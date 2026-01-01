@@ -4,9 +4,17 @@
 //! of divisors on a Calabi-Yau threefold. It is fully symmetric:
 //! `κ_ijk = κ_jik = κ_kij` etc.
 //!
+//! ## Performance
+//!
+//! - Sparse storage via `HashMap` for memory efficiency
+//! - Parallel iteration via `rayon` for multi-core contraction
+//! - Cache-friendly access patterns for hot loops
+//!
 //! Reference: arXiv:2107.09064
 
 use std::collections::HashMap;
+
+use rayon::prelude::*;
 
 /// Sparse representation of intersection numbers.
 ///
@@ -65,19 +73,38 @@ impl Intersection {
     ///
     /// This is used in volume computations: V = (1/6) `κ_ijk` t^i t^j t^k
     ///
+    /// Uses parallel reduction via rayon for large tensors.
+    ///
     /// # Panics
     /// Panics if `t.len() != self.dim()`.
     #[allow(clippy::cast_precision_loss)] // mult is at most 6, val fits in f64 mantissa for physics
     pub fn contract_triple(&self, t: &[f64]) -> f64 {
         assert_eq!(t.len(), self.dim, "dimension mismatch");
 
-        let mut result = 0.0;
-        for (&(i, j, k), &val) in &self.entries {
-            // Count multiplicity based on symmetry
-            let mult = symmetry_multiplicity(i, j, k);
-            result += f64::from(mult) * (val as f64) * t[i] * t[j] * t[k];
+        // Use parallel iteration for large tensors (typical: 2000+ entries for h11=214)
+        if self.entries.len() > 100 {
+            self.entries
+                .par_iter()
+                .map(|(&(i, j, k), &val)| {
+                    let mult = symmetry_multiplicity(i, j, k);
+                    f64::from(mult) * (val as f64) * t[i] * t[j] * t[k]
+                })
+                .sum()
+        } else {
+            // Serial for small tensors (avoid rayon overhead)
+            self.entries
+                .iter()
+                .map(|(&(i, j, k), &val)| {
+                    let mult = symmetry_multiplicity(i, j, k);
+                    f64::from(mult) * (val as f64) * t[i] * t[j] * t[k]
+                })
+                .sum()
         }
-        result
+    }
+
+    /// Parallel iterator over entries (for external use).
+    pub fn par_iter(&self) -> impl ParallelIterator<Item = ((usize, usize, usize), i64)> + '_ {
+        self.entries.par_iter().map(|(&k, &v)| (k, v))
     }
 }
 

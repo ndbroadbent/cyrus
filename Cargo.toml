@@ -17,8 +17,13 @@ cargo = { level = "warn", priority = -1 }
 # Allow these pedantic lints
 module_name_repetitions = "allow"
 must_use_candidate = "allow"
+similar_names = "allow"
+unreadable_literal = "allow"  # Physics constants shouldn't need underscores
+doc_markdown = "allow"  # CamelCase names (McAllister, GitHub) aren't code
 # Disable cargo metadata warnings for now
 cargo_common_metadata = "allow"
+# Allow multiple versions of transitive deps (out of our control)
+multiple_crate_versions = "allow"
 
 [workspace.package]
 version = "0.1.0"
@@ -37,11 +42,26 @@ num-rational = "0.4"
 num-integer = "0.1"
 num-traits = "0.2"
 
-# Arbitrary precision
-rug = "1.24"  # GMP/MPFR bindings
+# Arbitrary precision (pure Rust, LGPL)
+malachite = "0.4"
 
 # Linear algebra
 faer = "0.20"  # Fast pure-Rust linear algebra
+
+# Triangulations (pure Rust, CGAL-inspired, d-dimensional)
+delaunay = "0.4"
+
+# Lattice reduction
+lll-rs = "0.4"
+
+# Linear programming (for Kähler cone tests)
+good_lp = { version = "1.14", default-features = false, features = ["microlp"] }  # pure Rust solver
+
+# Tensor contraction
+ndarray_einsum_beta = "0.7"
+
+# Numerical integration (for period computations)
+quadrature = "0.1"
 
 # ODE solvers
 ode_solvers = "0.5"

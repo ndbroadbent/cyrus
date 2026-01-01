@@ -28,8 +28,10 @@ pub mod divisor;
 pub mod error;
 pub mod flat_direction;
 pub mod intersection;
+pub mod kklt;
 pub mod lattice;
 pub mod polytope;
+pub mod racetrack;
 pub mod vacuum;
 pub mod volume;
 
@@ -40,7 +42,14 @@ pub use flat_direction::{
     compute_n_matrix,
 };
 pub use intersection::Intersection;
+pub use kklt::{
+    KkltResult, compute_c_tau as kklt_compute_c_tau, compute_divisor_volumes as kklt_compute_tau,
+    compute_jacobian as kklt_compute_jacobian, compute_target_tau, solve_path_following,
+};
 pub use lattice::Point;
 pub use polytope::Polytope;
+pub use racetrack::{
+    RacetrackResult, RacetrackTerm, ZETA, compute_c_tau, compute_g_s_from_c_tau, solve_racetrack,
+};
 pub use vacuum::{VacuumResult, compute_v0, compute_vacuum};
 pub use volume::{VolumeResult, bbhl_correction, compute_volume, volume_classical, volume_string};
