@@ -1,0 +1,100 @@
+version: "3"
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  # === Quality Checks (run before marking any task complete) ===
+  ci:
+    desc: Run all CI checks
+    cmds:
+      - task: format:check
+      - task: lint
+      - task: file-length
+      - task: test
+
+  # === Formatting ===
+  format:
+    desc: Format Rust code
+    cmds:
+      - cargo fmt
+
+  format:check:
+    desc: Check Rust formatting
+    cmds:
+      - cargo fmt -- --check
+
+  # === Linting ===
+  lint:
+    desc: Run Clippy (Rust linter)
+    cmds:
+      - cargo clippy --all-targets --all-features -- -D warnings
+
+  lint:fix:
+    desc: Run Clippy with auto-fix
+    cmds:
+      - cargo clippy --all-targets --all-features --fix --allow-dirty -- -D warnings
+
+  # === Code Quality ===
+  file-length:
+    desc: Check file length limits (max 500 for code, 1000 for tests)
+    cmds:
+      - ./scripts/check_file_length.sh
+
+  # === Testing ===
+  test:
+    desc: Run all tests
+    cmds:
+      - cargo test
+
+  test:watch:
+    desc: Run tests in watch mode
+    cmds:
+      - cargo watch -x test
+
+  # === Building ===
+  build:
+    desc: Build all crates
+    cmds:
+      - cargo build
+
+  build:release:
+    desc: Build release version
+    cmds:
+      - cargo build --release
+
+  # === Benchmarking ===
+  bench:
+    desc: Run benchmarks
+    cmds:
+      - cargo bench
+
+  # === Documentation ===
+  doc:
+    desc: Generate documentation
+    cmds:
+      - cargo doc --no-deps --open
+
+  # === Git Hooks ===
+  hooks:install:
+    desc: Install git hooks with lefthook
+    cmds:
+      - lefthook install
+
+  hooks:run:
+    desc: Run pre-commit hooks manually
+    cmds:
+      - lefthook run pre-commit
+
+  # === Utilities ===
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - cargo clean
+
+  deps:update:
+    desc: Update all dependencies
+    cmds:
+      - cargo update

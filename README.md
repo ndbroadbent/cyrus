@@ -19,7 +19,7 @@ Cyrus is a Rust toolkit for evaluating Calabi-Yau compactifications, computing m
 
 1. **Reproduce published results** - Validate against McAllister et al. (arXiv:2107.09064) and Cicoli et al. (arXiv:2407.03405)
 2. **Performance** - 10-100× faster than Python implementations
-3. **Correctness** - 100% test coverage, formal verification for critical paths
+3. **Correctness** - 100% test coverage, including some formal verification (with [aeneas](https://github.com/AeneasVerif/aeneas))
 4. **Usability** - Clean API, thorough documentation
 
 ## Installation
@@ -86,9 +86,8 @@ If you use Cyrus in your research, please cite:
 }
 ```
 
-## Acknowledgments
+## Key References
 
-This project builds on decades of work by the string theory community. Key references:
-- McAllister et al., "Minimal Flux Compactifications" (arXiv:2107.09064)
+- Demirtas, Kim, McAllister, Moritz, Rios-Tascon, "Small Cosmological Constants in String Theory" (arXiv:2107.09064)
 - Cicoli et al., "From Inflation to Quintessence" (arXiv:2407.03405)
-- Demirtas et al., "Small Cosmological Constants" (arXiv:1912.10047)
+- Demirtas et al., "Computational Mirror Symmetry" (arXiv:2303.00757)

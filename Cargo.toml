@@ -2,12 +2,23 @@
 resolver = "2"
 members = [
     "crates/cyrus-core",
-    "crates/cyrus-moduli",
-    "crates/cyrus-cosmology",
-    "crates/cyrus-cache",
-    "crates/cyrus-ga",
-    "crates/cyrus-verify",
 ]
+
+# Workspace-wide lints (strict by default)
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+# Allow these pedantic lints
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+# Disable cargo metadata warnings for now
+cargo_common_metadata = "allow"
 
 [workspace.package]
 version = "0.1.0"
