@@ -24,6 +24,7 @@
 //! e^{K₀} = (4/3 × κ_abc p^a p^b p^c)⁻¹
 //! ```
 
+pub mod divisor;
 pub mod error;
 pub mod flat_direction;
 pub mod intersection;
@@ -32,6 +33,7 @@ pub mod polytope;
 pub mod vacuum;
 pub mod volume;
 
+pub use divisor::{compute_divisor_jacobian, compute_divisor_volumes};
 pub use error::{Error, Result};
 pub use flat_direction::{
     FlatDirectionResult, compute_ek0, compute_flat_direction, compute_flat_direction_full,
