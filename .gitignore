@@ -18,3 +18,6 @@ Thumbs.db
 *.profraw
 *.profdata
 coverage/
+
+# Project symlink (points to external knowledge base repo)
+project
