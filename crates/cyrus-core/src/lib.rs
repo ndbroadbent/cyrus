@@ -29,6 +29,7 @@ pub mod flat_direction;
 pub mod intersection;
 pub mod lattice;
 pub mod polytope;
+pub mod vacuum;
 pub mod volume;
 
 pub use error::{Error, Result};
@@ -39,4 +40,5 @@ pub use flat_direction::{
 pub use intersection::Intersection;
 pub use lattice::Point;
 pub use polytope::Polytope;
+pub use vacuum::{VacuumResult, compute_v0, compute_vacuum};
 pub use volume::{VolumeResult, bbhl_correction, compute_volume, volume_classical, volume_string};
