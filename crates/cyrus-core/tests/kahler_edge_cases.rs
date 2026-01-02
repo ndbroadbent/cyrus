@@ -190,3 +190,38 @@ fn test_mori_mismatched_dimensions() {
     // Simplex dimension doesn't match point dimension
     assert!(mori.generators().is_empty());
 }
+
+#[test]
+fn test_mori_two_simplices_shared_ridge_2d() {
+    // More complex 2D case with multiple ridges
+    let points = vec![
+        Point::new(vec![0, 0]),  // 0
+        Point::new(vec![2, 0]),  // 1
+        Point::new(vec![1, 2]),  // 2
+        Point::new(vec![1, -1]), // 3
+    ];
+    // Two triangles: [0,1,2] and [0,1,3], sharing edge [0,1]
+    let tri = Triangulation::new(vec![vec![0, 1, 2], vec![0, 1, 3]]);
+
+    let mori = compute_mori_generators(&tri, &points).unwrap();
+    // Should have one generator from interior ridge [0,1]
+    assert_eq!(mori.generators().len(), 1);
+}
+
+#[test]
+fn test_mori_three_simplices_3d() {
+    // 3D case with three tetrahedra
+    let points = vec![
+        Point::new(vec![0, 0, 0]),  // 0
+        Point::new(vec![2, 0, 0]),  // 1
+        Point::new(vec![1, 2, 0]),  // 2
+        Point::new(vec![1, 1, 2]),  // 3
+        Point::new(vec![1, 1, -2]), // 4 - below the plane
+    ];
+    // Three tetrahedra sharing faces
+    let tri = Triangulation::new(vec![vec![0, 1, 2, 3], vec![0, 1, 2, 4]]);
+
+    let mori = compute_mori_generators(&tri, &points).unwrap();
+    // Should have generators from interior ridges
+    assert!(!mori.generators().is_empty());
+}

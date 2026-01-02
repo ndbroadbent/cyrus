@@ -133,3 +133,29 @@ fn test_cosmology_negative_potential() {
         assert!(!r.redshifts.is_empty());
     }
 }
+
+struct InfinitePotential;
+impl Potential for InfinitePotential {
+    fn value(&self, _phi: f64) -> f64 {
+        f64::INFINITY // Return infinity
+    }
+    fn deriv(&self, _phi: f64) -> f64 {
+        f64::INFINITY
+    }
+}
+
+#[test]
+fn test_cosmology_infinite_potential() {
+    // Test with infinite potential - should handle gracefully
+    let params = CosmologyParams {
+        omega_m0: 0.3,
+        omega_de0: 0.7,
+        h0: 1.0,
+    };
+    let pot = InfinitePotential;
+
+    // This might fail or succeed with NaN/Inf values - just exercise the code
+    let res = solve_cosmology(&params, &pot, 0.0, 0.0, 1.0);
+    // Document what happens
+    let _ = res;
+}

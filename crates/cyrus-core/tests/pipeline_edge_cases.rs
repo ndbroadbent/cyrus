@@ -181,7 +181,9 @@ fn test_pipeline_orthogonality_violated() {
 #[test]
 fn test_pipeline_no_racetrack_solution() {
     // Setup that reaches the racetrack solver but finds no solution
-    // Using 2D case where we can achieve K·p = 0 with p ≠ 0
+    // Using 2D case with carefully chosen K,M so that K·p = 0 (orthogonality satisfied)
+    // while p is in the Kähler cone, and GV has same sign coefficients (racetrack fails)
+
     let mut kappa = Intersection::new(2);
     kappa.set(0, 0, 0, Rational::from(6));
     kappa.set(0, 0, 1, Rational::from(3));
@@ -193,15 +195,15 @@ fn test_pipeline_no_racetrack_solution() {
         vec![Integer::from(0), Integer::from(1)],
     ]);
 
-    // GV invariants with same sign coefficients - no racetrack solution
+    // Both GV values positive - racetrack needs opposite signs to find solution
     let gv = vec![
         GvInvariant {
             curve: vec![1, 0],
-            value: 50.0,
+            value: 540.0, // Positive
         },
         GvInvariant {
             curve: vec![0, 1],
-            value: 100.0,
+            value: 1080.0, // Also positive - no racetrack solution!
         },
     ];
 
@@ -214,16 +216,19 @@ fn test_pipeline_no_racetrack_solution() {
         q_max: 1000.0,
     };
 
-    // K = [1, -1] orthogonal to p = [a, a] for some a
-    // Need N*p = K where N is the matrix from kappa and M
-    let k = vec![1, -1];
-    let m = vec![1, 1];
+    // Choose K = [29, -29], M = [11, -14] so that:
+    // - N = [[24, 5], [5, -34]]
+    // - p = [1, 1] (from N*p = K)
+    // - K·p = 29 - 29 = 0 (orthogonality satisfied!)
+    // - p = [1,1] is in Kähler cone (both components > 0)
+    // - Q_flux = -0.5 * 725 < 1000 (tadpole passes)
+    let k = vec![29, -29];
+    let m = vec![11, -14];
 
     let res = evaluate_vacuum(&req, &k, &m).unwrap();
-    // Should fail somewhere in the pipeline
-    if !res.success {
-        assert!(res.reason.is_some());
-    }
+    // Should reach racetrack and fail with "No stable racetrack solution"
+    assert!(!res.success);
+    assert_eq!(res.reason.as_deref(), Some("No stable racetrack solution"));
 }
 
 #[test]

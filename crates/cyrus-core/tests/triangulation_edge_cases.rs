@@ -198,3 +198,55 @@ fn test_high_dimensional() {
     // 5 points in 4D - forms a simplex, just verify no panic
     let _ = tri.simplices();
 }
+
+#[test]
+fn test_point_on_facet_coplanar() {
+    // Test case where a point lies exactly on a facet (coplanar)
+    // Triangle 0-1-2, point 3 is on the plane of 0-1-2
+    let points = vec![
+        Point::new(vec![0, 0]),
+        Point::new(vec![2, 0]),
+        Point::new(vec![0, 2]),
+        Point::new(vec![1, 1]), // On the line connecting (2,0) and (0,2)
+    ];
+    // Heights that make 3 coplanar with the facet formed by 0,1,2
+    let heights = vec![0.0, 0.0, 0.0, 0.0];
+
+    let tri = compute_regular_triangulation(&points, &heights).unwrap();
+    // With all heights zero, all points are coplanar in lifted space
+    // Result depends on handling of degenerate cases
+    let _ = tri.simplices();
+}
+
+#[test]
+fn test_interior_point_invisible() {
+    // Create a triangulation where an interior point is not visible from any facet
+    // Square corners + center point that's truly interior
+    let points = vec![
+        Point::new(vec![0, 0]),
+        Point::new(vec![4, 0]),
+        Point::new(vec![4, 4]),
+        Point::new(vec![0, 4]),
+        Point::new(vec![2, 2]), // Center point - interior
+    ];
+    // Heights: corners have varying heights, center has high height so it's "above" lower hull
+    let heights = vec![0.0, 1.0, 0.0, 1.0, 100.0];
+
+    let tri = compute_regular_triangulation(&points, &heights).unwrap();
+    // Center point with very high height should be above lower hull
+    // and thus invisible from any lower facet
+    let _ = tri.simplices();
+}
+
+#[test]
+fn test_fewer_points_than_dimension() {
+    // 3D space but only 2 points - fewer than dim+1
+    // This tests the n <= dim branch at line 102
+    let points = vec![Point::new(vec![0, 0, 0]), Point::new(vec![1, 1, 1])];
+    let heights = vec![0.0, 1.0];
+
+    let tri = compute_regular_triangulation(&points, &heights).unwrap();
+    // With only 2 points in 3D, can't form proper simplices
+    // convex_hull returns single "simplex" with all points
+    let _ = tri.simplices();
+}
