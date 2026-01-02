@@ -42,27 +42,27 @@ pub fn compute_divisor_volumes(kappa: &Intersection, t: &[f64]) -> Vec<f64> {
 
         if a == b && b == c {
             // All same: κ_{aaa} t^a t^a - multiplicity 1
-            tau[a] += 0.5 * val_f * t[a] * t[a];
+            tau[*a] += 0.5 * val_f * t[*a] * t[*a];
         } else if a == b {
             // (a,a,c) with a < c - multiplicity 3
             // τ_a gets contribution from: κ_{aac}t^at^c (×2 from ac,ca)
             // τ_c gets contribution from: κ_{aac}t^at^a (×1)
-            tau[a] += 0.5 * val_f * 2.0 * t[a] * t[c];
-            tau[c] += 0.5 * val_f * t[a] * t[a];
+            tau[*a] += 0.5 * val_f * 2.0 * t[*a] * t[*c];
+            tau[*c] += 0.5 * val_f * t[*a] * t[*a];
         } else if b == c {
             // (a,b,b) with a < b - multiplicity 3
             // τ_a gets contribution from: κ_{abb}t^bt^b (×1)
             // τ_b gets contribution from: κ_{abb}t^at^b (×2 from ab,ba)
-            tau[a] += 0.5 * val_f * t[b] * t[b];
-            tau[b] += 0.5 * val_f * 2.0 * t[a] * t[b];
+            tau[*a] += 0.5 * val_f * t[*b] * t[*b];
+            tau[*b] += 0.5 * val_f * 2.0 * t[*a] * t[*b];
         } else {
             // All different (a,b,c) with a < b < c - multiplicity 6
             // τ_a gets κ_{abc}t^bt^c (×2 from bc,cb)
             // τ_b gets κ_{abc}t^at^c (×2 from ac,ca)
             // τ_c gets κ_{abc}t^at^b (×2 from ab,ba)
-            tau[a] += 0.5 * val_f * 2.0 * t[b] * t[c];
-            tau[b] += 0.5 * val_f * 2.0 * t[a] * t[c];
-            tau[c] += 0.5 * val_f * 2.0 * t[a] * t[b];
+            tau[*a] += 0.5 * val_f * 2.0 * t[*b] * t[*c];
+            tau[*b] += 0.5 * val_f * 2.0 * t[*a] * t[*c];
+            tau[*c] += 0.5 * val_f * 2.0 * t[*a] * t[*b];
         }
     }
 
@@ -90,23 +90,23 @@ pub fn compute_divisor_jacobian(kappa: &Intersection, t: &[f64]) -> Vec<Vec<f64>
 
         if a == b && b == c {
             // (a,a,a): J[a][a] += κ_{aaa} t^a
-            jac[a][a] += val_f * t[a];
+            jac[*a][*a] += val_f * t[*a];
         } else if a == b {
             // (a,a,c) with a < c
             // J[a][a] += κ_{aac} t^c
             // J[a][c] += κ_{aac} t^a (from j=a)
             // J[c][a] += κ_{caa} t^a = κ_{aac} t^a (symmetric, from j=a)
-            jac[a][a] += val_f * t[c];
-            jac[a][c] += val_f * t[a];
-            jac[c][a] += val_f * t[a];
+            jac[*a][*a] += val_f * t[*c];
+            jac[*a][*c] += val_f * t[*a];
+            jac[*c][*a] += val_f * t[*a];
         } else if b == c {
             // (a,b,b) with a < b
             // J[a][b] += κ_{abb} t^b (from j=b)
             // J[b][a] += κ_{bba} t^b = κ_{abb} t^b (symmetric)
             // J[b][b] += κ_{bba} t^a = κ_{abb} t^a
-            jac[a][b] += val_f * t[b];
-            jac[b][a] += val_f * t[b];
-            jac[b][b] += val_f * t[a];
+            jac[*a][*b] += val_f * t[*b];
+            jac[*b][*a] += val_f * t[*b];
+            jac[*b][*b] += val_f * t[*a];
         } else {
             // (a,b,c) all different
             // J[a][b] += κ_{abc} t^c (from κ_{ajb} with j=c)
@@ -115,12 +115,12 @@ pub fn compute_divisor_jacobian(kappa: &Intersection, t: &[f64]) -> Vec<Vec<f64>
             // J[b][c] += κ_{bac} t^a = κ_{abc} t^a
             // J[c][a] += κ_{cab} t^b = κ_{abc} t^b
             // J[c][b] += κ_{cab} t^a = κ_{abc} t^a
-            jac[a][b] += val_f * t[c];
-            jac[a][c] += val_f * t[b];
-            jac[b][a] += val_f * t[c];
-            jac[b][c] += val_f * t[a];
-            jac[c][a] += val_f * t[b];
-            jac[c][b] += val_f * t[a];
+            jac[*a][*b] += val_f * t[*c];
+            jac[*a][*c] += val_f * t[*b];
+            jac[*b][*a] += val_f * t[*c];
+            jac[*b][*c] += val_f * t[*a];
+            jac[*c][*a] += val_f * t[*b];
+            jac[*c][*b] += val_f * t[*a];
         }
     }
 

@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Integration tests validating against McAllister et al. (arXiv:2107.09064).
 //!
 //! These tests load fixtures (intersection numbers κ, flux vectors K/M, GV invariants) and verify

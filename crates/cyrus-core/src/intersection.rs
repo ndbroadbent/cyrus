@@ -1,42 +1,40 @@
-//! Intersection numbers for Calabi-Yau manifolds.
+//! Intersection number computation.
 //!
-//! The intersection tensor `κ_ijk` encodes the triple intersection numbers
-//! of divisors on a Calabi-Yau threefold. It is fully symmetric:
-//! `κ_ijk = κ_jik = κ_kij` etc.
+//! Implements the clean-room algorithm for computing intersection numbers
+//! of divisors in a Calabi-Yau threefold.
 //!
-//! ## Performance
+//! Algorithm:
+//! 1. Identify distinct intersections from the triangulation (facets).
+//! 2. Use GLSM linear relations to constrain the remaining intersections.
+//! 3. Solve the linear system to find all entries of the intersection tensor.
 //!
-//! - Sparse storage via `HashMap` for memory efficiency
-//! - Parallel iteration via `rayon` for multi-core contraction
-//! - Exact arithmetic via `malachite::Rational`
-//!
-//! Reference: arXiv:2107.09064, and [[project_docs/CYTOOLS_ALGORITHMS_CLEAN_ROOM.md]]
+//! Reference: [[project_docs/CYTOOLS_ALGORITHMS_CLEAN_ROOM.md]] Section 1.2
 
 use crate::Point;
 use crate::error::{Error, Result};
 use crate::integer_math::determinant_gaussian;
 use crate::triangulation::Triangulation;
-use malachite::Integer;
-use malachite::Rational;
 use malachite::num::arithmetic::traits::Abs;
 use malachite::num::conversion::traits::RoundingFrom;
 use malachite::rounding_modes::RoundingMode;
-use rayon::prelude::*;
+use malachite::{Integer, Rational};
 use std::collections::{HashMap, HashSet};
 
-/// Sparse representation of intersection numbers.
+/// Intersection tensor `κ_ijk`.
 ///
-/// Only stores unique entries (i ≤ j ≤ k) since the tensor is symmetric.
-#[derive(Debug, Clone, Default)]
+/// Stores intersection numbers for divisors `D_i, D_j, D_k`.
+/// Symmetric in all indices.
+#[derive(Debug, Clone)]
 pub struct Intersection {
-    /// Dimension (number of divisors).
+    /// Dimension of the divisor space (number of divisors).
     dim: usize,
-    /// Map from (i, j, k) with i ≤ j ≤ k to intersection number.
+    /// Storage for unique entries (i ≤ j ≤ k).
+    /// Key: (i, j, k), Value: Intersection number.
     entries: HashMap<(usize, usize, usize), Rational>,
 }
 
 impl Intersection {
-    /// Create a new empty intersection tensor of given dimension.
+    /// Create a new empty intersection tensor.
     pub fn new(dim: usize) -> Self {
         Self {
             dim,
@@ -44,24 +42,17 @@ impl Intersection {
         }
     }
 
-    /// Get the dimension.
+    /// Get the dimension (number of divisors).
     pub const fn dim(&self) -> usize {
         self.dim
     }
 
-    /// Set an intersection number `κ_ijk`.
-    ///
-    /// Automatically handles symmetry - only stores canonical form (i ≤ j ≤ k).
-    pub fn set(&mut self, i: usize, j: usize, k: usize, value: Rational) {
-        let key = canonical_key(i, j, k);
-        if value == 0 {
-            self.entries.remove(&key);
-        } else {
-            self.entries.insert(key, value);
-        }
+    /// Get the number of non-zero entries.
+    pub fn num_nonzero(&self) -> usize {
+        self.entries.len()
     }
 
-    /// Get an intersection number `κ_ijk`.
+    /// Get value at indices (i, j, k).
     pub fn get(&self, i: usize, j: usize, k: usize) -> Rational {
         let key = canonical_key(i, j, k);
         self.entries
@@ -70,32 +61,48 @@ impl Intersection {
             .unwrap_or_else(|| Rational::from(0))
     }
 
-    /// Number of non-zero entries (in canonical form).
-    pub fn num_nonzero(&self) -> usize {
-        self.entries.len()
+    /// Set value at indices (i, j, k).
+    pub fn set(&mut self, i: usize, j: usize, k: usize, val: Rational) {
+        let key = canonical_key(i, j, k);
+        if val == 0 {
+            self.entries.remove(&key);
+        } else {
+            self.entries.insert(key, val);
+        }
     }
 
-    /// Iterate over non-zero entries as ((i, j, k), value) with i ≤ j ≤ k.
-    pub fn iter(&self) -> impl Iterator<Item = ((usize, usize, usize), Rational)> + '_ {
-        self.entries.iter().map(|(&k, v)| (k, v.clone()))
+    /// Iterator over all non-zero entries.
+    /// Returns ((i, j, k), val) where i ≤ j ≤ k.
+    pub fn iter(&self) -> impl Iterator<Item = (&(usize, usize, usize), &Rational)> {
+        self.entries.iter()
     }
 
-    /// Parallel iterator over entries.
-    pub fn par_iter(&self) -> impl ParallelIterator<Item = ((usize, usize, usize), Rational)> + '_ {
-        // Since entries is a HashMap, we can use par_iter directly if we wrap the values
-        self.entries.par_iter().map(|(&k, v)| (k, v.clone()))
+    /// Parallel iterator over non-zero entries.
+    pub fn par_iter(
+        &self,
+    ) -> impl rayon::iter::ParallelIterator<Item = (&(usize, usize, usize), &Rational)>
+    where
+        HashMap<(usize, usize, usize), Rational>: rayon::iter::IntoParallelRefIterator<'static>,
+    {
+        use rayon::prelude::*;
+        self.entries.par_iter()
     }
 
-    /// Compute `κ_ijk t^i t^j t^k` (triple contraction).
+    /// Non-parallel iterator over non-zero entries.
+    pub fn iter_entries(
+        &self,
+    ) -> std::collections::hash_map::Iter<'_, (usize, usize, usize), Rational> {
+        self.entries.iter()
+    }
+
+    /// Contract with a vector `t` to compute `(1/6) κ_ijk t^i t^j t^k`.
     ///
-    /// This is used in volume computations: V = (1/6) `κ_ijk` t^i t^j t^k
+    /// This is the Calabi-Yau volume formula.
     ///
     /// # Panics
-    /// Panics if `t.len() != self.dim()`.
+    /// Panics if `t.len() != dim`.
     pub fn contract_triple(&self, t: &[f64]) -> f64 {
-        assert_eq!(t.len(), self.dim, "dimension mismatch");
-
-        // Convert sparse entries to f64 for physics contraction
+        assert_eq!(t.len(), self.dim, "Vector dimension mismatch");
         self.entries
             .iter()
             .map(|(&(i, j, k), val)| {
@@ -125,6 +132,106 @@ const fn symmetry_multiplicity(i: usize, j: usize, k: usize) -> u8 {
     }
 }
 
+struct SystemBuilder<'a> {
+    tri: &'a Triangulation,
+    points: &'a [Point],
+    dim_v: usize,
+    origin_idx: Option<usize>,
+    var_map: &'a HashMap<Vec<usize>, usize>,
+    n_vars: usize,
+    m_mat: Vec<Vec<Rational>>,
+    c_vec: Vec<Rational>,
+}
+
+impl<'a> SystemBuilder<'a> {
+    const fn new(
+        tri: &'a Triangulation,
+        points: &'a [Point],
+        dim_v: usize,
+        origin_idx: Option<usize>,
+        var_map: &'a HashMap<Vec<usize>, usize>,
+        n_vars: usize,
+    ) -> Self {
+        Self {
+            tri,
+            points,
+            dim_v,
+            origin_idx,
+            var_map,
+            n_vars,
+            m_mat: Vec::new(),
+            c_vec: Vec::new(),
+        }
+    }
+
+    fn build_distinct_equations(&mut self) {
+        for simplex in self.tri.simplices() {
+            let rays: Vec<usize> = simplex
+                .iter()
+                .filter(|&&i| Some(i) != self.origin_idx)
+                .copied()
+                .collect();
+            if rays.len() == self.dim_v {
+                let mut mat_pts: Vec<Vec<Rational>> = rays
+                    .iter()
+                    .map(|&idx| {
+                        self.points[idx]
+                            .coords()
+                            .iter()
+                            .map(|&x| Rational::from(x))
+                            .collect()
+                    })
+                    .collect();
+
+                let det = determinant_gaussian(&mut mat_pts);
+                if det != 0 {
+                    let val = Rational::from(1) / det.abs();
+                    let mut key = rays;
+                    key.sort_unstable();
+                    if let Some(&var_idx) = self.var_map.get(&key) {
+                        let mut row = vec![Rational::from(0); self.n_vars];
+                        row[var_idx] = Rational::from(1);
+                        self.m_mat.push(row);
+                        self.c_vec.push(val);
+                    }
+                }
+            }
+        }
+    }
+
+    fn build_glsm_equations(&mut self, glsm: &[Vec<Integer>]) {
+        let mut probes = HashSet::new();
+        for key in self.var_map.keys() {
+            for i in 0..key.len() {
+                let mut probe = key.clone();
+                probe.remove(i);
+                probes.insert(probe);
+            }
+        }
+
+        for probe in probes {
+            for q_row in glsm {
+                let mut row = vec![Rational::from(0); self.n_vars];
+                for (m, q_val) in q_row.iter().enumerate() {
+                    if *q_val == 0 || Some(m) == self.origin_idx {
+                        continue;
+                    }
+                    let mut key = probe.clone();
+                    key.push(m);
+                    key.sort_unstable();
+                    if let Some(&var_idx) = self.var_map.get(&key) {
+                        row[var_idx] += Rational::from(q_val.clone());
+                    }
+                }
+                if row.iter().any(|x| *x != 0) {
+                    self.m_mat.push(row);
+                    self.c_vec.push(Rational::from(0));
+                }
+            }
+        }
+    }
+}
+
 /// Compute the intersection numbers for a Calabi-Yau hypersurface.
 ///
 /// # Errors
@@ -139,7 +246,11 @@ pub fn compute_intersection_numbers(
     let n_pts = points.len();
     let dim_v = points[0].dim();
 
-    let var_list = collect_variables(tri, dim_v);
+    let origin_idx = points
+        .iter()
+        .position(|p| p.coords().iter().all(|&x| x == 0));
+
+    let var_list = collect_variables(tri, dim_v, origin_idx);
     let var_map: HashMap<Vec<usize>, usize> = var_list
         .iter()
         .enumerate()
@@ -147,23 +258,31 @@ pub fn compute_intersection_numbers(
         .collect();
     let n_vars = var_list.len();
 
-    let mut m_mat = Vec::new();
-    let mut c_vec = Vec::new();
+    let mut builder = SystemBuilder::new(tri, points, dim_v, origin_idx, &var_map, n_vars);
+    builder.build_distinct_equations();
+    builder.build_glsm_equations(glsm);
 
-    build_distinct_equations(tri, points, dim_v, &var_map, n_vars, &mut m_mat, &mut c_vec);
-    build_glsm_equations(tri, glsm, dim_v, &var_map, n_vars, &mut m_mat, &mut c_vec);
-
-    let sol = solve_rectangular(&m_mat, &c_vec, n_vars)?;
-    Ok(reduce_to_cy(n_pts, &var_list, &sol))
+    let sol = solve_rectangular(&builder.m_mat, &builder.c_vec, n_vars)?;
+    Ok(reduce_to_cy(n_pts, &var_map, &sol))
 }
 
-fn collect_variables(tri: &Triangulation, dim_v: usize) -> Vec<Vec<usize>> {
+fn collect_variables(
+    tri: &Triangulation,
+    dim_v: usize,
+    origin_idx: Option<usize>,
+) -> Vec<Vec<usize>> {
     let mut variables = HashSet::new();
     for simplex in tri.simplices() {
-        if simplex.len() != dim_v + 1 {
+        let rays: Vec<usize> = simplex
+            .iter()
+            .filter(|&&i| Some(i) != origin_idx)
+            .copied()
+            .collect();
+        if rays.len() < dim_v {
             continue;
         }
-        let perms = combinations_with_replacement(simplex, dim_v);
+
+        let perms = combinations_with_replacement(&rays, dim_v);
         for mut p in perms {
             p.sort_unstable();
             variables.insert(p);
@@ -174,117 +293,44 @@ fn collect_variables(tri: &Triangulation, dim_v: usize) -> Vec<Vec<usize>> {
     var_list
 }
 
-fn build_distinct_equations(
-    tri: &Triangulation,
-    points: &[Point],
-    dim_v: usize,
+fn reduce_to_cy(
+    n_pts: usize,
     var_map: &HashMap<Vec<usize>, usize>,
-    n_vars: usize,
-    m_mat: &mut Vec<Vec<Rational>>,
-    c_vec: &mut Vec<Rational>,
-) {
-    for simplex in tri.simplices() {
-        if simplex.len() != dim_v + 1 {
-            continue;
-        }
-        for i in 0..simplex.len() {
-            let mut subset: Vec<usize> = simplex
-                .iter()
-                .enumerate()
-                .filter(|&(j, _)| j != i)
-                .map(|(_, &v)| v)
-                .collect();
-
-            let mut mat_pts: Vec<Vec<Rational>> = subset
-                .iter()
-                .map(|&idx| {
-                    points[idx]
-                        .coords()
-                        .iter()
-                        .map(|&x| Rational::from(x))
-                        .collect()
-                })
-                .collect();
-
-            let det = determinant_gaussian(&mut mat_pts);
-            let val = if det == 0 {
-                Rational::from(0)
-            } else {
-                Rational::from(1) / det.abs()
-            };
-
-            subset.sort_unstable();
-            if let Some(&var_idx) = var_map.get(&subset) {
-                let mut row = vec![Rational::from(0); n_vars];
-                row[var_idx] = Rational::from(1);
-                m_mat.push(row);
-                c_vec.push(val);
-            }
-        }
-    }
-}
-
-fn build_glsm_equations(
-    tri: &Triangulation,
-    glsm: &[Vec<Integer>],
-    dim_v: usize,
-    var_map: &HashMap<Vec<usize>, usize>,
-    n_vars: usize,
-    m_mat: &mut Vec<Vec<Rational>>,
-    c_vec: &mut Vec<Rational>,
-) {
-    let mut probes = HashSet::new();
-    for simplex in tri.simplices() {
-        if simplex.len() != dim_v + 1 {
-            continue;
-        }
-        let perms = combinations_with_replacement(simplex, dim_v - 1);
-        for mut p in perms {
-            p.sort_unstable();
-            probes.insert(p);
-        }
-    }
-
-    for probe in probes {
-        for q_row in glsm {
-            let mut row = vec![Rational::from(0); n_vars];
-            for (m, q_val) in q_row.iter().enumerate() {
-                if *q_val == 0 {
-                    continue;
-                }
-                let mut key = probe.clone();
-                key.push(m);
-                key.sort_unstable();
-                if let Some(&var_idx) = var_map.get(&key) {
-                    row[var_idx] += Rational::from(q_val.clone());
-                }
-            }
-            if row.iter().any(|x| *x != 0) {
-                m_mat.push(row);
-                c_vec.push(Rational::from(0));
-            }
-        }
-    }
-}
-
-fn reduce_to_cy(n_pts: usize, var_list: &[Vec<usize>], sol: &[Rational]) -> Intersection {
+    sol: &[Rational],
+) -> Intersection {
     let mut kappa = Intersection::new(n_pts);
-    for (key, val) in var_list.iter().zip(sol.iter()) {
-        let v0 = key[0];
-        let v1 = key[1];
-        let v2 = key[2];
-        let v3 = key[3];
-        update_kappa(&mut kappa, v0, v1, v2, val);
-        update_kappa(&mut kappa, v0, v1, v3, val);
-        update_kappa(&mut kappa, v0, v2, v3, val);
-        update_kappa(&mut kappa, v1, v2, v3, val);
+
+    // We want to compute kappa_ijk = sum_l kappa_ijkl
+    // We only need to check i,j,k that are subsets of some simplex
+    let mut potential_triplets = HashSet::new();
+    for key in var_map.keys() {
+        // key is [a, b, c, d]
+        potential_triplets.insert(canonical_key_2(key[0], key[1], key[2]));
+        potential_triplets.insert(canonical_key_2(key[0], key[1], key[3]));
+        potential_triplets.insert(canonical_key_2(key[0], key[2], key[3]));
+        potential_triplets.insert(canonical_key_2(key[1], key[2], key[3]));
+    }
+
+    for (i, j, k) in potential_triplets {
+        let mut sum = Rational::from(0);
+        for l in 0..n_pts {
+            let mut multiset = vec![i, j, k, l];
+            multiset.sort_unstable();
+            if let Some(&var_idx) = var_map.get(&multiset) {
+                sum += &sol[var_idx];
+            }
+        }
+        if sum != 0 {
+            kappa.set(i, j, k, sum);
+        }
     }
     kappa
 }
 
-fn update_kappa(kappa: &mut Intersection, i: usize, j: usize, k: usize, val: &Rational) {
-    let current = kappa.get(i, j, k);
-    kappa.set(i, j, k, current + val);
+fn canonical_key_2(i: usize, j: usize, k: usize) -> (usize, usize, usize) {
+    let mut v = [i, j, k];
+    v.sort_unstable();
+    v.into()
 }
 
 fn combinations_with_replacement(pool: &[usize], k: usize) -> Vec<Vec<usize>> {

@@ -153,4 +153,14 @@ mod tests {
         let neg_p = -&p;
         assert_eq!(neg_p.coords(), &[-1, 2, -3]);
     }
+
+    #[test]
+    fn test_from() {
+        let p1: Point = vec![1, 2].into();
+        assert_eq!(p1.coords(), &[1, 2]);
+
+        let slice: &[i64] = &[3, 4];
+        let p2: Point = slice.into();
+        assert_eq!(p2.coords(), &[3, 4]);
+    }
 }

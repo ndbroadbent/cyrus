@@ -25,3 +25,4 @@ proptest.workspace = true
 serde = { workspace = true }
 serde_json = { workspace = true }
 insta = { version = "1.34", features = ["json"] }
+rand = { workspace = true }

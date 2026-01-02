@@ -47,7 +47,7 @@ pub fn compute_n_matrix(kappa: &Intersection, m: &[i64]) -> Mat<f64> {
             .par_iter()
             .flat_map(|((i, j, k), val)| {
                 let (val_f, _) = f64::rounding_from(val, RoundingMode::Nearest);
-                unique_permutations(i, j, k)
+                unique_permutations(*i, *j, *k)
                     .map(move |(a, b, c)| (a, b, val_f * m[c] as f64))
                     .collect::<Vec<_>>()
             })
@@ -57,7 +57,7 @@ pub fn compute_n_matrix(kappa: &Intersection, m: &[i64]) -> Mat<f64> {
             .iter()
             .flat_map(|((i, j, k), val)| {
                 let (val_f, _) = f64::rounding_from(val, RoundingMode::Nearest);
-                unique_permutations(i, j, k)
+                unique_permutations(*i, *j, *k)
                     .map(move |(a, b, c)| (a, b, val_f * m[c] as f64))
                     .collect::<Vec<_>>()
             })
@@ -138,17 +138,17 @@ pub fn solve_linear_system_faer(n: &Mat<f64>, k: &[i64]) -> Option<Vec<f64>> {
     // LU decomposition with full pivoting (most stable)
     let lu = n.full_piv_lu();
 
-    // Check if singular (rank deficient)
-    // We check if the smallest diagonal element is too small
-    let _tol = 1e-14 * n.norm_max();
+    // Solve using LU
+    let p_mat = lu.solve(&k_vec);
+
+    // Check for singularity by verifying finite solution
     for i in 0..dim {
-        if lu.row_permutation().inverse().arrays().0[i] >= dim {
+        let val = p_mat[(i, 0)];
+        if !val.is_finite() || val.abs() > 1e15 {
+            // Heuristic for singular
             return None;
         }
     }
-
-    // Solve using LU
-    let p_mat = lu.solve(&k_vec);
 
     // Extract solution
     Some((0..dim).map(|i| p_mat[(i, 0)]).collect())

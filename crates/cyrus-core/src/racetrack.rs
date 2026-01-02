@@ -99,11 +99,7 @@ pub fn build_racetrack_terms(
 
     // Sort by exponent (smallest first)
     let mut terms: Vec<RacetrackTerm> = grouped.into_values().collect();
-    terms.sort_by(|a, b| {
-        a.exponent
-            .partial_cmp(&b.exponent)
-            .expect("NaN in exponent")
-    });
+    terms.sort_by(|a, b| a.exponent.total_cmp(&b.exponent));
 
     terms
 }

@@ -78,7 +78,9 @@ pub fn compute_regular_triangulation(points: &[Point], heights: &[f64]) -> Resul
     // 3. Extract lower faces
     let mut simplices = Vec::new();
     for facet in facets {
-        if is_lower_face(&facet, &lifted) {
+        // We propagate error if is_lower_face fails (e.g. empty points)
+        // But here we know points is not empty because we checked above.
+        if is_lower_face(&facet, &lifted).unwrap_or(false) {
             simplices.push(facet);
         }
     }
@@ -98,6 +100,7 @@ fn convex_hull(points: &[Vec<Rational>]) -> Vec<Facet> {
     let dim = points[0].len();
 
     if n <= dim {
+        // Points form a single simplex or less
         return vec![(0..n).collect()];
     }
 
@@ -160,9 +163,15 @@ fn convex_hull(points: &[Vec<Rational>]) -> Vec<Facet> {
 
 /// Check if a point p is "visible" from the outside of a facet.
 fn is_visible(facet_indices: &[usize], p: &[Rational], all_points: &[Vec<Rational>]) -> bool {
+    if all_points.is_empty() {
+        return false;
+    }
     // 1. Compute orientation of (Facet, P)
     let mut mat_p = Vec::new();
     for &idx in facet_indices {
+        if idx >= all_points.len() {
+            return false; // Invalid index
+        }
         mat_p.push(all_points[idx].clone());
     }
     mat_p.push(p.to_vec());
@@ -202,17 +211,29 @@ fn is_visible(facet_indices: &[usize], p: &[Rational], all_points: &[Vec<Rationa
 }
 
 /// Check if a facet is a "lower" face.
-fn is_lower_face(facet_indices: &[usize], all_points: &[Vec<Rational>]) -> bool {
+fn is_lower_face(facet_indices: &[usize], all_points: &[Vec<Rational>]) -> Result<bool> {
+    if all_points.is_empty() {
+        return Err(Error::InvalidInput("No points provided".into()));
+    }
     let dim = all_points[0].len(); // d+1
 
     // Find min height in the whole set.
-    let min_h = all_points.iter().map(|p| p.last().unwrap()).min().unwrap();
+    let min_h = all_points
+        .iter()
+        .map(|p| {
+            p.last()
+                .ok_or_else(|| Error::InvalidInput("Point has no height".into()))
+        })
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .min()
+        .ok_or_else(|| Error::InvalidInput("Empty points list".into()))?;
 
     // Construct a test point below the facet.
     let mut below_point = all_points[facet_indices[0]].clone();
     below_point[dim - 1] = min_h - Rational::from(1000); // Way below
 
-    is_visible(facet_indices, &below_point, all_points)
+    Ok(is_visible(facet_indices, &below_point, all_points))
 }
 
 #[cfg(test)]
@@ -269,9 +290,9 @@ mod tests {
         ];
 
         // Face 0-1-2 (Bottom)
-        assert!(is_lower_face(&[0, 1, 2], &points));
+        assert!(is_lower_face(&[0, 1, 2], &points).unwrap());
 
         // Face 1-2-3 (Side/Top)
-        assert!(!is_lower_face(&[1, 2, 3], &points));
+        assert!(!is_lower_face(&[1, 2, 3], &points).unwrap());
     }
 }

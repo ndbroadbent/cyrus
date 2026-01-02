@@ -122,4 +122,23 @@ mod tests {
         assert!((result.w0 - 1e-50).abs() < 1e-60);
         assert!(result.v0 < 0.0);
     }
+
+    #[test]
+    fn test_compute_tadpole() {
+        // K=[-3, -5], M=[10, 11]
+        // K.M = -30 - 55 = -85
+        // Q = -0.5 * -85 = 42.5
+        let k = vec![-3, -5];
+        let m = vec![10, 11];
+        let q = compute_tadpole(&k, &m);
+        assert!((q - 42.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_is_tadpole_canceled() {
+        let k = vec![1];
+        let m = vec![-2]; // dot = -2 -> Q = 1.0
+        assert!(is_tadpole_canceled(&k, &m, 1.0));
+        assert!(!is_tadpole_canceled(&k, &m, 0.9));
+    }
 }

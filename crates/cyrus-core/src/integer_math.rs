@@ -114,10 +114,15 @@ pub fn integer_kernel(matrix: &[Vec<Integer>]) -> Vec<Vec<Integer>> {
         let mut best_row: Option<usize> = None;
         for r in pivot_row..n {
             let val = &m_mat[r][col];
-            if *val != 0
-                && (best_row.is_none()
-                    || val.clone().abs() < m_mat[best_row.unwrap()][col].clone().abs())
-            {
+            if *val == 0 {
+                continue;
+            }
+
+            if let Some(curr_best) = best_row {
+                if val.clone().abs() < m_mat[curr_best][col].clone().abs() {
+                    best_row = Some(r);
+                }
+            } else {
                 best_row = Some(r);
             }
         }

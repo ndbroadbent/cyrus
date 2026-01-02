@@ -62,9 +62,6 @@ impl MoriCone {
 ///
 /// # Errors
 /// Returns an error if the triangulation is inconsistent or if no generators are found.
-///
-/// # Panics
-/// Panics if the internal search for adjacent simplex vertices fails.
 pub fn compute_mori_generators(tri: &Triangulation, points: &[Point]) -> Result<MoriCone> {
     let n_pts = points.len();
     if n_pts == 0 {
@@ -73,20 +70,7 @@ pub fn compute_mori_generators(tri: &Triangulation, points: &[Point]) -> Result<
     let dim = points[0].dim();
 
     // 1. Identify ridges and their adjacent simplices
-    // A ridge has size dim (one less than simplex size dim+1).
-    let mut ridge_map: HashMap<Vec<usize>, Vec<usize>> = HashMap::new();
-    for (s_idx, simplex) in tri.simplices().iter().enumerate() {
-        if simplex.len() != dim + 1 {
-            continue;
-        }
-
-        for i in 0..simplex.len() {
-            let mut ridge = simplex.clone();
-            ridge.remove(i);
-            ridge.sort_unstable();
-            ridge_map.entry(ridge).or_default().push(s_idx);
-        }
-    }
+    let ridge_map = build_ridge_map(tri, dim);
 
     let mut generators = Vec::new();
 
@@ -97,8 +81,12 @@ pub fn compute_mori_generators(tri: &Triangulation, points: &[Point]) -> Result<
             let s2 = &tri.simplices()[adj_simplices[1]];
 
             // Opposing vertices u1, u2
-            let u1 = *s1.iter().find(|&v| !ridge.contains(v)).unwrap();
-            let u2 = *s2.iter().find(|&v| !ridge.contains(v)).unwrap();
+            let u1 = *s1.iter().find(|&v| !ridge.contains(v)).ok_or_else(|| {
+                Error::LinearAlgebra("Corrupt triangulation: simplex subset of ridge".into())
+            })?;
+            let u2 = *s2.iter().find(|&v| !ridge.contains(v)).ok_or_else(|| {
+                Error::LinearAlgebra("Corrupt triangulation: simplex subset of ridge".into())
+            })?;
 
             // Find relation among {u1, u2} U ridge
             // Total dim+2 points in dim dimensions.
@@ -128,6 +116,23 @@ pub fn compute_mori_generators(tri: &Triangulation, points: &[Point]) -> Result<
     }
 
     Ok(MoriCone::new(generators))
+}
+
+fn build_ridge_map(tri: &Triangulation, dim: usize) -> HashMap<Vec<usize>, Vec<usize>> {
+    let mut ridge_map: HashMap<Vec<usize>, Vec<usize>> = HashMap::new();
+    for (s_idx, simplex) in tri.simplices().iter().enumerate() {
+        if simplex.len() != dim + 1 {
+            continue;
+        }
+
+        for i in 0..simplex.len() {
+            let mut ridge = simplex.clone();
+            ridge.remove(i);
+            ridge.sort_unstable();
+            ridge_map.entry(ridge).or_default().push(s_idx);
+        }
+    }
+    ridge_map
 }
 
 /// From the kernel of {u1, u2, ridge}, extract the Mori relation.
@@ -162,5 +167,41 @@ mod tests {
         let mori = MoriCone::new(vec![vec![Integer::from(1), Integer::from(-2)]]);
         assert!(!mori.contains(&[2.0, 1.0]));
         assert!(mori.contains(&[3.0, 1.0]));
+    }
+
+    #[test]
+    fn test_compute_mori_generators_simple() {
+        // Two triangles sharing an edge in 2D
+        // Points: 0=(0,0), 1=(1,0), 2=(0,1), 3=(1,1)
+        // Triangulation: [0,1,2] and [1,2,3] -> shared edge [1,2]
+        // Relation: v0 + v3 = v1 + v2 => v0 - v1 - v2 + v3 = 0.
+        // Mori generator: [1, -1, -1, 1].
+
+        let points = vec![
+            Point::new(vec![0, 0]),
+            Point::new(vec![1, 0]),
+            Point::new(vec![0, 1]),
+            Point::new(vec![1, 1]),
+        ];
+
+        let tri = Triangulation::new(vec![vec![0, 1, 2], vec![1, 2, 3]]);
+
+        let mori = compute_mori_generators(&tri, &points).unwrap();
+        assert!(!mori.generators.is_empty());
+
+        let generator = &mori.generators[0];
+        // Check signs: v0, v3 positive? v1, v2 negative?
+        // Or v0, v3 negative?
+        // Relation is unique up to scale.
+        // v0+v3 - v1-v2 = 0.
+
+        // We implemented a heuristic: first element positive.
+        // If gen[0] corresponds to v0.
+        // Then gen should be [1, -1, -1, 1].
+
+        assert_eq!(generator[0], Integer::from(1));
+        assert_eq!(generator[3], Integer::from(1));
+        assert_eq!(generator[1], Integer::from(-1));
+        assert_eq!(generator[2], Integer::from(-1));
     }
 }
