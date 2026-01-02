@@ -24,6 +24,7 @@
 //! e^{K₀} = (4/3 × κ_abc p^a p^b p^c)⁻¹
 //! ```
 
+pub mod cosmology;
 pub mod divisor;
 pub mod error;
 pub mod flat_direction;
@@ -31,6 +32,7 @@ pub mod glsm;
 pub mod integer_math;
 pub mod intersection;
 pub mod kahler;
+pub mod lvs;
 pub use kahler::{MoriCone, compute_mori_generators};
 pub mod lattice;
 pub mod pipeline;

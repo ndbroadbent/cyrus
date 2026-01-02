@@ -17,6 +17,8 @@ thiserror.workspace = true
 rayon.workspace = true
 faer = { workspace = true, features = ["svd"] }
 malachite = "0.4"
+ode_solvers = { workspace = true }
+nalgebra = { workspace = true }
 
 [dev-dependencies]
 proptest.workspace = true
