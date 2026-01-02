@@ -136,4 +136,51 @@ mod tests {
         assert!(result.volume > 10.0);
         // assert!(result.potential < 0.0); // Might be positive with this crude approx
     }
+
+    #[test]
+    fn test_lvs_positive_chi_returns_none() {
+        // Positive chi means xi <= 0, which is not valid for LVS
+        let params = LvsParams {
+            w0: 1.0,
+            g_s: 0.1,
+            chi: 100, // Positive chi for negative/zero xi
+            a_s: 1.0,
+            lambda_s: 2.0 * PI,
+        };
+
+        let result = compute_lvs_vacuum(&params);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_lvs_zero_chi_returns_none() {
+        // Zero chi means xi = 0
+        let params = LvsParams {
+            w0: 1.0,
+            g_s: 0.1,
+            chi: 0,
+            a_s: 1.0,
+            lambda_s: 2.0 * PI,
+        };
+
+        let result = compute_lvs_vacuum(&params);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_lvs_result_fields() {
+        let params = LvsParams {
+            w0: 10.0,
+            g_s: 0.05,
+            chi: -200,
+            a_s: 1.0,
+            lambda_s: 2.0 * PI,
+        };
+
+        let result = compute_lvs_vacuum(&params).unwrap();
+        assert!(result.xi > 0.0);
+        assert!(result.tau_s > 0.0);
+        assert!(result.volume.is_finite());
+        assert!(result.potential.is_finite());
+    }
 }
