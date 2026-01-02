@@ -13,6 +13,24 @@
 //!
 //! Reference: arXiv:2107.09064, eq. 6.63
 
+/// Compute the flux tadpole contribution: `Q_flux = -1/2 * K · M`.
+///
+/// Reference: arXiv:2107.09064, eq. 6.13
+#[must_use]
+#[allow(clippy::cast_precision_loss)]
+pub fn compute_tadpole(k: &[i64], m: &[i64]) -> f64 {
+    let dot: i64 = k.iter().zip(m.iter()).map(|(&ki, &mi)| ki * mi).sum();
+    -0.5 * dot as f64
+}
+
+/// Check if the flux tadpole is canceled given a bound `q_max`.
+///
+/// `Q_flux <= Q_max`
+#[must_use]
+pub fn is_tadpole_canceled(k: &[i64], m: &[i64], q_max: f64) -> bool {
+    compute_tadpole(k, m) <= q_max
+}
+
 /// Compute vacuum energy V₀ = -3 × `e^{K₀}` × (`g_s`⁷ / (4V)²) × W₀².
 ///
 /// Returns the cosmological constant in Planck units (Mpl⁴).

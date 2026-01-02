@@ -9,9 +9,10 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use cyrus_core::{
-    GvInvariant, Intersection, build_racetrack_terms, compute_flat_direction, compute_w0,
-    solve_racetrack,
+    EvaluationRequest, GvInvariant, Intersection, MoriCone, build_racetrack_terms,
+    compute_flat_direction, compute_w0, evaluate_vacuum, solve_racetrack,
 };
+use malachite::Integer;
 
 /// Fixture data for flux vectors.
 #[derive(Debug, Deserialize)]
@@ -130,6 +131,39 @@ struct RacetrackSnapshot {
 }
 
 #[test]
+fn test_vacuum_pipeline_4_214_647() {
+    let flux: FluxFixture = load_fixture("4_214_647", "flux.json");
+    let intersection: IntersectionFixture = load_fixture("4_214_647", "intersection.json");
+    let kappa = fixture_to_intersection(&intersection);
+    let gv = load_gv_invariants("4_214_647");
+
+    // Construct a dummy Mori cone that contains the flat direction p
+    // (Actual Mori cone would come from triangulation)
+    let p = compute_flat_direction(&kappa, &flux.k, &flux.m).expect("Flat direction failed");
+    // Relation R such that p . R > 0. Let R = [1, 0, ... 0]
+    let mut generator = vec![Integer::from(0); p.len()];
+    generator[0] = Integer::from(1);
+    let mori = MoriCone::new(vec![generator]);
+
+    let req = EvaluationRequest {
+        kappa: &kappa,
+        mori: &mori,
+        gv: &gv,
+        h11: 214,
+        h21: 4,
+        q_max: 200.0,
+    };
+
+    let result = evaluate_vacuum(&req, &flux.k, &flux.m).expect("Pipeline failed");
+    assert!(result.success);
+    assert!(result.vacuum.is_some());
+
+    let vac = result.vacuum.unwrap();
+    let log_v0 = vac.v0.abs().log10();
+    assert!((-204.0..=-202.0).contains(&log_v0));
+}
+
+#[test]
 fn test_racetrack_full_pipeline_4_214_647() {
     // Full pipeline: (K, M, κ, GV) → p → racetrack terms → g_s, W₀
     let flux: FluxFixture = load_fixture("4_214_647", "flux.json");
@@ -163,7 +197,7 @@ fn test_racetrack_full_pipeline_4_214_647() {
         RacetrackSnapshot {
             g_s: result.g_s,
             w0,
-            w0_log10: w0.log10(),
+            w0_log10: w0.abs().log10(),
             im_tau: result.im_tau,
             delta: result.delta,
             epsilon: result.epsilon,
