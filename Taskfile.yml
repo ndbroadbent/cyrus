@@ -14,6 +14,7 @@ tasks:
       - task: lint
       - task: file-length
       - task: test
+      - task: coverage
 
   # === Formatting ===
   format:
@@ -42,6 +43,12 @@ tasks:
     desc: Check file length limits (max 500 for code, 1000 for tests)
     cmds:
       - ./scripts/check_file_length.sh
+
+  coverage:
+    desc: Run code coverage (fails if under 98%)
+    cmds:
+      - cargo llvm-cov --all-features --workspace --fail-under-lines 98
+      - cargo llvm-cov --all-features --workspace --html
 
   # === Testing ===
   test:
