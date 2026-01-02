@@ -47,7 +47,8 @@ pub use flat_direction::{
     FlatDirectionResult, compute_ek0, compute_flat_direction, compute_flat_direction_full,
     compute_n_matrix,
 };
-pub use intersection::Intersection;
+pub use glsm::compute_glsm_charge_matrix;
+pub use intersection::{Intersection, compute_intersection_numbers};
 // pub mod kklt;
 
 /*
@@ -61,5 +62,6 @@ pub use polytope::Polytope;
 pub use racetrack::{
     GvInvariant, RacetrackResult, RacetrackTerm, build_racetrack_terms, compute_w0, solve_racetrack,
 };
+pub use triangulation::compute_regular_triangulation;
 pub use vacuum::{VacuumResult, compute_v0, compute_vacuum};
 pub use volume::{VolumeResult, bbhl_correction, compute_volume, volume_classical, volume_string};
