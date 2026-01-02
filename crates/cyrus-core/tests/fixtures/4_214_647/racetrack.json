@@ -1,3 +1,33 @@
 {
-  "c_tau": 3.34109
+  "c_tau": 3.34109,
+  "leading_curves": {
+    "_comment": "From paper eq. 6.56-6.61: curve charges (columns) and GV invariants",
+    "curves": [
+      [1, -1, -1, 1],
+      [0, 0, 1, -2],
+      [-1, 1, 1, 0],
+      [0, 1, 0, -2]
+    ],
+    "gv_invariants": [1, -2, 252, -2]
+  },
+  "flat_direction_p": {
+    "_comment": "p = (293/110, 163/110, 163/110, 13/22) from eq. 6.56",
+    "values": [2.6636363636363636, 1.4818181818181818, 1.4818181818181818, 0.5909090909090909],
+    "fractions": [[293, 110], [163, 110], [163, 110], [13, 22]]
+  },
+  "racetrack_exponents": {
+    "_comment": "q·p values for leading curves: 32/110 and 33/110",
+    "alpha": 0.2909090909090909,
+    "beta": 0.3,
+    "alpha_fraction": [32, 110],
+    "beta_fraction": [33, 110]
+  },
+  "expected": {
+    "g_s": 0.00911134,
+    "g_s_formula": "2π / (110 × ln(528))",
+    "W0": 2.30012e-90,
+    "W0_formula": "80 × ζ × 528^(-33)",
+    "delta": 0.0018939393939393939,
+    "delta_ratio": "1/528"
+  }
 }

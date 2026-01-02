@@ -25,6 +25,10 @@ pub enum Error {
     #[error("linear algebra error: {0}")]
     LinearAlgebra(String),
 
+    /// Singular matrix encountered in solver.
+    #[error("singular matrix: {0}")]
+    SingularMatrix(String),
+
     /// Invalid input data.
     #[error("invalid input: {0}")]
     InvalidInput(String),

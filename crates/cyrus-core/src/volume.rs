@@ -70,6 +70,7 @@ pub fn compute_volume(kappa: &Intersection, t: &[f64], h11: i32, h21: i32) -> Vo
 #[cfg(test)]
 mod tests {
     use super::*;
+    use malachite::Rational;
 
     #[test]
     fn test_bbhl_correction() {
@@ -86,7 +87,7 @@ mod tests {
         // Simple case: κ_000 = 6, t = [2]
         // V = (1/6) * 6 * 8 = 8
         let mut kappa = Intersection::new(1);
-        kappa.set(0, 0, 0, 6);
+        kappa.set(0, 0, 0, Rational::from(6));
 
         let v = volume_classical(&kappa, &[2.0]);
         assert!((v - 8.0).abs() < 1e-10);
@@ -96,7 +97,7 @@ mod tests {
     fn test_volume_string() {
         // V_string = V_classical - BBHL
         let mut kappa = Intersection::new(1);
-        kappa.set(0, 0, 0, 6);
+        kappa.set(0, 0, 0, Rational::from(6));
 
         let v_string = volume_string(&kappa, &[2.0], 5, 3);
         let v_classical = 8.0;

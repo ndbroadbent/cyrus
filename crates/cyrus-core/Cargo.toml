@@ -15,9 +15,11 @@ workspace = true
 [dependencies]
 thiserror.workspace = true
 rayon.workspace = true
-faer = { workspace = true }
+faer = { workspace = true, features = ["svd"] }
+malachite = "0.4"
 
 [dev-dependencies]
 proptest.workspace = true
 serde = { workspace = true }
 serde_json = { workspace = true }
+insta = { version = "1.34", features = ["json"] }

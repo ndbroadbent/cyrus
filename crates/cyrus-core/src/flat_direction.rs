@@ -22,6 +22,8 @@
 //! Reference: arXiv:2107.09064, Section 6
 
 use faer::{Mat, prelude::SpSolver};
+use malachite::num::conversion::traits::RoundingFrom;
+use malachite::rounding_modes::RoundingMode;
 use rayon::prelude::*;
 
 use crate::intersection::Intersection;
@@ -44,9 +46,9 @@ pub fn compute_n_matrix(kappa: &Intersection, m: &[i64]) -> Mat<f64> {
         kappa
             .par_iter()
             .flat_map(|((i, j, k), val)| {
-                let val_f = val as f64;
+                let (val_f, _) = f64::rounding_from(val, RoundingMode::Nearest);
                 unique_permutations(i, j, k)
-                    .map(|(a, b, c)| (a, b, val_f * m[c] as f64))
+                    .map(move |(a, b, c)| (a, b, val_f * m[c] as f64))
                     .collect::<Vec<_>>()
             })
             .collect()
@@ -54,9 +56,9 @@ pub fn compute_n_matrix(kappa: &Intersection, m: &[i64]) -> Mat<f64> {
         kappa
             .iter()
             .flat_map(|((i, j, k), val)| {
-                let val_f = val as f64;
+                let (val_f, _) = f64::rounding_from(val, RoundingMode::Nearest);
                 unique_permutations(i, j, k)
-                    .map(|(a, b, c)| (a, b, val_f * m[c] as f64))
+                    .map(move |(a, b, c)| (a, b, val_f * m[c] as f64))
                     .collect::<Vec<_>>()
             })
             .collect()
@@ -232,12 +234,13 @@ pub fn compute_flat_direction_full(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use malachite::Rational;
 
     #[test]
     fn test_compute_n_matrix_simple() {
         // κ_000 = 6 means N_00 = 6 * M^0
         let mut kappa = Intersection::new(1);
-        kappa.set(0, 0, 0, 6);
+        kappa.set(0, 0, 0, Rational::from(6));
 
         let m = vec![2];
         let n = compute_n_matrix(&kappa, &m);
@@ -264,7 +267,7 @@ mod tests {
         // With κ_000 = 6, M = [1], K = [3]:
         // N_00 = 6, so p = 6⁻¹ × 3 = 0.5
         let mut kappa = Intersection::new(1);
-        kappa.set(0, 0, 0, 6);
+        kappa.set(0, 0, 0, Rational::from(6));
 
         let k = vec![3];
         let m = vec![1];
@@ -279,7 +282,7 @@ mod tests {
         // κ_ppp = 6 × 1 = 6 (note: multiplicity 1 for iii)
         // e^K₀ = 1 / (4/3 × 6) = 1/8 = 0.125
         let mut kappa = Intersection::new(1);
-        kappa.set(0, 0, 0, 6);
+        kappa.set(0, 0, 0, Rational::from(6));
 
         let p = vec![1.0];
         let ek0 = compute_ek0(&kappa, &p);

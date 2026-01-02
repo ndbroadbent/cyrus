@@ -12,6 +12,9 @@
 //!
 //! Reference: arXiv:2107.09064, Section 5
 
+use malachite::num::conversion::traits::RoundingFrom;
+use malachite::rounding_modes::RoundingMode;
+
 use crate::intersection::Intersection;
 
 /// Compute divisor volumes `τ_i` = (1/2) `κ_ijk` t^j t^k.
@@ -32,8 +35,7 @@ pub fn compute_divisor_volumes(kappa: &Intersection, t: &[f64]) -> Vec<f64> {
 
     // Build the contractions manually
     for ((a, b, c), val) in kappa.iter() {
-        #[allow(clippy::cast_precision_loss)]
-        let val_f = val as f64;
+        let (val_f, _) = f64::rounding_from(val, RoundingMode::Nearest);
 
         // Contribution to τ_a from κ_{abc} t^b t^c
         // κ_{abc} contributes to τ_a, τ_b, τ_c based on symmetry
@@ -84,8 +86,7 @@ pub fn compute_divisor_jacobian(kappa: &Intersection, t: &[f64]) -> Vec<Vec<f64>
     // From canonical (a,b,c) with a ≤ b ≤ c, we need to fill J entries
 
     for ((a, b, c), val) in kappa.iter() {
-        #[allow(clippy::cast_precision_loss)]
-        let val_f = val as f64;
+        let (val_f, _) = f64::rounding_from(val, RoundingMode::Nearest);
 
         if a == b && b == c {
             // (a,a,a): J[a][a] += κ_{aaa} t^a
@@ -129,13 +130,14 @@ pub fn compute_divisor_jacobian(kappa: &Intersection, t: &[f64]) -> Vec<Vec<f64>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use malachite::Rational;
 
     #[test]
     fn test_divisor_volume_simple() {
         // κ_000 = 6, t = [2]
         // τ_0 = (1/2) × 6 × 2² = 12
         let mut kappa = Intersection::new(1);
-        kappa.set(0, 0, 0, 6);
+        kappa.set(0, 0, 0, Rational::from(6));
 
         let t = vec![2.0];
         let tau = compute_divisor_volumes(&kappa, &t);
@@ -150,7 +152,7 @@ mod tests {
         // τ_0 = (1/2) × 3 × 2 × 1 × 2 = 6 (κ_{001}t^0t^1 + κ_{010}t^1t^0)
         // τ_1 = (1/2) × 3 × 1² = 1.5 (κ_{100}t^0t^0)
         let mut kappa = Intersection::new(2);
-        kappa.set(0, 0, 1, 3);
+        kappa.set(0, 0, 1, Rational::from(3));
 
         let t = vec![1.0, 2.0];
         let tau = compute_divisor_volumes(&kappa, &t);
@@ -166,7 +168,7 @@ mod tests {
         // τ_0 = (1/2) × 6 × t² = 3t²
         // J_{00} = dτ_0/dt^0 = 6t = 12
         let mut kappa = Intersection::new(1);
-        kappa.set(0, 0, 0, 6);
+        kappa.set(0, 0, 0, Rational::from(6));
 
         let t = vec![2.0];
         let jac = compute_divisor_jacobian(&kappa, &t);
@@ -179,8 +181,8 @@ mod tests {
     fn test_jacobian_consistency() {
         // Verify J numerically by finite differences
         let mut kappa = Intersection::new(2);
-        kappa.set(0, 0, 1, 3);
-        kappa.set(1, 1, 1, 2);
+        kappa.set(0, 0, 1, Rational::from(3));
+        kappa.set(1, 1, 1, Rational::from(2));
 
         let t = vec![1.5, 2.5];
         let jac = compute_divisor_jacobian(&kappa, &t);
