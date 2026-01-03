@@ -225,3 +225,36 @@ fn test_mori_three_simplices_3d() {
     // Should have generators from interior ridges
     assert!(!mori.generators().is_empty());
 }
+
+#[test]
+fn test_mori_corrupt_simplex_with_duplicates() {
+    // Test that corrupt simplices with duplicate vertices are handled gracefully.
+    //
+    // PROVEN INVARIANT: A ridge is constructed by removing one vertex from a simplex.
+    // Therefore simplex \ ridge = {removed_vertex} is always non-empty for ANY
+    // simplex that contributed to that ridge. This means the "simplex subset of ridge"
+    // error path is structurally unreachable.
+    //
+    // However, corrupt simplices with duplicates will cause the same ridge to be
+    // added multiple times, making adj_simplices.len() > 2, so no generators are
+    // produced (the corrupt simplices are effectively ignored).
+
+    let points = vec![
+        Point::new(vec![0, 0]), // 0
+        Point::new(vec![1, 0]), // 1
+        Point::new(vec![0, 1]), // 2
+    ];
+
+    // s1 = [0,1,2] is valid
+    // s2 = [0,1,0] is CORRUPT (duplicate vertex 0)
+    // s2 contributes ridge [0,1] twice (from removing indices 0 and 2)
+    // This makes adj_simplices = [0, 1, 1] (len=3), not 2, so no generator
+    let tri = Triangulation::new(vec![
+        vec![0, 1, 2], // valid simplex
+        vec![0, 1, 0], // CORRUPT: duplicate vertex
+    ]);
+
+    let result = compute_mori_generators(&tri, &points).unwrap();
+    // Corrupt simplices cause ridges to have != 2 adjacencies, producing no generators
+    assert!(result.generators().is_empty());
+}

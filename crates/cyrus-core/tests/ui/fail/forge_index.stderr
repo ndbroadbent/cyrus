@@ -1,0 +1,9 @@
+error[E0451]: fields `i` and `_brand` of struct `cyrus_core::types::Index` are private
+  --> tests/ui/fail/forge_index.rs:17:13
+   |
+16 |         let fake_idx = Index {
+   |                        ----- in this type
+17 |             i: 100, // Out of bounds!
+   |             ^ private field
+18 |             _brand: PhantomData,
+   |             ^^^^^^ private field

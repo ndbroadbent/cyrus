@@ -7,6 +7,9 @@
 
 use std::collections::HashMap;
 
+use crate::types::f64::F64;
+use crate::types::tags::Pos;
+
 /// Riemann zeta function at 3: ζ(3) ≈ 1.202056903159594.
 pub const ZETA: f64 = 1.202_056_903_159_594;
 
@@ -22,12 +25,12 @@ pub struct RacetrackTerm {
 }
 
 /// Result of racetrack stabilization.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct RacetrackResult {
-    /// String coupling g_s.
-    pub g_s: f64,
-    /// Stabilized Kähler moduli value: `Im(τ) = (p / g_s)`.
-    pub im_tau: f64,
+    /// String coupling g_s (positive, bounded 0 < g_s < 1).
+    pub g_s: F64<Pos>,
+    /// Stabilized Kähler moduli value: `Im(τ) = (p / g_s)` (positive).
+    pub im_tau: F64<Pos>,
     /// Numerical error delta (F-term residual).
     pub delta: f64,
     /// Numerical error epsilon (distance from target).
@@ -135,13 +138,17 @@ pub fn solve_racetrack(terms: &[RacetrackTerm]) -> Option<RacetrackResult> {
     }
 
     let diff = t1.exponent - t2.exponent;
-    let g_s = 2.0 * std::f64::consts::PI * diff / ratio.ln();
+    let g_s_raw = 2.0 * std::f64::consts::PI * diff / ratio.ln();
 
-    if g_s <= 0.0 || g_s > 1.0 {
+    if g_s_raw <= 0.0 || g_s_raw > 1.0 {
         return None;
     }
 
-    let im_tau = t1.exponent / g_s;
+    let im_tau_raw = t1.exponent / g_s_raw;
+
+    // Both are positive at this point (validated above)
+    let g_s = F64::<Pos>::new(g_s_raw)?;
+    let im_tau = F64::<Pos>::new(im_tau_raw)?;
 
     Some(RacetrackResult {
         g_s,
@@ -158,8 +165,9 @@ pub fn solve_racetrack(terms: &[RacetrackTerm]) -> Option<RacetrackResult> {
 /// Reference: arXiv:2107.09064, Eq. 6.4
 #[must_use]
 pub fn compute_w0(result: &RacetrackResult, term1: &RacetrackTerm, term2: &RacetrackTerm) -> f64 {
-    let exp1 = (-2.0 * std::f64::consts::PI * term1.exponent / result.g_s).exp();
-    let exp2 = (-2.0 * std::f64::consts::PI * term2.exponent / result.g_s).exp();
+    let g_s = result.g_s.get();
+    let exp1 = (-2.0 * std::f64::consts::PI * term1.exponent / g_s).exp();
+    let exp2 = (-2.0 * std::f64::consts::PI * term2.exponent / g_s).exp();
 
     let sum = term1.coefficient.mul_add(exp1, term2.coefficient * exp2);
     -sum
@@ -191,8 +199,8 @@ mod tests {
         ];
 
         let res = solve_racetrack(&terms).unwrap();
-        assert!(res.g_s > 0.0);
-        assert!(res.g_s < 1.0);
+        assert!(res.g_s.get() > 0.0);
+        assert!(res.g_s.get() < 1.0);
     }
 
     #[test]

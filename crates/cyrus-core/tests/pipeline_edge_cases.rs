@@ -1,10 +1,24 @@
 #![allow(missing_docs, clippy::too_many_lines)]
-use cyrus_core::{EvaluationRequest, GvInvariant, Intersection, MoriCone, evaluate_vacuum};
+use cyrus_core::types::rational::Rational as TypedRational;
+use cyrus_core::types::tags::Pos;
+use cyrus_core::{EvaluationRequest, GvInvariant, Intersection, MoriCone, evaluate_vacuum, H11, H21};
 use malachite::{Integer, Rational};
+
+fn pos_rat(n: i32) -> TypedRational<Pos> {
+    TypedRational::<Pos>::new(Rational::from(n)).unwrap()
+}
+
+fn h11() -> H11 {
+    H11::new(5).unwrap()
+}
+
+fn h21() -> H21 {
+    H21::new(3).unwrap()
+}
 
 fn make_simple_kappa() -> Intersection {
     let mut kappa = Intersection::new(1);
-    kappa.set(0, 0, 0, Rational::from(6));
+    kappa.set(0, 0, 0, pos_rat(6));
     kappa
 }
 
@@ -35,8 +49,8 @@ fn test_pipeline_tadpole_exceeded() {
         kappa: &kappa,
         mori: &mori,
         gv: &gv,
-        h11: 5,
-        h21: 3,
+        h11: h11(),
+        h21: h21(),
         q_max: 1.0, // Very low bound
     };
 
@@ -57,8 +71,8 @@ fn test_pipeline_singular_n_matrix() {
     // All zeros - N matrix will be singular
     // Actually we need non-zero kappa for the matrix to be built
     // but arranged so it's still singular
-    kappa.set(0, 0, 0, Rational::from(1));
-    kappa.set(1, 1, 1, Rational::from(1));
+    kappa.set(0, 0, 0, pos_rat(1));
+    kappa.set(1, 1, 1, pos_rat(1));
     // No cross terms - matrix may be rank deficient
 
     let mori = MoriCone::new(vec![vec![Integer::from(1), Integer::from(1)]]);
@@ -77,8 +91,8 @@ fn test_pipeline_singular_n_matrix() {
         kappa: &kappa,
         mori: &mori,
         gv: &gv,
-        h11: 5,
-        h21: 3,
+        h11: h11(),
+        h21: h21(),
         q_max: 1000.0,
     };
 
@@ -109,8 +123,8 @@ fn test_pipeline_outside_kahler_cone() {
         kappa: &kappa,
         mori: &mori,
         gv: &gv,
-        h11: 5,
-        h21: 3,
+        h11: h11(),
+        h21: h21(),
         q_max: 1000.0,
     };
 
@@ -131,10 +145,10 @@ fn test_pipeline_orthogonality_violated() {
     // Need K · p != 0
     // N * p = K, so we need special setup
     let mut kappa = Intersection::new(2);
-    kappa.set(0, 0, 0, Rational::from(6));
-    kappa.set(0, 0, 1, Rational::from(3));
-    kappa.set(0, 1, 1, Rational::from(2));
-    kappa.set(1, 1, 1, Rational::from(4));
+    kappa.set(0, 0, 0, pos_rat(6));
+    kappa.set(0, 0, 1, pos_rat(3));
+    kappa.set(0, 1, 1, pos_rat(2));
+    kappa.set(1, 1, 1, pos_rat(4));
 
     // Mori cone that accepts positive p
     let mori = MoriCone::new(vec![
@@ -157,8 +171,8 @@ fn test_pipeline_orthogonality_violated() {
         kappa: &kappa,
         mori: &mori,
         gv: &gv,
-        h11: 5,
-        h21: 3,
+        h11: h11(),
+        h21: h21(),
         q_max: 1000.0,
     };
 
@@ -185,10 +199,10 @@ fn test_pipeline_no_racetrack_solution() {
     // while p is in the Kähler cone, and GV has same sign coefficients (racetrack fails)
 
     let mut kappa = Intersection::new(2);
-    kappa.set(0, 0, 0, Rational::from(6));
-    kappa.set(0, 0, 1, Rational::from(3));
-    kappa.set(0, 1, 1, Rational::from(2));
-    kappa.set(1, 1, 1, Rational::from(4));
+    kappa.set(0, 0, 0, pos_rat(6));
+    kappa.set(0, 0, 1, pos_rat(3));
+    kappa.set(0, 1, 1, pos_rat(2));
+    kappa.set(1, 1, 1, pos_rat(4));
 
     let mori = MoriCone::new(vec![
         vec![Integer::from(1), Integer::from(0)],
@@ -211,8 +225,8 @@ fn test_pipeline_no_racetrack_solution() {
         kappa: &kappa,
         mori: &mori,
         gv: &gv,
-        h11: 5,
-        h21: 3,
+        h11: h11(),
+        h21: h21(),
         q_max: 1000.0,
     };
 
@@ -235,7 +249,7 @@ fn test_pipeline_no_racetrack_solution() {
 fn test_pipeline_success_path() {
     // Carefully construct a case that passes all filters
     let mut kappa = Intersection::new(1);
-    kappa.set(0, 0, 0, Rational::from(6));
+    kappa.set(0, 0, 0, pos_rat(6));
 
     let mori = MoriCone::new(vec![vec![Integer::from(1)]]);
 
@@ -255,8 +269,8 @@ fn test_pipeline_success_path() {
         kappa: &kappa,
         mori: &mori,
         gv: &gv,
-        h11: 5,
-        h21: 3,
+        h11: h11(),
+        h21: h21(),
         q_max: 1000.0,
     };
 
@@ -301,8 +315,8 @@ fn test_pipeline_tadpole_boundary() {
         kappa: &kappa,
         mori: &mori,
         gv: &gv,
-        h11: 5,
-        h21: 3,
+        h11: h11(),
+        h21: h21(),
         q_max: expected_tadpole, // Exactly equal
     };
 
@@ -317,8 +331,8 @@ fn test_pipeline_tadpole_boundary() {
         kappa: &kappa,
         mori: &mori,
         gv: &gv,
-        h11: 5,
-        h21: 3,
+        h11: h11(),
+        h21: h21(),
         q_max: expected_tadpole - 0.1, // 9.9 < 10
     };
 
@@ -331,7 +345,7 @@ fn test_pipeline_tadpole_boundary() {
 fn test_pipeline_orthogonality_threshold() {
     // Test the 1e-8 threshold for K·p
     let mut kappa = Intersection::new(1);
-    kappa.set(0, 0, 0, Rational::from(6));
+    kappa.set(0, 0, 0, pos_rat(6));
 
     let mori = MoriCone::new(vec![vec![Integer::from(1)]]);
     let gv = vec![
@@ -349,8 +363,8 @@ fn test_pipeline_orthogonality_threshold() {
         kappa: &kappa,
         mori: &mori,
         gv: &gv,
-        h11: 5,
-        h21: 3,
+        h11: h11(),
+        h21: h21(),
         q_max: 1000.0,
     };
 

@@ -1,0 +1,7 @@
+error[E0080]: evaluation panicked: f64_pos! requires finite positive value
+ --> tests/ui/fail/pos_macro_negative.rs:9:14
+  |
+9 |     let _x = f64_pos!(-1.0);
+  |              ^^^^^^^^^^^^^^ evaluation of `main::_` failed here
+  |
+  = note: this error originates in the macro `$crate::panic::panic_2021` which comes from the expansion of the macro `f64_pos` (in Nightly builds, run with -Z macro-backtrace for more info)

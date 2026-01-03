@@ -1,5 +1,4 @@
 #![allow(missing_docs)]
-use cyrus_core::compute_v0;
 use cyrus_core::integer_math::integer_kernel;
 use malachite::Integer;
 
@@ -25,15 +24,8 @@ fn test_kernel_sign_flip() {
     // Just verifying it works.
 }
 
-#[test]
-fn test_vacuum_error() {
-    // compute_v0 inputs: ek0, g_s, v_string, w0
-    // V0 = -3 * ek0 * (g_s^7 / (4*v_string)^2) * w0^2
-    // If v_string is 0, division by zero -> infinity.
-
-    let v0 = compute_v0(1.0, 0.1, 0.0, 1.0);
-    assert!(v0.is_infinite());
-}
+// Note: compute_v0 now requires PositiveF64 inputs, so we can't test
+// with v_string=0.0 (which would be invalid). The type system prevents this.
 
 #[test]
 fn test_polytope_duplicate_vertex() {

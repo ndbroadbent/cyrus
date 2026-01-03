@@ -1,0 +1,10 @@
+error[E0308]: mismatched types
+  --> tests/ui/fail/finite_abs_not_pos.rs:12:29
+   |
+12 |     let _result: F64<Pos> = f.abs();
+   |                  --------   ^^^^^^^ expected `F64<Pos>`, found `F64<NonNeg>`
+   |                  |
+   |                  expected due to this
+   |
+   = note: expected struct `F64<Pos>`
+              found struct `F64<NonNeg>`

@@ -12,6 +12,37 @@ use malachite::Rational;
 use malachite::num::conversion::traits::FromSciString;
 use std::collections::HashSet;
 
+/// A non-empty vector of points. Guarantees at least one element.
+struct NonEmptyPoints(Vec<Vec<Rational>>);
+
+impl NonEmptyPoints {
+    /// Create from a non-empty vector. Returns None if empty.
+    fn new(points: Vec<Vec<Rational>>) -> Option<Self> {
+        if points.is_empty() {
+            None
+        } else {
+            Some(Self(points))
+        }
+    }
+
+    fn as_slice(&self) -> &[Vec<Rational>] {
+        &self.0
+    }
+
+    const fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn first(&self) -> &Vec<Rational> {
+        // Safe: guaranteed non-empty by construction
+        &self.0[0]
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &Vec<Rational>> {
+        self.0.iter()
+    }
+}
+
 /// A triangulation of a point set.
 ///
 /// Represented as a collection of simplices, where each simplex is a
@@ -55,10 +86,6 @@ pub fn compute_regular_triangulation(points: &[Point], heights: &[f64]) -> Resul
         ));
     }
 
-    if points.is_empty() {
-        return Ok(Triangulation::new(Vec::new()));
-    }
-
     // 1. Lift points: (v_i, h_i) in R^{d+1} using Rational for exactness
     let lifted: Vec<Vec<Rational>> = points
         .iter()
@@ -72,15 +99,18 @@ pub fn compute_regular_triangulation(points: &[Point], heights: &[f64]) -> Resul
         })
         .collect();
 
-    // 2. Compute Convex Hull in d+1 dimensions
+    // 2. Wrap in NonEmptyPoints - if empty, return empty triangulation
+    let Some(lifted) = NonEmptyPoints::new(lifted) else {
+        return Ok(Triangulation::new(Vec::new()));
+    };
+
+    // 3. Compute Convex Hull in d+1 dimensions
     let facets = convex_hull(&lifted);
 
-    // 3. Extract lower faces
+    // 4. Extract lower faces
     let mut simplices = Vec::new();
     for facet in facets {
-        // We propagate error if is_lower_face fails (e.g. empty points)
-        // But here we know points is not empty because we checked above.
-        if is_lower_face(&facet, &lifted).unwrap_or(false) {
+        if is_lower_face(&facet, &lifted) {
             simplices.push(facet);
         }
     }
@@ -92,12 +122,9 @@ pub fn compute_regular_triangulation(points: &[Point], heights: &[f64]) -> Resul
 type Facet = Vec<usize>;
 
 /// Compute the convex hull of a set of points in N dimensions.
-fn convex_hull(points: &[Vec<Rational>]) -> Vec<Facet> {
+fn convex_hull(points: &NonEmptyPoints) -> Vec<Facet> {
     let n = points.len();
-    if n == 0 {
-        return Vec::new();
-    }
-    let dim = points[0].len();
+    let dim = points.first().len();
 
     if n <= dim {
         // Points form a single simplex or less
@@ -108,23 +135,22 @@ fn convex_hull(points: &[Vec<Rational>]) -> Vec<Facet> {
     let mut current_facets: Vec<Facet> = Vec::new();
 
     // Create initial facets from the first dim+1 points
+    // INVARIANT: n > dim (checked above), so n >= dim+1, meaning i in 0..=dim
+    // will always satisfy i < n. No break needed.
     for i in 0..=dim {
-        if i >= n {
-            break;
-        }
         let face: Vec<usize> = (0..=dim).filter(|&idx| idx != i).collect();
         current_facets.push(face);
     }
 
     // 2. Incrementally add points
     for i in (dim + 1)..n {
-        let p = &points[i];
+        let p = &points.as_slice()[i];
 
         let mut visible_facets = Vec::new();
         let mut horizon_ridges = HashSet::new();
 
         for (f_idx, facet) in current_facets.iter().enumerate() {
-            if is_visible(facet, p, points) {
+            if is_visible(facet, p, points.as_slice()) {
                 visible_facets.push(f_idx);
                 // Add ridges
                 for j in 0..facet.len() {
@@ -162,16 +188,11 @@ fn convex_hull(points: &[Vec<Rational>]) -> Vec<Facet> {
 }
 
 /// Check if a point p is "visible" from the outside of a facet.
+/// Caller guarantees all_points is non-empty and indices are valid.
 fn is_visible(facet_indices: &[usize], p: &[Rational], all_points: &[Vec<Rational>]) -> bool {
-    if all_points.is_empty() {
-        return false;
-    }
     // 1. Compute orientation of (Facet, P)
     let mut mat_p = Vec::new();
     for &idx in facet_indices {
-        if idx >= all_points.len() {
-            return false; // Invalid index
-        }
         mat_p.push(all_points[idx].clone());
     }
     mat_p.push(p.to_vec());
@@ -211,29 +232,22 @@ fn is_visible(facet_indices: &[usize], p: &[Rational], all_points: &[Vec<Rationa
 }
 
 /// Check if a facet is a "lower" face.
-fn is_lower_face(facet_indices: &[usize], all_points: &[Vec<Rational>]) -> Result<bool> {
-    if all_points.is_empty() {
-        return Err(Error::InvalidInput("No points provided".into()));
-    }
-    let dim = all_points[0].len(); // d+1
+fn is_lower_face(facet_indices: &[usize], all_points: &NonEmptyPoints) -> bool {
+    let dim = all_points.first().len(); // d+1
 
     // Find min height in the whole set.
+    // Safe: NonEmptyPoints guarantees non-empty, and each point has height (last coord)
     let min_h = all_points
         .iter()
-        .map(|p| {
-            p.last()
-                .ok_or_else(|| Error::InvalidInput("Point has no height".into()))
-        })
-        .collect::<Result<Vec<_>>>()?
-        .into_iter()
+        .filter_map(|p| p.last())
         .min()
-        .ok_or_else(|| Error::InvalidInput("Empty points list".into()))?;
+        .expect("NonEmptyPoints guarantees non-empty");
 
     // Construct a test point below the facet.
-    let mut below_point = all_points[facet_indices[0]].clone();
-    below_point[dim - 1] = min_h - Rational::from(1000); // Way below
+    let mut below_point = all_points.as_slice()[facet_indices[0]].clone();
+    below_point[dim - 1] = min_h.clone() - Rational::from(1000); // Way below
 
-    Ok(is_visible(facet_indices, &below_point, all_points))
+    is_visible(facet_indices, &below_point, all_points.as_slice())
 }
 
 #[cfg(test)]
@@ -282,17 +296,30 @@ mod tests {
 
     #[test]
     fn test_is_lower_face_3d() {
-        let points = vec![
+        let points = NonEmptyPoints::new(vec![
             vec![r(0), r(0), r(0)], // 0
             vec![r(1), r(0), r(0)], // 1
             vec![r(0), r(1), r(0)], // 2
             vec![r(0), r(0), r(1)], // 3 (Top)
-        ];
+        ])
+        .unwrap();
 
         // Face 0-1-2 (Bottom)
-        assert!(is_lower_face(&[0, 1, 2], &points).unwrap());
+        assert!(is_lower_face(&[0, 1, 2], &points));
 
         // Face 1-2-3 (Side/Top)
-        assert!(!is_lower_face(&[1, 2, 3], &points).unwrap());
+        assert!(!is_lower_face(&[1, 2, 3], &points));
+    }
+
+    #[test]
+    fn test_non_empty_points_rejects_empty() {
+        let empty: Vec<Vec<Rational>> = vec![];
+        assert!(NonEmptyPoints::new(empty).is_none());
+    }
+
+    #[test]
+    fn test_non_empty_points_accepts_non_empty() {
+        let points = vec![vec![r(0), r(0)]];
+        assert!(NonEmptyPoints::new(points).is_some());
     }
 }

@@ -26,7 +26,11 @@ use malachite::num::conversion::traits::RoundingFrom;
 use malachite::rounding_modes::RoundingMode;
 use rayon::prelude::*;
 
+use crate::error::{Error, Result};
+use crate::f64_pos;
 use crate::intersection::Intersection;
+use crate::types::f64::F64;
+use crate::types::tags::{Finite, Pos};
 
 /// Compute the N matrix: `N_ab = κ_abc M^c`.
 ///
@@ -46,7 +50,7 @@ pub fn compute_n_matrix(kappa: &Intersection, m: &[i64]) -> Mat<f64> {
         kappa
             .par_iter()
             .flat_map(|((i, j, k), val)| {
-                let (val_f, _) = f64::rounding_from(val, RoundingMode::Nearest);
+                let (val_f, _) = f64::rounding_from(val.get(), RoundingMode::Nearest);
                 unique_permutations(*i, *j, *k)
                     .map(move |(a, b, c)| (a, b, val_f * m[c] as f64))
                     .collect::<Vec<_>>()
@@ -56,7 +60,7 @@ pub fn compute_n_matrix(kappa: &Intersection, m: &[i64]) -> Mat<f64> {
         kappa
             .iter()
             .flat_map(|((i, j, k), val)| {
-                let (val_f, _) = f64::rounding_from(val, RoundingMode::Nearest);
+                let (val_f, _) = f64::rounding_from(val.get(), RoundingMode::Nearest);
                 unique_permutations(*i, *j, *k)
                     .map(move |(a, b, c)| (a, b, val_f * m[c] as f64))
                     .collect::<Vec<_>>()
@@ -187,12 +191,28 @@ pub fn compute_flat_direction(kappa: &Intersection, k: &[i64], m: &[i64]) -> Opt
 
 /// Compute `e^{K₀} = (4/3 × κ_abc p^a p^b p^c)^{-1}`.
 ///
-/// # Panics
-/// Panics if `p.len() != kappa.dim()`.
-#[must_use]
-pub fn compute_ek0(kappa: &Intersection, p: &[f64]) -> f64 {
-    let kappa_ppp = kappa.contract_triple(p);
-    1.0 / ((4.0 / 3.0) * kappa_ppp)
+/// Returns `F64<Pos>` since `e^x` is always positive.
+///
+/// # Errors
+/// Returns an error if the contraction is non-positive (invalid flat direction).
+pub fn compute_ek0(kappa: &Intersection, p: &[f64]) -> Result<F64<Pos>> {
+    // Convert raw values to typed (flat direction can have any sign)
+    let p_typed: Vec<F64<Finite>> = p
+        .iter()
+        .map(|&x| {
+            F64::<Finite>::new(x).expect("flat direction components must be finite")
+        })
+        .collect();
+
+    // Boundary: contraction must be positive for valid physics
+    let kappa_ppp = kappa.contract_triple_finite(&p_typed).ok_or_else(|| {
+        Error::InvalidInput(
+            "κ_abc p^a p^b p^c must be positive for valid flat direction".into(),
+        )
+    })?;
+
+    // Type algebra: Pos / Pos = Pos
+    Ok(f64_pos!(1.0) / (f64_pos!(4.0 / 3.0) * kappa_ppp))
 }
 
 /// Result of flat direction computation.
@@ -203,12 +223,13 @@ pub struct FlatDirectionResult {
     /// Flat direction: p = N⁻¹ K.
     pub p: Vec<f64>,
     /// Kähler potential factor: `e^{K₀} = (4/3 × κ_abc p^a p^b p^c)^{-1}`.
-    pub ek0: f64,
+    /// Always positive (it's an exponential).
+    pub ek0: F64<Pos>,
 }
 
 /// Compute flat direction with full breakdown.
 ///
-/// Returns `None` if N is singular.
+/// Returns `None` if N is singular or if the flat direction is invalid.
 ///
 /// # Panics
 /// Panics if dimensions don't match.
@@ -220,7 +241,7 @@ pub fn compute_flat_direction_full(
 ) -> Option<FlatDirectionResult> {
     let n_mat = compute_n_matrix(kappa, m);
     let p = solve_linear_system_faer(&n_mat, k)?;
-    let ek0 = compute_ek0(kappa, &p);
+    let ek0 = compute_ek0(kappa, &p).ok()?;
 
     // Convert to Vec<Vec> for result
     let dim = n_mat.nrows();
@@ -234,13 +255,15 @@ pub fn compute_flat_direction_full(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::rational::Rational as TypedRational;
+use crate::types::tags::Pos;
     use malachite::Rational;
 
     #[test]
     fn test_compute_n_matrix_simple() {
         // κ_000 = 6 means N_00 = 6 * M^0
         let mut kappa = Intersection::new(1);
-        kappa.set(0, 0, 0, Rational::from(6));
+        kappa.set(0, 0, 0, TypedRational::<Pos>::new(Rational::from(6)).unwrap());
 
         let m = vec![2];
         let n = compute_n_matrix(&kappa, &m);
@@ -267,7 +290,7 @@ mod tests {
         // With κ_000 = 6, M = [1], K = [3]:
         // N_00 = 6, so p = 6⁻¹ × 3 = 0.5
         let mut kappa = Intersection::new(1);
-        kappa.set(0, 0, 0, Rational::from(6));
+        kappa.set(0, 0, 0, TypedRational::<Pos>::new(Rational::from(6)).unwrap());
 
         let k = vec![3];
         let m = vec![1];
@@ -282,11 +305,11 @@ mod tests {
         // κ_ppp = 6 × 1 = 6 (note: multiplicity 1 for iii)
         // e^K₀ = 1 / (4/3 × 6) = 1/8 = 0.125
         let mut kappa = Intersection::new(1);
-        kappa.set(0, 0, 0, Rational::from(6));
+        kappa.set(0, 0, 0, TypedRational::<Pos>::new(Rational::from(6)).unwrap());
 
         let p = vec![1.0];
-        let ek0 = compute_ek0(&kappa, &p);
+        let ek0 = compute_ek0(&kappa, &p).unwrap();
 
-        assert!((ek0 - 0.125).abs() < 1e-10);
+        assert!((ek0.get() - 0.125).abs() < 1e-10);
     }
 }

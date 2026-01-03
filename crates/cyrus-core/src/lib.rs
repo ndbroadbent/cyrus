@@ -36,12 +36,17 @@ pub mod lvs;
 pub use kahler::{MoriCone, compute_mori_generators};
 pub mod lattice;
 pub mod pipeline;
+pub mod policy;
 pub mod polytope;
 pub use pipeline::{EvaluationRequest, EvaluationResult, evaluate_vacuum};
+pub use policy::{Abort, ForGA, Strict, VacuumPolicy, VolumePolicy};
 pub mod racetrack;
 pub mod triangulation;
+pub mod types;
 pub mod vacuum;
 pub mod volume;
+
+pub use types::{F64, I32, I64, NonEmptyVec, UnitInterval, Pos, Neg, Finite, H11, H21};
 
 pub use divisor::{compute_divisor_jacobian, compute_divisor_volumes};
 pub use error::{Error, Result};

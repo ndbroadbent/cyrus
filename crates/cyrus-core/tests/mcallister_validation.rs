@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use cyrus_core::{
-    EvaluationRequest, GvInvariant, Intersection, MoriCone, build_racetrack_terms,
+    EvaluationRequest, GvInvariant, Intersection, MoriCone, H11, H21, build_racetrack_terms,
     compute_flat_direction, compute_w0, evaluate_vacuum, solve_racetrack,
 };
 use malachite::Integer;
@@ -109,6 +109,8 @@ fn load_gv_invariants(example: &str) -> Vec<GvInvariant> {
         .collect()
 }
 
+use cyrus_core::types::rational::Rational as TypedRational;
+use cyrus_core::types::tags::Pos;
 use malachite::Rational;
 
 /// Convert intersection fixture to our Intersection type.
@@ -116,17 +118,19 @@ fn fixture_to_intersection(fixture: &IntersectionFixture) -> Intersection {
     let mut kappa = Intersection::new(fixture.dim);
     for (key, &value) in &fixture.entries {
         let parts: Vec<usize> = key.split(',').map(|s| s.parse().unwrap()).collect();
-        kappa.set(parts[0], parts[1], parts[2], Rational::from(value));
+        if let Some(pos_val) = TypedRational::<Pos>::new(Rational::from(value)) {
+            kappa.set(parts[0], parts[1], parts[2], pos_val);
+        }
     }
     kappa
 }
 
 #[derive(Serialize)]
 struct RacetrackSnapshot {
-    g_s: f64,
+    g_s: f64,        // Extract from F64<Pos> for serialization
     w0: f64,
     w0_log10: f64,
-    im_tau: f64,
+    im_tau: f64,     // Extract from F64<Pos> for serialization
     delta: f64,
     epsilon: f64,
 }
@@ -141,26 +145,34 @@ fn test_vacuum_pipeline_4_214_647() {
     // Construct a dummy Mori cone that contains the flat direction p
     // (Actual Mori cone would come from triangulation)
     let p = compute_flat_direction(&kappa, &flux.k, &flux.m).expect("Flat direction failed");
-    // Relation R such that p . R > 0. Let R = [1, 0, ... 0]
+    eprintln!("Flat direction p: {:?}", &p[..5.min(p.len())]);
+
+    // Find the first positive component to use as the generator direction
+    let pos_idx = p.iter().position(|&x| x > 0.0).unwrap_or(0);
+    eprintln!("Using positive index {} with value {}", pos_idx, p[pos_idx]);
+
     let mut generator = vec![Integer::from(0); p.len()];
-    generator[0] = Integer::from(1);
+    generator[pos_idx] = Integer::from(1);
     let mori = MoriCone::new(vec![generator]);
 
     let req = EvaluationRequest {
         kappa: &kappa,
         mori: &mori,
         gv: &gv,
-        h11: 214,
-        h21: 4,
+        h11: H11::new(214).unwrap(),
+        h21: H21::new(4).unwrap(),
         q_max: 200.0,
     };
 
     let result = evaluate_vacuum(&req, &flux.k, &flux.m).expect("Pipeline failed");
+    if !result.success {
+        eprintln!("Vacuum evaluation failed: {:?}", result.reason);
+    }
     assert!(result.success);
     assert!(result.vacuum.is_some());
 
     let vac = result.vacuum.unwrap();
-    let log_v0 = vac.v0.abs().log10();
+    let log_v0 = vac.v0.get().abs().log10();
     assert!((-204.0..=-202.0).contains(&log_v0));
 }
 
@@ -196,10 +208,10 @@ fn test_racetrack_full_pipeline_4_214_647() {
     assert_json_snapshot!(
         "racetrack_4_214_647",
         RacetrackSnapshot {
-            g_s: result.g_s,
+            g_s: result.g_s.get(),
             w0,
             w0_log10: w0.abs().log10(),
-            im_tau: result.im_tau,
+            im_tau: result.im_tau.get(),
             delta: result.delta,
             epsilon: result.epsilon,
         }

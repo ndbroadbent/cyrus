@@ -61,7 +61,11 @@ impl MoriCone {
 /// relation that generates a ray of the Mori cone.
 ///
 /// # Errors
-/// Returns an error if the triangulation is inconsistent or if no generators are found.
+/// Returns an error if no points are provided.
+///
+/// # Panics
+/// Panics if the triangulation is corrupt (simplex with vertices not in points,
+/// or simplex that is a subset of a ridge it should contain).
 pub fn compute_mori_generators(tri: &Triangulation, points: &[Point]) -> Result<MoriCone> {
     let n_pts = points.len();
     if n_pts == 0 {
@@ -81,12 +85,17 @@ pub fn compute_mori_generators(tri: &Triangulation, points: &[Point]) -> Result<
             let s2 = &tri.simplices()[adj_simplices[1]];
 
             // Opposing vertices u1, u2
-            let u1 = *s1.iter().find(|&v| !ridge.contains(v)).ok_or_else(|| {
-                Error::LinearAlgebra("Corrupt triangulation: simplex subset of ridge".into())
-            })?;
-            let u2 = *s2.iter().find(|&v| !ridge.contains(v)).ok_or_else(|| {
-                Error::LinearAlgebra("Corrupt triangulation: simplex subset of ridge".into())
-            })?;
+            // INVARIANT: A ridge is constructed by removing one vertex from a simplex.
+            // Therefore simplex \ ridge = {removed_vertex} is always non-empty.
+            // This unwrap cannot fail for valid triangulations.
+            let u1 = *s1
+                .iter()
+                .find(|&v| !ridge.contains(v))
+                .expect("Invariant violated: simplex has no vertex outside ridge");
+            let u2 = *s2
+                .iter()
+                .find(|&v| !ridge.contains(v))
+                .expect("Invariant violated: simplex has no vertex outside ridge");
 
             // Find relation among {u1, u2} U ridge
             // Total dim+2 points in dim dimensions.

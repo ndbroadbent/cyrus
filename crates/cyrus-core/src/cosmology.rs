@@ -102,6 +102,7 @@ impl System<f64, State> for QuintessenceSystem<'_> {
 }
 
 /// Result of cosmological evolution
+#[derive(Debug)]
 pub struct CosmologyResult {
     /// Redshifts z
     pub redshifts: Vec<f64>,
@@ -111,6 +112,26 @@ pub struct CosmologyResult {
     pub omega_phi_z: Vec<f64>,
 }
 
+/// Validate the starting redshift for cosmology integration.
+///
+/// # Arguments
+/// * `z_start` - Starting redshift
+///
+/// # Errors
+/// Returns an error if:
+/// - `z_start <= 0`: Zero or negative redshift is unphysical and causes ODE solver issues
+///   - `z_start = 0` gives `n_start = n_end = 0` (zero interval, causes ODE solver panic)
+///   - `z_start < 0` is unphysical (negative redshift has no cosmological meaning)
+///   - `z_start = -1` gives `ln(0) = -inf` (causes ODE solver panic)
+pub fn validate_z_start(z_start: f64) -> Result<()> {
+    if z_start <= 0.0 {
+        return Err(Error::InvalidInput(format!(
+            "z_start must be positive, got {z_start}"
+        )));
+    }
+    Ok(())
+}
+
 /// Solve the cosmology from z_initial to z_final (usually z=0).
 ///
 /// # Arguments
@@ -118,10 +139,10 @@ pub struct CosmologyResult {
 /// * `potential` - Scalar potential V(phi)
 /// * `phi_i` - Initial field value
 /// * `phi_prime_i` - Initial field velocity dphi/dN
-/// * `z_start` - Starting redshift (e.g. 1000)
+/// * `z_start` - Starting redshift (must be > 0, e.g. 1000)
 ///
 /// # Errors
-/// Returns an error if the ODE integration fails.
+/// Returns an error if z_start <= 0 or if ODE integration fails.
 pub fn solve_cosmology(
     params: &CosmologyParams,
     potential: &dyn Potential,
@@ -129,6 +150,8 @@ pub fn solve_cosmology(
     phi_prime_i: f64,
     z_start: f64,
 ) -> Result<CosmologyResult> {
+    validate_z_start(z_start)?;
+
     let n_start = -z_start.ln_1p();
     let n_end = 0.0; // z=0
     let dx = (n_end - n_start) / 100.0; // Ensure step is positive and reasonable
@@ -212,5 +235,45 @@ mod tests {
         for w in res.w_z {
             assert!((w - (-1.0)).abs() < 0.01);
         }
+    }
+
+    #[test]
+    fn test_validate_z_start_positive() {
+        // Valid positive redshifts
+        assert!(validate_z_start(1.0).is_ok());
+        assert!(validate_z_start(0.1).is_ok());
+        assert!(validate_z_start(1000.0).is_ok());
+        assert!(validate_z_start(1e-9).is_ok()); // Very small but positive
+    }
+
+    #[test]
+    fn test_validate_z_start_zero() {
+        // z_start = 0 gives n_start = n_end = 0 (zero integration interval)
+        let res = validate_z_start(0.0);
+        assert!(res.is_err());
+        assert!(res.unwrap_err().to_string().contains("z_start must be positive"));
+    }
+
+    #[test]
+    fn test_validate_z_start_negative() {
+        // Negative redshift is unphysical
+        let res = validate_z_start(-0.5);
+        assert!(res.is_err());
+        assert!(res.unwrap_err().to_string().contains("z_start must be positive"));
+    }
+
+    #[test]
+    fn test_validate_z_start_minus_one() {
+        // z_start = -1 would give ln(0) = -inf
+        let res = validate_z_start(-1.0);
+        assert!(res.is_err());
+        assert!(res.unwrap_err().to_string().contains("z_start must be positive"));
+    }
+
+    #[test]
+    fn test_validate_z_start_large_negative() {
+        // Very negative values
+        let res = validate_z_start(-100.0);
+        assert!(res.is_err());
     }
 }

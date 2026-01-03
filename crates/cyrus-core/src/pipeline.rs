@@ -9,8 +9,11 @@ use crate::kahler::MoriCone;
 use crate::racetrack::{
     GvInvariant, RacetrackResult, build_racetrack_terms, compute_w0, solve_racetrack,
 };
+use crate::types::f64::F64;
+use crate::types::i32::I32;
+use crate::types::tags::{GTEOne, NonNeg, Pos};
 use crate::vacuum::{VacuumResult, compute_tadpole, compute_vacuum};
-use crate::volume::compute_volume;
+use crate::volume::compute_volume_raw;
 
 /// Input for a single vacuum evaluation.
 #[derive(Debug, Clone)]
@@ -21,10 +24,10 @@ pub struct EvaluationRequest<'a> {
     pub mori: &'a MoriCone,
     /// GV invariants for racetrack computation.
     pub gv: &'a [GvInvariant],
-    /// Euler characteristic χ components.
-    pub h11: i32,
-    /// Number of complex structure moduli.
-    pub h21: i32,
+    /// Hodge number h¹¹ (≥ 1 for CY3).
+    pub h11: I32<GTEOne>,
+    /// Hodge number h²¹ (non-negative).
+    pub h21: I32<NonNeg>,
     /// Tadpole bound Q_max.
     pub q_max: f64,
 }
@@ -109,13 +112,31 @@ pub fn evaluate_vacuum(
 
     // 6. Calculation: W₀ and V₀
     let w0 = compute_w0(&rt_res, &terms[0], &terms[1]);
-    let ek0 = compute_ek0(req.kappa, &p);
+    let Ok(ek0) = compute_ek0(req.kappa, &p) else {
+        res.reason = Some("Invalid flat direction (e^K₀ not positive)".into());
+        return Ok(res);
+    };
 
     // Scale p to get actual Kähler moduli t = p / g_s
-    let t: Vec<f64> = p.iter().map(|&pi| pi / rt_res.g_s).collect();
-    let vol_res = compute_volume(req.kappa, &t, req.h11, req.h21);
+    let g_s = rt_res.g_s.get();
+    let t: Vec<f64> = p.iter().map(|&pi| pi / g_s).collect();
+    let Some(vol_res) = compute_volume_raw(req.kappa, &t, req.h11, req.h21) else {
+        res.reason = Some("Invalid volume computation".into());
+        return Ok(res);
+    };
 
-    let vac_res = compute_vacuum(ek0, rt_res.g_s, vol_res.string_frame, w0.abs());
+    // g_s is already F64<Pos> from racetrack, just unwrap it
+    let g_s_pos = rt_res.g_s;
+    let Some(vol_pos) = F64::<Pos>::new(vol_res.string_frame.get()) else {
+        res.reason = Some("String frame volume must be positive".into());
+        return Ok(res);
+    };
+    let Some(w0_pos) = F64::<Pos>::new(w0.abs()) else {
+        res.reason = Some("|W₀| must be positive".into());
+        return Ok(res);
+    };
+
+    let vac_res = compute_vacuum(ek0, g_s_pos, vol_pos, w0_pos);
 
     // Success!
     res.success = true;
@@ -129,13 +150,16 @@ pub fn evaluate_vacuum(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::physics::{H11, H21};
+    use crate::types::rational::Rational as TypedRational;
+    use crate::types::tags::Pos;
     use malachite::Integer;
     use malachite::Rational;
 
     #[test]
     fn test_evaluate_vacuum_simple() {
         let mut kappa = Intersection::new(1);
-        kappa.set(0, 0, 0, Rational::from(6));
+        kappa.set(0, 0, 0, TypedRational::<Pos>::new(Rational::from(6)).unwrap());
 
         let mori = MoriCone::new(vec![vec![Integer::from(1)]]);
 
@@ -154,11 +178,11 @@ mod tests {
             kappa: &kappa,
             mori: &mori,
             gv: &gv,
-            h11: 5,
-            h21: 3,
+            h11: H11::new(5).unwrap(),
+            h21: H21::new(3).unwrap(),
             q_max: 100.0,
         };
 
-        assert_eq!(req.h11, 5);
+        assert_eq!(req.h11.get(), 5);
     }
 }

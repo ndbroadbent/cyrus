@@ -1,12 +1,18 @@
 #![allow(missing_docs, clippy::too_many_lines)]
 use cyrus_core::flat_direction::compute_n_matrix_vecs;
 use cyrus_core::flat_direction::solve_linear_system_faer;
+use cyrus_core::types::rational::Rational as TypedRational;
+use cyrus_core::types::tags::Pos;
 use cyrus_core::{
     Intersection, compute_ek0, compute_flat_direction, compute_flat_direction_full,
     compute_n_matrix, solve_linear_system,
 };
 use faer::Mat;
 use malachite::Rational;
+
+fn pos_rat(n: i32) -> TypedRational<Pos> {
+    TypedRational::<Pos>::new(Rational::from(n)).unwrap()
+}
 
 #[test]
 fn test_solve_singular_system() {
@@ -21,7 +27,7 @@ fn test_solve_singular_system() {
 #[test]
 fn test_compute_n_matrix_permutations() {
     let mut kappa = Intersection::new(4);
-    kappa.set(1, 2, 3, Rational::from(1));
+    kappa.set(1, 2, 3, pos_rat(1));
 
     let m = vec![0, 0, 0, 1]; // Indices 0..3. 3 is the one.
 
@@ -33,7 +39,7 @@ fn test_compute_n_matrix_permutations() {
 
     // Also check self-intersections
     let mut kappa2 = Intersection::new(1);
-    kappa2.set(0, 0, 0, Rational::from(1));
+    kappa2.set(0, 0, 0, pos_rat(1));
     let m2 = vec![1];
     let n2 = compute_n_matrix(&kappa2, &m2);
     assert!((n2[(0, 0)] - 1.0).abs() < 1e-10);
@@ -42,7 +48,7 @@ fn test_compute_n_matrix_permutations() {
 #[test]
 fn test_compute_flat_direction_full() {
     let mut kappa = Intersection::new(1);
-    kappa.set(0, 0, 0, Rational::from(6));
+    kappa.set(0, 0, 0, pos_rat(6));
     let k = vec![3];
     let m = vec![1];
 
@@ -50,7 +56,7 @@ fn test_compute_flat_direction_full() {
     assert!((res.p[0] - 0.5).abs() < 1e-10);
     // kappa(p,p,p) = 6 * 0.5^3 = 0.75.
     // ek0 = 1 / (4/3 * 0.75) = 1 / 1 = 1.0.
-    assert!((res.ek0 - 1.0).abs() < 1e-10);
+    assert!((res.ek0.get() - 1.0).abs() < 1e-10);
     assert_eq!(res.n_matrix.len(), 1);
 }
 
@@ -64,7 +70,7 @@ fn test_compute_n_matrix_parallel() {
     for i in 0..dim {
         for j in i..dim {
             for k in j..dim {
-                kappa.set(i, j, k, Rational::from(1));
+                kappa.set(i, j, k, pos_rat(1));
             }
         }
     }
@@ -80,7 +86,7 @@ fn test_compute_n_matrix_parallel() {
 #[test]
 fn test_compute_n_matrix_vecs() {
     let mut kappa = Intersection::new(2);
-    kappa.set(0, 0, 1, Rational::from(3));
+    kappa.set(0, 0, 1, pos_rat(3));
 
     let m = vec![1, 1];
     let n = compute_n_matrix_vecs(&kappa, &m);
@@ -117,10 +123,10 @@ fn test_solve_linear_system_faer_identity() {
 #[test]
 fn test_compute_flat_direction() {
     let mut kappa = Intersection::new(2);
-    kappa.set(0, 0, 0, Rational::from(6));
-    kappa.set(0, 0, 1, Rational::from(3));
-    kappa.set(0, 1, 1, Rational::from(2));
-    kappa.set(1, 1, 1, Rational::from(4));
+    kappa.set(0, 0, 0, pos_rat(6));
+    kappa.set(0, 0, 1, pos_rat(3));
+    kappa.set(0, 1, 1, pos_rat(2));
+    kappa.set(1, 1, 1, pos_rat(4));
 
     let k = vec![6, 4];
     let m = vec![1, 1];
@@ -133,12 +139,12 @@ fn test_compute_flat_direction() {
 #[test]
 fn test_compute_ek0_simple() {
     let mut kappa = Intersection::new(1);
-    kappa.set(0, 0, 0, Rational::from(6));
+    kappa.set(0, 0, 0, pos_rat(6));
 
     let p = vec![1.0];
-    let ek0 = compute_ek0(&kappa, &p);
+    let ek0 = compute_ek0(&kappa, &p).unwrap();
     // κ_ppp = 6, ek0 = 1/(4/3 * 6) = 0.125
-    assert!((ek0 - 0.125).abs() < 1e-10);
+    assert!((ek0.get() - 0.125).abs() < 1e-10);
 }
 
 #[test]
@@ -146,7 +152,7 @@ fn test_compute_flat_direction_full_singular() {
     // Create a singular N matrix
     let mut kappa = Intersection::new(2);
     // Only diagonal terms that make N singular
-    kappa.set(0, 0, 0, Rational::from(1));
+    kappa.set(0, 0, 0, pos_rat(1));
     // M = [0, 1] means N[0,0] = κ_000 * 0 = 0, N[0,1] = κ_001 * 1 = 0
     // This creates a singular matrix
 
@@ -164,7 +170,7 @@ fn test_compute_flat_direction_full_singular() {
 fn test_unique_permutations_all_equal() {
     // Test with all indices equal (should give 1 unique permutation)
     let mut kappa = Intersection::new(3);
-    kappa.set(1, 1, 1, Rational::from(6));
+    kappa.set(1, 1, 1, pos_rat(6));
 
     let m = vec![1, 1, 1];
     let n = compute_n_matrix(&kappa, &m);
@@ -178,7 +184,7 @@ fn test_unique_permutations_all_equal() {
 fn test_unique_permutations_two_equal() {
     // Test with two indices equal (should give 3 unique permutations)
     let mut kappa = Intersection::new(3);
-    kappa.set(0, 0, 1, Rational::from(2));
+    kappa.set(0, 0, 1, pos_rat(2));
 
     let m = vec![1, 1, 0];
     let n = compute_n_matrix(&kappa, &m);
@@ -195,7 +201,7 @@ fn test_unique_permutations_two_equal() {
 fn test_unique_permutations_all_distinct() {
     // Test with all distinct indices (should give 6 unique permutations)
     let mut kappa = Intersection::new(3);
-    kappa.set(0, 1, 2, Rational::from(1));
+    kappa.set(0, 1, 2, pos_rat(1));
 
     let m = vec![1, 1, 1];
     let n = compute_n_matrix(&kappa, &m);

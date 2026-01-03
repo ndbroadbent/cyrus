@@ -3,6 +3,8 @@ use cyrus_core::racetrack::{
     GvInvariant, RacetrackResult, RacetrackTerm, ZETA, build_racetrack_terms, compute_w0,
     solve_racetrack,
 };
+use cyrus_core::types::f64::F64;
+use cyrus_core::types::tags::Pos;
 
 #[test]
 fn test_zeta_value() {
@@ -65,7 +67,7 @@ fn test_solve_racetrack_ratio_negative() {
     let res = solve_racetrack(&terms);
     // Could be valid or invalid depending on g_s bounds
     if let Some(r) = res {
-        assert!(r.g_s > 0.0 && r.g_s <= 1.0);
+        assert!(r.g_s.get() > 0.0 && r.g_s.get() <= 1.0);
     }
 }
 
@@ -87,7 +89,7 @@ fn test_solve_racetrack_gs_out_of_bounds() {
     // This should produce g_s out of [0,1] range
     let res = solve_racetrack(&terms);
     if let Some(r) = res {
-        assert!(r.g_s > 0.0 && r.g_s <= 1.0);
+        assert!(r.g_s.get() > 0.0 && r.g_s.get() <= 1.0);
     }
 }
 
@@ -136,8 +138,8 @@ fn test_build_racetrack_terms_grouping() {
 #[test]
 fn test_compute_w0() {
     let result = RacetrackResult {
-        g_s: 0.1,
-        im_tau: 10.0,
+        g_s: F64::<Pos>::new(0.1).unwrap(),
+        im_tau: F64::<Pos>::new(10.0).unwrap(),
         delta: 0.0,
         epsilon: 0.0,
     };
@@ -159,12 +161,18 @@ fn test_compute_w0() {
 }
 
 #[test]
-fn test_racetrack_result_default() {
-    let res = RacetrackResult::default();
-    assert!(res.g_s.abs() < f64::EPSILON);
-    assert!(res.im_tau.abs() < f64::EPSILON);
-    assert!(res.delta.abs() < f64::EPSILON);
-    assert!(res.epsilon.abs() < f64::EPSILON);
+fn test_racetrack_result_fields() {
+    // Construct a valid result and verify fields are accessible
+    let result = RacetrackResult {
+        g_s: F64::<Pos>::new(0.5).unwrap(),
+        im_tau: F64::<Pos>::new(2.0).unwrap(),
+        delta: 0.001,
+        epsilon: 0.002,
+    };
+    assert!((result.g_s.get() - 0.5).abs() < f64::EPSILON);
+    assert!((result.im_tau.get() - 2.0).abs() < f64::EPSILON);
+    assert!((result.delta - 0.001).abs() < f64::EPSILON);
+    assert!((result.epsilon - 0.002).abs() < f64::EPSILON);
 }
 
 #[test]

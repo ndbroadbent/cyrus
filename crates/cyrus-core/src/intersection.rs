@@ -12,25 +12,27 @@
 
 use crate::Point;
 use crate::error::{Error, Result};
+use crate::f64_pos;
 use crate::integer_math::determinant_gaussian;
 use crate::triangulation::Triangulation;
+use crate::types::f64::F64;
+use crate::types::rational::Rational as TypedRational;
+use crate::types::tags::{Finite, IsFinite, Pos};
 use malachite::num::arithmetic::traits::Abs;
-use malachite::num::conversion::traits::RoundingFrom;
-use malachite::rounding_modes::RoundingMode;
 use malachite::{Integer, Rational};
 use std::collections::{HashMap, HashSet};
 
 /// Intersection tensor `κ_ijk`.
 ///
 /// Stores intersection numbers for divisors `D_i, D_j, D_k`.
-/// Symmetric in all indices.
+/// Symmetric in all indices. Values can be positive or negative.
 #[derive(Debug, Clone)]
 pub struct Intersection {
     /// Dimension of the divisor space (number of divisors).
     dim: usize,
     /// Storage for unique entries (i ≤ j ≤ k).
-    /// Key: (i, j, k), Value: Intersection number.
-    entries: HashMap<(usize, usize, usize), Rational>,
+    /// Key: (i, j, k), Value: Intersection number (any finite value).
+    entries: HashMap<(usize, usize, usize), TypedRational<Finite>>,
 }
 
 impl Intersection {
@@ -52,19 +54,25 @@ impl Intersection {
         self.entries.len()
     }
 
-    /// Get value at indices (i, j, k).
-    pub fn get(&self, i: usize, j: usize, k: usize) -> Rational {
+    /// Get value at indices (i, j, k). Returns zero if not set.
+    pub fn get(&self, i: usize, j: usize, k: usize) -> TypedRational<Finite> {
         let key = canonical_key(i, j, k);
         self.entries
             .get(&key)
             .cloned()
-            .unwrap_or_else(|| Rational::from(0))
+            .unwrap_or_else(|| TypedRational::<Finite>::from_raw(Rational::from(0)))
     }
 
     /// Set value at indices (i, j, k).
-    pub fn set(&mut self, i: usize, j: usize, k: usize, val: Rational) {
+    ///
+    /// Accepts any rational type that can be widened to Finite (Pos, Neg, etc.).
+    pub fn set<T>(&mut self, i: usize, j: usize, k: usize, val: TypedRational<T>)
+    where
+        TypedRational<T>: IsFinite<Finite = TypedRational<Finite>>,
+    {
         let key = canonical_key(i, j, k);
-        if val == 0 {
+        let val = val.to_finite();
+        if *val.get() == 0 {
             self.entries.remove(&key);
         } else {
             self.entries.insert(key, val);
@@ -73,16 +81,16 @@ impl Intersection {
 
     /// Iterator over all non-zero entries.
     /// Returns ((i, j, k), val) where i ≤ j ≤ k.
-    pub fn iter(&self) -> impl Iterator<Item = (&(usize, usize, usize), &Rational)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&(usize, usize, usize), &TypedRational<Finite>)> {
         self.entries.iter()
     }
 
     /// Parallel iterator over non-zero entries.
     pub fn par_iter(
         &self,
-    ) -> impl rayon::iter::ParallelIterator<Item = (&(usize, usize, usize), &Rational)>
+    ) -> impl rayon::iter::ParallelIterator<Item = (&(usize, usize, usize), &TypedRational<Finite>)>
     where
-        HashMap<(usize, usize, usize), Rational>: rayon::iter::IntoParallelRefIterator<'static>,
+        HashMap<(usize, usize, usize), TypedRational<Finite>>: rayon::iter::IntoParallelRefIterator<'static>,
     {
         use rayon::prelude::*;
         self.entries.par_iter()
@@ -91,26 +99,109 @@ impl Intersection {
     /// Non-parallel iterator over non-zero entries.
     pub fn iter_entries(
         &self,
-    ) -> std::collections::hash_map::Iter<'_, (usize, usize, usize), Rational> {
+    ) -> std::collections::hash_map::Iter<'_, (usize, usize, usize), TypedRational<Finite>> {
         self.entries.iter()
     }
 
-    /// Contract with a vector `t` to compute `(1/6) κ_ijk t^i t^j t^k`.
+    /// Contract with positive moduli `t` to compute `κ_ijk t^i t^j t^k`.
     ///
-    /// This is the Calabi-Yau volume formula.
+    /// Input moduli must be positive (F64<Pos>) - for Kähler moduli.
+    /// Returns `None` if the contraction is not positive (invalid physics).
     ///
     /// # Panics
     /// Panics if `t.len() != dim`.
-    pub fn contract_triple(&self, t: &[f64]) -> f64 {
+    pub fn contract_triple(&self, t: &[F64<Pos>]) -> Option<F64<Pos>> {
         assert_eq!(t.len(), self.dim, "Vector dimension mismatch");
-        self.entries
-            .iter()
-            .map(|(&(i, j, k), val)| {
-                let mult = symmetry_multiplicity(i, j, k);
-                let (val_f, _) = f64::rounding_from(val, RoundingMode::Nearest);
-                f64::from(mult) * val_f * t[i] * t[j] * t[k]
-            })
-            .sum()
+
+        // Accumulate as Finite (sum of terms could be any sign)
+        // Type algebra: Pos * Finite = Finite, Finite + Finite = Finite
+        let mut sum = F64::<Finite>::ZERO;
+        for (&(i, j, k), val) in &self.entries {
+            let mult = symmetry_multiplicity(i, j, k);
+            let kappa = val.to_f64();
+            // mult: Pos, kappa: Finite, t[i]: Pos → Pos * Finite * Pos * Pos * Pos = Finite
+            let term = mult * kappa * t[i] * t[j] * t[k];
+            sum = sum + term;
+        }
+
+        sum.try_to_pos()
+    }
+
+    /// Contract with finite-valued vector `t` to compute `κ_ijk t^i t^j t^k`.
+    ///
+    /// For cases where the vector can have any sign (e.g., flat directions).
+    /// Returns `None` if the contraction is not positive.
+    ///
+    /// # Panics
+    /// Panics if `t.len() != dim`.
+    pub fn contract_triple_finite(&self, t: &[F64<Finite>]) -> Option<F64<Pos>> {
+        assert_eq!(t.len(), self.dim, "Vector dimension mismatch");
+
+        // Type algebra: Pos * Finite = Finite, Finite * Finite = Finite
+        let mut sum = F64::<Finite>::ZERO;
+        for (&(i, j, k), val) in &self.entries {
+            let mult = symmetry_multiplicity(i, j, k);
+            let kappa = val.to_f64();
+            // mult: Pos, kappa: Finite, t[i]: Finite → all Finite
+            let term = mult * kappa * t[i] * t[j] * t[k];
+            sum = sum + term;
+        }
+
+        sum.try_to_pos()
+    }
+
+    /// Convert to NonEmptyIntersection if this tensor has entries.
+    ///
+    /// Returns `None` if the tensor is empty (no non-zero entries).
+    #[must_use]
+    pub fn into_non_empty(self) -> Option<NonEmptyIntersection> {
+        if self.entries.is_empty() {
+            None
+        } else {
+            Some(NonEmptyIntersection(self))
+        }
+    }
+}
+
+/// Non-empty intersection tensor.
+///
+/// Wrapper around `Intersection` that guarantees at least one non-zero entry.
+/// Provides branded dimension for type-safe moduli handling.
+#[derive(Debug, Clone)]
+pub struct NonEmptyIntersection(Intersection);
+
+impl NonEmptyIntersection {
+    /// Get the dimension handle branded to this tensor.
+    ///
+    /// Use this to create `Moduli` vectors of the correct length.
+    #[must_use]
+    pub fn dim(&self) -> crate::types::branded::Dim<'_> {
+        crate::types::branded::Dim(self.0.dim, std::marker::PhantomData)
+    }
+
+    /// Contract with validated moduli to compute `κ_ijk t^i t^j t^k`.
+    ///
+    /// # Panics
+    /// Panics if the contraction is non-positive (moduli outside Kähler cone).
+    #[must_use]
+    pub fn contract_triple(&self, t: &crate::types::branded::Moduli<'_>) -> F64<Pos> {
+        // Type algebra: accumulate as Finite, narrow at boundary
+        let mut sum = F64::<Finite>::ZERO;
+        for (&(i, j, k), val) in &self.0.entries {
+            let mult = symmetry_multiplicity(i, j, k);
+            let kappa = val.to_f64();
+            let term = mult * kappa * t[i] * t[j] * t[k];
+            sum = sum + term;
+        }
+
+        sum.try_to_pos()
+            .expect("contraction must be positive - moduli outside Kähler cone")
+    }
+
+    /// Get the underlying intersection tensor.
+    #[must_use]
+    pub fn inner(&self) -> &Intersection {
+        &self.0
     }
 }
 
@@ -122,13 +213,14 @@ fn canonical_key(i: usize, j: usize, k: usize) -> (usize, usize, usize) {
 }
 
 /// Compute symmetry multiplicity for entry (i, j, k) with i ≤ j ≤ k.
-const fn symmetry_multiplicity(i: usize, j: usize, k: usize) -> u8 {
+/// Returns F64<Pos> (1, 3, or 6 are all positive).
+fn symmetry_multiplicity(i: usize, j: usize, k: usize) -> F64<Pos> {
     if i == j && j == k {
-        1
+        f64_pos!(1.0)
     } else if i == j || j == k || i == k {
-        3
+        f64_pos!(3.0)
     } else {
-        6
+        f64_pos!(6.0)
     }
 }
 
@@ -321,7 +413,8 @@ fn reduce_to_cy(
             }
         }
         if sum != 0 {
-            kappa.set(i, j, k, sum);
+            // Wrap in typed Rational<Finite> - intersection numbers can be any sign
+            kappa.set(i, j, k, TypedRational::<Finite>::from_raw(sum));
         }
     }
     kappa
@@ -429,14 +522,14 @@ fn eliminate_other_rows(mat: &mut [Vec<Rational>], pivot_row: usize, col: usize,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use malachite::Rational;
 
     #[test]
     fn test_set_get() {
         let mut kappa = Intersection::new(3);
-        kappa.set(0, 1, 2, Rational::from(5));
+        let val = TypedRational::<Finite>::from_raw(Rational::from(5));
+        kappa.set(0, 1, 2, val.clone());
 
-        assert_eq!(kappa.get(0, 1, 2), Rational::from(5));
-        assert_eq!(kappa.get(2, 1, 0), Rational::from(5));
+        assert_eq!(*kappa.get(0, 1, 2).get(), Rational::from(5));
+        assert_eq!(*kappa.get(2, 1, 0).get(), Rational::from(5));
     }
 }

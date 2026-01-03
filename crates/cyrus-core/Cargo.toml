@@ -19,10 +19,11 @@ faer = { workspace = true, features = ["svd"] }
 malachite = "0.4"
 ode_solvers = { workspace = true }
 nalgebra = { workspace = true }
+rand = { workspace = true }
 
 [dev-dependencies]
 proptest.workspace = true
 serde = { workspace = true }
 serde_json = { workspace = true }
 insta = { version = "1.34", features = ["json"] }
-rand = { workspace = true }
+trybuild = "1"

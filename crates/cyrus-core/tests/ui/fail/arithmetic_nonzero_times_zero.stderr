@@ -1,0 +1,13 @@
+error[E0369]: cannot multiply `F64<cyrus_core::types::NonZero>` by `F64<cyrus_core::types::Zero>`
+  --> tests/ui/fail/arithmetic_nonzero_times_zero.rs:13:36
+   |
+13 |     let _result: F64<NonZero> = nz * z;
+   |                                 -- ^ - F64<cyrus_core::types::Zero>
+   |                                 |
+   |                                 F64<cyrus_core::types::NonZero>
+   |
+note: the foreign item type `F64<cyrus_core::types::NonZero>` doesn't implement `Mul<F64<cyrus_core::types::Zero>>`
+  --> src/types/f64.rs
+   |
+   | pub struct F64<Tag = Finite>(pub(crate) f64, pub(crate) PhantomData<Tag>);
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ not implement `Mul<F64<cyrus_core::types::Zero>>`
