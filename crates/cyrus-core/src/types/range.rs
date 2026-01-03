@@ -45,7 +45,7 @@ macro_rules! range {
 impl CheckedRange<usize> {
     /// Iterate yielding `I64<NonNeg>` values (0, 1, 2, ...).
     #[must_use]
-    pub fn iter_non_neg(self) -> CheckedRangeIterNonNeg {
+    pub const fn iter_non_neg(self) -> CheckedRangeIterNonNeg {
         CheckedRangeIterNonNeg {
             current: self.start,
             end: self.end,
@@ -55,7 +55,7 @@ impl CheckedRange<usize> {
     /// Iterate yielding `I64<Pos>` values (1, 2, 3, ...).
     /// Skips start if start == 0.
     #[must_use]
-    pub fn iter_pos(self) -> CheckedRangeIterPos {
+    pub const fn iter_pos(self) -> CheckedRangeIterPos {
         let current = if self.start == 0 { 1 } else { self.start };
         CheckedRangeIterPos {
             current,
@@ -74,6 +74,7 @@ pub struct CheckedRangeIterNonNeg {
 impl Iterator for CheckedRangeIterNonNeg {
     type Item = I64<NonNeg>;
 
+    #[allow(clippy::cast_possible_wrap)] // Range values won't overflow i64
     fn next(&mut self) -> Option<Self::Item> {
         if self.current < self.end {
             let val = I64::<NonNeg>::from_raw(self.current as i64);
@@ -102,6 +103,7 @@ pub struct CheckedRangeIterPos {
 impl Iterator for CheckedRangeIterPos {
     type Item = I64<Pos>;
 
+    #[allow(clippy::cast_possible_wrap)] // Range values won't overflow i64
     fn next(&mut self) -> Option<Self::Item> {
         if self.current < self.end && self.current > 0 {
             let val = I64::<Pos>::from_raw(self.current as i64);

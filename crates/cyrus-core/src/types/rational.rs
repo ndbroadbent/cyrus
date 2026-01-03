@@ -35,14 +35,14 @@ pub struct Rational<Tag = Finite>(pub(crate) MalachiteRational, pub(crate) Phant
 
 impl<Tag> Rational<Tag> {
     /// Get the underlying malachite Rational value.
-    #[inline(always)]
+    #[inline]
     #[must_use]
-    pub fn get(&self) -> &MalachiteRational {
+    pub const fn get(&self) -> &MalachiteRational {
         &self.0
     }
 
     /// Consume and return the inner malachite Rational.
-    #[inline(always)]
+    #[inline]
     #[must_use]
     pub fn into_inner(self) -> MalachiteRational {
         self.0
@@ -50,9 +50,9 @@ impl<Tag> Rational<Tag> {
 
     /// Create from a raw Rational without validation.
     #[doc(hidden)]
-    #[inline(always)]
+    #[inline]
     #[must_use]
-    pub fn from_raw(x: MalachiteRational) -> Self {
+    pub const fn from_raw(x: MalachiteRational) -> Self {
         Self(x, PhantomData)
     }
 }
@@ -104,7 +104,7 @@ impl<Tag> Ord for Rational<Tag> {
 impl Rational<Finite> {
     /// Create a finite Rational. Always succeeds for rationals.
     #[must_use]
-    pub fn new(x: MalachiteRational) -> Self {
+    pub const fn new(x: MalachiteRational) -> Self {
         Self(x, PhantomData)
     }
 }
@@ -114,7 +114,7 @@ impl Rational<Pos> {
     #[must_use]
     pub fn new(x: MalachiteRational) -> Option<Self> {
         use malachite::num::basic::traits::Zero;
-        (x > MalachiteRational::ZERO).then(|| Self(x, PhantomData))
+        (x > MalachiteRational::ZERO).then_some(Self(x, PhantomData))
     }
 }
 
@@ -123,7 +123,7 @@ impl Rational<Neg> {
     #[must_use]
     pub fn new(x: MalachiteRational) -> Option<Self> {
         use malachite::num::basic::traits::Zero;
-        (x < MalachiteRational::ZERO).then(|| Self(x, PhantomData))
+        (x < MalachiteRational::ZERO).then_some(Self(x, PhantomData))
     }
 }
 
@@ -132,7 +132,7 @@ impl Rational<NonZero> {
     #[must_use]
     pub fn new(x: MalachiteRational) -> Option<Self> {
         use malachite::num::basic::traits::Zero;
-        (x != MalachiteRational::ZERO).then(|| Self(x, PhantomData))
+        (x != MalachiteRational::ZERO).then_some(Self(x, PhantomData))
     }
 }
 
@@ -141,7 +141,7 @@ impl Rational<NonNeg> {
     #[must_use]
     pub fn new(x: MalachiteRational) -> Option<Self> {
         use malachite::num::basic::traits::Zero;
-        (x >= MalachiteRational::ZERO).then(|| Self(x, PhantomData))
+        (x >= MalachiteRational::ZERO).then_some(Self(x, PhantomData))
     }
 }
 
@@ -150,21 +150,21 @@ impl Rational<NonPos> {
     #[must_use]
     pub fn new(x: MalachiteRational) -> Option<Self> {
         use malachite::num::basic::traits::Zero;
-        (x <= MalachiteRational::ZERO).then(|| Self(x, PhantomData))
+        (x <= MalachiteRational::ZERO).then_some(Self(x, PhantomData))
     }
 }
 
 impl Rational<Zero> {
     /// Create a zero. Returns `None` if not exactly 0.
     #[must_use]
-    pub fn new(x: MalachiteRational) -> Option<Self> {
+    pub fn new(x: &MalachiteRational) -> Option<Self> {
         use malachite::num::basic::traits::Zero;
-        (x == MalachiteRational::ZERO).then(|| Self(MalachiteRational::ZERO, PhantomData))
+        (*x == MalachiteRational::ZERO).then_some(Self(MalachiteRational::ZERO, PhantomData))
     }
 
     /// The zero constant.
     #[must_use]
-    pub fn zero() -> Self {
+    pub const fn zero() -> Self {
         use malachite::num::basic::traits::Zero;
         Self(MalachiteRational::ZERO, PhantomData)
     }
@@ -210,6 +210,9 @@ impl IsNonPos for Rational<Zero> {}
 
 impl Rational<Pos> {
     /// Convert to f64. Positive rational → positive f64.
+    ///
+    /// # Panics
+    /// Panics if the value is too small to represent as a positive f64.
     #[must_use]
     pub fn to_f64(&self) -> crate::types::f64::F64<Pos> {
         use malachite::num::conversion::traits::RoundingFrom;
@@ -225,6 +228,9 @@ impl Rational<Pos> {
 
 impl Rational<Neg> {
     /// Convert to f64. Negative rational → negative f64.
+    ///
+    /// # Panics
+    /// Panics if the value is too small in magnitude to represent as a negative f64.
     #[must_use]
     pub fn to_f64(&self) -> crate::types::f64::F64<Neg> {
         use malachite::num::conversion::traits::RoundingFrom;
@@ -237,6 +243,9 @@ impl Rational<Neg> {
 
 impl Rational<Finite> {
     /// Convert to f64.
+    ///
+    /// # Panics
+    /// Panics if the value overflows to infinity (should not occur for physics values).
     #[must_use]
     pub fn to_f64(&self) -> crate::types::f64::F64<Finite> {
         use malachite::num::conversion::traits::RoundingFrom;
@@ -302,9 +311,9 @@ mod tests {
 
     #[test]
     fn test_zero_new() {
-        assert!(Rational::<Zero>::new(MR::from(0)).is_some());
-        assert!(Rational::<Zero>::new(MR::from(1)).is_none());
-        assert!(Rational::<Zero>::new(MR::from(-1)).is_none());
+        assert!(Rational::<Zero>::new(&MR::from(0)).is_some());
+        assert!(Rational::<Zero>::new(&MR::from(1)).is_none());
+        assert!(Rational::<Zero>::new(&MR::from(-1)).is_none());
 
         let z = Rational::<Zero>::zero();
         assert_eq!(z.get(), &MR::from(0));

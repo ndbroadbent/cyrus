@@ -51,9 +51,9 @@ pub struct I64<Tag = Finite>(pub(crate) i64, pub(crate) PhantomData<Tag>);
 
 impl<Tag> I64<Tag> {
     /// Get the underlying i64 value.
-    #[inline(always)]
+    #[inline]
     #[must_use]
-    pub fn get(self) -> i64 {
+    pub const fn get(self) -> i64 {
         self.0
     }
 
@@ -61,7 +61,7 @@ impl<Tag> I64<Tag> {
     ///
     /// Used internally and by macros after compile-time verification.
     #[doc(hidden)]
-    #[inline(always)]
+    #[inline]
     #[must_use]
     pub const fn from_raw(x: i64) -> Self {
         Self(x, PhantomData)
@@ -118,13 +118,14 @@ impl I64<Finite> {
 
     /// Create a finite i64. Always succeeds for integers.
     #[must_use]
-    pub fn new(x: i64) -> Self {
+    pub const fn new(x: i64) -> Self {
         Self(x, PhantomData)
     }
 
     /// Convert to F64<Finite>.
     #[must_use]
-    pub fn to_f64(self) -> crate::types::f64::F64<Finite> {
+    #[allow(clippy::cast_precision_loss)] // Acceptable for physics values
+    pub const fn to_f64(self) -> crate::types::f64::F64<Finite> {
         crate::types::f64::F64::from_raw(self.0 as f64)
     }
 }
@@ -133,12 +134,13 @@ impl I64<Pos> {
     /// Create a positive i64. Returns `None` if ≤ 0.
     #[must_use]
     pub fn new(x: i64) -> Option<Self> {
-        (x > 0).then(|| Self(x, PhantomData))
+        (x > 0).then_some(Self(x, PhantomData))
     }
 
     /// Convert to F64<Pos>. Preserves positivity.
     #[must_use]
-    pub fn to_f64(self) -> crate::types::f64::F64<Pos> {
+    #[allow(clippy::cast_precision_loss)] // Acceptable for physics values
+    pub const fn to_f64(self) -> crate::types::f64::F64<Pos> {
         crate::types::f64::F64::from_raw(self.0 as f64)
     }
 }
@@ -147,12 +149,13 @@ impl I64<Neg> {
     /// Create a negative i64. Returns `None` if ≥ 0.
     #[must_use]
     pub fn new(x: i64) -> Option<Self> {
-        (x < 0).then(|| Self(x, PhantomData))
+        (x < 0).then_some(Self(x, PhantomData))
     }
 
     /// Convert to F64<Neg>. Preserves negativity.
     #[must_use]
-    pub fn to_f64(self) -> crate::types::f64::F64<Neg> {
+    #[allow(clippy::cast_precision_loss)] // Acceptable for physics values
+    pub const fn to_f64(self) -> crate::types::f64::F64<Neg> {
         crate::types::f64::F64::from_raw(self.0 as f64)
     }
 }
@@ -161,12 +164,13 @@ impl I64<NonZero> {
     /// Create a non-zero i64. Returns `None` if = 0.
     #[must_use]
     pub fn new(x: i64) -> Option<Self> {
-        (x != 0).then(|| Self(x, PhantomData))
+        (x != 0).then_some(Self(x, PhantomData))
     }
 
     /// Convert to F64<NonZero>. Preserves non-zero.
     #[must_use]
-    pub fn to_f64(self) -> crate::types::f64::F64<NonZero> {
+    #[allow(clippy::cast_precision_loss)] // Acceptable for physics values
+    pub const fn to_f64(self) -> crate::types::f64::F64<NonZero> {
         crate::types::f64::F64::from_raw(self.0 as f64)
     }
 }
@@ -175,12 +179,13 @@ impl I64<NonNeg> {
     /// Create a non-negative i64. Returns `None` if < 0.
     #[must_use]
     pub fn new(x: i64) -> Option<Self> {
-        (x >= 0).then(|| Self(x, PhantomData))
+        (x >= 0).then_some(Self(x, PhantomData))
     }
 
     /// Convert to F64<NonNeg>. Preserves non-negativity.
     #[must_use]
-    pub fn to_f64(self) -> crate::types::f64::F64<NonNeg> {
+    #[allow(clippy::cast_precision_loss)] // Acceptable for physics values
+    pub const fn to_f64(self) -> crate::types::f64::F64<NonNeg> {
         crate::types::f64::F64::from_raw(self.0 as f64)
     }
 }
@@ -189,12 +194,13 @@ impl I64<NonPos> {
     /// Create a non-positive i64. Returns `None` if > 0.
     #[must_use]
     pub fn new(x: i64) -> Option<Self> {
-        (x <= 0).then(|| Self(x, PhantomData))
+        (x <= 0).then_some(Self(x, PhantomData))
     }
 
     /// Convert to F64<NonPos>. Preserves non-positivity.
     #[must_use]
-    pub fn to_f64(self) -> crate::types::f64::F64<NonPos> {
+    #[allow(clippy::cast_precision_loss)] // Acceptable for physics values
+    pub const fn to_f64(self) -> crate::types::f64::F64<NonPos> {
         crate::types::f64::F64::from_raw(self.0 as f64)
     }
 }
@@ -211,7 +217,7 @@ impl I64<Zero> {
 
     /// Convert to F64<Zero>.
     #[must_use]
-    pub fn to_f64(self) -> crate::types::f64::F64<Zero> {
+    pub const fn to_f64(self) -> crate::types::f64::F64<Zero> {
         crate::types::f64::F64::from_raw(0.0)
     }
 }
@@ -228,7 +234,7 @@ impl I64<One> {
 
     /// Convert to F64<One>.
     #[must_use]
-    pub fn to_f64(self) -> crate::types::f64::F64<One> {
+    pub const fn to_f64(self) -> crate::types::f64::F64<One> {
         crate::types::f64::F64::from_raw(1.0)
     }
 }
@@ -245,7 +251,7 @@ impl I64<MinusOne> {
 
     /// Convert to F64<MinusOne>.
     #[must_use]
-    pub fn to_f64(self) -> crate::types::f64::F64<MinusOne> {
+    pub const fn to_f64(self) -> crate::types::f64::F64<MinusOne> {
         crate::types::f64::F64::from_raw(-1.0)
     }
 }

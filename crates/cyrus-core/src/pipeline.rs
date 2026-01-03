@@ -57,7 +57,7 @@ pub struct EvaluationResult {
 ///
 /// # Errors
 /// Returns an error if any linear algebra or geometric calculation fails unexpectedly.
-#[allow(clippy::cast_precision_loss)]
+#[allow(clippy::cast_precision_loss, clippy::too_many_lines)] // Orchestration function
 pub fn evaluate_vacuum(
     req: &EvaluationRequest,
     k: &[i64],

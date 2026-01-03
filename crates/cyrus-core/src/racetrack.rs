@@ -191,6 +191,9 @@ pub fn solve_racetrack(terms: &[RacetrackTerm]) -> Option<RacetrackResult> {
 /// `W_0 = - (A1 exp(-2π q1·p/gs) + A2 exp(-2π q2·p/gs))`
 ///
 /// Reference: arXiv:2107.09064, Eq. 6.4
+///
+/// # Panics
+/// Panics if exp() produces a non-positive result (should not occur mathematically).
 #[must_use]
 pub fn compute_w0(
     result: &RacetrackResult,

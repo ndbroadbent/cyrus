@@ -34,7 +34,7 @@ macro_rules! impl_ops {
         {
             type Output = $Wrapper<L::Output>;
 
-            #[inline(always)]
+            #[inline]
             fn add(self, rhs: $Wrapper<R>) -> Self::Output {
                 $Wrapper(self.0 + rhs.0, ::std::marker::PhantomData)
             }
@@ -50,7 +50,7 @@ macro_rules! impl_ops {
         {
             type Output = $Wrapper<L::Output>;
 
-            #[inline(always)]
+            #[inline]
             fn sub(self, rhs: $Wrapper<R>) -> Self::Output {
                 $Wrapper(self.0 - rhs.0, ::std::marker::PhantomData)
             }
@@ -66,7 +66,7 @@ macro_rules! impl_ops {
         {
             type Output = $Wrapper<L::Output>;
 
-            #[inline(always)]
+            #[inline]
             fn mul(self, rhs: $Wrapper<R>) -> Self::Output {
                 $Wrapper(self.0 * rhs.0, ::std::marker::PhantomData)
             }
@@ -82,7 +82,7 @@ macro_rules! impl_ops {
         {
             type Output = $Wrapper<L::Output>;
 
-            #[inline(always)]
+            #[inline]
             fn div(self, rhs: $Wrapper<R>) -> Self::Output {
                 $Wrapper(self.0 / rhs.0, ::std::marker::PhantomData)
             }
@@ -98,7 +98,7 @@ macro_rules! impl_ops {
         {
             type Output = $Wrapper<T::Output>;
 
-            #[inline(always)]
+            #[inline]
             fn neg(self) -> Self::Output {
                 $Wrapper(-self.0, ::std::marker::PhantomData)
             }

@@ -45,6 +45,9 @@ const FOUR_TWO_PI_CUBED: F64<Pos> = f64_pos!(32.0 * 31.006_276_680_299_816); // 
 ///
 /// # Returns
 /// BBHL correction (can be positive, negative, or zero depending on χ)
+///
+/// # Panics
+/// Panics if the result is not finite (should not occur for valid Hodge numbers).
 pub fn bbhl_correction(h11: H11, h21: H21) -> BBHLCorrection {
     // χ = 2(h11 - h21) can be positive, negative, or zero
     let diff = h11.get() - h21.get(); // Finite (can be pos, neg, or zero)
@@ -68,7 +71,7 @@ pub fn volume_classical(kappa: &NonEmptyIntersection, t: &Moduli<'_>) -> F64<Pos
 ///
 /// This is the raw computation that can produce negative values.
 /// Use `volume_string` or `volume_string_with_policy` for the public API.
-#[inline(always)]
+#[inline]
 fn volume_string_raw(
     kappa: &NonEmptyIntersection,
     t: &Moduli<'_>,
@@ -105,7 +108,7 @@ fn volume_string_raw(
 /// let v: F64<Finite> = volume_string_with_policy::<ForGA>(&kappa, &t, h11, h21);
 /// ```
 #[must_use]
-#[inline(always)]
+#[inline]
 pub fn volume_string_with_policy<P: VolumePolicy>(
     kappa: &NonEmptyIntersection,
     t: &Moduli<'_>,
@@ -183,6 +186,9 @@ pub struct VolumeResultRaw {
 /// come from flat direction solving rather than GA generation.
 ///
 /// Returns `None` if classical volume is non-positive.
+///
+/// # Panics
+/// Panics if any modulus value is NaN or infinite.
 #[must_use]
 pub fn compute_volume_raw(
     kappa: &Intersection,

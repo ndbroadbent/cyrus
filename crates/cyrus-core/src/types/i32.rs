@@ -51,9 +51,9 @@ pub struct I32<Tag = Finite>(pub(crate) i32, pub(crate) PhantomData<Tag>);
 
 impl<Tag> I32<Tag> {
     /// Get the underlying i32 value.
-    #[inline(always)]
+    #[inline]
     #[must_use]
-    pub fn get(self) -> i32 {
+    pub const fn get(self) -> i32 {
         self.0
     }
 
@@ -61,7 +61,7 @@ impl<Tag> I32<Tag> {
     ///
     /// Used internally and by macros after compile-time verification.
     #[doc(hidden)]
-    #[inline(always)]
+    #[inline]
     #[must_use]
     pub const fn from_raw(x: i32) -> Self {
         Self(x, PhantomData)
@@ -115,7 +115,7 @@ impl<Tag> Ord for I32<Tag> {
 impl I32<Finite> {
     /// Create a finite i32. Always succeeds for integers.
     #[must_use]
-    pub fn new(x: i32) -> Self {
+    pub const fn new(x: i32) -> Self {
         Self(x, PhantomData)
     }
 }
@@ -124,7 +124,7 @@ impl I32<Pos> {
     /// Create a positive i32. Returns `None` if ≤ 0.
     #[must_use]
     pub fn new(x: i32) -> Option<Self> {
-        (x > 0).then(|| Self(x, PhantomData))
+        (x > 0).then_some(Self(x, PhantomData))
     }
 }
 
@@ -132,7 +132,7 @@ impl I32<Neg> {
     /// Create a negative i32. Returns `None` if ≥ 0.
     #[must_use]
     pub fn new(x: i32) -> Option<Self> {
-        (x < 0).then(|| Self(x, PhantomData))
+        (x < 0).then_some(Self(x, PhantomData))
     }
 }
 
@@ -140,7 +140,7 @@ impl I32<NonZero> {
     /// Create a non-zero i32. Returns `None` if = 0.
     #[must_use]
     pub fn new(x: i32) -> Option<Self> {
-        (x != 0).then(|| Self(x, PhantomData))
+        (x != 0).then_some(Self(x, PhantomData))
     }
 }
 
@@ -148,7 +148,7 @@ impl I32<NonNeg> {
     /// Create a non-negative i32. Returns `None` if < 0.
     #[must_use]
     pub fn new(x: i32) -> Option<Self> {
-        (x >= 0).then(|| Self(x, PhantomData))
+        (x >= 0).then_some(Self(x, PhantomData))
     }
 }
 
@@ -156,7 +156,7 @@ impl I32<NonPos> {
     /// Create a non-positive i32. Returns `None` if > 0.
     #[must_use]
     pub fn new(x: i32) -> Option<Self> {
-        (x <= 0).then(|| Self(x, PhantomData))
+        (x <= 0).then_some(Self(x, PhantomData))
     }
 }
 
@@ -197,7 +197,7 @@ impl I32<GTEOne> {
     /// Create a value ≥ 1. Returns `None` if < 1.
     #[must_use]
     pub fn new(x: i32) -> Option<Self> {
-        (x >= 1).then(|| Self(x, PhantomData))
+        (x >= 1).then_some(Self(x, PhantomData))
     }
 }
 

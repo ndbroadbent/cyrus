@@ -176,7 +176,7 @@ impl NonEmptyIntersection {
     ///
     /// Use this to create `Moduli` vectors of the correct length.
     #[must_use]
-    pub fn dim(&self) -> crate::types::branded::Dim<'_> {
+    pub const fn dim(&self) -> crate::types::branded::Dim<'_> {
         crate::types::branded::Dim(self.0.dim, std::marker::PhantomData)
     }
 
@@ -201,7 +201,7 @@ impl NonEmptyIntersection {
 
     /// Get the underlying intersection tensor.
     #[must_use]
-    pub fn inner(&self) -> &Intersection {
+    pub const fn inner(&self) -> &Intersection {
         &self.0
     }
 }
@@ -215,7 +215,7 @@ pub(crate) fn canonical_key(i: usize, j: usize, k: usize) -> (usize, usize, usiz
 
 /// Compute symmetry multiplicity for entry (i, j, k) with i ≤ j ≤ k.
 /// Returns F64<Pos> (1, 3, or 6 are all positive).
-fn symmetry_multiplicity(i: usize, j: usize, k: usize) -> F64<Pos> {
+const fn symmetry_multiplicity(i: usize, j: usize, k: usize) -> F64<Pos> {
     if i == j && j == k {
         f64_pos!(1.0)
     } else if i == j || j == k || i == k {

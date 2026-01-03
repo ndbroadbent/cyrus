@@ -25,11 +25,14 @@ pub struct MoriCone {
 
 impl MoriCone {
     /// Create a new Mori cone from generators.
-    pub fn new(generators: Vec<Vec<I64<Finite>>>) -> Self {
+    pub const fn new(generators: Vec<Vec<I64<Finite>>>) -> Self {
         Self { generators }
     }
 
     /// Create from raw Integer vectors (for compatibility with integer_kernel).
+    ///
+    /// # Panics
+    /// Panics if any generator value does not fit in an i64.
     pub fn from_integers(generators: Vec<Vec<Integer>>) -> Self {
         let typed_generators = generators
             .into_iter()
@@ -87,6 +90,9 @@ impl MoriCone {
 ///
 /// # Errors
 /// Returns an error if no points are provided.
+///
+/// # Panics
+/// Panics if a simplex has no vertex outside its ridge (invariant violation).
 pub fn compute_mori_generators(tri: &Triangulation, points: &[Point]) -> Result<MoriCone> {
     let n_pts = points.len();
     if n_pts == 0 {

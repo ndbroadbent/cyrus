@@ -49,7 +49,7 @@ pub enum Strict {}
 impl VolumePolicy for Strict {
     type Output = Option<F64<Pos>>;
 
-    #[inline(always)]
+    #[inline]
     fn apply(v: F64<Finite>) -> Self::Output {
         F64::<Pos>::new(v.get())
     }
@@ -63,7 +63,7 @@ pub enum ForGA {}
 impl VolumePolicy for ForGA {
     type Output = F64<Finite>;
 
-    #[inline(always)]
+    #[inline]
     fn apply(v: F64<Finite>) -> Self::Output {
         v
     }
@@ -77,7 +77,7 @@ pub enum Abort {}
 impl VolumePolicy for Abort {
     type Output = F64<Pos>;
 
-    #[inline(always)]
+    #[inline]
     fn apply(v: F64<Finite>) -> Self::Output {
         F64::<Pos>::new(v.get()).expect("expected positive value")
     }
@@ -101,7 +101,7 @@ pub trait VacuumPolicy {
 impl VacuumPolicy for Strict {
     type Output = Option<F64<Neg>>;
 
-    #[inline(always)]
+    #[inline]
     fn apply(v: F64<Finite>) -> Self::Output {
         F64::<Neg>::new(v.get())
     }
@@ -110,7 +110,7 @@ impl VacuumPolicy for Strict {
 impl VacuumPolicy for ForGA {
     type Output = F64<Finite>;
 
-    #[inline(always)]
+    #[inline]
     fn apply(v: F64<Finite>) -> Self::Output {
         v
     }
@@ -119,7 +119,7 @@ impl VacuumPolicy for ForGA {
 impl VacuumPolicy for Abort {
     type Output = F64<Neg>;
 
-    #[inline(always)]
+    #[inline]
     fn apply(v: F64<Finite>) -> Self::Output {
         F64::<Neg>::new(v.get()).expect("expected negative value (AdS)")
     }

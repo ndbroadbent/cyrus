@@ -18,13 +18,22 @@ pub struct Dim<'a>(pub(crate) usize, pub(crate) PhantomData<&'a ()>);
 impl<'a> Dim<'a> {
     /// The number of moduli (dimension of Kähler moduli space).
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.0
+    }
+
+    /// Returns true if the dimension is zero.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.0 == 0
     }
 
     /// Generate random moduli using the provided RNG.
     ///
     /// The result is guaranteed to have the correct length and positive values.
+    ///
+    /// # Panics
+    /// Panics in debug mode if `max <= min`.
     #[must_use]
     pub fn generate<R: Rng>(&self, rng: &mut R, min: F64<Pos>, max: F64<Pos>) -> Moduli<'a> {
         debug_assert!(max.get() > min.get(), "max must be greater than min");
@@ -85,7 +94,7 @@ pub struct Moduli<'a> {
     pub(crate) _brand: PhantomData<&'a ()>,
 }
 
-impl<'a> Moduli<'a> {
+impl Moduli<'_> {
     /// Access the underlying values.
     #[must_use]
     pub fn values(&self) -> &[F64<Pos>] {
@@ -93,7 +102,7 @@ impl<'a> Moduli<'a> {
     }
 }
 
-impl<'a> std::ops::Index<usize> for Moduli<'a> {
+impl std::ops::Index<usize> for Moduli<'_> {
     type Output = F64<Pos>;
 
     fn index(&self, index: usize) -> &Self::Output {

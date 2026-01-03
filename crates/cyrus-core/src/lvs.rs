@@ -54,6 +54,10 @@ pub struct LvsResult {
 /// V_LVS = (8/3) * (a_s² * √τ_s / vol) * exp(-2λ_s τ_s)
 ///       - 4 * (W0 * a_s * τ_s / vol²) * exp(-λ_s τ_s)
 ///       + 3 * ξ * W0² / (4 * g_s^(3/2) * vol³)
+///
+/// # Panics
+/// Panics if intermediate calculations produce non-positive values where positive
+/// is expected (should not occur with valid positive inputs).
 pub fn compute_lvs_potential(
     params: &LvsParams,
     vol: Volume,
@@ -93,6 +97,10 @@ pub fn compute_lvs_potential(
 /// Compute the LVS potential minimum.
 ///
 /// Returns the stabilized volume and potential energy.
+///
+/// # Panics
+/// Panics if intermediate calculations produce invalid values (should not occur
+/// with valid positive inputs).
 pub fn compute_lvs_vacuum(params: &LvsParams) -> Option<LvsResult> {
     // ξ = -χ × ζ(3) / (2 × (2π)³)
     // χ is Neg, so -χ is Pos, making ξ positive

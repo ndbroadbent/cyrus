@@ -198,6 +198,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // Test code with small indices
     fn test_jacobian_consistency() {
         // Verify J numerically by finite differences
         let mut kappa = Intersection::new(2);

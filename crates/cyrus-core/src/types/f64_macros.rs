@@ -23,6 +23,7 @@
 /// Used by compile-time macros since `is_finite()` is not const.
 #[doc(hidden)]
 #[must_use]
+#[allow(clippy::eq_op, clippy::float_cmp)] // Intentional: v == v is false for NaN
 pub const fn const_is_finite(v: f64) -> bool {
     // NaN != NaN, so v == v is false for NaN
     // Infinity and -Infinity are equal to themselves but fail the bound check

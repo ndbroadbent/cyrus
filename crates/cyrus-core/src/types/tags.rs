@@ -1,15 +1,15 @@
 //! Type tags for compile-time numeric invariants.
 //!
 //! Tags are zero-sized types that encode what we know about a value:
-//! - [`Finite`]: No NaN or infinity (always true for Rational/Integer)
-//! - [`NonZero`]: Not zero (≠ 0) - critical for safe division
-//! - [`Pos`]: Strictly positive (> 0)
-//! - [`Neg`]: Strictly negative (< 0)
-//! - [`Zero`]: Exactly zero
-//! - [`One`]: Exactly 1
-//! - [`MinusOne`]: Exactly -1
-//! - [`NonNeg`]: Non-negative (≥ 0)
-//! - [`NonPos`]: Non-positive (≤ 0)
+//! - [`Finite`] - No NaN or infinity (always true for Rational/Integer)
+//! - [`NonZero`] - Not zero (≠ 0) - critical for safe division
+//! - [`Pos`] - Strictly positive (> 0)
+//! - [`Neg`] - Strictly negative (< 0)
+//! - [`Zero`] - Exactly zero
+//! - [`One`] - Exactly 1
+//! - [`MinusOne`] - Exactly -1
+//! - [`NonNeg`] - Non-negative (≥ 0)
+//! - [`NonPos`] - Non-positive (≤ 0)
 //!
 //! ## Trait Hierarchy
 //!
@@ -135,7 +135,7 @@ pub trait IsMinusOne: IsNegative {}
 // ============================================================================
 
 /// Helper to create PhantomData for tags.
-#[inline(always)]
+#[inline]
 pub const fn tag<T>() -> PhantomData<T> {
     PhantomData
 }

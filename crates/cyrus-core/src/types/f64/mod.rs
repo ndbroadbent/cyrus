@@ -54,9 +54,9 @@ pub struct F64<Tag = Finite>(pub(crate) f64, pub(crate) PhantomData<Tag>);
 
 impl<Tag> F64<Tag> {
     /// Get the underlying f64 value.
-    #[inline(always)]
+    #[inline]
     #[must_use]
-    pub fn get(self) -> f64 {
+    pub const fn get(self) -> f64 {
         self.0
     }
 
@@ -64,7 +64,7 @@ impl<Tag> F64<Tag> {
     ///
     /// Used internally and by macros after compile-time verification.
     #[doc(hidden)]
-    #[inline(always)]
+    #[inline]
     #[must_use]
     pub const fn from_raw(x: f64) -> Self {
         Self(x, PhantomData)
@@ -116,7 +116,7 @@ impl F64<Finite> {
     /// Create a finite f64. Returns `None` if NaN or infinite.
     #[must_use]
     pub fn new(x: f64) -> Option<Self> {
-        x.is_finite().then(|| Self(x, PhantomData))
+        x.is_finite().then_some(Self(x, PhantomData))
     }
 
     /// Zero constant.
@@ -124,7 +124,7 @@ impl F64<Finite> {
 
     /// Compute absolute value. Finite.abs() is NonNeg (could be zero).
     #[must_use]
-    pub fn abs(self) -> F64<NonNeg> {
+    pub const fn abs(self) -> F64<NonNeg> {
         F64(self.0.abs(), PhantomData)
     }
 
@@ -137,19 +137,19 @@ impl F64<Finite> {
     /// Try to narrow to positive. Returns `None` if ≤ 0.
     #[must_use]
     pub fn try_to_pos(self) -> Option<F64<Pos>> {
-        (self.0 > 0.0).then(|| F64(self.0, PhantomData))
+        (self.0 > 0.0).then_some(F64(self.0, PhantomData))
     }
 
     /// Try to narrow to negative. Returns `None` if ≥ 0.
     #[must_use]
     pub fn try_to_neg(self) -> Option<F64<Neg>> {
-        (self.0 < 0.0).then(|| F64(self.0, PhantomData))
+        (self.0 < 0.0).then_some(F64(self.0, PhantomData))
     }
 
     /// Try to narrow to non-zero. Returns `None` if = 0.
     #[must_use]
     pub fn try_to_non_zero(self) -> Option<F64<NonZero>> {
-        (self.0 != 0.0).then(|| F64(self.0, PhantomData))
+        (self.0 != 0.0).then_some(F64(self.0, PhantomData))
     }
 }
 
@@ -157,12 +157,12 @@ impl F64<Pos> {
     /// Create a positive f64. Returns `None` if ≤ 0, NaN, or infinite.
     #[must_use]
     pub fn new(x: f64) -> Option<Self> {
-        (x.is_finite() && x > 0.0).then(|| Self(x, PhantomData))
+        (x.is_finite() && x > 0.0).then_some(Self(x, PhantomData))
     }
 
     /// Compute absolute value. Pos.abs() is Pos (already positive).
     #[must_use]
-    pub fn abs(self) -> F64<Pos> {
+    pub const fn abs(self) -> Self {
         self
     }
 
@@ -189,12 +189,12 @@ impl F64<Neg> {
     /// Create a negative f64. Returns `None` if ≥ 0, NaN, or infinite.
     #[must_use]
     pub fn new(x: f64) -> Option<Self> {
-        (x.is_finite() && x < 0.0).then(|| Self(x, PhantomData))
+        (x.is_finite() && x < 0.0).then_some(Self(x, PhantomData))
     }
 
     /// Compute absolute value. Neg.abs() is Pos.
     #[must_use]
-    pub fn abs(self) -> F64<Pos> {
+    pub const fn abs(self) -> F64<Pos> {
         F64(self.0.abs(), PhantomData)
     }
 }
@@ -203,12 +203,12 @@ impl F64<NonZero> {
     /// Create a non-zero f64. Returns `None` if = 0, NaN, or infinite.
     #[must_use]
     pub fn new(x: f64) -> Option<Self> {
-        (x.is_finite() && x != 0.0).then(|| Self(x, PhantomData))
+        (x.is_finite() && x != 0.0).then_some(Self(x, PhantomData))
     }
 
     /// Compute absolute value. NonZero.abs() is Pos (not just NonNeg).
     #[must_use]
-    pub fn abs(self) -> F64<Pos> {
+    pub const fn abs(self) -> F64<Pos> {
         F64(self.0.abs(), PhantomData)
     }
 }
@@ -220,7 +220,7 @@ impl F64<NonNeg> {
     /// Create a non-negative f64. Returns `None` if < 0, NaN, or infinite.
     #[must_use]
     pub fn new(x: f64) -> Option<Self> {
-        (x.is_finite() && x >= 0.0).then(|| Self(x, PhantomData))
+        (x.is_finite() && x >= 0.0).then_some(Self(x, PhantomData))
     }
 
     /// Compute square root. sqrt(NonNeg) is NonNeg.
@@ -234,7 +234,7 @@ impl F64<NonPos> {
     /// Create a non-positive f64. Returns `None` if > 0, NaN, or infinite.
     #[must_use]
     pub fn new(x: f64) -> Option<Self> {
-        (x.is_finite() && x <= 0.0).then(|| Self(x, PhantomData))
+        (x.is_finite() && x <= 0.0).then_some(Self(x, PhantomData))
     }
 }
 
@@ -255,6 +255,7 @@ impl F64<One> {
 
     /// Create a one. Returns `None` if not exactly 1.0.
     #[must_use]
+    #[allow(clippy::float_cmp)] // Intentional exact comparison for special value
     pub fn new(x: f64) -> Option<Self> {
         (x == 1.0).then_some(Self::ONE)
     }
@@ -266,6 +267,7 @@ impl F64<MinusOne> {
 
     /// Create a minus-one. Returns `None` if not exactly -1.0.
     #[must_use]
+    #[allow(clippy::float_cmp)] // Intentional exact comparison for special value
     pub fn new(x: f64) -> Option<Self> {
         (x == -1.0).then_some(Self::MINUS_ONE)
     }
@@ -277,6 +279,7 @@ impl F64<Two> {
 
     /// Create a two. Returns `None` if not exactly 2.0.
     #[must_use]
+    #[allow(clippy::float_cmp)] // Intentional exact comparison for special value
     pub fn new(x: f64) -> Option<Self> {
         (x == 2.0).then_some(Self::TWO)
     }
@@ -286,7 +289,7 @@ impl F64<GTEOne> {
     /// Create a value ≥ 1. Returns `None` if < 1, NaN, or infinite.
     #[must_use]
     pub fn new(x: f64) -> Option<Self> {
-        (x.is_finite() && x >= 1.0).then(|| Self(x, PhantomData))
+        (x.is_finite() && x >= 1.0).then_some(Self(x, PhantomData))
     }
 }
 

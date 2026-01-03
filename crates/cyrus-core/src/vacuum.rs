@@ -50,6 +50,9 @@ pub fn is_tadpole_canceled(k: &[i64], m: &[i64], q_max: f64) -> bool {
 /// * `g_s` - String coupling (positive)
 /// * `v_string` - String frame volume with BBHL correction (positive)
 /// * `w0` - Flux superpotential magnitude |W₀| (positive)
+///
+/// # Panics
+/// Panics if the formula produces a non-negative result (should not occur with valid inputs).
 #[must_use]
 pub fn compute_v0(ek0: F64<Pos>, g_s: F64<Pos>, v_string: F64<Pos>, w0: F64<Pos>) -> F64<Neg> {
     // All inputs positive → product is positive → multiply by -3 → negative
