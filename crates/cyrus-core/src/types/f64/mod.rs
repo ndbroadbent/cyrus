@@ -14,20 +14,24 @@
 //! # Example
 //!
 //! ```
-//! use cyrus_core::{pos, finite};
+//! use cyrus_core::{f64_pos, f64_finite};
 //! use cyrus_core::types::f64::F64;
 //!
-//! let x = pos!(4.0);        // Compile-time verified F64<Pos>
-//! let y = x.sqrt();         // sqrt of Pos is Pos
-//! assert!((y.get() - 2.0).abs() < 1e-10);
+//! let x = f64_pos!(4.0);     // Compile-time verified F64<Pos>
+//! let y = x * x;             // Pos * Pos = Pos
+//! assert!((y.get() - 16.0).abs() < 1e-10);
 //!
-//! let z = finite!(-3.5);    // Compile-time verified F64 (F64<Finite>)
+//! let z = f64_finite!(-3.5); // Compile-time verified F64 (F64<Finite>)
 //! ```
 
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 
-pub use super::tags::{Finite, GTEOne, IsFinite, IsGTEOne, IsNegative, IsNonNeg, IsNonPos, IsNonZero, IsOne, IsPositive, IsMinusOne, IsTwo, IsZero, MinusOne, Neg, NonNeg, NonPos, NonZero, One, Pos, Two, Zero, tag};
+pub use super::tags::{
+    Finite, GTEOne, IsFinite, IsGTEOne, IsMinusOne, IsNegative, IsNonNeg, IsNonPos, IsNonZero,
+    IsOne, IsPositive, IsTwo, IsZero, MinusOne, Neg, NonNeg, NonPos, NonZero, One, Pos, Two, Zero,
+    tag,
+};
 
 // ============================================================================
 // F64<Tag> Wrapper
@@ -124,6 +128,12 @@ impl F64<Finite> {
         F64(self.0.abs(), PhantomData)
     }
 
+    /// Compute square. x² is always non-negative.
+    #[must_use]
+    pub fn square(self) -> F64<NonNeg> {
+        F64(self.0 * self.0, PhantomData)
+    }
+
     /// Try to narrow to positive. Returns `None` if ≤ 0.
     #[must_use]
     pub fn try_to_pos(self) -> Option<F64<Pos>> {
@@ -154,6 +164,24 @@ impl F64<Pos> {
     #[must_use]
     pub fn abs(self) -> F64<Pos> {
         self
+    }
+
+    /// Compute square root. sqrt(Pos) is Pos.
+    #[must_use]
+    pub fn sqrt(self) -> Self {
+        Self(self.0.sqrt(), PhantomData)
+    }
+
+    /// Compute natural logarithm. ln(Pos) is Finite (any real number).
+    #[must_use]
+    pub fn ln(self) -> F64<Finite> {
+        F64(self.0.ln(), PhantomData)
+    }
+
+    /// Compute reciprocal. 1/Pos is Pos.
+    #[must_use]
+    pub fn recip(self) -> Self {
+        Self(1.0 / self.0, PhantomData)
     }
 }
 
@@ -186,10 +214,19 @@ impl F64<NonZero> {
 }
 
 impl F64<NonNeg> {
+    /// The zero constant.
+    pub const ZERO: Self = Self(0.0, PhantomData);
+
     /// Create a non-negative f64. Returns `None` if < 0, NaN, or infinite.
     #[must_use]
     pub fn new(x: f64) -> Option<Self> {
         (x.is_finite() && x >= 0.0).then(|| Self(x, PhantomData))
+    }
+
+    /// Compute square root. sqrt(NonNeg) is NonNeg.
+    #[must_use]
+    pub fn sqrt(self) -> Self {
+        Self(self.0.sqrt(), PhantomData)
     }
 }
 
@@ -260,195 +297,59 @@ impl Default for F64<Zero> {
 }
 
 // ============================================================================
-// Trait Implementations
+// Marker Trait Implementations
 // ============================================================================
 
-impl IsFinite for F64<Finite> {
-    type Finite = F64<Finite>;
-    fn to_finite(self) -> Self::Finite { self }
-}
+// IsFinite - all tags are finite
+impl IsFinite for F64<Finite> {}
+impl IsFinite for F64<Pos> {}
+impl IsFinite for F64<Neg> {}
+impl IsFinite for F64<Zero> {}
+impl IsFinite for F64<One> {}
+impl IsFinite for F64<MinusOne> {}
+impl IsFinite for F64<NonZero> {}
+impl IsFinite for F64<NonNeg> {}
+impl IsFinite for F64<NonPos> {}
+impl IsFinite for F64<Two> {}
+impl IsFinite for F64<GTEOne> {}
 
-impl IsFinite for F64<Pos> {
-    type Finite = F64<Finite>;
-    fn to_finite(self) -> Self::Finite { F64(self.0, PhantomData) }
-}
+// IsNonZero
+impl IsNonZero for F64<NonZero> {}
+impl IsNonZero for F64<Pos> {}
+impl IsNonZero for F64<Neg> {}
+impl IsNonZero for F64<One> {}
+impl IsNonZero for F64<MinusOne> {}
+impl IsNonZero for F64<Two> {}
+impl IsNonZero for F64<GTEOne> {}
 
-impl IsFinite for F64<Neg> {
-    type Finite = F64<Finite>;
-    fn to_finite(self) -> Self::Finite { F64(self.0, PhantomData) }
-}
+// IsPositive
+impl IsPositive for F64<Pos> {}
+impl IsPositive for F64<One> {}
+impl IsPositive for F64<Two> {}
+impl IsPositive for F64<GTEOne> {}
 
-impl IsFinite for F64<Zero> {
-    type Finite = F64<Finite>;
-    fn to_finite(self) -> Self::Finite { F64(self.0, PhantomData) }
-}
+// IsNegative
+impl IsNegative for F64<Neg> {}
+impl IsNegative for F64<MinusOne> {}
 
-impl IsFinite for F64<One> {
-    type Finite = F64<Finite>;
-    fn to_finite(self) -> Self::Finite { F64(self.0, PhantomData) }
-}
-
-impl IsFinite for F64<MinusOne> {
-    type Finite = F64<Finite>;
-    fn to_finite(self) -> Self::Finite { F64(self.0, PhantomData) }
-}
-
-impl IsFinite for F64<NonZero> {
-    type Finite = F64<Finite>;
-    fn to_finite(self) -> Self::Finite { F64(self.0, PhantomData) }
-}
-
-impl IsFinite for F64<NonNeg> {
-    type Finite = F64<Finite>;
-    fn to_finite(self) -> Self::Finite { F64(self.0, PhantomData) }
-}
-
-impl IsFinite for F64<NonPos> {
-    type Finite = F64<Finite>;
-    fn to_finite(self) -> Self::Finite { F64(self.0, PhantomData) }
-}
-
-impl IsFinite for F64<Two> {
-    type Finite = F64<Finite>;
-    fn to_finite(self) -> Self::Finite { F64(self.0, PhantomData) }
-}
-
-impl IsFinite for F64<GTEOne> {
-    type Finite = F64<Finite>;
-    fn to_finite(self) -> Self::Finite { F64(self.0, PhantomData) }
-}
-
-// --- IsNonZero ---
-
-impl IsNonZero for F64<NonZero> {
-    type NonZero = F64<NonZero>;
-    fn to_non_zero(self) -> Self::NonZero { self }
-}
-
-impl IsNonZero for F64<Pos> {
-    type NonZero = F64<NonZero>;
-    fn to_non_zero(self) -> Self::NonZero { F64(self.0, PhantomData) }
-}
-
-impl IsNonZero for F64<Neg> {
-    type NonZero = F64<NonZero>;
-    fn to_non_zero(self) -> Self::NonZero { F64(self.0, PhantomData) }
-}
-
-impl IsNonZero for F64<One> {
-    type NonZero = F64<NonZero>;
-    fn to_non_zero(self) -> Self::NonZero { F64(self.0, PhantomData) }
-}
-
-impl IsNonZero for F64<MinusOne> {
-    type NonZero = F64<NonZero>;
-    fn to_non_zero(self) -> Self::NonZero { F64(self.0, PhantomData) }
-}
-
-impl IsNonZero for F64<Two> {
-    type NonZero = F64<NonZero>;
-    fn to_non_zero(self) -> Self::NonZero { F64(self.0, PhantomData) }
-}
-
-impl IsNonZero for F64<GTEOne> {
-    type NonZero = F64<NonZero>;
-    fn to_non_zero(self) -> Self::NonZero { F64(self.0, PhantomData) }
-}
-
-// --- IsPositive ---
-
-impl IsPositive for F64<Pos> {
-    type Positive = F64<Pos>;
-    fn to_positive(self) -> Self::Positive { self }
-}
-
-impl IsPositive for F64<One> {
-    type Positive = F64<Pos>;
-    fn to_positive(self) -> Self::Positive { F64(self.0, PhantomData) }
-}
-
-impl IsPositive for F64<Two> {
-    type Positive = F64<Pos>;
-    fn to_positive(self) -> Self::Positive { F64(self.0, PhantomData) }
-}
-
-impl IsPositive for F64<GTEOne> {
-    type Positive = F64<Pos>;
-    fn to_positive(self) -> Self::Positive { F64(self.0, PhantomData) }
-}
-
-// --- IsNegative ---
-
-impl IsNegative for F64<Neg> {
-    type Negative = F64<Neg>;
-    fn to_negative(self) -> Self::Negative { self }
-}
-
-impl IsNegative for F64<MinusOne> {
-    type Negative = F64<Neg>;
-    fn to_negative(self) -> Self::Negative { F64(self.0, PhantomData) }
-}
-
-// --- IsZero ---
-
+// IsZero
 impl IsZero for F64<Zero> {}
 
-// --- IsNonNeg ---
+// IsNonNeg
+impl IsNonNeg for F64<NonNeg> {}
+impl IsNonNeg for F64<Pos> {}
+impl IsNonNeg for F64<One> {}
+impl IsNonNeg for F64<Zero> {}
+impl IsNonNeg for F64<Two> {}
+impl IsNonNeg for F64<GTEOne> {}
 
-impl IsNonNeg for F64<NonNeg> {
-    type NonNeg = F64<NonNeg>;
-    fn to_non_neg(self) -> Self::NonNeg { self }
-}
+// IsNonPos
+impl IsNonPos for F64<NonPos> {}
+impl IsNonPos for F64<Neg> {}
+impl IsNonPos for F64<MinusOne> {}
+impl IsNonPos for F64<Zero> {}
 
-impl IsNonNeg for F64<Pos> {
-    type NonNeg = F64<NonNeg>;
-    fn to_non_neg(self) -> Self::NonNeg { F64(self.0, PhantomData) }
-}
-
-impl IsNonNeg for F64<One> {
-    type NonNeg = F64<NonNeg>;
-    fn to_non_neg(self) -> Self::NonNeg { F64(self.0, PhantomData) }
-}
-
-impl IsNonNeg for F64<Zero> {
-    type NonNeg = F64<NonNeg>;
-    fn to_non_neg(self) -> Self::NonNeg { F64(self.0, PhantomData) }
-}
-
-impl IsNonNeg for F64<Two> {
-    type NonNeg = F64<NonNeg>;
-    fn to_non_neg(self) -> Self::NonNeg { F64(self.0, PhantomData) }
-}
-
-impl IsNonNeg for F64<GTEOne> {
-    type NonNeg = F64<NonNeg>;
-    fn to_non_neg(self) -> Self::NonNeg { F64(self.0, PhantomData) }
-}
-
-// --- IsNonPos ---
-
-impl IsNonPos for F64<NonPos> {
-    type NonPos = F64<NonPos>;
-    fn to_non_pos(self) -> Self::NonPos { self }
-}
-
-impl IsNonPos for F64<Neg> {
-    type NonPos = F64<NonPos>;
-    fn to_non_pos(self) -> Self::NonPos { F64(self.0, PhantomData) }
-}
-
-impl IsNonPos for F64<MinusOne> {
-    type NonPos = F64<NonPos>;
-    fn to_non_pos(self) -> Self::NonPos { F64(self.0, PhantomData) }
-}
-
-impl IsNonPos for F64<Zero> {
-    type NonPos = F64<NonPos>;
-    fn to_non_pos(self) -> Self::NonPos { F64(self.0, PhantomData) }
-}
-
-// --- IsOne / IsMinusOne ---
-
+// Exact values
 impl IsOne for F64<One> {}
 impl IsTwo for F64<Two> {}
 impl IsMinusOne for F64<MinusOne> {}
@@ -462,80 +363,5 @@ impl IsGTEOne for F64<Two> {}
 
 crate::impl_ops!(F64, f64);
 
-// ============================================================================
-// Tests
-// ============================================================================
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_f64_size() {
-        assert_eq!(std::mem::size_of::<F64>(), std::mem::size_of::<f64>());
-        assert_eq!(std::mem::size_of::<F64<Pos>>(), std::mem::size_of::<f64>());
-    }
-
-    #[test]
-    fn test_finite_new() {
-        assert!(F64::<Finite>::new(0.0).is_some());
-        assert!(F64::<Finite>::new(1.0).is_some());
-        assert!(F64::<Finite>::new(-1.0).is_some());
-        assert!(F64::<Finite>::new(f64::NAN).is_none());
-        assert!(F64::<Finite>::new(f64::INFINITY).is_none());
-    }
-
-    #[test]
-    fn test_pos_new() {
-        assert!(F64::<Pos>::new(1.0).is_some());
-        assert!(F64::<Pos>::new(0.0).is_none());
-        assert!(F64::<Pos>::new(-1.0).is_none());
-    }
-
-    #[test]
-    fn test_neg_new() {
-        assert!(F64::<Neg>::new(-1.0).is_some());
-        assert!(F64::<Neg>::new(0.0).is_none());
-        assert!(F64::<Neg>::new(1.0).is_none());
-    }
-
-    #[test]
-    fn test_constants() {
-        assert_eq!(F64::<Zero>::ZERO.get(), 0.0);
-        assert_eq!(F64::<One>::ONE.get(), 1.0);
-        assert_eq!(F64::<MinusOne>::MINUS_ONE.get(), -1.0);
-    }
-
-    #[test]
-    fn test_display() {
-        let x = F64::<Pos>::new(3.14).unwrap();
-        assert_eq!(format!("{x}"), "3.14");
-    }
-
-    #[test]
-    fn test_debug() {
-        let x = F64::<Pos>::new(3.14).unwrap();
-        let s = format!("{x:?}");
-        assert!(s.contains("Pos"));
-        assert!(s.contains("3.14"));
-    }
-
-    #[test]
-    fn test_hash() {
-        use std::collections::HashSet;
-        let mut set = HashSet::new();
-        set.insert(F64::<Pos>::new(1.0).unwrap());
-        set.insert(F64::<Pos>::new(2.0).unwrap());
-        assert_eq!(set.len(), 2);
-    }
-
-    #[test]
-    fn test_widening() {
-        let p = F64::<Pos>::new(1.0).unwrap();
-        let o = F64::<One>::ONE;
-
-        let _: F64<Finite> = p.to_finite();
-        let _: F64<Pos> = o.to_positive();
-        let _: F64<NonNeg> = p.to_non_neg();
-    }
-}
+mod tests;

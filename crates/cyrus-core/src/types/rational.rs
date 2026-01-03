@@ -177,148 +177,32 @@ impl Default for Rational<Zero> {
 }
 
 // ============================================================================
-// Trait Implementations
+// Marker Trait Implementations
 // ============================================================================
 
-impl IsFinite for Rational<Finite> {
-    type Finite = Rational<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        self
-    }
-}
+impl IsFinite for Rational<Finite> {}
+impl IsFinite for Rational<Pos> {}
+impl IsFinite for Rational<Neg> {}
+impl IsFinite for Rational<Zero> {}
+impl IsFinite for Rational<NonNeg> {}
+impl IsFinite for Rational<NonZero> {}
+impl IsFinite for Rational<NonPos> {}
 
-impl IsFinite for Rational<Pos> {
-    type Finite = Rational<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        Rational(self.0, PhantomData)
-    }
-}
+impl IsNonZero for Rational<NonZero> {}
+impl IsNonZero for Rational<Pos> {}
+impl IsNonZero for Rational<Neg> {}
 
-impl IsFinite for Rational<Neg> {
-    type Finite = Rational<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        Rational(self.0, PhantomData)
-    }
-}
-
-impl IsFinite for Rational<Zero> {
-    type Finite = Rational<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        Rational(self.0, PhantomData)
-    }
-}
-
-impl IsFinite for Rational<NonNeg> {
-    type Finite = Rational<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        Rational(self.0, PhantomData)
-    }
-}
-
-impl IsFinite for Rational<NonZero> {
-    type Finite = Rational<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        Rational(self.0, PhantomData)
-    }
-}
-
-impl IsFinite for Rational<NonPos> {
-    type Finite = Rational<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        Rational(self.0, PhantomData)
-    }
-}
-
-// --- IsNonZero ---
-
-impl IsNonZero for Rational<NonZero> {
-    type NonZero = Rational<NonZero>;
-    fn to_non_zero(self) -> Self::NonZero {
-        self
-    }
-}
-
-impl IsNonZero for Rational<Pos> {
-    type NonZero = Rational<NonZero>;
-    fn to_non_zero(self) -> Self::NonZero {
-        Rational(self.0, PhantomData)
-    }
-}
-
-impl IsNonZero for Rational<Neg> {
-    type NonZero = Rational<NonZero>;
-    fn to_non_zero(self) -> Self::NonZero {
-        Rational(self.0, PhantomData)
-    }
-}
-
-// --- IsPositive ---
-
-impl IsPositive for Rational<Pos> {
-    type Positive = Rational<Pos>;
-    fn to_positive(self) -> Self::Positive {
-        self
-    }
-}
-
-// --- IsNegative ---
-
-impl IsNegative for Rational<Neg> {
-    type Negative = Rational<Neg>;
-    fn to_negative(self) -> Self::Negative {
-        self
-    }
-}
-
-// --- IsZero ---
-
+impl IsPositive for Rational<Pos> {}
+impl IsNegative for Rational<Neg> {}
 impl IsZero for Rational<Zero> {}
 
-// --- IsNonNeg ---
+impl IsNonNeg for Rational<NonNeg> {}
+impl IsNonNeg for Rational<Pos> {}
+impl IsNonNeg for Rational<Zero> {}
 
-impl IsNonNeg for Rational<NonNeg> {
-    type NonNeg = Rational<NonNeg>;
-    fn to_non_neg(self) -> Self::NonNeg {
-        self
-    }
-}
-
-impl IsNonNeg for Rational<Pos> {
-    type NonNeg = Rational<NonNeg>;
-    fn to_non_neg(self) -> Self::NonNeg {
-        Rational(self.0, PhantomData)
-    }
-}
-
-impl IsNonNeg for Rational<Zero> {
-    type NonNeg = Rational<NonNeg>;
-    fn to_non_neg(self) -> Self::NonNeg {
-        Rational(self.0, PhantomData)
-    }
-}
-
-// --- IsNonPos ---
-
-impl IsNonPos for Rational<NonPos> {
-    type NonPos = Rational<NonPos>;
-    fn to_non_pos(self) -> Self::NonPos {
-        self
-    }
-}
-
-impl IsNonPos for Rational<Neg> {
-    type NonPos = Rational<NonPos>;
-    fn to_non_pos(self) -> Self::NonPos {
-        Rational(self.0, PhantomData)
-    }
-}
-
-impl IsNonPos for Rational<Zero> {
-    type NonPos = Rational<NonPos>;
-    fn to_non_pos(self) -> Self::NonPos {
-        Rational(self.0, PhantomData)
-    }
-}
+impl IsNonPos for Rational<NonPos> {}
+impl IsNonPos for Rational<Neg> {}
+impl IsNonPos for Rational<Zero> {}
 
 // ============================================================================
 // Conversions
@@ -358,8 +242,7 @@ impl Rational<Finite> {
         use malachite::num::conversion::traits::RoundingFrom;
         use malachite::rounding_modes::RoundingMode;
         let (value, _) = f64::rounding_from(&self.0, RoundingMode::Nearest);
-        crate::types::f64::F64::<Finite>::new(value)
-            .expect("rational should convert to finite f64")
+        crate::types::f64::F64::<Finite>::new(value).expect("rational should convert to finite f64")
     }
 }
 
@@ -371,6 +254,16 @@ impl Rational<Finite> {
 mod tests {
     use super::*;
     use malachite::Rational as MR;
+    use std::collections::hash_map::DefaultHasher;
+
+    #[test]
+    fn test_finite_new() {
+        let r = Rational::<Finite>::new(MR::from(42));
+        assert_eq!(r.get(), &MR::from(42));
+
+        let r2 = Rational::<Finite>::new(MR::from(-5));
+        assert_eq!(r2.get(), &MR::from(-5));
+    }
 
     #[test]
     fn test_pos_new() {
@@ -387,15 +280,124 @@ mod tests {
     }
 
     #[test]
-    fn test_to_f64() {
+    fn test_nonzero_new() {
+        assert!(Rational::<NonZero>::new(MR::from(1)).is_some());
+        assert!(Rational::<NonZero>::new(MR::from(-1)).is_some());
+        assert!(Rational::<NonZero>::new(MR::from(0)).is_none());
+    }
+
+    #[test]
+    fn test_nonneg_new() {
+        assert!(Rational::<NonNeg>::new(MR::from(0)).is_some());
+        assert!(Rational::<NonNeg>::new(MR::from(1)).is_some());
+        assert!(Rational::<NonNeg>::new(MR::from(-1)).is_none());
+    }
+
+    #[test]
+    fn test_nonpos_new() {
+        assert!(Rational::<NonPos>::new(MR::from(0)).is_some());
+        assert!(Rational::<NonPos>::new(MR::from(-1)).is_some());
+        assert!(Rational::<NonPos>::new(MR::from(1)).is_none());
+    }
+
+    #[test]
+    fn test_zero_new() {
+        assert!(Rational::<Zero>::new(MR::from(0)).is_some());
+        assert!(Rational::<Zero>::new(MR::from(1)).is_none());
+        assert!(Rational::<Zero>::new(MR::from(-1)).is_none());
+
+        let z = Rational::<Zero>::zero();
+        assert_eq!(z.get(), &MR::from(0));
+    }
+
+    #[test]
+    fn test_default_zero() {
+        let z: Rational<Zero> = Rational::default();
+        assert_eq!(z.get(), &MR::from(0));
+    }
+
+    #[test]
+    fn test_into_inner() {
+        let r = Rational::<Pos>::new(MR::from(5)).unwrap();
+        let inner = r.into_inner();
+        assert_eq!(inner, MR::from(5));
+    }
+
+    #[test]
+    fn test_from_raw() {
+        let r = Rational::<Pos>::from_raw(MR::from(10));
+        assert_eq!(r.get(), &MR::from(10));
+    }
+
+    #[test]
+    fn test_to_f64_pos() {
         let r = Rational::<Pos>::new(MR::from(42)).unwrap();
         let f = r.to_f64();
-        assert_eq!(f.get(), 42.0);
+        assert!((f.get() - 42.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_to_f64_neg() {
+        let r = Rational::<Neg>::new(MR::from(-5)).unwrap();
+        let f = r.to_f64();
+        assert!((f.get() - (-5.0)).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_to_f64_finite() {
+        let r = Rational::<Finite>::new(MR::from(-3));
+        let f = r.to_f64();
+        assert!((f.get() - (-3.0)).abs() < 1e-10);
+
+        let r2 = Rational::<Finite>::new(MR::from(7));
+        let f2 = r2.to_f64();
+        assert!((f2.get() - 7.0).abs() < 1e-10);
     }
 
     #[test]
     fn test_display() {
         let r = Rational::<Pos>::new(MR::from_signeds(3, 4)).unwrap();
         assert_eq!(format!("{r}"), "3/4");
+    }
+
+    #[test]
+    fn test_debug() {
+        let r = Rational::<Pos>::new(MR::from(5)).unwrap();
+        let s = format!("{r:?}");
+        assert!(s.contains("Pos"));
+        assert!(s.contains('5'));
+    }
+
+    #[test]
+    fn test_eq() {
+        let a = Rational::<Pos>::new(MR::from(3)).unwrap();
+        let b = Rational::<Pos>::new(MR::from(3)).unwrap();
+        let c = Rational::<Pos>::new(MR::from(4)).unwrap();
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+    }
+
+    #[test]
+    fn test_hash() {
+        let a = Rational::<Pos>::new(MR::from(5)).unwrap();
+        let b = Rational::<Pos>::new(MR::from(5)).unwrap();
+
+        let mut h1 = DefaultHasher::new();
+        let mut h2 = DefaultHasher::new();
+        a.hash(&mut h1);
+        b.hash(&mut h2);
+        assert_eq!(h1.finish(), h2.finish());
+    }
+
+    #[test]
+    fn test_ord() {
+        let a = Rational::<Pos>::new(MR::from(1)).unwrap();
+        let b = Rational::<Pos>::new(MR::from(2)).unwrap();
+        assert!(a < b);
+        assert!(b > a);
+        assert!(a <= b);
+        assert!(b >= a);
+        assert_eq!(a.partial_cmp(&b), Some(std::cmp::Ordering::Less));
+        assert_eq!(a.cmp(&b), std::cmp::Ordering::Less);
     }
 }

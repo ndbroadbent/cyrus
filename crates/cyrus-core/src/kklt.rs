@@ -19,38 +19,55 @@
 //! - `c_i` = dual Coxeter numbers (1 for D3-instanton, 6 for O7-plane with so(8))
 //! - `c_τ` = 2π / (`g_s` × ln(W₀⁻¹))
 //!
-//! ## Path-Following Algorithm
-//!
-//! Given target τ values, we solve for Kähler moduli t using path-following:
-//! 1. Start with `t_init` (e.g., uniform or from triangulation)
-//! 2. Interpolate from `τ_init` to `τ_target` in N steps
-//! 3. At each step, solve the linear system: J @ ε = Δτ
-//! 4. Update t = t + ε
-//!
-//! The Jacobian is: `J_ik` = ∂`τ_i/∂t^k` = `κ_ijk` t^j
-//!
 //! Reference: arXiv:2107.09064, Section 5
 
+use std::f64::consts::PI;
+
+use crate::f64_pos;
 use crate::intersection::Intersection;
+use crate::types::f64::F64;
+use crate::types::i64::I64;
+use crate::types::physics::{CTau, DivisorVolume, RelativeError, StringCoupling};
+use crate::types::range::CheckedRange;
+use crate::types::tags::{Finite, NonNeg, Pos};
+
+/// 2π as a typed positive constant.
+const TWO_PI: F64<Pos> = f64_pos!(2.0 * PI);
 
 /// Compute target divisor volumes `τ_i` = `c_i` / `c_τ`.
 ///
 /// # Arguments
-/// * `c_i` - Dual Coxeter numbers (1 for D3, 6 for O7)
-/// * `c_tau` - Parameter relating `g_s` to W₀
+/// * `c_i` - Dual Coxeter numbers (positive integers: 1 for D3, 6 for O7)
+/// * `c_tau` - Parameter relating `g_s` to W₀ (positive)
 #[must_use]
-#[allow(clippy::cast_possible_truncation)]
-pub fn compute_target_tau(c_i: &[i64], c_tau: f64) -> Vec<f64> {
-    c_i.iter().map(|&ci| f64::from(ci as i32) / c_tau).collect()
+pub fn compute_target_tau(c_i: &[I64<Pos>], c_tau: CTau) -> Vec<DivisorVolume> {
+    c_i.iter()
+        .map(|ci| {
+            // Pos / Pos = Pos
+            ci.to_f64() / c_tau
+        })
+        .collect()
 }
 
 /// Compute `c_τ` = 2π / (`g_s` × ln(W₀⁻¹)).
 ///
 /// This relates the string coupling to the flux superpotential.
+///
+/// # Arguments
+/// * `g_s` - String coupling (positive)
+/// * `w0` - Flux superpotential magnitude |W₀| (positive)
 #[must_use]
-pub fn compute_c_tau(g_s: f64, w0: f64) -> f64 {
-    use std::f64::consts::PI;
-    2.0 * PI / (g_s * (1.0 / w0).ln())
+pub fn compute_c_tau(g_s: StringCoupling, w0: F64<Pos>) -> CTau {
+    // ln(1/w0) = -ln(w0) = ln(w0.recip())
+    // For KKLT we need W0 < 1, so 1/w0 > 1, so ln(1/w0) > 0
+    let ln_w0_inv = w0.recip().ln();
+
+    // 2π / (g_s × ln(1/w0))
+    let denominator = g_s * ln_w0_inv;
+
+    // This should be positive for valid KKLT
+    let result = TWO_PI / denominator;
+    result.try_to_pos().expect("c_tau must be positive for valid KKLT")
 }
 
 /// Compute divisor volumes `τ_i` = (1/2) `κ_ijk` t^j t^k.
@@ -60,32 +77,26 @@ pub fn compute_c_tau(g_s: f64, w0: f64) -> f64 {
 /// # Panics
 /// Panics if `t.len() != kappa.dim()`.
 #[must_use]
-#[allow(clippy::cast_precision_loss)]
-pub fn compute_divisor_volumes(kappa: &Intersection, t: &[f64]) -> Vec<f64> {
+pub fn compute_divisor_volumes(kappa: &Intersection, t: &[F64<Finite>]) -> Vec<F64<Finite>> {
     let dim = kappa.dim();
     assert_eq!(t.len(), dim, "dimension mismatch");
 
-    let mut tau = vec![0.0; dim];
+    let mut tau = vec![F64::<Finite>::ZERO; dim];
 
     // For each divisor i, compute τ_i = (1/2) Σ_{j,k} κ_{ijk} t^j t^k
-    // Using the fact that κ is symmetric, we iterate over canonical entries
-    // and account for all permutations.
     for ((i_idx, j_idx, k_idx), val) in kappa.iter() {
-        let val_f = val as f64;
+        let val_f = val.to_f64();
 
         // Generate all unique permutations of (i,j,k)
-        // For each permutation (a,b,c), we add val * t[b] * t[c] to τ[a]
-        for (a, b, c) in unique_permutations(i_idx, j_idx, k_idx) {
-            tau[a] += val_f * t[b] * t[c];
+        for (a, b, c) in unique_permutations(*i_idx, *j_idx, *k_idx) {
+            // Finite * Finite * Finite = Finite
+            tau[a] = tau[a] + val_f * t[b] * t[c];
         }
     }
 
     // Apply the 1/2 factor
-    for tau_i in &mut tau {
-        *tau_i *= 0.5;
-    }
-
-    tau
+    let half = F64::<Finite>::new(0.5).expect("0.5 is finite");
+    tau.into_iter().map(|t| half * t).collect()
 }
 
 /// Compute the Jacobian `J_ik` = ∂`τ_i/∂t^k` = `κ_ijk` t^j.
@@ -93,43 +104,20 @@ pub fn compute_divisor_volumes(kappa: &Intersection, t: &[f64]) -> Vec<f64> {
 /// # Panics
 /// Panics if `t.len() != kappa.dim()`.
 #[must_use]
-#[allow(clippy::cast_precision_loss)]
-pub fn compute_jacobian(kappa: &Intersection, t: &[f64]) -> Vec<Vec<f64>> {
+pub fn compute_jacobian(kappa: &Intersection, t: &[F64<Finite>]) -> Vec<Vec<F64<Finite>>> {
     let dim = kappa.dim();
     assert_eq!(t.len(), dim, "dimension mismatch");
 
-    let mut j = vec![vec![0.0; dim]; dim];
+    let mut j = vec![vec![F64::<Finite>::ZERO; dim]; dim];
 
-    // For each κ entry, compute contribution to Jacobian
-    // J_ik = ∂τ_i/∂t^k = Σ_j κ_ijk t^j
     for ((i_idx, j_idx, k_idx), val) in kappa.iter() {
-        let val_f = val as f64;
+        let val_f = val.to_f64();
 
-        // For each permutation (a,b,c):
-        // τ_a = (1/2) κ_{abc} t^b t^c
-        // ∂τ_a/∂t^k = κ_{abc} × (δ_{bk} t^c + t^b δ_{ck}) / 2
-        //           = κ_{abc} t^c when b=k, plus κ_{abc} t^b when c=k
-        // Due to symmetry in b,c: ∂τ_a/∂t^k = κ_{akc} t^c
-
-        for (a, b, c) in unique_permutations(i_idx, j_idx, k_idx) {
-            // When computing ∂τ_a/∂t^k, we need contributions where
-            // one of b,c equals k and we sum over the other.
-            // Due to symmetry: J_ak = κ_abk t^b + κ_akc t^c
-            // But κ_abk = κ_akb so this is 2 × κ_akc t^c... wait, that's wrong.
-
-            // Let's be more careful. τ_a = (1/2) Σ_{b,c} κ_{abc} t^b t^c
-            // ∂τ_a/∂t^k = (1/2) Σ_c κ_{akc} t^c + (1/2) Σ_b κ_{abk} t^b
-            //           = (1/2) Σ_c κ_{akc} t^c + (1/2) Σ_b κ_{abk} t^b
-            // Since κ is symmetric: κ_{abk} = κ_{akb}
-            // So this is: (1/2) Σ_c κ_{akc} t^c + (1/2) Σ_c κ_{akc} t^c = Σ_c κ_{akc} t^c
-
-            // So J_ak = Σ_c κ_{akc} t^c (no factor of 1/2 after applying chain rule)
-
-            // For permutation (a,b,c), this contributes to J[a][b] += κ * t[c]
-            // and to J[a][c] += κ * t[b]
-            j[a][b] += val_f * t[c];
+        for (a, b, c) in unique_permutations(*i_idx, *j_idx, *k_idx) {
+            // J[a][b] += κ * t[c], J[a][c] += κ * t[b]
+            j[a][b] = j[a][b] + val_f * t[c];
             if b != c {
-                j[a][c] += val_f * t[b];
+                j[a][c] = j[a][c] + val_f * t[b];
             }
         }
     }
@@ -172,16 +160,16 @@ fn unique_permutations(
 /// Result of KKLT path-following.
 #[derive(Debug, Clone)]
 pub struct KkltResult {
-    /// Kähler moduli t.
-    pub t: Vec<f64>,
+    /// Kähler moduli t (can be any finite values during optimization).
+    pub t: Vec<F64<Finite>>,
     /// Achieved divisor volumes.
-    pub tau: Vec<f64>,
+    pub tau: Vec<F64<Finite>>,
     /// Target divisor volumes.
-    pub tau_target: Vec<f64>,
+    pub tau_target: Vec<DivisorVolume>,
     /// Whether the solver converged.
     pub converged: bool,
-    /// Relative error in tau.
-    pub relative_error: f64,
+    /// Relative error in tau (non-negative).
+    pub relative_error: RelativeError,
 }
 
 /// Solve KKLT using path-following.
@@ -190,21 +178,17 @@ pub struct KkltResult {
 ///
 /// # Arguments
 /// * `kappa` - Intersection numbers
-/// * `tau_target` - Target divisor volumes
+/// * `tau_target` - Target divisor volumes (positive)
 /// * `t_init` - Initial Kähler moduli guess
-/// * `n_steps` - Number of interpolation steps
+/// * `steps` - Checked range for interpolation steps (e.g., `range!(0..100)`)
 ///
 /// # Returns
 /// `Some(result)` if converged, `None` if diverged.
-///
-/// # Panics
-/// Panics if `t_init` or `tau_target` length doesn't match `kappa.dim()`.
-#[allow(clippy::cast_precision_loss)]
 pub fn solve_path_following(
     kappa: &Intersection,
-    tau_target: &[f64],
-    t_init: &[f64],
-    n_steps: usize,
+    tau_target: &[DivisorVolume],
+    t_init: &[F64<Finite>],
+    steps: CheckedRange<usize>,
 ) -> Option<KkltResult> {
     let dim = kappa.dim();
     assert_eq!(t_init.len(), dim);
@@ -213,23 +197,27 @@ pub fn solve_path_following(
     let mut t = t_init.to_vec();
     let tau_init = compute_divisor_volumes(kappa, &t);
 
-    for m in 0..n_steps {
-        let alpha = (m + 1) as f64 / n_steps as f64;
+    let n_steps = I64::<Pos>::new(steps.end as i64)?;
+
+    for m in steps.iter_pos() {
+        // m is I64<Pos>, n_steps is I64<Pos>, division yields F64<Pos>
+        let alpha = m.to_f64() / n_steps.to_f64();
+        let one_minus_alpha = f64_pos!(1.0) - alpha;
 
         // Interpolate target
-        let tau_step: Vec<f64> = tau_init
+        let tau_step: Vec<F64<Finite>> = tau_init
             .iter()
             .zip(tau_target.iter())
-            .map(|(&ti, &tt)| (1.0 - alpha).mul_add(ti, alpha * tt))
+            .map(|(ti, tt)| one_minus_alpha * *ti + alpha * tt.to_finite())
             .collect();
 
         let tau_current = compute_divisor_volumes(kappa, &t);
 
         // Residual
-        let delta_tau: Vec<f64> = tau_step
+        let delta_tau: Vec<F64<Finite>> = tau_step
             .iter()
             .zip(tau_current.iter())
-            .map(|(&ts, &tc)| ts - tc)
+            .map(|(ts, tc)| *ts - *tc)
             .collect();
 
         // Solve J @ epsilon = delta_tau using least squares
@@ -238,27 +226,39 @@ pub fn solve_path_following(
 
         // Update t
         for (ti, ei) in t.iter_mut().zip(epsilon.iter()) {
-            *ti += ei;
+            *ti = *ti + *ei;
         }
 
         // Check for divergence
-        if t.iter().any(|ti| ti.abs() > 1e6) {
+        let divergence_threshold = f64_pos!(1e6);
+        if t.iter().any(|ti| ti.abs() > divergence_threshold) {
             return None;
         }
     }
 
     let tau = compute_divisor_volumes(kappa, &t);
 
-    // Compute error
-    let error: f64 = tau
+    // Compute error: sum of squared differences
+    let error_sq: F64<NonNeg> = tau
         .iter()
         .zip(tau_target.iter())
-        .map(|(&ta, &tt)| (ta - tt).powi(2))
-        .sum::<f64>()
-        .sqrt();
-    let mean_target: f64 = tau_target.iter().sum::<f64>() / tau_target.len() as f64;
+        .map(|(ta, tt)| (*ta - tt.to_finite()).square())
+        .fold(F64::<NonNeg>::ZERO, |acc, x| acc + x);
+
+    let error = error_sq.sqrt();
+
+    // Mean of target tau values (all positive, so sum and mean are positive)
+    let n_targets = I64::<Pos>::new(tau_target.len() as i64)?;
+    let sum_target: F64<Pos> = tau_target
+        .iter()
+        .copied()
+        .reduce(|acc, x| acc + x)?;
+    let mean_target = sum_target / n_targets.to_f64();
+
+    // Relative error = error / mean_target (both NonNeg/Pos, result is NonNeg)
     let relative_error = error / mean_target;
-    let converged = relative_error < 0.001;
+
+    let converged = relative_error < f64_pos!(0.001);
 
     Some(KkltResult {
         t,
@@ -269,9 +269,8 @@ pub fn solve_path_following(
     })
 }
 
-/// Solve Ax = b using least squares (truncated SVD).
-#[allow(clippy::needless_range_loop)]
-fn solve_least_squares(a: &[Vec<f64>], b: &[f64]) -> Option<Vec<f64>> {
+/// Solve Ax = b using least squares (normal equations).
+fn solve_least_squares(a: &[Vec<F64<Finite>>], b: &[F64<Finite>]) -> Option<Vec<F64<Finite>>> {
     let m = a.len();
     if m == 0 {
         return None;
@@ -281,25 +280,21 @@ fn solve_least_squares(a: &[Vec<f64>], b: &[f64]) -> Option<Vec<f64>> {
         return None;
     }
 
-    // Simple least squares using normal equations: (A^T A) x = A^T b
-    // This is less numerically stable than SVD but simpler to implement.
-    // TODO: Use SVD or QR for better numerical stability.
-
     // Compute A^T A
-    let mut ata = vec![vec![0.0; n]; n];
+    let mut ata = vec![vec![F64::<Finite>::ZERO; n]; n];
     for i in 0..n {
         for j in 0..n {
             for k in 0..m {
-                ata[i][j] += a[k][i] * a[k][j];
+                ata[i][j] = ata[i][j] + a[k][i] * a[k][j];
             }
         }
     }
 
     // Compute A^T b
-    let mut atb = vec![0.0; n];
+    let mut atb = vec![F64::<Finite>::ZERO; n];
     for i in 0..n {
         for k in 0..m {
-            atb[i] += a[k][i] * b[k];
+            atb[i] = atb[i] + a[k][i] * b[k];
         }
     }
 
@@ -308,34 +303,35 @@ fn solve_least_squares(a: &[Vec<f64>], b: &[f64]) -> Option<Vec<f64>> {
 }
 
 /// Solve Ax = b using Gaussian elimination with partial pivoting.
-fn solve_linear_system(a: &[Vec<f64>], b: &[f64]) -> Option<Vec<f64>> {
+fn solve_linear_system(a: &[Vec<F64<Finite>>], b: &[F64<Finite>]) -> Option<Vec<F64<Finite>>> {
     let n = a.len();
     if n == 0 || b.len() != n {
         return None;
     }
 
     // Create augmented matrix
-    let mut aug: Vec<Vec<f64>> = a
+    let mut aug: Vec<Vec<F64<Finite>>> = a
         .iter()
         .zip(b.iter())
-        .map(|(row, &bi)| {
+        .map(|(row, bi)| {
             let mut r = row.clone();
-            r.push(bi);
+            r.push(*bi);
             r
         })
         .collect();
 
     // Gaussian elimination with partial pivoting
+    let singular_threshold = f64_pos!(1e-14);
     for col in 0..n {
-        // Find pivot
-        let (max_row, max_val) = aug
+        // Find pivot (largest absolute value in column)
+        let (max_row, max_abs) = aug
             .iter()
             .enumerate()
             .skip(col)
             .map(|(row, r)| (row, r[col].abs()))
             .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())?;
 
-        if max_val < 1e-14 {
+        if max_abs < singular_threshold {
             return None; // Singular matrix
         }
 
@@ -347,17 +343,17 @@ fn solve_linear_system(a: &[Vec<f64>], b: &[f64]) -> Option<Vec<f64>> {
         for row in (col + 1)..n {
             let factor = aug[row][col] / pivot;
             for c in col..=n {
-                aug[row][c] -= factor * aug[col][c];
+                aug[row][c] = aug[row][c] - factor * aug[col][c];
             }
         }
     }
 
     // Back substitution
-    let mut x = vec![0.0; n];
+    let mut x = vec![F64::<Finite>::ZERO; n];
     for i in (0..n).rev() {
         let mut sum = aug[i][n];
-        for (j, &xj) in x.iter().enumerate().skip(i + 1) {
-            sum -= aug[i][j] * xj;
+        for (j, xj) in x.iter().enumerate().skip(i + 1) {
+            sum = sum - aug[i][j] * *xj;
         }
         x[i] = sum / aug[i][i];
     }
@@ -368,25 +364,35 @@ fn solve_linear_system(a: &[Vec<f64>], b: &[f64]) -> Option<Vec<f64>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::rational::Rational as TypedRational;
+    use malachite::Rational;
+
+    fn pos_i64(v: i64) -> I64<Pos> {
+        I64::<Pos>::new(v).unwrap()
+    }
+
+    fn finite_f64(v: f64) -> F64<Finite> {
+        F64::<Finite>::new(v).unwrap()
+    }
 
     #[test]
     fn test_compute_c_tau() {
         // For McAllister 4-214-647:
         // g_s ≈ 0.00911, W₀ ≈ 2.3e-90, expected c_τ ≈ 3.34
-        let g_s = 0.00911134;
-        let w0 = 2.3e-90;
+        let g_s = f64_pos!(0.00911134);
+        let w0 = f64_pos!(2.3e-90);
         let c_tau = compute_c_tau(g_s, w0);
-        assert!((c_tau - 3.34).abs() < 0.01, "c_tau = {c_tau}");
+        assert!((c_tau.get() - 3.34).abs() < 0.01, "c_tau = {}", c_tau.get());
     }
 
     #[test]
     fn test_compute_target_tau() {
-        let c_i = vec![6, 1, 6, 1];
-        let c_tau = 3.0;
+        let c_i = vec![pos_i64(6), pos_i64(1), pos_i64(6), pos_i64(1)];
+        let c_tau = f64_pos!(3.0);
         let tau = compute_target_tau(&c_i, c_tau);
         assert_eq!(tau.len(), 4);
-        assert!((tau[0] - 2.0).abs() < 1e-10);
-        assert!((tau[1] - 1.0 / 3.0).abs() < 1e-10);
+        assert!((tau[0].get() - 2.0).abs() < 1e-10);
+        assert!((tau[1].get() - 1.0 / 3.0).abs() < 1e-10);
     }
 
     #[test]
@@ -394,23 +400,28 @@ mod tests {
         // κ_000 = 6, t = [2]
         // τ_0 = (1/2) × 6 × 2 × 2 = 12
         let mut kappa = Intersection::new(1);
-        kappa.set(0, 0, 0, 6);
+        kappa.set(
+            0, 0, 0,
+            TypedRational::<Finite>::from_raw(Rational::from(6)),
+        );
 
-        let t = vec![2.0];
+        let t = vec![finite_f64(2.0)];
         let tau = compute_divisor_volumes(&kappa, &t);
-        assert!((tau[0] - 12.0).abs() < 1e-10);
+        assert!((tau[0].get() - 12.0).abs() < 1e-10);
     }
 
     #[test]
     fn test_compute_jacobian_simple() {
         // κ_000 = 6, t = [2]
-        // τ_0 = (1/2) × 6 × t × t = 3t²
         // ∂τ_0/∂t = 6t = 12
         let mut kappa = Intersection::new(1);
-        kappa.set(0, 0, 0, 6);
+        kappa.set(
+            0, 0, 0,
+            TypedRational::<Finite>::from_raw(Rational::from(6)),
+        );
 
-        let t = vec![2.0];
+        let t = vec![finite_f64(2.0)];
         let j = compute_jacobian(&kappa, &t);
-        assert!((j[0][0] - 12.0).abs() < 1e-10, "J[0][0] = {}", j[0][0]);
+        assert!((j[0][0].get() - 12.0).abs() < 1e-10, "J[0][0] = {}", j[0][0].get());
     }
 }

@@ -97,74 +97,26 @@ pub trait Tagged<Tag> {
     fn from_inner_unchecked(inner: Self::Inner) -> Self;
 }
 
-/// Guaranteed finite (no NaN, no ±∞).
-///
-/// This is the base constraint - all tagged numeric types implement it.
-/// For `Rational` and `Integer`, this is always true.
-/// Note: No `Copy` bound since `Rational` and `Integer` are heap-allocated.
-pub trait IsFinite {
-    /// The numeric wrapper type (e.g., `F64<Finite>`).
-    type Finite: IsFinite;
+/// Guaranteed finite (no NaN, no ±∞). Base marker for all typed numerics.
+pub trait IsFinite {}
 
-    /// Widen to the `Finite` variant, forgetting more specific constraints.
-    fn to_finite(self) -> Self::Finite;
-}
-
-/// Guaranteed non-zero (≠ 0).
-///
-/// Critical for safe division. If `x: IsNonZero`, then:
-/// - `1/x` is valid (no division by zero)
-/// - `x.abs()` returns `Pos` (not just `NonNeg`)
-pub trait IsNonZero: IsFinite {
-    /// The non-zero variant type.
-    type NonZero: IsNonZero;
-
-    /// Widen to `NonZero`, forgetting `Pos`/`Neg` constraint if present.
-    fn to_non_zero(self) -> Self::NonZero;
-}
+/// Guaranteed non-zero (≠ 0). Safe to divide by.
+pub trait IsNonZero: IsFinite {}
 
 /// Guaranteed strictly positive (> 0).
-///
-/// Implies `IsNonZero` - positive values are never zero.
-pub trait IsPositive: IsNonZero {
-    /// The positive variant type.
-    type Positive: IsPositive;
-
-    /// Widen to `Pos`, forgetting `One` constraint if present.
-    fn to_positive(self) -> Self::Positive;
-}
+pub trait IsPositive: IsNonZero {}
 
 /// Guaranteed strictly negative (< 0).
-///
-/// Implies `IsNonZero` - negative values are never zero.
-pub trait IsNegative: IsNonZero {
-    /// The negative variant type.
-    type Negative: IsNegative;
-
-    /// Widen to `Neg`, forgetting `MinusOne` constraint if present.
-    fn to_negative(self) -> Self::Negative;
-}
+pub trait IsNegative: IsNonZero {}
 
 /// Guaranteed exactly zero.
 pub trait IsZero: IsFinite {}
 
 /// Guaranteed non-negative (≥ 0).
-pub trait IsNonNeg: IsFinite {
-    /// The non-negative variant type.
-    type NonNeg: IsNonNeg;
-
-    /// Widen to `NonNeg`.
-    fn to_non_neg(self) -> Self::NonNeg;
-}
+pub trait IsNonNeg: IsFinite {}
 
 /// Guaranteed non-positive (≤ 0).
-pub trait IsNonPos: IsFinite {
-    /// The non-positive variant type.
-    type NonPos: IsNonPos;
-
-    /// Widen to `NonPos`.
-    fn to_non_pos(self) -> Self::NonPos;
-}
+pub trait IsNonPos: IsFinite {}
 
 /// Guaranteed exactly 1.
 pub trait IsOne: IsPositive {}
@@ -204,13 +156,97 @@ mod tests {
         assert_eq!(std::mem::size_of::<Neg>(), 0);
         assert_eq!(std::mem::size_of::<Zero>(), 0);
         assert_eq!(std::mem::size_of::<One>(), 0);
+        assert_eq!(std::mem::size_of::<Two>(), 0);
         assert_eq!(std::mem::size_of::<MinusOne>(), 0);
         assert_eq!(std::mem::size_of::<NonNeg>(), 0);
         assert_eq!(std::mem::size_of::<NonPos>(), 0);
+        assert_eq!(std::mem::size_of::<GTEOne>(), 0);
     }
 
     #[test]
     fn test_finite_is_default() {
-        let _: Finite = Default::default();
+        let _: Finite = Finite;
+    }
+
+    #[test]
+    fn test_tag_helper() {
+        let _pd: PhantomData<Pos> = tag();
+        let _pd2: PhantomData<NonZero> = tag();
+    }
+
+    #[test]
+    fn test_tags_debug() {
+        // Test Debug derives - use inline format to satisfy clippy
+        let finite = Finite;
+        let pos = Pos;
+        let neg = Neg;
+        let zero = Zero;
+        let one = One;
+        let two = Two;
+        let gte_one = GTEOne;
+        let minus_one = MinusOne;
+        let non_zero = NonZero;
+        let non_neg = NonNeg;
+        let non_pos = NonPos;
+
+        assert!(format!("{finite:?}").contains("Finite"));
+        assert!(format!("{pos:?}").contains("Pos"));
+        assert!(format!("{neg:?}").contains("Neg"));
+        assert!(format!("{zero:?}").contains("Zero"));
+        assert!(format!("{one:?}").contains("One"));
+        assert!(format!("{two:?}").contains("Two"));
+        assert!(format!("{gte_one:?}").contains("GTEOne"));
+        assert!(format!("{minus_one:?}").contains("MinusOne"));
+        assert!(format!("{non_zero:?}").contains("NonZero"));
+        assert!(format!("{non_neg:?}").contains("NonNeg"));
+        assert!(format!("{non_pos:?}").contains("NonPos"));
+    }
+
+    #[test]
+    fn test_tags_copy_eq() {
+        // Test Copy and PartialEq, Eq
+        let p1 = Pos;
+        let p2 = p1; // Copy
+        assert_eq!(p1, p2);
+
+        let n1 = Neg;
+        let n2 = n1;
+        assert_eq!(n1, n2);
+
+        let z1 = Zero;
+        let z2 = z1;
+        assert_eq!(z1, z2);
+
+        let o1 = One;
+        let o2 = o1;
+        assert_eq!(o1, o2);
+
+        let t1 = Two;
+        let t2 = t1;
+        assert_eq!(t1, t2);
+
+        let g1 = GTEOne;
+        let g2 = g1;
+        assert_eq!(g1, g2);
+
+        let m1 = MinusOne;
+        let m2 = m1;
+        assert_eq!(m1, m2);
+
+        let nz1 = NonZero;
+        let nz2 = nz1;
+        assert_eq!(nz1, nz2);
+
+        let nn1 = NonNeg;
+        let nn2 = nn1;
+        assert_eq!(nn1, nn2);
+
+        let np1 = NonPos;
+        let np2 = np1;
+        assert_eq!(np1, np2);
+
+        let f1 = Finite;
+        let f2 = f1;
+        assert_eq!(f1, f2);
     }
 }

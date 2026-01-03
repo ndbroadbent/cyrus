@@ -7,28 +7,49 @@
 
 use crate::Point;
 use crate::error::{Error, Result};
+use crate::f64_pos;
 use crate::integer_math::integer_kernel;
 use crate::triangulation::Triangulation;
+use crate::types::f64::F64;
+use crate::types::i64::I64;
+use crate::types::tags::Finite;
 use malachite::Integer;
-use malachite::num::conversion::traits::RoundingFrom;
-use malachite::rounding_modes::RoundingMode;
 use std::collections::HashMap;
 
 /// Mori cone generators for a given triangulation.
 #[derive(Debug, Clone)]
 pub struct MoriCone {
     /// Generators as integer vectors in the space of divisors.
-    generators: Vec<Vec<Integer>>,
+    generators: Vec<Vec<I64<Finite>>>,
 }
 
 impl MoriCone {
     /// Create a new Mori cone from generators.
-    pub const fn new(generators: Vec<Vec<Integer>>) -> Self {
+    pub fn new(generators: Vec<Vec<I64<Finite>>>) -> Self {
         Self { generators }
     }
 
+    /// Create from raw Integer vectors (for compatibility with integer_kernel).
+    pub fn from_integers(generators: Vec<Vec<Integer>>) -> Self {
+        let typed_generators = generators
+            .into_iter()
+            .map(|generator| {
+                generator
+                    .into_iter()
+                    .map(|v| {
+                        let val = i64::try_from(&v).expect("generator value must fit in i64");
+                        I64::<Finite>::new(val)
+                    })
+                    .collect()
+            })
+            .collect();
+        Self {
+            generators: typed_generators,
+        }
+    }
+
     /// Get the generators.
-    pub fn generators(&self) -> &[Vec<Integer>] {
+    pub fn generators(&self) -> &[Vec<I64<Finite>>] {
         &self.generators
     }
 
@@ -38,16 +59,20 @@ impl MoriCone {
     ///
     /// # Panics
     /// Panics if `p.len()` does not match the generator dimension.
-    pub fn contains(&self, p: &[f64]) -> bool {
+    pub fn contains(&self, p: &[F64<Finite>]) -> bool {
+        // Threshold for numerical stability (positive)
+        let threshold = f64_pos!(1e-10);
+
         for generator in &self.generators {
-            let mut dot = 0.0;
-            for (i, val) in generator.iter().enumerate() {
-                // gen is Integer, p is f64.
-                let (val_f, _) = f64::rounding_from(val, RoundingMode::Nearest);
-                dot += val_f * p[i];
-            }
-            if dot <= 1e-10 {
-                // Threshold for numerical stability
+            // Dot product: Finite * Finite = Finite, sum of Finite = Finite
+            let dot: F64<Finite> = generator
+                .iter()
+                .zip(p.iter())
+                .map(|(g, pi)| g.to_f64() * *pi)
+                .fold(F64::<Finite>::ZERO, |acc, x| acc + x);
+
+            // Must be strictly positive (above threshold)
+            if dot.get() <= threshold.get() {
                 return false;
             }
         }
@@ -62,10 +87,6 @@ impl MoriCone {
 ///
 /// # Errors
 /// Returns an error if no points are provided.
-///
-/// # Panics
-/// Panics if the triangulation is corrupt (simplex with vertices not in points,
-/// or simplex that is a subset of a ridge it should contain).
 pub fn compute_mori_generators(tri: &Triangulation, points: &[Point]) -> Result<MoriCone> {
     let n_pts = points.len();
     if n_pts == 0 {
@@ -85,9 +106,6 @@ pub fn compute_mori_generators(tri: &Triangulation, points: &[Point]) -> Result<
             let s2 = &tri.simplices()[adj_simplices[1]];
 
             // Opposing vertices u1, u2
-            // INVARIANT: A ridge is constructed by removing one vertex from a simplex.
-            // Therefore simplex \ ridge = {removed_vertex} is always non-empty.
-            // This unwrap cannot fail for valid triangulations.
             let u1 = *s1
                 .iter()
                 .find(|&v| !ridge.contains(v))
@@ -98,7 +116,6 @@ pub fn compute_mori_generators(tri: &Triangulation, points: &[Point]) -> Result<
                 .expect("Invariant violated: simplex has no vertex outside ridge");
 
             // Find relation among {u1, u2} U ridge
-            // Total dim+2 points in dim dimensions.
             let mut subset = vec![u1, u2];
             subset.extend(ridge.iter());
 
@@ -115,9 +132,10 @@ pub fn compute_mori_generators(tri: &Triangulation, points: &[Point]) -> Result<
             if let Some(relation) = extract_mori_relation(&kernel) {
                 // relation is in order of 'subset': [u1, u2, v1, v2, v3, v4]
                 // Expand to full points list
-                let mut full_gen = vec![Integer::from(0); n_pts];
+                let mut full_gen = vec![I64::<Finite>::ZERO; n_pts];
                 for (i, &idx) in subset.iter().enumerate() {
-                    full_gen[idx] = relation[i].clone();
+                    let val = i64::try_from(&relation[i]).expect("relation value must fit in i64");
+                    full_gen[idx] = I64::<Finite>::new(val);
                 }
                 generators.push(full_gen);
             }
@@ -145,12 +163,7 @@ fn build_ridge_map(tri: &Triangulation, dim: usize) -> HashMap<Vec<usize>, Vec<u
 }
 
 /// From the kernel of {u1, u2, ridge}, extract the Mori relation.
-///
-/// There is a 2D kernel. We want the relation where u1 and u2 both have
-/// the SAME sign (by convention positive).
 fn extract_mori_relation(kernel: &[Vec<Integer>]) -> Option<Vec<Integer>> {
-    // TODO: Robust implementation of relation extraction.
-    // For now, return first kernel vector if it looks reasonable.
     if !kernel.is_empty() {
         let mut res = kernel[0].clone();
         if res[0] < 0 {
@@ -160,7 +173,6 @@ fn extract_mori_relation(kernel: &[Vec<Integer>]) -> Option<Vec<Integer>> {
         }
         return Some(res);
     }
-
     None
 }
 
@@ -168,24 +180,70 @@ fn extract_mori_relation(kernel: &[Vec<Integer>]) -> Option<Vec<Integer>> {
 mod tests {
     use super::*;
 
+    fn finite_i64(v: i64) -> I64<Finite> {
+        I64::<Finite>::new(v)
+    }
+
+    fn finite_f64(v: f64) -> F64<Finite> {
+        F64::<Finite>::new(v).unwrap()
+    }
+
     #[test]
     fn test_kahler_cone_contains() {
         // Generator R = [1, -2]
         // p = [2, 1] => p·R = 2 - 2 = 0 (boundary)
         // p = [3, 1] => p·R = 3 - 2 = 1 > 0 (inside)
-        let mori = MoriCone::new(vec![vec![Integer::from(1), Integer::from(-2)]]);
-        assert!(!mori.contains(&[2.0, 1.0]));
-        assert!(mori.contains(&[3.0, 1.0]));
+        let mori = MoriCone::new(vec![vec![finite_i64(1), finite_i64(-2)]]);
+        assert!(!mori.contains(&[finite_f64(2.0), finite_f64(1.0)]));
+        assert!(mori.contains(&[finite_f64(3.0), finite_f64(1.0)]));
+    }
+
+    #[test]
+    fn test_mori_cone_from_integers() {
+        // Test the from_integers constructor
+        let generators = vec![
+            vec![Integer::from(1), Integer::from(-1)],
+            vec![Integer::from(2), Integer::from(3)],
+        ];
+
+        let mori = MoriCone::from_integers(generators);
+        assert_eq!(mori.generators().len(), 2);
+        assert_eq!(mori.generators()[0][0].get(), 1);
+        assert_eq!(mori.generators()[0][1].get(), -1);
+        assert_eq!(mori.generators()[1][0].get(), 2);
+        assert_eq!(mori.generators()[1][1].get(), 3);
+    }
+
+    #[test]
+    fn test_extract_mori_relation_empty() {
+        // Empty kernel should return None
+        let kernel: Vec<Vec<Integer>> = vec![];
+        assert!(extract_mori_relation(&kernel).is_none());
+    }
+
+    #[test]
+    fn test_extract_mori_relation_negative_first() {
+        // If first element is negative, all should be negated
+        let kernel = vec![vec![Integer::from(-2), Integer::from(3), Integer::from(-1)]];
+        let result = extract_mori_relation(&kernel).unwrap();
+        assert_eq!(result[0], Integer::from(2));
+        assert_eq!(result[1], Integer::from(-3));
+        assert_eq!(result[2], Integer::from(1));
+    }
+
+    #[test]
+    fn test_extract_mori_relation_positive_first() {
+        // If first element is positive, should stay the same
+        let kernel = vec![vec![Integer::from(2), Integer::from(-3), Integer::from(1)]];
+        let result = extract_mori_relation(&kernel).unwrap();
+        assert_eq!(result[0], Integer::from(2));
+        assert_eq!(result[1], Integer::from(-3));
+        assert_eq!(result[2], Integer::from(1));
     }
 
     #[test]
     fn test_compute_mori_generators_simple() {
         // Two triangles sharing an edge in 2D
-        // Points: 0=(0,0), 1=(1,0), 2=(0,1), 3=(1,1)
-        // Triangulation: [0,1,2] and [1,2,3] -> shared edge [1,2]
-        // Relation: v0 + v3 = v1 + v2 => v0 - v1 - v2 + v3 = 0.
-        // Mori generator: [1, -1, -1, 1].
-
         let points = vec![
             Point::new(vec![0, 0]),
             Point::new(vec![1, 0]),
@@ -199,18 +257,9 @@ mod tests {
         assert!(!mori.generators.is_empty());
 
         let generator = &mori.generators[0];
-        // Check signs: v0, v3 positive? v1, v2 negative?
-        // Or v0, v3 negative?
-        // Relation is unique up to scale.
-        // v0+v3 - v1-v2 = 0.
-
-        // We implemented a heuristic: first element positive.
-        // If gen[0] corresponds to v0.
-        // Then gen should be [1, -1, -1, 1].
-
-        assert_eq!(generator[0], Integer::from(1));
-        assert_eq!(generator[3], Integer::from(1));
-        assert_eq!(generator[1], Integer::from(-1));
-        assert_eq!(generator[2], Integer::from(-1));
+        assert_eq!(generator[0].get(), 1);
+        assert_eq!(generator[3].get(), 1);
+        assert_eq!(generator[1].get(), -1);
+        assert_eq!(generator[2].get(), -1);
     }
 }

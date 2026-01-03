@@ -51,14 +51,10 @@ pub fn is_tadpole_canceled(k: &[i64], m: &[i64], q_max: f64) -> bool {
 /// * `v_string` - String frame volume with BBHL correction (positive)
 /// * `w0` - Flux superpotential magnitude |W₀| (positive)
 #[must_use]
-pub fn compute_v0(
-    ek0: F64<Pos>,
-    g_s: F64<Pos>,
-    v_string: F64<Pos>,
-    w0: F64<Pos>,
-) -> F64<Neg> {
+pub fn compute_v0(ek0: F64<Pos>, g_s: F64<Pos>, v_string: F64<Pos>, w0: F64<Pos>) -> F64<Neg> {
     // All inputs positive → product is positive → multiply by -3 → negative
-    let value = -3.0 * ek0.get() * (g_s.get().powi(7) / (4.0 * v_string.get()).powi(2)) * w0.get().powi(2);
+    let value =
+        -3.0 * ek0.get() * (g_s.get().powi(7) / (4.0 * v_string.get()).powi(2)) * w0.get().powi(2);
     // SAFETY: formula guarantees negative result when all inputs are positive
     F64::<Neg>::new(value).expect("V₀ formula with positive inputs always yields negative result")
 }

@@ -236,7 +236,12 @@ mod tests {
         // Simple case: κ_000 = 6, t = [2]
         // V = (1/6) * 6 * 8 = 8
         let mut kappa = Intersection::new(1);
-        kappa.set(0, 0, 0, TypedRational::<Pos>::new(Rational::from(6)).unwrap());
+        kappa.set(
+            0,
+            0,
+            0,
+            TypedRational::<Pos>::new(Rational::from(6)).unwrap(),
+        );
 
         let kappa = kappa.into_non_empty().unwrap();
         let t = kappa.dim().validate(&[2.0]).unwrap();
@@ -249,7 +254,12 @@ mod tests {
     fn test_volume_classical_negative_moduli_rejected() {
         // Negative moduli are rejected at validation
         let mut kappa = Intersection::new(1);
-        kappa.set(0, 0, 0, TypedRational::<Pos>::new(Rational::from(6)).unwrap());
+        kappa.set(
+            0,
+            0,
+            0,
+            TypedRational::<Pos>::new(Rational::from(6)).unwrap(),
+        );
 
         let kappa = kappa.into_non_empty().unwrap();
         let result = kappa.dim().validate(&[-2.0]);
@@ -260,7 +270,12 @@ mod tests {
     fn test_volume_string() {
         // V_string = V_classical - BBHL
         let mut kappa = Intersection::new(1);
-        kappa.set(0, 0, 0, TypedRational::<Pos>::new(Rational::from(6)).unwrap());
+        kappa.set(
+            0,
+            0,
+            0,
+            TypedRational::<Pos>::new(Rational::from(6)).unwrap(),
+        );
 
         let kappa = kappa.into_non_empty().unwrap();
         let t = kappa.dim().validate(&[2.0]).unwrap();
@@ -277,7 +292,12 @@ mod tests {
     #[test]
     fn test_compute_volume() {
         let mut kappa = Intersection::new(1);
-        kappa.set(0, 0, 0, TypedRational::<Pos>::new(Rational::from(6)).unwrap());
+        kappa.set(
+            0,
+            0,
+            0,
+            TypedRational::<Pos>::new(Rational::from(6)).unwrap(),
+        );
 
         let kappa = kappa.into_non_empty().unwrap();
         let t = kappa.dim().validate(&[2.0]).unwrap();

@@ -100,3 +100,118 @@ impl<'a> std::ops::Index<usize> for Moduli<'a> {
         &self.values[index]
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::f64_pos;
+    use rand::SeedableRng;
+
+    // Helper to create a Dim for testing (simulate getting it from an intersection)
+    fn test_dim<'a>(n: usize) -> Dim<'a> {
+        Dim(n, PhantomData)
+    }
+
+    #[test]
+    fn test_dim_len() {
+        let dim = test_dim(5);
+        assert_eq!(dim.len(), 5);
+
+        let dim2 = test_dim(10);
+        assert_eq!(dim2.len(), 10);
+    }
+
+    #[test]
+    fn test_generate() {
+        let dim = test_dim(3);
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        let min = f64_pos!(0.1);
+        let max = f64_pos!(10.0);
+
+        let moduli = dim.generate(&mut rng, min, max);
+        assert_eq!(moduli.values().len(), 3);
+
+        // Check all values are within range
+        for v in moduli.values() {
+            assert!(v.get() >= 0.1);
+            assert!(v.get() <= 10.0);
+        }
+    }
+
+    #[test]
+    fn test_from_values_success() {
+        let dim = test_dim(2);
+        let values = vec![f64_pos!(1.0), f64_pos!(2.0)];
+
+        let moduli = dim.from_values(values).unwrap();
+        assert_eq!(moduli.values().len(), 2);
+        assert!((moduli[0].get() - 1.0).abs() < 1e-10);
+        assert!((moduli[1].get() - 2.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_from_values_wrong_length() {
+        let dim = test_dim(3);
+        let values = vec![f64_pos!(1.0), f64_pos!(2.0)]; // Only 2 values
+
+        assert!(dim.from_values(values).is_none());
+    }
+
+    #[test]
+    fn test_validate_success() {
+        let dim = test_dim(2);
+        let raw = [1.5, 2.5];
+
+        let moduli = dim.validate(&raw).unwrap();
+        assert_eq!(moduli.values().len(), 2);
+        assert!((moduli[0].get() - 1.5).abs() < 1e-10);
+        assert!((moduli[1].get() - 2.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_validate_wrong_length() {
+        let dim = test_dim(3);
+        let raw = [1.0, 2.0]; // Only 2 values
+
+        assert!(dim.validate(&raw).is_none());
+    }
+
+    #[test]
+    fn test_validate_non_positive() {
+        let dim = test_dim(2);
+        let raw = [1.0, -0.5]; // Negative value
+
+        assert!(dim.validate(&raw).is_none());
+    }
+
+    #[test]
+    fn test_validate_zero() {
+        let dim = test_dim(2);
+        let raw = [1.0, 0.0]; // Zero value
+
+        assert!(dim.validate(&raw).is_none());
+    }
+
+    #[test]
+    fn test_moduli_index() {
+        let dim = test_dim(3);
+        let values = vec![f64_pos!(1.0), f64_pos!(2.0), f64_pos!(3.0)];
+        let moduli = dim.from_values(values).unwrap();
+
+        assert!((moduli[0].get() - 1.0).abs() < 1e-10);
+        assert!((moduli[1].get() - 2.0).abs() < 1e-10);
+        assert!((moduli[2].get() - 3.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_moduli_values() {
+        let dim = test_dim(2);
+        let values = vec![f64_pos!(5.0), f64_pos!(10.0)];
+        let moduli = dim.from_values(values).unwrap();
+
+        let vals = moduli.values();
+        assert_eq!(vals.len(), 2);
+        assert!((vals[0].get() - 5.0).abs() < 1e-10);
+        assert!((vals[1].get() - 10.0).abs() < 1e-10);
+    }
+}

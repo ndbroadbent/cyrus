@@ -1,12 +1,15 @@
-error[E0277]: cannot divide `F64<Pos>` by `F64<cyrus_core::types::Zero>`
+error[E0277]: the trait bound `Pos: DivOutput<cyrus_core::types::Zero>` is not satisfied
   --> tests/ui/fail/divide_by_zero.rs:14:21
    |
 14 |     let _result = p / z;
-   |                     ^ no implementation for `F64<Pos> / F64<cyrus_core::types::Zero>`
+   |                     ^ the trait `DivOutput<cyrus_core::types::Zero>` is not implemented for `Pos`
    |
-   = help: the trait `Div<F64<cyrus_core::types::Zero>>` is not implemented for `F64<Pos>`
-   = help: the following other types implement trait `Div<Rhs>`:
-             `F64<Pos>` implements `Div<F64<MinusOne>>`
-             `F64<Pos>` implements `Div<F64<One>>`
-             `F64<Pos>` implements `Div<F64<cyrus_core::Neg>>`
-             `F64<Pos>` implements `Div`
+   = help: the following other types implement trait `DivOutput<Rhs>`:
+             `Pos` implements `DivOutput<GTEOne>`
+             `Pos` implements `DivOutput<MinusOne>`
+             `Pos` implements `DivOutput<One>`
+             `Pos` implements `DivOutput<Pos>`
+             `Pos` implements `DivOutput<Two>`
+             `Pos` implements `DivOutput<cyrus_core::Neg>`
+             `Pos` implements `DivOutput<cyrus_core::types::NonZero>`
+   = note: required for `F64<Pos>` to implement `Div<F64<cyrus_core::types::Zero>>`

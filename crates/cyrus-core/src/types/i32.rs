@@ -219,262 +219,50 @@ impl Default for I32<Zero> {
 }
 
 // ============================================================================
-// Trait Implementations
+// Marker Trait Implementations
 // ============================================================================
 
-impl IsFinite for I32<Finite> {
-    type Finite = I32<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        self
-    }
-}
+impl IsFinite for I32<Finite> {}
+impl IsFinite for I32<Pos> {}
+impl IsFinite for I32<Neg> {}
+impl IsFinite for I32<Zero> {}
+impl IsFinite for I32<One> {}
+impl IsFinite for I32<Two> {}
+impl IsFinite for I32<MinusOne> {}
+impl IsFinite for I32<NonZero> {}
+impl IsFinite for I32<NonNeg> {}
+impl IsFinite for I32<NonPos> {}
+impl IsFinite for I32<GTEOne> {}
 
-impl IsFinite for I32<Pos> {
-    type Finite = I32<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        I32(self.0, PhantomData)
-    }
-}
+impl IsNonZero for I32<NonZero> {}
+impl IsNonZero for I32<Pos> {}
+impl IsNonZero for I32<Neg> {}
+impl IsNonZero for I32<One> {}
+impl IsNonZero for I32<Two> {}
+impl IsNonZero for I32<MinusOne> {}
+impl IsNonZero for I32<GTEOne> {}
 
-impl IsFinite for I32<Neg> {
-    type Finite = I32<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        I32(self.0, PhantomData)
-    }
-}
+impl IsPositive for I32<Pos> {}
+impl IsPositive for I32<One> {}
+impl IsPositive for I32<Two> {}
+impl IsPositive for I32<GTEOne> {}
 
-impl IsFinite for I32<Zero> {
-    type Finite = I32<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        I32(self.0, PhantomData)
-    }
-}
-
-impl IsFinite for I32<One> {
-    type Finite = I32<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        I32(self.0, PhantomData)
-    }
-}
-
-impl IsFinite for I32<Two> {
-    type Finite = I32<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        I32(self.0, PhantomData)
-    }
-}
-
-impl IsFinite for I32<MinusOne> {
-    type Finite = I32<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        I32(self.0, PhantomData)
-    }
-}
-
-impl IsFinite for I32<NonZero> {
-    type Finite = I32<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        I32(self.0, PhantomData)
-    }
-}
-
-impl IsFinite for I32<NonNeg> {
-    type Finite = I32<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        I32(self.0, PhantomData)
-    }
-}
-
-impl IsFinite for I32<NonPos> {
-    type Finite = I32<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        I32(self.0, PhantomData)
-    }
-}
-
-impl IsFinite for I32<GTEOne> {
-    type Finite = I32<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        I32(self.0, PhantomData)
-    }
-}
-
-// --- IsNonZero ---
-
-impl IsNonZero for I32<NonZero> {
-    type NonZero = I32<NonZero>;
-    fn to_non_zero(self) -> Self::NonZero {
-        self
-    }
-}
-
-impl IsNonZero for I32<Pos> {
-    type NonZero = I32<NonZero>;
-    fn to_non_zero(self) -> Self::NonZero {
-        I32(self.0, PhantomData)
-    }
-}
-
-impl IsNonZero for I32<Neg> {
-    type NonZero = I32<NonZero>;
-    fn to_non_zero(self) -> Self::NonZero {
-        I32(self.0, PhantomData)
-    }
-}
-
-impl IsNonZero for I32<One> {
-    type NonZero = I32<NonZero>;
-    fn to_non_zero(self) -> Self::NonZero {
-        I32(self.0, PhantomData)
-    }
-}
-
-impl IsNonZero for I32<Two> {
-    type NonZero = I32<NonZero>;
-    fn to_non_zero(self) -> Self::NonZero {
-        I32(self.0, PhantomData)
-    }
-}
-
-impl IsNonZero for I32<MinusOne> {
-    type NonZero = I32<NonZero>;
-    fn to_non_zero(self) -> Self::NonZero {
-        I32(self.0, PhantomData)
-    }
-}
-
-impl IsNonZero for I32<GTEOne> {
-    type NonZero = I32<NonZero>;
-    fn to_non_zero(self) -> Self::NonZero {
-        I32(self.0, PhantomData)
-    }
-}
-
-// --- IsPositive ---
-
-impl IsPositive for I32<Pos> {
-    type Positive = I32<Pos>;
-    fn to_positive(self) -> Self::Positive {
-        self
-    }
-}
-
-impl IsPositive for I32<One> {
-    type Positive = I32<Pos>;
-    fn to_positive(self) -> Self::Positive {
-        I32(self.0, PhantomData)
-    }
-}
-
-impl IsPositive for I32<Two> {
-    type Positive = I32<Pos>;
-    fn to_positive(self) -> Self::Positive {
-        I32(self.0, PhantomData)
-    }
-}
-
-impl IsPositive for I32<GTEOne> {
-    type Positive = I32<Pos>;
-    fn to_positive(self) -> Self::Positive {
-        I32(self.0, PhantomData)
-    }
-}
-
-// --- IsNegative ---
-
-impl IsNegative for I32<Neg> {
-    type Negative = I32<Neg>;
-    fn to_negative(self) -> Self::Negative {
-        self
-    }
-}
-
-impl IsNegative for I32<MinusOne> {
-    type Negative = I32<Neg>;
-    fn to_negative(self) -> Self::Negative {
-        I32(self.0, PhantomData)
-    }
-}
-
-// --- IsZero ---
+impl IsNegative for I32<Neg> {}
+impl IsNegative for I32<MinusOne> {}
 
 impl IsZero for I32<Zero> {}
 
-// --- IsNonNeg ---
+impl IsNonNeg for I32<NonNeg> {}
+impl IsNonNeg for I32<Pos> {}
+impl IsNonNeg for I32<One> {}
+impl IsNonNeg for I32<Two> {}
+impl IsNonNeg for I32<Zero> {}
+impl IsNonNeg for I32<GTEOne> {}
 
-impl IsNonNeg for I32<NonNeg> {
-    type NonNeg = I32<NonNeg>;
-    fn to_non_neg(self) -> Self::NonNeg {
-        self
-    }
-}
-
-impl IsNonNeg for I32<Pos> {
-    type NonNeg = I32<NonNeg>;
-    fn to_non_neg(self) -> Self::NonNeg {
-        I32(self.0, PhantomData)
-    }
-}
-
-impl IsNonNeg for I32<One> {
-    type NonNeg = I32<NonNeg>;
-    fn to_non_neg(self) -> Self::NonNeg {
-        I32(self.0, PhantomData)
-    }
-}
-
-impl IsNonNeg for I32<Two> {
-    type NonNeg = I32<NonNeg>;
-    fn to_non_neg(self) -> Self::NonNeg {
-        I32(self.0, PhantomData)
-    }
-}
-
-impl IsNonNeg for I32<Zero> {
-    type NonNeg = I32<NonNeg>;
-    fn to_non_neg(self) -> Self::NonNeg {
-        I32(self.0, PhantomData)
-    }
-}
-
-impl IsNonNeg for I32<GTEOne> {
-    type NonNeg = I32<NonNeg>;
-    fn to_non_neg(self) -> Self::NonNeg {
-        I32(self.0, PhantomData)
-    }
-}
-
-// --- IsNonPos ---
-
-impl IsNonPos for I32<NonPos> {
-    type NonPos = I32<NonPos>;
-    fn to_non_pos(self) -> Self::NonPos {
-        self
-    }
-}
-
-impl IsNonPos for I32<Neg> {
-    type NonPos = I32<NonPos>;
-    fn to_non_pos(self) -> Self::NonPos {
-        I32(self.0, PhantomData)
-    }
-}
-
-impl IsNonPos for I32<MinusOne> {
-    type NonPos = I32<NonPos>;
-    fn to_non_pos(self) -> Self::NonPos {
-        I32(self.0, PhantomData)
-    }
-}
-
-impl IsNonPos for I32<Zero> {
-    type NonPos = I32<NonPos>;
-    fn to_non_pos(self) -> Self::NonPos {
-        I32(self.0, PhantomData)
-    }
-}
-
-// --- IsOne / IsMinusOne ---
+impl IsNonPos for I32<NonPos> {}
+impl IsNonPos for I32<Neg> {}
+impl IsNonPos for I32<MinusOne> {}
+impl IsNonPos for I32<Zero> {}
 
 impl IsOne for I32<One> {}
 impl IsTwo for I32<Two> {}
@@ -540,6 +328,7 @@ macro_rules! i32_nonpos {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::hash_map::DefaultHasher;
 
     #[test]
     fn test_i32_size() {
@@ -562,10 +351,109 @@ mod tests {
     }
 
     #[test]
+    fn test_nonzero_new() {
+        assert!(I32::<NonZero>::new(1).is_some());
+        assert!(I32::<NonZero>::new(-1).is_some());
+        assert!(I32::<NonZero>::new(0).is_none());
+    }
+
+    #[test]
+    fn test_nonneg_new() {
+        assert!(I32::<NonNeg>::new(0).is_some());
+        assert!(I32::<NonNeg>::new(1).is_some());
+        assert!(I32::<NonNeg>::new(-1).is_none());
+    }
+
+    #[test]
+    fn test_nonpos_new() {
+        assert!(I32::<NonPos>::new(0).is_some());
+        assert!(I32::<NonPos>::new(-1).is_some());
+        assert!(I32::<NonPos>::new(1).is_none());
+    }
+
+    #[test]
+    fn test_zero_new() {
+        assert!(I32::<Zero>::new(0).is_some());
+        assert!(I32::<Zero>::new(1).is_none());
+        assert!(I32::<Zero>::new(-1).is_none());
+    }
+
+    #[test]
+    fn test_one_new() {
+        assert!(I32::<One>::new(1).is_some());
+        assert!(I32::<One>::new(0).is_none());
+        assert!(I32::<One>::new(2).is_none());
+    }
+
+    #[test]
+    fn test_two_new() {
+        assert!(I32::<Two>::new(2).is_some());
+        assert!(I32::<Two>::new(1).is_none());
+        assert!(I32::<Two>::new(0).is_none());
+    }
+
+    #[test]
+    fn test_gteone_new() {
+        assert!(I32::<GTEOne>::new(1).is_some());
+        assert!(I32::<GTEOne>::new(2).is_some());
+        assert!(I32::<GTEOne>::new(100).is_some());
+        assert!(I32::<GTEOne>::new(0).is_none());
+        assert!(I32::<GTEOne>::new(-1).is_none());
+    }
+
+    #[test]
+    fn test_minusone_new() {
+        assert!(I32::<MinusOne>::new(-1).is_some());
+        assert!(I32::<MinusOne>::new(0).is_none());
+        assert!(I32::<MinusOne>::new(-2).is_none());
+    }
+
+    #[test]
+    fn test_finite_new() {
+        let x = I32::<Finite>::new(42);
+        assert_eq!(x.get(), 42);
+        let y = I32::<Finite>::new(-100);
+        assert_eq!(y.get(), -100);
+    }
+
+    #[test]
     fn test_constants() {
         assert_eq!(I32::<Zero>::ZERO.get(), 0);
         assert_eq!(I32::<One>::ONE.get(), 1);
+        assert_eq!(I32::<Two>::TWO.get(), 2);
         assert_eq!(I32::<MinusOne>::MINUS_ONE.get(), -1);
+    }
+
+    #[test]
+    fn test_debug_display() {
+        let x = I32::<Pos>::new(42).unwrap();
+        assert!(format!("{x:?}").contains("Pos"));
+        assert!(format!("{x:?}").contains("42"));
+        assert_eq!(format!("{x}"), "42");
+
+        let y = I32::<Finite>::new(-5);
+        assert!(format!("{y:?}").contains("Finite"));
+    }
+
+    #[test]
+    fn test_eq_hash() {
+        let a = I32::<Pos>::new(5).unwrap();
+        let b = I32::<Pos>::new(5).unwrap();
+        let c = I32::<Pos>::new(6).unwrap();
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+
+        let mut h1 = DefaultHasher::new();
+        let mut h2 = DefaultHasher::new();
+        a.hash(&mut h1);
+        b.hash(&mut h2);
+        assert_eq!(h1.finish(), h2.finish());
+    }
+
+    #[test]
+    fn test_default_zero() {
+        let z: I32<Zero> = I32::default();
+        assert_eq!(z.get(), 0);
     }
 
     #[test]
@@ -575,6 +463,16 @@ mod tests {
 
         let y = i32_neg!(-5);
         assert_eq!(y.get(), -5);
+
+        let z = i32_nonneg!(0);
+        assert_eq!(z.get(), 0);
+        let z2 = i32_nonneg!(10);
+        assert_eq!(z2.get(), 10);
+
+        let w = i32_nonpos!(0);
+        assert_eq!(w.get(), 0);
+        let w2 = i32_nonpos!(-10);
+        assert_eq!(w2.get(), -10);
     }
 
     #[test]
@@ -582,5 +480,15 @@ mod tests {
         let a = I32::<Pos>::new(1).unwrap();
         let b = I32::<Pos>::new(2).unwrap();
         assert!(a < b);
+        assert!(b > a);
+        assert!(a <= b);
+        assert!(b >= a);
+        assert_eq!(a.partial_cmp(&b), Some(std::cmp::Ordering::Less));
+    }
+
+    #[test]
+    fn test_from_raw() {
+        let x = I32::<Pos>::from_raw(100);
+        assert_eq!(x.get(), 100);
     }
 }

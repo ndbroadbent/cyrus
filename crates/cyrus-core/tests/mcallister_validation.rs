@@ -9,11 +9,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use cyrus_core::types::f64::F64;
+use cyrus_core::types::i64::I64;
+use cyrus_core::types::tags::Finite;
 use cyrus_core::{
-    EvaluationRequest, GvInvariant, Intersection, MoriCone, H11, H21, build_racetrack_terms,
+    EvaluationRequest, GvInvariant, H11, H21, Intersection, MoriCone, build_racetrack_terms,
     compute_flat_direction, compute_w0, evaluate_vacuum, solve_racetrack,
 };
-use malachite::Integer;
 
 /// Fixture data for flux vectors.
 #[derive(Debug, Deserialize)]
@@ -85,32 +87,24 @@ fn load_gv_invariants(example: &str) -> Vec<GvInvariant> {
         .join(example)
         .join("gv_basis_old.json");
 
+    // Helper to convert raw fixture entry to typed GvInvariant
+    let convert_entry = |e: GvFixtureEntry| GvInvariant {
+        curve: e.curve.into_iter().map(I64::<Finite>::new).collect(),
+        value: F64::<Finite>::new(e.value).expect("GV value must be finite"),
+    };
+
     if basis_path.exists() {
         let content = std::fs::read_to_string(&basis_path).unwrap();
         let entries: Vec<GvFixtureEntry> = serde_json::from_str(&content).unwrap();
-        return entries
-            .into_iter()
-            .map(|e| GvInvariant {
-                curve: e.curve,
-                value: e.value,
-            })
-            .collect();
+        return entries.into_iter().map(convert_entry).collect();
     }
 
     // Fallback to original format if basis file not found
     let fixture: GvFixture = load_fixture(example, "gv_invariants.json");
-    fixture
-        .curves
-        .into_iter()
-        .map(|e| GvInvariant {
-            curve: e.curve,
-            value: e.value,
-        })
-        .collect()
+    fixture.curves.into_iter().map(convert_entry).collect()
 }
 
 use cyrus_core::types::rational::Rational as TypedRational;
-use cyrus_core::types::tags::Pos;
 use malachite::Rational;
 
 /// Convert intersection fixture to our Intersection type.
@@ -118,19 +112,19 @@ fn fixture_to_intersection(fixture: &IntersectionFixture) -> Intersection {
     let mut kappa = Intersection::new(fixture.dim);
     for (key, &value) in &fixture.entries {
         let parts: Vec<usize> = key.split(',').map(|s| s.parse().unwrap()).collect();
-        if let Some(pos_val) = TypedRational::<Pos>::new(Rational::from(value)) {
-            kappa.set(parts[0], parts[1], parts[2], pos_val);
-        }
+        // Intersection numbers can be positive or negative - use Finite
+        let val = TypedRational::<Finite>::from_raw(Rational::from(value));
+        kappa.set(parts[0], parts[1], parts[2], val);
     }
     kappa
 }
 
 #[derive(Serialize)]
 struct RacetrackSnapshot {
-    g_s: f64,        // Extract from F64<Pos> for serialization
+    g_s: f64, // Extract from F64<Pos> for serialization
     w0: f64,
     w0_log10: f64,
-    im_tau: f64,     // Extract from F64<Pos> for serialization
+    im_tau: f64, // Extract from F64<Pos> for serialization
     delta: f64,
     epsilon: f64,
 }
@@ -142,17 +136,25 @@ fn test_vacuum_pipeline_4_214_647() {
     let kappa = fixture_to_intersection(&intersection);
     let gv = load_gv_invariants("4_214_647");
 
+    // Convert raw flux vectors to typed at the boundary
+    let k_typed: Vec<I64<Finite>> = flux.k.iter().map(|&x| I64::<Finite>::new(x)).collect();
+    let m_typed: Vec<I64<Finite>> = flux.m.iter().map(|&x| I64::<Finite>::new(x)).collect();
+
     // Construct a dummy Mori cone that contains the flat direction p
     // (Actual Mori cone would come from triangulation)
-    let p = compute_flat_direction(&kappa, &flux.k, &flux.m).expect("Flat direction failed");
+    let p = compute_flat_direction(&kappa, &k_typed, &m_typed).expect("Flat direction failed");
     eprintln!("Flat direction p: {:?}", &p[..5.min(p.len())]);
 
     // Find the first positive component to use as the generator direction
-    let pos_idx = p.iter().position(|&x| x > 0.0).unwrap_or(0);
-    eprintln!("Using positive index {} with value {}", pos_idx, p[pos_idx]);
+    let pos_idx = p.iter().position(|x| x.get() > 0.0).unwrap_or(0);
+    eprintln!(
+        "Using positive index {} with value {}",
+        pos_idx,
+        p[pos_idx].get()
+    );
 
-    let mut generator = vec![Integer::from(0); p.len()];
-    generator[pos_idx] = Integer::from(1);
+    let mut generator: Vec<I64<Finite>> = vec![I64::<Finite>::new(0); p.len()];
+    generator[pos_idx] = I64::<Finite>::new(1);
     let mori = MoriCone::new(vec![generator]);
 
     let req = EvaluationRequest {
@@ -183,9 +185,13 @@ fn test_racetrack_full_pipeline_4_214_647() {
     let intersection: IntersectionFixture = load_fixture("4_214_647", "intersection.json");
     let kappa = fixture_to_intersection(&intersection);
 
+    // Convert raw flux vectors to typed at the boundary
+    let k_typed: Vec<I64<Finite>> = flux.k.iter().map(|&x| I64::<Finite>::new(x)).collect();
+    let m_typed: Vec<I64<Finite>> = flux.m.iter().map(|&x| I64::<Finite>::new(x)).collect();
+
     // Step 1: Compute flat direction
-    let p =
-        compute_flat_direction(&kappa, &flux.k, &flux.m).expect("Failed to compute flat direction");
+    let p = compute_flat_direction(&kappa, &k_typed, &m_typed)
+        .expect("Failed to compute flat direction");
 
     // Step 2: Build racetrack terms from GV invariants
     // We load the BASIS aligned GV invariants we generated
@@ -194,7 +200,7 @@ fn test_racetrack_full_pipeline_4_214_647() {
     // Ensure we have data
     assert!(!gv.is_empty(), "GV invariants should not be empty");
 
-    let terms = build_racetrack_terms(&gv, &flux.m, &p);
+    let terms = build_racetrack_terms(&gv, &m_typed, &p);
 
     // Step 3: Solve racetrack
     let result = solve_racetrack(&terms).expect("Racetrack should stabilize");
@@ -204,16 +210,16 @@ fn test_racetrack_full_pipeline_4_214_647() {
     assert!(terms.len() >= 2);
     let w0 = compute_w0(&result, &terms[0], &terms[1]);
 
-    // Snapshot the result
+    // Snapshot the result - convert typed values to raw for serialization
     assert_json_snapshot!(
         "racetrack_4_214_647",
         RacetrackSnapshot {
             g_s: result.g_s.get(),
-            w0,
-            w0_log10: w0.abs().log10(),
+            w0: w0.get(),
+            w0_log10: w0.get().abs().log10(),
             im_tau: result.im_tau.get(),
-            delta: result.delta,
-            epsilon: result.epsilon,
+            delta: result.delta.get(),
+            epsilon: result.epsilon.get(),
         }
     );
 }

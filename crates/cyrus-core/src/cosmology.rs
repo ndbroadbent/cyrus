@@ -251,7 +251,11 @@ mod tests {
         // z_start = 0 gives n_start = n_end = 0 (zero integration interval)
         let res = validate_z_start(0.0);
         assert!(res.is_err());
-        assert!(res.unwrap_err().to_string().contains("z_start must be positive"));
+        assert!(
+            res.unwrap_err()
+                .to_string()
+                .contains("z_start must be positive")
+        );
     }
 
     #[test]
@@ -259,7 +263,11 @@ mod tests {
         // Negative redshift is unphysical
         let res = validate_z_start(-0.5);
         assert!(res.is_err());
-        assert!(res.unwrap_err().to_string().contains("z_start must be positive"));
+        assert!(
+            res.unwrap_err()
+                .to_string()
+                .contains("z_start must be positive")
+        );
     }
 
     #[test]
@@ -267,7 +275,11 @@ mod tests {
         // z_start = -1 would give ln(0) = -inf
         let res = validate_z_start(-1.0);
         assert!(res.is_err());
-        assert!(res.unwrap_err().to_string().contains("z_start must be positive"));
+        assert!(
+            res.unwrap_err()
+                .to_string()
+                .contains("z_start must be positive")
+        );
     }
 
     #[test]

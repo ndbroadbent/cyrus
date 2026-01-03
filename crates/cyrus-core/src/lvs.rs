@@ -7,105 +7,141 @@
 
 use std::f64::consts::PI;
 
-/// Parameters for LVS potential
+use crate::f64_pos;
+use crate::types::f64::F64;
+use crate::types::i32::I32;
+use crate::types::physics::{
+    LvsPotential, SmallCycleModulus, StringCoupling, Volume, XiCorrection,
+};
+use crate::types::tags::{Neg, Pos};
+
+/// 2π as a typed positive constant.
+const TWO_PI: F64<Pos> = f64_pos!(2.0 * PI);
+
+/// ζ(3) ≈ 1.202056903159594 (positive).
+const ZETA_3: F64<Pos> = f64_pos!(1.202_056_903_159_594);
+
+/// Parameters for LVS potential.
 #[derive(Debug, Clone)]
 pub struct LvsParams {
-    /// Flux superpotential magnitude |W0|
-    pub w0: f64,
-    /// String coupling g_s
-    pub g_s: f64,
-    /// Euler characteristic of the CY
-    pub chi: i32,
-    /// Non-perturbative prefactor A_s (for small cycle)
-    pub a_s: f64,
-    /// Non-perturbative exponent coefficient a_s (2pi/N)
-    pub lambda_s: f64,
+    /// Flux superpotential magnitude |W0| (positive).
+    pub w0: F64<Pos>,
+    /// String coupling g_s (positive).
+    pub g_s: StringCoupling,
+    /// Euler characteristic of the CY (negative for LVS).
+    pub chi: I32<Neg>,
+    /// Non-perturbative prefactor A_s (positive).
+    pub a_s: F64<Pos>,
+    /// Non-perturbative exponent coefficient λ_s = 2π/N (positive).
+    pub lambda_s: F64<Pos>,
 }
 
-/// Result of LVS potential evaluation
+/// Result of LVS potential evaluation.
 #[derive(Debug, Clone)]
 pub struct LvsResult {
-    /// Volume of the CY in string units
-    pub volume: f64,
-    /// Stabilized small cycle volume tau_s
-    pub tau_s: f64,
-    /// Scalar potential V_LVS
-    pub potential: f64,
-    /// Alpha' correction parameter xi
-    pub xi: f64,
+    /// Volume of the CY in string units (positive).
+    pub volume: Volume,
+    /// Stabilized small cycle volume τ_s (positive).
+    pub tau_s: SmallCycleModulus,
+    /// Scalar potential V_LVS (can be any sign during optimization).
+    pub potential: LvsPotential,
+    /// Alpha' correction parameter ξ (positive for LVS).
+    pub xi: XiCorrection,
 }
 
-/// Compute the scalar potential V(vol, tau_s).
+/// Compute the scalar potential V(vol, τ_s).
 ///
-/// V_LVS = (8/3) * (a_s^2 * sqrt(tau_s) / (vol * lambda)) * exp(-2*a_s*tau_s)
-///       - 4 * (W0 * a_s * tau_s / (vol^2 * lambda)) * exp(-a_s*tau_s)
-///       + 3 * xi * W0^2 / (4 * g_s^(3/2) * vol^3)
-///
-/// Note: This is a simplified form. We use the version from Cicoli 2024.
-pub fn compute_lvs_potential(params: &LvsParams, vol: f64, tau_s: f64, xi: f64) -> f64 {
-    let term1 =
-        (8.0 / 3.0) * (params.a_s.powi(2) * tau_s.sqrt()) * (-2.0 * params.lambda_s * tau_s).exp()
-            / vol;
-    let term2 =
-        -4.0 * params.w0 * params.a_s * tau_s * (-params.lambda_s * tau_s).exp() / vol.powi(2);
-    let term3 = 3.0 * xi * params.w0.powi(2) / (4.0 * params.g_s.powf(1.5) * vol.powi(3));
+/// V_LVS = (8/3) * (a_s² * √τ_s / vol) * exp(-2λ_s τ_s)
+///       - 4 * (W0 * a_s * τ_s / vol²) * exp(-λ_s τ_s)
+///       + 3 * ξ * W0² / (4 * g_s^(3/2) * vol³)
+pub fn compute_lvs_potential(
+    params: &LvsParams,
+    vol: Volume,
+    tau_s: SmallCycleModulus,
+    xi: XiCorrection,
+) -> LvsPotential {
+    // All inputs are Pos, so we can compute safely
 
+    // term1 = (8/3) * a_s² * √τ_s * exp(-2λ_s τ_s) / vol
+    // Pos * Pos = Pos, Pos / Pos = Pos
+    let a_s_sq = params.a_s * params.a_s;
+    let sqrt_tau = F64::<Pos>::new(tau_s.get().sqrt()).expect("sqrt of Pos is Pos");
+    let exp_arg1 = f64_pos!(2.0) * params.lambda_s * tau_s;
+    let exp1 = F64::<Pos>::new((-exp_arg1.get()).exp()).expect("exp is always positive");
+    let term1 = f64_pos!(8.0 / 3.0) * a_s_sq * sqrt_tau * exp1 / vol;
+
+    // term2 = -4 * W0 * a_s * τ_s * exp(-λ_s τ_s) / vol²
+    // This is negative (the minus sign)
+    let exp_arg2 = params.lambda_s * tau_s;
+    let exp2 = F64::<Pos>::new((-exp_arg2.get()).exp()).expect("exp is always positive");
+    let vol_sq = vol * vol;
+    let term2_magnitude = f64_pos!(4.0) * params.w0 * params.a_s * tau_s * exp2 / vol_sq;
+    // Negate: -Pos = Neg
+    let term2 = -term2_magnitude;
+
+    // term3 = 3 * ξ * W0² / (4 * g_s^(3/2) * vol³)
+    // All positive
+    let w0_sq = params.w0 * params.w0;
+    let g_s_32 = F64::<Pos>::new(params.g_s.get().powf(1.5)).expect("Pos^1.5 is Pos");
+    let vol_cubed = vol * vol * vol;
+    let term3 = f64_pos!(3.0) * xi * w0_sq / (f64_pos!(4.0) * g_s_32 * vol_cubed);
+
+    // Sum: Pos + Neg + Pos = Finite (algebra handles it)
     term1 + term2 + term3
 }
 
 /// Compute the LVS potential minimum.
 ///
 /// Returns the stabilized volume and potential energy.
-///
-/// # Arguments
-/// * `params` - LVS model parameters
-///
-/// # Errors
-/// Returns error if stabilization fails (e.g. no minimum found).
 pub fn compute_lvs_vacuum(params: &LvsParams) -> Option<LvsResult> {
-    let zeta3 = 1.2020569;
-    let xi = -f64::from(params.chi) * zeta3 / (2.0 * (2.0 * PI).powi(3));
+    // ξ = -χ × ζ(3) / (2 × (2π)³)
+    // χ is Neg, so -χ is Pos, making ξ positive
+    let neg_chi = -params.chi; // Neg → Pos after negation... actually I32<Neg> negated is I32<Pos>
+    let chi_f64 = F64::<Pos>::new(f64::from(neg_chi.get())).expect("negated Neg chi is positive");
 
-    if xi <= 0.0 {
-        return None; // LVS requires xi > 0 (so chi < 0)
-    }
+    // (2π)³ = 8π³
+    let two_pi_cubed = TWO_PI * TWO_PI * TWO_PI;
+    let denominator = f64_pos!(2.0) * two_pi_cubed;
 
-    // Minimize V(vol, tau_s).
-    // Analytical approximation:
-    // a_s * tau_s = ln(vol) approx.
-    // Let's use a simple grid search or gradient descent for prototype.
-    // Or just use the known approximation for tau_s:
-    // tau_s ~ (xi / 2)^(2/3) is usually for something else.
-    // The standard approximation:
-    // exp(a_s tau_s) ~ (W0 sqrt(vol)) / (a_s tau_s).
+    // ξ = chi_f64 × ζ(3) / denominator - all Pos
+    let xi = chi_f64 * ZETA_3 / denominator;
 
-    // Let's perform a simple 1D minimization over tau_s for a fixed Vol relation,
-    // or just return the analytic approximation used in the paper.
-    // Cicoli 2407: <tau_s> approx (xi / (2 * lambda))^(2/3) ? No.
+    // Initial guess for τ_s
+    let tau_s_init = f64_pos!(2.0) / params.lambda_s;
 
-    // Implementation of numerical minimization is better.
-    // Initial guess:
-    let mut tau_s = 2.0 / params.lambda_s;
-    let mut vol = params.w0 * (params.lambda_s * tau_s).exp();
+    // Initial guess for volume
+    let exp_lambda_tau = F64::<Pos>::new((params.lambda_s * tau_s_init).get().exp())
+        .expect("exp is always positive");
+    let vol_init = params.w0 * exp_lambda_tau;
+
+    let mut tau_s = tau_s_init;
+    let mut vol = vol_init;
 
     // Gradient descent loop
-    let lr = 0.01;
+    let lr = f64_pos!(0.01);
+    let eps = f64_pos!(1e-5);
+
     for _ in 0..100 {
         let v_curr = compute_lvs_potential(params, vol, tau_s, xi);
 
         // Numerical gradients
-        let eps = 1e-5;
-        let v_vol = compute_lvs_potential(params, vol + eps, tau_s, xi);
-        let grad_vol = (v_vol - v_curr) / eps;
+        let vol_plus = vol + eps; // Pos + Pos = Pos
+        let v_vol = compute_lvs_potential(params, vol_plus, tau_s, xi);
+        let grad_vol = (v_vol - v_curr) / eps; // Finite / Pos = Finite
 
-        let v_tau = compute_lvs_potential(params, vol, tau_s + eps, xi);
-        let grad_tau = (v_tau - v_curr) / eps;
+        let tau_plus = tau_s + eps; // Pos + Pos = Pos
+        let v_tau = compute_lvs_potential(params, vol, tau_plus, xi);
+        let grad_tau = (v_tau - v_curr) / eps; // Finite / Pos = Finite
 
-        // Update (ensure positive)
-        vol = (lr * grad_vol).mul_add(-1000.0, vol).max(1.0); // Larger step for vol
-        tau_s = lr.mul_add(-grad_tau, tau_s).max(0.1);
+        // Update - if values go non-positive, optimization diverged
+        let vol_update = vol - lr * f64_pos!(1000.0) * grad_vol;
+        vol = vol_update.try_to_pos()?;
 
-        if grad_vol.abs() < 1e-6 && grad_tau.abs() < 1e-6 {
+        let tau_update = tau_s - lr * grad_tau;
+        tau_s = tau_update.try_to_pos()?;
+
+        // Check convergence (compare raw values since abs() returns NonNeg)
+        if grad_vol.abs().get() < 1e-6 && grad_tau.abs().get() < 1e-6 {
             break;
         }
     }
@@ -125,62 +161,31 @@ mod tests {
     #[test]
     fn test_lvs_potential_minimum() {
         let params = LvsParams {
-            w0: 1.0,
-            g_s: 0.1,
-            chi: -100, // Negative chi for positive xi
-            a_s: 1.0,
-            lambda_s: 2.0 * PI,
+            w0: f64_pos!(1.0),
+            g_s: f64_pos!(0.1),
+            chi: I32::<Neg>::new(-100).unwrap(),
+            a_s: f64_pos!(1.0),
+            lambda_s: TWO_PI,
         };
 
         let result = compute_lvs_vacuum(&params).unwrap();
-        assert!(result.volume > 10.0);
-        // assert!(result.potential < 0.0); // Might be positive with this crude approx
-    }
-
-    #[test]
-    fn test_lvs_positive_chi_returns_none() {
-        // Positive chi means xi <= 0, which is not valid for LVS
-        let params = LvsParams {
-            w0: 1.0,
-            g_s: 0.1,
-            chi: 100, // Positive chi for negative/zero xi
-            a_s: 1.0,
-            lambda_s: 2.0 * PI,
-        };
-
-        let result = compute_lvs_vacuum(&params);
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_lvs_zero_chi_returns_none() {
-        // Zero chi means xi = 0
-        let params = LvsParams {
-            w0: 1.0,
-            g_s: 0.1,
-            chi: 0,
-            a_s: 1.0,
-            lambda_s: 2.0 * PI,
-        };
-
-        let result = compute_lvs_vacuum(&params);
-        assert!(result.is_none());
+        assert!(result.volume.get() > 10.0);
     }
 
     #[test]
     fn test_lvs_result_fields() {
         let params = LvsParams {
-            w0: 10.0,
-            g_s: 0.05,
-            chi: -200,
-            a_s: 1.0,
-            lambda_s: 2.0 * PI,
+            w0: f64_pos!(10.0),
+            g_s: f64_pos!(0.05),
+            chi: I32::<Neg>::new(-200).unwrap(),
+            a_s: f64_pos!(1.0),
+            lambda_s: TWO_PI,
         };
 
         let result = compute_lvs_vacuum(&params).unwrap();
-        assert!(result.xi > 0.0);
-        assert!(result.tau_s > 0.0);
-        assert!(result.volume.is_finite());
-        assert!(result.potential.is_finite());
+        assert!(result.xi.get() > 0.0);
+        assert!(result.tau_s.get() > 0.0);
+        assert!(result.volume.get().is_finite());
+        assert!(result.potential.get().is_finite());
     }
 }

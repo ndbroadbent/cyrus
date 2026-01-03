@@ -1,11 +1,25 @@
 #![allow(missing_docs, clippy::too_many_lines)]
+use cyrus_core::types::f64::F64;
+use cyrus_core::types::i64::I64;
 use cyrus_core::types::rational::Rational as TypedRational;
-use cyrus_core::types::tags::Pos;
-use cyrus_core::{EvaluationRequest, GvInvariant, Intersection, MoriCone, evaluate_vacuum, H11, H21};
-use malachite::{Integer, Rational};
+use cyrus_core::types::tags::{Finite, Pos};
+use cyrus_core::{
+    EvaluationRequest, GvInvariant, H11, H21, Intersection, MoriCone, evaluate_vacuum,
+};
+use malachite::Rational;
 
 fn pos_rat(n: i32) -> TypedRational<Pos> {
     TypedRational::<Pos>::new(Rational::from(n)).unwrap()
+}
+
+// Helper to convert raw i64 slice to typed
+fn i64_vec(v: &[i64]) -> Vec<I64<Finite>> {
+    v.iter().map(|&x| I64::<Finite>::new(x)).collect()
+}
+
+// Helper to create F64<Finite> from raw
+fn f64_finite(v: f64) -> F64<Finite> {
+    F64::<Finite>::new(v).unwrap()
 }
 
 fn h11() -> H11 {
@@ -23,18 +37,18 @@ fn make_simple_kappa() -> Intersection {
 }
 
 fn make_simple_mori() -> MoriCone {
-    MoriCone::new(vec![vec![Integer::from(1)]])
+    MoriCone::new(vec![i64_vec(&[1])])
 }
 
 fn make_simple_gv() -> Vec<GvInvariant> {
     vec![
         GvInvariant {
-            curve: vec![1],
-            value: 50.0,
+            curve: i64_vec(&[1]),
+            value: f64_finite(50.0),
         },
         GvInvariant {
-            curve: vec![2],
-            value: 100.0,
+            curve: i64_vec(&[2]),
+            value: f64_finite(100.0),
         },
     ]
 }
@@ -75,15 +89,15 @@ fn test_pipeline_singular_n_matrix() {
     kappa.set(1, 1, 1, pos_rat(1));
     // No cross terms - matrix may be rank deficient
 
-    let mori = MoriCone::new(vec![vec![Integer::from(1), Integer::from(1)]]);
+    let mori = MoriCone::new(vec![i64_vec(&[1, 1])]);
     let gv = vec![
         GvInvariant {
-            curve: vec![1, 0],
-            value: 50.0,
+            curve: i64_vec(&[1, 0]),
+            value: f64_finite(50.0),
         },
         GvInvariant {
-            curve: vec![0, 1],
-            value: 100.0,
+            curve: i64_vec(&[0, 1]),
+            value: f64_finite(100.0),
         },
     ];
 
@@ -116,7 +130,7 @@ fn test_pipeline_singular_n_matrix() {
 fn test_pipeline_outside_kahler_cone() {
     let kappa = make_simple_kappa();
     // Mori generator that requires p > 0
-    let mori = MoriCone::new(vec![vec![Integer::from(1)]]);
+    let mori = MoriCone::new(vec![i64_vec(&[1])]);
     let gv = make_simple_gv();
 
     let req = EvaluationRequest {
@@ -151,19 +165,16 @@ fn test_pipeline_orthogonality_violated() {
     kappa.set(1, 1, 1, pos_rat(4));
 
     // Mori cone that accepts positive p
-    let mori = MoriCone::new(vec![
-        vec![Integer::from(1), Integer::from(0)],
-        vec![Integer::from(0), Integer::from(1)],
-    ]);
+    let mori = MoriCone::new(vec![i64_vec(&[1, 0]), i64_vec(&[0, 1])]);
 
     let gv = vec![
         GvInvariant {
-            curve: vec![1, 0],
-            value: 50.0,
+            curve: i64_vec(&[1, 0]),
+            value: f64_finite(50.0),
         },
         GvInvariant {
-            curve: vec![0, 1],
-            value: 100.0,
+            curve: i64_vec(&[0, 1]),
+            value: f64_finite(100.0),
         },
     ];
 
@@ -204,20 +215,17 @@ fn test_pipeline_no_racetrack_solution() {
     kappa.set(0, 1, 1, pos_rat(2));
     kappa.set(1, 1, 1, pos_rat(4));
 
-    let mori = MoriCone::new(vec![
-        vec![Integer::from(1), Integer::from(0)],
-        vec![Integer::from(0), Integer::from(1)],
-    ]);
+    let mori = MoriCone::new(vec![i64_vec(&[1, 0]), i64_vec(&[0, 1])]);
 
     // Both GV values positive - racetrack needs opposite signs to find solution
     let gv = vec![
         GvInvariant {
-            curve: vec![1, 0],
-            value: 540.0, // Positive
+            curve: i64_vec(&[1, 0]),
+            value: f64_finite(540.0), // Positive
         },
         GvInvariant {
-            curve: vec![0, 1],
-            value: 1080.0, // Also positive - no racetrack solution!
+            curve: i64_vec(&[0, 1]),
+            value: f64_finite(1080.0), // Also positive - no racetrack solution!
         },
     ];
 
@@ -251,17 +259,17 @@ fn test_pipeline_success_path() {
     let mut kappa = Intersection::new(1);
     kappa.set(0, 0, 0, pos_rat(6));
 
-    let mori = MoriCone::new(vec![vec![Integer::from(1)]]);
+    let mori = MoriCone::new(vec![i64_vec(&[1])]);
 
     // GV invariants with opposite signs for racetrack
     let gv = vec![
         GvInvariant {
-            curve: vec![1],
-            value: 540.0,
+            curve: i64_vec(&[1]),
+            value: f64_finite(540.0),
         },
         GvInvariant {
-            curve: vec![2],
-            value: -2160.0,
+            curve: i64_vec(&[2]),
+            value: f64_finite(-2160.0),
         },
     ];
 
@@ -347,15 +355,15 @@ fn test_pipeline_orthogonality_threshold() {
     let mut kappa = Intersection::new(1);
     kappa.set(0, 0, 0, pos_rat(6));
 
-    let mori = MoriCone::new(vec![vec![Integer::from(1)]]);
+    let mori = MoriCone::new(vec![i64_vec(&[1])]);
     let gv = vec![
         GvInvariant {
-            curve: vec![1],
-            value: 540.0,
+            curve: i64_vec(&[1]),
+            value: f64_finite(540.0),
         },
         GvInvariant {
-            curve: vec![2],
-            value: -2160.0,
+            curve: i64_vec(&[2]),
+            value: f64_finite(-2160.0),
         },
     ];
 

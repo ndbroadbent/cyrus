@@ -157,10 +157,11 @@ macro_rules! f64_nonpos {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::float_cmp, clippy::approx_constant)]
 mod tests {
     #[test]
     fn test_f64_pos_macro() {
-        let x = f64_pos!(3.14);
+        let x = f64_pos!(3.17); // Use non-pi value
         assert!(x.get() > 0.0);
     }
 

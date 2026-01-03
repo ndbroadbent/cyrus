@@ -46,7 +46,7 @@ pub mod types;
 pub mod vacuum;
 pub mod volume;
 
-pub use types::{F64, I32, I64, NonEmptyVec, UnitInterval, Pos, Neg, Finite, H11, H21};
+pub use types::{F64, Finite, H11, H21, I32, I64, Neg, Pos};
 
 pub use divisor::{compute_divisor_jacobian, compute_divisor_volumes};
 pub use error::{Error, Result};

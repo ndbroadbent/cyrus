@@ -173,7 +173,11 @@ fn test_cosmology_zero_z_start_returns_error() {
 
     let res = solve_cosmology(&params, &pot, 0.0, 0.0, 0.0);
     assert!(res.is_err());
-    assert!(res.unwrap_err().to_string().contains("z_start must be positive"));
+    assert!(
+        res.unwrap_err()
+            .to_string()
+            .contains("z_start must be positive")
+    );
 }
 
 #[test]
@@ -189,7 +193,11 @@ fn test_cosmology_negative_z_start_returns_error() {
 
     let res = solve_cosmology(&params, &pot, 0.0, 0.0, -0.5);
     assert!(res.is_err());
-    assert!(res.unwrap_err().to_string().contains("z_start must be positive"));
+    assert!(
+        res.unwrap_err()
+            .to_string()
+            .contains("z_start must be positive")
+    );
 }
 
 #[test]
@@ -204,7 +212,11 @@ fn test_cosmology_z_start_minus_one_returns_error() {
 
     let res = solve_cosmology(&params, &pot, 0.0, 0.0, -1.0);
     assert!(res.is_err());
-    assert!(res.unwrap_err().to_string().contains("z_start must be positive"));
+    assert!(
+        res.unwrap_err()
+            .to_string()
+            .contains("z_start must be positive")
+    );
 }
 
 // Direct validation function tests (integration tests complement unit tests)

@@ -113,10 +113,19 @@ impl<Tag> Ord for I64<Tag> {
 // ============================================================================
 
 impl I64<Finite> {
+    /// The zero constant.
+    pub const ZERO: Self = Self(0, PhantomData);
+
     /// Create a finite i64. Always succeeds for integers.
     #[must_use]
     pub fn new(x: i64) -> Self {
         Self(x, PhantomData)
+    }
+
+    /// Convert to F64<Finite>.
+    #[must_use]
+    pub fn to_f64(self) -> crate::types::f64::F64<Finite> {
+        crate::types::f64::F64::from_raw(self.0 as f64)
     }
 }
 
@@ -126,6 +135,12 @@ impl I64<Pos> {
     pub fn new(x: i64) -> Option<Self> {
         (x > 0).then(|| Self(x, PhantomData))
     }
+
+    /// Convert to F64<Pos>. Preserves positivity.
+    #[must_use]
+    pub fn to_f64(self) -> crate::types::f64::F64<Pos> {
+        crate::types::f64::F64::from_raw(self.0 as f64)
+    }
 }
 
 impl I64<Neg> {
@@ -133,6 +148,12 @@ impl I64<Neg> {
     #[must_use]
     pub fn new(x: i64) -> Option<Self> {
         (x < 0).then(|| Self(x, PhantomData))
+    }
+
+    /// Convert to F64<Neg>. Preserves negativity.
+    #[must_use]
+    pub fn to_f64(self) -> crate::types::f64::F64<Neg> {
+        crate::types::f64::F64::from_raw(self.0 as f64)
     }
 }
 
@@ -142,6 +163,12 @@ impl I64<NonZero> {
     pub fn new(x: i64) -> Option<Self> {
         (x != 0).then(|| Self(x, PhantomData))
     }
+
+    /// Convert to F64<NonZero>. Preserves non-zero.
+    #[must_use]
+    pub fn to_f64(self) -> crate::types::f64::F64<NonZero> {
+        crate::types::f64::F64::from_raw(self.0 as f64)
+    }
 }
 
 impl I64<NonNeg> {
@@ -150,6 +177,12 @@ impl I64<NonNeg> {
     pub fn new(x: i64) -> Option<Self> {
         (x >= 0).then(|| Self(x, PhantomData))
     }
+
+    /// Convert to F64<NonNeg>. Preserves non-negativity.
+    #[must_use]
+    pub fn to_f64(self) -> crate::types::f64::F64<NonNeg> {
+        crate::types::f64::F64::from_raw(self.0 as f64)
+    }
 }
 
 impl I64<NonPos> {
@@ -157,6 +190,12 @@ impl I64<NonPos> {
     #[must_use]
     pub fn new(x: i64) -> Option<Self> {
         (x <= 0).then(|| Self(x, PhantomData))
+    }
+
+    /// Convert to F64<NonPos>. Preserves non-positivity.
+    #[must_use]
+    pub fn to_f64(self) -> crate::types::f64::F64<NonPos> {
+        crate::types::f64::F64::from_raw(self.0 as f64)
     }
 }
 
@@ -169,6 +208,12 @@ impl I64<Zero> {
     pub fn new(x: i64) -> Option<Self> {
         (x == 0).then_some(Self::ZERO)
     }
+
+    /// Convert to F64<Zero>.
+    #[must_use]
+    pub fn to_f64(self) -> crate::types::f64::F64<Zero> {
+        crate::types::f64::F64::from_raw(0.0)
+    }
 }
 
 impl I64<One> {
@@ -179,6 +224,12 @@ impl I64<One> {
     #[must_use]
     pub fn new(x: i64) -> Option<Self> {
         (x == 1).then_some(Self::ONE)
+    }
+
+    /// Convert to F64<One>.
+    #[must_use]
+    pub fn to_f64(self) -> crate::types::f64::F64<One> {
+        crate::types::f64::F64::from_raw(1.0)
     }
 }
 
@@ -191,6 +242,12 @@ impl I64<MinusOne> {
     pub fn new(x: i64) -> Option<Self> {
         (x == -1).then_some(Self::MINUS_ONE)
     }
+
+    /// Convert to F64<MinusOne>.
+    #[must_use]
+    pub fn to_f64(self) -> crate::types::f64::F64<MinusOne> {
+        crate::types::f64::F64::from_raw(-1.0)
+    }
 }
 
 impl Default for I64<Zero> {
@@ -200,209 +257,51 @@ impl Default for I64<Zero> {
 }
 
 // ============================================================================
-// Trait Implementations
+// Marker Trait Implementations
 // ============================================================================
 
-impl IsFinite for I64<Finite> {
-    type Finite = I64<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        self
-    }
-}
+impl IsFinite for I64<Finite> {}
+impl IsFinite for I64<Pos> {}
+impl IsFinite for I64<Neg> {}
+impl IsFinite for I64<Zero> {}
+impl IsFinite for I64<One> {}
+impl IsFinite for I64<MinusOne> {}
+impl IsFinite for I64<NonNeg> {}
+impl IsFinite for I64<NonZero> {}
+impl IsFinite for I64<NonPos> {}
 
-impl IsFinite for I64<Pos> {
-    type Finite = I64<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        I64(self.0, PhantomData)
-    }
-}
+impl IsNonZero for I64<NonZero> {}
+impl IsNonZero for I64<Pos> {}
+impl IsNonZero for I64<Neg> {}
+impl IsNonZero for I64<One> {}
+impl IsNonZero for I64<MinusOne> {}
 
-impl IsFinite for I64<Neg> {
-    type Finite = I64<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        I64(self.0, PhantomData)
-    }
-}
+impl IsPositive for I64<Pos> {}
+impl IsPositive for I64<One> {}
 
-impl IsFinite for I64<Zero> {
-    type Finite = I64<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        I64(self.0, PhantomData)
-    }
-}
-
-impl IsFinite for I64<One> {
-    type Finite = I64<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        I64(self.0, PhantomData)
-    }
-}
-
-impl IsFinite for I64<MinusOne> {
-    type Finite = I64<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        I64(self.0, PhantomData)
-    }
-}
-
-impl IsFinite for I64<NonNeg> {
-    type Finite = I64<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        I64(self.0, PhantomData)
-    }
-}
-
-impl IsFinite for I64<NonZero> {
-    type Finite = I64<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        I64(self.0, PhantomData)
-    }
-}
-
-impl IsFinite for I64<NonPos> {
-    type Finite = I64<Finite>;
-    fn to_finite(self) -> Self::Finite {
-        I64(self.0, PhantomData)
-    }
-}
-
-// --- IsNonZero ---
-
-impl IsNonZero for I64<NonZero> {
-    type NonZero = I64<NonZero>;
-    fn to_non_zero(self) -> Self::NonZero {
-        self
-    }
-}
-
-impl IsNonZero for I64<Pos> {
-    type NonZero = I64<NonZero>;
-    fn to_non_zero(self) -> Self::NonZero {
-        I64(self.0, PhantomData)
-    }
-}
-
-impl IsNonZero for I64<Neg> {
-    type NonZero = I64<NonZero>;
-    fn to_non_zero(self) -> Self::NonZero {
-        I64(self.0, PhantomData)
-    }
-}
-
-impl IsNonZero for I64<One> {
-    type NonZero = I64<NonZero>;
-    fn to_non_zero(self) -> Self::NonZero {
-        I64(self.0, PhantomData)
-    }
-}
-
-impl IsNonZero for I64<MinusOne> {
-    type NonZero = I64<NonZero>;
-    fn to_non_zero(self) -> Self::NonZero {
-        I64(self.0, PhantomData)
-    }
-}
-
-// --- IsPositive ---
-
-impl IsPositive for I64<Pos> {
-    type Positive = I64<Pos>;
-    fn to_positive(self) -> Self::Positive {
-        self
-    }
-}
-
-impl IsPositive for I64<One> {
-    type Positive = I64<Pos>;
-    fn to_positive(self) -> Self::Positive {
-        I64(self.0, PhantomData)
-    }
-}
-
-// --- IsNegative ---
-
-impl IsNegative for I64<Neg> {
-    type Negative = I64<Neg>;
-    fn to_negative(self) -> Self::Negative {
-        self
-    }
-}
-
-impl IsNegative for I64<MinusOne> {
-    type Negative = I64<Neg>;
-    fn to_negative(self) -> Self::Negative {
-        I64(self.0, PhantomData)
-    }
-}
-
-// --- IsZero ---
+impl IsNegative for I64<Neg> {}
+impl IsNegative for I64<MinusOne> {}
 
 impl IsZero for I64<Zero> {}
 
-// --- IsNonNeg ---
+impl IsNonNeg for I64<NonNeg> {}
+impl IsNonNeg for I64<Pos> {}
+impl IsNonNeg for I64<One> {}
+impl IsNonNeg for I64<Zero> {}
 
-impl IsNonNeg for I64<NonNeg> {
-    type NonNeg = I64<NonNeg>;
-    fn to_non_neg(self) -> Self::NonNeg {
-        self
-    }
-}
-
-impl IsNonNeg for I64<Pos> {
-    type NonNeg = I64<NonNeg>;
-    fn to_non_neg(self) -> Self::NonNeg {
-        I64(self.0, PhantomData)
-    }
-}
-
-impl IsNonNeg for I64<One> {
-    type NonNeg = I64<NonNeg>;
-    fn to_non_neg(self) -> Self::NonNeg {
-        I64(self.0, PhantomData)
-    }
-}
-
-impl IsNonNeg for I64<Zero> {
-    type NonNeg = I64<NonNeg>;
-    fn to_non_neg(self) -> Self::NonNeg {
-        I64(self.0, PhantomData)
-    }
-}
-
-// --- IsNonPos ---
-
-impl IsNonPos for I64<NonPos> {
-    type NonPos = I64<NonPos>;
-    fn to_non_pos(self) -> Self::NonPos {
-        self
-    }
-}
-
-impl IsNonPos for I64<Neg> {
-    type NonPos = I64<NonPos>;
-    fn to_non_pos(self) -> Self::NonPos {
-        I64(self.0, PhantomData)
-    }
-}
-
-impl IsNonPos for I64<MinusOne> {
-    type NonPos = I64<NonPos>;
-    fn to_non_pos(self) -> Self::NonPos {
-        I64(self.0, PhantomData)
-    }
-}
-
-impl IsNonPos for I64<Zero> {
-    type NonPos = I64<NonPos>;
-    fn to_non_pos(self) -> Self::NonPos {
-        I64(self.0, PhantomData)
-    }
-}
-
-// --- IsOne / IsMinusOne ---
+impl IsNonPos for I64<NonPos> {}
+impl IsNonPos for I64<Neg> {}
+impl IsNonPos for I64<MinusOne> {}
+impl IsNonPos for I64<Zero> {}
 
 impl IsOne for I64<One> {}
 impl IsMinusOne for I64<MinusOne> {}
+
+// ============================================================================
+// Arithmetic Operations (generated from algebra rules)
+// ============================================================================
+
+crate::impl_ops!(I64, i64);
 
 // ============================================================================
 // Compile-time Macros
@@ -448,54 +347,5 @@ macro_rules! i64_nonpos {
     }};
 }
 
-// ============================================================================
-// Tests
-// ============================================================================
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_i64_size() {
-        assert_eq!(std::mem::size_of::<I64>(), std::mem::size_of::<i64>());
-        assert_eq!(std::mem::size_of::<I64<Pos>>(), std::mem::size_of::<i64>());
-    }
-
-    #[test]
-    fn test_pos_new() {
-        assert!(I64::<Pos>::new(1).is_some());
-        assert!(I64::<Pos>::new(0).is_none());
-        assert!(I64::<Pos>::new(-1).is_none());
-    }
-
-    #[test]
-    fn test_neg_new() {
-        assert!(I64::<Neg>::new(-1).is_some());
-        assert!(I64::<Neg>::new(0).is_none());
-        assert!(I64::<Neg>::new(1).is_none());
-    }
-
-    #[test]
-    fn test_constants() {
-        assert_eq!(I64::<Zero>::ZERO.get(), 0);
-        assert_eq!(I64::<One>::ONE.get(), 1);
-        assert_eq!(I64::<MinusOne>::MINUS_ONE.get(), -1);
-    }
-
-    #[test]
-    fn test_macros() {
-        let x = i64_pos!(42);
-        assert_eq!(x.get(), 42);
-
-        let y = i64_neg!(-5);
-        assert_eq!(y.get(), -5);
-    }
-
-    #[test]
-    fn test_ord() {
-        let a = I64::<Pos>::new(1).unwrap();
-        let b = I64::<Pos>::new(2).unwrap();
-        assert!(a < b);
-    }
-}
+mod tests;

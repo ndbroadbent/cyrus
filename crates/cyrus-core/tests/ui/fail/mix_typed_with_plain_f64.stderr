@@ -1,0 +1,8 @@
+error[E0308]: mismatched types
+  --> tests/ui/fail/mix_typed_with_plain_f64.rs:14:27
+   |
+14 |     let _result = typed + plain;
+   |                           ^^^^^ expected `F64<_>`, found `f64`
+   |
+   = note: expected struct `F64<_>`
+                found type `f64`

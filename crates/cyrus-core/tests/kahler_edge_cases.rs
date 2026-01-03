@@ -1,6 +1,18 @@
 #![allow(missing_docs, clippy::too_many_lines)]
+use cyrus_core::types::f64::F64;
+use cyrus_core::types::i64::I64;
+use cyrus_core::types::tags::Finite;
 use cyrus_core::{MoriCone, Point, Triangulation, compute_mori_generators};
-use malachite::Integer;
+
+// Helper to convert raw i64 slice to typed
+fn i64_vec(v: &[i64]) -> Vec<I64<Finite>> {
+    v.iter().map(|&x| I64::<Finite>::new(x)).collect()
+}
+
+// Helper to convert raw f64 slice to typed
+fn f64_vec(v: &[f64]) -> Vec<F64<Finite>> {
+    v.iter().map(|&x| F64::<Finite>::new(x).unwrap()).collect()
+}
 
 #[test]
 fn test_mori_empty_points() {
@@ -17,46 +29,46 @@ fn test_mori_empty_points() {
 fn test_mori_cone_contains_empty_generators() {
     // Empty Mori cone - vacuously all points are in Kähler cone
     let mori = MoriCone::new(vec![]);
-    assert!(mori.contains(&[1.0, 2.0, 3.0]));
-    assert!(mori.contains(&[-1.0, -2.0]));
+    assert!(mori.contains(&f64_vec(&[1.0, 2.0, 3.0])));
+    assert!(mori.contains(&f64_vec(&[-1.0, -2.0])));
 }
 
 #[test]
 fn test_mori_cone_contains_negative_dot() {
     // Generator R = [1, 1], p = [-1, -1] => dot = -2 < 0
-    let mori = MoriCone::new(vec![vec![Integer::from(1), Integer::from(1)]]);
-    assert!(!mori.contains(&[-1.0, -1.0]));
+    let mori = MoriCone::new(vec![i64_vec(&[1, 1])]);
+    assert!(!mori.contains(&f64_vec(&[-1.0, -1.0])));
 }
 
 #[test]
 fn test_mori_cone_contains_boundary_values() {
     // Test exact boundary at 1e-10 threshold
-    let mori = MoriCone::new(vec![vec![Integer::from(1), Integer::from(0)]]);
+    let mori = MoriCone::new(vec![i64_vec(&[1, 0])]);
 
     // Exactly at threshold - should be false (dot <= 1e-10)
-    assert!(!mori.contains(&[1e-10, 0.0]));
+    assert!(!mori.contains(&f64_vec(&[1e-10, 0.0])));
 
     // Just above threshold - should be true
-    assert!(mori.contains(&[1e-9, 0.0]));
+    assert!(mori.contains(&f64_vec(&[1e-9, 0.0])));
 
     // Zero - should be false
-    assert!(!mori.contains(&[0.0, 0.0]));
+    assert!(!mori.contains(&f64_vec(&[0.0, 0.0])));
 }
 
 #[test]
 fn test_mori_cone_multiple_generators() {
     // Two generators - must satisfy both
     let mori = MoriCone::new(vec![
-        vec![Integer::from(1), Integer::from(0)], // x > 0
-        vec![Integer::from(0), Integer::from(1)], // y > 0
+        i64_vec(&[1, 0]), // x > 0
+        i64_vec(&[0, 1]), // y > 0
     ]);
 
     // Both positive - in cone
-    assert!(mori.contains(&[1.0, 1.0]));
+    assert!(mori.contains(&f64_vec(&[1.0, 1.0])));
 
     // One negative - not in cone
-    assert!(!mori.contains(&[1.0, -1.0]));
-    assert!(!mori.contains(&[-1.0, 1.0]));
+    assert!(!mori.contains(&f64_vec(&[1.0, -1.0])));
+    assert!(!mori.contains(&f64_vec(&[-1.0, 1.0])));
 }
 
 #[test]
@@ -132,15 +144,15 @@ fn test_mori_3d_triangulation() {
 #[test]
 fn test_mori_cone_large_integers() {
     // Test with larger integer values
-    let mori = MoriCone::new(vec![vec![Integer::from(1000), Integer::from(-500)]]);
+    let mori = MoriCone::new(vec![i64_vec(&[1000, -500])]);
 
-    assert!(mori.contains(&[1.0, 1.0])); // 1000 - 500 = 500 > 0
-    assert!(!mori.contains(&[0.5, 2.0])); // 500 - 1000 = -500 < 0
+    assert!(mori.contains(&f64_vec(&[1.0, 1.0]))); // 1000 - 500 = 500 > 0
+    assert!(!mori.contains(&f64_vec(&[0.5, 2.0]))); // 500 - 1000 = -500 < 0
 }
 
 #[test]
 fn test_mori_generators_accessor() {
-    let generators = vec![vec![Integer::from(1), Integer::from(-1)]];
+    let generators = vec![i64_vec(&[1, -1])];
     let mori = MoriCone::new(generators.clone());
     assert_eq!(mori.generators().len(), 1);
     assert_eq!(mori.generators()[0], generators[0]);
