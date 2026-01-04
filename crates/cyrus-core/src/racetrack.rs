@@ -18,7 +18,13 @@ use crate::types::physics::{
 use crate::types::tags::{Finite, NonNeg, Pos};
 
 /// Riemann zeta function at 3: ζ(3) ≈ 1.202056903159594 (positive).
-pub const ZETA: F64<Pos> = f64_pos!(1.202_056_903_159_594);
+pub const ZETA_3: F64<Pos> = f64_pos!(1.202_056_903_159_594);
+
+/// Superpotential normalization from eq. 2.22: ζ = 1/(2^{3/2} π^{5/2}).
+///
+/// This factor multiplies the flux superpotential sum.
+/// Value: 1 / (2.828... × 17.49...) ≈ 0.02024
+const ZETA_NORM: F64<Pos> = f64_pos!(1.0 / (2.828_427_124_746_19 * 17.493_418_327_624_86));
 
 /// 2π as a typed positive constant.
 const TWO_PI: F64<Pos> = f64_pos!(2.0 * PI);
@@ -188,9 +194,19 @@ pub fn solve_racetrack(terms: &[RacetrackTerm]) -> Option<RacetrackResult> {
 
 /// Compute W₀ from stabilized racetrack.
 ///
-/// `W_0 = - (A1 exp(-2π q1·p/gs) + A2 exp(-2π q2·p/gs))`
+/// From eq. 2.22:
+/// ```text
+/// W_flux = -ζ Σ_q (M·q) N_q Li₂(e^{2πiτ(q·p)})
+/// ```
 ///
-/// Reference: arXiv:2107.09064, Eq. 6.4
+/// At large Im(τ), Li₂(x) ≈ x for small x, so:
+/// ```text
+/// W₀ ≈ ζ × |A1 exp(-2π q1·p/gs) + A2 exp(-2π q2·p/gs)|
+/// ```
+///
+/// where ζ = 1/(2^{3/2} π^{5/2}) ≈ 0.02024 is the normalization factor.
+///
+/// Reference: arXiv:2107.09064, Eq. 2.22
 ///
 /// # Panics
 /// Panics if exp() produces a non-positive result (should not occur mathematically).
@@ -200,7 +216,7 @@ pub fn compute_w0(
     term1: &RacetrackTerm,
     term2: &RacetrackTerm,
 ) -> Superpotential {
-    // -2π × exponent / g_s
+    // -2π × exponent / g_s (exponent = q·p, and we use Im(τ) = 1/g_s)
     // -Pos = Neg, Neg * Finite = Finite, Finite / Pos = Finite
     let arg1 = -TWO_PI * term1.exponent / result.g_s;
     let arg2 = -TWO_PI * term2.exponent / result.g_s;
@@ -213,8 +229,11 @@ pub fn compute_w0(
     let term1_val = term1.coefficient * exp1;
     let term2_val = term2.coefficient * exp2;
 
-    // -(Finite + Finite) = Finite
-    -(term1_val + term2_val)
+    // W₀ = ζ × |sum of terms|
+    // The ζ normalization factor was missing - this caused ~50x error
+    let sum = term1_val + term2_val;
+    let sum_pos = sum.abs().try_to_pos().expect("racetrack terms never exactly cancel");
+    ZETA_NORM * sum_pos
 }
 
 #[cfg(test)]
@@ -261,6 +280,6 @@ mod tests {
 
     #[test]
     fn test_zeta_constant() {
-        assert!((ZETA.get() - 1.202_f64).abs() < 0.001);
+        assert!((ZETA_3.get() - 1.202_f64).abs() < 0.001);
     }
 }

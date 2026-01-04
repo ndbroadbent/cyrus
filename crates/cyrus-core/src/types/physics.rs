@@ -52,8 +52,8 @@ pub type SmallCycleModulus = F64<Pos>;
 /// String coupling g_s (positive, typically 0 < g_s < 1).
 pub type StringCoupling = F64<Pos>;
 
-/// Superpotential W₀ (can be any sign, but |W₀| > 0 for stabilization).
-pub type Superpotential = F64<Finite>;
+/// Superpotential magnitude |W₀| (positive for stabilization).
+pub type Superpotential = F64<Pos>;
 
 /// Imaginary part of the axio-dilaton Im(τ) (positive).
 pub type ImTau = F64<Pos>;

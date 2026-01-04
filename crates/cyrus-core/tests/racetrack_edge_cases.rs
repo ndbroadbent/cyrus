@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 use cyrus_core::racetrack::{
-    GvInvariant, RacetrackResult, RacetrackTerm, ZETA, build_racetrack_terms, compute_w0,
+    GvInvariant, RacetrackResult, RacetrackTerm, ZETA_3, build_racetrack_terms, compute_w0,
     solve_racetrack,
 };
 use cyrus_core::types::f64::F64;
@@ -24,7 +24,7 @@ fn f64_finite(v: f64) -> F64<Finite> {
 
 #[test]
 fn test_zeta_value() {
-    assert!((ZETA.get() - 1.202_056_903_159_594).abs() < 1e-15);
+    assert!((ZETA_3.get() - 1.202_056_903_159_594).abs() < 1e-15);
 }
 
 #[test]

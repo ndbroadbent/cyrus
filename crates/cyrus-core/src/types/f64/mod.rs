@@ -146,10 +146,35 @@ impl F64<Finite> {
         (self.0 < 0.0).then_some(F64(self.0, PhantomData))
     }
 
+    /// Try to narrow to zero. Returns `None` if ≠ 0.
+    #[must_use]
+    #[allow(clippy::float_cmp)]
+    pub fn try_to_zero(self) -> Option<F64<Zero>> {
+        (self.0 == 0.0).then_some(F64(0.0, PhantomData))
+    }
+
     /// Try to narrow to non-zero. Returns `None` if = 0.
     #[must_use]
     pub fn try_to_non_zero(self) -> Option<F64<NonZero>> {
         (self.0 != 0.0).then_some(F64(self.0, PhantomData))
+    }
+
+    /// Try to narrow to non-negative. Returns `None` if < 0.
+    #[must_use]
+    pub fn try_to_non_neg(self) -> Option<F64<NonNeg>> {
+        (self.0 >= 0.0).then_some(F64(self.0, PhantomData))
+    }
+
+    /// Try to narrow to non-positive. Returns `None` if > 0.
+    #[must_use]
+    pub fn try_to_non_pos(self) -> Option<F64<NonPos>> {
+        (self.0 <= 0.0).then_some(F64(self.0, PhantomData))
+    }
+
+    /// Try to narrow to ≥ 1. Returns `None` if < 1.
+    #[must_use]
+    pub fn try_to_gte_one(self) -> Option<F64<GTEOne>> {
+        (self.0 >= 1.0).then_some(F64(self.0, PhantomData))
     }
 }
 
@@ -183,6 +208,19 @@ impl F64<Pos> {
     pub fn recip(self) -> Self {
         Self(1.0 / self.0, PhantomData)
     }
+
+    /// Try to narrow to one. Returns `None` if ≠ 1.
+    #[must_use]
+    #[allow(clippy::float_cmp)]
+    pub fn try_to_one(self) -> Option<F64<One>> {
+        (self.0 == 1.0).then_some(F64(1.0, PhantomData))
+    }
+
+    /// Try to narrow to ≥ 1. Returns `None` if < 1.
+    #[must_use]
+    pub fn try_to_gte_one(self) -> Option<F64<GTEOne>> {
+        (self.0 >= 1.0).then_some(F64(self.0, PhantomData))
+    }
 }
 
 impl F64<Neg> {
@@ -197,6 +235,13 @@ impl F64<Neg> {
     pub const fn abs(self) -> F64<Pos> {
         F64(self.0.abs(), PhantomData)
     }
+
+    /// Try to narrow to minus one. Returns `None` if ≠ -1.
+    #[must_use]
+    #[allow(clippy::float_cmp)]
+    pub fn try_to_minus_one(self) -> Option<F64<MinusOne>> {
+        (self.0 == -1.0).then_some(F64(-1.0, PhantomData))
+    }
 }
 
 impl F64<NonZero> {
@@ -210,6 +255,18 @@ impl F64<NonZero> {
     #[must_use]
     pub const fn abs(self) -> F64<Pos> {
         F64(self.0.abs(), PhantomData)
+    }
+
+    /// Try to narrow to positive. Returns `None` if < 0.
+    #[must_use]
+    pub fn try_to_pos(self) -> Option<F64<Pos>> {
+        (self.0 > 0.0).then_some(F64(self.0, PhantomData))
+    }
+
+    /// Try to narrow to negative. Returns `None` if > 0.
+    #[must_use]
+    pub fn try_to_neg(self) -> Option<F64<Neg>> {
+        (self.0 < 0.0).then_some(F64(self.0, PhantomData))
     }
 }
 
@@ -228,6 +285,19 @@ impl F64<NonNeg> {
     pub fn sqrt(self) -> Self {
         Self(self.0.sqrt(), PhantomData)
     }
+
+    /// Try to narrow to positive. Returns `None` if = 0.
+    #[must_use]
+    pub fn try_to_pos(self) -> Option<F64<Pos>> {
+        (self.0 > 0.0).then_some(F64(self.0, PhantomData))
+    }
+
+    /// Try to narrow to zero. Returns `None` if > 0.
+    #[must_use]
+    #[allow(clippy::float_cmp)]
+    pub fn try_to_zero(self) -> Option<F64<Zero>> {
+        (self.0 == 0.0).then_some(F64(0.0, PhantomData))
+    }
 }
 
 impl F64<NonPos> {
@@ -235,6 +305,19 @@ impl F64<NonPos> {
     #[must_use]
     pub fn new(x: f64) -> Option<Self> {
         (x.is_finite() && x <= 0.0).then_some(Self(x, PhantomData))
+    }
+
+    /// Try to narrow to negative. Returns `None` if = 0.
+    #[must_use]
+    pub fn try_to_neg(self) -> Option<F64<Neg>> {
+        (self.0 < 0.0).then_some(F64(self.0, PhantomData))
+    }
+
+    /// Try to narrow to zero. Returns `None` if < 0.
+    #[must_use]
+    #[allow(clippy::float_cmp)]
+    pub fn try_to_zero(self) -> Option<F64<Zero>> {
+        (self.0 == 0.0).then_some(F64(0.0, PhantomData))
     }
 }
 
@@ -290,6 +373,20 @@ impl F64<GTEOne> {
     #[must_use]
     pub fn new(x: f64) -> Option<Self> {
         (x.is_finite() && x >= 1.0).then_some(Self(x, PhantomData))
+    }
+
+    /// Try to narrow to one. Returns `None` if ≠ 1.
+    #[must_use]
+    #[allow(clippy::float_cmp)]
+    pub fn try_to_one(self) -> Option<F64<One>> {
+        (self.0 == 1.0).then_some(F64(1.0, PhantomData))
+    }
+
+    /// Try to narrow to two. Returns `None` if ≠ 2.
+    #[must_use]
+    #[allow(clippy::float_cmp)]
+    pub fn try_to_two(self) -> Option<F64<Two>> {
+        (self.0 == 2.0).then_some(F64(2.0, PhantomData))
     }
 }
 
