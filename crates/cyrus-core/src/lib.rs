@@ -70,6 +70,8 @@ pub use polytope::Polytope;
 pub use racetrack::{
     GvInvariant, RacetrackResult, RacetrackTerm, build_racetrack_terms, compute_w0, solve_racetrack,
 };
-pub use triangulation::{Triangulation, compute_regular_triangulation};
+pub use triangulation::{
+    Triangulation, compute_delaunay_heights, compute_frst_heights, compute_regular_triangulation,
+};
 pub use vacuum::{VacuumResult, compute_v0, compute_vacuum};
 pub use volume::{VolumeResult, bbhl_correction, compute_volume, volume_classical, volume_string};

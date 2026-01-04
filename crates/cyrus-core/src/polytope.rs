@@ -176,6 +176,143 @@ impl Polytope {
         Ok(lattice_points)
     }
 
+    /// Get points that are NOT interior to facets.
+    ///
+    /// A point is "interior to a facet" if it lies on exactly ONE facet.
+    /// This method returns points that lie on 0 (interior) or 2+ (edges/vertices) facets.
+    ///
+    /// These are the points used for triangulation - points interior to facets
+    /// don't affect the triangulation structure.
+    ///
+    /// For a reflexive polytope, we use the dual vertices to determine facets.
+    /// Each dual vertex m corresponds to a primal facet with equation p · m = -1.
+    /// A primal point p "saturates" this facet if p · m = -1.
+    ///
+    /// Returns points in CYTools order:
+    /// 1. Interior points (0 facets) first
+    /// 2. Boundary points by decreasing saturation count
+    /// 3. Lexicographic within each group
+    pub fn points_not_interior_to_facets(&self) -> Result<Vec<Point>> {
+        // Get dual vertices - each corresponds to a primal facet
+        let dual_vertices = self.find_dual_vertices()?;
+
+        // For each point, count how many facets it saturates
+        let mut point_saturations: Vec<(usize, usize, &Point)> = Vec::new();
+
+        for (idx, point) in self.vertices.iter().enumerate() {
+            let coords = point.coords();
+            let mut saturation_count = 0;
+
+            for dual_v in &dual_vertices {
+                // A primal point p saturates facet m if p · m = -1
+                let dot: i64 = coords
+                    .iter()
+                    .zip(dual_v.coords().iter())
+                    .map(|(&p, &m)| p * m)
+                    .sum();
+
+                if dot == -1 {
+                    saturation_count += 1;
+                }
+            }
+
+            // Keep points with saturation_count != 1
+            if saturation_count != 1 {
+                point_saturations.push((saturation_count, idx, point));
+            }
+        }
+
+        // Sort by CYTools ordering:
+        // 1. Interior points first (saturation_count == 0)
+        // 2. Then by DECREASING saturation count
+        // 3. Lexicographic within groups
+        point_saturations.sort_by(|a, b| {
+            // First compare by saturation count category
+            let a_interior = a.0 == 0;
+            let b_interior = b.0 == 0;
+
+            if a_interior != b_interior {
+                // Interior points come first
+                return b_interior.cmp(&a_interior);
+            }
+
+            if !a_interior {
+                // Both are boundary - sort by DECREASING saturation count
+                match b.0.cmp(&a.0) {
+                    std::cmp::Ordering::Equal => {}
+                    other => return other,
+                }
+            }
+
+            // Within same saturation count, sort lexicographically by coordinates
+            a.2.coords().cmp(b.2.coords())
+        });
+
+        Ok(point_saturations
+            .into_iter()
+            .map(|(_, _, p)| p.clone())
+            .collect())
+    }
+
+    /// Debug version that also returns saturation histogram.
+    #[cfg(test)]
+    pub fn points_not_interior_to_facets_debug(
+        &self,
+    ) -> Result<(Vec<Point>, std::collections::HashMap<usize, usize>)> {
+        use std::collections::HashMap;
+
+        let dual_vertices = self.find_dual_vertices()?;
+
+        let mut histogram: HashMap<usize, usize> = HashMap::new();
+        let mut point_saturations: Vec<(usize, usize, &Point)> = Vec::new();
+
+        for (idx, point) in self.vertices.iter().enumerate() {
+            let coords = point.coords();
+            let mut saturation_count = 0;
+
+            for dual_v in &dual_vertices {
+                let dot: i64 = coords
+                    .iter()
+                    .zip(dual_v.coords().iter())
+                    .map(|(&p, &m)| p * m)
+                    .sum();
+
+                if dot == -1 {
+                    saturation_count += 1;
+                }
+            }
+
+            *histogram.entry(saturation_count).or_insert(0) += 1;
+
+            if saturation_count != 1 {
+                point_saturations.push((saturation_count, idx, point));
+            }
+        }
+
+        point_saturations.sort_by(|a, b| {
+            let a_interior = a.0 == 0;
+            let b_interior = b.0 == 0;
+            if a_interior != b_interior {
+                return b_interior.cmp(&a_interior);
+            }
+            if !a_interior {
+                match b.0.cmp(&a.0) {
+                    std::cmp::Ordering::Equal => {}
+                    other => return other,
+                }
+            }
+            a.2.coords().cmp(b.2.coords())
+        });
+
+        Ok((
+            point_saturations
+                .into_iter()
+                .map(|(_, _, p)| p.clone())
+                .collect(),
+            histogram,
+        ))
+    }
+
     /// Find dual vertices by computing facet normals using convex hull.
     ///
     /// Uses the Beneath-Beyond algorithm for efficient facet enumeration.
@@ -388,5 +525,126 @@ mod tests {
         .collect();
 
         assert_eq!(dual_coords, expected);
+    }
+
+    #[test]
+    fn test_points_not_interior_to_facets_square() {
+        // Square with 4 vertices - all are on 2 facets (edges)
+        // No points interior to facets
+        let p = square();
+        let filtered = p.points_not_interior_to_facets().unwrap();
+
+        // All 4 vertices should be kept (each on 2 edges)
+        assert_eq!(filtered.len(), 4);
+    }
+
+    #[test]
+    fn test_points_not_interior_to_facets_with_edge_point() {
+        // Square with an extra point on an edge
+        // The edge point saturates exactly 1 facet, so it should be excluded
+        let p = Polytope::from_vertices(vec![
+            Point::new(vec![-1, -1]),
+            Point::new(vec![1, -1]),
+            Point::new(vec![1, 1]),
+            Point::new(vec![-1, 1]),
+            Point::new(vec![0, -1]), // Point on bottom edge - saturates 1 facet
+        ])
+        .unwrap();
+
+        let filtered = p.points_not_interior_to_facets().unwrap();
+
+        // Should have 4 vertices, edge point excluded
+        assert_eq!(filtered.len(), 4);
+
+        // Verify edge point is not in result
+        let coords: Vec<Vec<i64>> = filtered.iter().map(|p| p.coords().to_vec()).collect();
+        assert!(!coords.contains(&vec![0, -1]));
+    }
+
+    #[test]
+    fn test_points_not_interior_to_facets_with_interior() {
+        // Square with origin inside
+        let p = Polytope::from_vertices(vec![
+            Point::new(vec![-1, -1]),
+            Point::new(vec![1, -1]),
+            Point::new(vec![1, 1]),
+            Point::new(vec![-1, 1]),
+            Point::new(vec![0, 0]), // Origin - interior, saturates 0 facets
+        ])
+        .unwrap();
+
+        let filtered = p.points_not_interior_to_facets().unwrap();
+
+        // Should have 5 points: 4 vertices + 1 interior
+        assert_eq!(filtered.len(), 5);
+
+        // Interior point should be FIRST (CYTools ordering)
+        assert_eq!(filtered[0].coords(), &[0, 0]);
+    }
+
+    #[test]
+    fn test_points_not_interior_to_facets_ordering() {
+        // Test that ordering is correct:
+        // 1. Interior points first
+        // 2. Then by decreasing saturation count
+        let p = Polytope::from_vertices(vec![
+            Point::new(vec![-1, -1]),
+            Point::new(vec![1, -1]),
+            Point::new(vec![1, 1]),
+            Point::new(vec![-1, 1]),
+            Point::new(vec![0, 0]), // Interior (0 saturations)
+        ])
+        .unwrap();
+
+        let filtered = p.points_not_interior_to_facets().unwrap();
+
+        // First point should be interior (0 saturations)
+        assert_eq!(filtered[0].coords(), &[0, 0]);
+
+        // Remaining points should all have saturation count >= 2
+        // (they're on 2 edges each for a square)
+    }
+
+    #[test]
+    fn test_points_not_interior_to_facets_mcallister() {
+        // Load McAllister polytope 4-214-647
+        // Expected: 294 total points -> 219 after filtering (75 removed)
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let input_path = manifest_dir.join("tests/fixtures/4_214_647/polytope.json");
+
+        #[derive(serde::Deserialize)]
+        struct PolytopeInput {
+            primal_points: Vec<Vec<i64>>,
+        }
+
+        let content = std::fs::read_to_string(&input_path)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {e}", input_path.display()));
+        let input: PolytopeInput = serde_json::from_str(&content)
+            .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", input_path.display()));
+
+        let points: Vec<Point> = input
+            .primal_points
+            .iter()
+            .map(|coords| Point::new(coords.clone()))
+            .collect();
+
+        assert_eq!(points.len(), 294, "McAllister polytope should have 294 points");
+
+        let polytope = Polytope::from_vertices(points).unwrap();
+        let filtered = polytope.points_not_interior_to_facets().unwrap();
+
+        // McAllister uses 219 points for triangulation (75 are interior to facets)
+        assert_eq!(
+            filtered.len(),
+            219,
+            "Expected 219 points not interior to facets, got {}",
+            filtered.len()
+        );
+
+        // Origin should be first (interior point with 0 saturations)
+        assert!(
+            filtered[0].coords().iter().all(|&x| x == 0),
+            "First point should be the origin"
+        );
     }
 }

@@ -1,5 +1,0 @@
----
-source: crates/cyrus-core/tests/mcallister_e2e/stage1_polytope.rs
-expression: "format!(\"{}\", fixture.dual_points.len())"
----
-12

@@ -21,6 +21,9 @@ ode_solvers = { workspace = true }
 nalgebra = { workspace = true }
 rand = { workspace = true }
 
+[features]
+slow-tests = []  # Run with: cargo test --features slow-tests
+
 [dev-dependencies]
 proptest.workspace = true
 serde = { workspace = true }

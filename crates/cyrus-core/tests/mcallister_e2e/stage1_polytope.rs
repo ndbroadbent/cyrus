@@ -78,19 +78,13 @@ fn to_points(raw: &[Vec<i64>]) -> Vec<Point> {
 #[test]
 fn stage1_primal_point_count() {
     let fixture = load_polytope();
-    insta::assert_snapshot!(
-        "primal_point_count",
-        format!("{}", fixture.primal_points.len())
-    );
+    assert_eq!(fixture.primal_points.len(), 294, "Expected 294 primal points");
 }
 
 #[test]
 fn stage1_dual_point_count() {
     let fixture = load_polytope();
-    insta::assert_snapshot!(
-        "dual_point_count",
-        format!("{}", fixture.dual_points.len())
-    );
+    assert_eq!(fixture.dual_points.len(), 12, "Expected 12 dual points");
 }
 
 #[test]
@@ -100,19 +94,10 @@ fn stage1_primal_dimension() {
 
     // All points should be 4-dimensional (CY3 in 4D ambient)
     assert!(!points.is_empty(), "No primal points");
-    let dim = points[0].dim();
-
-    insta::assert_snapshot!("primal_dimension", format!("{}", dim));
+    assert_eq!(points[0].dim(), 4, "Expected 4-dimensional points");
 
     for (i, p) in points.iter().enumerate() {
-        assert_eq!(
-            p.dim(),
-            dim,
-            "Point {} has dimension {} but expected {}",
-            i,
-            p.dim(),
-            dim
-        );
+        assert_eq!(p.dim(), 4, "Point {} has wrong dimension {}", i, p.dim());
     }
 }
 
@@ -152,28 +137,15 @@ fn stage1_dual_contains_origin() {
 }
 
 #[test]
-fn stage1_primal_sample_points() {
+fn stage1_primal_points() {
     let fixture = load_polytope();
-
-    // Snapshot first few points for verification
-    let mut output = String::new();
-    for (i, pt) in fixture.primal_points.iter().take(10).enumerate() {
-        output.push_str(&format!("p[{}] = {:?}\n", i, pt));
-    }
-
-    insta::assert_snapshot!("primal_sample_points", output);
+    insta::assert_json_snapshot!("primal_points", fixture.primal_points);
 }
 
 #[test]
-fn stage1_dual_sample_points() {
+fn stage1_dual_points() {
     let fixture = load_polytope();
-
-    let mut output = String::new();
-    for (i, pt) in fixture.dual_points.iter().enumerate() {
-        output.push_str(&format!("d[{}] = {:?}\n", i, pt));
-    }
-
-    insta::assert_snapshot!("dual_sample_points", output);
+    insta::assert_json_snapshot!("dual_points", fixture.dual_points);
 }
 
 /// Assert that our computed dual matches McAllister's expected dual points.

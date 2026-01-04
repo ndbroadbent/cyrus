@@ -64,6 +64,88 @@ impl Triangulation {
     pub fn simplices(&self) -> &[Vec<usize>] {
         &self.simplices
     }
+
+    /// Check if this triangulation has the Star property.
+    ///
+    /// A triangulation is Star if a specified point (typically the origin)
+    /// is a vertex of every simplex.
+    pub fn is_star(&self, point_idx: usize) -> bool {
+        self.simplices.iter().all(|s| s.contains(&point_idx))
+    }
+}
+
+/// Compute Delaunay heights for a set of points.
+///
+/// For each point p, the height is h(p) = |p|² = p · p (squared Euclidean norm).
+/// This is the standard choice for inducing a Delaunay-like triangulation.
+pub fn compute_delaunay_heights(points: &[Point]) -> Vec<f64> {
+    points
+        .iter()
+        .map(|p| {
+            p.coords()
+                .iter()
+                .map(|&x| (x as f64) * (x as f64))
+                .sum()
+        })
+        .collect()
+}
+
+/// Compute default FRST (Fine Regular Star Triangulation) heights.
+///
+/// Starting from Delaunay heights (|p|²), adjusts the origin's height
+/// downward until the triangulation has the Star property (origin in every simplex).
+///
+/// # Arguments
+/// * `points` - The lattice points to triangulate
+/// * `origin_idx` - Index of the origin point (must be in points)
+///
+/// # Returns
+/// * `Ok((heights, triangulation))` - The adjusted heights and resulting triangulation
+/// * `Err` if origin_idx is out of bounds or triangulation fails
+///
+/// Reference: CYTools algorithm (Demirtas et al. 2022, Sec. 3.2)
+pub fn compute_frst_heights(
+    points: &[Point],
+    origin_idx: usize,
+) -> Result<(Vec<f64>, Triangulation)> {
+    if origin_idx >= points.len() {
+        return Err(Error::InvalidInput(format!(
+            "origin_idx {} out of bounds for {} points",
+            origin_idx,
+            points.len()
+        )));
+    }
+
+    // Start with Delaunay heights
+    let mut heights = compute_delaunay_heights(points);
+
+    // Maximum iterations to prevent infinite loop
+    const MAX_ITERATIONS: usize = 100;
+
+    for _ in 0..MAX_ITERATIONS {
+        let tri = compute_regular_triangulation(points, &heights)?;
+
+        if tri.is_star(origin_idx) {
+            return Ok((heights, tri));
+        }
+
+        // Adjust origin height downward
+        let min_h = heights
+            .iter()
+            .copied()
+            .fold(f64::INFINITY, |a, b| a.min(b));
+        let max_h = heights
+            .iter()
+            .copied()
+            .fold(f64::NEG_INFINITY, |a, b| a.max(b));
+
+        // h(origin) -= (max - min + 10)
+        heights[origin_idx] -= (max_h - min_h) + 10.0;
+    }
+
+    Err(Error::InvalidInput(
+        "Failed to achieve Star triangulation after max iterations".into(),
+    ))
 }
 
 /// Compute a regular triangulation of a set of points using the lifting map.
@@ -321,5 +403,75 @@ mod tests {
     fn test_non_empty_points_accepts_non_empty() {
         let points = vec![vec![r(0), r(0)]];
         assert!(NonEmptyPoints::new(points).is_some());
+    }
+
+    #[test]
+    fn test_compute_delaunay_heights() {
+        let points = vec![
+            Point::new(vec![0, 0]),    // |p|² = 0
+            Point::new(vec![1, 0]),    // |p|² = 1
+            Point::new(vec![1, 1]),    // |p|² = 2
+            Point::new(vec![3, 4]),    // |p|² = 25
+            Point::new(vec![-2, -2]),  // |p|² = 8
+        ];
+
+        let heights = compute_delaunay_heights(&points);
+
+        assert_eq!(heights.len(), 5);
+        assert!((heights[0] - 0.0).abs() < 1e-10);
+        assert!((heights[1] - 1.0).abs() < 1e-10);
+        assert!((heights[2] - 2.0).abs() < 1e-10);
+        assert!((heights[3] - 25.0).abs() < 1e-10);
+        assert!((heights[4] - 8.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_is_star() {
+        // Triangulation where point 0 is in all simplices
+        let tri_star = Triangulation::new(vec![
+            vec![0, 1, 2],
+            vec![0, 2, 3],
+            vec![0, 3, 1],
+        ]);
+        assert!(tri_star.is_star(0));
+        assert!(!tri_star.is_star(1)); // Point 1 is not in simplex [0, 2, 3]
+
+        // Triangulation where point 0 is missing from one simplex
+        let tri_not_star = Triangulation::new(vec![
+            vec![0, 1, 2],
+            vec![1, 2, 3], // Missing point 0
+        ]);
+        assert!(!tri_not_star.is_star(0));
+    }
+
+    #[test]
+    fn test_compute_frst_heights_simple() {
+        // Simple 2D case: square with origin at center
+        // Origin should already be in all simplices with Delaunay heights
+        let points = vec![
+            Point::new(vec![0, 0]),   // Origin at index 0
+            Point::new(vec![-1, -1]),
+            Point::new(vec![1, -1]),
+            Point::new(vec![1, 1]),
+            Point::new(vec![-1, 1]),
+        ];
+
+        let result = compute_frst_heights(&points, 0);
+        assert!(result.is_ok());
+
+        let (heights, tri) = result.unwrap();
+        assert_eq!(heights.len(), 5);
+        assert!(tri.is_star(0));
+    }
+
+    #[test]
+    fn test_compute_frst_heights_invalid_origin() {
+        let points = vec![
+            Point::new(vec![0, 0]),
+            Point::new(vec![1, 0]),
+        ];
+
+        let result = compute_frst_heights(&points, 10); // Invalid index
+        assert!(result.is_err());
     }
 }

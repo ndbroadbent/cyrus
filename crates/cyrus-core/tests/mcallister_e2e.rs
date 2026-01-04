@@ -15,3 +15,6 @@
 
 #[path = "mcallister_e2e/stage1_polytope.rs"]
 mod stage1_polytope;
+
+#[path = "mcallister_e2e/stage2_triangulation.rs"]
+mod stage2_triangulation;
