@@ -30,3 +30,16 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 insta = { version = "1.34", features = ["json"] }
 trybuild = "1"
+criterion.workspace = true
+
+[[bench]]
+name = "polytope"
+harness = false
+
+[[bench]]
+name = "triangulation"
+harness = false
+
+[[bench]]
+name = "intersection"
+harness = false

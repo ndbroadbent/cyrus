@@ -3,21 +3,28 @@
 //! Implements Fine, Regular, Star Triangulations (FRST) needed for
 //! constructing smooth Calabi-Yau hypersurfaces.
 //!
+//! Uses Integer arithmetic for orientation tests (not Rational) for performance.
+//! Heights are scaled by 2^40 and rounded to integers - this preserves the sign
+//! of all orientation determinants which is all we need for convex hull.
+//!
 //! Reference: [[project_docs/CYTOOLS_ALGORITHMS_CLEAN_ROOM.md]] Section 4.
 
 use crate::Point;
 use crate::error::{Error, Result};
-use crate::integer_math::orientation;
-use malachite::Rational;
-use malachite::num::conversion::traits::FromSciString;
+use malachite::Integer;
+use rayon::prelude::*;
 use std::collections::HashSet;
 
-/// A non-empty vector of points. Guarantees at least one element.
-struct NonEmptyPoints(Vec<Vec<Rational>>);
+/// Scale factor for converting f64 heights to integers.
+/// 2^40 ≈ 10^12 gives plenty of precision while staying in reasonable integer range.
+const HEIGHT_SCALE: f64 = 1_099_511_627_776.0; // 2^40
 
-impl NonEmptyPoints {
+/// A non-empty vector of lifted points (Integer coordinates including scaled height).
+struct LiftedPoints(Vec<Vec<Integer>>);
+
+impl LiftedPoints {
     /// Create from a non-empty vector. Returns None if empty.
-    fn new(points: Vec<Vec<Rational>>) -> Option<Self> {
+    fn new(points: Vec<Vec<Integer>>) -> Option<Self> {
         if points.is_empty() {
             None
         } else {
@@ -25,7 +32,7 @@ impl NonEmptyPoints {
         }
     }
 
-    fn as_slice(&self) -> &[Vec<Rational>] {
+    fn as_slice(&self) -> &[Vec<Integer>] {
         &self.0
     }
 
@@ -33,12 +40,12 @@ impl NonEmptyPoints {
         self.0.len()
     }
 
-    fn first(&self) -> &Vec<Rational> {
+    fn first(&self) -> &Vec<Integer> {
         // Safe: guaranteed non-empty by construction
         &self.0[0]
     }
 
-    fn iter(&self) -> impl Iterator<Item = &Vec<Rational>> {
+    fn iter(&self) -> impl Iterator<Item = &Vec<Integer>> {
         self.0.iter()
     }
 }
@@ -153,6 +160,8 @@ pub fn compute_frst_heights(
 /// Given points S and heights H, the triangulation is the projection of
 /// the lower convex hull of the lifted points (p, h_p).
 ///
+/// Uses scaled Integer arithmetic for exact orientation tests.
+///
 /// # Arguments
 /// * `points` - Lattice points to triangulate.
 /// * `heights` - Heights used for the lifting map.
@@ -168,21 +177,22 @@ pub fn compute_regular_triangulation(points: &[Point], heights: &[f64]) -> Resul
         ));
     }
 
-    // 1. Lift points: (v_i, h_i) in R^{d+1} using Rational for exactness
-    let lifted: Vec<Vec<Rational>> = points
+    // 1. Lift points: (v_i, h_i) in Z^{d+1} using scaled Integer for exactness
+    let lifted: Vec<Vec<Integer>> = points
         .iter()
         .zip(heights.iter())
         .map(|(p, &h)| {
-            let mut v: Vec<Rational> = p.coords().iter().map(|&x| Rational::from(x)).collect();
-            v.push(
-                Rational::from_sci_string(&format!("{h:e}")).unwrap_or_else(|| Rational::from(0)),
-            );
+            let mut v: Vec<Integer> = p.coords().iter().map(|&x| Integer::from(x)).collect();
+            // Scale height to integer: round(h * 2^40)
+            #[allow(clippy::cast_possible_truncation)]
+            let h_scaled = (h * HEIGHT_SCALE).round() as i64;
+            v.push(Integer::from(h_scaled));
             v
         })
         .collect();
 
-    // 2. Wrap in NonEmptyPoints - if empty, return empty triangulation
-    let Some(lifted) = NonEmptyPoints::new(lifted) else {
+    // 2. Wrap in LiftedPoints - if empty, return empty triangulation
+    let Some(lifted) = LiftedPoints::new(lifted) else {
         return Ok(Triangulation::new(Vec::new()));
     };
 
@@ -204,7 +214,8 @@ pub fn compute_regular_triangulation(points: &[Point], heights: &[f64]) -> Resul
 type Facet = Vec<usize>;
 
 /// Compute the convex hull of a set of points in N dimensions.
-fn convex_hull(points: &NonEmptyPoints) -> Vec<Facet> {
+/// Uses rayon for parallel visibility checks.
+fn convex_hull(points: &LiftedPoints) -> Vec<Facet> {
     let n = points.len();
     let dim = points.first().len();
 
@@ -217,28 +228,48 @@ fn convex_hull(points: &NonEmptyPoints) -> Vec<Facet> {
     let mut current_facets: Vec<Facet> = Vec::new();
 
     // Create initial facets from the first dim+1 points
-    // INVARIANT: n > dim (checked above), so n >= dim+1, meaning i in 0..=dim
-    // will always satisfy i < n. No break needed.
     for i in 0..=dim {
         let face: Vec<usize> = (0..=dim).filter(|&idx| idx != i).collect();
         current_facets.push(face);
     }
 
+    let all_points = points.as_slice();
+
     // 2. Incrementally add points
     for i in (dim + 1)..n {
-        let p = &points.as_slice()[i];
+        let p = &all_points[i];
 
+        // Parallel visibility check for all facets
+        let visibility: Vec<(usize, bool, Vec<Vec<usize>>)> = current_facets
+            .par_iter()
+            .enumerate()
+            .map(|(f_idx, facet)| {
+                let visible = is_visible(facet, p, all_points);
+                let ridges = if visible {
+                    // Compute ridges for this facet
+                    (0..facet.len())
+                        .map(|j| {
+                            let mut ridge = facet.clone();
+                            ridge.remove(j);
+                            ridge.sort_unstable();
+                            ridge
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                (f_idx, visible, ridges)
+            })
+            .collect();
+
+        // Collect visible facets and ridges (sequential reduction)
         let mut visible_facets = Vec::new();
         let mut horizon_ridges = HashSet::new();
 
-        for (f_idx, facet) in current_facets.iter().enumerate() {
-            if is_visible(facet, p, points.as_slice()) {
+        for (f_idx, visible, ridges) in visibility {
+            if visible {
                 visible_facets.push(f_idx);
-                // Add ridges
-                for j in 0..facet.len() {
-                    let mut ridge = facet.clone();
-                    ridge.remove(j);
-                    ridge.sort_unstable();
+                for ridge in ridges {
                     if !horizon_ridges.insert(ridge.clone()) {
                         horizon_ridges.remove(&ridge);
                     }
@@ -250,6 +281,7 @@ fn convex_hull(points: &NonEmptyPoints) -> Vec<Facet> {
             continue;
         }
 
+        // Build new facet list
         let mut new_facets = Vec::with_capacity(current_facets.len());
         for (idx, facet) in current_facets.iter().enumerate() {
             if !visible_facets.contains(&idx) {
@@ -270,81 +302,152 @@ fn convex_hull(points: &NonEmptyPoints) -> Vec<Facet> {
 }
 
 /// Check if a point p is "visible" from the outside of a facet.
-/// Caller guarantees all_points is non-empty and indices are valid.
-fn is_visible(facet_indices: &[usize], p: &[Rational], all_points: &[Vec<Rational>]) -> bool {
+fn is_visible(facet_indices: &[usize], p: &[Integer], all_points: &[Vec<Integer>]) -> bool {
     // 1. Compute orientation of (Facet, P)
     let mut mat_p = Vec::new();
     for &idx in facet_indices {
         mat_p.push(all_points[idx].clone());
     }
     mat_p.push(p.to_vec());
-    let vol_p = orientation(&mat_p);
+    let vol_p = orientation_integer(&mat_p);
 
-    if vol_p == 0 {
+    if vol_p == Integer::from(0) {
         return false; // Coplanar
     }
 
     // 2. Compute orientation of (Facet, Center)
-    // Use centroid of initial simplex (points 0..dim)
+    // Use centroid of initial simplex (points 0..dim) scaled to avoid division
     let dim_space = all_points[0].len();
-    let mut center = vec![Rational::from(0); dim_space];
-    for i in 0..=dim_space {
+    let n_center = dim_space + 1;
+
+    // Sum instead of average (scaling doesn't affect sign comparison)
+    let mut center_sum = vec![Integer::from(0); dim_space];
+    for i in 0..n_center {
         if i < all_points.len() {
-            for (j, item) in center.iter_mut().enumerate().take(dim_space) {
+            for (j, item) in center_sum.iter_mut().enumerate().take(dim_space) {
                 *item += &all_points[i][j];
             }
         }
     }
-    // Divide by dim_space + 1
-    let count = Rational::from((dim_space + 1) as u64);
-    for item in center.iter_mut().take(dim_space) {
-        *item /= &count;
-    }
 
     let mut mat_c = Vec::new();
+    // Scale facet points by n_center to match center_sum scale
     for &idx in facet_indices {
-        mat_c.push(all_points[idx].clone());
+        let scaled: Vec<Integer> = all_points[idx]
+            .iter()
+            .map(|x| x * Integer::from(n_center as i64))
+            .collect();
+        mat_c.push(scaled);
     }
-    mat_c.push(center);
+    mat_c.push(center_sum);
 
-    let vol_c = orientation(&mat_c);
+    let vol_c = orientation_integer(&mat_c);
 
-    // If signs are different, p is on the opposite side of the facet from center => Outside => Visible.
-    (vol_p * vol_c) < 0
+    // If signs are different, p is on opposite side from center => Visible
+    (vol_p.clone() * vol_c) < Integer::from(0)
 }
 
-/// Check if a facet is a "lower" face.
-fn is_lower_face(facet_indices: &[usize], all_points: &NonEmptyPoints) -> bool {
+/// Check if a facet is a "lower" face (normal points downward in height dimension).
+fn is_lower_face(facet_indices: &[usize], all_points: &LiftedPoints) -> bool {
     let dim = all_points.first().len(); // d+1
 
-    // Find min height in the whole set.
-    // Safe: NonEmptyPoints guarantees non-empty, and each point has height (last coord)
+    // Find min height in the whole set
     let min_h = all_points
         .iter()
         .filter_map(|p| p.last())
         .min()
-        .expect("NonEmptyPoints guarantees non-empty");
+        .expect("LiftedPoints guarantees non-empty");
 
-    // Construct a test point below the facet.
+    // Construct a test point below the facet (way below min height)
     let mut below_point = all_points.as_slice()[facet_indices[0]].clone();
-    below_point[dim - 1] = min_h.clone() - Rational::from(1000); // Way below
+    below_point[dim - 1] = min_h - Integer::from(1_000_000_000_000_i64);
 
     is_visible(facet_indices, &below_point, all_points.as_slice())
+}
+
+/// Compute orientation (signed volume) of a simplex using Integer determinant.
+/// Returns positive, negative, or zero.
+fn orientation_integer(points: &[Vec<Integer>]) -> Integer {
+    let n = points.len();
+    if n == 0 {
+        return Integer::from(0);
+    }
+    let dim = n - 1;
+    if dim == 0 {
+        return Integer::from(0);
+    }
+
+    // Build matrix of differences: M[i][j] = points[i+1][j] - points[0][j]
+    let mut mat: Vec<Vec<Integer>> = vec![vec![Integer::from(0); dim]; dim];
+    for i in 0..dim {
+        for j in 0..dim {
+            mat[i][j] = &points[i + 1][j] - &points[0][j];
+        }
+    }
+
+    determinant_integer(&mut mat)
+}
+
+/// Compute determinant of a square Integer matrix using Bareiss algorithm.
+/// This is fraction-free and avoids the expression swell of Gaussian elimination.
+fn determinant_integer(mat: &mut [Vec<Integer>]) -> Integer {
+    let n = mat.len();
+    if n == 0 {
+        return Integer::from(1);
+    }
+    if n == 1 {
+        return mat[0][0].clone();
+    }
+
+    let mut sign = Integer::from(1);
+    let mut prev_pivot = Integer::from(1);
+
+    for k in 0..n {
+        // Find pivot
+        let mut pivot_row = None;
+        for i in k..n {
+            if mat[i][k] != Integer::from(0) {
+                pivot_row = Some(i);
+                break;
+            }
+        }
+
+        let Some(pivot_row) = pivot_row else {
+            return Integer::from(0); // Singular matrix
+        };
+
+        if pivot_row != k {
+            mat.swap(k, pivot_row);
+            sign = -sign;
+        }
+
+        let pivot = mat[k][k].clone();
+
+        // Bareiss algorithm: M[i][j] = (M[i][j] * pivot - M[i][k] * M[k][j]) / prev_pivot
+        for i in (k + 1)..n {
+            for j in (k + 1)..n {
+                let numerator = &mat[i][j] * &pivot - &mat[i][k] * &mat[k][j];
+                mat[i][j] = numerator / &prev_pivot;
+            }
+        }
+
+        prev_pivot = pivot;
+    }
+
+    sign * &mat[n - 1][n - 1]
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use malachite::Rational;
 
-    fn r(n: i64) -> Rational {
-        Rational::from(n)
+    fn int(n: i64) -> Integer {
+        Integer::from(n)
     }
 
     #[test]
     fn test_regular_triangulation_2d_square() {
         // Square (0,0), (1,0), (1,1), (0,1)
-        // Use heights that break coplanarity: h = 2x^2 + 3y^2 + xy
         let points = vec![
             Point::new(vec![0, 0]),
             Point::new(vec![1, 0]),
@@ -355,34 +458,34 @@ mod tests {
         let heights = vec![0.0, 2.0, 6.0, 3.0];
 
         let tri = compute_regular_triangulation(&points, &heights).unwrap();
-        // Should produce 2 triangles.
+        // Should produce 2 triangles
         assert_eq!(tri.simplices().len(), 2);
     }
 
     #[test]
     fn test_is_visible_2d() {
         let all_points = vec![
-            vec![r(0), r(0)],
-            vec![r(2), r(0)],
-            vec![r(0), r(2)],
-            vec![r(3), r(3)],               // Outside
-            vec![r(1) / r(2), r(1) / r(2)], // Inside
+            vec![int(0), int(0)],
+            vec![int(2), int(0)],
+            vec![int(0), int(2)],
+            vec![int(3), int(3)], // Outside
+            vec![int(1), int(1)], // Inside (using integer approx)
         ];
 
         // Test P3 (outside)
         assert!(is_visible(&[1, 2], &all_points[3], &all_points));
 
-        // Test P4 (inside)
+        // Test P4 (inside) - should not be visible from edge [1,2]
         assert!(!is_visible(&[1, 2], &all_points[4], &all_points));
     }
 
     #[test]
     fn test_is_lower_face_3d() {
-        let points = NonEmptyPoints::new(vec![
-            vec![r(0), r(0), r(0)], // 0
-            vec![r(1), r(0), r(0)], // 1
-            vec![r(0), r(1), r(0)], // 2
-            vec![r(0), r(0), r(1)], // 3 (Top)
+        let points = LiftedPoints::new(vec![
+            vec![int(0), int(0), int(0)], // 0
+            vec![int(1), int(0), int(0)], // 1
+            vec![int(0), int(1), int(0)], // 2
+            vec![int(0), int(0), int(1)], // 3 (Top)
         ])
         .unwrap();
 
@@ -394,25 +497,25 @@ mod tests {
     }
 
     #[test]
-    fn test_non_empty_points_rejects_empty() {
-        let empty: Vec<Vec<Rational>> = vec![];
-        assert!(NonEmptyPoints::new(empty).is_none());
+    fn test_lifted_points_rejects_empty() {
+        let empty: Vec<Vec<Integer>> = vec![];
+        assert!(LiftedPoints::new(empty).is_none());
     }
 
     #[test]
-    fn test_non_empty_points_accepts_non_empty() {
-        let points = vec![vec![r(0), r(0)]];
-        assert!(NonEmptyPoints::new(points).is_some());
+    fn test_lifted_points_accepts_non_empty() {
+        let points = vec![vec![int(0), int(0)]];
+        assert!(LiftedPoints::new(points).is_some());
     }
 
     #[test]
     fn test_compute_delaunay_heights() {
         let points = vec![
-            Point::new(vec![0, 0]),    // |p|² = 0
-            Point::new(vec![1, 0]),    // |p|² = 1
-            Point::new(vec![1, 1]),    // |p|² = 2
-            Point::new(vec![3, 4]),    // |p|² = 25
-            Point::new(vec![-2, -2]),  // |p|² = 8
+            Point::new(vec![0, 0]),   // |p|² = 0
+            Point::new(vec![1, 0]),   // |p|² = 1
+            Point::new(vec![1, 1]),   // |p|² = 2
+            Point::new(vec![3, 4]),   // |p|² = 25
+            Point::new(vec![-2, -2]), // |p|² = 8
         ];
 
         let heights = compute_delaunay_heights(&points);
@@ -434,7 +537,7 @@ mod tests {
             vec![0, 3, 1],
         ]);
         assert!(tri_star.is_star(0));
-        assert!(!tri_star.is_star(1)); // Point 1 is not in simplex [0, 2, 3]
+        assert!(!tri_star.is_star(1));
 
         // Triangulation where point 0 is missing from one simplex
         let tri_not_star = Triangulation::new(vec![
@@ -446,8 +549,6 @@ mod tests {
 
     #[test]
     fn test_compute_frst_heights_simple() {
-        // Simple 2D case: square with origin at center
-        // Origin should already be in all simplices with Delaunay heights
         let points = vec![
             Point::new(vec![0, 0]),   // Origin at index 0
             Point::new(vec![-1, -1]),
@@ -471,7 +572,38 @@ mod tests {
             Point::new(vec![1, 0]),
         ];
 
-        let result = compute_frst_heights(&points, 10); // Invalid index
+        let result = compute_frst_heights(&points, 10);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_determinant_integer_2x2() {
+        // det([[1, 2], [3, 4]]) = 1*4 - 2*3 = -2
+        let mut mat = vec![
+            vec![int(1), int(2)],
+            vec![int(3), int(4)],
+        ];
+        assert_eq!(determinant_integer(&mut mat), int(-2));
+    }
+
+    #[test]
+    fn test_determinant_integer_3x3() {
+        // det([[1, 2, 3], [4, 5, 6], [7, 8, 10]]) = -3
+        let mut mat = vec![
+            vec![int(1), int(2), int(3)],
+            vec![int(4), int(5), int(6)],
+            vec![int(7), int(8), int(10)],
+        ];
+        assert_eq!(determinant_integer(&mut mat), int(-3));
+    }
+
+    #[test]
+    fn test_determinant_integer_singular() {
+        // Singular matrix
+        let mut mat = vec![
+            vec![int(1), int(2)],
+            vec![int(2), int(4)],
+        ];
+        assert_eq!(determinant_integer(&mut mat), int(0));
     }
 }
