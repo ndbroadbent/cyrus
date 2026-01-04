@@ -28,6 +28,7 @@ pub mod cosmology;
 pub mod divisor;
 pub mod error;
 pub mod flat_direction;
+pub mod geometry;
 pub mod glsm;
 pub mod integer_math;
 pub mod intersection;

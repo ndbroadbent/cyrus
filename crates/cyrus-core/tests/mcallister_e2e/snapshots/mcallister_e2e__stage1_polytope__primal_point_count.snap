@@ -1,0 +1,5 @@
+---
+source: crates/cyrus-core/tests/mcallister_e2e/stage1_polytope.rs
+expression: "format!(\"{}\", fixture.primal_points.len())"
+---
+294
