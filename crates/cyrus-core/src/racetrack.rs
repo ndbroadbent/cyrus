@@ -232,7 +232,10 @@ pub fn compute_w0(
     // W₀ = ζ × |sum of terms|
     // The ζ normalization factor was missing - this caused ~50x error
     let sum = term1_val + term2_val;
-    let sum_pos = sum.abs().try_to_pos().expect("racetrack terms never exactly cancel");
+    let sum_pos = sum
+        .abs()
+        .try_to_pos()
+        .expect("racetrack terms never exactly cancel");
     ZETA_NORM * sum_pos
 }
 

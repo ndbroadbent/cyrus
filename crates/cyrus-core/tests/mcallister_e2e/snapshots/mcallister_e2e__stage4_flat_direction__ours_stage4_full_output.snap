@@ -1,0 +1,61 @@
+---
+source: crates/cyrus-core/tests/mcallister_e2e/stage4_flat_direction.rs
+expression: output
+---
+{
+  "h21": 4,
+  "basis_used": [
+    5,
+    8,
+    6,
+    7
+  ],
+  "k_flux": [
+    -3,
+    -5,
+    8,
+    6
+  ],
+  "m_flux": [
+    10,
+    11,
+    -11,
+    -5
+  ],
+  "n_matrix": [
+    [
+      -10.0,
+      -27.0,
+      0.0,
+      11.0
+    ],
+    [
+      -27.0,
+      100.0,
+      -27.0,
+      -23.0
+    ],
+    [
+      0.0,
+      -27.0,
+      0.0,
+      11.0
+    ],
+    [
+      11.0,
+      -23.0,
+      11.0,
+      0.0
+    ]
+  ],
+  "p": [
+    1.1,
+    -2.0492957746,
+    -4.8394366197,
+    -4.3028169014
+  ],
+  "kappa_ppp": -65.37525332,
+  "kappa_ppp_is_positive": false,
+  "ek0": null,
+  "note": "Computed with OUR basis. May be invalid with McAllister's flux vectors."
+}

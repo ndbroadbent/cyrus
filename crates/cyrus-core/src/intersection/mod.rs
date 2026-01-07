@@ -11,6 +11,13 @@
 //! Reference: [[project_docs/CYTOOLS_ALGORITHMS_CLEAN_ROOM.md]] Section 1.2
 
 mod compute;
+pub mod cytools_algorithm;
+mod four_form;
+mod helpers;
+mod linear_system;
+mod three_form;
+
+pub use cytools_algorithm::compute_intersection_cytools;
 
 use crate::f64_pos;
 use crate::types::f64::F64;
@@ -19,7 +26,10 @@ use crate::types::tags::{Finite, IsFinite, Pos};
 use malachite::Rational;
 use std::collections::HashMap;
 
-pub use compute::compute_intersection_numbers;
+pub use compute::{
+    compute_intersection_numbers, compute_intersection_numbers_with_linear_relations,
+    compute_intersection_numbers_with_offset,
+};
 
 /// Intersection tensor `κ_ijk`.
 ///

@@ -61,7 +61,11 @@ fn load_polytope() -> PolytopeFixture {
         .expect("Failed to compute dual polytope");
 
     // Dual now includes all lattice points (including origin)
-    let dual_points: Vec<Vec<i64>> = dual.vertices().iter().map(|p| p.coords().to_vec()).collect();
+    let dual_points: Vec<Vec<i64>> = dual
+        .vertices()
+        .iter()
+        .map(|p| p.coords().to_vec())
+        .collect();
 
     PolytopeFixture {
         primal_points: input.points,
@@ -78,7 +82,11 @@ fn to_points(raw: &[Vec<i64>]) -> Vec<Point> {
 #[test]
 fn stage1_primal_point_count() {
     let fixture = load_polytope();
-    assert_eq!(fixture.primal_points.len(), 294, "Expected 294 primal points");
+    assert_eq!(
+        fixture.primal_points.len(),
+        294,
+        "Expected 294 primal points"
+    );
 }
 
 #[test]
@@ -114,8 +122,7 @@ fn stage1_primal_contains_origin() {
     // Reflexive polytope must contain exactly one interior point (the origin)
     assert_eq!(
         origin_count, 1,
-        "Reflexive polytope must have exactly one origin, found {}",
-        origin_count
+        "Reflexive polytope must have exactly one origin, found {origin_count}"
     );
 }
 
@@ -131,8 +138,7 @@ fn stage1_dual_contains_origin() {
 
     assert_eq!(
         origin_count, 1,
-        "Dual polytope must have exactly one origin, found {}",
-        origin_count
+        "Dual polytope must have exactly one origin, found {origin_count}"
     );
 }
 
@@ -182,8 +188,6 @@ fn stage1_dual_matches_expected() {
 
     assert!(
         missing.is_empty() && extra.is_empty(),
-        "Dual polytope mismatch!\nMissing (in expected but not computed): {:?}\nExtra (in computed but not expected): {:?}",
-        missing,
-        extra
+        "Dual polytope mismatch!\nMissing (in expected but not computed): {missing:?}\nExtra (in computed but not expected): {extra:?}"
     );
 }

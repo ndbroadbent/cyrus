@@ -1,15 +1,15 @@
+#![allow(missing_docs)]
 //! GLSM and intersection number benchmarks.
 //!
 //! Target: <1 second for intersection numbers on 4-214-647.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use serde::Deserialize;
 use std::path::PathBuf;
 
 use cyrus_core::{
-    Point, Polytope,
+    Point, Polytope, compute_glsm_charge_matrix, compute_intersection_numbers,
     compute_regular_triangulation,
-    compute_glsm_charge_matrix, compute_intersection_numbers,
 };
 
 #[derive(Debug, Deserialize)]
@@ -43,8 +43,7 @@ fn load_fixture() -> Fixture {
         .map(|coords| Point::new(coords.clone()))
         .collect();
 
-    let polytope = Polytope::from_vertices(all_points)
-        .expect("Failed to create polytope");
+    let polytope = Polytope::from_vertices(all_points).expect("Failed to create polytope");
 
     let triangulation_points = polytope
         .points_not_interior_to_facets()
@@ -56,13 +55,11 @@ fn load_fixture() -> Fixture {
     let heights_input: HeightsInput = serde_json::from_str(&heights_content)
         .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", heights_path.display()));
 
-    let triangulation = compute_regular_triangulation(
-        &triangulation_points,
-        &heights_input.values,
-    ).expect("Failed to compute triangulation");
+    let triangulation = compute_regular_triangulation(&triangulation_points, &heights_input.values)
+        .expect("Failed to compute triangulation");
 
-    let glsm = compute_glsm_charge_matrix(&triangulation_points, true)
-        .expect("Failed to compute GLSM");
+    let glsm =
+        compute_glsm_charge_matrix(&triangulation_points, true).expect("Failed to compute GLSM");
 
     Fixture {
         triangulation,
@@ -89,10 +86,8 @@ fn bench_glsm_charge_matrix(c: &mut Criterion) {
 
     c.bench_function("glsm/charge_matrix/219pts", |b| {
         b.iter(|| {
-            compute_glsm_charge_matrix(
-                black_box(&triangulation_points),
-                true,
-            ).expect("GLSM computation failed")
+            compute_glsm_charge_matrix(black_box(&triangulation_points), true)
+                .expect("GLSM computation failed")
         });
     });
 }
@@ -112,7 +107,8 @@ fn bench_intersection_numbers(c: &mut Criterion) {
                 black_box(&fixture.triangulation),
                 black_box(&fixture.triangulation_points),
                 black_box(&fixture.glsm),
-            ).expect("Intersection computation failed")
+            )
+            .expect("Intersection computation failed")
         });
     });
 

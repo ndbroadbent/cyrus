@@ -20,6 +20,7 @@ malachite = "0.4"
 ode_solvers = { workspace = true }
 nalgebra = { workspace = true }
 rand = { workspace = true }
+rsparse = "1.2"
 
 [features]
 slow-tests = []  # Run with: cargo test --features slow-tests

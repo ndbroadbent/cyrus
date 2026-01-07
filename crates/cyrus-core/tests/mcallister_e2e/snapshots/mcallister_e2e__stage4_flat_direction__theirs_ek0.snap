@@ -1,0 +1,15 @@
+---
+source: crates/cyrus-core/tests/mcallister_e2e/stage4_flat_direction.rs
+expression: snapshot
+---
+{
+  "value": 0.2343929955,
+  "basis_used": [
+    3,
+    4,
+    5,
+    8
+  ],
+  "mcallister_expected": 0.234393,
+  "note": "Using McAllister's dual basis override - must match exactly"
+}

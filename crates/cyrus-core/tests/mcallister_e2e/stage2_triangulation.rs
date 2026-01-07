@@ -41,8 +41,7 @@ fn load_stage2_fixture() -> Stage2Fixture {
         .map(|coords| Point::new(coords.clone()))
         .collect();
 
-    let polytope = Polytope::from_vertices(all_points)
-        .expect("Failed to create polytope");
+    let polytope = Polytope::from_vertices(all_points).expect("Failed to create polytope");
 
     // Filter to points not interior to facets
     let triangulation_points = polytope
@@ -90,10 +89,9 @@ fn stage2_origin_index() {
 fn stage2_ours_frst_heights() {
     let fixture = load_stage2_fixture();
 
-    let (heights, triangulation) = compute_frst_heights(
-        &fixture.triangulation_points,
-        fixture.origin_idx,
-    ).expect("Failed to compute FRST heights");
+    let (heights, triangulation) =
+        compute_frst_heights(&fixture.triangulation_points, fixture.origin_idx)
+            .expect("Failed to compute FRST heights");
 
     // Verify star property
     assert!(
@@ -109,10 +107,9 @@ fn stage2_ours_frst_heights() {
 fn stage2_ours_triangulation_simplex_count() {
     let fixture = load_stage2_fixture();
 
-    let (_heights, triangulation) = compute_frst_heights(
-        &fixture.triangulation_points,
-        fixture.origin_idx,
-    ).expect("Failed to compute FRST heights");
+    let (_heights, triangulation) =
+        compute_frst_heights(&fixture.triangulation_points, fixture.origin_idx)
+            .expect("Failed to compute FRST heights");
 
     assert_eq!(
         triangulation.simplices().len(),
@@ -126,10 +123,9 @@ fn stage2_ours_triangulation_simplex_count() {
 fn stage2_ours_triangulation_simplices() {
     let fixture = load_stage2_fixture();
 
-    let (_heights, triangulation) = compute_frst_heights(
-        &fixture.triangulation_points,
-        fixture.origin_idx,
-    ).expect("Failed to compute FRST heights");
+    let (_heights, triangulation) =
+        compute_frst_heights(&fixture.triangulation_points, fixture.origin_idx)
+            .expect("Failed to compute FRST heights");
 
     // Sort simplices for deterministic snapshot
     let mut simplices: Vec<_> = triangulation.simplices().to_vec();
@@ -143,17 +139,18 @@ fn stage2_ours_triangulation_simplices() {
 fn stage2_ours_all_simplices_contain_origin() {
     let fixture = load_stage2_fixture();
 
-    let (_heights, triangulation) = compute_frst_heights(
-        &fixture.triangulation_points,
-        fixture.origin_idx,
-    ).expect("Failed to compute FRST heights");
+    let (_heights, triangulation) =
+        compute_frst_heights(&fixture.triangulation_points, fixture.origin_idx)
+            .expect("Failed to compute FRST heights");
 
     // Verify star property explicitly
     for (i, simplex) in triangulation.simplices().iter().enumerate() {
         assert!(
             simplex.contains(&fixture.origin_idx),
             "Simplex {} does not contain origin (idx {}): {:?}",
-            i, fixture.origin_idx, simplex
+            i,
+            fixture.origin_idx,
+            simplex
         );
     }
 }
@@ -180,7 +177,11 @@ fn load_mcallister_heights() -> Vec<f64> {
 #[test]
 fn stage2_theirs_heights_count() {
     let heights = load_mcallister_heights();
-    assert_eq!(heights.len(), 219, "McAllister heights should have 219 values");
+    assert_eq!(
+        heights.len(),
+        219,
+        "McAllister heights should have 219 values"
+    );
 }
 
 #[test]
@@ -189,10 +190,8 @@ fn stage2_theirs_triangulation() {
     let fixture = load_stage2_fixture();
     let heights = load_mcallister_heights();
 
-    let triangulation = compute_regular_triangulation(
-        &fixture.triangulation_points,
-        &heights,
-    ).expect("Failed to compute triangulation from McAllister heights");
+    let triangulation = compute_regular_triangulation(&fixture.triangulation_points, &heights)
+        .expect("Failed to compute triangulation from McAllister heights");
 
     // Sort simplices for deterministic snapshot
     let mut simplices: Vec<_> = triangulation.simplices().to_vec();
@@ -207,10 +206,8 @@ fn stage2_theirs_is_star() {
     let fixture = load_stage2_fixture();
     let heights = load_mcallister_heights();
 
-    let triangulation = compute_regular_triangulation(
-        &fixture.triangulation_points,
-        &heights,
-    ).expect("Failed to compute triangulation from McAllister heights");
+    let triangulation = compute_regular_triangulation(&fixture.triangulation_points, &heights)
+        .expect("Failed to compute triangulation from McAllister heights");
 
     assert!(
         triangulation.is_star(fixture.origin_idx),

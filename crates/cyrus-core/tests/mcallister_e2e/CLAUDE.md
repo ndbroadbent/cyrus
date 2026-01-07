@@ -108,6 +108,27 @@ See research docs:
 
 **Be thorough and honest. Never hide failures. Never cheat.**
 
+### Discrepancies Are GOLD
+
+**When you find a discrepancy between our computation and McAllister's expected values, THIS IS THE ENTIRE POINT OF WHAT WE ARE DOING.**
+
+A discrepancy like "κ_abc p^a p^b p^c comes out negative when it should be positive" is not a problem to work around - it's a BUG to investigate. You do NOT:
+- Mark the test as `#[ignore]`
+- Add a comment saying "needs investigation" and move on
+- Assume it's a "convention difference" without proving it
+- Give up and say "we'd need their precomputed values"
+
+You DO:
+- Stop everything else
+- Investigate until you understand EXACTLY why the discrepancy exists
+- Write comprehensive research notes documenting your investigation
+- Fix the bug in our code (if it's our bug)
+- Document the convention difference (if it's a convention difference) with PROOF
+- Keep the test failing until the issue is resolved
+
+**Discrepancies reveal bugs. Bugs must be fixed. This is non-negotiable.**
+
+If you find yourself saying "this doesn't work because X" - that's when the REAL work begins. X is the bug. Find it. Fix it. Understand it completely.
 
 ### Never Hide Test Failures
 

@@ -1,0 +1,30 @@
+---
+source: crates/cyrus-core/tests/mcallister_e2e/stage4_flat_direction.rs
+expression: n_matrix_f64
+---
+[
+  [
+    10.0,
+    -10.0,
+    -10.0,
+    0.0
+  ],
+  [
+    -10.0,
+    10.0,
+    5.0,
+    -1.0
+  ],
+  [
+    -10.0,
+    5.0,
+    10.0,
+    21.0
+  ],
+  [
+    0.0,
+    -1.0,
+    21.0,
+    -40.0
+  ]
+]

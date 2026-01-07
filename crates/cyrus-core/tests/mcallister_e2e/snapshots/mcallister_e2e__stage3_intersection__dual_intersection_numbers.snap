@@ -1,0 +1,66 @@
+---
+source: crates/cyrus-core/tests/mcallister_e2e/stage3_intersection.rs
+expression: snapshot
+---
+{
+  "dim": 4,
+  "num_nonzero": 7,
+  "entries": [
+    [
+      [
+        0,
+        0,
+        0
+      ],
+      "-1"
+    ],
+    [
+      [
+        0,
+        1,
+        1
+      ],
+      "-2"
+    ],
+    [
+      [
+        0,
+        1,
+        3
+      ],
+      "1"
+    ],
+    [
+      [
+        1,
+        1,
+        1
+      ],
+      "8"
+    ],
+    [
+      [
+        1,
+        1,
+        2
+      ],
+      "-2"
+    ],
+    [
+      [
+        1,
+        1,
+        3
+      ],
+      "-2"
+    ],
+    [
+      [
+        1,
+        2,
+        3
+      ],
+      "1"
+    ]
+  ]
+}

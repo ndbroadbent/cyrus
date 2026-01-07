@@ -1,3 +1,30 @@
+// Clippy allows for intentional patterns in physics code
+#![allow(clippy::cast_precision_loss)] // i64 to f64 is intentional for floating point math
+#![allow(clippy::cast_possible_wrap)] // usize to i64 is safe for our data sizes
+#![allow(clippy::cast_possible_truncation)] // Safe truncations are checked at runtime
+#![allow(clippy::cast_sign_loss)] // Safe sign conversions are checked at runtime
+#![allow(clippy::missing_panics_doc)] // Not all panic conditions need documentation
+#![allow(clippy::missing_errors_doc)] // Not all error conditions need documentation
+#![allow(clippy::module_name_repetitions)] // Types like `ConeError` in `cone` module are fine
+#![allow(clippy::too_many_lines)] // Will be fixed when splitting files
+#![allow(clippy::cognitive_complexity)] // Will be fixed when splitting files
+#![allow(clippy::needless_range_loop)] // Matrix operations are clearer with index loops
+#![allow(clippy::branches_sharing_code)] // Sometimes clearer to repeat code in branches
+#![allow(clippy::must_use_candidate)] // Not all methods need #[must_use]
+#![allow(clippy::if_then_some_else_none)] // Pattern is fine
+#![allow(clippy::items_after_statements)] // Test helper structs in functions are fine
+#![allow(clippy::type_complexity)] // Complex types are acceptable in physics code
+#![allow(clippy::single_match_else)] // Match with single arm is sometimes clearer
+#![allow(clippy::match_same_arms)] // Sometimes clearer to be explicit about same behavior
+#![allow(clippy::option_if_let_else)] // Pattern is often clearer than map_or_else
+#![allow(clippy::needless_collect)] // Sometimes collect is clearer
+#![allow(clippy::only_used_in_recursion)] // False positives in some algorithms
+#![allow(clippy::redundant_else)] // Explicit else for clarity
+#![allow(clippy::manual_let_else)] // let...else not always clearer
+#![allow(clippy::cmp_owned)] // Owned comparison is sometimes clearer
+#![allow(clippy::return_self_not_must_use)] // Methods returning Self don't always need must_use
+#![allow(clippy::no_effect_underscore_binding)] // Debug variables are fine
+
 //! Core mathematical primitives for Calabi-Yau manifold computations.
 //!
 //! This crate provides the foundational algorithms for:
@@ -24,6 +51,9 @@
 //! e^{K₀} = (4/3 × κ_abc p^a p^b p^c)⁻¹
 //! ```
 
+pub mod basis;
+pub mod cone;
+pub mod config;
 pub mod cosmology;
 pub mod divisor;
 pub mod error;
@@ -34,6 +64,7 @@ pub mod integer_math;
 pub mod intersection;
 pub mod kahler;
 pub mod lvs;
+pub use cone::Cone;
 pub use kahler::{MoriCone, compute_mori_generators};
 pub mod lattice;
 pub mod pipeline;
@@ -44,11 +75,13 @@ pub use policy::{Abort, ForGA, Strict, VacuumPolicy, VolumePolicy};
 pub mod racetrack;
 pub mod triangulation;
 pub mod types;
+pub mod utils;
 pub mod vacuum;
 pub mod volume;
 
 pub use types::{F64, Finite, H11, H21, I32, I64, Neg, Pos};
 
+pub use basis::{compute_divisor_basis, intersection_in_basis};
 pub use divisor::{compute_divisor_jacobian, compute_divisor_volumes};
 pub use error::{Error, Result};
 pub use flat_direction::{
@@ -56,7 +89,9 @@ pub use flat_direction::{
     compute_n_matrix, solve_linear_system,
 };
 pub use glsm::compute_glsm_charge_matrix;
-pub use intersection::{Intersection, compute_intersection_numbers};
+pub use intersection::{
+    Intersection, compute_intersection_numbers, compute_intersection_numbers_with_offset,
+};
 // pub mod kklt;
 
 /*

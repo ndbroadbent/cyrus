@@ -1,6 +1,7 @@
+#![allow(missing_docs)]
 //! Triangulation benchmarks.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use serde::Deserialize;
 use std::path::PathBuf;
 
@@ -37,8 +38,7 @@ fn load_fixture() -> Fixture {
         .map(|coords| Point::new(coords.clone()))
         .collect();
 
-    let polytope = Polytope::from_vertices(all_points)
-        .expect("Failed to create polytope");
+    let polytope = Polytope::from_vertices(all_points).expect("Failed to create polytope");
 
     let triangulation_points = polytope
         .points_not_interior_to_facets()
@@ -70,7 +70,8 @@ fn bench_regular_triangulation(c: &mut Criterion) {
             compute_regular_triangulation(
                 black_box(&fixture.triangulation_points),
                 black_box(&fixture.heights),
-            ).expect("Triangulation failed")
+            )
+            .expect("Triangulation failed")
         });
     });
 }
@@ -87,16 +88,13 @@ fn bench_frst_heights(c: &mut Criterion) {
             compute_frst_heights(
                 black_box(&fixture.triangulation_points),
                 black_box(fixture.origin_idx),
-            ).expect("FRST failed")
+            )
+            .expect("FRST failed")
         });
     });
 
     group.finish();
 }
 
-criterion_group!(
-    benches,
-    bench_regular_triangulation,
-    bench_frst_heights,
-);
+criterion_group!(benches, bench_regular_triangulation, bench_frst_heights,);
 criterion_main!(benches);

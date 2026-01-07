@@ -1,6 +1,7 @@
+#![allow(missing_docs)]
 //! Polytope operation benchmarks.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use serde::Deserialize;
 use std::path::PathBuf;
 
@@ -31,10 +32,12 @@ fn load_fixture() -> Fixture {
         .map(|coords| Point::new(coords.clone()))
         .collect();
 
-    let polytope = Polytope::from_vertices(all_points.clone())
-        .expect("Failed to create polytope");
+    let polytope = Polytope::from_vertices(all_points.clone()).expect("Failed to create polytope");
 
-    Fixture { all_points, polytope }
+    Fixture {
+        all_points,
+        polytope,
+    }
 }
 
 fn bench_from_vertices(c: &mut Criterion) {

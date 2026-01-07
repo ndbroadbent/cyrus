@@ -13,9 +13,8 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use cyrus_core::{
-    Point, Polytope,
-    compute_frst_heights, compute_regular_triangulation,
-    compute_glsm_charge_matrix, compute_intersection_numbers,
+    Point, Polytope, compute_frst_heights, compute_glsm_charge_matrix,
+    compute_intersection_numbers, compute_regular_triangulation,
 };
 
 #[derive(Debug, Deserialize)]
@@ -48,8 +47,7 @@ fn load_fixture() -> Stage3Fixture {
         .map(|coords| Point::new(coords.clone()))
         .collect();
 
-    let polytope = Polytope::from_vertices(all_points)
-        .expect("Failed to create polytope");
+    let polytope = Polytope::from_vertices(all_points).expect("Failed to create polytope");
 
     let triangulation_points = polytope
         .points_not_interior_to_facets()
@@ -92,8 +90,16 @@ fn stage3_glsm_charge_matrix() {
     // Kernel has (n_points - dim - 1) = 220 - 4 - 1 = 215 rows
     // Each row has 220 columns
     assert!(!glsm.is_empty(), "GLSM should not be empty");
-    assert_eq!(glsm.len(), 215, "GLSM should have 215 kernel vectors (h11+1)");
-    assert_eq!(glsm[0].len(), 220, "GLSM columns should equal n_points+origin = 220");
+    assert_eq!(
+        glsm.len(),
+        215,
+        "GLSM should have 215 kernel vectors (h11+1)"
+    );
+    assert_eq!(
+        glsm[0].len(),
+        220,
+        "GLSM columns should equal n_points+origin = 220"
+    );
 
     // Snapshot the GLSM matrix - convert Integer to i64
     let glsm_i64: Vec<Vec<i64>> = glsm
@@ -118,21 +124,17 @@ fn stage3_ours_intersection_numbers() {
     let fixture = load_fixture();
 
     // Compute our triangulation
-    let (_heights, triangulation) = compute_frst_heights(
-        &fixture.triangulation_points,
-        fixture.origin_idx,
-    ).expect("Failed to compute FRST heights");
+    let (_heights, triangulation) =
+        compute_frst_heights(&fixture.triangulation_points, fixture.origin_idx)
+            .expect("Failed to compute FRST heights");
 
     // Compute GLSM
     let glsm = compute_glsm_charge_matrix(&fixture.triangulation_points, true)
         .expect("Failed to compute GLSM");
 
     // Compute intersection numbers
-    let kappa = compute_intersection_numbers(
-        &triangulation,
-        &fixture.triangulation_points,
-        &glsm,
-    ).expect("Failed to compute intersection numbers");
+    let kappa = compute_intersection_numbers(&triangulation, &fixture.triangulation_points, &glsm)
+        .expect("Failed to compute intersection numbers");
 
     // Convert to serializable format: sorted list of ((i,j,k), value)
     let mut entries: Vec<((usize, usize, usize), String)> = kappa
@@ -168,21 +170,16 @@ fn stage3_theirs_intersection_numbers() {
     let heights = load_mcallister_heights();
 
     // Compute triangulation from their heights
-    let triangulation = compute_regular_triangulation(
-        &fixture.triangulation_points,
-        &heights,
-    ).expect("Failed to compute triangulation");
+    let triangulation = compute_regular_triangulation(&fixture.triangulation_points, &heights)
+        .expect("Failed to compute triangulation");
 
     // Compute GLSM
     let glsm = compute_glsm_charge_matrix(&fixture.triangulation_points, true)
         .expect("Failed to compute GLSM");
 
     // Compute intersection numbers
-    let kappa = compute_intersection_numbers(
-        &triangulation,
-        &fixture.triangulation_points,
-        &glsm,
-    ).expect("Failed to compute intersection numbers");
+    let kappa = compute_intersection_numbers(&triangulation, &fixture.triangulation_points, &glsm)
+        .expect("Failed to compute intersection numbers");
 
     // Convert to serializable format: sorted list of ((i,j,k), value)
     let mut entries: Vec<((usize, usize, usize), String)> = kappa

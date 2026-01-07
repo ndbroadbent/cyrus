@@ -1,3 +1,26 @@
+// Test-specific clippy allows
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::items_after_statements)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::cognitive_complexity)]
+#![allow(clippy::redundant_closure_for_method_calls)]
+#![allow(clippy::unnecessary_sort_by)]
+#![allow(clippy::needless_for_each)]
+#![allow(clippy::iter_cloned_collect)]
+#![allow(clippy::many_single_char_names)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::float_cmp)]
+#![allow(clippy::struct_field_names)]
+#![allow(clippy::suboptimal_flops)]
+#![allow(clippy::redundant_clone)]
+#![allow(clippy::stable_sort_primitive)]
+#![allow(clippy::bool_to_int_with_if)]
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 //! McAllister E2E Pipeline Tests
 //!
 //! End-to-end validation against arXiv:2107.09064.
@@ -20,3 +43,6 @@ mod stage2_triangulation;
 
 #[path = "mcallister_e2e/stage3_intersection.rs"]
 mod stage3_intersection;
+
+#[path = "mcallister_e2e/stage4_flat_direction.rs"]
+mod stage4_flat_direction;
