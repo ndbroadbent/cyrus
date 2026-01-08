@@ -1,0 +1,11 @@
+---
+source: crates/cyrus-core/tests/mcallister_e2e/stage5_racetrack.rs
+assertion_line: 96
+expression: ground_truth
+---
+{
+  "g_s": 0.00911134,
+  "cy_vol": 4711.829675,
+  "w_0_exponent": -90,
+  "n_curves": 344
+}

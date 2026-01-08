@@ -1,0 +1,16 @@
+---
+source: crates/cyrus-core/tests/mcallister_e2e/stage5_racetrack.rs
+expression: summary
+---
+{
+  "e_k0": 0.234393,
+  "g_s": 0.00911134,
+  "v_string": 4711.8297,
+  "w_0_exponent": -90,
+  "g_s_7": 0.000000000000005212856525595466,
+  "denominator": 355221422.21,
+  "ratio": 0.000000000000000000000014674949762770426,
+  "v_0_exponent": -202,
+  "v_0_sign": "negative (AdS)",
+  "note": "V₀ ≈ -5.5 × 10⁻²⁰³ Mpl⁴ - extremely small CC achieved!"
+}

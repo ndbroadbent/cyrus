@@ -1,0 +1,47 @@
+---
+source: crates/cyrus-core/tests/mcallister_e2e/stage5_racetrack.rs
+assertion_line: 616
+expression: summary
+---
+{
+  "total_unique_exponents": 6,
+  "nonzero_terms": 6,
+  "first_10_nonzero": [
+    {
+      "exponent": 0.290909,
+      "coeff": 5,
+      "count": 1,
+      "sign": "+"
+    },
+    {
+      "exponent": 0.3,
+      "coeff": -2560,
+      "count": 3,
+      "sign": "-"
+    },
+    {
+      "exponent": 0.590909,
+      "coeff": -2070,
+      "count": 3,
+      "sign": "-"
+    },
+    {
+      "exponent": 0.6,
+      "coeff": 184960,
+      "count": 2,
+      "sign": "+"
+    },
+    {
+      "exponent": 0.890909,
+      "coeff": -72675,
+      "count": 4,
+      "sign": "-"
+    },
+    {
+      "exponent": 0.9,
+      "coeff": -25459200,
+      "count": 3,
+      "sign": "-"
+    }
+  ]
+}

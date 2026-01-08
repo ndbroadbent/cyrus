@@ -1,0 +1,16 @@
+---
+source: crates/cyrus-core/tests/mcallister_e2e/stage5_racetrack.rs
+assertion_line: 1008
+expression: summary
+---
+{
+  "kappa_dim": 214,
+  "kappa_nonzero": 1811,
+  "basis_size": 214,
+  "classical_volume": 4712.3385,
+  "bbhl_correction": 0.508832,
+  "v_string_computed": 4711.8297,
+  "v_string_expected": 4711.8297,
+  "difference": 0.0,
+  "difference_percent": 0.0
+}

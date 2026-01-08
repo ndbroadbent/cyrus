@@ -10,7 +10,15 @@
 #![allow(missing_docs)]
 
 use serde::Deserialize;
+#[cfg(feature = "slow-tests")]
+use serde::Serialize;
 use std::path::PathBuf;
+
+#[cfg(feature = "slow-tests")]
+use cyrus_core::{
+    compute_frst_heights, compute_regular_triangulation,
+    intersection::compute_intersection_numbers,
+};
 
 use cyrus_core::{
     Point, Polytope, compute_glsm_charge_matrix,

@@ -1,0 +1,17 @@
+---
+source: crates/cyrus-core/tests/mcallister_e2e/stage5_racetrack.rs
+expression: summary
+---
+{
+  "kklt_basis_size": 214,
+  "target_volumes_size": 214,
+  "first_5_kklt_indices": [
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "n_o7_divisors": 49,
+  "n_d3_divisors": 165
+}

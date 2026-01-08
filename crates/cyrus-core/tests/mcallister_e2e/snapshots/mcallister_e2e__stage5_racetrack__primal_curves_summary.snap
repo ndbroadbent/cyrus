@@ -1,0 +1,30 @@
+---
+source: crates/cyrus-core/tests/mcallister_e2e/stage5_racetrack.rs
+expression: summary
+---
+{
+  "n_curves": 344,
+  "curve_dim": 219,
+  "first_3_nonzero_in_curve0": [
+    [
+      34,
+      -1
+    ],
+    [
+      40,
+      1
+    ],
+    [
+      167,
+      1
+    ]
+  ],
+  "gv_range": [
+    -2,
+    1
+  ],
+  "gv_distribution": {
+    "-2": 29,
+    "1": 315
+  }
+}

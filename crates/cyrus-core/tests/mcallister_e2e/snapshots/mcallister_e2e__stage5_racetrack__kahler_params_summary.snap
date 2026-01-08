@@ -1,0 +1,24 @@
+---
+source: crates/cyrus-core/tests/mcallister_e2e/stage5_racetrack.rs
+expression: summary
+---
+{
+  "n_params": 214,
+  "uncorrected_first_5": [
+    0.73827,
+    10.467852,
+    0.469983,
+    68.489677,
+    108.274044
+  ],
+  "corrected_first_5": [
+    0.222403,
+    7.03893,
+    0.44434,
+    43.372436,
+    69.038575
+  ],
+  "uncorrected_sum": 8286.0767,
+  "corrected_sum": 5227.1547,
+  "ratio": 0.6308
+}

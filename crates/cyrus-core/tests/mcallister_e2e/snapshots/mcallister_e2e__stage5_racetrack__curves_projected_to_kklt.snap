@@ -1,0 +1,29 @@
+---
+source: crates/cyrus-core/tests/mcallister_e2e/stage5_racetrack.rs
+expression: summary
+---
+{
+  "n_curves": 344,
+  "original_dim": 219,
+  "projected_dim": 214,
+  "avg_nonzero_per_curve": 3.74,
+  "max_nonzero_per_curve": 5,
+  "first_projected_curve_nonzero": [
+    [
+      31,
+      -1
+    ],
+    [
+      37,
+      1
+    ],
+    [
+      162,
+      1
+    ],
+    [
+      179,
+      -1
+    ]
+  ]
+}

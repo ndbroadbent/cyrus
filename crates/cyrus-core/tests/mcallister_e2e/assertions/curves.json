@@ -1,0 +1,8 @@
+{
+  "description": "McAllister curve data summary",
+  "n_curves": 344,
+  "curve_dimension": 219,
+  "h11": 214,
+  "basis_size": 214,
+  "kklt_basis_size": 213
+}

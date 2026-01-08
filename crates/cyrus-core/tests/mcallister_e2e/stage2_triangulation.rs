@@ -10,6 +10,9 @@
 use serde::Deserialize;
 use std::path::PathBuf;
 
+#[cfg(feature = "slow-tests")]
+use cyrus_core::{compute_frst_heights, compute_regular_triangulation};
+
 use cyrus_core::{Point, Polytope};
 
 #[derive(Debug, Deserialize)]

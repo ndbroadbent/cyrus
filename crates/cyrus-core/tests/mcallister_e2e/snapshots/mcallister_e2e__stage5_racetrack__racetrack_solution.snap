@@ -1,0 +1,18 @@
+---
+source: crates/cyrus-core/tests/mcallister_e2e/stage5_racetrack.rs
+assertion_line: 887
+expression: solution
+---
+{
+  "alpha": 0.290909,
+  "beta": 0.3,
+  "delta": 0.009091,
+  "coeff_a": 5,
+  "coeff_b": -2560,
+  "computed_g_s": 0.00911143,
+  "expected_g_s": 0.00911134,
+  "g_s_ratio": 1.0,
+  "computed_w0_exponent": -90,
+  "expected_w0_exponent": -90,
+  "note": "Racetrack solution from dual curves. W₀ is exponentially suppressed."
+}
