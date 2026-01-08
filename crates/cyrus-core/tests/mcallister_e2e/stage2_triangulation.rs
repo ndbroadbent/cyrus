@@ -10,7 +10,7 @@
 use serde::Deserialize;
 use std::path::PathBuf;
 
-use cyrus_core::{Point, Polytope, compute_frst_heights, compute_regular_triangulation};
+use cyrus_core::{Point, Polytope};
 
 #[derive(Debug, Deserialize)]
 struct PolytopeInput {

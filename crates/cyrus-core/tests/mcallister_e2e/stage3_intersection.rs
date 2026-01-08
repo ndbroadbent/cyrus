@@ -9,12 +9,11 @@
 
 #![allow(missing_docs)]
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::path::PathBuf;
 
 use cyrus_core::{
-    Point, Polytope, compute_frst_heights, compute_glsm_charge_matrix,
-    compute_intersection_numbers, compute_regular_triangulation,
+    Point, Polytope, compute_glsm_charge_matrix,
 };
 
 #[derive(Debug, Deserialize)]
