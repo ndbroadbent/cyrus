@@ -49,3 +49,6 @@ mod stage4_flat_direction;
 
 #[path = "mcallister_e2e/stage5_racetrack.rs"]
 mod stage5_racetrack;
+
+#[path = "mcallister_e2e/stage5_gv.rs"]
+mod stage5_gv;

@@ -89,8 +89,10 @@ pub use flat_direction::{
     compute_n_matrix, solve_linear_system,
 };
 pub use glsm::compute_glsm_charge_matrix;
+pub use integer_math::{compute_glsm_and_linear_relations, compute_linear_relations_no_origin};
 pub use intersection::{
-    Intersection, compute_intersection_numbers, compute_intersection_numbers_with_offset,
+    Intersection, compute_intersection_numbers, compute_intersection_numbers_with_linear_relations,
+    compute_intersection_numbers_with_offset,
 };
 // pub mod kklt;
 

@@ -22,3 +22,5 @@ coverage/
 # Project symlink (points to external knowledge base repo)
 project
 reference/
+
+.venv/

@@ -1,0 +1,407 @@
+{
+  "description": "Sample intersection numbers (first 50 sorted) for verification",
+  "in_basis": true,
+  "total_nonzero": 1754,
+  "sample": [
+    {
+      "indices": [
+        0,
+        0,
+        0
+      ],
+      "value": -9
+    },
+    {
+      "indices": [
+        0,
+        0,
+        23
+      ],
+      "value": -1
+    },
+    {
+      "indices": [
+        0,
+        0,
+        27
+      ],
+      "value": 2
+    },
+    {
+      "indices": [
+        0,
+        0,
+        28
+      ],
+      "value": -1
+    },
+    {
+      "indices": [
+        0,
+        0,
+        39
+      ],
+      "value": 2
+    },
+    {
+      "indices": [
+        0,
+        0,
+        45
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        0,
+        69
+      ],
+      "value": -1
+    },
+    {
+      "indices": [
+        0,
+        0,
+        71
+      ],
+      "value": -1
+    },
+    {
+      "indices": [
+        0,
+        0,
+        88
+      ],
+      "value": -1
+    },
+    {
+      "indices": [
+        0,
+        0,
+        123
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        0,
+        125
+      ],
+      "value": 2
+    },
+    {
+      "indices": [
+        0,
+        0,
+        142
+      ],
+      "value": 2
+    },
+    {
+      "indices": [
+        0,
+        0,
+        158
+      ],
+      "value": 4
+    },
+    {
+      "indices": [
+        0,
+        0,
+        171
+      ],
+      "value": -1
+    },
+    {
+      "indices": [
+        0,
+        0,
+        183
+      ],
+      "value": 2
+    },
+    {
+      "indices": [
+        0,
+        0,
+        200
+      ],
+      "value": -1
+    },
+    {
+      "indices": [
+        0,
+        23,
+        23
+      ],
+      "value": -1
+    },
+    {
+      "indices": [
+        0,
+        23,
+        113
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        23,
+        158
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        27,
+        27
+      ],
+      "value": -4
+    },
+    {
+      "indices": [
+        0,
+        27,
+        69
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        27,
+        71
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        27,
+        151
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        28,
+        28
+      ],
+      "value": -1
+    },
+    {
+      "indices": [
+        0,
+        28,
+        146
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        28,
+        158
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        38,
+        38
+      ],
+      "value": -2
+    },
+    {
+      "indices": [
+        0,
+        38,
+        155
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        38,
+        175
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        38,
+        179
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        39,
+        39
+      ],
+      "value": -4
+    },
+    {
+      "indices": [
+        0,
+        39,
+        146
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        39,
+        171
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        39,
+        176
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        44,
+        44
+      ],
+      "value": -2
+    },
+    {
+      "indices": [
+        0,
+        44,
+        179
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        44,
+        190
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        44,
+        196
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        45,
+        45
+      ],
+      "value": -3
+    },
+    {
+      "indices": [
+        0,
+        45,
+        191
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        45,
+        196
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        45,
+        200
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        69,
+        69
+      ],
+      "value": -1
+    },
+    {
+      "indices": [
+        0,
+        69,
+        123
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        71,
+        71
+      ],
+      "value": -1
+    },
+    {
+      "indices": [
+        0,
+        71,
+        125
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        88,
+        88
+      ],
+      "value": -1
+    },
+    {
+      "indices": [
+        0,
+        88,
+        125
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        88,
+        142
+      ],
+      "value": 1
+    },
+    {
+      "indices": [
+        0,
+        113,
+        113
+      ],
+      "value": -2
+    }
+  ]
+}

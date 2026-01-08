@@ -1,0 +1,13 @@
+---
+source: crates/cyrus-core/tests/mcallister_e2e/stage3_intersection.rs
+expression: summary
+---
+{
+  "cytools_total_nonzero": 1754,
+  "our_total_nonzero": 2024,
+  "sample_size": 50,
+  "matches": 50,
+  "mismatches": 0,
+  "missing": 0,
+  "note": "CYTools uses latest version basis, our test uses McAllister heights"
+}

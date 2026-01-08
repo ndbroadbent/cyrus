@@ -16,8 +16,8 @@ use std::path::PathBuf;
 
 #[cfg(feature = "slow-tests")]
 use cyrus_core::{
-    compute_frst_heights, compute_regular_triangulation,
-    intersection::compute_intersection_numbers,
+    compute_frst_heights, compute_linear_relations_no_origin, compute_regular_triangulation,
+    intersection::compute_intersection_numbers_with_linear_relations,
 };
 
 use cyrus_core::{
@@ -135,13 +135,23 @@ fn stage3_ours_intersection_numbers() {
         compute_frst_heights(&fixture.triangulation_points, fixture.origin_idx)
             .expect("Failed to compute FRST heights");
 
-    // Compute GLSM
-    let glsm = compute_glsm_charge_matrix(&fixture.triangulation_points, true)
-        .expect("Failed to compute GLSM");
+    // Convert points to i64 vecs for linear_relations computation
+    let points_i64: Vec<Vec<i64>> = fixture
+        .triangulation_points
+        .iter()
+        .map(|p| p.coords().to_vec())
+        .collect();
 
-    // Compute intersection numbers
-    let kappa = compute_intersection_numbers(&triangulation, &fixture.triangulation_points, &glsm)
-        .expect("Failed to compute intersection numbers");
+    // Compute linear relations (CYTools-style, origin excluded)
+    let linear_relations = compute_linear_relations_no_origin(&points_i64);
+
+    // Compute intersection numbers using linear relations
+    let kappa = compute_intersection_numbers_with_linear_relations(
+        &triangulation,
+        &fixture.triangulation_points,
+        &linear_relations,
+    )
+    .expect("Failed to compute intersection numbers");
 
     // Convert to serializable format: sorted list of ((i,j,k), value)
     let mut entries: Vec<((usize, usize, usize), String)> = kappa
@@ -180,13 +190,23 @@ fn stage3_theirs_intersection_numbers() {
     let triangulation = compute_regular_triangulation(&fixture.triangulation_points, &heights)
         .expect("Failed to compute triangulation");
 
-    // Compute GLSM
-    let glsm = compute_glsm_charge_matrix(&fixture.triangulation_points, true)
-        .expect("Failed to compute GLSM");
+    // Convert points to i64 vecs for linear_relations computation
+    let points_i64: Vec<Vec<i64>> = fixture
+        .triangulation_points
+        .iter()
+        .map(|p| p.coords().to_vec())
+        .collect();
 
-    // Compute intersection numbers
-    let kappa = compute_intersection_numbers(&triangulation, &fixture.triangulation_points, &glsm)
-        .expect("Failed to compute intersection numbers");
+    // Compute linear relations (CYTools-style, origin excluded)
+    let linear_relations = compute_linear_relations_no_origin(&points_i64);
+
+    // Compute intersection numbers using linear relations
+    let kappa = compute_intersection_numbers_with_linear_relations(
+        &triangulation,
+        &fixture.triangulation_points,
+        &linear_relations,
+    )
+    .expect("Failed to compute intersection numbers");
 
     // Convert to serializable format: sorted list of ((i,j,k), value)
     let mut entries: Vec<((usize, usize, usize), String)> = kappa
@@ -209,4 +229,163 @@ fn stage3_theirs_intersection_numbers() {
     };
 
     insta::assert_json_snapshot!("intersection_theirs", snapshot);
+}
+
+// =============================================================================
+// DUAL TEST: Compare intersection numbers against CYTools
+// =============================================================================
+
+/// Dual test comparing our intersection numbers against CYTools computed values
+#[test]
+#[cfg(feature = "slow-tests")]
+fn stage3_dual_test_intersection_vs_cytools() {
+    let fixture = load_fixture();
+    let heights = load_mcallister_heights();
+
+    // Compute triangulation from McAllister's heights
+    let triangulation = compute_regular_triangulation(&fixture.triangulation_points, &heights)
+        .expect("Failed to compute triangulation");
+
+    // Convert points to i64 vecs for linear_relations computation
+    let points_i64: Vec<Vec<i64>> = fixture
+        .triangulation_points
+        .iter()
+        .map(|p| p.coords().to_vec())
+        .collect();
+
+    // Compute linear relations (CYTools-style, origin excluded)
+    let linear_relations = compute_linear_relations_no_origin(&points_i64);
+
+    eprintln!("Linear relations: {} rows x {} cols",
+        linear_relations.len(),
+        linear_relations.first().map_or(0, |r| r.len()));
+
+    // Compute our intersection numbers using linear relations
+    let kappa = compute_intersection_numbers_with_linear_relations(
+        &triangulation,
+        &fixture.triangulation_points,
+        &linear_relations,
+    )
+    .expect("Failed to compute intersection numbers");
+
+    // Load CYTools intersection numbers fixture
+    #[derive(Debug, Deserialize)]
+    struct IntersectionEntry {
+        indices: Vec<usize>,
+        value: i64,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct CytoolsIntersection {
+        in_basis: bool,
+        total_nonzero: usize,
+        sample: Vec<IntersectionEntry>,
+    }
+
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let fixture_path = manifest_dir.join("tests/mcallister_e2e/assertions/intersection_sample_cytools.json");
+    let content = std::fs::read_to_string(&fixture_path)
+        .unwrap_or_else(|e| panic!("Failed to read CYTools fixture: {e}"));
+    let cytools: CytoolsIntersection = serde_json::from_str(&content)
+        .unwrap_or_else(|e| panic!("Failed to parse CYTools fixture: {e}"));
+
+    // Load CYTools divisor basis to map indices
+    #[derive(Debug, Deserialize)]
+    struct CytoolsBasis {
+        basis: Vec<usize>,
+    }
+
+    let basis_path = manifest_dir.join("tests/mcallister_e2e/assertions/divisor_basis_cytools.json");
+    let basis_content = std::fs::read_to_string(&basis_path)
+        .unwrap_or_else(|e| panic!("Failed to read CYTools basis: {e}"));
+    let cytools_basis: CytoolsBasis = serde_json::from_str(&basis_content)
+        .unwrap_or_else(|e| panic!("Failed to parse CYTools basis: {e}"));
+
+    eprintln!("\n=== Dual Test: Intersection Numbers ===");
+    eprintln!("CYTools total nonzero: {}", cytools.total_nonzero);
+    eprintln!("Our total nonzero: {}", kappa.num_nonzero());
+    eprintln!("CYTools basis (first 10): {:?}", &cytools_basis.basis[..10]);
+
+    // CYTools uses in_basis=True, so indices are 0-based into their divisor basis
+    // cytools_basis.basis[i] gives the full point index for basis element i
+    // Our kappa uses full point indices (with origin at 0)
+
+    let basis = &cytools_basis.basis;
+
+    let mut matches = 0;
+    let mut mismatches = 0;
+    let mut missing = 0;
+
+    for entry in &cytools.sample {
+        let (bi, bj, bk) = (entry.indices[0], entry.indices[1], entry.indices[2]);
+
+        // Map basis indices to full point indices
+        // CYTools basis indices are 0..214, basis[n] gives full point index
+        if bi >= basis.len() || bj >= basis.len() || bk >= basis.len() {
+            eprintln!("SKIP: basis index out of range ({},{},{})", bi, bj, bk);
+            continue;
+        }
+
+        let (fi, fj, fk) = (basis[bi], basis[bj], basis[bk]);
+
+        // Look up in our kappa using full indices
+        let our_val = kappa.get(fi, fj, fk);
+        let our_rational = our_val.get();
+
+        // Try to convert to i64 for comparison
+        if let Ok(our_i64) = i64::try_from(our_rational) {
+            if our_i64 == entry.value {
+                matches += 1;
+            } else if our_i64 == 0 {
+                missing += 1;
+                if missing <= 5 {
+                    eprintln!("MISSING: κ_basis({},{},{}) = κ_full({},{},{}) = 0 (ours) vs {} (CYTools)",
+                        bi, bj, bk, fi, fj, fk, entry.value);
+                }
+            } else {
+                mismatches += 1;
+                if mismatches <= 5 {
+                    eprintln!("MISMATCH: κ_basis({},{},{}) = κ_full({},{},{}) = {} (ours) vs {} (CYTools)",
+                        bi, bj, bk, fi, fj, fk, our_i64, entry.value);
+                }
+            }
+        } else {
+            // Rational doesn't fit in i64
+            mismatches += 1;
+            if mismatches <= 5 {
+                eprintln!("MISMATCH: κ_basis({},{},{}) = κ_full({},{},{}) = {} (ours, non-integer) vs {} (CYTools)",
+                    bi, bj, bk, fi, fj, fk, our_rational, entry.value);
+            }
+        }
+    }
+
+    eprintln!("\nComparison results:");
+    eprintln!("  Matches: {}", matches);
+    eprintln!("  Mismatches: {}", mismatches);
+    eprintln!("  Missing: {}", missing);
+    eprintln!("  Total sample: {}", cytools.sample.len());
+
+    // Save comparison summary for documentation
+    #[derive(Serialize)]
+    struct DualTestSummary {
+        cytools_total_nonzero: usize,
+        our_total_nonzero: usize,
+        sample_size: usize,
+        matches: usize,
+        mismatches: usize,
+        missing: usize,
+        note: String,
+    }
+
+    let summary = DualTestSummary {
+        cytools_total_nonzero: cytools.total_nonzero,
+        our_total_nonzero: kappa.num_nonzero(),
+        sample_size: cytools.sample.len(),
+        matches,
+        mismatches,
+        missing,
+        note: "CYTools uses latest version basis, our test uses McAllister heights".to_string(),
+    };
+
+    insta::assert_json_snapshot!("dual_test_intersection_cytools", summary);
 }
