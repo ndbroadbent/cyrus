@@ -20,9 +20,7 @@ use cyrus_core::{
     intersection::compute_intersection_numbers_with_linear_relations,
 };
 
-use cyrus_core::{
-    Point, Polytope, compute_glsm_charge_matrix,
-};
+use cyrus_core::{Point, Polytope, compute_glsm_charge_matrix};
 
 #[derive(Debug, Deserialize)]
 struct PolytopeInput {
@@ -256,9 +254,11 @@ fn stage3_dual_test_intersection_vs_cytools() {
     // Compute linear relations (CYTools-style, origin excluded)
     let linear_relations = compute_linear_relations_no_origin(&points_i64);
 
-    eprintln!("Linear relations: {} rows x {} cols",
+    eprintln!(
+        "Linear relations: {} rows x {} cols",
         linear_relations.len(),
-        linear_relations.first().map_or(0, |r| r.len()));
+        linear_relations.first().map_or(0, |r| r.len())
+    );
 
     // Compute our intersection numbers using linear relations
     let kappa = compute_intersection_numbers_with_linear_relations(
@@ -283,7 +283,8 @@ fn stage3_dual_test_intersection_vs_cytools() {
     }
 
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let fixture_path = manifest_dir.join("tests/mcallister_e2e/assertions/intersection_sample_cytools.json");
+    let fixture_path =
+        manifest_dir.join("tests/mcallister_e2e/assertions/intersection_sample_cytools.json");
     let content = std::fs::read_to_string(&fixture_path)
         .unwrap_or_else(|e| panic!("Failed to read CYTools fixture: {e}"));
     let cytools: CytoolsIntersection = serde_json::from_str(&content)
@@ -295,7 +296,8 @@ fn stage3_dual_test_intersection_vs_cytools() {
         basis: Vec<usize>,
     }
 
-    let basis_path = manifest_dir.join("tests/mcallister_e2e/assertions/divisor_basis_cytools.json");
+    let basis_path =
+        manifest_dir.join("tests/mcallister_e2e/assertions/divisor_basis_cytools.json");
     let basis_content = std::fs::read_to_string(&basis_path)
         .unwrap_or_else(|e| panic!("Failed to read CYTools basis: {e}"));
     let cytools_basis: CytoolsBasis = serde_json::from_str(&basis_content)
@@ -339,22 +341,28 @@ fn stage3_dual_test_intersection_vs_cytools() {
             } else if our_i64 == 0 {
                 missing += 1;
                 if missing <= 5 {
-                    eprintln!("MISSING: κ_basis({},{},{}) = κ_full({},{},{}) = 0 (ours) vs {} (CYTools)",
-                        bi, bj, bk, fi, fj, fk, entry.value);
+                    eprintln!(
+                        "MISSING: κ_basis({},{},{}) = κ_full({},{},{}) = 0 (ours) vs {} (CYTools)",
+                        bi, bj, bk, fi, fj, fk, entry.value
+                    );
                 }
             } else {
                 mismatches += 1;
                 if mismatches <= 5 {
-                    eprintln!("MISMATCH: κ_basis({},{},{}) = κ_full({},{},{}) = {} (ours) vs {} (CYTools)",
-                        bi, bj, bk, fi, fj, fk, our_i64, entry.value);
+                    eprintln!(
+                        "MISMATCH: κ_basis({},{},{}) = κ_full({},{},{}) = {} (ours) vs {} (CYTools)",
+                        bi, bj, bk, fi, fj, fk, our_i64, entry.value
+                    );
                 }
             }
         } else {
             // Rational doesn't fit in i64
             mismatches += 1;
             if mismatches <= 5 {
-                eprintln!("MISMATCH: κ_basis({},{},{}) = κ_full({},{},{}) = {} (ours, non-integer) vs {} (CYTools)",
-                    bi, bj, bk, fi, fj, fk, our_rational, entry.value);
+                eprintln!(
+                    "MISMATCH: κ_basis({},{},{}) = κ_full({},{},{}) = {} (ours, non-integer) vs {} (CYTools)",
+                    bi, bj, bk, fi, fj, fk, our_rational, entry.value
+                );
             }
         }
     }

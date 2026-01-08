@@ -43,10 +43,16 @@ fn stage5_cygv_basic_import() {
     // The important thing is that the cygv crate is linked and types work
     match semigroup {
         Ok(sg) => {
-            eprintln!("Semigroup created successfully, max_degree: {}", sg.max_degree);
+            eprintln!(
+                "Semigroup created successfully, max_degree: {}",
+                sg.max_degree
+            );
         }
         Err(e) => {
-            eprintln!("Semigroup construction error (expected for simple inputs): {:?}", e);
+            eprintln!(
+                "Semigroup construction error (expected for simple inputs): {:?}",
+                e
+            );
             // This is OK - the crate is linked and working
         }
     }
@@ -55,7 +61,10 @@ fn stage5_cygv_basic_import() {
     let semigroup_with_deg = Semigroup::with_max_degree(generators, grading, 5);
     match semigroup_with_deg {
         Ok(sg) => {
-            eprintln!("Semigroup with max_degree created, elements: {}", sg.elements.ncols());
+            eprintln!(
+                "Semigroup with max_degree created, elements: {}",
+                sg.elements.ncols()
+            );
             assert!(sg.max_degree >= 5, "Max degree should be at least 5");
         }
         Err(e) => {
@@ -88,7 +97,7 @@ fn stage5_cygv_quintic_example() {
     // - GV_2 = 609250 (number of conics)
 
     // Placeholder - actual implementation requires Mori cone computation
-    assert!(true, "Quintic example placeholder");
+    // Test is ignored until Mori cone infrastructure is ready
 }
 
 /// Verify we have the data structures needed for McAllister GV computation
@@ -96,8 +105,7 @@ fn stage5_cygv_quintic_example() {
 fn stage5_mcallister_gv_data_available() {
     use std::fs;
 
-    let data_dir =
-        "/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647";
+    let data_dir = "/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647";
 
     // Check all required data files exist
     let required_files = [
@@ -118,7 +126,10 @@ fn stage5_mcallister_gv_data_available() {
 
     // Load and verify dual curves data
     let curves_content = fs::read_to_string(format!("{}/dual_curves.dat", data_dir)).unwrap();
-    let n_curves = curves_content.lines().filter(|l| !l.trim().is_empty()).count();
+    let n_curves = curves_content
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .count();
     assert_eq!(n_curves, 5177, "Should have 5177 dual curves");
 
     // Load and verify GV invariants count
@@ -152,7 +163,7 @@ fn stage5_mcallister_gv_data_available() {
         n_curves,
         n_gv_values: gv_values.len(),
         huge_gv_count,
-        first_5_gv: gv_values.iter().take(5).map(|s| s.to_string()).collect(),
+        first_5_gv: gv_values.iter().take(5).map(|s| (*s).to_string()).collect(),
         max_gv_digits: max_digits,
     };
 
@@ -166,19 +177,17 @@ fn stage5_gv_computation_roadmap() {
     #[derive(serde::Serialize)]
     struct GvComputationRoadmap {
         status: &'static str,
-        cygv_integrated: bool,
-        mori_cone_implemented: bool,
-        grading_vector_implemented: bool,
-        full_pipeline_ready: bool,
+        /// Bitmask of completed components: cygv=1, mori=2, grading=4, pipeline=8
+        completed_components: u8,
         steps_remaining: Vec<&'static str>,
     }
 
+    // Components: cygv integrated (1), mori cone (0), grading vector (0), full pipeline (0)
+    let completed = 1u8; // Only cygv is integrated
+
     let roadmap = GvComputationRoadmap {
         status: "In Progress - cygv integrated, Mori cone needed",
-        cygv_integrated: true,
-        mori_cone_implemented: false,
-        grading_vector_implemented: false,
-        full_pipeline_ready: false,
+        completed_components: completed,
         steps_remaining: vec![
             "Port mori_cone_cap from CYTools calabiyau.py lines 2295-2400",
             "Port find_grading_vector from CYTools cone.py",

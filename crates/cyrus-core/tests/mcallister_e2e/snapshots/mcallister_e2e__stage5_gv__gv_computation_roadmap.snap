@@ -4,10 +4,7 @@ expression: roadmap
 ---
 {
   "status": "In Progress - cygv integrated, Mori cone needed",
-  "cygv_integrated": true,
-  "mori_cone_implemented": false,
-  "grading_vector_implemented": false,
-  "full_pipeline_ready": false,
+  "completed_components": 1,
   "steps_remaining": [
     "Port mori_cone_cap from CYTools calabiyau.py lines 2295-2400",
     "Port find_grading_vector from CYTools cone.py",

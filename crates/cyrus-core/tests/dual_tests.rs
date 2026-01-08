@@ -27,8 +27,8 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
-use cyrus_core::utils::filter_tensor_indices;
 use cyrus_core::Point;
+use cyrus_core::utils::filter_tensor_indices;
 use malachite::Rational;
 use serde::Deserialize;
 
@@ -270,7 +270,9 @@ fn test_simplex_determinants() {
             .collect();
 
         let det = determinant_gaussian(&mut mat);
-        let abs_det = if det < 0 { -det } else { det };
+        let zero = Rational::from(0);
+        #[allow(clippy::suboptimal_flops)] // Rational doesn't have .abs() method
+        let abs_det = if det < zero { -det } else { det };
         let abs_det_i64: i64 = (&abs_det).try_into().unwrap_or(0);
 
         assert_eq!(
@@ -291,13 +293,17 @@ fn test_triangulation_from_heights() {
     let tri = compute_regular_triangulation(&points, &fixture.heights)
         .expect("Failed to compute triangulation");
 
-    let mut our_simplices: Vec<Vec<usize>> = tri.simplices().iter().cloned().collect();
-    let mut expected_simplices = fixture.simplices.clone();
+    let mut our_simplices: Vec<Vec<usize>> = tri.simplices().to_vec();
+    let mut expected_simplices = fixture.simplices;
 
-    our_simplices.iter_mut().for_each(|s| s.sort());
-    expected_simplices.iter_mut().for_each(|s| s.sort());
-    our_simplices.sort();
-    expected_simplices.sort();
+    for s in &mut our_simplices {
+        s.sort_unstable();
+    }
+    for s in &mut expected_simplices {
+        s.sort_unstable();
+    }
+    our_simplices.sort_unstable();
+    expected_simplices.sort_unstable();
 
     assert_eq!(
         our_simplices, expected_simplices,

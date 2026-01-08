@@ -52,3 +52,6 @@ mod stage5_racetrack;
 
 #[path = "mcallister_e2e/stage5_gv.rs"]
 mod stage5_gv;
+
+#[path = "mcallister_e2e/stage10_volume.rs"]
+mod stage10_volume;
