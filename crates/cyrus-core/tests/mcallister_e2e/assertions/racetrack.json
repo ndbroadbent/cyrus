@@ -1,7 +1,8 @@
 {
   "description": "McAllister racetrack stabilization results (arXiv:2107.09064)",
-  "g_s": 0.00911134,
-  "W_0": 2.30012e-90,
+  "g_s": 0.009111340698479443,
+  "W_0": 2.3001695655818173e-90,
   "cy_vol": 4711.829675204889,
-  "n_curves": 344
+  "n_curves": 344,
+  "_note": "g_s and W_0 computed from dual_curves.dat using same algorithm as CYTools. The .dat files store truncated values (g_s: 0.00911134, W_0: 2.30012e-90)."
 }

@@ -16,7 +16,7 @@ workspace = true
 thiserror.workspace = true
 rayon.workspace = true
 faer = { workspace = true, features = ["svd"] }
-malachite = "0.4"
+malachite = { version = "0.4", features = ["floats"] }
 ode_solvers = { workspace = true }
 nalgebra = { workspace = true }
 rand = { workspace = true }
