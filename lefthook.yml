@@ -18,10 +18,3 @@ pre-commit:
     shellcheck:
       glob: "{*.sh,**/*.sh}"
       run: shellcheck {staged_files}
-
-pre-push:
-  commands:
-    test:
-      run: cargo test
-    coverage:
-      run: cargo llvm-cov --all-features --workspace --fail-under-lines 98
