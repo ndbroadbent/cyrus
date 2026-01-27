@@ -202,7 +202,11 @@ fn compute_gram_schmidt(basis: &[Vec<Integer>], mu: &mut [Vec<Rational>], b_star
             for l in 0..j {
                 sum += &mu[j][l] * &mu[i][l] * &b_star[l];
             }
-            mu[i][j] = (dot_ij - sum) / &b_star[j];
+            if b_star[j] != 0 {
+                mu[i][j] = (dot_ij - sum) / &b_star[j];
+            } else {
+                mu[i][j] = Rational::from(0);
+            }
 
             b_star_i -= &mu[i][j] * &mu[i][j] * &b_star[j];
         }

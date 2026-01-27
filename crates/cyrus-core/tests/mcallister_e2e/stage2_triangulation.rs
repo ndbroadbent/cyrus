@@ -3,17 +3,15 @@
 //! Computes regular triangulation from polytope points + heights.
 //!
 //! - "ours" branch: Our computed FRST heights (|p|² with star adjustment)
-//! - "theirs" branch: McAllister's heights from inputs/heights.json
+//! - "theirs" branch: McAllister's heights from data files
 
 #![allow(missing_docs)]
 
 use serde::Deserialize;
 use std::path::PathBuf;
 
-#[cfg(feature = "slow-tests")]
-use cyrus_core::{compute_frst_heights, compute_regular_triangulation};
-
 use cyrus_core::{Point, Polytope};
+use cyrus_core::{compute_frst_heights, compute_regular_triangulation};
 
 #[derive(Debug, Deserialize)]
 struct PolytopeInput {
@@ -27,19 +25,62 @@ struct Stage2Fixture {
     origin_idx: usize,
 }
 
+fn read_csv_rows_i64(path: &PathBuf) -> Vec<Vec<i64>> {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+    content
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|line| {
+            line.split(',')
+                .map(|s| s.trim().parse::<i64>().expect("invalid integer"))
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+fn read_csv_f64(path: &PathBuf) -> Vec<f64> {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+    content
+        .split(|c| c == ',' || c == '\n' || c == '\r')
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.trim().parse::<f64>().expect("invalid float"))
+        .collect()
+}
+
+fn require_first_principles() -> bool {
+    if !crate::first_principles_enabled() {
+        eprintln!("Skipping first-principles test (set CYRUS_FIRST_PRINCIPLES=1)");
+        return false;
+    }
+    true
+}
+
 fn load_stage2_fixture() -> Stage2Fixture {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
-    // Load primal points from inputs
-    let input_path = manifest_dir.join("tests/mcallister_e2e/inputs/polytope.json");
-    let content = std::fs::read_to_string(&input_path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", input_path.display()));
-    let input: PolytopeInput = serde_json::from_str(&content)
-        .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", input_path.display()));
+    let data_dir = crate::mcallister_data_dir();
+    if crate::first_principles_enabled() && data_dir.is_none() {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    }
+
+    let points_raw = if let Some(dir) = data_dir {
+        read_csv_rows_i64(&dir.join("points.dat"))
+    } else {
+        if !crate::fixtures_enabled() {
+            panic!("Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures");
+        }
+        let input_path = manifest_dir.join("tests/mcallister_e2e/inputs/polytope.json");
+        let content = std::fs::read_to_string(&input_path)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {e}", input_path.display()));
+        let input: PolytopeInput = serde_json::from_str(&content)
+            .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", input_path.display()));
+        input.points
+    };
 
     // Create polytope from all primal points
-    let all_points: Vec<Point> = input
-        .points
+    let all_points: Vec<Point> = points_raw
         .iter()
         .map(|coords| Point::new(coords.clone()))
         .collect();
@@ -88,8 +129,10 @@ fn stage2_origin_index() {
 // =============================================================================
 
 #[test]
-#[cfg(feature = "slow-tests")]
 fn stage2_ours_frst_heights() {
+    if !require_first_principles() {
+        return;
+    }
     let fixture = load_stage2_fixture();
 
     let (heights, triangulation) =
@@ -106,8 +149,10 @@ fn stage2_ours_frst_heights() {
 }
 
 #[test]
-#[cfg(feature = "slow-tests")]
 fn stage2_ours_triangulation_simplex_count() {
+    if !require_first_principles() {
+        return;
+    }
     let fixture = load_stage2_fixture();
 
     let (_heights, triangulation) =
@@ -122,8 +167,10 @@ fn stage2_ours_triangulation_simplex_count() {
 }
 
 #[test]
-#[cfg(feature = "slow-tests")]
 fn stage2_ours_triangulation_simplices() {
+    if !require_first_principles() {
+        return;
+    }
     let fixture = load_stage2_fixture();
 
     let (_heights, triangulation) =
@@ -138,8 +185,10 @@ fn stage2_ours_triangulation_simplices() {
 }
 
 #[test]
-#[cfg(feature = "slow-tests")]
 fn stage2_ours_all_simplices_contain_origin() {
+    if !require_first_principles() {
+        return;
+    }
     let fixture = load_stage2_fixture();
 
     let (_heights, triangulation) =
@@ -159,7 +208,7 @@ fn stage2_ours_all_simplices_contain_origin() {
 }
 
 // =============================================================================
-// "theirs" branch: McAllister's heights from inputs/heights.json
+// "theirs" branch: McAllister's heights from data files
 // =============================================================================
 
 #[derive(Debug, Deserialize)]
@@ -169,6 +218,16 @@ struct HeightsInput {
 
 fn load_mcallister_heights() -> Vec<f64> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let data_dir = crate::mcallister_data_dir();
+    if crate::first_principles_enabled() && data_dir.is_none() {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    }
+    if let Some(dir) = data_dir {
+        return read_csv_f64(&dir.join("heights.dat"));
+    }
+    if !crate::fixtures_enabled() {
+        panic!("Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures");
+    }
     let path = manifest_dir.join("tests/mcallister_e2e/inputs/heights.json");
     let content = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
@@ -188,8 +247,10 @@ fn stage2_theirs_heights_count() {
 }
 
 #[test]
-#[cfg(feature = "slow-tests")]
 fn stage2_theirs_triangulation() {
+    if !require_first_principles() {
+        return;
+    }
     let fixture = load_stage2_fixture();
     let heights = load_mcallister_heights();
 
@@ -204,8 +265,10 @@ fn stage2_theirs_triangulation() {
 }
 
 #[test]
-#[cfg(feature = "slow-tests")]
 fn stage2_theirs_is_star() {
+    if !require_first_principles() {
+        return;
+    }
     let fixture = load_stage2_fixture();
     let heights = load_mcallister_heights();
 

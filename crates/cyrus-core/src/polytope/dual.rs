@@ -15,6 +15,12 @@ use std::collections::HashSet;
 use super::Polytope;
 
 impl Polytope {
+    /// Return the dual vertices (facet normals) of the polytope.
+    ///
+    /// These are the vertices of the dual polytope (not all dual lattice points).
+    pub fn dual_vertices(&self) -> Result<Vec<Point>> {
+        self.find_dual_vertices()
+    }
     /// Compute the dual (polar) polytope and return all its lattice points.
     ///
     /// For a reflexive polytope with the origin as interior point,

@@ -17,11 +17,15 @@
 //! ```
 
 use malachite::Integer;
+use malachite::Rational;
 use malachite::num::arithmetic::traits::Abs;
+use malachite::num::conversion::traits::RoundingFrom;
+use malachite::rounding_modes::RoundingMode;
 
 use crate::Point;
 use crate::error::{Error, Result};
 use crate::intersection::Intersection;
+use crate::integer_math::{determinant_gaussian, invert_matrix};
 
 /// Compute the divisor basis indices from triangulation points and GLSM.
 ///
@@ -62,18 +66,13 @@ pub fn compute_divisor_basis(points: &[Point], glsm: &[Vec<Integer>]) -> Result<
         return Err(Error::InvalidInput("h11 must be positive".into()));
     }
 
-    // Verify: GLSM rows should equal h11
+    // Verify: GLSM rows must equal h11
     if glsm.len() != h11 {
-        // Allow off-by-one for legacy compatibility (some code passes h11+1 rows)
-        if glsm.len() != h11 + 1 {
-            return Err(Error::InvalidInput(format!(
-                "GLSM row count {} doesn't match h11={} (expected {} or {})",
-                glsm.len(),
-                h11,
-                h11,
-                h11 + 1
-            )));
-        }
+        return Err(Error::InvalidInput(format!(
+            "GLSM row count {} doesn't match h11={}",
+            glsm.len(),
+            h11
+        )));
     }
 
     // Step 1: Build linear relations matrix L
@@ -256,6 +255,100 @@ fn gcd_integer(a: &Integer, b: &Integer) -> Integer {
     } else {
         gcd_integer(b, &(a % b))
     }
+}
+
+/// Compute the integer change-of-basis matrix between two divisor bases.
+///
+/// Returns a matrix T such that:
+///   glsm[:, to_basis] = glsm[:, from_basis] * T
+/// where glsm is the GLSM charge matrix (rows = h11, cols = n_points).
+pub fn basis_change_matrix(
+    glsm: &[Vec<Integer>],
+    from_basis: &[usize],
+    to_basis: &[usize],
+) -> Result<Vec<Vec<Integer>>> {
+    if glsm.is_empty() {
+        return Err(Error::InvalidInput("GLSM matrix is empty".into()));
+    }
+    let h11 = glsm.len();
+    let n_cols = glsm[0].len();
+    if from_basis.len() != h11 || to_basis.len() != h11 {
+        return Err(Error::InvalidInput(format!(
+            "Basis length mismatch: from={}, to={}, h11={}",
+            from_basis.len(),
+            to_basis.len(),
+            h11
+        )));
+    }
+    if from_basis.iter().any(|&i| i >= n_cols) || to_basis.iter().any(|&i| i >= n_cols) {
+        return Err(Error::InvalidInput("Basis index out of range".into()));
+    }
+
+    // Build A = glsm[:, from_basis], B = glsm[:, to_basis]
+    let mut a: Vec<Vec<Integer>> = vec![vec![Integer::from(0); h11]; h11];
+    let mut b: Vec<Vec<Integer>> = vec![vec![Integer::from(0); h11]; h11];
+    for (col_idx, &col) in from_basis.iter().enumerate() {
+        for row in 0..h11 {
+            a[row][col_idx] = glsm[row][col].clone();
+        }
+    }
+    for (col_idx, &col) in to_basis.iter().enumerate() {
+        for row in 0..h11 {
+            b[row][col_idx] = glsm[row][col].clone();
+        }
+    }
+
+    let a_r: Vec<Vec<Rational>> = a
+        .iter()
+        .map(|row| row.iter().map(|v| Rational::from(v)).collect())
+        .collect();
+    let b_r: Vec<Vec<Rational>> = b
+        .iter()
+        .map(|row| row.iter().map(|v| Rational::from(v)).collect())
+        .collect();
+
+    let a_inv = invert_matrix(&a_r).ok_or_else(|| {
+        Error::InvalidInput("Failed to invert GLSM basis submatrix".into())
+    })?;
+
+    // T = A^{-1} * B
+    let mut t_r: Vec<Vec<Rational>> = vec![vec![Rational::from(0); h11]; h11];
+    for i in 0..h11 {
+        for j in 0..h11 {
+            let mut acc = Rational::from(0);
+            for k in 0..h11 {
+                acc += &a_inv[i][k] * &b_r[k][j];
+            }
+            t_r[i][j] = acc;
+        }
+    }
+
+    // Convert to Integer matrix and ensure exact integrality.
+    let mut t: Vec<Vec<Integer>> = vec![vec![Integer::from(0); h11]; h11];
+    for i in 0..h11 {
+        for j in 0..h11 {
+            let val = &t_r[i][j];
+            let int_val = Integer::rounding_from(val, RoundingMode::Floor).0;
+            if Rational::from(&int_val) != *val {
+                return Err(Error::InvalidInput(
+                    "Basis change matrix is not integral".into(),
+                ));
+            }
+            t[i][j] = int_val;
+        }
+    }
+
+    Ok(t)
+}
+
+/// Check whether an integer matrix is unimodular (determinant ±1).
+pub fn is_unimodular(mat: &[Vec<Integer>]) -> bool {
+    let mut mat_r: Vec<Vec<Rational>> = mat
+        .iter()
+        .map(|row| row.iter().map(|v| Rational::from(v)).collect())
+        .collect();
+    let det = determinant_gaussian(&mut mat_r);
+    det == Rational::from(1) || det == Rational::from(-1)
 }
 
 /// Extract intersection numbers for basis indices only.

@@ -35,6 +35,35 @@
 //! Stage 7: V_string (from moduli)
 //! Stage 8: V₀ (from all above)
 
+pub(crate) fn first_principles_enabled() -> bool {
+    std::env::var_os("CYRUS_FIRST_PRINCIPLES").is_some()
+}
+
+pub(crate) fn fixtures_enabled() -> bool {
+    let enabled = std::env::var_os("CYRUS_ALLOW_FIXTURES").is_some();
+    if enabled && first_principles_enabled() {
+        panic!("CYRUS_ALLOW_FIXTURES cannot be used with CYRUS_FIRST_PRINCIPLES");
+    }
+    enabled
+}
+
+pub(crate) fn mcallister_data_dir() -> Option<std::path::PathBuf> {
+    if let Some(dir) = std::env::var_os("CYRUS_MCALLISTER_DATA_DIR") {
+        return Some(std::path::PathBuf::from(dir));
+    }
+
+    let default =
+        std::path::PathBuf::from("/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647");
+    if default.exists() {
+        Some(default)
+    } else {
+        None
+    }
+}
+
+#[path = "mcallister_e2e/stage0_data_integrity.rs"]
+mod stage0_data_integrity;
+
 #[path = "mcallister_e2e/stage1_polytope.rs"]
 mod stage1_polytope;
 

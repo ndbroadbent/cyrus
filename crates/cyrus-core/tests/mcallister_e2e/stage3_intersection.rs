@@ -9,15 +9,13 @@
 
 #![allow(missing_docs)]
 
-use serde::Deserialize;
-#[cfg(feature = "slow-tests")]
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[cfg(feature = "slow-tests")]
 use cyrus_core::{
-    compute_frst_heights, compute_linear_relations_no_origin, compute_regular_triangulation,
-    intersection::compute_intersection_numbers_with_linear_relations,
+    basis_change_matrix, compute_frst_heights, compute_glsm_and_linrels,
+    compute_linear_relations_no_origin, compute_regular_triangulation,
+    intersection::compute_intersection_numbers_with_linear_relations, is_unimodular,
 };
 
 use cyrus_core::{Point, Polytope, compute_glsm_charge_matrix};
@@ -37,17 +35,71 @@ struct Stage3Fixture {
     origin_idx: usize,
 }
 
+fn read_csv_rows_i64(path: &PathBuf) -> Vec<Vec<i64>> {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+    content
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|line| {
+            line.split(',')
+                .map(|s| s.trim().parse::<i64>().expect("invalid integer"))
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+fn read_csv_f64(path: &PathBuf) -> Vec<f64> {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+    content
+        .split(|c| c == ',' || c == '\n' || c == '\r')
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.trim().parse::<f64>().expect("invalid float"))
+        .collect()
+}
+
+fn read_csv_i64(path: &PathBuf) -> Vec<i64> {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+    content
+        .split(|c| c == ',' || c == '\n' || c == '\r')
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.trim().parse::<i64>().expect("invalid integer"))
+        .collect()
+}
+
+fn require_first_principles() -> bool {
+    if !crate::first_principles_enabled() {
+        eprintln!("Skipping first-principles test (set CYRUS_FIRST_PRINCIPLES=1)");
+        return false;
+    }
+    true
+}
+
 fn load_fixture() -> Stage3Fixture {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
-    let input_path = manifest_dir.join("tests/mcallister_e2e/inputs/polytope.json");
-    let content = std::fs::read_to_string(&input_path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", input_path.display()));
-    let input: PolytopeInput = serde_json::from_str(&content)
-        .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", input_path.display()));
+    let data_dir = crate::mcallister_data_dir();
+    if crate::first_principles_enabled() && data_dir.is_none() {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    }
 
-    let all_points: Vec<Point> = input
-        .points
+    let points_raw = if let Some(dir) = data_dir {
+        read_csv_rows_i64(&dir.join("points.dat"))
+    } else {
+        if !crate::fixtures_enabled() {
+            panic!("Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures");
+        }
+        let input_path = manifest_dir.join("tests/mcallister_e2e/inputs/polytope.json");
+        let content = std::fs::read_to_string(&input_path)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {e}", input_path.display()));
+        let input: PolytopeInput = serde_json::from_str(&content)
+            .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", input_path.display()));
+        input.points
+    };
+
+    let all_points: Vec<Point> = points_raw
         .iter()
         .map(|coords| Point::new(coords.clone()))
         .collect();
@@ -71,12 +123,68 @@ fn load_fixture() -> Stage3Fixture {
 
 fn load_mcallister_heights() -> Vec<f64> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let data_dir = crate::mcallister_data_dir();
+    if crate::first_principles_enabled() && data_dir.is_none() {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    }
+    if let Some(dir) = data_dir {
+        return read_csv_f64(&dir.join("heights.dat"));
+    }
+    if !crate::fixtures_enabled() {
+        panic!("Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures");
+    }
     let path = manifest_dir.join("tests/mcallister_e2e/inputs/heights.json");
     let content = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
     let input: HeightsInput = serde_json::from_str(&content)
         .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", path.display()));
     input.values
+}
+
+#[test]
+fn stage3_primal_basis_matches_dat() {
+    if !require_first_principles() {
+        return;
+    }
+    let Some(data_dir) = crate::mcallister_data_dir() else {
+        eprintln!("Skipping basis check (set CYRUS_MCALLISTER_DATA_DIR)");
+        return;
+    };
+
+    let fixture = load_fixture();
+    let (glsm, _linrel, basis) =
+        compute_glsm_and_linrels(&fixture.triangulation_points)
+            .expect("Failed to compute GLSM/basis");
+
+    let basis_path = data_dir.join("basis.dat");
+    let basis_i64 = read_csv_i64(&basis_path);
+    let basis_expected: Vec<usize> = basis_i64
+        .into_iter()
+        .map(|v| usize::try_from(v).expect("basis index fits usize"))
+        .collect();
+
+    if basis == basis_expected {
+        return;
+    }
+
+    if std::env::var_os("CYRUS_STRICT_BASIS").is_some() {
+        assert_eq!(
+            basis, basis_expected,
+            "Computed basis does not match McAllister basis.dat"
+        );
+    }
+
+    let transform = basis_change_matrix(&glsm, &basis, &basis_expected)
+        .expect("Failed to compute basis change matrix");
+
+    assert!(
+        is_unimodular(&transform),
+        "Basis differs from McAllister, and change-of-basis is not unimodular"
+    );
+
+    eprintln!(
+        "Basis differs from McAllister; unimodular change-of-basis confirmed."
+    );
 }
 
 // =============================================================================
@@ -90,20 +198,22 @@ fn stage3_glsm_charge_matrix() {
     let glsm = compute_glsm_charge_matrix(&fixture.triangulation_points, true)
         .expect("Failed to compute GLSM charge matrix");
 
-    // GLSM is the kernel of the point matrix
-    // With include_origin=true, we have 219 + 1 = 220 points
-    // Kernel has (n_points - dim - 1) = 220 - 4 - 1 = 215 rows
-    // Each row has 220 columns
+    // GLSM is the kernel of the point matrix.
+    // With include_origin=true, the column count equals the point count
+    // (origin is already present in points_not_interior_to_facets).
     assert!(!glsm.is_empty(), "GLSM should not be empty");
+    let n_pts = fixture.triangulation_points.len();
+    let dim = fixture.triangulation_points[0].dim();
+    let expected_rows = n_pts - (dim + 1);
     assert_eq!(
         glsm.len(),
-        215,
-        "GLSM should have 215 kernel vectors (h11+1)"
+        expected_rows,
+        "GLSM should have n_points - dim - 1 kernel vectors"
     );
     assert_eq!(
         glsm[0].len(),
-        220,
-        "GLSM columns should equal n_points+origin = 220"
+        n_pts,
+        "GLSM columns should equal number of points (origin included)"
     );
 
     // Snapshot the GLSM matrix - convert Integer to i64
@@ -124,8 +234,10 @@ fn stage3_glsm_charge_matrix() {
 // =============================================================================
 
 #[test]
-#[cfg(feature = "slow-tests")]
 fn stage3_ours_intersection_numbers() {
+    if !require_first_principles() {
+        return;
+    }
     let fixture = load_fixture();
 
     // Compute our triangulation
@@ -179,8 +291,10 @@ fn stage3_ours_intersection_numbers() {
 // =============================================================================
 
 #[test]
-#[cfg(feature = "slow-tests")]
 fn stage3_theirs_intersection_numbers() {
+    if !require_first_principles() {
+        return;
+    }
     let fixture = load_fixture();
     let heights = load_mcallister_heights();
 
@@ -235,8 +349,10 @@ fn stage3_theirs_intersection_numbers() {
 
 /// Dual test comparing our intersection numbers against CYTools computed values
 #[test]
-#[cfg(feature = "slow-tests")]
 fn stage3_dual_test_intersection_vs_cytools() {
+    if !require_first_principles() {
+        return;
+    }
     let fixture = load_fixture();
     let heights = load_mcallister_heights();
 

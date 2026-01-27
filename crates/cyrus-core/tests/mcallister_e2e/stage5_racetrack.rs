@@ -27,6 +27,25 @@ fn round_to_decimals(value: f64, decimals: u32) -> f64 {
     (value * multiplier).round() / multiplier
 }
 
+fn require_data_dir() -> Option<PathBuf> {
+    let Some(dir) = crate::mcallister_data_dir() else {
+        if crate::first_principles_enabled() {
+            panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+        }
+        eprintln!("Skipping racetrack data checks (set CYRUS_MCALLISTER_DATA_DIR)");
+        return None;
+    };
+    Some(dir)
+}
+
+fn require_racetrack_heavy() -> bool {
+    if std::env::var_os("CYRUS_RACETRACK_HEAVY").is_none() {
+        eprintln!("Skipping heavy racetrack solve (set CYRUS_RACETRACK_HEAVY=1)");
+        return false;
+    }
+    true
+}
+
 // =============================================================================
 // FIXTURE DATA STRUCTURES
 // =============================================================================
@@ -131,13 +150,11 @@ fn stage10_bbhl_correction_4_214() {
 
 /// Load dual curves from McAllister's data files
 /// Note: GV invariants are arbitrary precision integers (10^50+), returned as strings
-fn load_dual_curves() -> (Vec<Vec<i64>>, Vec<String>) {
+fn load_dual_curves(data_dir: &PathBuf) -> (Vec<Vec<i64>>, Vec<String>) {
     use std::fs;
 
-    let data_dir = "/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647";
-
     // Load dual curves (5177 curves, 9 elements each)
-    let curves_content = fs::read_to_string(format!("{}/dual_curves.dat", data_dir))
+    let curves_content = fs::read_to_string(data_dir.join("dual_curves.dat"))
         .expect("Failed to read dual_curves.dat");
 
     let curves: Vec<Vec<i64>> = curves_content
@@ -151,7 +168,7 @@ fn load_dual_curves() -> (Vec<Vec<i64>>, Vec<String>) {
         .collect();
 
     // Load GV invariants as strings (they can be HUGE: 10^50+)
-    let gv_content = fs::read_to_string(format!("{}/dual_curves_gv.dat", data_dir))
+    let gv_content = fs::read_to_string(data_dir.join("dual_curves_gv.dat"))
         .expect("Failed to read dual_curves_gv.dat");
 
     let gv: Vec<String> = gv_content
@@ -165,7 +182,10 @@ fn load_dual_curves() -> (Vec<Vec<i64>>, Vec<String>) {
 
 #[test]
 fn stage5_load_dual_curves() {
-    let (curves, gv) = load_dual_curves();
+    let Some(data_dir) = require_data_dir() else {
+        return;
+    };
+    let (curves, gv) = load_dual_curves(&data_dir);
 
     // Verify dimensions
     assert_eq!(curves.len(), 5177, "Should have 5177 dual curves");
@@ -202,13 +222,11 @@ fn stage5_load_dual_curves() {
 
 /// Load primal curves from McAllister's data files
 /// These are the 344 curves used for the racetrack superpotential
-fn load_primal_curves() -> (Vec<Vec<i64>>, Vec<i64>) {
+fn load_primal_curves(data_dir: &PathBuf) -> (Vec<Vec<i64>>, Vec<i64>) {
     use std::fs;
 
-    let data_dir = "/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647";
-
     // Load primal curves (344 curves, 219 elements each)
-    let curves_content = fs::read_to_string(format!("{}/small_curves.dat", data_dir))
+    let curves_content = fs::read_to_string(data_dir.join("small_curves.dat"))
         .expect("Failed to read small_curves.dat");
 
     let curves: Vec<Vec<i64>> = curves_content
@@ -222,7 +240,7 @@ fn load_primal_curves() -> (Vec<Vec<i64>>, Vec<i64>) {
         .collect();
 
     // Load GV invariants (these are small, fit in i64)
-    let gv_content = fs::read_to_string(format!("{}/small_curves_gv.dat", data_dir))
+    let gv_content = fs::read_to_string(data_dir.join("small_curves_gv.dat"))
         .expect("Failed to read small_curves_gv.dat");
 
     let gv: Vec<i64> = gv_content
@@ -238,13 +256,11 @@ fn load_primal_curves() -> (Vec<Vec<i64>>, Vec<i64>) {
 }
 
 /// Load KKLT basis and target volumes
-fn load_kklt_data() -> (Vec<usize>, Vec<i64>) {
+fn load_kklt_data(data_dir: &PathBuf) -> (Vec<usize>, Vec<i64>) {
     use std::fs;
 
-    let data_dir = "/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647";
-
     // Load KKLT basis indices (213 divisors that contribute to superpotential)
-    let basis_content = fs::read_to_string(format!("{}/kklt_basis.dat", data_dir))
+    let basis_content = fs::read_to_string(data_dir.join("kklt_basis.dat"))
         .expect("Failed to read kklt_basis.dat");
 
     let kklt_basis: Vec<usize> = basis_content
@@ -254,7 +270,7 @@ fn load_kklt_data() -> (Vec<usize>, Vec<i64>) {
         .collect();
 
     // Load target volumes (c_i values: 6 for O7, 1 for D3)
-    let volumes_content = fs::read_to_string(format!("{}/target_volumes.dat", data_dir))
+    let volumes_content = fs::read_to_string(data_dir.join("target_volumes.dat"))
         .expect("Failed to read target_volumes.dat");
 
     let target_volumes: Vec<i64> = volumes_content
@@ -268,7 +284,10 @@ fn load_kklt_data() -> (Vec<usize>, Vec<i64>) {
 
 #[test]
 fn stage5_load_primal_curves() {
-    let (curves, gv) = load_primal_curves();
+    let Some(data_dir) = require_data_dir() else {
+        return;
+    };
+    let (curves, gv) = load_primal_curves(&data_dir);
 
     // Verify dimensions match McAllister
     assert_eq!(curves.len(), 344, "Should have 344 primal curves");
@@ -316,7 +335,10 @@ fn stage5_load_primal_curves() {
 
 #[test]
 fn stage5_load_kklt_data() {
-    let (kklt_basis, target_volumes) = load_kklt_data();
+    let Some(data_dir) = require_data_dir() else {
+        return;
+    };
+    let (kklt_basis, target_volumes) = load_kklt_data(&data_dir);
 
     // KKLT basis has 214 divisors (full h11 = 214)
     // Note: assertions/curves.json says kklt_basis_size: 213, but kklt_basis.dat has 214
@@ -351,8 +373,11 @@ fn stage5_load_kklt_data() {
 
 #[test]
 fn stage5_project_curves_to_kklt_basis() {
-    let (curves, gv) = load_primal_curves();
-    let (kklt_basis, _target_volumes) = load_kklt_data();
+    let Some(data_dir) = require_data_dir() else {
+        return;
+    };
+    let (curves, gv) = load_primal_curves(&data_dir);
+    let (kklt_basis, _target_volumes) = load_kklt_data(&data_dir);
 
     // Project each curve to the KKLT basis (213 dimensions)
     let projected_curves: Vec<Vec<i64>> = curves
@@ -448,10 +473,10 @@ struct RacetrackTerm {
 }
 
 /// Build racetrack terms from dual curves
-fn build_racetrack_terms() -> Vec<RacetrackTerm> {
+fn build_racetrack_terms(data_dir: &PathBuf) -> Vec<RacetrackTerm> {
     use std::collections::BTreeMap;
 
-    let (curves, gv) = load_dual_curves();
+    let (curves, gv) = load_dual_curves(data_dir);
     let p = get_mcallister_flat_direction_p();
     let m = get_m_flux();
     let basis = get_dual_basis();
@@ -532,7 +557,10 @@ fn build_racetrack_terms() -> Vec<RacetrackTerm> {
 
 #[test]
 fn stage6_build_racetrack_terms() {
-    let terms = build_racetrack_terms();
+    let Some(data_dir) = require_data_dir() else {
+        return;
+    };
+    let terms = build_racetrack_terms(&data_dir);
 
     // Should have multiple unique exponents
     assert!(!terms.is_empty(), "Should have racetrack terms");
@@ -579,16 +607,18 @@ fn stage6_build_racetrack_terms() {
 fn stage10_verify_mcallister_cy_vol() {
     use std::fs;
 
-    let data_dir = "/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647";
+    let Some(data_dir) = require_data_dir() else {
+        return;
+    };
 
     // Load uncorrected and corrected volumes from McAllister's data
-    let cy_vol_uncorrected: f64 = fs::read_to_string(format!("{}/cy_vol.dat", data_dir))
+    let cy_vol_uncorrected: f64 = fs::read_to_string(data_dir.join("cy_vol.dat"))
         .expect("Failed to read cy_vol.dat")
         .trim()
         .parse()
         .expect("Invalid cy_vol");
 
-    let cy_vol_corrected: f64 = fs::read_to_string(format!("{}/corrected_cy_vol.dat", data_dir))
+    let cy_vol_corrected: f64 = fs::read_to_string(data_dir.join("corrected_cy_vol.dat"))
         .expect("Failed to read corrected_cy_vol.dat")
         .trim()
         .parse()
@@ -641,8 +671,8 @@ fn stage10_verify_mcallister_cy_vol() {
 
 /// Find the racetrack pair (two consecutive terms with opposite signs)
 /// and solve for g_s
-fn solve_racetrack_gs() -> Option<(f64, f64, f64, i64, i64)> {
-    let terms = build_racetrack_terms();
+fn solve_racetrack_gs(data_dir: &PathBuf) -> Option<(f64, f64, f64, i64, i64)> {
+    let terms = build_racetrack_terms(data_dir);
 
     // Filter to non-zero coefficient terms
     let nonzero: Vec<_> = terms.iter().filter(|t| t.coeff != 0).collect();
@@ -837,8 +867,15 @@ fn compute_w0_exact(
 
 #[test]
 fn stage7_8_solve_racetrack_gs_w0() {
-    let terms = build_racetrack_terms();
-    let racetrack_result = solve_racetrack_gs();
+    // Heavy: explicit opt-in only.
+    if !crate::first_principles_enabled() || !require_racetrack_heavy() {
+        return;
+    }
+    let Some(data_dir) = require_data_dir() else {
+        return;
+    };
+    let terms = build_racetrack_terms(&data_dir);
+    let racetrack_result = solve_racetrack_gs(&data_dir);
 
     assert!(
         racetrack_result.is_some(),

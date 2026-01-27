@@ -9,6 +9,7 @@ use crate::kahler::MoriCone;
 use crate::racetrack::{
     GvInvariant, RacetrackResult, build_racetrack_terms, compute_w0, solve_racetrack,
 };
+use crate::f64_pos;
 use crate::types::f64::F64;
 use crate::types::i32::I32;
 use crate::types::i64::I64;
@@ -111,7 +112,7 @@ pub fn evaluate_vacuum(
     }
 
     // 5. Calculation: Racetrack Solution
-    let terms = build_racetrack_terms(req.gv, &m_typed, &p);
+    let terms = build_racetrack_terms(req.gv, &m_typed, &p, f64_pos!(1.0));
     let Some(rt_res) = solve_racetrack(&terms) else {
         res.reason = Some("No stable racetrack solution".into());
         return Ok(res);

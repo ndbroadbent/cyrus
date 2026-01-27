@@ -13,6 +13,8 @@
 
 use std::collections::HashSet;
 
+use good_lp::{constraint, default_solver, variable, ProblemVariables, SolverModel};
+
 /// Convert hyperplanes to rays (or vice versa).
 ///
 /// Given H = hyperplanes defining cone {x : H @ x >= 0},
@@ -20,14 +22,14 @@ use std::collections::HashSet;
 ///
 /// The algorithm is symmetric: dualize(rays) gives hyperplanes,
 /// dualize(hyperplanes) gives rays.
-pub fn dualize(matrix: &[Vec<i64>], ambient_dim: usize) -> Vec<Vec<i64>> {
+pub fn dualize(matrix: &[Vec<i128>], ambient_dim: usize) -> Vec<Vec<i128>> {
     if matrix.is_empty() {
         // No constraints = full space
         // Return ±e_i for each dimension
         let mut rays = Vec::new();
         for i in 0..ambient_dim {
-            let mut pos = vec![0i64; ambient_dim];
-            let mut neg = vec![0i64; ambient_dim];
+            let mut pos = vec![0i128; ambient_dim];
+            let mut neg = vec![0i128; ambient_dim];
             pos[i] = 1;
             neg[i] = -1;
             rays.push(pos);
@@ -47,12 +49,12 @@ pub fn dualize(matrix: &[Vec<i64>], ambient_dim: usize) -> Vec<Vec<i64>> {
 /// Incremental Double Description Method.
 ///
 /// Start with the full space (identity rays), then add constraints one by one.
-fn ddm_incremental(hyperplanes: &[Vec<i64>], dim: usize) -> Vec<Vec<i64>> {
+fn ddm_incremental(hyperplanes: &[Vec<i128>], dim: usize) -> Vec<Vec<i128>> {
     // Start with identity rays (full space before any constraints)
-    let mut rays: Vec<Vec<i64>> = (0..dim)
+    let mut rays: Vec<Vec<i128>> = (0..dim)
         .flat_map(|i| {
-            let mut pos = vec![0i64; dim];
-            let mut neg = vec![0i64; dim];
+            let mut pos = vec![0i128; dim];
+            let mut neg = vec![0i128; dim];
             pos[i] = 1;
             neg[i] = -1;
             vec![pos, neg]
@@ -60,8 +62,14 @@ fn ddm_incremental(hyperplanes: &[Vec<i64>], dim: usize) -> Vec<Vec<i64>> {
         .collect();
 
     // Process each hyperplane
-    for h in hyperplanes {
+    for (idx, h) in hyperplanes.iter().enumerate() {
+        if idx % 25 == 0 {
+            eprintln!("[DEBUG] ddm: hyperplane {}/{}", idx + 1, hyperplanes.len());
+        }
         rays = process_hyperplane(&rays, h);
+        if rays.len() > 2000 || idx % 20 == 0 {
+            rays = prune_rays(rays);
+        }
 
         // Early termination if cone becomes empty
         if rays.is_empty() {
@@ -70,7 +78,7 @@ fn ddm_incremental(hyperplanes: &[Vec<i64>], dim: usize) -> Vec<Vec<i64>> {
     }
 
     // Remove duplicates and normalize
-    deduplicate_rays(rays)
+    prune_rays(rays)
 }
 
 /// Process one hyperplane in the DDM algorithm.
@@ -81,7 +89,7 @@ fn ddm_incremental(hyperplanes: &[Vec<i64>], dim: usize) -> Vec<Vec<i64>> {
 /// - Negative: h·r < 0 (outside, will be cut)
 ///
 /// New rays = positive + zero + (positive × negative intersections)
-fn process_hyperplane(rays: &[Vec<i64>], h: &[i64]) -> Vec<Vec<i64>> {
+fn process_hyperplane(rays: &[Vec<i128>], h: &[i128]) -> Vec<Vec<i128>> {
     let mut positive = Vec::new();
     let mut zero = Vec::new();
     let mut negative = Vec::new();
@@ -120,13 +128,12 @@ fn process_hyperplane(rays: &[Vec<i64>], h: &[i64]) -> Vec<Vec<i64>> {
 /// r = (h·r+) * r- - (h·r-) * r+
 ///
 /// This makes h·r = (h·r+)(h·r-) - (h·r-)(h·r+) = 0.
-fn compute_intersection_ray(pos: &[i64], neg: &[i64], h: &[i64]) -> Option<Vec<i64>> {
+fn compute_intersection_ray(pos: &[i128], neg: &[i128], h: &[i128]) -> Option<Vec<i128>> {
     let dp = dot_product(h, pos); // > 0
     let dn = dot_product(h, neg); // < 0
 
     // r = dp * neg - dn * pos
-    // Since dn < 0, this is: dp * neg + |dn| * pos
-    let mut result: Vec<i64> = pos
+    let mut result: Vec<i128> = pos
         .iter()
         .zip(neg.iter())
         .map(|(&p, &n)| dp * n - dn * p)
@@ -146,8 +153,8 @@ fn compute_intersection_ray(pos: &[i64], neg: &[i64], h: &[i64]) -> Option<Vec<i
 }
 
 /// Remove duplicate rays (after normalization).
-fn deduplicate_rays(rays: Vec<Vec<i64>>) -> Vec<Vec<i64>> {
-    let mut seen: HashSet<Vec<i64>> = HashSet::new();
+fn deduplicate_rays(rays: Vec<Vec<i128>>) -> Vec<Vec<i128>> {
+    let mut seen: HashSet<Vec<i128>> = HashSet::new();
     let mut result = Vec::new();
 
     for ray in rays {
@@ -162,8 +169,57 @@ fn deduplicate_rays(rays: Vec<Vec<i64>>) -> Vec<Vec<i64>> {
     result
 }
 
+fn prune_rays(rays: Vec<Vec<i128>>) -> Vec<Vec<i128>> {
+    let rays = deduplicate_rays(rays);
+    if rays.len() <= 1 {
+        return rays;
+    }
+    let mut keep = Vec::with_capacity(rays.len());
+    for i in 0..rays.len() {
+        if is_extremal_ray(&rays, i) {
+            keep.push(rays[i].clone());
+        }
+    }
+    if keep.is_empty() {
+        rays
+    } else {
+        keep
+    }
+}
+
+fn is_extremal_ray(rays: &[Vec<i128>], i: usize) -> bool {
+    let target = &rays[i];
+    let others: Vec<&Vec<i128>> = rays
+        .iter()
+        .enumerate()
+        .filter(|&(j, _)| j != i)
+        .map(|(_, r)| r)
+        .collect();
+
+    if others.is_empty() {
+        return true;
+    }
+
+    let dim = target.len();
+    let mut vars = ProblemVariables::new();
+    let lambdas: Vec<_> = (0..others.len())
+        .map(|_| vars.add(variable().min(0.0)))
+        .collect();
+    let mut model = vars.minimise(0.0).using(default_solver);
+
+    for k in 0..dim {
+        let mut expr = good_lp::Expression::from(0.0);
+        for (j, ray) in others.iter().enumerate() {
+            expr.add_mul(ray[k] as f64, lambdas[j]);
+        }
+        model = model.with(constraint!(expr == target[k] as f64));
+    }
+
+    model.solve().is_err()
+}
+
 /// Normalize ray direction so first non-zero element is positive.
-fn normalize_direction(mut ray: Vec<i64>) -> Vec<i64> {
+fn normalize_direction(mut ray: Vec<i128>) -> Vec<i128> {
     // First normalize by GCD
     let g = gcd_vec(&ray);
     if g > 0 {
@@ -185,17 +241,17 @@ fn normalize_direction(mut ray: Vec<i64>) -> Vec<i64> {
 }
 
 /// Dot product of two integer vectors.
-fn dot_product(a: &[i64], b: &[i64]) -> i64 {
+fn dot_product(a: &[i128], b: &[i128]) -> i128 {
     a.iter().zip(b.iter()).map(|(&x, &y)| x * y).sum()
 }
 
 /// GCD of a vector.
-fn gcd_vec(v: &[i64]) -> i64 {
+fn gcd_vec(v: &[i128]) -> i128 {
     v.iter().fold(0, |acc, &x| gcd(acc, x.abs()))
 }
 
 /// GCD of two integers.
-fn gcd(a: i64, b: i64) -> i64 {
+fn gcd(a: i128, b: i128) -> i128 {
     if b == 0 { a } else { gcd(b, a % b) }
 }
 
@@ -251,7 +307,7 @@ mod tests {
 
         // Check that (1,1)·h >= 0 for all h
         for h in &hyperplanes {
-            let dot: i64 = h.iter().sum();
+            let dot: i128 = h.iter().sum();
             assert!(dot >= 0, "Hyperplane {h:?} violates constraint");
         }
     }
@@ -289,7 +345,7 @@ mod tests {
         assert_eq!(ray, vec![0, 1]); // normalized (0,2) -> (0,1)
 
         // Verify: h·ray = 0
-        let dot: i64 = h.iter().zip(ray.iter()).map(|(&a, &b)| a * b).sum();
+        let dot: i128 = h.iter().zip(ray.iter()).map(|(&a, &b)| a * b).sum();
         assert_eq!(dot, 0);
     }
 

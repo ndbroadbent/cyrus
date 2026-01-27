@@ -3,6 +3,7 @@ use cyrus_core::racetrack::{
     GvInvariant, RacetrackResult, RacetrackTerm, ZETA_3, build_racetrack_terms, compute_w0,
     solve_racetrack,
 };
+use cyrus_core::f64_pos;
 use cyrus_core::types::f64::F64;
 use cyrus_core::types::i64::I64;
 use cyrus_core::types::tags::{Finite, NonNeg, Pos};
@@ -124,7 +125,7 @@ fn test_build_racetrack_terms() {
     let m = i64_vec(&[2, 3]);
     let p = f64_vec(&[1.0, 1.0]);
 
-    let terms = build_racetrack_terms(&gv, &m, &p);
+    let terms = build_racetrack_terms(&gv, &m, &p, f64_pos!(2.0));
     assert!(!terms.is_empty());
 }
 
@@ -144,10 +145,56 @@ fn test_build_racetrack_terms_grouping() {
     let m = i64_vec(&[1]);
     let p = f64_vec(&[1.0]);
 
-    let terms = build_racetrack_terms(&gv, &m, &p);
+    let terms = build_racetrack_terms(&gv, &m, &p, f64_pos!(2.0));
     // Should be grouped into 1 term
     assert_eq!(terms.len(), 1);
     // coefficient = 1*10 + 1*20 = 30
+    assert!((terms[0].coefficient.get() - 30.0).abs() < 1e-10);
+}
+
+#[test]
+fn test_build_racetrack_terms_cutoff() {
+    let gv = vec![
+        GvInvariant {
+            curve: i64_vec(&[1]),
+            value: f64_finite(10.0),
+        },
+        GvInvariant {
+            curve: i64_vec(&[2]),
+            value: f64_finite(20.0),
+        },
+        GvInvariant {
+            curve: i64_vec(&[-1]),
+            value: f64_finite(30.0),
+        },
+    ];
+    let m = i64_vec(&[1]);
+    // q·p values: 0.5, 1.2, -0.5
+    let p = f64_vec(&[0.5]);
+
+    let terms = build_racetrack_terms(&gv, &m, &p, f64_pos!(1.0));
+    assert_eq!(terms.len(), 1);
+    assert!((terms[0].exponent.get() - 0.5).abs() < 1e-10);
+}
+
+#[test]
+fn test_build_racetrack_terms_rounding() {
+    let gv = vec![
+        GvInvariant {
+            curve: i64_vec(&[1]),
+            value: f64_finite(10.0),
+        },
+        GvInvariant {
+            curve: i64_vec(&[1]),
+            value: f64_finite(20.0),
+        },
+    ];
+    let m = i64_vec(&[1]);
+    // Two q·p values that should round to same 6-decimal key.
+    let p = f64_vec(&[1.0000004]);
+
+    let terms = build_racetrack_terms(&gv, &m, &p, f64_pos!(2.0));
+    assert_eq!(terms.len(), 1);
     assert!((terms[0].coefficient.get() - 30.0).abs() < 1e-10);
 }
 

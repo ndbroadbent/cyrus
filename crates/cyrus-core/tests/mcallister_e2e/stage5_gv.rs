@@ -105,7 +105,13 @@ fn stage5_cygv_quintic_example() {
 fn stage5_mcallister_gv_data_available() {
     use std::fs;
 
-    let data_dir = "/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647";
+    let Some(data_dir) = crate::mcallister_data_dir() else {
+        if crate::first_principles_enabled() {
+            panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+        }
+        eprintln!("Skipping GV data availability check (set CYRUS_MCALLISTER_DATA_DIR)");
+        return;
+    };
 
     // Check all required data files exist
     let required_files = [
@@ -116,7 +122,7 @@ fn stage5_mcallister_gv_data_available() {
     ];
 
     for file in &required_files {
-        let path = format!("{}/{}", data_dir, file);
+        let path = data_dir.join(file);
         assert!(
             fs::metadata(&path).is_ok(),
             "Required file {} should exist",
@@ -125,7 +131,7 @@ fn stage5_mcallister_gv_data_available() {
     }
 
     // Load and verify dual curves data
-    let curves_content = fs::read_to_string(format!("{}/dual_curves.dat", data_dir)).unwrap();
+    let curves_content = fs::read_to_string(data_dir.join("dual_curves.dat")).unwrap();
     let n_curves = curves_content
         .lines()
         .filter(|l| !l.trim().is_empty())
@@ -133,7 +139,7 @@ fn stage5_mcallister_gv_data_available() {
     assert_eq!(n_curves, 5177, "Should have 5177 dual curves");
 
     // Load and verify GV invariants count
-    let gv_content = fs::read_to_string(format!("{}/dual_curves_gv.dat", data_dir)).unwrap();
+    let gv_content = fs::read_to_string(data_dir.join("dual_curves_gv.dat")).unwrap();
     let gv_values: Vec<&str> = gv_content
         .lines()
         .filter(|l| !l.trim().is_empty())

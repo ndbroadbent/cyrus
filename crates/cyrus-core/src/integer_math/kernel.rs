@@ -1,114 +1,152 @@
 //! Integer kernel (nullspace) computation.
 //!
-//! Provides algorithms for computing the integer kernel of matrices using
-//! Hermite Normal Form (HNF) approach.
+//! Computes an integer basis for the nullspace by performing exact
+//! rational row-reduction and then clearing denominators.
 
-use malachite::Integer;
+use malachite::{Integer, Rational};
 use malachite::num::arithmetic::traits::Abs;
+use malachite::num::conversion::traits::RoundingFrom;
+use malachite::rounding_modes::RoundingMode;
+
+use super::matrix_utils::{gcd_integer, lcm_integer};
 
 /// Compute the integer kernel (nullspace) of a matrix.
 ///
 /// Given an m x n matrix A, find a basis for the set of vectors x in Z^n
 /// such that A x = 0.
 ///
-/// # Algorithm
-/// Uses the Hermite Normal Form (HNF) approach.
-/// We compute the HNF of the augmented matrix [A^T | I].
-///
-/// Reference: Cohen, "A Course in Computational Algebraic Number Theory", Section 2.4.
-///
-/// # Panics
-/// Panics if the internal state becomes inconsistent during pivot selection.
+/// This performs exact row-reduction over Q to obtain a rational nullspace
+/// basis, then scales each basis vector to integers and reduces by GCD.
 pub fn integer_kernel(matrix: &[Vec<Integer>]) -> Vec<Vec<Integer>> {
     if matrix.is_empty() {
         return Vec::new();
     }
-
     let m = matrix.len();
     let n = matrix[0].len();
-
-    // 1. Construct the matrix M = [A^T | I] of size n x (m + n)
-    let mut m_mat = vec![vec![Integer::from(0); m + n]; n];
-    for (i, row) in m_mat.iter_mut().enumerate().take(n) {
-        for (j, col) in matrix.iter().enumerate().take(m) {
-            row[j] = col[i].clone();
-        }
-        row[m + i] = Integer::from(1);
+    if n == 0 {
+        return Vec::new();
     }
 
-    // 2. Perform row operations to zero out the A^T part (first m columns)
-    let mut pivot_row = 0;
-    for col in 0..m {
-        if pivot_row >= n {
+    // Convert to rational matrix for exact elimination.
+    let mut mat: Vec<Vec<Rational>> = vec![vec![Rational::from(0); n]; m];
+    for i in 0..m {
+        for j in 0..n {
+            mat[i][j] = Rational::from(&matrix[i][j]);
+        }
+    }
+
+    // Row-reduced echelon form.
+    let mut pivot_cols: Vec<usize> = Vec::new();
+    let mut row = 0usize;
+    for col in 0..n {
+        if row >= m {
             break;
         }
 
-        // Find a row with a non-zero entry in this column
-        let mut best_row: Option<usize> = None;
-        for r in pivot_row..n {
-            let val = &m_mat[r][col];
-            if *val == 0 {
-                continue;
-            }
-
-            if let Some(curr_best) = best_row {
-                if val.clone().abs() < m_mat[curr_best][col].clone().abs() {
-                    best_row = Some(r);
-                }
-            } else {
-                best_row = Some(r);
-            }
-        }
-
-        if let Some(r) = best_row {
-            m_mat.swap(pivot_row, r);
-            reduce_column(&mut m_mat, pivot_row, col, n, m);
-            pivot_row += 1;
-        }
-    }
-
-    // 3. The rows of M where the first m columns are all zero form the kernel
-    collect_kernel(&m_mat, n, m)
-}
-
-fn reduce_column(m_mat: &mut [Vec<Integer>], pivot_row: usize, col: usize, n: usize, m: usize) {
-    loop {
-        let mut finished = true;
-        for r in 0..n {
-            if r == pivot_row || m_mat[r][col] == 0 {
-                continue;
-            }
-
-            let q = &m_mat[r][col] / &m_mat[pivot_row][col];
-            if q != 0 {
-                for c in col..m + n {
-                    let sub = &q * &m_mat[pivot_row][c];
-                    m_mat[r][c] -= sub;
-                }
-            }
-
-            if m_mat[r][col] != 0 {
-                m_mat.swap(pivot_row, r);
-                finished = false;
+        // Find pivot row.
+        let mut pivot_row = None;
+        for r in row..m {
+            if mat[r][col] != 0 {
+                pivot_row = Some(r);
                 break;
             }
         }
-        if finished {
-            break;
+        let Some(pr) = pivot_row else {
+            continue;
+        };
+        if pr != row {
+            mat.swap(pr, row);
         }
-    }
-}
 
-fn collect_kernel(m_mat: &[Vec<Integer>], n: usize, m: usize) -> Vec<Vec<Integer>> {
-    let mut kernel = Vec::new();
-    for row in m_mat.iter().take(n) {
-        let is_zero = row.iter().take(m).all(|x| *x == 0);
-        if is_zero {
-            let vec: Vec<Integer> = row[m..m + n].to_vec();
-            if vec.iter().any(|x| *x != 0) {
-                kernel.push(vec);
+        // Normalize pivot row.
+        let pivot_val = mat[row][col].clone();
+        for c in col..n {
+            mat[row][c] /= pivot_val.clone();
+        }
+
+        // Eliminate this column from other rows.
+        let pivot_row_vals = mat[row].clone();
+        for r in 0..m {
+            if r == row {
+                continue;
+            }
+            if mat[r][col] != 0 {
+                let factor = mat[r][col].clone();
+                for c in col..n {
+                    mat[r][c] -= factor.clone() * pivot_row_vals[c].clone();
+                }
             }
         }
+
+        pivot_cols.push(col);
+        row += 1;
     }
-    kernel
+
+    if std::env::var_os("CYRUS_DEBUG_KERNEL").is_some() {
+        eprintln!("rref: {mat:?}");
+        eprintln!("pivot_cols: {pivot_cols:?}");
+    }
+
+    // Identify free columns.
+    let mut free_cols: Vec<usize> = Vec::new();
+    for col in 0..n {
+        if !pivot_cols.contains(&col) {
+            free_cols.push(col);
+        }
+    }
+    if free_cols.is_empty() {
+        return Vec::new();
+    }
+
+    // Build basis vectors for each free variable.
+    let mut basis: Vec<Vec<Integer>> = Vec::new();
+    for &free in &free_cols {
+        let mut vec = vec![Rational::from(0); n];
+        vec[free] = Rational::from(1);
+        for (r, &pcol) in pivot_cols.iter().enumerate() {
+            let coeff = mat[r][free].clone();
+            vec[pcol] = -coeff;
+        }
+        if std::env::var_os("CYRUS_DEBUG_KERNEL").is_some() {
+            eprintln!("free={free} raw_vec={vec:?}");
+        }
+
+        // Scale to integers.
+        let mut lcm = Integer::from(1);
+        for v in &vec {
+            let (_, denom) = v.clone().into_numerator_and_denominator();
+            lcm = lcm_integer(&lcm, &Integer::from(denom));
+        }
+
+        let mut int_vec: Vec<Integer> = Vec::with_capacity(n);
+        for v in &vec {
+            let scaled = v * Rational::from(&lcm);
+            let int_val = Integer::rounding_from(&scaled, RoundingMode::Floor).0;
+            debug_assert!(
+                Rational::from(&int_val) == scaled,
+                "Non-integer after scaling: {scaled}"
+            );
+            int_vec.push(int_val);
+        }
+
+        // Reduce by GCD for a primitive vector.
+        let mut g = Integer::from(0);
+        for v in &int_vec {
+            let abs = v.clone().abs();
+            if g == 0 {
+                g = abs;
+            } else if abs != 0 {
+                g = gcd_integer(&g, &abs);
+            }
+        }
+        if g > 1 {
+            for v in &mut int_vec {
+                *v /= &g;
+            }
+        }
+
+        basis.push(int_vec);
+    }
+
+    basis
 }

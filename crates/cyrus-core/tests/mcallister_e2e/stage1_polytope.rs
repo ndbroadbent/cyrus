@@ -35,19 +35,44 @@ struct PolytopeFixture {
     dual_points: Vec<Vec<i64>>,
 }
 
+fn read_csv_rows_i64(path: &PathBuf) -> Vec<Vec<i64>> {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+    content
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|line| {
+            line.split(',')
+                .map(|s| s.trim().parse::<i64>().expect("invalid integer"))
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
 fn load_polytope() -> PolytopeFixture {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
-    // Load primal points from inputs
-    let input_path = manifest_dir.join("tests/mcallister_e2e/inputs/polytope.json");
-    let content = std::fs::read_to_string(&input_path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", input_path.display()));
-    let input: PolytopeInput = serde_json::from_str(&content)
-        .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", input_path.display()));
+    let data_dir = crate::mcallister_data_dir();
+    if crate::first_principles_enabled() && data_dir.is_none() {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    }
+
+    let primal_points = if let Some(dir) = data_dir {
+        read_csv_rows_i64(&dir.join("points.dat"))
+    } else {
+        if !crate::fixtures_enabled() {
+            panic!("Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures");
+        }
+        let input_path = manifest_dir.join("tests/mcallister_e2e/inputs/polytope.json");
+        let content = std::fs::read_to_string(&input_path)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {e}", input_path.display()));
+        let input: PolytopeInput = serde_json::from_str(&content)
+            .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", input_path.display()));
+        input.points
+    };
 
     // Compute the dual polytope
-    let primal_verts: Vec<Point> = input
-        .points
+    let primal_verts: Vec<Point> = primal_points
         .iter()
         .filter(|p| !p.iter().all(|&x| x == 0)) // Exclude origin for vertex set
         .map(|coords| Point::new(coords.clone()))
@@ -68,7 +93,7 @@ fn load_polytope() -> PolytopeFixture {
         .collect();
 
     PolytopeFixture {
-        primal_points: input.points,
+        primal_points,
         dual_points,
     }
 }
@@ -161,18 +186,26 @@ fn stage1_dual_matches_expected() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
     // Load expected dual from assertions
-    let assertion_path = manifest_dir.join("tests/mcallister_e2e/assertions/dual_points.json");
-    let content = std::fs::read_to_string(&assertion_path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", assertion_path.display()));
-    let expected: DualAssertion = serde_json::from_str(&content)
-        .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", assertion_path.display()));
+    let expected_points = if let Some(dir) = crate::mcallister_data_dir() {
+        read_csv_rows_i64(&dir.join("dual_points.dat"))
+    } else {
+        if !crate::fixtures_enabled() {
+            panic!("Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures");
+        }
+        let assertion_path = manifest_dir.join("tests/mcallister_e2e/assertions/dual_points.json");
+        let content = std::fs::read_to_string(&assertion_path)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {e}", assertion_path.display()));
+        let expected: DualAssertion = serde_json::from_str(&content)
+            .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", assertion_path.display()));
+        expected.points
+    };
 
     // Load computed dual
     let fixture = load_polytope();
 
     // Compare as sets (order doesn't matter)
     let computed_set: HashSet<Vec<i64>> = fixture.dual_points.into_iter().collect();
-    let expected_set: HashSet<Vec<i64>> = expected.points.into_iter().collect();
+    let expected_set: HashSet<Vec<i64>> = expected_points.into_iter().collect();
 
     assert_eq!(
         computed_set.len(),

@@ -21,9 +21,10 @@ ode_solvers = { workspace = true }
 nalgebra = { workspace = true }
 rand = { workspace = true }
 rsparse = "1.2"
-
-[features]
-slow-tests = []  # Run with: cargo test --features slow-tests
+cygv = "0.1.2"
+good_lp = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 proptest.workspace = true
@@ -32,7 +33,6 @@ serde_json = { workspace = true }
 insta = { version = "1.34", features = ["json"] }
 trybuild = "1"
 criterion.workspace = true
-cygv = "0.1.2"
 
 [[bench]]
 name = "polytope"

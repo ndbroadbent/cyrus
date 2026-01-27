@@ -10,6 +10,7 @@
 //! Reference: CYTools cone.py tip_of_stretched_cone()
 
 use super::Cone;
+use good_lp::{default_solver, variable, Expression, ProblemVariables, Solution, SolverModel};
 
 /// Find the tip of a stretched cone.
 ///
@@ -87,12 +88,128 @@ pub fn find_interior_point_lp(cone: &mut Cone) -> Option<Vec<f64>> {
         return Some(vec![1.0; dim]);
     }
 
-    // Use the sum of hyperplane normals as a starting direction
-    find_initial_point(&h, dim, 1.0)
+    // Objective vector: average of hyperplane normals (CYTools feasibility)
+    let mut obj_vec = vec![0.0f64; dim];
+    for row in &h {
+        for i in 0..dim {
+            obj_vec[i] += row[i] as f64;
+        }
+    }
+    let denom = h.len() as f64;
+    if denom > 0.0 {
+        for v in &mut obj_vec {
+            *v /= denom;
+        }
+    }
+
+    // Fast heuristic: try constructive interior point first for smaller systems.
+    if h.len() <= 10_000 {
+        if let Some(candidate) = find_initial_point(&h, dim, 1.0) {
+            if cone.contains_interior(&candidate, 1e-10) {
+                return Some(candidate);
+            }
+        }
+    }
+
+    // Cutting-plane: start with a subset, add violated constraints.
+    let mut active: Vec<usize> = (0..h.len().min(64)).collect();
+    let mut active_set: std::collections::HashSet<usize> = active.iter().copied().collect();
+
+    for iter in 0..200 {
+        if iter % 10 == 0 {
+            eprintln!(
+                "[DEBUG] interior lp iter={}, active_constraints={}",
+                iter,
+                active.len()
+            );
+        }
+        let candidate = solve_feasibility_lp(&h, &active, dim, &obj_vec)?;
+
+        let mut violations: Vec<(usize, f64)> = Vec::new();
+        for (idx, row) in h.iter().enumerate() {
+            let dot: f64 = row
+                .iter()
+                .zip(candidate.iter())
+                .map(|(&a, &x)| a as f64 * x)
+                .sum();
+            if dot < 1.0 - 1e-9 {
+                violations.push((idx, 1.0 - dot));
+            }
+        }
+
+        if violations.is_empty() && cone.contains_interior(&candidate, 1e-10) {
+            return Some(candidate);
+        }
+
+        violations.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        let mut added = 0usize;
+        for (idx, _) in violations {
+            if active_set.insert(idx) {
+                active.push(idx);
+                added += 1;
+            }
+            if added >= 256 {
+                break;
+            }
+        }
+
+        if added == 0 && iter > 0 {
+            break;
+        }
+    }
+
+    None
+}
+
+fn solve_feasibility_lp(
+    h: &[Vec<i128>],
+    active: &[usize],
+    dim: usize,
+    obj_vec: &[f64],
+) -> Option<Vec<f64>> {
+    let mut vars = ProblemVariables::new();
+    let bound = 1.0e6;
+    let x: Vec<_> = (0..dim)
+        .map(|_| vars.add(variable().min(-bound).max(bound)))
+        .collect();
+
+    let mut obj_expr = Expression::from(0.0);
+    for i in 0..dim {
+        obj_expr.add_mul(obj_vec[i], x[i]);
+    }
+    let mut model = vars.minimise(obj_expr).using(default_solver);
+
+    for &row_idx in active {
+        let row = &h[row_idx];
+        let max_abs = row.iter().map(|v| v.abs()).max().unwrap_or(0) as f64;
+        if max_abs == 0.0 {
+            eprintln!("[WARN] interior lp constraint has zero row");
+            return None;
+        }
+        let scale = max_abs;
+        let mut expr = Expression::from(0.0);
+        for i in 0..dim {
+            expr.add_mul((row[i] as f64) / scale, x[i]);
+        }
+        model = model.with(expr.geq(1.0 / scale));
+    }
+
+    let solution = match model.solve() {
+        Ok(sol) => sol,
+        Err(err) => {
+            eprintln!("[WARN] interior lp solve failed: {}", err);
+            return None;
+        }
+    };
+    let mut out = Vec::with_capacity(dim);
+    for i in 0..dim {
+        out.push(solution.value(x[i]));
+    }
+    Some(out)
 }
 
 /// Find an initial feasible point for optimization.
-fn find_initial_point(h: &[Vec<i64>], dim: usize, c: f64) -> Option<Vec<f64>> {
+fn find_initial_point(h: &[Vec<i128>], dim: usize, c: f64) -> Option<Vec<f64>> {
     if h.is_empty() {
         return Some(vec![c; dim]);
     }
@@ -170,7 +287,7 @@ fn find_initial_point(h: &[Vec<i64>], dim: usize, c: f64) -> Option<Vec<f64>> {
 }
 
 /// Scale a point to satisfy H @ x >= c.
-fn scale_to_feasible(h: &[Vec<i64>], x: &mut [f64], c: f64) {
+fn scale_to_feasible(h: &[Vec<i128>], x: &mut [f64], c: f64) {
     // Find minimum scale factor needed
     let mut min_scale = 1.0;
 
@@ -198,7 +315,7 @@ fn scale_to_feasible(h: &[Vec<i64>], x: &mut [f64], c: f64) {
 /// Check if x satisfies H @ x >= c for all hyperplanes.
 ///
 /// Returns (feasible, violations) where violations is a list of (index, violation amount).
-fn check_feasibility(h: &[Vec<i64>], x: &[f64], c: f64) -> (bool, Vec<(usize, f64)>) {
+fn check_feasibility(h: &[Vec<i128>], x: &[f64], c: f64) -> (bool, Vec<(usize, f64)>) {
     let mut violations = Vec::new();
 
     for (i, row) in h.iter().enumerate() {

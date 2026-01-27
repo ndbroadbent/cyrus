@@ -14,6 +14,8 @@
 //! - [`linear_relations`] - GLSM and linear relations from polytope points
 
 mod determinant;
+mod hnf;
+mod snf;
 mod kernel;
 mod linear_relations;
 mod matrix_utils;
@@ -24,6 +26,10 @@ mod tests;
 
 // Re-export all public functions
 pub use determinant::{determinant_gaussian, orientation};
+pub use hnf::{
+    hermite_normal_form, hermite_normal_form_columns, is_row_hnf, pivot_product, sublattice_index,
+};
+pub use snf::{smith_normal_form_diag, sublattice_index_snf};
 pub use kernel::integer_kernel;
 pub use linear_relations::{compute_glsm_and_linear_relations, compute_linear_relations_no_origin};
 pub use matrix_utils::{

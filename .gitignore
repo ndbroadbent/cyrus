@@ -2,6 +2,7 @@
 /target/
 **/*.rs.bk
 Cargo.lock
+crates/cyrus-core/target/
 
 # IDE
 .idea/

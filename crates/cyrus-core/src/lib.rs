@@ -55,11 +55,13 @@ pub mod basis;
 pub mod cone;
 pub mod config;
 pub mod cosmology;
+pub mod curve_basis;
 pub mod divisor;
 pub mod error;
 pub mod flat_direction;
 pub mod geometry;
 pub mod glsm;
+pub mod gv;
 pub mod integer_math;
 pub mod intersection;
 pub mod kahler;
@@ -70,6 +72,7 @@ pub mod lattice;
 pub mod pipeline;
 pub mod policy;
 pub mod polytope;
+pub mod quintessence;
 pub use pipeline::{EvaluationRequest, EvaluationResult, evaluate_vacuum};
 pub use policy::{Abort, ForGA, Strict, VacuumPolicy, VolumePolicy};
 pub mod racetrack;
@@ -81,7 +84,9 @@ pub mod volume;
 
 pub use types::{F64, Finite, H11, H21, I32, I64, Neg, Pos};
 
-pub use basis::{compute_divisor_basis, intersection_in_basis};
+pub use basis::{
+    basis_change_matrix, compute_divisor_basis, intersection_in_basis, is_unimodular,
+};
 pub use divisor::{compute_divisor_jacobian, compute_divisor_volumes};
 pub use error::{Error, Result};
 pub use flat_direction::{
@@ -89,11 +94,16 @@ pub use flat_direction::{
     compute_n_matrix, solve_linear_system,
 };
 pub use glsm::compute_glsm_charge_matrix;
+pub use glsm::compute_glsm_linear_relations;
+pub use glsm::compute_glsm_and_linrels;
+pub use gv::{compute_grading_vector, compute_gv_invariants, compute_mori_cone_cap_rays};
+pub use curve_basis::compute_curve_basis_matrix;
 pub use integer_math::{compute_glsm_and_linear_relations, compute_linear_relations_no_origin};
 pub use intersection::{
     Intersection, compute_intersection_numbers, compute_intersection_numbers_with_linear_relations,
     compute_intersection_numbers_with_offset,
 };
+pub use intersection::compute_intersection_cytools;
 // pub mod kklt;
 
 /*

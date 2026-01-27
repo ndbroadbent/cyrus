@@ -31,6 +31,10 @@ fn test_integer_kernel_simple() {
     let a = vec![vec![i(1), i(1), i(1)]];
     let kernel = integer_kernel(&a);
 
+    if std::env::var_os("CYRUS_DEBUG_KERNEL").is_some() {
+        eprintln!("kernel: {kernel:?}");
+    }
+
     assert_eq!(kernel.len(), 2);
     for v in &kernel {
         let mut sum = i(0);

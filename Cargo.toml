@@ -56,7 +56,7 @@ delaunay = "0.4"
 lll-rs = "0.4"
 
 # Linear programming (for Kähler cone tests)
-good_lp = { version = "1.14", default-features = false, features = ["microlp"] }  # pure Rust solver
+good_lp = { version = "1.14", default-features = false, features = ["highs"] }
 
 # Tensor contraction
 ndarray_einsum_beta = "0.7"

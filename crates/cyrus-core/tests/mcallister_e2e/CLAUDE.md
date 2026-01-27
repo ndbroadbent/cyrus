@@ -46,6 +46,11 @@ potent_rays.dat      - Rays for potential
 
 **Use these for stage-by-stage verification**: Compute each stage, compare against the corresponding `.dat` file. This lets us pinpoint exactly where our computation diverges from theirs.
 
+**Fixtures are opt-in only**: JSON fixtures are deprecated and only used when explicitly enabled
+via `CYRUS_ALLOW_FIXTURES=1`. First-principles runs must use `.dat`.
+
+**Mutual exclusion**: `CYRUS_ALLOW_FIXTURES` must NOT be used with `CYRUS_FIRST_PRINCIPLES`.
+
 **CRITICAL: basis.dat vs kklt_basis.dat are DIFFERENT:**
 - `basis.dat`: Snapshot of CYTools 2021's divisor basis (214 indices for h11=214)
 - `kklt_basis.dat`: Indices of divisors that **contribute to the superpotential**
@@ -80,25 +85,23 @@ See `string_theory/mcallister_2107/LATEST_CYTOOLS_CONVERSION_RESULT.md` for deta
 
 ### Critical Implementation Details
 
-#### Divisor Basis Override
+#### Divisor Basis (no overrides)
 
-CYTools 2021 vs latest produces DIFFERENT divisor bases for the same triangulation. McAllister used specific basis indices stored in `basis.dat`. Our code must:
-1. Accept an optional divisor basis override
-2. If not provided, use our own deterministic default
-3. For McAllister validation, override with their exact basis to reproduce results
+McAllister’s basis indices are stored in `basis.dat`. Our code must compute the divisor
+basis deterministically and **match `basis.dat` exactly**. No overrides. If it diverges,
+the algorithm is wrong and must be fixed.
 
 #### Curve Discovery (GV Invariants)
 
 Curves for GV invariants are FOUND via enumeration, not known ahead of time. McAllister found a specific set of curves. Our approach:
 
-1. **Compute our own curves** - Run curve enumeration, snapshot the curves WE find
-2. **Verify superset property** - Assert our curves contain 100% of McAllister's curves (proven: at higher `min_points`, we find all of theirs plus more)
-3. **Override with McAllister curves** - For exact reproduction, override with their specific curves to match their W₀ exactly
+1. **Compute curves from first principles** - run enumeration from our code.
+2. **Compare to McAllister’s data** - require that our results match their `.dat` files for this seed.
+3. **If mismatch** - treat as a bug and fix the algorithm (no overrides).
 
 This approach:
-- Validates our enumeration finds at least what they found
-- Allows exact reproduction of their published numbers via override
-- Documents that our enumeration may find additional high-degree curves
+- Proves the enumeration is identical for the validation target
+- Avoids any hidden substitution of precomputed curves
 
 See research docs:
 - `string_theory/mcallister_2107/CURVE_DISCREPANCY.md` - superset proof
@@ -179,12 +182,11 @@ crates/cyrus-core/tests/mcallister_e2e/
 │   ├── heights.json     # Which triangulation (point in secondary fan)
 │   └── flux.json        # Which flux configuration (K, M integers)
 │
-├── overrides/           # DETERMINISTIC VALUES we override for exact reproduction
-│   │                    # Our code CAN compute these, but CYTools 2021 differs
-│   ├── primal_basis.json   # Divisor basis (CYTools version-dependent)
-│   ├── dual_basis.json     # Dual basis indices
-│   ├── curves.json         # Curves for GV invariants (enumeration may differ)
-│   └── target_volumes.json # Brane setup (c_i values derived from basis)
+├── overrides/           # LEGACY OVERRIDES (deprecated)
+│   │                    # First-principles runs should use .dat inputs instead.
+│   ├── dual_basis.json     # Legacy dual basis indices
+│   ├── curves.json         # Legacy curves for GV invariants
+│   └── target_volumes.json # Legacy brane setup (c_i values)
 │
 ├── snapshots/           # OUR COMPUTED VALUES (insta snapshots)
 │   └── ...              # Each stage writes its output here
@@ -200,13 +202,12 @@ crates/cyrus-core/tests/mcallister_e2e/
    - We CANNOT derive these from other data - they are free parameters
    - McAllister found these specific values through their search
 
-2. **overrides/** - Deterministically computed values where CYTools 2021 differs from our code.
-   - Our code CAN compute these (divisor basis, curves, etc.)
-   - But CYTools 2021 made different choices than CYTools 2025 or our implementation
-   - We OVERRIDE our computed values with McAllister's to reproduce their exact results
-   - Without overrides, our pipeline works but may produce slightly different intermediate values
+2. **overrides/** - Deprecated legacy overrides.
+   - First-principles runs should NOT use these.
+   - Use `.dat` files in McAllister data dir instead.
+   - Overrides remain only for legacy debugging.
 
-3. **snapshots/** - What WE compute from inputs + overrides.
+3. **snapshots/** - What WE compute from inputs (no overrides).
    - Each pipeline stage writes its output here
    - Insta manages these automatically
 
@@ -229,20 +230,15 @@ If we only had assertions/, it would be tempting to read from there during compu
 
 **Overrides vs Assertions:**
 
-When we use an override, we MUST match the corresponding assertion exactly:
-- Override divisor_basis.json → our intersection numbers MUST match assertions/intersection.json
-- Override curves.json → our W₀ MUST match assertions/W_0.json
+Overrides are deprecated. If you enable fixtures, you MUST still match the
+corresponding assertions exactly. Prefer `.dat` inputs in all first-principles runs.
 
 If we use McAllister's intermediate values as input, we must reproduce their subsequent outputs exactly. This validates our math is correct.
 
-**Without overrides:**
+**Without overrides (required):**
 
-Our pipeline still works, but may produce slightly different intermediate values due to:
-- Different divisor basis ordering (CYTools version)
-- Different curve enumeration results
-- Different numerical precision
-
-The final physics (V₀) should be similar but not identical. We can add loose assertions (same order of magnitude, same sign) to catch gross errors.
+There is no override path. If our computed basis or curves differ from the `.dat` files,
+we treat it as a correctness bug and fix it.
 
 ### Two Branches: With and Without Overrides
 
@@ -260,7 +256,7 @@ polytope → search for our own (heights, flux) → compute everything → V₀
 
 **Branch B: With Overrides (reproduce McAllister exactly)**
 ```
-McAllister's (polytope, heights, flux) + overrides → ... → V₀
+McAllister's (polytope, heights, flux) → ... → V₀
 ```
 - Uses McAllister's exact inputs (their found heights/flux)
 - Overrides divisor basis, curves with their values

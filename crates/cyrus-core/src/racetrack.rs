@@ -69,6 +69,7 @@ pub fn build_racetrack_terms(
     gv_invariants: &[GvInvariant],
     m: &[I64<Finite>],
     p: &[F64<Finite>],
+    cutoff: F64<Pos>,
 ) -> Vec<RacetrackTerm> {
     let mut raw_terms = Vec::new();
 
@@ -80,6 +81,11 @@ pub fn build_racetrack_terms(
             .zip(p.iter())
             .map(|(qi, pi)| qi.to_f64() * *pi)
             .fold(F64::<Finite>::ZERO, |acc, x| acc + x);
+
+        // Match McAllister: keep only 0 < q·p < cutoff.
+        if q_dot_p.get() <= 0.0 || q_dot_p.get() >= cutoff.get() {
+            continue;
+        }
 
         // M·q (flux dot curve) - Finite * Finite = Finite, sum of Finite = Finite
         let m_dot_q: I64<Finite> = gv
@@ -99,11 +105,11 @@ pub fn build_racetrack_terms(
         });
     }
 
-    // Group terms by exponent (q·p)
+    // Group terms by exponent (q·p), matching CYTools rounding.
     let mut grouped: HashMap<String, RacetrackTerm> = HashMap::new();
     for term in raw_terms {
-        // Use precision-aware key for grouping
-        let key = format!("{:.10}", term.exponent.get());
+        // CYTools uses round(q·p, 6)
+        let key = format!("{:.6}", term.exponent.get());
         let entry = grouped.entry(key).or_insert(RacetrackTerm {
             curve: Vec::new(),
             coefficient: F64::<Finite>::ZERO,

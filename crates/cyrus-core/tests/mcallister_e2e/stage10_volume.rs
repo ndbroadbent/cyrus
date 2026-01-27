@@ -20,6 +20,35 @@ fn round_to_decimals(value: f64, decimals: u32) -> f64 {
     (value * multiplier).round() / multiplier
 }
 
+fn require_data_dir() -> Option<PathBuf> {
+    let Some(dir) = crate::mcallister_data_dir() else {
+        if crate::first_principles_enabled() {
+            panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+        }
+        eprintln!("Skipping volume checks (set CYRUS_MCALLISTER_DATA_DIR)");
+        return None;
+    };
+    Some(dir)
+}
+
+fn require_first_principles() -> bool {
+    if !crate::first_principles_enabled() {
+        eprintln!("Skipping first-principles test (set CYRUS_FIRST_PRINCIPLES=1)");
+        return false;
+    }
+    true
+}
+
+fn read_csv_i64(path: &PathBuf) -> Vec<i64> {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+    content
+        .split(|c| c == ',' || c == '\n' || c == '\r')
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.trim().parse::<i64>().expect("invalid integer"))
+        .collect()
+}
+
 #[derive(Debug, Deserialize)]
 struct RacetrackAssertion {
     g_s: f64,
@@ -41,13 +70,11 @@ fn load_racetrack_assertion() -> RacetrackAssertion {
 }
 
 /// Load McAllister's Kähler parameters (t^i values)
-fn load_kahler_params() -> (Vec<f64>, Vec<f64>) {
+fn load_kahler_params(data_dir: &PathBuf) -> (Vec<f64>, Vec<f64>) {
     use std::fs;
 
-    let data_dir = "/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647";
-
     // Load uncorrected Kähler parameters
-    let uncorrected_content = fs::read_to_string(format!("{}/kahler_param.dat", data_dir))
+    let uncorrected_content = fs::read_to_string(data_dir.join("kahler_param.dat"))
         .expect("Failed to read kahler_param.dat");
 
     let uncorrected: Vec<f64> = uncorrected_content
@@ -57,7 +84,7 @@ fn load_kahler_params() -> (Vec<f64>, Vec<f64>) {
         .collect();
 
     // Load corrected (with instanton corrections) Kähler parameters
-    let corrected_content = fs::read_to_string(format!("{}/corrected_kahler_param.dat", data_dir))
+    let corrected_content = fs::read_to_string(data_dir.join("corrected_kahler_param.dat"))
         .expect("Failed to read corrected_kahler_param.dat");
 
     let corrected: Vec<f64> = corrected_content
@@ -75,7 +102,10 @@ fn load_kahler_params() -> (Vec<f64>, Vec<f64>) {
 
 #[test]
 fn stage9_load_kahler_params() {
-    let (uncorrected, corrected) = load_kahler_params();
+    let Some(data_dir) = require_data_dir() else {
+        return;
+    };
+    let (uncorrected, corrected) = load_kahler_params(&data_dir);
 
     // Both should have 214 parameters (one per basis divisor)
     assert_eq!(uncorrected.len(), 214, "Should have 214 Kähler parameters");
@@ -120,10 +150,15 @@ fn stage9_load_kahler_params() {
 }
 
 /// Compute V_string from primal intersection numbers and Kähler parameters
-/// This is a slow test because it computes intersection numbers from scratch
+/// This is a first-principles test that computes intersection numbers from scratch
 #[test]
-#[cfg(feature = "slow-tests")]
 fn stage10_compute_v_string() {
+    if !require_first_principles() {
+        return;
+    }
+    let Some(data_dir) = require_data_dir() else {
+        return;
+    };
     use cyrus_core::types::i32::I32;
     use cyrus_core::types::tags::{GTEOne, NonNeg};
     use cyrus_core::volume::bbhl_correction;
@@ -146,14 +181,31 @@ fn stage10_compute_v_string() {
         values: Vec<f64>,
     }
 
-    // Load polytope
-    let input_path = manifest_dir.join("tests/mcallister_e2e/inputs/polytope.json");
-    let content = std::fs::read_to_string(&input_path).expect("Failed to read polytope.json");
-    let input: PolytopeInput =
-        serde_json::from_str(&content).expect("Failed to parse polytope.json");
+    let points_raw = if let Some(dir) = crate::mcallister_data_dir() {
+        let content = std::fs::read_to_string(dir.join("points.dat"))
+            .expect("Failed to read points.dat");
+        content
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(|line| {
+                line.split(',')
+                    .map(|s| s.trim().parse::<i64>().expect("Invalid point value"))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<Vec<i64>>>()
+    } else {
+        if !crate::fixtures_enabled() {
+            panic!("Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures");
+        }
+        let input_path = manifest_dir.join("tests/mcallister_e2e/inputs/polytope.json");
+        let content =
+            std::fs::read_to_string(&input_path).expect("Failed to read polytope.json");
+        let input: PolytopeInput =
+            serde_json::from_str(&content).expect("Failed to parse polytope.json");
+        input.points
+    };
 
-    let all_points: Vec<Point> = input
-        .points
+    let all_points: Vec<Point> = points_raw
         .iter()
         .map(|coords| Point::new(coords.clone()))
         .collect();
@@ -163,15 +215,28 @@ fn stage10_compute_v_string() {
         .points_not_interior_to_facets()
         .expect("Failed to filter points");
 
-    // Load McAllister's heights
-    let heights_path = manifest_dir.join("tests/mcallister_e2e/inputs/heights.json");
-    let heights_content =
-        std::fs::read_to_string(&heights_path).expect("Failed to read heights.json");
-    let heights_input: HeightsInput =
-        serde_json::from_str(&heights_content).expect("Failed to parse heights.json");
+    let heights = if let Some(dir) = crate::mcallister_data_dir() {
+        let content = std::fs::read_to_string(dir.join("heights.dat"))
+            .expect("Failed to read heights.dat");
+        content
+            .split(|c| c == ',' || c == '\n' || c == '\r')
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.trim().parse::<f64>().expect("Invalid height value"))
+            .collect::<Vec<f64>>()
+    } else {
+        if !crate::fixtures_enabled() {
+            panic!("Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures");
+        }
+        let heights_path = manifest_dir.join("tests/mcallister_e2e/inputs/heights.json");
+        let heights_content =
+            std::fs::read_to_string(&heights_path).expect("Failed to read heights.json");
+        let heights_input: HeightsInput =
+            serde_json::from_str(&heights_content).expect("Failed to parse heights.json");
+        heights_input.values
+    };
 
     // Compute triangulation from their heights
-    let triangulation = compute_regular_triangulation(&triangulation_points, &heights_input.values)
+    let triangulation = compute_regular_triangulation(&triangulation_points, &heights)
         .expect("Failed to compute triangulation");
 
     // === Compute intersection numbers using CYTools algorithm ===
@@ -199,18 +264,12 @@ fn stage10_compute_v_string() {
     )
     .expect("Failed to compute intersection numbers");
 
-    // Load McAllister's primal basis override (critical for matching their Kähler params)
-    #[derive(Debug, Deserialize)]
-    struct PrimalBasisOverride {
-        indices: Vec<usize>,
-    }
-
-    let primal_basis_path = manifest_dir.join("tests/mcallister_e2e/overrides/primal_basis.json");
-    let basis_content =
-        std::fs::read_to_string(&primal_basis_path).expect("Failed to read primal_basis.json");
-    let basis_override: PrimalBasisOverride =
-        serde_json::from_str(&basis_content).expect("Failed to parse primal_basis.json");
-    let basis = basis_override.indices;
+    let basis_path = data_dir.join("basis.dat");
+    let basis_i64 = read_csv_i64(&basis_path);
+    let basis: Vec<usize> = basis_i64
+        .into_iter()
+        .map(|v| usize::try_from(v).expect("basis index fits usize"))
+        .collect();
 
     eprintln!("Using McAllister's primal basis: {} indices", basis.len());
     eprintln!("First 10 basis indices: {:?}", &basis[..10]);
@@ -226,7 +285,7 @@ fn stage10_compute_v_string() {
 
     // === Load Kähler parameters ===
 
-    let (_uncorrected_t, corrected_t) = load_kahler_params();
+    let (uncorrected_t, corrected_t) = load_kahler_params(&data_dir);
 
     // Verify dimensions match
     assert_eq!(
@@ -244,32 +303,37 @@ fn stage10_compute_v_string() {
         basis.len()
     );
 
-    // === Compute V_string = (1/6) κ_ijk t^i t^j t^k ===
+    // === Compute classical volumes from Kähler parameters ===
 
-    let mut volume_sum = 0.0f64;
-    for (&(i, j, k), val) in kappa.iter() {
-        // Convert rational to f64
-        let (kappa_val, _): (f64, _) =
-            malachite::num::conversion::traits::RoundingFrom::rounding_from(
-                val.get(),
-                malachite::rounding_modes::RoundingMode::Nearest,
-            );
+    let volume_from_t = |t: &[f64]| -> f64 {
+        let mut volume_sum = 0.0f64;
+        for (&(i, j, k), val) in kappa.iter() {
+            // Convert rational to f64
+            let (kappa_val, _): (f64, _) =
+                malachite::num::conversion::traits::RoundingFrom::rounding_from(
+                    val.get(),
+                    malachite::rounding_modes::RoundingMode::Nearest,
+                );
 
-        let t_product = corrected_t[i] * corrected_t[j] * corrected_t[k];
+            let t_product = t[i] * t[j] * t[k];
 
-        // Account for symmetry multiplicity
-        let mult = if i == j && j == k {
-            1.0
-        } else if i == j || j == k || i == k {
-            3.0
-        } else {
-            6.0
-        };
+            // Account for symmetry multiplicity
+            let mult = if i == j && j == k {
+                1.0
+            } else if i == j || j == k || i == k {
+                3.0
+            } else {
+                6.0
+            };
 
-        volume_sum += mult * kappa_val * t_product;
-    }
+            volume_sum += mult * kappa_val * t_product;
+        }
 
-    let classical_volume = volume_sum / 6.0;
+        volume_sum / 6.0
+    };
+
+    let classical_volume_uncorrected = volume_from_t(&uncorrected_t);
+    let classical_volume_corrected = volume_from_t(&corrected_t);
 
     // === Apply BBHL correction ===
 
@@ -277,9 +341,10 @@ fn stage10_compute_v_string() {
     let h21 = I32::<NonNeg>::new(4).unwrap();
     let bbhl = bbhl_correction(h11, h21);
 
-    let v_string = classical_volume - bbhl.get();
+    let v_string = classical_volume_corrected - bbhl.get();
 
-    eprintln!("Classical volume: {}", classical_volume);
+    eprintln!("Classical volume (uncorrected): {}", classical_volume_uncorrected);
+    eprintln!("Classical volume (corrected): {}", classical_volume_corrected);
     eprintln!("BBHL correction: {}", bbhl.get());
     eprintln!("V_string (computed): {}", v_string);
 
@@ -300,12 +365,27 @@ fn stage10_compute_v_string() {
         tolerance
     );
 
+    // Compare against McAllister's cy_vol.dat (V_string without worldsheet instantons).
+    let cy_vol_expected: f64 = std::fs::read_to_string(data_dir.join("cy_vol.dat"))
+        .expect("Failed to read cy_vol.dat")
+        .trim()
+        .parse()
+        .expect("Invalid cy_vol.dat");
+    let dat_tol = 1e-6;
+    assert!(
+        (v_string - cy_vol_expected).abs() < dat_tol,
+        "V_string mismatch: computed={}, expected={}",
+        v_string,
+        cy_vol_expected
+    );
+
     #[derive(serde::Serialize)]
     struct VStringSummary {
         kappa_dim: usize,
         kappa_nonzero: usize,
         basis_size: usize,
-        classical_volume: f64,
+        classical_volume_uncorrected: f64,
+        classical_volume_corrected: f64,
         bbhl_correction: f64,
         v_string_computed: f64,
         v_string_expected: f64,
@@ -324,7 +404,8 @@ fn stage10_compute_v_string() {
         kappa_dim: kappa.dim(),
         kappa_nonzero: kappa.num_nonzero(),
         basis_size: basis.len(),
-        classical_volume: round_to_decimals(classical_volume, 4),
+        classical_volume_uncorrected: round_to_decimals(classical_volume_uncorrected, 4),
+        classical_volume_corrected: round_to_decimals(classical_volume_corrected, 4),
         bbhl_correction: round_to_decimals(bbhl.get(), 6),
         v_string_computed: round_to_decimals(v_string, 4),
         v_string_expected: round_to_decimals(expected_v_string, 4),

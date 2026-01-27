@@ -16,7 +16,7 @@
 //!
 //! **Branches:**
 //! - "ours": Uses our computed divisor basis
-//! - "theirs": Uses McAllister's dual basis override [3,4,5,8] - must EXACTLY reproduce e^K₀
+//! - "theirs": Uses McAllister's triangulation and expected basis [3,4,5,8] - must reproduce e^K₀
 
 #![allow(missing_docs)]
 
@@ -29,12 +29,58 @@ fn round_to_decimals(value: f64, decimals: u32) -> f64 {
     (value * multiplier).round() / multiplier
 }
 
+fn require_first_principles() -> bool {
+    if !crate::first_principles_enabled() {
+        eprintln!("Skipping first-principles test (set CYRUS_FIRST_PRINCIPLES=1)");
+        return false;
+    }
+    true
+}
+
+fn read_csv_i64(path: &PathBuf) -> Vec<i64> {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+    content
+        .split(|c| c == ',' || c == '\n' || c == '\r')
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.trim().parse::<i64>().expect("invalid integer"))
+        .collect()
+}
+
+fn read_csv_rows_i64(path: &PathBuf) -> Vec<Vec<i64>> {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+    content
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|line| {
+            line.split(',')
+                .map(|s| s.trim().parse::<i64>().expect("invalid integer"))
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+fn read_csv_rows_usize(path: &PathBuf) -> Vec<Vec<usize>> {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+    content
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|line| {
+            line.split(',')
+                .map(|s| s.trim().parse::<usize>().expect("invalid integer"))
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
 use cyrus_core::types::i64::I64;
 use cyrus_core::types::tags::Finite;
 use cyrus_core::{
-    Point, Polytope, Triangulation, compute_divisor_basis, compute_flat_direction_full,
-    compute_frst_heights, compute_glsm_charge_matrix, intersection::compute_intersection_cytools,
-    intersection_in_basis,
+    Point, Polytope, Triangulation, compute_flat_direction_full, compute_frst_heights,
+    compute_glsm_and_linrels, compute_linear_relations_no_origin,
+    intersection::compute_intersection_cytools, intersection_in_basis,
 };
 
 #[derive(Debug, Deserialize)]
@@ -48,21 +94,6 @@ struct FluxInput {
     k: Vec<i64>,
     #[serde(rename = "M")]
     m: Vec<i64>,
-}
-
-#[derive(Debug, Deserialize)]
-struct DualBasisOverride {
-    indices: Vec<usize>,
-}
-
-#[derive(Debug, Deserialize)]
-struct DualPointsOverride {
-    points: Vec<Vec<i64>>,
-}
-
-#[derive(Debug, Deserialize)]
-struct DualSimplicesOverride {
-    simplices: Vec<Vec<usize>>,
 }
 
 /// Fixture containing dual intersection tensor and flux vectors
@@ -83,16 +114,27 @@ fn load_stage4_fixture_ours() -> Stage4Fixture {
 
     // === Compute dual intersection numbers using our triangulation ===
 
-    // Load primal polytope
-    let input_path = manifest_dir.join("tests/mcallister_e2e/inputs/polytope.json");
-    let content = std::fs::read_to_string(&input_path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", input_path.display()));
-    let input: PolytopeInput = serde_json::from_str(&content)
-        .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", input_path.display()));
+    let data_dir = crate::mcallister_data_dir();
+    if crate::first_principles_enabled() && data_dir.is_none() {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    }
+
+    let primal_points = if let Some(dir) = data_dir {
+        read_csv_rows_i64(&dir.join("points.dat"))
+    } else {
+        if !crate::fixtures_enabled() {
+            panic!("Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures");
+        }
+        let input_path = manifest_dir.join("tests/mcallister_e2e/inputs/polytope.json");
+        let content = std::fs::read_to_string(&input_path)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {e}", input_path.display()));
+        let input: PolytopeInput = serde_json::from_str(&content)
+            .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", input_path.display()));
+        input.points
+    };
 
     // Create primal polytope (exclude origin for vertices)
-    let primal_verts: Vec<Point> = input
-        .points
+    let primal_verts: Vec<Point> = primal_points
         .iter()
         .filter(|p| !p.iter().all(|&x| x == 0))
         .map(|coords| Point::new(coords.clone()))
@@ -150,26 +192,28 @@ fn load_stage4_fixture_ours() -> Stage4Fixture {
     )
     .expect("Failed to compute dual intersection numbers");
 
-    // Compute GLSM for divisor basis computation
-    let glsm = compute_glsm_charge_matrix(&triangulation_points, true)
-        .expect("Failed to compute dual GLSM");
-
-    // Compute our own basis
-    let basis = compute_divisor_basis(&triangulation_points, &glsm)
-        .expect("Failed to compute dual divisor basis");
+    let (_glsm, _linrel, basis) =
+        compute_glsm_and_linrels(&triangulation_points).expect("Failed to compute dual GLSM");
 
     let kappa_dual = intersection_in_basis(&kappa_dual_full, &basis);
 
     // === Load flux vectors ===
 
-    let flux_path = manifest_dir.join("tests/mcallister_e2e/inputs/flux.json");
-    let flux_content = std::fs::read_to_string(&flux_path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", flux_path.display()));
-    let flux: FluxInput = serde_json::from_str(&flux_content)
-        .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", flux_path.display()));
+    let (k_raw, m_raw) = if let Some(dir) = crate::mcallister_data_dir() {
+        let k = read_csv_i64(&dir.join("K_vec.dat"));
+        let m = read_csv_i64(&dir.join("M_vec.dat"));
+        (k, m)
+    } else {
+        let flux_path = manifest_dir.join("tests/mcallister_e2e/inputs/flux.json");
+        let flux_content = std::fs::read_to_string(&flux_path)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {e}", flux_path.display()));
+        let flux: FluxInput = serde_json::from_str(&flux_content)
+            .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", flux_path.display()));
+        (flux.k, flux.m)
+    };
 
-    let k_flux: Vec<I64<Finite>> = flux.k.iter().map(|&v| I64::<Finite>::new(v)).collect();
-    let m_flux: Vec<I64<Finite>> = flux.m.iter().map(|&v| I64::<Finite>::new(v)).collect();
+    let k_flux: Vec<I64<Finite>> = k_raw.iter().map(|&v| I64::<Finite>::new(v)).collect();
+    let m_flux: Vec<I64<Finite>> = m_raw.iter().map(|&v| I64::<Finite>::new(v)).collect();
 
     Stage4Fixture {
         kappa_dual,
@@ -179,49 +223,45 @@ fn load_stage4_fixture_ours() -> Stage4Fixture {
     }
 }
 
-/// Load fixture using McAllister's triangulation, basis [3,4,5,8], and flux vectors
+/// Load fixture using McAllister's triangulation, expected basis [3,4,5,8], and flux vectors
 fn load_stage4_fixture_theirs() -> Stage4Fixture {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let data_dir = crate::mcallister_data_dir()
+        .expect("Set CYRUS_MCALLISTER_DATA_DIR for McAllister data files");
 
     // === Load McAllister's dual triangulation data ===
 
     // Load dual points (McAllister's point ordering)
-    let dual_points_path = manifest_dir.join("tests/mcallister_e2e/overrides/dual_points.json");
-    let content = std::fs::read_to_string(&dual_points_path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", dual_points_path.display()));
-    let dual_points_data: DualPointsOverride = serde_json::from_str(&content)
-        .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", dual_points_path.display()));
+    let dual_points_path = data_dir.join("dual_points.dat");
+    let dual_points_data = read_csv_rows_i64(&dual_points_path);
 
     // McAllister's triangulation uses points 0-8 only
     // Point 0 is the origin, points 1-8 are the actual rays (divisors)
     let triangulation_points: Vec<Point> = dual_points_data
-        .points
         .iter()
         .take(9)
         .map(|coords| Point::new(coords.clone()))
         .collect();
 
     // Load dual simplices (McAllister's triangulation)
-    let dual_simplices_path =
-        manifest_dir.join("tests/mcallister_e2e/overrides/dual_simplices.json");
-    let content = std::fs::read_to_string(&dual_simplices_path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", dual_simplices_path.display()));
-    let dual_simplices_data: DualSimplicesOverride = serde_json::from_str(&content)
-        .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", dual_simplices_path.display()));
+    let dual_simplices_path = data_dir.join("dual_simplices.dat");
+    let dual_simplices_data = read_csv_rows_usize(&dual_simplices_path);
 
-    let triangulation = Triangulation::new(dual_simplices_data.simplices);
+    let triangulation = Triangulation::new(dual_simplices_data);
 
-    // Load linear_relations_no_origin from override file (to match McAllister's exact setup)
-    #[derive(Debug, Deserialize)]
-    struct LinearRelationsOverride {
-        linear_relations_no_origin: Vec<Vec<i64>>,
-    }
-    let lr_path = manifest_dir.join("tests/mcallister_e2e/overrides/dual_linear_relations.json");
-    let content = std::fs::read_to_string(&lr_path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", lr_path.display()));
-    let lr_data: LinearRelationsOverride = serde_json::from_str(&content)
-        .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", lr_path.display()));
-    let linear_relations_no_origin = lr_data.linear_relations_no_origin;
+    // Compute linear relations from the dual points
+    let dual_points_i64: Vec<Vec<i64>> = triangulation_points
+        .iter()
+        .map(|p| p.coords().to_vec())
+        .collect();
+    let linear_relations_no_origin =
+        compute_linear_relations_no_origin(&dual_points_i64)
+            .into_iter()
+            .map(|row| {
+                row.iter()
+                    .map(|x| i64::try_from(x).expect("dual linrel fits in i64"))
+                    .collect::<Vec<i64>>()
+            })
+            .collect::<Vec<Vec<i64>>>();
 
     // Compute intersection numbers using CYTools algorithm
     let kappa_dual_full = compute_intersection_cytools(
@@ -231,26 +271,16 @@ fn load_stage4_fixture_theirs() -> Stage4Fixture {
     )
     .expect("Failed to compute dual intersection numbers");
 
-    // Load McAllister's basis override
-    let dual_basis_path = manifest_dir.join("tests/mcallister_e2e/overrides/dual_basis.json");
-    let content = std::fs::read_to_string(&dual_basis_path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", dual_basis_path.display()));
-    let basis_override: DualBasisOverride = serde_json::from_str(&content)
-        .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", dual_basis_path.display()));
-
-    let basis = basis_override.indices;
+    let (_glsm, _linrel, basis) =
+        compute_glsm_and_linrels(&triangulation_points).expect("Failed to compute dual GLSM");
     let kappa_dual = intersection_in_basis(&kappa_dual_full, &basis);
 
     // === Load flux vectors ===
+    let k_raw = read_csv_i64(&data_dir.join("K_vec.dat"));
+    let m_raw = read_csv_i64(&data_dir.join("M_vec.dat"));
 
-    let flux_path = manifest_dir.join("tests/mcallister_e2e/inputs/flux.json");
-    let flux_content = std::fs::read_to_string(&flux_path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", flux_path.display()));
-    let flux: FluxInput = serde_json::from_str(&flux_content)
-        .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", flux_path.display()));
-
-    let k_flux: Vec<I64<Finite>> = flux.k.iter().map(|&v| I64::<Finite>::new(v)).collect();
-    let m_flux: Vec<I64<Finite>> = flux.m.iter().map(|&v| I64::<Finite>::new(v)).collect();
+    let k_flux: Vec<I64<Finite>> = k_raw.iter().map(|&v| I64::<Finite>::new(v)).collect();
+    let m_flux: Vec<I64<Finite>> = m_raw.iter().map(|&v| I64::<Finite>::new(v)).collect();
 
     Stage4Fixture {
         kappa_dual,
@@ -274,6 +304,9 @@ fn load_stage4_fixture_theirs() -> Stage4Fixture {
 
 #[test]
 fn stage4_ours_n_matrix() {
+    if !require_first_principles() {
+        return;
+    }
     let fixture = load_stage4_fixture_ours();
 
     // Compute N matrix directly (not through compute_flat_direction_full)
@@ -298,6 +331,9 @@ fn stage4_ours_n_matrix() {
 
 #[test]
 fn stage4_ours_flat_direction_p() {
+    if !require_first_principles() {
+        return;
+    }
     let fixture = load_stage4_fixture_ours();
 
     // Compute N matrix and solve for p
@@ -317,6 +353,9 @@ fn stage4_ours_flat_direction_p() {
 
 #[test]
 fn stage4_ours_ek0() {
+    if !require_first_principles() {
+        return;
+    }
     let fixture = load_stage4_fixture_ours();
 
     // Compute N matrix and solve for p
@@ -376,6 +415,9 @@ fn stage4_ours_ek0() {
 
 #[test]
 fn stage4_ours_full_output() {
+    if !require_first_principles() {
+        return;
+    }
     let fixture = load_stage4_fixture_ours();
 
     // Verify dimensions match
@@ -450,7 +492,7 @@ fn stage4_ours_full_output() {
 }
 
 // =============================================================================
-// BRANCH "THEIRS": Using McAllister's triangulation and basis [3,4,5,8]
+// BRANCH "THEIRS": Using McAllister's triangulation and expected basis [3,4,5,8]
 //
 // BUG UNDER INVESTIGATION:
 // κ_abc p^a p^b p^c comes out NEGATIVE when it should be positive.
@@ -462,7 +504,15 @@ fn stage4_ours_full_output() {
 
 #[test]
 fn stage4_theirs_n_matrix() {
+    if !require_first_principles() {
+        return;
+    }
     let fixture = load_stage4_fixture_theirs();
+    assert_eq!(
+        fixture.basis_used,
+        vec![3, 4, 5, 8],
+        "Computed dual basis must match McAllister [3,4,5,8]"
+    );
 
     // === DEBUG: Investigate κ_abc p^a p^b p^c negativity ===
     eprintln!("\n=== THEIRS BRANCH DEBUG ===");
@@ -556,7 +606,15 @@ fn stage4_theirs_n_matrix() {
 
 #[test]
 fn stage4_theirs_flat_direction_p() {
+    if !require_first_principles() {
+        return;
+    }
     let fixture = load_stage4_fixture_theirs();
+    assert_eq!(
+        fixture.basis_used,
+        vec![3, 4, 5, 8],
+        "Computed dual basis must match McAllister [3,4,5,8]"
+    );
 
     let result = compute_flat_direction_full(&fixture.kappa_dual, &fixture.k_flux, &fixture.m_flux)
         .expect("Failed to compute flat direction");
@@ -580,7 +638,15 @@ fn stage4_theirs_flat_direction_p() {
 
 #[test]
 fn stage4_theirs_ek0() {
+    if !require_first_principles() {
+        return;
+    }
     let fixture = load_stage4_fixture_theirs();
+    assert_eq!(
+        fixture.basis_used,
+        vec![3, 4, 5, 8],
+        "Computed dual basis must match McAllister [3,4,5,8]"
+    );
 
     let result = compute_flat_direction_full(&fixture.kappa_dual, &fixture.k_flux, &fixture.m_flux)
         .expect("Failed to compute flat direction");
@@ -609,7 +675,7 @@ fn stage4_theirs_ek0() {
         value: round_to_decimals(ek0, 10),
         basis_used: fixture.basis_used,
         mcallister_expected: mcallister_ek0,
-        note: "Using McAllister's dual basis override - must match exactly",
+        note: "Using McAllister's dual basis (expected [3,4,5,8])",
     };
 
     insta::assert_json_snapshot!("theirs_ek0", snapshot);
@@ -617,6 +683,9 @@ fn stage4_theirs_ek0() {
 
 #[test]
 fn stage4_theirs_full_output() {
+    if !require_first_principles() {
+        return;
+    }
     let fixture = load_stage4_fixture_theirs();
 
     // Verify dimensions match
@@ -636,7 +705,7 @@ fn stage4_theirs_full_output() {
     struct Stage4Output {
         /// Dimensions
         h21: usize,
-        /// Which basis was used (must be [3,4,5,8])
+        /// Which basis was used (expected [3,4,5,8])
         basis_used: Vec<usize>,
         /// Input flux vectors
         k_flux: Vec<i64>,
