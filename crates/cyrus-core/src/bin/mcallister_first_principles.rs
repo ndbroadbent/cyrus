@@ -5614,6 +5614,100 @@ fn compare_corrected_chamber_target_volume_checkpoint(
     );
 }
 
+#[allow(clippy::too_many_arguments)]
+fn compare_checkpoint_t_corrected_chamber_gv_target(
+    data_dir: Option<&str>,
+    geom: &PrimalGeom,
+    intersection: &PrimalIntersection,
+    kklt_basis: &[usize],
+    base_target_tau: &[F64<Pos>],
+    checkpoint_t: &[F64<Finite>],
+    gamma: &[I64<Finite>],
+    cutoff: F64<Pos>,
+) {
+    let Some(dir) = data_dir.map(PathBuf::from) else {
+        return;
+    };
+    let target_path = dir.join("corrected_target_volumes.dat");
+    if !target_path.exists() {
+        return;
+    }
+    let checkpoint_target = read_csv_f64(&target_path)
+        .into_iter()
+        .map(|value| {
+            F64::<Finite>::new(value).expect("corrected target-volume checkpoint is finite")
+        })
+        .collect::<Vec<_>>();
+    if checkpoint_target.len() != base_target_tau.len()
+        || checkpoint_target.len() != kklt_basis.len()
+    {
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber GV target length mismatch: checkpoint={} base={} kklt={}",
+            checkpoint_target.len(),
+            base_target_tau.len(),
+            kklt_basis.len()
+        );
+        return;
+    }
+    let checkpoint_implied_gv = base_target_tau
+        .iter()
+        .zip(checkpoint_target.iter())
+        .map(|(base, target)| {
+            F64::<Finite>::new(base.get() - target.get())
+                .expect("checkpoint implied GV correction is finite")
+        })
+        .collect::<Vec<_>>();
+    let checkpoint_chamber =
+        triangulation_from_kahler_point(geom, &intersection.basis, checkpoint_t).unwrap_or_else(
+            |e| {
+                eprintln!("[ERROR] failed to build checkpoint-t corrected chamber: {e}");
+                std::process::exit(2);
+            },
+        );
+    let selection = compute_chamber_toric_gv_selection(
+        &checkpoint_chamber,
+        geom,
+        intersection,
+        checkpoint_t,
+        cutoff,
+    )
+    .unwrap_or_else(|e| {
+        eprintln!("[ERROR] failed to compute checkpoint-t corrected-chamber GV selection: {e}");
+        std::process::exit(2);
+    });
+    let Some(covered_gv_target) = cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+        &selection.small_curve_gvs,
+        &intersection.basis,
+        kklt_basis,
+        checkpoint_t,
+        Some(gamma),
+    ) else {
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber toric-covered GV target correction is invalid"
+        );
+        return;
+    };
+    let summary = target_correction_delta_summary(&checkpoint_implied_gv, &covered_gv_target)
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "[ERROR] failed to compare checkpoint-t corrected-chamber GV target correction: {e}"
+            );
+            std::process::exit(2);
+        });
+    eprintln!(
+        "[COMPARE] checkpoint-t corrected-chamber GV target correction delta: max_abs={} relative_l2={} max_abs_checkpoint_implied={} max_abs_toric_covered={} ambient_rays={} subcutoff={} pair_pruned={} toric_covered={} toric_missing={}",
+        summary.max_abs_delta,
+        summary.relative_l2_delta,
+        summary.max_abs_reference,
+        summary.max_abs_candidate,
+        selection.ambient_rays,
+        selection.subcutoff_count,
+        selection.filtered_count,
+        selection.toric_gv_covered_count,
+        selection.toric_gv_missing_count
+    );
+}
+
 fn stage_volume(
     data_dir: Option<&str>,
     manifest_dir: &PathBuf,
@@ -6424,6 +6518,18 @@ fn stage_volume(
             && input_chamber_gv_target_correction_checkpoint_t.is_none()
         {
             eprintln!("[COMPARE] checkpoint-t input-chamber GV target correction is invalid");
+        }
+        if let Some(checkpoint_t) = checkpoint_t_for_gv.as_ref() {
+            compare_checkpoint_t_corrected_chamber_gv_target(
+                data_dir,
+                geom,
+                intersection,
+                &kklt_basis,
+                &tau_target,
+                checkpoint_t,
+                &gamma,
+                small_curve_cutoff,
+            );
         }
         let Some(input_chamber_target_tau) = cyrus_core::kklt::compute_gv_corrected_target_tau(
             &c_i,
