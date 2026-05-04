@@ -345,6 +345,117 @@ pub fn remove_pair_decomposable_curve_candidates(
         .collect())
 }
 
+/// Exact bounded semigroup-decomposition diagnostic for toric curve candidates.
+///
+/// This is intentionally diagnostic-only. It can prove that a curve is a sum
+/// of up to three other selected candidates, which is useful for investigating
+/// the remaining McAllister "sums of others" pruning gap. It does not replace
+/// a full Hilbert-basis computation.
+pub struct BoundedCurveDecompositionIndex<'a> {
+    candidates: &'a [ToricCurveCandidate],
+    class_set: HashSet<Vec<i64>>,
+    pair_sums: HashMap<Vec<i64>, Vec<(usize, usize)>>,
+    dim: usize,
+}
+
+impl<'a> BoundedCurveDecompositionIndex<'a> {
+    /// Build a bounded decomposition index over selected curve candidates.
+    pub fn new(candidates: &'a [ToricCurveCandidate]) -> Result<Self> {
+        let Some(first) = candidates.first() else {
+            return Ok(Self {
+                candidates,
+                class_set: HashSet::new(),
+                pair_sums: HashMap::new(),
+                dim: 0,
+            });
+        };
+        let dim = first.class.len();
+        let mut class_set = HashSet::with_capacity(candidates.len());
+        for candidate in candidates {
+            if candidate.class.len() != dim {
+                return Err(Error::InvalidInput(
+                    "candidate curve dimensions are inconsistent".into(),
+                ));
+            }
+            class_set.insert(candidate.class.clone());
+        }
+
+        let mut pair_sums: HashMap<Vec<i64>, Vec<(usize, usize)>> = HashMap::new();
+        for i in 0..candidates.len() {
+            for j in i..candidates.len() {
+                let sum = add_curve(&candidates[i].class, &candidates[j].class);
+                pair_sums.entry(sum).or_default().push((i, j));
+            }
+        }
+
+        Ok(Self {
+            candidates,
+            class_set,
+            pair_sums,
+            dim,
+        })
+    }
+
+    /// Find a decomposition of `target` as a sum of up to `max_terms` indexed candidates.
+    ///
+    /// Currently supports `max_terms <= 3`. Terms may repeat, matching
+    /// semigroup membership rather than a set partition.
+    pub fn find_decomposition(
+        &self,
+        target: &ToricCurveCandidate,
+        max_terms: usize,
+    ) -> Result<Option<Vec<Vec<i64>>>> {
+        if max_terms < 2 || self.candidates.is_empty() {
+            return Ok(None);
+        }
+        if target.class.len() != self.dim {
+            return Err(Error::InvalidInput(
+                "target curve dimension does not match decomposition index".into(),
+            ));
+        }
+        if max_terms > 3 {
+            return Err(Error::InvalidInput(
+                "bounded curve decomposition currently supports max_terms <= 3".into(),
+            ));
+        }
+
+        if let Some((first, second)) =
+            find_pair_decomposition_with_set(target, self.candidates, &self.class_set)
+        {
+            return Ok(Some(vec![first, second]));
+        }
+        if max_terms < 3 {
+            return Ok(None);
+        }
+
+        for summand in self
+            .candidates
+            .iter()
+            .filter(|candidate| candidate.volume < target.volume)
+        {
+            let remainder = subtract_curve(&target.class, &summand.class);
+            let Some(pairs) = self.pair_sums.get(&remainder) else {
+                continue;
+            };
+            for &(i, j) in pairs {
+                let first = &self.candidates[i];
+                let second = &self.candidates[j];
+                if first.volume < target.volume && second.volume < target.volume {
+                    let mut decomposition = vec![
+                        first.class.clone(),
+                        second.class.clone(),
+                        summand.class.clone(),
+                    ];
+                    decomposition.sort();
+                    return Ok(Some(decomposition));
+                }
+            }
+        }
+
+        Ok(None)
+    }
+}
+
 /// Compute genus-zero GV invariants for simple toric curve classes.
 ///
 /// This implements the analytic formulas from Demirtas-Kim-McAllister-Moritz-
@@ -498,6 +609,11 @@ fn find_pair_decomposition_with_set(
 fn subtract_curve(lhs: &[i64], rhs: &[i64]) -> Vec<i64> {
     debug_assert_eq!(lhs.len(), rhs.len());
     lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a - b).collect()
+}
+
+fn add_curve(lhs: &[i64], rhs: &[i64]) -> Vec<i64> {
+    debug_assert_eq!(lhs.len(), rhs.len());
+    lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a + b).collect()
 }
 
 fn toric_two_face_curve_gv(
@@ -1869,10 +1985,11 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        ToricCurveCandidate, compute_grading_vector, curve_volume_in_divisor_basis,
-        dump_mori_rays_cdd, find_pair_decomposition, load_grading_cache,
-        map_basis_gv_invariants_to_ambient, remove_pair_decomposable_curve_candidates,
-        subcutoff_toric_curve_candidates, write_grading_cache,
+        BoundedCurveDecompositionIndex, ToricCurveCandidate, compute_grading_vector,
+        curve_volume_in_divisor_basis, dump_mori_rays_cdd, find_pair_decomposition,
+        load_grading_cache, map_basis_gv_invariants_to_ambient,
+        remove_pair_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
+        write_grading_cache,
     };
     use crate::{f64_finite, f64_pos};
     use malachite::Integer;
@@ -2057,6 +2174,35 @@ mod tests {
 
         let filtered = remove_pair_decomposable_curve_candidates(&candidates).unwrap();
         assert_eq!(filtered, candidates);
+    }
+
+    #[test]
+    fn bounded_decomposition_index_finds_three_term_sums() {
+        let candidates = vec![
+            ToricCurveCandidate {
+                class: vec![1, 0, 0],
+                volume: f64_pos!(0.2),
+            },
+            ToricCurveCandidate {
+                class: vec![0, 1, 0],
+                volume: f64_pos!(0.3),
+            },
+            ToricCurveCandidate {
+                class: vec![0, 0, 1],
+                volume: f64_pos!(0.4),
+            },
+            ToricCurveCandidate {
+                class: vec![1, 1, 1],
+                volume: f64_pos!(0.9),
+            },
+        ];
+        let index = BoundedCurveDecompositionIndex::new(&candidates).unwrap();
+
+        assert_eq!(index.find_decomposition(&candidates[3], 2).unwrap(), None);
+        assert_eq!(
+            index.find_decomposition(&candidates[3], 3).unwrap(),
+            Some(vec![vec![0, 0, 1], vec![0, 1, 0], vec![1, 0, 0]])
+        );
     }
 
     #[test]
