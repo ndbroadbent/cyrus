@@ -6,6 +6,8 @@
 //! Optional:
 //! - `--dual-basis path/to/dual_basis.json` to supply the flux coordinate basis.
 //! - `--allow-fixtures` to permit JSON fixture fallback when no data dir is set.
+//! - `--skip-mcallister-assertions` to run the computed pipeline without
+//!   comparing final observables to the 4-214-647 validation target.
 //! - `--branch-candidates N --branch-selection <max-volume|min-volume|first-positive|min-condition|min-toric-gv-missing|min-required-gv-degree>`
 //!   to run deterministic KKLT branch search without loading Kähler checkpoints.
 //! - `--branch-height-init` to include the CYTools-style height-projected
@@ -767,6 +769,7 @@ struct PipelineArgs {
     data_dir: Option<String>,
     allow_invalid_ek0: bool,
     allow_fixtures: bool,
+    validate_mcallister_assertions: bool,
     allow_downstream_kahler: bool,
     kklt_steps: usize,
     branch_candidates: usize,
@@ -837,6 +840,7 @@ fn parse_args() -> PipelineArgs {
         .or_else(|| std::env::var("CYRUS_MCALLISTER_DATA_DIR").ok());
     let allow_invalid_ek0 = parse_flag("--allow-invalid-ek0");
     let allow_fixtures = parse_flag("--allow-fixtures");
+    let validate_mcallister_assertions = !parse_flag("--skip-mcallister-assertions");
     let allow_downstream_kahler = parse_flag("--allow-downstream-kahler");
     let kklt_steps = parse_arg_value::<usize>("--kklt-steps").unwrap_or(200);
     let branch_candidates = parse_arg_value::<usize>("--branch-candidates").unwrap_or(0);
@@ -877,6 +881,7 @@ fn parse_args() -> PipelineArgs {
         data_dir,
         allow_invalid_ek0,
         allow_fixtures,
+        validate_mcallister_assertions,
         allow_downstream_kahler,
         kklt_steps,
         branch_candidates,
@@ -6052,6 +6057,7 @@ fn stage_vacuum(
     v_string: f64,
     compare_dir: Option<String>,
     data_dir: Option<String>,
+    validate_mcallister_assertions: bool,
     manifest_dir: &PathBuf,
 ) -> PipelineSummary {
     let Some(ek0) = ek0_opt else {
@@ -6062,8 +6068,6 @@ fn stage_vacuum(
     let vac = compute_vacuum(ek0, g_s, v_string_pos, racetrack.w0);
     let v0_log10_abs = vac.v0.get().abs().log10();
     compare_against_dat(compare_dir, data_dir, g_s, racetrack.w0, v_string);
-    let assertion_path = manifest_dir.join("tests/mcallister_e2e/assertions/racetrack.json");
-    let assertion: RacetrackAssertion = load_json(&assertion_path);
     let summary = PipelineSummary {
         g_s: g_s.get(),
         w0: racetrack.w0.get(),
@@ -6075,6 +6079,18 @@ fn stage_vacuum(
     eprintln!("[RESULT] W0 = {}", summary.w0);
     eprintln!("[RESULT] V_string = {}", summary.v_string);
     eprintln!("[RESULT] log10(|V0|) = {}", summary.v0_log10_abs);
+    if summary.w0 <= 0.0 {
+        eprintln!("[ERROR] W0 must be positive");
+        std::process::exit(2);
+    }
+    if !validate_mcallister_assertions {
+        eprintln!(
+            "[INFO] skipping McAllister final assertion checks (--skip-mcallister-assertions)"
+        );
+        return summary;
+    }
+    let assertion_path = manifest_dir.join("tests/mcallister_e2e/assertions/racetrack.json");
+    let assertion: RacetrackAssertion = load_json(&assertion_path);
     let tol_gs = 1e-6;
     let tol_v = 50.0;
     if (summary.g_s - assertion.g_s).abs() > tol_gs {
@@ -6096,10 +6112,6 @@ fn stage_vacuum(
             "[ERROR] W0 mismatch: got {}, expected {}",
             summary.w0, assertion.w_0
         );
-        std::process::exit(2);
-    }
-    if summary.w0 <= 0.0 {
-        eprintln!("[ERROR] W0 must be positive");
         std::process::exit(2);
     }
     if assertion.n_curves != 344 {
@@ -6181,6 +6193,7 @@ fn run_pipeline(args: PipelineArgs) {
         v_string,
         args.compare_dir,
         args.data_dir,
+        args.validate_mcallister_assertions,
         &manifest_dir,
     );
     if let Some(path) = args.out_path {

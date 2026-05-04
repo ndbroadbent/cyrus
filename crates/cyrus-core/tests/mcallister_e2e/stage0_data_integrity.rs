@@ -413,6 +413,11 @@ fn stage0_first_principles_runner_does_not_silently_replay_downstream_outputs() 
         stage_vacuum.contains("compare_against_dat("),
         "downstream checkpoint comparison belongs after V_string has been computed"
     );
+    assert!(
+        runner.contains("--skip-mcallister-assertions")
+            && stage_vacuum.contains("if !validate_mcallister_assertions"),
+        "McAllister final assertion checks must be explicitly skippable for non-validation candidates"
+    );
     let validate_basis =
         source_region_before_fn(&runner, "validate_basis_checkpoint", "sorted_point_coords");
     assert!(
