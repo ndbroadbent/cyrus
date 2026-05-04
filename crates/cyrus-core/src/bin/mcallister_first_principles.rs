@@ -25,6 +25,8 @@
 //!   small-curve/GV coverage enrichment.
 //! - `--primal-gv-max-deg N` or `--primal-gv-min-points N` to compute general
 //!   primal GV invariants if toric formulas do not cover selected small curves.
+//! - `--diagnose-corrected-chamber-gv` to recompute toric small-curve/GV data
+//!   in the FRST induced by the solved corrected Kähler point.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -451,6 +453,19 @@ struct BranchGvCoverage {
     first_missing_bounded_decomposition: Option<Vec<Vec<i64>>>,
 }
 
+struct ChamberGvDiagnostic {
+    ambient_rays: usize,
+    subcutoff_count: usize,
+    filtered_count: usize,
+    toric_gv_covered_count: usize,
+    toric_gv_missing_count: usize,
+    first_missing_class: Option<Vec<i64>>,
+    missing_required_degree_min: Option<i128>,
+    missing_required_degree_max: Option<i128>,
+    covered_gv_volume_correction: Option<F64<Finite>>,
+    gv_volume_correction: Option<F64<Finite>>,
+}
+
 struct BranchReportContext {
     branch_seed: u64,
     branch_selection: BranchSelection,
@@ -486,6 +501,7 @@ struct PipelineArgs {
     branch_report_skip_gv_coverage: bool,
     primal_gv_max_deg: Option<u32>,
     primal_gv_min_points: Option<u32>,
+    diagnose_corrected_chamber_gv: bool,
     dual_basis_override: Option<BasisOverride>,
 }
 
@@ -560,6 +576,7 @@ fn parse_args() -> PipelineArgs {
     } else {
         parse_arg_value::<u32>("--primal-gv-min-points")
     };
+    let diagnose_corrected_chamber_gv = parse_flag("--diagnose-corrected-chamber-gv");
     let dual_basis_override = parse_arg_value::<String>("--dual-basis")
         .map(|path| load_json::<BasisOverride>(&PathBuf::from(path)));
     PipelineArgs {
@@ -586,6 +603,7 @@ fn parse_args() -> PipelineArgs {
         branch_report_skip_gv_coverage,
         primal_gv_max_deg,
         primal_gv_min_points,
+        diagnose_corrected_chamber_gv,
         dual_basis_override,
     }
 }
@@ -1750,6 +1768,100 @@ fn triangulations_have_same_simplices(lhs: &Triangulation, rhs: &Triangulation) 
     lhs_simplices == rhs_simplices
 }
 
+fn diagnose_chamber_gv_volume_correction(
+    tri: &Triangulation,
+    geom: &PrimalGeom,
+    intersection: &PrimalIntersection,
+    kahler: &[F64<Finite>],
+    gamma: &[I64<Finite>],
+    cutoff: F64<Pos>,
+) -> Result<ChamberGvDiagnostic, String> {
+    let ambient_rays = compute_mori_cone_cap_rays(
+        tri,
+        &geom.triangulation_points,
+        &geom.polytope,
+        false,
+        false,
+        None,
+    )
+    .map_err(|e| format!("failed to compute corrected-chamber ambient Mori-cap rays: {e}"))?;
+    let small_curve_candidates =
+        subcutoff_toric_curve_candidates(&ambient_rays, &intersection.basis, kahler, cutoff)
+            .map_err(|e| format!("failed to select corrected-chamber small curves: {e}"))?;
+    let small_curves = remove_pair_decomposable_curve_candidates(&small_curve_candidates)
+        .map_err(|e| format!("failed to prune corrected-chamber small curves: {e}"))?;
+    let toric_gvs =
+        compute_toric_two_face_curve_gv_invariants(tri, &geom.triangulation_points, &geom.polytope)
+            .map_err(|e| format!("failed to compute corrected-chamber toric GV values: {e}"))?;
+
+    let gv_by_class: HashMap<Vec<i64>, malachite::Integer> = toric_gvs
+        .into_iter()
+        .map(|item| (item.class, item.gv))
+        .collect();
+    let mut small_curve_gvs = Vec::with_capacity(small_curves.len());
+    let mut missing_gv_classes = Vec::new();
+    for curve in &small_curves {
+        match gv_by_class.get(&curve.class) {
+            Some(gv) => small_curve_gvs.push((curve.class.clone(), gv.clone())),
+            None => missing_gv_classes.push(curve.class.clone()),
+        }
+    }
+
+    let covered_gv_volume_correction = if small_curve_gvs.is_empty() {
+        None
+    } else {
+        Some(
+            cyrus_core::kklt::compute_gv_volume_correction_for_ambient_curves(
+                &small_curve_gvs,
+                &intersection.basis,
+                kahler,
+                Some(gamma),
+            )
+            .ok_or_else(|| {
+                "failed to compute corrected-chamber ambient GV volume correction".to_string()
+            })?,
+        )
+    };
+
+    let gv_volume_correction = if missing_gv_classes.is_empty() {
+        covered_gv_volume_correction
+    } else {
+        None
+    };
+    let (missing_required_degree_min, missing_required_degree_max) =
+        if missing_gv_classes.is_empty() {
+            (None, None)
+        } else {
+            let basis_rays =
+                project_mori_cone_cap_rays_to_basis(&ambient_rays, &intersection.basis).map_err(
+                    |e| format!("failed to project corrected-chamber Mori-cap rays to basis: {e}"),
+                )?;
+            let grading = compute_grading_vector(&basis_rays).ok_or_else(|| {
+                "failed to compute corrected-chamber GV degree grading vector".to_string()
+            })?;
+            let summary = summarize_required_gv_degrees(
+                &missing_gv_classes,
+                &intersection.basis,
+                &grading,
+                None,
+            )?;
+            (Some(summary.min_degree), Some(summary.max_degree))
+        };
+
+    Ok(ChamberGvDiagnostic {
+        ambient_rays: ambient_rays.len(),
+        subcutoff_count: small_curve_candidates.len(),
+        filtered_count: small_curves.len(),
+        toric_gv_covered_count: small_curve_gvs.len(),
+        toric_gv_missing_count: missing_gv_classes.len(),
+        first_missing_class: missing_gv_classes.first().cloned(),
+        missing_required_degree_min,
+        missing_required_degree_max,
+        covered_gv_volume_correction,
+        gv_volume_correction,
+    })
+}
+
 fn stage_volume(
     data_dir: Option<&str>,
     manifest_dir: &PathBuf,
@@ -1769,6 +1881,7 @@ fn stage_volume(
     branch_report_skip_gv_coverage: bool,
     primal_gv_min_points: Option<u32>,
     primal_gv_max_deg: Option<u32>,
+    diagnose_corrected_chamber_gv: bool,
     small_curve_cutoff: F64<Pos>,
     h21: usize,
     t0: &Instant,
@@ -1824,7 +1937,13 @@ fn stage_volume(
         );
         std::process::exit(2);
     }
-    let (t, gv_volume_correction) = if allow_downstream_kahler {
+    if diagnose_corrected_chamber_gv && allow_downstream_kahler {
+        eprintln!(
+            "[ERROR] --diagnose-corrected-chamber-gv is only valid for first-principles runs, not downstream Kähler replay"
+        );
+        std::process::exit(2);
+    }
+    let (t, gv_volume_correction, gamma_for_chamber_gv) = if allow_downstream_kahler {
         let Some(data_dir_path) = data_dir.map(PathBuf::from) else {
             eprintln!(
                 "[ERROR] Volume replay requires McAllister data dir for corrected_kahler_param.dat"
@@ -1842,7 +1961,7 @@ fn stage_volume(
             &source_basis,
             &t_raw,
         );
-        (t, None)
+        (t, None, None)
     } else {
         let (c_i, kklt_basis) = load_kklt_inputs(data_dir, manifest_dir);
         let c_tau = cyrus_core::kklt::compute_c_tau(racetrack.rt_res.g_s, racetrack.w0);
@@ -2490,7 +2609,7 @@ fn stage_volume(
             "[INFO] GV volume correction = {}",
             gv_volume_correction.get()
         );
-        (corrected.t, Some(gv_volume_correction))
+        (corrected.t, Some(gv_volume_correction), Some(gamma))
     };
 
     let corrected_chamber = triangulation_from_kahler_point(geom, &intersection.basis, &t)
@@ -2509,6 +2628,70 @@ fn stage_volume(
         eprintln!(
             "[WARN] corrected Kähler point lies in a different regular chamber; flop/chamber-updated GV evaluation remains an explicit instanton-layer gap."
         );
+    }
+    if diagnose_corrected_chamber_gv {
+        let gamma = gamma_for_chamber_gv.as_deref().unwrap_or_else(|| {
+            eprintln!("[ERROR] corrected-chamber GV diagnostic requires first-principles gamma");
+            std::process::exit(2);
+        });
+        let diag = diagnose_chamber_gv_volume_correction(
+            &corrected_chamber,
+            geom,
+            intersection,
+            &t,
+            gamma,
+            small_curve_cutoff,
+        )
+        .unwrap_or_else(|e| {
+            eprintln!("[ERROR] corrected-chamber GV diagnostic failed: {e}");
+            std::process::exit(2);
+        });
+        eprintln!(
+            "[INFO] corrected-chamber small toric curves: ambient_rays={} subcutoff={} pair_pruned={} toric_covered={} toric_missing={} cutoff={}",
+            diag.ambient_rays,
+            diag.subcutoff_count,
+            diag.filtered_count,
+            diag.toric_gv_covered_count,
+            diag.toric_gv_missing_count,
+            small_curve_cutoff.get()
+        );
+        if let Some(first_missing) = &diag.first_missing_class {
+            if let (Some(min_degree), Some(max_degree)) = (
+                diag.missing_required_degree_min,
+                diag.missing_required_degree_max,
+            ) {
+                eprintln!(
+                    "[INFO] corrected-chamber missing toric GV required degree range: min={} max={} count={}",
+                    min_degree, max_degree, diag.toric_gv_missing_count
+                );
+            }
+            if let Some(chamber_correction) = diag.covered_gv_volume_correction.as_ref() {
+                eprintln!(
+                    "[INFO] corrected-chamber covered toric GV volume correction (partial) = {}",
+                    chamber_correction.get()
+                );
+                if let Some(input_chamber_correction) = gv_volume_correction.as_ref() {
+                    eprintln!(
+                        "[INFO] corrected-chamber covered toric GV volume correction delta_vs_input_chamber (partial) = {}",
+                        chamber_correction.get() - input_chamber_correction.get()
+                    );
+                }
+            }
+            eprintln!(
+                "[WARN] corrected-chamber GV volume correction unavailable: missing toric GV values, first_missing={first_missing:?}"
+            );
+        } else if let Some(chamber_correction) = diag.gv_volume_correction.as_ref() {
+            eprintln!(
+                "[INFO] corrected-chamber GV volume correction = {}",
+                chamber_correction.get()
+            );
+            if let Some(input_chamber_correction) = gv_volume_correction.as_ref() {
+                eprintln!(
+                    "[INFO] corrected-chamber GV volume correction delta_vs_input_chamber = {}",
+                    chamber_correction.get() - input_chamber_correction.get()
+                );
+            }
+        }
     }
 
     let classical_volume = classical_volume_from_t(&intersection.kappa_basis, &t);
@@ -2696,6 +2879,7 @@ fn run_pipeline(args: PipelineArgs) {
         args.branch_report_skip_gv_coverage,
         args.primal_gv_min_points,
         args.primal_gv_max_deg,
+        args.diagnose_corrected_chamber_gv,
         small_curve_cutoff,
         flat.dual_basis.len(),
         &t0,
