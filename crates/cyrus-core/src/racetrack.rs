@@ -12,7 +12,7 @@ use crate::f64_pos;
 use crate::types::f64::F64;
 use crate::types::i64::I64;
 use crate::types::physics::{
-    GvValue, ImTau, RacetrackCoefficient, RacetrackExponent, ResidualError, StringCoupling,
+    GvValue, ImTau, RacetrackCoefficient, RacetrackExponent, ReTau, ResidualError, StringCoupling,
     Superpotential,
 };
 use crate::types::tags::{Finite, NonNeg, Pos};
@@ -28,6 +28,8 @@ const ZETA_NORM: F64<Pos> = f64_pos!(1.0 / (2.828_427_124_746_19 * 17.493_418_32
 
 /// 2π as a typed positive constant.
 const TWO_PI: F64<Pos> = f64_pos!(2.0 * PI);
+const DILOG_TOL: f64 = 1e-16;
+const DILOG_MAX_TERMS: usize = 100_000;
 
 /// A racetrack term: `coefficient * exp(-2π q·p / g_s)`.
 #[derive(Debug, Clone)]
@@ -45,6 +47,8 @@ pub struct RacetrackTerm {
 pub struct RacetrackResult {
     /// String coupling g_s (positive, bounded 0 < g_s < 1).
     pub g_s: StringCoupling,
+    /// Real part of the stabilized axio-dilaton.
+    pub re_tau: ReTau,
     /// Stabilized Kähler moduli value: `Im(τ) = (p / g_s)` (positive).
     pub im_tau: ImTau,
     /// Numerical error delta (F-term residual, non-negative).
@@ -142,107 +146,148 @@ pub fn solve_racetrack(terms: &[RacetrackTerm]) -> Option<RacetrackResult> {
     let t1 = &terms[0];
     let t2 = &terms[1];
 
-    // Coefficients must have opposite signs for cancellation
-    // Finite * Finite = Finite
-    let product = t1.coefficient * t2.coefficient;
-    if product.get() >= 0.0 {
-        return None;
-    }
-
-    // Condition for dW/dτ = 0:
-    // e^(-2π (q1-q2)·p / g_s) = - (q2 A2) / (q1 A1)
-    // ratio = -(q1 A1) / (q2 A2)
-    let numerator = t1.exponent * t1.coefficient;
-    let denominator = t2.exponent * t2.coefficient;
+    // McAllister eqs. 2.25-2.26:
+    // δ = -[(M·q1)(p·q1)N_q1] / [(M·q2)(p·q2)N_q2]
+    // ε = (p·q2) - (p·q1)
+    // Im(τ) = ln(1/|δ|)/(2πε), with Re(τ)=1/(2ε) for δ < 0.
+    let epsilon = (t2.exponent - t1.exponent).try_to_pos()?;
+    let derivative_coeff_1 = t1.exponent * t1.coefficient;
+    let derivative_coeff_2 = t2.exponent * t2.coefficient;
 
     // Need NonZero to divide - check denominator isn't zero
-    let denominator_nz = denominator.try_to_non_zero()?;
-    // Finite / NonZero = Finite
-    let ratio = -(numerator / denominator_nz);
-    if ratio.get() <= 0.0 {
-        return None;
-    }
-
-    // g_s = 2π × (q1·p - q2·p) / ln(ratio)
-    // Finite - Finite = Finite
-    let diff = t1.exponent - t2.exponent;
-
-    // ln(ratio) - ratio is positive so ln is finite (and non-zero for ratio != 1)
-    let ln_ratio = F64::<Finite>::new(ratio.get().ln())?.try_to_non_zero()?;
-
-    // TWO_PI is Pos, diff is Finite, ln_ratio is NonZero
-    // Pos * Finite = Finite, Finite / NonZero = Finite
-    let g_s_raw = TWO_PI * diff / ln_ratio;
+    let derivative_coeff_2_nz = derivative_coeff_2.try_to_non_zero()?;
+    let delta = -(derivative_coeff_1 / derivative_coeff_2_nz);
+    let abs_delta = delta.abs().try_to_pos()?;
+    let ln_inv_abs_delta = abs_delta.recip().ln().try_to_pos()?;
+    let im_tau = ln_inv_abs_delta / (TWO_PI * epsilon);
+    let g_s = im_tau.recip();
 
     // Validate g_s is in physical range (0, 1)
-    if g_s_raw.get() <= 0.0 || g_s_raw.get() > 1.0 {
+    if g_s.get() > 1.0 {
         return None;
     }
 
-    // im_tau = q1·p / g_s
-    // We already validated g_s_raw > 0, but type system doesn't know that yet
-    // Since we narrow to Pos below, we can use try_to_pos here too
-    let g_s_nz = g_s_raw.try_to_non_zero()?;
-    // Finite / NonZero = Finite
-    let im_tau_raw = t1.exponent / g_s_nz;
-
-    // Narrow to positive types at the boundary
-    let g_s = g_s_raw.try_to_pos()?;
-    let im_tau = im_tau_raw.try_to_pos()?;
+    let re_tau = if delta.get() < 0.0 {
+        let branch = (f64_pos!(2.0) * epsilon).recip();
+        F64::<NonNeg>::new(branch.get()).expect("1/(2 epsilon) is non-negative")
+    } else {
+        F64::<NonNeg>::ZERO
+    };
 
     Some(RacetrackResult {
         g_s,
+        re_tau,
         im_tau,
         delta: F64::<NonNeg>::ZERO,
         epsilon: F64::<NonNeg>::ZERO,
     })
 }
 
-/// Compute W₀ from stabilized racetrack.
+fn complex_dilog_unit_disk(z_re: f64, z_im: f64) -> Option<(f64, f64)> {
+    let z_abs_sq = z_re.mul_add(z_re, z_im * z_im);
+    if !z_abs_sq.is_finite() || z_abs_sq >= 1.0 {
+        return None;
+    }
+    if z_abs_sq == 0.0 {
+        return Some((0.0, 0.0));
+    }
+
+    let mut sum_re = 0.0;
+    let mut sum_im = 0.0;
+    let mut pow_re = z_re;
+    let mut pow_im = z_im;
+
+    for k in 1..=DILOG_MAX_TERMS {
+        let k_f = k as f64;
+        let denom = k_f * k_f;
+        let term_re = pow_re / denom;
+        let term_im = pow_im / denom;
+        sum_re += term_re;
+        sum_im += term_im;
+
+        let term_abs = term_re.hypot(term_im);
+        let sum_abs = sum_re.hypot(sum_im).max(1.0);
+        if term_abs <= DILOG_TOL * sum_abs {
+            return Some((sum_re, sum_im));
+        }
+
+        let next_re = pow_re * z_re - pow_im * z_im;
+        let next_im = pow_re * z_im + pow_im * z_re;
+        if !next_re.is_finite() || !next_im.is_finite() {
+            return None;
+        }
+        pow_re = next_re;
+        pow_im = next_im;
+    }
+
+    None
+}
+
+fn racetrack_term_value(result: &RacetrackResult, term: &RacetrackTerm) -> Option<(f64, f64)> {
+    // exp(2πiτ q·p) = exp(-2π Im(τ) q·p) × exp(i 2π Re(τ) q·p)
+    let magnitude_arg = -TWO_PI * term.exponent * result.im_tau;
+    let magnitude = magnitude_arg.get().exp();
+    if !magnitude.is_finite() {
+        return None;
+    }
+    if magnitude == 0.0 {
+        return Some((0.0, 0.0));
+    }
+    let phase = (TWO_PI * term.exponent * result.re_tau).get();
+    let z_re = magnitude * phase.cos();
+    let z_im = magnitude * phase.sin();
+    let (li2_re, li2_im) = complex_dilog_unit_disk(z_re, z_im)?;
+    let coefficient = term.coefficient.get();
+    Some((coefficient * li2_re, coefficient * li2_im))
+}
+
+/// Compute W₀ from all available racetrack terms.
 ///
 /// From eq. 2.22:
 /// ```text
 /// W_flux = -ζ Σ_q (M·q) N_q Li₂(e^{2πiτ(q·p)})
 /// ```
 ///
-/// At large Im(τ), Li₂(x) ≈ x for small x, so:
-/// ```text
-/// W₀ ≈ ζ × |A1 exp(-2π q1·p/gs) + A2 exp(-2π q2·p/gs)|
-/// ```
-///
 /// where ζ = 1/(2^{3/2} π^{5/2}) ≈ 0.02024 is the normalization factor.
 ///
 /// Reference: arXiv:2107.09064, Eq. 2.22
+#[must_use]
+pub fn compute_w0_from_terms(
+    result: &RacetrackResult,
+    terms: &[RacetrackTerm],
+) -> Option<Superpotential> {
+    if terms.is_empty() {
+        return None;
+    }
+
+    // W₀ = ζ × |sum of terms|, keeping the phase needed by same-sign racetracks.
+    // The ζ normalization factor was missing - this caused ~50x error
+    let mut sum_re = 0.0;
+    let mut sum_im = 0.0;
+    for term in terms {
+        let (term_re, term_im) = racetrack_term_value(result, term)?;
+        sum_re += term_re;
+        sum_im += term_im;
+    }
+    let sum_abs = (sum_re.mul_add(sum_re, sum_im * sum_im)).sqrt();
+    let sum_pos = F64::<Pos>::new(sum_abs)?;
+    Some(ZETA_NORM * sum_pos)
+}
+
+/// Compute W₀ from the two leading stabilized racetrack terms.
+///
+/// Prefer [`compute_w0_from_terms`] when all computed terms are available.
 ///
 /// # Panics
-/// Panics if exp() produces a non-positive result (should not occur mathematically).
+/// Panics if the two terms cancel exactly.
 #[must_use]
 pub fn compute_w0(
     result: &RacetrackResult,
     term1: &RacetrackTerm,
     term2: &RacetrackTerm,
 ) -> Superpotential {
-    // -2π × exponent / g_s (exponent = q·p, and we use Im(τ) = 1/g_s)
-    // -Pos = Neg, Neg * Finite = Finite, Finite / Pos = Finite
-    let arg1 = -TWO_PI * term1.exponent / result.g_s;
-    let arg2 = -TWO_PI * term2.exponent / result.g_s;
-
-    // exp() of Finite is Pos (always positive)
-    let exp1 = F64::<Pos>::new(arg1.get().exp()).expect("exp is always positive and finite");
-    let exp2 = F64::<Pos>::new(arg2.get().exp()).expect("exp is always positive and finite");
-
-    // Finite * Pos = Finite (algebra handles cross-type automatically)
-    let term1_val = term1.coefficient * exp1;
-    let term2_val = term2.coefficient * exp2;
-
-    // W₀ = ζ × |sum of terms|
-    // The ζ normalization factor was missing - this caused ~50x error
-    let sum = term1_val + term2_val;
-    let sum_pos = sum
-        .abs()
-        .try_to_pos()
-        .expect("racetrack terms never exactly cancel");
-    ZETA_NORM * sum_pos
+    compute_w0_from_terms(result, &[term1.clone(), term2.clone()])
+        .expect("racetrack terms never exactly cancel")
 }
 
 #[cfg(test)]
@@ -255,6 +300,36 @@ mod tests {
 
     fn finite_f64(v: f64) -> F64<Finite> {
         F64::<Finite>::new(v).unwrap()
+    }
+
+    #[test]
+    fn test_complex_dilog_known_real_value() {
+        let (re, im) = complex_dilog_unit_disk(0.5, 0.0).unwrap();
+        assert!((re - 0.582_240_526_465_012_5).abs() < 1e-14);
+        assert!(im.abs() < 1e-14);
+    }
+
+    #[test]
+    fn test_compute_w0_from_terms_uses_dilog_not_linear_approximation() {
+        let result = RacetrackResult {
+            g_s: f64_pos!(1.0),
+            re_tau: F64::<NonNeg>::ZERO,
+            im_tau: f64_pos!(std::f64::consts::LN_2 / (2.0 * PI)),
+            delta: F64::<NonNeg>::ZERO,
+            epsilon: F64::<NonNeg>::ZERO,
+        };
+        let terms = vec![RacetrackTerm {
+            curve: vec![finite_i64(1)],
+            coefficient: finite_f64(1.0),
+            exponent: finite_f64(1.0),
+        }];
+
+        let w0 = compute_w0_from_terms(&result, &terms).unwrap();
+        let linearized = ZETA_NORM.get() * 0.5;
+        assert!(
+            (w0.get() - linearized).abs() > 0.01 * ZETA_NORM.get(),
+            "Li2(1/2) should be visibly different from the linear term"
+        );
     }
 
     #[test]
@@ -275,6 +350,7 @@ mod tests {
         let res = solve_racetrack(&terms).unwrap();
         assert!(res.g_s.get() > 0.0);
         assert!(res.g_s.get() < 1.0);
+        assert_eq!(res.re_tau, F64::<NonNeg>::ZERO);
     }
 
     #[test]
