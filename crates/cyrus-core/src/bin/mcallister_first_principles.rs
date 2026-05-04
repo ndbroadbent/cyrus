@@ -29,6 +29,9 @@
 //!   in the FRST induced by the solved corrected Kähler point.
 //!   When combined with primal GV bounds, also tries bounded general GV fallback
 //!   for corrected-chamber small curves not covered by toric formulas.
+//! - `--diagnose-corrected-chamber-provided-generators-gv` to also try the
+//!   CYTools `mcap_generators` override path for corrected-chamber misses,
+//!   explicitly without Mori-cone lattice augmentation.
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -511,6 +514,7 @@ struct PipelineArgs {
     primal_gv_max_deg: Option<u32>,
     primal_gv_min_points: Option<u32>,
     diagnose_corrected_chamber_gv: bool,
+    diagnose_corrected_chamber_provided_generators_gv: bool,
     dual_basis_override: Option<BasisOverride>,
 }
 
@@ -586,6 +590,8 @@ fn parse_args() -> PipelineArgs {
         parse_arg_value::<u32>("--primal-gv-min-points")
     };
     let diagnose_corrected_chamber_gv = parse_flag("--diagnose-corrected-chamber-gv");
+    let diagnose_corrected_chamber_provided_generators_gv =
+        parse_flag("--diagnose-corrected-chamber-provided-generators-gv");
     let dual_basis_override = parse_arg_value::<String>("--dual-basis")
         .map(|path| load_json::<BasisOverride>(&PathBuf::from(path)));
     PipelineArgs {
@@ -613,6 +619,7 @@ fn parse_args() -> PipelineArgs {
         primal_gv_max_deg,
         primal_gv_min_points,
         diagnose_corrected_chamber_gv,
+        diagnose_corrected_chamber_provided_generators_gv,
         dual_basis_override,
     }
 }
@@ -1614,6 +1621,33 @@ fn graded_ray_stats(
     })
 }
 
+fn degree_filtered_basis_rays(
+    rays: &[Vec<i64>],
+    grading: &[i64],
+    max_degree: u32,
+) -> Result<Vec<Vec<i64>>, String> {
+    let limit = i128::from(max_degree);
+    let mut out = Vec::new();
+    for ray in rays {
+        if ray.len() != grading.len() {
+            return Err(format!(
+                "basis ray length {} does not match grading vector length {}",
+                ray.len(),
+                grading.len()
+            ));
+        }
+        let degree = ray
+            .iter()
+            .zip(grading.iter())
+            .map(|(&coefficient, &weight)| i128::from(coefficient) * i128::from(weight))
+            .sum::<i128>();
+        if degree <= limit {
+            out.push(ray.clone());
+        }
+    }
+    Ok(out)
+}
+
 fn write_branch_report_jsonl(
     path: &PathBuf,
     ctx: &BranchReportContext,
@@ -1884,6 +1918,7 @@ fn diagnose_chamber_gv_volume_correction(
     cutoff: F64<Pos>,
     general_min_points: Option<u32>,
     general_max_deg: Option<u32>,
+    provided_generators_only: bool,
 ) -> Result<ChamberGvDiagnostic, String> {
     let ambient_rays = compute_mori_cone_cap_rays(
         tri,
@@ -1967,7 +2002,7 @@ fn diagnose_chamber_gv_volume_correction(
             .ok()
             .and_then(|value| value.parse::<usize>().ok())
             .unwrap_or(DEFAULT_CORRECTED_CHAMBER_GENERAL_GV_DIRECT_RAY_LIMIT);
-        if basis_rays.len() > direct_ray_limit {
+        if basis_rays.len() > direct_ray_limit && !provided_generators_only {
             let bounded_note = basis_ray_stats
                 .as_ref()
                 .and_then(|stats| stats.degree_bounded_count)
@@ -1978,6 +2013,15 @@ fn diagnose_chamber_gv_volume_correction(
             return Err(format!(
                 "corrected-chamber general GV direct fallback would dualize {} Mori generators, exceeding limit {direct_ray_limit}; {bounded_note}. Current backend computes cone hyperplanes by DDM before bounded lattice enumeration. Need a reduced corrected-chamber cone/lattice formulation, or set CYRUS_CORRECTED_CHAMBER_GENERAL_GV_DIRECT_RAY_LIMIT to force the direct attempt.",
                 basis_rays.len(),
+            ));
+        }
+        if basis_rays.len() > direct_ray_limit
+            && provided_generators_only
+            && general_max_deg.is_none()
+        {
+            return Err(format!(
+                "corrected-chamber provided-generator GV diagnostic would pass {} Mori generators without a max-degree bound; supply --primal-gv-max-deg or increase CYRUS_CORRECTED_CHAMBER_GENERAL_GV_DIRECT_RAY_LIMIT for an explicit direct attempt",
+                basis_rays.len()
             ));
         }
         let (non_positive_count, first_non_positive) =
@@ -2011,14 +2055,34 @@ fn diagnose_chamber_gv_volume_correction(
             .collect::<Result<Vec<_>, _>>()?;
         let corrected_kappa_basis =
             chamber_intersection_in_basis(tri, &geom.triangulation_points, &intersection.basis)?;
-        let general_gvs = cyrus_core::compute_gv_invariants(
-            basis_rays,
-            grading,
-            &q_matrix,
-            &corrected_kappa_basis,
-            general_min_points,
-            general_max_deg,
-        )
+        let general_gvs = if provided_generators_only {
+            let provided_rays = if let Some(max_deg) = general_max_deg {
+                degree_filtered_basis_rays(basis_rays, grading, max_deg)?
+            } else {
+                basis_rays.clone()
+            };
+            eprintln!(
+                "[WARN] corrected-chamber provided-generator GV diagnostic is using {} caller-provided generators without Mori-cone lattice augmentation; this is not the exact corrected-chamber GV fallback.",
+                provided_rays.len()
+            );
+            cyrus_core::compute_gv_invariants_with_provided_generators(
+                &provided_rays,
+                grading,
+                &q_matrix,
+                &corrected_kappa_basis,
+                general_min_points,
+                general_max_deg,
+            )
+        } else {
+            cyrus_core::compute_gv_invariants(
+                basis_rays,
+                grading,
+                &q_matrix,
+                &corrected_kappa_basis,
+                general_min_points,
+                general_max_deg,
+            )
+        }
         .map_err(|e| format!("failed to compute corrected-chamber general GV invariants: {e}"))?;
         let ambient_gvs =
             map_basis_gv_invariants_to_ambient(&general_gvs, &curve_basis).map_err(|e| {
@@ -2124,6 +2188,7 @@ fn stage_volume(
     primal_gv_min_points: Option<u32>,
     primal_gv_max_deg: Option<u32>,
     diagnose_corrected_chamber_gv: bool,
+    diagnose_corrected_chamber_provided_generators_gv: bool,
     small_curve_cutoff: F64<Pos>,
     h21: usize,
     t0: &Instant,
@@ -2179,7 +2244,9 @@ fn stage_volume(
         );
         std::process::exit(2);
     }
-    if diagnose_corrected_chamber_gv && allow_downstream_kahler {
+    if (diagnose_corrected_chamber_gv || diagnose_corrected_chamber_provided_generators_gv)
+        && allow_downstream_kahler
+    {
         eprintln!(
             "[ERROR] --diagnose-corrected-chamber-gv is only valid for first-principles runs, not downstream Kähler replay"
         );
@@ -2871,7 +2938,7 @@ fn stage_volume(
             "[WARN] corrected Kähler point lies in a different regular chamber; flop/chamber-updated GV evaluation remains an explicit instanton-layer gap."
         );
     }
-    if diagnose_corrected_chamber_gv {
+    if diagnose_corrected_chamber_gv || diagnose_corrected_chamber_provided_generators_gv {
         let gamma = gamma_for_chamber_gv.as_deref().unwrap_or_else(|| {
             eprintln!("[ERROR] corrected-chamber GV diagnostic requires first-principles gamma");
             std::process::exit(2);
@@ -2885,6 +2952,7 @@ fn stage_volume(
             small_curve_cutoff,
             primal_gv_min_points,
             primal_gv_max_deg,
+            diagnose_corrected_chamber_provided_generators_gv,
         )
         .unwrap_or_else(|e| {
             eprintln!("[ERROR] corrected-chamber GV diagnostic failed: {e}");
@@ -3145,6 +3213,7 @@ fn run_pipeline(args: PipelineArgs) {
         args.primal_gv_min_points,
         args.primal_gv_max_deg,
         args.diagnose_corrected_chamber_gv,
+        args.diagnose_corrected_chamber_provided_generators_gv,
         small_curve_cutoff,
         flat.dual_basis.len(),
         &t0,
@@ -3475,6 +3544,14 @@ mod tests {
                 .unwrap_err()
                 .contains("basis ray length")
         );
+    }
+
+    #[test]
+    fn degree_filtered_basis_rays_keeps_only_requested_degree_window() {
+        let filtered =
+            degree_filtered_basis_rays(&[vec![1, 0], vec![2, 1], vec![0, 5]], &[2, 3], 7).unwrap();
+
+        assert_eq!(filtered, vec![vec![1, 0], vec![2, 1]]);
     }
 }
 

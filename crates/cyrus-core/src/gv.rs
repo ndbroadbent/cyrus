@@ -1061,13 +1061,62 @@ pub fn compute_gv_invariants(
     min_points: Option<u32>,
     max_deg: Option<u32>,
 ) -> Result<Vec<(Vec<i32>, Integer)>> {
+    compute_gv_invariants_inner(
+        rays,
+        grading_vector,
+        q_matrix,
+        intnums,
+        min_points,
+        max_deg,
+        true,
+    )
+}
+
+/// Compute GV invariants using exactly the caller-provided semigroup generators.
+///
+/// This mirrors the CYTools `_compute_gvs_gws(..., mcap_generators=...)` path:
+/// the supplied generators are passed to `cygv` without first augmenting them
+/// with Mori-cone lattice points. Use this for explicit diagnostics or for
+/// callers that have already constructed the desired semigroup elements.
+///
+/// # Errors
+/// Returns an error if the input shapes or numeric ranges are invalid.
+pub fn compute_gv_invariants_with_provided_generators(
+    generators: &[Vec<i64>],
+    grading_vector: &[i64],
+    q_matrix: &[Vec<i64>],
+    intnums: &Intersection,
+    min_points: Option<u32>,
+    max_deg: Option<u32>,
+) -> Result<Vec<(Vec<i32>, Integer)>> {
+    compute_gv_invariants_inner(
+        generators,
+        grading_vector,
+        q_matrix,
+        intnums,
+        min_points,
+        max_deg,
+        false,
+    )
+}
+
+fn compute_gv_invariants_inner(
+    rays: &[Vec<i64>],
+    grading_vector: &[i64],
+    q_matrix: &[Vec<i64>],
+    intnums: &Intersection,
+    min_points: Option<u32>,
+    max_deg: Option<u32>,
+    augment_lattice_points: bool,
+) -> Result<Vec<(Vec<i32>, Integer)>> {
     let t0 = std::time::Instant::now();
     eprintln!(
-        "[DEBUG] gv start: rays={}, dim={}, max_deg={:?}, min_points={:?}",
+        "[DEBUG] gv start: rays={}, dim={}, max_deg={:?}, min_points={:?}, augment_lattice_points={}",
         rays.len(),
         rays.first().map_or(0, Vec::len),
         max_deg,
-        min_points
+        min_points,
+        augment_lattice_points
     );
     if min_points.is_none() && max_deg.is_none() {
         return Err(Error::InvalidInput(
@@ -1144,7 +1193,7 @@ pub fn compute_gv_invariants(
         lattice_min_points, lattice_max_deg
     );
 
-    let lattice_pts = {
+    let lattice_pts = if augment_lattice_points {
         let lattice_cache = LatticeCacheControls::from_env(1000, 0);
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         LATTICE_CACHE_VERSION.hash(&mut hasher);
@@ -1225,6 +1274,9 @@ pub fn compute_gv_invariants(
             }
             pts
         }
+    } else {
+        eprintln!("[DEBUG] gv lattice points: skipped (using caller-provided generators only)");
+        Vec::new()
     };
 
     let mut all_generators: Vec<Vec<i64>> = Vec::new();
@@ -2044,11 +2096,13 @@ mod tests {
 
     use super::{
         BoundedCurveDecompositionIndex, ToricCurveCandidate, compute_grading_vector,
-        curve_volume_in_divisor_basis, dump_mori_rays_cdd, find_pair_decomposition,
-        gv_lattice_search_request, load_grading_cache, map_basis_gv_invariants_to_ambient,
-        project_mori_cone_cap_rays_to_basis, remove_pair_decomposable_curve_candidates,
-        subcutoff_toric_curve_candidates, write_grading_cache,
+        compute_gv_invariants_with_provided_generators, curve_volume_in_divisor_basis,
+        dump_mori_rays_cdd, find_pair_decomposition, gv_lattice_search_request, load_grading_cache,
+        map_basis_gv_invariants_to_ambient, project_mori_cone_cap_rays_to_basis,
+        remove_pair_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
+        write_grading_cache,
     };
+    use crate::Intersection;
     use crate::{f64_finite, f64_pos};
     use malachite::Integer;
 
@@ -2071,6 +2125,21 @@ mod tests {
         let invariants = vec![(vec![1, 2], Integer::from(1))];
 
         assert!(map_basis_gv_invariants_to_ambient(&invariants, &curve_basis).is_err());
+    }
+
+    #[test]
+    fn provided_generator_gv_path_skips_lattice_augmentation() {
+        let err = compute_gv_invariants_with_provided_generators(
+            &[vec![1]],
+            &[1],
+            &[],
+            &Intersection::new(1),
+            None,
+            Some(1),
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("q_matrix is empty"));
     }
 
     #[test]
