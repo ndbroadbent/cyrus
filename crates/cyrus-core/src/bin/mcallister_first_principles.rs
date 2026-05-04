@@ -215,6 +215,19 @@ fn read_csv_usize(path: &PathBuf) -> Vec<usize> {
         .collect()
 }
 
+fn read_optional_scalar_f64(path: &PathBuf) -> Option<f64> {
+    if !path.exists() {
+        return None;
+    }
+    Some(
+        std::fs::read_to_string(path)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()))
+            .trim()
+            .parse::<f64>()
+            .unwrap_or_else(|e| panic!("Invalid scalar in {}: {e}", path.display())),
+    )
+}
+
 fn validate_basis_checkpoint(
     glsm: &[Vec<malachite::Integer>],
     computed: &[usize],
@@ -222,6 +235,12 @@ fn validate_basis_checkpoint(
     label: &str,
 ) {
     let basis_path = PathBuf::from(data_dir).join("basis.dat");
+    if !basis_path.exists() {
+        eprintln!(
+            "[WARN] basis.dat checkpoint not found; skipping {label} basis checkpoint validation"
+        );
+        return;
+    }
     let expected = read_csv_usize(&basis_path);
     if computed == expected {
         return;
@@ -272,38 +291,67 @@ fn validate_dual_checkpoint(
     data_dir: &str,
 ) {
     let dir = PathBuf::from(data_dir);
-    let expected_dual_points = read_points(&dir.join("dual_points.dat"));
-    let expected_dual_set = {
-        let mut points = expected_dual_points;
-        points.sort();
-        points
-    };
-    let actual_dual_set = sorted_point_coords(dual_polytope.vertices());
-    if actual_dual_set != expected_dual_set {
-        eprintln!("[ERROR] computed dual polytope points differ from dual_points.dat checkpoint");
-        std::process::exit(2);
+    let dual_points_path = dir.join("dual_points.dat");
+    if dual_points_path.exists() {
+        let expected_dual_points = read_points(&dual_points_path);
+        let expected_dual_set = {
+            let mut points = expected_dual_points;
+            points.sort();
+            points
+        };
+        let actual_dual_set = sorted_point_coords(dual_polytope.vertices());
+        if actual_dual_set != expected_dual_set {
+            eprintln!(
+                "[ERROR] computed dual polytope points differ from dual_points.dat checkpoint"
+            );
+            std::process::exit(2);
+        }
+    } else {
+        eprintln!("[WARN] dual_points.dat checkpoint not found; skipping dual point validation");
     }
 
-    let expected_simplices_i64 = read_points(&dir.join("dual_simplices.dat"));
-    let mut expected_simplices: Vec<Vec<usize>> = expected_simplices_i64
-        .into_iter()
-        .map(|row| {
-            row.into_iter()
-                .map(|value| {
-                    usize::try_from(value).expect("dual_simplices.dat index must be non-negative")
-                })
-                .collect()
-        })
-        .collect();
-    expected_simplices.sort();
-    let actual_simplices = sorted_simplices(dual_triangulation);
-    if actual_simplices != expected_simplices {
-        eprintln!("[ERROR] computed dual FRST differs from dual_simplices.dat checkpoint");
-        std::process::exit(2);
+    let dual_simplices_path = dir.join("dual_simplices.dat");
+    if dual_simplices_path.exists() {
+        let expected_simplices_i64 = read_points(&dual_simplices_path);
+        let mut expected_simplices: Vec<Vec<usize>> = expected_simplices_i64
+            .into_iter()
+            .map(|row| {
+                row.into_iter()
+                    .map(|value| {
+                        usize::try_from(value)
+                            .expect("dual_simplices.dat index must be non-negative")
+                    })
+                    .collect()
+            })
+            .collect();
+        expected_simplices.sort();
+        let actual_simplices = sorted_simplices(dual_triangulation);
+        if actual_simplices != expected_simplices {
+            eprintln!("[ERROR] computed dual FRST differs from dual_simplices.dat checkpoint");
+            std::process::exit(2);
+        }
+    } else {
+        eprintln!("[WARN] dual_simplices.dat checkpoint not found; skipping dual FRST validation");
     }
-    eprintln!(
-        "[INFO] computed dual polytope/FRST match dual_points.dat and dual_simplices.dat checkpoints"
-    );
+
+    match (dual_points_path.exists(), dual_simplices_path.exists()) {
+        (true, true) => {
+            eprintln!(
+                "[INFO] computed dual polytope/FRST match dual_points.dat and dual_simplices.dat checkpoints"
+            );
+        }
+        (true, false) => {
+            eprintln!("[INFO] computed dual polytope points match dual_points.dat checkpoint");
+        }
+        (false, true) => {
+            eprintln!("[INFO] computed dual FRST matches dual_simplices.dat checkpoint");
+        }
+        (false, false) => {
+            eprintln!(
+                "[WARN] no dual checkpoint files found; continuing with Cyrus-computed dual geometry"
+            );
+        }
+    }
 }
 
 fn read_points(path: &PathBuf) -> Vec<Vec<i64>> {
@@ -5962,27 +6010,20 @@ fn compare_against_dat(
     let compare_dir = compare_dir.or(data_dir);
     if let Some(dir) = compare_dir {
         let dir = PathBuf::from(dir);
-        let g_s_expected: f64 = std::fs::read_to_string(dir.join("g_s.dat"))
-            .expect("Failed to read g_s.dat")
-            .trim()
-            .parse()
-            .expect("Invalid g_s.dat");
-        let w0_expected: f64 = std::fs::read_to_string(dir.join("W_0.dat"))
-            .expect("Failed to read W_0.dat")
-            .trim()
-            .parse()
-            .expect("Invalid W_0.dat");
-        let rel_gs = ((g_s.get() - g_s_expected) / g_s_expected).abs();
-        let rel_w0 = ((w0.get() - w0_expected) / w0_expected).abs();
-        eprintln!("[COMPARE] g_s rel_err = {rel_gs}");
-        eprintln!("[COMPARE] W0 rel_err = {rel_w0}");
+        if let Some(g_s_expected) = read_optional_scalar_f64(&dir.join("g_s.dat")) {
+            let rel_gs = ((g_s.get() - g_s_expected) / g_s_expected).abs();
+            eprintln!("[COMPARE] g_s rel_err = {rel_gs}");
+        } else {
+            eprintln!("[COMPARE] g_s.dat checkpoint not found; skipping g_s comparison");
+        }
+        if let Some(w0_expected) = read_optional_scalar_f64(&dir.join("W_0.dat")) {
+            let rel_w0 = ((w0.get() - w0_expected) / w0_expected).abs();
+            eprintln!("[COMPARE] W0 rel_err = {rel_w0}");
+        } else {
+            eprintln!("[COMPARE] W_0.dat checkpoint not found; skipping W0 comparison");
+        }
         let corrected_volume_path = dir.join("corrected_cy_vol.dat");
-        if corrected_volume_path.exists() {
-            let corrected_v_expected: f64 = std::fs::read_to_string(&corrected_volume_path)
-                .expect("Failed to read corrected_cy_vol.dat")
-                .trim()
-                .parse()
-                .expect("Invalid corrected_cy_vol.dat");
+        if let Some(corrected_v_expected) = read_optional_scalar_f64(&corrected_volume_path) {
             let abs_v = (v_string - corrected_v_expected).abs();
             eprintln!("[COMPARE] corrected V_string abs_err = {abs_v}");
             if abs_v > 0.1 {
@@ -5991,6 +6032,10 @@ fn compare_against_dat(
                 );
                 std::process::exit(2);
             }
+        } else {
+            eprintln!(
+                "[COMPARE] corrected_cy_vol.dat checkpoint not found; skipping corrected V_string comparison"
+            );
         }
     }
 }

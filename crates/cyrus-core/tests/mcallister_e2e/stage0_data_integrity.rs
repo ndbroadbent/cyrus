@@ -403,6 +403,24 @@ fn stage0_first_principles_runner_does_not_silently_replay_downstream_outputs() 
         stage_vacuum.contains("compare_against_dat("),
         "downstream checkpoint comparison belongs after V_string has been computed"
     );
+    let validate_basis =
+        source_region_before_fn(&runner, "validate_basis_checkpoint", "sorted_point_coords");
+    assert!(
+        validate_basis.contains("basis_path.exists()"),
+        "basis.dat checkpoint validation must be optional after Cyrus computes the basis"
+    );
+    let validate_dual = source_region_before_fn(&runner, "validate_dual_checkpoint", "read_points");
+    assert!(
+        validate_dual.contains("dual_points_path.exists()")
+            && validate_dual.contains("dual_simplices_path.exists()"),
+        "dual_points.dat and dual_simplices.dat must be optional validation checkpoints after Cyrus computes dual geometry"
+    );
+    assert!(
+        compare.contains("read_optional_scalar_f64(&dir.join(\"g_s.dat\"))")
+            && compare.contains("read_optional_scalar_f64(&dir.join(\"W_0.dat\"))")
+            && compare.contains("read_optional_scalar_f64(&corrected_volume_path)"),
+        "g_s.dat, W_0.dat, and corrected_cy_vol.dat must be optional validation checkpoints, not required inputs"
+    );
 
     for gv_artifact in [
         "dual_curves.dat",
