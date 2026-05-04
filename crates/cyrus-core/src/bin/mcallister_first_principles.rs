@@ -78,6 +78,9 @@ const DEFAULT_CORRECTED_CHAMBER_LP_FACE_LATTICE_ELEMENT_LIMIT: usize = 50_000;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_INTEGER_DECOMPOSITION_MAX_TERMS: usize = 3;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_INTEGER_DECOMPOSITION_MAX_WITNESSES: usize = 8;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_DECOMPOSITION_CLOSURE_ELEMENT_LIMIT: usize = 20_000;
+const DEFAULT_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE_RAY_LIMIT: usize = 1_000_000;
+const DEFAULT_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE_ANCHOR_ATTEMPTS: usize = 16;
+const DEFAULT_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE_SCALE_LIMIT: i64 = 100_000;
 const DEFAULT_CORRECTED_CHAMBER_COVERED_GV_DIVISOR_REPRESENTATION_CLASS_LIMIT: usize = 24;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -635,9 +638,24 @@ struct FaceGvDiagnosticSample {
     used_decomposition_closure: bool,
     integer_decomposition_term_count: Option<usize>,
     lattice_semigroup_element_count: Option<usize>,
+    supporting_face_certificate: Option<SupportingFaceCertificateSummary>,
     gv: Option<malachite::Integer>,
     error: Option<String>,
     ambient_nonzero: Vec<(usize, i64)>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct SupportingFaceCertificateSummary {
+    zero_generator_count: usize,
+    positive_generator_count: usize,
+    normal_nonzero: Vec<(usize, i64)>,
+}
+
+#[derive(Clone, Debug)]
+struct SupportingFaceCertificate {
+    zero_generator_count: usize,
+    positive_generator_count: usize,
+    normal: Vec<i64>,
 }
 
 #[derive(Clone, Debug)]
@@ -654,6 +672,7 @@ struct FaceGvDiagnosticResult {
     used_decomposition_closure: bool,
     integer_decomposition_term_count: Option<usize>,
     lattice_semigroup_element_count: Option<usize>,
+    supporting_face_certificate: Option<SupportingFaceCertificate>,
     gv: Option<malachite::Integer>,
     error: Option<String>,
 }
@@ -670,6 +689,7 @@ struct FaceGvAttempt {
     used_decomposition_closure: bool,
     integer_decomposition_term_count: Option<usize>,
     lattice_semigroup_element_count: Option<usize>,
+    supporting_face_certificate: Option<SupportingFaceCertificate>,
     gv: Option<malachite::Integer>,
     error: Option<String>,
 }
@@ -2799,6 +2819,7 @@ fn compute_missing_lp_witness_face_gvs(
             used_decomposition_closure: attempt.used_decomposition_closure,
             integer_decomposition_term_count: attempt.integer_decomposition_term_count,
             lattice_semigroup_element_count: attempt.lattice_semigroup_element_count,
+            supporting_face_certificate: attempt.supporting_face_certificate,
             gv: attempt.gv,
             error: attempt.error,
         });
@@ -2836,6 +2857,7 @@ fn compute_lp_witness_face_attempt(
     let mut used_decomposition_closure = false;
     let mut integer_decomposition_term_count = None;
     let mut lattice_semigroup_element_count = None;
+    let mut supporting_face_certificate = None;
     let (gv, error) = match compute_provided_generator_target_gv(
         &provided_generators,
         basis_class,
@@ -2868,6 +2890,19 @@ fn compute_lp_witness_face_attempt(
                     ambient_class,
                 ) {
                     Ok(gv) => {
+                        let (supporting_face_certificate, error) =
+                            match certify_supporting_mori_face_if_requested(
+                                &span_generators,
+                                basis_rays,
+                            ) {
+                                Ok(certificate) => (certificate, None),
+                                Err(certificate_error) => (
+                                    None,
+                                    Some(format!(
+                                        "supporting-face certificate failed: {certificate_error}"
+                                    )),
+                                ),
+                            };
                         return Ok(FaceGvAttempt {
                             generator_count: provided_generators.len(),
                             active_generator_count: witness.active_generator_indices.len(),
@@ -2879,8 +2914,9 @@ fn compute_lp_witness_face_attempt(
                             used_decomposition_closure,
                             integer_decomposition_term_count,
                             lattice_semigroup_element_count,
+                            supporting_face_certificate,
                             gv: Some(gv),
-                            error: None,
+                            error,
                         });
                     }
                     Err(second_error) => (
@@ -2982,6 +3018,24 @@ fn compute_lp_witness_face_attempt(
             }
         }
     };
+    let error = if gv.is_some() {
+        match certify_supporting_mori_face_if_requested(&span_generators, basis_rays) {
+            Ok(certificate) => {
+                supporting_face_certificate = certificate;
+                error
+            }
+            Err(certificate_error) => match error {
+                Some(existing_error) => Some(format!(
+                    "{existing_error}; supporting-face certificate failed: {certificate_error}"
+                )),
+                None => Some(format!(
+                    "supporting-face certificate failed: {certificate_error}"
+                )),
+            },
+        }
+    } else {
+        error
+    };
 
     Ok(FaceGvAttempt {
         generator_count: provided_generators.len(),
@@ -2994,9 +3048,284 @@ fn compute_lp_witness_face_attempt(
         used_decomposition_closure,
         integer_decomposition_term_count,
         lattice_semigroup_element_count,
+        supporting_face_certificate,
         gv,
         error,
     })
+}
+
+fn certify_supporting_mori_face_if_requested(
+    face_generators: &[Vec<i64>],
+    basis_rays: &[Vec<i64>],
+) -> Result<Option<SupportingFaceCertificate>, String> {
+    if !std::env::var("CYRUS_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE")
+        .map(|value| value != "0")
+        .unwrap_or(false)
+    {
+        return Ok(None);
+    }
+    certify_supporting_mori_face(face_generators, basis_rays)
+}
+
+fn certify_supporting_mori_face(
+    face_generators: &[Vec<i64>],
+    basis_rays: &[Vec<i64>],
+) -> Result<Option<SupportingFaceCertificate>, String> {
+    if face_generators.is_empty() {
+        return Ok(None);
+    }
+    if basis_rays.is_empty() {
+        return Err("supporting-face certificate requires Mori generators".to_string());
+    }
+    let dim = face_generators[0].len();
+    if dim == 0 {
+        return Err("supporting-face certificate dimension is zero".to_string());
+    }
+    if face_generators.iter().any(|row| row.len() != dim)
+        || basis_rays.iter().any(|row| row.len() != dim)
+    {
+        return Err("supporting-face certificate row dimensions are inconsistent".to_string());
+    }
+
+    let ray_limit = std::env::var("CYRUS_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE_RAY_LIMIT")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(DEFAULT_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE_RAY_LIMIT);
+    if basis_rays.len() > ray_limit {
+        return Err(format!(
+            "supporting-face certificate skipped because {} Mori generators exceed limit {ray_limit}",
+            basis_rays.len()
+        ));
+    }
+
+    let anchors = supporting_face_anchor_candidates(face_generators, basis_rays)?;
+    for anchor in anchors {
+        let Some(lp_normal) =
+            solve_supporting_face_normal_lp(face_generators, basis_rays, &anchor)?
+        else {
+            continue;
+        };
+        if let Some(certificate) =
+            integer_supporting_face_certificate_from_lp(&lp_normal, face_generators, basis_rays)?
+        {
+            return Ok(Some(certificate));
+        }
+    }
+    Ok(None)
+}
+
+fn supporting_face_anchor_candidates(
+    face_generators: &[Vec<i64>],
+    basis_rays: &[Vec<i64>],
+) -> Result<Vec<Vec<i64>>, String> {
+    let dim = face_generators[0].len();
+    let face_rank = rational_rank_i64_rows(face_generators);
+    if face_rank >= dim {
+        return Ok(Vec::new());
+    }
+
+    let attempt_limit =
+        std::env::var("CYRUS_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE_ANCHOR_ATTEMPTS")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or(DEFAULT_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE_ANCHOR_ATTEMPTS);
+    let mut anchors = Vec::new();
+    let mut seen = HashSet::new();
+    for ray in basis_rays {
+        if face_generators.iter().any(|generator| generator == ray) || !seen.insert(ray.clone()) {
+            continue;
+        }
+        let mut rows = face_generators.to_vec();
+        rows.push(ray.clone());
+        if rational_rank_i64_rows(&rows) > face_rank {
+            anchors.push(ray.clone());
+            if anchors.len() >= attempt_limit {
+                break;
+            }
+        }
+    }
+    Ok(anchors)
+}
+
+fn solve_supporting_face_normal_lp(
+    face_generators: &[Vec<i64>],
+    basis_rays: &[Vec<i64>],
+    anchor: &[i64],
+) -> Result<Option<Vec<f64>>, String> {
+    let dim = anchor.len();
+    let mut vars = ProblemVariables::new();
+    let bound = 1.0e9;
+    let normal_vars: Vec<_> = (0..dim)
+        .map(|_| vars.add(variable().min(-bound).max(bound)))
+        .collect();
+
+    let mut objective = Expression::from(0.0);
+    objective.add_mul(0.0, normal_vars[0]);
+    let mut model = vars.minimise(objective).using(default_solver);
+
+    for generator in face_generators {
+        let mut expr = Expression::from(0.0);
+        for (var, &coefficient) in normal_vars.iter().zip(generator) {
+            if coefficient != 0 {
+                expr.add_mul(coefficient as f64, *var);
+            }
+        }
+        model = model.with(expr.eq(0.0));
+    }
+
+    let mut anchor_expr = Expression::from(0.0);
+    for (var, &coefficient) in normal_vars.iter().zip(anchor) {
+        if coefficient != 0 {
+            anchor_expr.add_mul(coefficient as f64, *var);
+        }
+    }
+    model = model.with(anchor_expr.eq(1.0));
+
+    for ray in basis_rays {
+        let mut expr = Expression::from(0.0);
+        for (var, &coefficient) in normal_vars.iter().zip(ray) {
+            if coefficient != 0 {
+                expr.add_mul(coefficient as f64, *var);
+            }
+        }
+        model = model.with(expr.geq(0.0));
+    }
+
+    let solution = match model.solve() {
+        Ok(solution) => solution,
+        Err(ResolutionError::Infeasible) => return Ok(None),
+        Err(err) => {
+            return Err(format!("supporting-face normal LP failed: {err}"));
+        }
+    };
+    let normal = normal_vars
+        .iter()
+        .map(|var| solution.value(*var))
+        .collect::<Vec<_>>();
+    if normal.iter().all(|value| value.is_finite()) {
+        Ok(Some(normal))
+    } else {
+        Err("supporting-face normal LP returned a non-finite value".to_string())
+    }
+}
+
+fn integer_supporting_face_certificate_from_lp(
+    lp_normal: &[f64],
+    face_generators: &[Vec<i64>],
+    basis_rays: &[Vec<i64>],
+) -> Result<Option<SupportingFaceCertificate>, String> {
+    let scale_limit = std::env::var("CYRUS_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE_SCALE_LIMIT")
+        .ok()
+        .and_then(|value| value.parse::<i64>().ok())
+        .unwrap_or(DEFAULT_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE_SCALE_LIMIT);
+    if scale_limit <= 0 {
+        return Err("supporting-face certificate scale limit must be positive".to_string());
+    }
+
+    let mut seen_normals = HashSet::new();
+    for scale in 1..=scale_limit {
+        let Some(normal) = rounded_reduced_i64_normal(lp_normal, scale)? else {
+            continue;
+        };
+        if !seen_normals.insert(normal.clone()) {
+            continue;
+        }
+        if !normal_vanishes_on_generators(&normal, face_generators) {
+            continue;
+        }
+        if let Some(certificate) = check_integer_supporting_face_normal(&normal, basis_rays)? {
+            return Ok(Some(certificate));
+        }
+    }
+    Ok(None)
+}
+
+fn rounded_reduced_i64_normal(lp_normal: &[f64], scale: i64) -> Result<Option<Vec<i64>>, String> {
+    let mut normal = Vec::with_capacity(lp_normal.len());
+    for &value in lp_normal {
+        let scaled = value * scale as f64;
+        if !scaled.is_finite() || scaled < i64::MIN as f64 || scaled > i64::MAX as f64 {
+            return Err("supporting-face LP normal does not fit in i64 after scaling".to_string());
+        }
+        normal.push(scaled.round() as i64);
+    }
+    reduce_i64_vector_preserve_sign(&normal)
+}
+
+fn reduce_i64_vector_preserve_sign(values: &[i64]) -> Result<Option<Vec<i64>>, String> {
+    let mut gcd = 0i64;
+    for &value in values {
+        if value == i64::MIN {
+            return Err("supporting-face normal coefficient is i64::MIN".to_string());
+        }
+        gcd = gcd_i64(gcd, value.abs());
+    }
+    if gcd == 0 {
+        return Ok(None);
+    }
+    values
+        .iter()
+        .map(|&value| {
+            value
+                .checked_div(gcd)
+                .ok_or_else(|| "supporting-face normal reduction divided by zero".to_string())
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(Some)
+}
+
+fn normal_vanishes_on_generators(normal: &[i64], generators: &[Vec<i64>]) -> bool {
+    generators
+        .iter()
+        .all(|generator| exact_i64_dot(normal, generator) == 0)
+}
+
+fn check_integer_supporting_face_normal(
+    normal: &[i64],
+    basis_rays: &[Vec<i64>],
+) -> Result<Option<SupportingFaceCertificate>, String> {
+    if normal.iter().all(|&value| value == 0) {
+        return Ok(None);
+    }
+    let mut zero_generator_count = 0usize;
+    let mut positive_generator_count = 0usize;
+    for ray in basis_rays {
+        if ray.len() != normal.len() {
+            return Err(format!(
+                "supporting-face normal dimension {} does not match Mori ray dimension {}",
+                normal.len(),
+                ray.len()
+            ));
+        }
+        let dot = exact_i64_dot(normal, ray);
+        if dot < 0 {
+            return Ok(None);
+        }
+        if dot == 0 {
+            zero_generator_count += 1;
+        } else {
+            positive_generator_count += 1;
+        }
+    }
+    if positive_generator_count == 0 {
+        return Ok(None);
+    }
+    Ok(Some(SupportingFaceCertificate {
+        zero_generator_count,
+        positive_generator_count,
+        normal: normal.to_vec(),
+    }))
+}
+
+fn exact_i64_dot(lhs: &[i64], rhs: &[i64]) -> i128 {
+    lhs.iter()
+        .zip(rhs)
+        .map(|(&left, &right)| i128::from(left) * i128::from(right))
+        .sum()
+}
+
+fn gcd_i64(a: i64, b: i64) -> i64 {
+    if b == 0 { a.abs() } else { gcd_i64(b, a % b) }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -4247,6 +4576,13 @@ fn diagnose_chamber_gv_volume_correction(
                 used_decomposition_closure: result.used_decomposition_closure,
                 integer_decomposition_term_count: result.integer_decomposition_term_count,
                 lattice_semigroup_element_count: result.lattice_semigroup_element_count,
+                supporting_face_certificate: result.supporting_face_certificate.as_ref().map(
+                    |certificate| SupportingFaceCertificateSummary {
+                        zero_generator_count: certificate.zero_generator_count,
+                        positive_generator_count: certificate.positive_generator_count,
+                        normal_nonzero: sparse_i64(&certificate.normal),
+                    },
+                ),
                 gv: result.gv.clone(),
                 error: result.error.clone(),
                 ambient_nonzero: result
@@ -6337,6 +6673,28 @@ mod tests {
         assert!(points.contains(&vec![1, 1]));
         assert!(points.contains(&vec![1, 0]));
         assert!(points.contains(&vec![1, 2]));
+    }
+
+    #[test]
+    fn supporting_mori_face_certificate_finds_exact_integer_normal() {
+        let certificate =
+            certify_supporting_mori_face(&[vec![1, 0]], &[vec![1, 0], vec![0, 1], vec![1, 1]])
+                .unwrap()
+                .unwrap();
+
+        assert_eq!(exact_i64_dot(&certificate.normal, &[1, 0]), 0);
+        assert!(exact_i64_dot(&certificate.normal, &[0, 1]) > 0);
+        assert_eq!(certificate.zero_generator_count, 1);
+        assert_eq!(certificate.positive_generator_count, 2);
+    }
+
+    #[test]
+    fn supporting_mori_face_certificate_rejects_interior_ray() {
+        let certificate =
+            certify_supporting_mori_face(&[vec![1, 1]], &[vec![1, 0], vec![0, 1], vec![1, 1]])
+                .unwrap();
+
+        assert!(certificate.is_none());
     }
 
     #[test]
