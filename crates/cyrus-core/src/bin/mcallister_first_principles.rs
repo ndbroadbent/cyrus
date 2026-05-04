@@ -75,6 +75,7 @@ const DEFAULT_CORRECTED_CHAMBER_PROVIDED_GV_GENERATOR_LIMIT: usize = 2_000;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_SPAN_GENERATOR_LIMIT: usize = 64;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_LATTICE_GENERATOR_LIMIT: usize = 64;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_LATTICE_ELEMENT_LIMIT: usize = 50_000;
+const DEFAULT_CORRECTED_CHAMBER_LP_FACE_INTEGER_DECOMPOSITION_MAX_TERMS: usize = 3;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Stage {
@@ -555,6 +556,8 @@ struct FaceGvDiagnosticSample {
     span_generator_count: usize,
     used_span_expansion: bool,
     used_lattice_saturation: bool,
+    used_integer_decomposition: bool,
+    integer_decomposition_term_count: Option<usize>,
     lattice_semigroup_element_count: Option<usize>,
     gv: Option<malachite::Integer>,
     error: Option<String>,
@@ -570,6 +573,8 @@ struct FaceGvDiagnosticResult {
     span_generator_count: usize,
     used_span_expansion: bool,
     used_lattice_saturation: bool,
+    used_integer_decomposition: bool,
+    integer_decomposition_term_count: Option<usize>,
     lattice_semigroup_element_count: Option<usize>,
     gv: Option<malachite::Integer>,
     error: Option<String>,
@@ -582,6 +587,8 @@ struct FaceGvAttempt {
     span_generator_count: usize,
     used_span_expansion: bool,
     used_lattice_saturation: bool,
+    used_integer_decomposition: bool,
+    integer_decomposition_term_count: Option<usize>,
     lattice_semigroup_element_count: Option<usize>,
     gv: Option<malachite::Integer>,
     error: Option<String>,
@@ -2339,6 +2346,8 @@ fn compute_missing_lp_witness_face_gvs(
             span_generator_count: attempt.span_generator_count,
             used_span_expansion: attempt.used_span_expansion,
             used_lattice_saturation: attempt.used_lattice_saturation,
+            used_integer_decomposition: attempt.used_integer_decomposition,
+            integer_decomposition_term_count: attempt.integer_decomposition_term_count,
             lattice_semigroup_element_count: attempt.lattice_semigroup_element_count,
             gv: attempt.gv,
             error: attempt.error,
@@ -2372,6 +2381,8 @@ fn compute_lp_witness_face_attempt(
     let span_generator_count = span_generators.len();
     let mut used_span_expansion = false;
     let mut used_lattice_saturation = false;
+    let mut used_integer_decomposition = false;
+    let mut integer_decomposition_term_count = None;
     let mut lattice_semigroup_element_count = None;
     let (gv, error) = match compute_provided_generator_target_gv(
         &provided_generators,
@@ -2411,6 +2422,8 @@ fn compute_lp_witness_face_attempt(
                             span_generator_count,
                             used_span_expansion,
                             used_lattice_saturation,
+                            used_integer_decomposition,
+                            integer_decomposition_term_count,
                             lattice_semigroup_element_count,
                             gv: Some(gv),
                             error: None,
@@ -2453,12 +2466,40 @@ fn compute_lp_witness_face_attempt(
                         lattice_semigroup_element_count = Some(element_count);
                         (Some(gv), None)
                     }
-                    Err(lattice_error) => (
-                        None,
-                        Some(format!(
-                            "{accumulated_error}; lattice-saturated retry also failed: {lattice_error}"
-                        )),
-                    ),
+                    Err(lattice_error) => {
+                        let exact_decomposition_max_terms = std::env::var(
+                            "CYRUS_CORRECTED_CHAMBER_LP_FACE_INTEGER_DECOMPOSITION_MAX_TERMS",
+                        )
+                        .ok()
+                        .and_then(|value| value.parse::<usize>().ok())
+                        .unwrap_or(
+                            DEFAULT_CORRECTED_CHAMBER_LP_FACE_INTEGER_DECOMPOSITION_MAX_TERMS,
+                        );
+                        match compute_integer_decomposition_face_target_gv(
+                            basis_rays,
+                            basis_class,
+                            grading,
+                            q_matrix,
+                            intnums,
+                            max_deg,
+                            ambient_class,
+                            exact_decomposition_max_terms,
+                        ) {
+                            Ok((gv, element_count, term_count)) => {
+                                used_lattice_saturation = true;
+                                used_integer_decomposition = true;
+                                integer_decomposition_term_count = Some(term_count);
+                                lattice_semigroup_element_count = Some(element_count);
+                                (Some(gv), None)
+                            }
+                            Err(exact_error) => (
+                                None,
+                                Some(format!(
+                                    "{accumulated_error}; lattice-saturated retry also failed: {lattice_error}; exact-integer-decomposition retry also failed: {exact_error}"
+                                )),
+                            ),
+                        }
+                    }
                 }
             } else {
                 (
@@ -2478,6 +2519,8 @@ fn compute_lp_witness_face_attempt(
         span_generator_count,
         used_span_expansion,
         used_lattice_saturation,
+        used_integer_decomposition,
+        integer_decomposition_term_count,
         lattice_semigroup_element_count,
         gv,
         error,
@@ -2588,6 +2631,139 @@ fn compute_lattice_saturated_face_target_gv(
         .find_map(|(curve, gv)| (curve == target_i32).then_some(gv))
         .unwrap_or_else(|| malachite::Integer::from(0));
     Ok((gv, semigroup_elements.len()))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn compute_integer_decomposition_face_target_gv(
+    basis_rays: &[Vec<i64>],
+    target_class: &[i64],
+    grading: &[i64],
+    q_matrix: &[Vec<i64>],
+    intnums: &cyrus_core::Intersection,
+    max_deg: u32,
+    ambient_class: &[i64],
+    max_terms: usize,
+) -> Result<(malachite::Integer, usize, usize), String> {
+    let decomposition = exact_generator_decomposition(
+        target_class,
+        basis_rays,
+        grading,
+        i128::from(max_deg),
+        max_terms,
+    )?
+    .ok_or_else(|| {
+        format!("no exact integer generator decomposition found with up to {max_terms} terms")
+    })?;
+    let mut seed_generators = decomposition.clone();
+    seed_generators.push(target_class.to_vec());
+    seed_generators.sort();
+    seed_generators.dedup();
+    let (gv, element_count) = compute_lattice_saturated_face_target_gv(
+        &seed_generators,
+        target_class,
+        grading,
+        q_matrix,
+        intnums,
+        max_deg,
+        ambient_class,
+    )?;
+    Ok((gv, element_count, decomposition.len()))
+}
+
+fn exact_generator_decomposition(
+    target: &[i64],
+    basis_rays: &[Vec<i64>],
+    grading: &[i64],
+    target_degree: i128,
+    max_terms: usize,
+) -> Result<Option<Vec<Vec<i64>>>, String> {
+    if max_terms < 2 {
+        return Ok(None);
+    }
+    if target.len() != grading.len() {
+        return Err(format!(
+            "target dimension {} does not match grading vector length {}",
+            target.len(),
+            grading.len()
+        ));
+    }
+
+    let mut candidates = Vec::new();
+    let mut candidate_set = HashSet::new();
+    for ray in basis_rays {
+        if ray.len() != target.len() {
+            return Err(format!(
+                "basis ray dimension {} does not match target dimension {}",
+                ray.len(),
+                target.len()
+            ));
+        }
+        if ray.as_slice() == target {
+            continue;
+        }
+        let degree = ray
+            .iter()
+            .zip(grading.iter())
+            .map(|(&coefficient, &weight)| i128::from(coefficient) * i128::from(weight))
+            .sum::<i128>();
+        if degree > 0 && degree < target_degree && candidate_set.insert(ray.clone()) {
+            candidates.push(ray.clone());
+        }
+    }
+    candidates.sort();
+    if candidates.is_empty() {
+        return Ok(None);
+    }
+
+    let mut remainder = vec![0i64; target.len()];
+    for first in &candidates {
+        subtract_two_into(target, first, &mut remainder)?;
+        if let Some(second) = candidate_set.get(remainder.as_slice()) {
+            return Ok(Some(vec![first.clone(), second.clone()]));
+        }
+    }
+    if max_terms < 3 {
+        return Ok(None);
+    }
+
+    for (i, first) in candidates.iter().enumerate() {
+        for second in candidates.iter().skip(i) {
+            subtract_three_into(target, first, second, &mut remainder)?;
+            if let Some(third) = candidate_set.get(remainder.as_slice()) {
+                let mut decomposition = vec![first.clone(), second.clone(), third.clone()];
+                decomposition.sort();
+                return Ok(Some(decomposition));
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn subtract_two_into(target: &[i64], first: &[i64], out: &mut [i64]) -> Result<(), String> {
+    if target.len() != first.len() || target.len() != out.len() {
+        return Err("subtract_two_into dimensions are inconsistent".to_string());
+    }
+    for ((slot, &target_value), &first_value) in out.iter_mut().zip(target).zip(first) {
+        *slot = target_value - first_value;
+    }
+    Ok(())
+}
+
+fn subtract_three_into(
+    target: &[i64],
+    first: &[i64],
+    second: &[i64],
+    out: &mut [i64],
+) -> Result<(), String> {
+    if target.len() != first.len() || target.len() != second.len() || target.len() != out.len() {
+        return Err("subtract_three_into dimensions are inconsistent".to_string());
+    }
+    for (((slot, &target_value), &first_value), &second_value) in
+        out.iter_mut().zip(target).zip(first).zip(second)
+    {
+        *slot = target_value - first_value - second_value;
+    }
+    Ok(())
 }
 
 fn degree_bounded_face_lattice_points(
@@ -3270,6 +3446,8 @@ fn diagnose_chamber_gv_volume_correction(
                 span_generator_count: result.span_generator_count,
                 used_span_expansion: result.used_span_expansion,
                 used_lattice_saturation: result.used_lattice_saturation,
+                used_integer_decomposition: result.used_integer_decomposition,
+                integer_decomposition_term_count: result.integer_decomposition_term_count,
                 lattice_semigroup_element_count: result.lattice_semigroup_element_count,
                 gv: result.gv.clone(),
                 error: result.error.clone(),
@@ -5077,6 +5255,21 @@ mod tests {
         assert!(points.contains(&vec![1, 1]));
         assert!(points.contains(&vec![1, 0]));
         assert!(points.contains(&vec![1, 2]));
+    }
+
+    #[test]
+    fn exact_generator_decomposition_finds_integer_sums() {
+        let decomposition = exact_generator_decomposition(
+            &[2, 1],
+            &[vec![1, 0], vec![1, 1], vec![0, 1], vec![2, 1]],
+            &[1, 1],
+            3,
+            2,
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(decomposition, vec![vec![1, 0], vec![1, 1]]);
     }
 }
 
