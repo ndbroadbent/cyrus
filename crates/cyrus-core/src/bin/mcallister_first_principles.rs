@@ -2484,8 +2484,11 @@ fn stage_volume(
     let h21 = cyrus_core::types::i32::I32::<cyrus_core::types::tags::NonNeg>::new(h21_raw)
         .expect("computed h21 must be non-negative");
     let bbhl = bbhl_correction(h11, h21);
-    let v_string =
-        classical_volume - bbhl.get() + gv_volume_correction.map_or(0.0, |value| value.get());
+    let v_string_before_gv = classical_volume - bbhl.get();
+    eprintln!("[INFO] V_classical = {classical_volume}");
+    eprintln!("[INFO] BBHL correction = {}", bbhl.get());
+    eprintln!("[INFO] V_string before GV volume correction = {v_string_before_gv}");
+    let v_string = v_string_before_gv + gv_volume_correction.map_or(0.0, |value| value.get());
     let v_string_pos = F64::<Pos>::new(v_string).expect("V_string must be positive");
     eprintln!("[TIME] volume: {:.2?}", t0.elapsed());
     (v_string, v_string_pos)
