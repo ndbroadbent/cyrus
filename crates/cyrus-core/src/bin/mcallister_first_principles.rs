@@ -24,8 +24,9 @@ use cyrus_core::{
     compute_curve_basis_matrix, compute_glsm_and_linrels, compute_grading_vector,
     compute_intersection_cytools, compute_linear_relations_no_origin, compute_mori_cone_cap_rays,
     compute_regular_triangulation, compute_toric_two_face_curve_gv_invariants,
-    compute_w0_from_terms, intersection_in_basis, is_unimodular,
-    remove_pair_decomposable_curve_candidates, solve_mixed_basis_path_following, solve_racetrack,
+    compute_w0_from_terms, generate_scaled_kklt_branch_initializations, intersection_in_basis,
+    is_unimodular, remove_pair_decomposable_curve_candidates, solve_mixed_basis_path_following,
+    solve_mixed_basis_path_following_branch_candidates, solve_racetrack,
     subcutoff_toric_curve_candidates,
 };
 
@@ -246,6 +247,8 @@ struct PipelineArgs {
     allow_fixtures: bool,
     allow_downstream_kahler: bool,
     kklt_steps: usize,
+    branch_candidates: usize,
+    branch_seed: u64,
     dual_basis_override: Option<BasisOverride>,
 }
 
@@ -299,6 +302,8 @@ fn parse_args() -> PipelineArgs {
     let allow_fixtures = parse_flag("--allow-fixtures");
     let allow_downstream_kahler = parse_flag("--allow-downstream-kahler");
     let kklt_steps = parse_arg_value::<usize>("--kklt-steps").unwrap_or(200);
+    let branch_candidates = parse_arg_value::<usize>("--branch-candidates").unwrap_or(0);
+    let branch_seed = parse_arg_value::<u64>("--branch-seed").unwrap_or(42);
     let dual_basis_override = parse_arg_value::<String>("--dual-basis")
         .map(|path| load_json::<BasisOverride>(&PathBuf::from(path)));
     PipelineArgs {
@@ -314,6 +319,8 @@ fn parse_args() -> PipelineArgs {
         allow_fixtures,
         allow_downstream_kahler,
         kklt_steps,
+        branch_candidates,
+        branch_seed,
         dual_basis_override,
     }
 }
@@ -860,6 +867,8 @@ fn stage_volume(
     racetrack: &RacetrackData,
     allow_downstream_kahler: bool,
     kklt_steps: usize,
+    branch_candidates: usize,
+    branch_seed: u64,
     small_curve_cutoff: F64<Pos>,
     t0: &Instant,
 ) -> (f64, F64<Pos>) {
@@ -903,17 +912,85 @@ fn stage_volume(
             eprintln!("[ERROR] corrected KKLT target construction failed");
             std::process::exit(2);
         };
-        let Some(zeroth_order) = cyrus_core::kklt::solve_two_phase_mixed_basis_path_following(
-            &intersection.kappa_basis,
-            &intersection.kappa_full,
-            &intersection.basis,
-            &kklt_basis,
-            &tau_target,
-            &c_i,
-            CheckedRange::new(0, kklt_steps),
-        ) else {
-            eprintln!("[ERROR] zeroth-order mixed-basis KKLT path-following failed");
-            std::process::exit(2);
+        let zeroth_order = if branch_candidates == 0 {
+            let Some(result) = cyrus_core::kklt::solve_two_phase_mixed_basis_path_following(
+                &intersection.kappa_basis,
+                &intersection.kappa_full,
+                &intersection.basis,
+                &kklt_basis,
+                &tau_target,
+                &c_i,
+                CheckedRange::new(0, kklt_steps),
+            ) else {
+                eprintln!("[ERROR] zeroth-order mixed-basis KKLT path-following failed");
+                std::process::exit(2);
+            };
+            result
+        } else {
+            let tau_phase1: Vec<F64<Pos>> = c_i.iter().map(|ci| ci.to_f64()).collect();
+            let Some(t_initializations) = generate_scaled_kklt_branch_initializations(
+                &intersection.kappa_basis,
+                &intersection.kappa_full,
+                &intersection.basis,
+                &kklt_basis,
+                &tau_phase1,
+                branch_candidates,
+                branch_seed,
+            ) else {
+                eprintln!("[ERROR] failed to generate KKLT branch initializations");
+                std::process::exit(2);
+            };
+            let branch_search = solve_mixed_basis_path_following_branch_candidates(
+                &intersection.kappa_basis,
+                &intersection.kappa_full,
+                &intersection.basis,
+                &kklt_basis,
+                &tau_phase1,
+                &t_initializations,
+                CheckedRange::new(0, kklt_steps),
+            );
+            eprintln!(
+                "[INFO] KKLT branch search: attempted={} solved={} non_converged={} non_positive_volume={} positive_volume={}",
+                branch_search.attempted,
+                branch_search.solved,
+                branch_search.non_converged,
+                branch_search.non_positive_volume,
+                branch_search.positive_volume.len()
+            );
+            let Some(best_branch) = branch_search.positive_volume.into_iter().max_by(|a, b| {
+                a.classical_volume
+                    .get()
+                    .total_cmp(&b.classical_volume.get())
+            }) else {
+                eprintln!("[ERROR] KKLT branch search found no positive-volume phase-1 branch");
+                std::process::exit(2);
+            };
+            eprintln!(
+                "[INFO] KKLT branch search selected init={} phase1_volume={} rel_err={}",
+                best_branch.init_index,
+                best_branch.classical_volume.get(),
+                best_branch.result.relative_error.get()
+            );
+            let Some(result) = solve_mixed_basis_path_following(
+                &intersection.kappa_basis,
+                &intersection.kappa_full,
+                &intersection.basis,
+                &kklt_basis,
+                &tau_target,
+                &best_branch.result.t,
+                CheckedRange::new(0, kklt_steps),
+            ) else {
+                eprintln!("[ERROR] corrected mixed-basis KKLT solve failed after branch search");
+                std::process::exit(2);
+            };
+            if !result.converged {
+                eprintln!(
+                    "[ERROR] corrected mixed-basis KKLT solve after branch search did not converge: rel_err={}",
+                    result.relative_error.get()
+                );
+                std::process::exit(2);
+            }
+            result
         };
         eprintln!(
             "[INFO] zeroth-order mixed-basis KKLT converged={} rel_err={}",
@@ -1206,6 +1283,8 @@ fn run_pipeline(args: PipelineArgs) {
         &racetrack,
         args.allow_downstream_kahler,
         args.kklt_steps,
+        args.branch_candidates,
+        args.branch_seed,
         small_curve_cutoff,
         &t0,
     );
