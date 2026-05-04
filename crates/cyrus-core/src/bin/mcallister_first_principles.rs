@@ -6,6 +6,8 @@
 //! Optional:
 //! - `--dual-basis path/to/dual_basis.json` to supply the flux coordinate basis.
 //! - `--allow-fixtures` to permit JSON fixture fallback when no data dir is set.
+//! - `--branch-candidates N --branch-selection <max-volume|min-volume|first-positive>`
+//!   to run deterministic KKLT branch search without loading Kähler checkpoints.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -41,6 +43,32 @@ enum Stage {
     Racetrack = 5,
     Volume = 6,
     Vacuum = 7,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BranchSelection {
+    MaxVolume,
+    MinVolume,
+    FirstPositive,
+}
+
+impl BranchSelection {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::MaxVolume => "max-volume",
+            Self::MinVolume => "min-volume",
+            Self::FirstPositive => "first-positive",
+        }
+    }
+}
+
+fn parse_branch_selection(name: &str) -> Option<BranchSelection> {
+    match name {
+        "max-volume" => Some(BranchSelection::MaxVolume),
+        "min-volume" => Some(BranchSelection::MinVolume),
+        "first-positive" => Some(BranchSelection::FirstPositive),
+        _ => None,
+    }
 }
 
 fn parse_stage(name: &str) -> Option<Stage> {
@@ -249,6 +277,7 @@ struct PipelineArgs {
     kklt_steps: usize,
     branch_candidates: usize,
     branch_seed: u64,
+    branch_selection: BranchSelection,
     dual_basis_override: Option<BasisOverride>,
 }
 
@@ -304,6 +333,9 @@ fn parse_args() -> PipelineArgs {
     let kklt_steps = parse_arg_value::<usize>("--kklt-steps").unwrap_or(200);
     let branch_candidates = parse_arg_value::<usize>("--branch-candidates").unwrap_or(0);
     let branch_seed = parse_arg_value::<u64>("--branch-seed").unwrap_or(42);
+    let branch_selection = parse_arg_value::<String>("--branch-selection")
+        .and_then(|s| parse_branch_selection(&s))
+        .unwrap_or(BranchSelection::MaxVolume);
     let dual_basis_override = parse_arg_value::<String>("--dual-basis")
         .map(|path| load_json::<BasisOverride>(&PathBuf::from(path)));
     PipelineArgs {
@@ -321,6 +353,7 @@ fn parse_args() -> PipelineArgs {
         kklt_steps,
         branch_candidates,
         branch_seed,
+        branch_selection,
         dual_basis_override,
     }
 }
@@ -869,6 +902,7 @@ fn stage_volume(
     kklt_steps: usize,
     branch_candidates: usize,
     branch_seed: u64,
+    branch_selection: BranchSelection,
     small_curve_cutoff: F64<Pos>,
     t0: &Instant,
 ) -> (f64, F64<Pos>) {
@@ -957,16 +991,35 @@ fn stage_volume(
                 branch_search.non_positive_volume,
                 branch_search.positive_volume.len()
             );
-            let Some(best_branch) = branch_search.positive_volume.into_iter().max_by(|a, b| {
+            let mut positive_branches = branch_search.positive_volume;
+            positive_branches.sort_by(|a, b| {
                 a.classical_volume
                     .get()
                     .total_cmp(&b.classical_volume.get())
-            }) else {
+            });
+            for (rank, branch) in positive_branches.iter().take(5).enumerate() {
+                eprintln!(
+                    "[INFO] KKLT branch candidate rank={} init={} phase1_volume={} rel_err={}",
+                    rank,
+                    branch.init_index,
+                    branch.classical_volume.get(),
+                    branch.result.relative_error.get()
+                );
+            }
+            let best_branch = match branch_selection {
+                BranchSelection::MinVolume => positive_branches.into_iter().next(),
+                BranchSelection::MaxVolume => positive_branches.into_iter().next_back(),
+                BranchSelection::FirstPositive => positive_branches
+                    .into_iter()
+                    .min_by_key(|branch| branch.init_index),
+            };
+            let Some(best_branch) = best_branch else {
                 eprintln!("[ERROR] KKLT branch search found no positive-volume phase-1 branch");
                 std::process::exit(2);
             };
             eprintln!(
-                "[INFO] KKLT branch search selected init={} phase1_volume={} rel_err={}",
+                "[INFO] KKLT branch search selected policy={} init={} phase1_volume={} rel_err={}",
+                branch_selection.as_str(),
                 best_branch.init_index,
                 best_branch.classical_volume.get(),
                 best_branch.result.relative_error.get()
@@ -1285,6 +1338,7 @@ fn run_pipeline(args: PipelineArgs) {
         args.kklt_steps,
         args.branch_candidates,
         args.branch_seed,
+        args.branch_selection,
         small_curve_cutoff,
         &t0,
     );
