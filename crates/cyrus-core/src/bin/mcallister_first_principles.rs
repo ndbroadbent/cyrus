@@ -5381,6 +5381,7 @@ fn compare_corrected_kahler_checkpoint(
 
 fn compare_corrected_target_volume_checkpoint(
     data_dir: Option<&str>,
+    chi_divisor: &[I64<Finite>],
     base_target_tau: &[F64<Pos>],
     computed_gv_correction: &[F64<Finite>],
     computed_target_tau: &[F64<Finite>],
@@ -5402,12 +5403,14 @@ fn compare_corrected_target_volume_checkpoint(
         })
         .collect::<Vec<_>>();
     if checkpoint.len() != computed_target_tau.len()
+        || checkpoint.len() != chi_divisor.len()
         || checkpoint.len() != base_target_tau.len()
         || checkpoint.len() != computed_gv_correction.len()
     {
         eprintln!(
-            "[COMPARE] corrected target-volume checkpoint length mismatch: checkpoint={} base={} gv={} computed={}",
+            "[COMPARE] corrected target-volume checkpoint length mismatch: checkpoint={} chi={} base={} gv={} computed={}",
             checkpoint.len(),
+            chi_divisor.len(),
             base_target_tau.len(),
             computed_gv_correction.len(),
             computed_target_tau.len()
@@ -5441,6 +5444,27 @@ fn compare_corrected_target_volume_checkpoint(
             eprintln!("[ERROR] failed to compare corrected target-volume checkpoint: {e}");
             std::process::exit(2);
         });
+    let computed_chi = chi_divisor
+        .iter()
+        .map(|value| value.to_f64())
+        .collect::<Vec<_>>();
+    let implied_chi = computed_chi
+        .iter()
+        .zip(checkpoint.iter().zip(computed_target_tau.iter()))
+        .map(|(chi, (checkpoint_target, computed_target))| {
+            chi.get() + 24.0 * (checkpoint_target.get() - computed_target.get())
+        })
+        .map(|value| F64::<Finite>::new(value).expect("implied chi is finite"))
+        .collect::<Vec<_>>();
+    let computed_chi_finite = computed_chi
+        .into_iter()
+        .map(|value| F64::<Finite>::new(value.get()).expect("computed chi is finite"))
+        .collect::<Vec<_>>();
+    let chi_summary = target_correction_delta_summary(&implied_chi, &computed_chi_finite)
+        .unwrap_or_else(|e| {
+            eprintln!("[ERROR] failed to compare implied divisor chi: {e}");
+            std::process::exit(2);
+        });
     eprintln!(
         "[COMPARE] corrected target-volume checkpoint base-target delta: max_abs={} relative_l2={}",
         base_summary.max_abs_delta, base_summary.relative_l2_delta
@@ -5458,6 +5482,13 @@ fn compare_corrected_target_volume_checkpoint(
         target_summary.relative_l2_delta,
         target_summary.max_abs_reference,
         target_summary.max_abs_candidate
+    );
+    eprintln!(
+        "[COMPARE] corrected target-volume implied divisor-chi delta: max_abs={} relative_l2={} max_abs_implied={} max_abs_computed={}",
+        chi_summary.max_abs_delta,
+        chi_summary.relative_l2_delta,
+        chi_summary.max_abs_reference,
+        chi_summary.max_abs_candidate
     );
 }
 
@@ -6258,6 +6289,7 @@ fn stage_volume(
             .collect::<Vec<_>>();
         compare_corrected_target_volume_checkpoint(
             data_dir,
+            &chi_divisor,
             &tau_target,
             &input_chamber_gv_target_correction,
             &input_chamber_target_tau_finite,
