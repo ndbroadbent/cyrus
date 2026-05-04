@@ -589,6 +589,16 @@ fn insert_toric_gv(
     Ok(())
 }
 
+fn gv_lattice_search_request(
+    gen_min_points: usize,
+    max_deg: Option<u32>,
+) -> (Option<usize>, Option<i64>) {
+    match max_deg {
+        Some(degree) => (None, Some(i64::from(degree))),
+        None => (Some(gen_min_points), None),
+    }
+}
+
 fn find_pair_decomposition_with_set(
     target: &ToricCurveCandidate,
     candidates: &[ToricCurveCandidate],
@@ -1078,14 +1088,19 @@ pub fn compute_gv_invariants(
         t0.elapsed()
     );
 
-    // Augment generators with lattice points, matching CYTools:
-    // lattice_pts = mori.find_lattice_points(min_points=100*h11)
+    // Augment generators with lattice points, matching CYTools for unbounded
+    // runs and using degree-bounded enumeration for explicit max-degree runs.
+    // CYTools default: lattice_pts = mori.find_lattice_points(min_points=100*h11)
     let factor = env::var("CYRUS_LATTICE_MIN_POINTS_FACTOR")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(100);
     let gen_min_points = factor * dim;
-    eprintln!("[DEBUG] gv generator min_points: {gen_min_points}");
+    let (lattice_min_points, lattice_max_deg) = gv_lattice_search_request(gen_min_points, max_deg);
+    eprintln!(
+        "[DEBUG] gv lattice request: min_points={:?} max_deg={:?}",
+        lattice_min_points, lattice_max_deg
+    );
 
     let lattice_pts = {
         let lattice_cache = LatticeCacheControls::from_env(1000, 0);
@@ -1097,7 +1112,8 @@ pub fn compute_gv_invariants(
             row.hash(&mut hasher);
         }
         grading_vector.hash(&mut hasher);
-        gen_min_points.hash(&mut hasher);
+        lattice_min_points.hash(&mut hasher);
+        lattice_max_deg.hash(&mut hasher);
         lattice_cache.max_coord.hash(&mut hasher);
         lattice_cache.deg_window.hash(&mut hasher);
         let key = hasher.finish();
@@ -1129,8 +1145,8 @@ pub fn compute_gv_invariants(
                 .collect();
             let mut cone = Cone::from_rays(rays_i128);
             let pts = cone.find_lattice_points_ortools(
-                Some(gen_min_points),
-                None,
+                lattice_min_points,
+                lattice_max_deg,
                 grading_vector,
                 lattice_cache.max_coord,
                 lattice_cache.deg_window,
@@ -1987,7 +2003,7 @@ mod tests {
     use super::{
         BoundedCurveDecompositionIndex, ToricCurveCandidate, compute_grading_vector,
         curve_volume_in_divisor_basis, dump_mori_rays_cdd, find_pair_decomposition,
-        load_grading_cache, map_basis_gv_invariants_to_ambient,
+        gv_lattice_search_request, load_grading_cache, map_basis_gv_invariants_to_ambient,
         remove_pair_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
         write_grading_cache,
     };
@@ -2203,6 +2219,12 @@ mod tests {
             index.find_decomposition(&candidates[3], 3).unwrap(),
             Some(vec![vec![0, 0, 1], vec![0, 1, 0], vec![1, 0, 0]])
         );
+    }
+
+    #[test]
+    fn gv_lattice_search_uses_max_degree_when_requested() {
+        assert_eq!(gv_lattice_search_request(400, None), (Some(400), None));
+        assert_eq!(gv_lattice_search_request(400, Some(7)), (None, Some(7)));
     }
 
     #[test]
