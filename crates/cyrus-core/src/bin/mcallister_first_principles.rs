@@ -851,7 +851,6 @@ fn stage_volume(
     manifest_dir: &PathBuf,
     geom: &PrimalGeom,
     intersection: &PrimalIntersection,
-    invariants: &[(Vec<i32>, malachite::Integer)],
     racetrack: &RacetrackData,
     allow_downstream_kahler: bool,
     kklt_steps: usize,
@@ -891,25 +890,33 @@ fn stage_volume(
         eprintln!(
             "[WARN] corrected_kahler_param.dat remains validation-only replay and is not loaded without --allow-downstream-kahler."
         );
-        let Some(result) = cyrus_core::kklt::solve_two_phase_mixed_basis_path_following_with_gv(
+        let Some(tau_target) =
+            cyrus_core::kklt::compute_corrected_target_tau(&c_i, &chi_divisor, c_tau)
+        else {
+            eprintln!("[ERROR] corrected KKLT target construction failed");
+            std::process::exit(2);
+        };
+        let Some(zeroth_order) = cyrus_core::kklt::solve_two_phase_mixed_basis_path_following(
             &intersection.kappa_basis,
             &intersection.kappa_full,
             &intersection.basis,
             &kklt_basis,
+            &tau_target,
             &c_i,
-            &chi_divisor,
-            c_tau,
-            invariants,
-            None,
             CheckedRange::new(0, kklt_steps),
-            20,
-            F64::<cyrus_core::types::tags::NonNeg>::new(1e-8)
-                .expect("GV tolerance is non-negative"),
         ) else {
-            eprintln!("[ERROR] mixed-basis KKLT path-following with GV corrections failed");
+            eprintln!("[ERROR] zeroth-order mixed-basis KKLT path-following failed");
             std::process::exit(2);
         };
-        result.t
+        eprintln!(
+            "[INFO] zeroth-order mixed-basis KKLT converged={} rel_err={}",
+            zeroth_order.converged,
+            zeroth_order.relative_error.get()
+        );
+        eprintln!(
+            "[ERROR] full primal KKLT GV corrections are not available in this runner yet; refusing to reuse dual racetrack GV data"
+        );
+        std::process::exit(2);
     };
 
     let classical_volume = classical_volume_from_t(&intersection.kappa_basis, &t);
@@ -1049,7 +1056,6 @@ fn run_pipeline(args: PipelineArgs) {
         &manifest_dir,
         &geom,
         &intersection,
-        &invariants,
         &racetrack,
         args.allow_downstream_kahler,
         args.kklt_steps,
