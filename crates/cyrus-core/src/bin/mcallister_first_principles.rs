@@ -1748,6 +1748,7 @@ fn stage_volume(
     primal_gv_min_points: Option<u32>,
     primal_gv_max_deg: Option<u32>,
     small_curve_cutoff: F64<Pos>,
+    h21: usize,
     t0: &Instant,
 ) -> (f64, F64<Pos>) {
     if branch_report_path.is_some() && allow_downstream_kahler {
@@ -2470,8 +2471,18 @@ fn stage_volume(
     };
 
     let classical_volume = classical_volume_from_t(&intersection.kappa_basis, &t);
-    let h11 = cyrus_core::types::i32::I32::<cyrus_core::types::tags::GTEOne>::new(214).unwrap();
-    let h21 = cyrus_core::types::i32::I32::<cyrus_core::types::tags::NonNeg>::new(4).unwrap();
+    let h11_raw = i32::try_from(intersection.basis.len()).unwrap_or_else(|_| {
+        eprintln!("[ERROR] h11 does not fit in i32");
+        std::process::exit(2);
+    });
+    let h21_raw = i32::try_from(h21).unwrap_or_else(|_| {
+        eprintln!("[ERROR] h21 does not fit in i32");
+        std::process::exit(2);
+    });
+    let h11 = cyrus_core::types::i32::I32::<cyrus_core::types::tags::GTEOne>::new(h11_raw)
+        .expect("computed h11 must be >= 1");
+    let h21 = cyrus_core::types::i32::I32::<cyrus_core::types::tags::NonNeg>::new(h21_raw)
+        .expect("computed h21 must be non-negative");
     let bbhl = bbhl_correction(h11, h21);
     let v_string =
         classical_volume - bbhl.get() + gv_volume_correction.map_or(0.0, |value| value.get());
@@ -2625,6 +2636,7 @@ fn run_pipeline(args: PipelineArgs) {
         args.primal_gv_min_points,
         args.primal_gv_max_deg,
         small_curve_cutoff,
+        flat.dual_basis.len(),
         &t0,
     );
     if !stage_enabled(Stage::Vacuum, args.stop_after) {
