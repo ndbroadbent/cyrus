@@ -22,6 +22,7 @@
 //! Reference: arXiv:2107.09064, Section 5
 
 use std::collections::HashMap;
+use std::env;
 use std::f64::consts::PI;
 
 use crate::f64_pos;
@@ -37,6 +38,10 @@ use malachite::Integer;
 const TWO_PI: F64<Pos> = f64_pos!(2.0 * PI);
 const DILOG_TOL: f64 = 1e-16;
 const DILOG_MAX_TERMS: usize = 100_000;
+
+fn kklt_debug_enabled() -> bool {
+    env::var_os("CYRUS_KKLT_DEBUG").is_some()
+}
 
 /// Compute target divisor volumes `τ_i` = `c_i` / `c_τ`.
 ///
@@ -285,11 +290,7 @@ pub fn compute_jacobian(kappa: &Intersection, t: &[F64<Finite>]) -> Vec<Vec<F64<
         let val_f = val.to_f64();
 
         for (a, b, c) in unique_permutations(*i_idx, *j_idx, *k_idx) {
-            // J[a][b] += κ * t[c], J[a][c] += κ * t[b]
-            j[a][b] = j[a][b] + val_f * t[c];
-            if b != c {
-                j[a][c] = j[a][c] + val_f * t[b];
-            }
+            j[a][c] = j[a][c] + val_f * t[b];
         }
     }
 
@@ -773,12 +774,21 @@ pub fn solve_two_phase_mixed_basis_path_following_with_gv(
     max_gv_iterations: usize,
     gv_tolerance: F64<NonNeg>,
 ) -> Option<KkltResult> {
+    let debug = kklt_debug_enabled();
     if max_gv_iterations == 0 {
+        if debug {
+            eprintln!("[KKLT] max_gv_iterations is zero");
+        }
         return None;
     }
 
-    let tau_target = compute_corrected_target_tau(c_i, chi_divisor, c_tau)?;
-    let mut result = solve_two_phase_mixed_basis_path_following(
+    let Some(tau_target) = compute_corrected_target_tau(c_i, chi_divisor, c_tau) else {
+        if debug {
+            eprintln!("[KKLT] corrected target tau construction failed");
+        }
+        return None;
+    };
+    let Some(mut result) = solve_two_phase_mixed_basis_path_following(
         kappa_basis,
         kappa_all,
         basis,
@@ -786,13 +796,38 @@ pub fn solve_two_phase_mixed_basis_path_following_with_gv(
         &tau_target,
         c_i,
         steps,
-    )?;
+    ) else {
+        if debug {
+            eprintln!("[KKLT] zeroth-order mixed-basis path following failed");
+        }
+        return None;
+    };
+    if debug {
+        eprintln!(
+            "[KKLT] zeroth-order solve converged={} rel_err={}",
+            result.converged,
+            result.relative_error.get()
+        );
+    }
 
-    for _ in 0..max_gv_iterations {
+    for iter in 0..max_gv_iterations {
         let previous_t = result.t.clone();
-        let gv_correction = compute_gv_target_correction(gv_invariants, &previous_t, gamma)?;
-        let tau_target = compute_gv_corrected_target_tau(c_i, chi_divisor, c_tau, &gv_correction)?;
-        let next = solve_mixed_basis_path_following(
+        let Some(gv_correction) = compute_gv_target_correction(gv_invariants, &previous_t, gamma)
+        else {
+            if debug {
+                eprintln!("[KKLT] GV correction failed at iteration {iter}");
+            }
+            return None;
+        };
+        let Some(tau_target) =
+            compute_gv_corrected_target_tau(c_i, chi_divisor, c_tau, &gv_correction)
+        else {
+            if debug {
+                eprintln!("[KKLT] GV-corrected target tau failed at iteration {iter}");
+            }
+            return None;
+        };
+        let Some(next) = solve_mixed_basis_path_following(
             kappa_basis,
             kappa_all,
             basis,
@@ -800,8 +835,19 @@ pub fn solve_two_phase_mixed_basis_path_following_with_gv(
             &tau_target,
             &previous_t,
             steps,
-        )?;
+        ) else {
+            if debug {
+                eprintln!("[KKLT] corrected mixed-basis path failed at iteration {iter}");
+            }
+            return None;
+        };
         if !next.converged {
+            if debug {
+                eprintln!(
+                    "[KKLT] corrected path did not converge at iteration {iter}: rel_err={}",
+                    next.relative_error.get()
+                );
+            }
             return None;
         }
 
@@ -811,12 +857,21 @@ pub fn solve_two_phase_mixed_basis_path_following_with_gv(
             .zip(previous_t.iter())
             .map(|(new, old)| (new.get() - old.get()).abs() / (old.get().abs() + 1e-12))
             .fold(0.0f64, f64::max);
+        if debug {
+            eprintln!(
+                "[KKLT] iteration {iter}: max_relative_step={max_relative_step}, rel_err={}",
+                next.relative_error.get()
+            );
+        }
         result = next;
         if max_relative_step <= gv_tolerance.get() {
             return Some(result);
         }
     }
 
+    if debug {
+        eprintln!("[KKLT] GV fixed-point iteration did not converge");
+    }
     None
 }
 
@@ -1006,6 +1061,27 @@ mod tests {
             "J[0][0] = {}",
             j[0][0].get()
         );
+    }
+
+    #[test]
+    fn test_compute_jacobian_distinct_indices_matches_tensor_contraction() {
+        let mut kappa = Intersection::new(3);
+        kappa.set(
+            0,
+            1,
+            2,
+            TypedRational::<Finite>::from_raw(Rational::from(5)),
+        );
+
+        let t = vec![finite_f64(2.0), finite_f64(3.0), finite_f64(7.0)];
+        let j = compute_jacobian(&kappa, &t);
+
+        assert!((j[0][1].get() - 35.0).abs() < 1e-10);
+        assert!((j[0][2].get() - 15.0).abs() < 1e-10);
+        assert!((j[1][0].get() - 35.0).abs() < 1e-10);
+        assert!((j[1][2].get() - 10.0).abs() < 1e-10);
+        assert!((j[2][0].get() - 15.0).abs() < 1e-10);
+        assert!((j[2][1].get() - 10.0).abs() < 1e-10);
     }
 
     #[test]
