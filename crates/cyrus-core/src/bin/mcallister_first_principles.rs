@@ -475,8 +475,26 @@ struct ChamberGvDiagnostic {
     first_missing_class: Option<Vec<i64>>,
     missing_required_degree_min: Option<i128>,
     missing_required_degree_max: Option<i128>,
+    missing_target_stats: Option<MissingGvTargetStats>,
     covered_gv_volume_correction: Option<F64<Finite>>,
     gv_volume_correction: Option<F64<Finite>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct MissingGvTargetStats {
+    target_count: usize,
+    targets_that_are_mori_generators: usize,
+    min_generators_le_target_degree: usize,
+    max_generators_le_target_degree: usize,
+    sample: Vec<MissingGvTargetSample>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct MissingGvTargetSample {
+    degree: i128,
+    generators_le_degree: usize,
+    is_mori_generator: bool,
+    basis_nonzero: Vec<(usize, i64)>,
 }
 
 struct BranchReportContext {
@@ -1649,6 +1667,117 @@ fn degree_filtered_basis_rays(
     Ok(out)
 }
 
+fn missing_gv_target_stats(
+    ambient_classes: &[Vec<i64>],
+    basis_rays: &[Vec<i64>],
+    basis: &[usize],
+    grading: &[i64],
+    sample_limit: usize,
+) -> Result<MissingGvTargetStats, String> {
+    if basis.len() != grading.len() {
+        return Err(format!(
+            "basis length {} does not match grading vector length {}",
+            basis.len(),
+            grading.len()
+        ));
+    }
+    if ambient_classes.is_empty() {
+        return Ok(MissingGvTargetStats {
+            target_count: 0,
+            targets_that_are_mori_generators: 0,
+            min_generators_le_target_degree: 0,
+            max_generators_le_target_degree: 0,
+            sample: Vec::new(),
+        });
+    }
+
+    let mut sorted_degrees = Vec::with_capacity(basis_rays.len());
+    let mut sorted_basis_refs: Vec<&Vec<i64>> = Vec::with_capacity(basis_rays.len());
+    for ray in basis_rays {
+        if ray.len() != grading.len() {
+            return Err(format!(
+                "basis ray length {} does not match grading vector length {}",
+                ray.len(),
+                grading.len()
+            ));
+        }
+        let degree = ray
+            .iter()
+            .zip(grading.iter())
+            .map(|(&coefficient, &weight)| i128::from(coefficient) * i128::from(weight))
+            .sum::<i128>();
+        sorted_degrees.push(degree);
+        sorted_basis_refs.push(ray);
+    }
+    sorted_degrees.sort_unstable();
+    sorted_basis_refs.sort_unstable();
+
+    let mut targets_that_are_mori_generators = 0usize;
+    let mut min_generators = usize::MAX;
+    let mut max_generators = 0usize;
+    let mut sample = Vec::new();
+    for ambient_class in ambient_classes {
+        let basis_class = project_ambient_curve_to_basis(ambient_class, basis)?;
+        let degree = basis_class
+            .iter()
+            .zip(grading.iter())
+            .map(|(&coefficient, &weight)| i128::from(coefficient) * i128::from(weight))
+            .sum::<i128>();
+        if degree <= 0 {
+            return Err(format!(
+                "missing GV target has non-positive grading degree {degree}: {ambient_class:?}"
+            ));
+        }
+        let generators_le_degree =
+            sorted_degrees.partition_point(|&ray_degree| ray_degree <= degree);
+        let is_mori_generator = sorted_basis_refs
+            .binary_search_by(|ray| ray.as_slice().cmp(basis_class.as_slice()))
+            .is_ok();
+        if is_mori_generator {
+            targets_that_are_mori_generators += 1;
+        }
+        min_generators = min_generators.min(generators_le_degree);
+        max_generators = max_generators.max(generators_le_degree);
+        if sample.len() < sample_limit {
+            sample.push(MissingGvTargetSample {
+                degree,
+                generators_le_degree,
+                is_mori_generator,
+                basis_nonzero: basis_class
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(idx, &value)| (value != 0).then_some((idx, value)))
+                    .collect(),
+            });
+        }
+    }
+
+    Ok(MissingGvTargetStats {
+        target_count: ambient_classes.len(),
+        targets_that_are_mori_generators,
+        min_generators_le_target_degree: min_generators,
+        max_generators_le_target_degree: max_generators,
+        sample,
+    })
+}
+
+fn project_ambient_curve_to_basis(
+    ambient_class: &[i64],
+    basis: &[usize],
+) -> Result<Vec<i64>, String> {
+    basis
+        .iter()
+        .map(|&idx| {
+            ambient_class.get(idx).copied().ok_or_else(|| {
+                format!(
+                    "basis index {idx} is out of bounds for ambient curve dimension {}",
+                    ambient_class.len()
+                )
+            })
+        })
+        .collect()
+}
+
 fn write_branch_report_jsonl(
     path: &PathBuf,
     ctx: &BranchReportContext,
@@ -1958,6 +2087,7 @@ fn diagnose_chamber_gv_volume_correction(
     let mut basis_rays_for_missing = None;
     let mut grading_for_missing = None;
     let mut degree_summary = None;
+    let mut missing_target_stats = None;
     if !missing_gv_classes.is_empty() {
         let basis_rays = project_mori_cone_cap_rays_to_basis(&ambient_rays, &intersection.basis)
             .map_err(|e| {
@@ -1973,10 +2103,18 @@ fn diagnose_chamber_gv_volume_correction(
             general_max_deg,
         )?;
         let ray_stats = graded_ray_stats(&basis_rays, &grading, general_max_deg)?;
+        let target_stats = missing_gv_target_stats(
+            &missing_gv_classes,
+            &basis_rays,
+            &intersection.basis,
+            &grading,
+            10,
+        )?;
         basis_rays_for_missing = Some(basis_rays);
         grading_for_missing = Some(grading);
         degree_summary = Some(summary);
         basis_ray_stats = Some(ray_stats);
+        missing_target_stats = Some(target_stats);
     }
 
     let general_gv_requested = general_min_points.is_some() || general_max_deg.is_some();
@@ -2175,6 +2313,7 @@ fn diagnose_chamber_gv_volume_correction(
         first_missing_class: missing_gv_classes.first().cloned(),
         missing_required_degree_min,
         missing_required_degree_max,
+        missing_target_stats,
         covered_gv_volume_correction,
         gv_volume_correction,
     })
@@ -3000,6 +3139,19 @@ fn stage_volume(
                 ray_count, diag.degree_bounded_basis_mori_ray_count, degree_window
             );
         }
+        if let Some(stats) = diag.missing_target_stats.as_ref() {
+            eprintln!(
+                "[INFO] corrected-chamber missing GV target reduction: targets={} targets_as_mori_generators={} generators_le_target_degree_range={}..{}",
+                stats.target_count,
+                stats.targets_that_are_mori_generators,
+                stats.min_generators_le_target_degree,
+                stats.max_generators_le_target_degree
+            );
+            eprintln!(
+                "[INFO] corrected-chamber missing GV target sample: {:?}",
+                stats.sample
+            );
+        }
         if let Some(first_missing) = &diag.first_missing_class {
             if let (Some(min_degree), Some(max_degree)) = (
                 diag.missing_required_degree_min,
@@ -3564,6 +3716,36 @@ mod tests {
             degree_filtered_basis_rays(&[vec![1, 0], vec![2, 1], vec![0, 5]], &[2, 3], 7).unwrap();
 
         assert_eq!(filtered, vec![vec![1, 0], vec![2, 1]]);
+    }
+
+    #[test]
+    fn missing_gv_target_stats_reports_generator_membership_and_degree_window() {
+        let ambient_classes = vec![vec![0, 1, 1], vec![0, 2, 0]];
+        let basis_rays = vec![vec![1, 0], vec![0, 1], vec![1, 1]];
+        let stats =
+            missing_gv_target_stats(&ambient_classes, &basis_rays, &[1, 2], &[2, 3], 4).unwrap();
+
+        assert_eq!(stats.target_count, 2);
+        assert_eq!(stats.targets_that_are_mori_generators, 1);
+        assert_eq!(stats.min_generators_le_target_degree, 2);
+        assert_eq!(stats.max_generators_le_target_degree, 3);
+        assert_eq!(
+            stats.sample,
+            vec![
+                MissingGvTargetSample {
+                    degree: 5,
+                    generators_le_degree: 3,
+                    is_mori_generator: true,
+                    basis_nonzero: vec![(0, 1), (1, 1)]
+                },
+                MissingGvTargetSample {
+                    degree: 4,
+                    generators_le_degree: 2,
+                    is_mori_generator: false,
+                    basis_nonzero: vec![(0, 2)]
+                }
+            ]
+        );
     }
 }
 
