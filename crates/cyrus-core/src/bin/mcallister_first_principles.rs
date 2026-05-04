@@ -13,6 +13,8 @@
 //! - `--branch-report-jsonl path` to export positive phase-1 branch candidates
 //!   discovered by that search for GA/debug ranking.
 //! - `--branch-report-only` to stop after writing that report.
+//! - `--branch-report-skip-gv-coverage` to omit the expensive per-branch
+//!   small-curve/GV coverage enrichment.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -421,6 +423,7 @@ struct PipelineArgs {
     branch_height_init: bool,
     branch_report_path: Option<String>,
     branch_report_only: bool,
+    branch_report_skip_gv_coverage: bool,
     dual_basis_override: Option<BasisOverride>,
 }
 
@@ -484,6 +487,7 @@ fn parse_args() -> PipelineArgs {
     let branch_height_init = parse_flag("--branch-height-init");
     let branch_report_path = parse_arg_value::<String>("--branch-report-jsonl");
     let branch_report_only = parse_flag("--branch-report-only");
+    let branch_report_skip_gv_coverage = parse_flag("--branch-report-skip-gv-coverage");
     let dual_basis_override = parse_arg_value::<String>("--dual-basis")
         .map(|path| load_json::<BasisOverride>(&PathBuf::from(path)));
     PipelineArgs {
@@ -505,6 +509,7 @@ fn parse_args() -> PipelineArgs {
         branch_height_init,
         branch_report_path,
         branch_report_only,
+        branch_report_skip_gv_coverage,
         dual_basis_override,
     }
 }
@@ -1294,6 +1299,7 @@ fn stage_volume(
     branch_height_init: bool,
     branch_report_path: Option<&str>,
     branch_report_only: bool,
+    branch_report_skip_gv_coverage: bool,
     small_curve_cutoff: F64<Pos>,
     t0: &Instant,
 ) -> (f64, F64<Pos>) {
@@ -1309,6 +1315,10 @@ fn stage_volume(
     }
     if branch_report_only && branch_report_path.is_none() {
         eprintln!("[ERROR] --branch-report-only requires --branch-report-jsonl path");
+        std::process::exit(2);
+    }
+    if branch_report_skip_gv_coverage && branch_report_path.is_none() {
+        eprintln!("[ERROR] --branch-report-skip-gv-coverage requires --branch-report-jsonl path");
         std::process::exit(2);
     }
     if branch_height_init && branch_candidates == 0 {
@@ -1489,16 +1499,6 @@ fn stage_volume(
             let small_curve_selection_t = best_branch.result.t.clone();
             if let Some(path) = branch_report_path {
                 let report_path = PathBuf::from(path);
-                let branch_gv_coverages = compute_branch_gv_coverages(
-                    geom,
-                    intersection,
-                    &positive_branches,
-                    small_curve_cutoff,
-                )
-                .unwrap_or_else(|e| {
-                    eprintln!("[ERROR] failed to compute branch GV coverage report data: {e}");
-                    std::process::exit(2);
-                });
                 let ctx = BranchReportContext {
                     branch_seed,
                     branch_selection,
@@ -1514,7 +1514,7 @@ fn stage_volume(
                     &ctx,
                     &positive_branches,
                     &t_initializations,
-                    Some(&branch_gv_coverages),
+                    None,
                 )
                 .unwrap_or_else(|e| {
                     eprintln!(
@@ -1523,7 +1523,40 @@ fn stage_volume(
                     );
                     std::process::exit(2);
                 });
-                eprintln!("[INFO] wrote KKLT branch report {}", report_path.display());
+                eprintln!(
+                    "[INFO] wrote KKLT branch report {} without GV coverage",
+                    report_path.display()
+                );
+                if !branch_report_skip_gv_coverage {
+                    let branch_gv_coverages = compute_branch_gv_coverages(
+                        geom,
+                        intersection,
+                        &positive_branches,
+                        small_curve_cutoff,
+                    )
+                    .unwrap_or_else(|e| {
+                        eprintln!("[ERROR] failed to compute branch GV coverage report data: {e}");
+                        std::process::exit(2);
+                    });
+                    write_branch_report_jsonl(
+                        &report_path,
+                        &ctx,
+                        &positive_branches,
+                        &t_initializations,
+                        Some(&branch_gv_coverages),
+                    )
+                    .unwrap_or_else(|e| {
+                        eprintln!(
+                            "[ERROR] failed to write KKLT branch report {}: {e}",
+                            report_path.display()
+                        );
+                        std::process::exit(2);
+                    });
+                    eprintln!(
+                        "[INFO] enriched KKLT branch report {} with GV coverage",
+                        report_path.display()
+                    );
+                }
                 if branch_report_only {
                     eprintln!("[INFO] stopping after branch report as requested");
                     std::process::exit(0);
@@ -1880,6 +1913,7 @@ fn run_pipeline(args: PipelineArgs) {
         args.branch_height_init,
         args.branch_report_path.as_deref(),
         args.branch_report_only,
+        args.branch_report_skip_gv_coverage,
         small_curve_cutoff,
         &t0,
     );
