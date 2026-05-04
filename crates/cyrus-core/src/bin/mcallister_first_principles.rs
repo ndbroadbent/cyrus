@@ -1590,6 +1590,26 @@ fn run_pipeline(args: PipelineArgs) {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn branch_selection_parser_accepts_all_declared_policies() {
+        for name in [
+            "max-volume",
+            "min-volume",
+            "first-positive",
+            "min-condition",
+        ] {
+            let policy = parse_branch_selection(name)
+                .unwrap_or_else(|| panic!("policy {name} should parse"));
+            assert_eq!(policy.as_str(), name);
+        }
+        assert!(parse_branch_selection("condition").is_none());
+    }
+}
+
 fn main() {
     run_pipeline(parse_args());
 }
