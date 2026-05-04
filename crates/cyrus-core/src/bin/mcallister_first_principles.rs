@@ -527,6 +527,7 @@ struct MissingGvTargetSample {
     origin_circuit_witness_count: Option<usize>,
     origin_circuit_first_witness: Option<OriginCircuitWitnessSample>,
     cms_general_divisor_shape_candidates: Option<Vec<CmsGeneralDivisorShapeCandidate>>,
+    cms_general_divisor_intersection_checks: Option<Vec<CmsGeneralDivisorIntersectionCheck>>,
     real_cone_decomposable_by_other_generators: bool,
     real_cone_decomposition_active_generators: Option<usize>,
     ambient_nonzero: Vec<(usize, i64)>,
@@ -541,6 +542,16 @@ struct CmsGeneralDivisorShapeCandidate {
     inferred_other_normal_degree: i64,
     toric_gv1_formula_value: Option<i64>,
     all_non_origin_relation_points_are_two_face: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct CmsGeneralDivisorIntersectionCheck {
+    shrinking_divisor_index: usize,
+    has_rational_divisor_solution: bool,
+    solution_basis_support_len: Option<usize>,
+    solution_is_integral: Option<bool>,
+    computed_other_normal_degree: Option<String>,
+    matches_inferred_other_normal_degree: Option<bool>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1811,6 +1822,7 @@ fn missing_gv_target_stats(
     grading: &[i64],
     origin_idx: usize,
     origin_circuits_by_class: &HashMap<Vec<i64>, cyrus_core::OriginCircuitCurveDiagnostic>,
+    cms_intersection_checks_by_class: &HashMap<Vec<i64>, Vec<CmsGeneralDivisorIntersectionCheck>>,
     sample_limit: usize,
 ) -> Result<MissingGvTargetStats, String> {
     if basis.len() != grading.len() {
@@ -1946,6 +1958,10 @@ fn missing_gv_target_stats(
         let cms_general_divisor_shape_candidates = origin_circuit_diagnostic
             .map(cms_general_divisor_shape_candidates)
             .filter(|candidates| !candidates.is_empty());
+        let cms_general_divisor_intersection_checks = cms_intersection_checks_by_class
+            .get(ambient_class)
+            .filter(|checks| !checks.is_empty())
+            .cloned();
         min_generators = min_generators.min(generators_le_degree);
         max_generators = max_generators.max(generators_le_degree);
         if sample.len() < sample_limit {
@@ -1957,6 +1973,7 @@ fn missing_gv_target_stats(
                 origin_circuit_witness_count,
                 origin_circuit_first_witness,
                 cms_general_divisor_shape_candidates,
+                cms_general_divisor_intersection_checks,
                 real_cone_decomposable_by_other_generators: real_cone_decomposable,
                 real_cone_decomposition_active_generators,
                 ambient_nonzero: ambient_class
@@ -2265,6 +2282,200 @@ fn cms_general_divisor_shape_candidates(
     candidates.sort();
     candidates.dedup();
     candidates
+}
+
+fn cms_general_divisor_intersection_checks_by_class(
+    ambient_classes: &[Vec<i64>],
+    origin_circuits_by_class: &HashMap<Vec<i64>, cyrus_core::OriginCircuitCurveDiagnostic>,
+    kappa_full: &cyrus_core::Intersection,
+    basis: &[usize],
+) -> Result<HashMap<Vec<i64>, Vec<CmsGeneralDivisorIntersectionCheck>>, String> {
+    let mut out = HashMap::new();
+    for ambient_class in ambient_classes {
+        let Some(diagnostic) = origin_circuits_by_class.get(ambient_class) else {
+            continue;
+        };
+        let mut checks = Vec::new();
+        for candidate in cms_general_divisor_shape_candidates(diagnostic) {
+            checks.push(cms_general_divisor_intersection_check(
+                ambient_class,
+                &candidate,
+                kappa_full,
+                basis,
+            )?);
+        }
+        checks.sort();
+        checks.dedup();
+        if !checks.is_empty() {
+            out.insert(ambient_class.clone(), checks);
+        }
+    }
+    Ok(out)
+}
+
+fn cms_general_divisor_intersection_check(
+    ambient_class: &[i64],
+    candidate: &CmsGeneralDivisorShapeCandidate,
+    kappa_full: &cyrus_core::Intersection,
+    basis: &[usize],
+) -> Result<CmsGeneralDivisorIntersectionCheck, String> {
+    if ambient_class.len() != kappa_full.dim() {
+        return Err(format!(
+            "CMS divisor check curve dimension {} does not match intersection dimension {}",
+            ambient_class.len(),
+            kappa_full.dim()
+        ));
+    }
+    let i = candidate.shrinking_divisor_index;
+    if i >= kappa_full.dim() {
+        return Err(format!(
+            "CMS divisor check shrinking divisor index {i} is out of bounds for dimension {}",
+            kappa_full.dim()
+        ));
+    }
+    for &basis_idx in basis {
+        if basis_idx >= kappa_full.dim() {
+            return Err(format!(
+                "CMS divisor check basis index {basis_idx} is out of bounds for dimension {}",
+                kappa_full.dim()
+            ));
+        }
+    }
+
+    let matrix: Vec<Vec<malachite::Rational>> = (0..kappa_full.dim())
+        .map(|row_idx| {
+            basis
+                .iter()
+                .map(|&basis_idx| kappa_full.get(row_idx, i, basis_idx).get().clone())
+                .collect()
+        })
+        .collect();
+    let rhs: Vec<malachite::Rational> = ambient_class
+        .iter()
+        .map(|&coefficient| malachite::Rational::from(coefficient))
+        .collect();
+    let Some(solution) = solve_rational_linear_system(&matrix, &rhs)? else {
+        return Ok(CmsGeneralDivisorIntersectionCheck {
+            shrinking_divisor_index: i,
+            has_rational_divisor_solution: false,
+            solution_basis_support_len: None,
+            solution_is_integral: None,
+            computed_other_normal_degree: None,
+            matches_inferred_other_normal_degree: None,
+        });
+    };
+    let support_len = solution.iter().filter(|value| **value != 0).count();
+    let solution_is_integral = solution.iter().all(rational_is_integer);
+    let computed_m = divisor_square_against_point(kappa_full, i, basis, &solution)?;
+    let inferred_m = malachite::Rational::from(candidate.inferred_other_normal_degree);
+    Ok(CmsGeneralDivisorIntersectionCheck {
+        shrinking_divisor_index: i,
+        has_rational_divisor_solution: true,
+        solution_basis_support_len: Some(support_len),
+        solution_is_integral: Some(solution_is_integral),
+        computed_other_normal_degree: Some(computed_m.to_string()),
+        matches_inferred_other_normal_degree: Some(computed_m == inferred_m),
+    })
+}
+
+fn divisor_square_against_point(
+    kappa_full: &cyrus_core::Intersection,
+    point_idx: usize,
+    basis: &[usize],
+    divisor_coefficients: &[malachite::Rational],
+) -> Result<malachite::Rational, String> {
+    if basis.len() != divisor_coefficients.len() {
+        return Err(format!(
+            "CMS divisor square basis length {} does not match coefficient length {}",
+            basis.len(),
+            divisor_coefficients.len()
+        ));
+    }
+    let mut value = malachite::Rational::from(0);
+    for (a_pos, &a_idx) in basis.iter().enumerate() {
+        for (b_pos, &b_idx) in basis.iter().enumerate() {
+            let term = &divisor_coefficients[a_pos]
+                * &divisor_coefficients[b_pos]
+                * kappa_full.get(point_idx, a_idx, b_idx).get();
+            value += term;
+        }
+    }
+    Ok(value)
+}
+
+fn solve_rational_linear_system(
+    matrix: &[Vec<malachite::Rational>],
+    rhs: &[malachite::Rational],
+) -> Result<Option<Vec<malachite::Rational>>, String> {
+    if matrix.len() != rhs.len() {
+        return Err(format!(
+            "linear system row count {} does not match rhs length {}",
+            matrix.len(),
+            rhs.len()
+        ));
+    }
+    let Some(first_row) = matrix.first() else {
+        return Ok(Some(Vec::new()));
+    };
+    let n_cols = first_row.len();
+    if matrix.iter().any(|row| row.len() != n_cols) {
+        return Err("linear system matrix rows have inconsistent lengths".to_string());
+    }
+
+    let mut work: Vec<Vec<malachite::Rational>> = matrix
+        .iter()
+        .zip(rhs.iter())
+        .map(|(row, rhs_value)| {
+            let mut augmented = row.clone();
+            augmented.push(rhs_value.clone());
+            augmented
+        })
+        .collect();
+    let mut pivot_cols = Vec::new();
+    let mut pivot_row = 0usize;
+    for col in 0..n_cols {
+        let Some(found_row) = (pivot_row..work.len()).find(|&row| work[row][col] != 0) else {
+            continue;
+        };
+        work.swap(pivot_row, found_row);
+        let pivot = work[pivot_row][col].clone();
+        for entry in &mut work[pivot_row][col..=n_cols] {
+            *entry /= &pivot;
+        }
+        let normalized_pivot_row = work[pivot_row].clone();
+        for row in 0..work.len() {
+            if row == pivot_row || work[row][col] == 0 {
+                continue;
+            }
+            let factor = work[row][col].clone();
+            for c in col..=n_cols {
+                let sub = &factor * &normalized_pivot_row[c];
+                work[row][c] -= sub;
+            }
+        }
+        pivot_cols.push(col);
+        pivot_row += 1;
+        if pivot_row == work.len() {
+            break;
+        }
+    }
+
+    for row in pivot_row..work.len() {
+        let all_zero = work[row][..n_cols].iter().all(|value| *value == 0);
+        if all_zero && work[row][n_cols] != 0 {
+            return Ok(None);
+        }
+    }
+
+    let mut solution = vec![malachite::Rational::from(0); n_cols];
+    for (row, &col) in pivot_cols.iter().enumerate() {
+        solution[col] = work[row][n_cols].clone();
+    }
+    Ok(Some(solution))
+}
+
+fn rational_is_integer(value: &malachite::Rational) -> bool {
+    value.denominator_ref() == &1u32
 }
 
 fn cms_general_divisor_shape_candidates_for_witness(
@@ -3288,6 +3499,14 @@ fn chamber_intersection_in_basis(
     points: &[Point],
     basis: &[usize],
 ) -> Result<cyrus_core::Intersection, String> {
+    let kappa_full = chamber_intersection_full(tri, points)?;
+    Ok(intersection_in_basis(&kappa_full, basis))
+}
+
+fn chamber_intersection_full(
+    tri: &Triangulation,
+    points: &[Point],
+) -> Result<cyrus_core::Intersection, String> {
     let points_i64: Vec<Vec<i64>> = points.iter().map(|point| point.coords().to_vec()).collect();
     let linrels_reduced = compute_linear_relations_no_origin(&points_i64);
     let linrels_i64: Vec<Vec<i64>> = linrels_reduced
@@ -3303,7 +3522,7 @@ fn chamber_intersection_in_basis(
         .collect::<Result<Vec<_>, _>>()?;
     let kappa_full = compute_intersection_cytools(tri, points, &linrels_i64)
         .map_err(|e| format!("failed to compute corrected-chamber intersections: {e}"))?;
-    Ok(intersection_in_basis(&kappa_full, basis))
+    Ok(kappa_full)
 }
 
 fn triangulations_have_same_simplices(lhs: &Triangulation, rhs: &Triangulation) -> bool {
@@ -3394,6 +3613,13 @@ fn diagnose_chamber_gv_volume_correction(
                 .into_iter()
                 .map(|diagnostic| (diagnostic.class.clone(), diagnostic))
                 .collect();
+        let corrected_kappa_full = chamber_intersection_full(tri, &geom.triangulation_points)?;
+        let cms_intersection_checks_by_class = cms_general_divisor_intersection_checks_by_class(
+            &missing_gv_classes,
+            &origin_circuits_by_class,
+            &corrected_kappa_full,
+            &intersection.basis,
+        )?;
         let grading = compute_grading_vector(&basis_rays).ok_or_else(|| {
             "failed to compute corrected-chamber GV degree grading vector".to_string()
         })?;
@@ -3411,6 +3637,7 @@ fn diagnose_chamber_gv_volume_correction(
             &grading,
             origin_idx,
             &origin_circuits_by_class,
+            &cms_intersection_checks_by_class,
             10,
         )?;
         basis_rays_for_missing = Some(basis_rays);
@@ -5322,6 +5549,7 @@ mod tests {
             &[2, 3],
             0,
             &HashMap::new(),
+            &HashMap::new(),
             4,
         )
         .unwrap();
@@ -5349,6 +5577,7 @@ mod tests {
                     origin_circuit_witness_count: None,
                     origin_circuit_first_witness: None,
                     cms_general_divisor_shape_candidates: None,
+                    cms_general_divisor_intersection_checks: None,
                     real_cone_decomposable_by_other_generators: true,
                     real_cone_decomposition_active_generators: Some(2),
                     ambient_nonzero: vec![(1, 1), (2, 1)],
@@ -5362,6 +5591,7 @@ mod tests {
                     origin_circuit_witness_count: None,
                     origin_circuit_first_witness: None,
                     cms_general_divisor_shape_candidates: None,
+                    cms_general_divisor_intersection_checks: None,
                     real_cone_decomposable_by_other_generators: true,
                     real_cone_decomposition_active_generators: Some(1),
                     ambient_nonzero: vec![(1, 2)],
@@ -5435,6 +5665,83 @@ mod tests {
                 toric_gv1_formula_value: Some(3),
                 all_non_origin_relation_points_are_two_face: true,
             }]
+        );
+    }
+
+    #[test]
+    fn rational_linear_system_finds_exact_overdetermined_solution() {
+        let matrix = vec![
+            vec![malachite::Rational::from(1), malachite::Rational::from(0)],
+            vec![malachite::Rational::from(0), malachite::Rational::from(1)],
+            vec![malachite::Rational::from(1), malachite::Rational::from(1)],
+        ];
+        let rhs = vec![
+            malachite::Rational::from(2),
+            malachite::Rational::from(3),
+            malachite::Rational::from(5),
+        ];
+
+        let solution = solve_rational_linear_system(&matrix, &rhs).unwrap();
+
+        assert_eq!(
+            solution,
+            Some(vec![
+                malachite::Rational::from(2),
+                malachite::Rational::from(3)
+            ])
+        );
+
+        let inconsistent_rhs = vec![
+            malachite::Rational::from(2),
+            malachite::Rational::from(3),
+            malachite::Rational::from(6),
+        ];
+        assert_eq!(
+            solve_rational_linear_system(&matrix, &inconsistent_rhs).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn cms_general_divisor_intersection_check_solves_divisor_class_and_normal_degree() {
+        let mut kappa = cyrus_core::Intersection::new(3);
+        kappa.set(
+            2,
+            1,
+            1,
+            cyrus_core::types::rational::Rational::<Finite>::from_raw(malachite::Rational::from(4)),
+        );
+        kappa.set(
+            2,
+            2,
+            2,
+            cyrus_core::types::rational::Rational::<Finite>::from_raw(malachite::Rational::from(
+                -3,
+            )),
+        );
+        let candidate = CmsGeneralDivisorShapeCandidate {
+            shrinking_divisor_index: 2,
+            shrinking_divisor_coefficient: -3,
+            shrinking_divisor_coordinates: vec![2, 3, 2, 3],
+            inferred_other_normal_degree: 1,
+            toric_gv1_formula_value: Some(3),
+            all_non_origin_relation_points_are_two_face: true,
+        };
+
+        let check =
+            cms_general_divisor_intersection_check(&[0, 4, -3], &candidate, &kappa, &[1, 2])
+                .unwrap();
+
+        assert_eq!(
+            check,
+            CmsGeneralDivisorIntersectionCheck {
+                shrinking_divisor_index: 2,
+                has_rational_divisor_solution: true,
+                solution_basis_support_len: Some(2),
+                solution_is_integral: Some(true),
+                computed_other_normal_degree: Some("1".to_string()),
+                matches_inferred_other_normal_degree: Some(true),
+            }
         );
     }
 
