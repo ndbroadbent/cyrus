@@ -80,6 +80,29 @@ fn curve_volume_in_basis(curve: &[i64], basis: &[usize], t: &[F64<Finite>]) -> F
         })
 }
 
+fn subtract_curve(lhs: &[i64], rhs: &[i64]) -> Vec<i64> {
+    assert_eq!(lhs.len(), rhs.len(), "curve dimensions must match");
+    lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a - b).collect()
+}
+
+fn find_pair_decomposition(
+    target: &[i64],
+    target_volume: F64<Pos>,
+    selected: &[(Vec<i64>, F64<Pos>)],
+    selected_set: &HashSet<Vec<i64>>,
+) -> Option<(Vec<i64>, Vec<i64>)> {
+    for (summand, summand_volume) in selected {
+        if *summand_volume >= target_volume {
+            continue;
+        }
+        let remainder = subtract_curve(target, summand);
+        if selected_set.contains(&remainder) {
+            return Some((summand.clone(), remainder));
+        }
+    }
+    None
+}
+
 fn main() {
     let data_dir = std::env::var("CYRUS_MCALLISTER_DATA_DIR")
         .map(PathBuf::from)
@@ -156,6 +179,33 @@ fn main() {
     );
     println!("selected_volume_range=[{min_volume}, {max_volume}]");
 
+    let pair_decomposable = selected
+        .iter()
+        .filter(|(ray, volume)| {
+            find_pair_decomposition(ray, *volume, &selected, &selected_set).is_some()
+        })
+        .count();
+    let pair_decomposable_expected = selected
+        .iter()
+        .filter(|(ray, volume)| {
+            expected_set.contains(ray) && {
+                find_pair_decomposition(ray, *volume, &selected, &selected_set).is_some()
+            }
+        })
+        .count();
+    let pair_decomposable_extra = selected
+        .iter()
+        .filter(|(ray, volume)| {
+            !expected_set.contains(ray) && {
+                find_pair_decomposition(ray, *volume, &selected, &selected_set).is_some()
+            }
+        })
+        .count();
+    println!(
+        "pair_decomposable={} expected_decomposable={} extra_decomposable={}",
+        pair_decomposable, pair_decomposable_expected, pair_decomposable_extra
+    );
+
     let mut extra_with_volume: Vec<(Vec<i64>, f64)> = selected
         .iter()
         .filter(|(ray, _)| !expected_set.contains(ray))
@@ -170,5 +220,27 @@ fn main() {
             .filter(|(_, value)| *value != 0)
             .collect();
         println!("extra[{idx}] volume={volume} nonzero={nonzero:?}");
+        if let Some((a, b)) = find_pair_decomposition(
+            ray,
+            F64::<Finite>::new(*volume)
+                .and_then(|volume| volume.try_to_pos())
+                .expect("printed extra volume is positive"),
+            &selected,
+            &selected_set,
+        ) {
+            let a_nonzero: Vec<(usize, i64)> = a
+                .iter()
+                .copied()
+                .enumerate()
+                .filter(|(_, value)| *value != 0)
+                .collect();
+            let b_nonzero: Vec<(usize, i64)> = b
+                .iter()
+                .copied()
+                .enumerate()
+                .filter(|(_, value)| *value != 0)
+                .collect();
+            println!("  decomposition a={a_nonzero:?} b={b_nonzero:?}");
+        }
     }
 }
