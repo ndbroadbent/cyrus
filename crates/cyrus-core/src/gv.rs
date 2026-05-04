@@ -931,6 +931,9 @@ pub fn compute_gv_invariants(
 
     let n_rays = rays.len();
     eprintln!("[DEBUG] gv generators used: {n_rays}");
+    if let Ok(path) = env::var("CYRUS_GV_DUMP_MORI_RAYS_CDD") {
+        dump_mori_rays_cdd(Path::new(&path), rays)?;
+    }
 
     let grading_vec_i32: Vec<i32> = grading_vector
         .iter()
@@ -1414,6 +1417,49 @@ fn dump_gv_inputs(
     Ok(())
 }
 
+fn dump_mori_rays_cdd(path: &Path, rays: &[Vec<i64>]) -> Result<()> {
+    let dim = rays.first().map_or(0, Vec::len);
+    for row in rays {
+        if row.len() != dim {
+            return Err(Error::InvalidInput(
+                "cannot dump CDD rays with inconsistent dimensions".into(),
+            ));
+        }
+    }
+
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent).map_err(|err| {
+            Error::InvalidInput(format!(
+                "failed to create CDD dump directory {}: {err}",
+                parent.display()
+            ))
+        })?;
+    }
+
+    let mut out = String::new();
+    out.push_str("V-representation\nbegin\n");
+    out.push_str(&format!("{} {} integer\n", rays.len(), dim + 1));
+    for row in rays {
+        out.push('0');
+        for value in row {
+            out.push(' ');
+            out.push_str(&value.to_string());
+        }
+        out.push('\n');
+    }
+    out.push_str("end\n");
+    fs::write(path, out).map_err(|err| {
+        Error::InvalidInput(format!(
+            "failed to write CDD dump {}: {err}",
+            path.display()
+        ))
+    })?;
+    eprintln!("[DEBUG] wrote Mori ray CDD dump: {}", path.display());
+    Ok(())
+}
+
 #[derive(Clone, Debug)]
 struct TwoFaceData {
     points: Vec<usize>,
@@ -1822,9 +1868,9 @@ mod tests {
 
     use super::{
         ToricCurveCandidate, compute_grading_vector, curve_volume_in_divisor_basis,
-        find_pair_decomposition, load_grading_cache, map_basis_gv_invariants_to_ambient,
-        remove_pair_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
-        write_grading_cache,
+        dump_mori_rays_cdd, find_pair_decomposition, load_grading_cache,
+        map_basis_gv_invariants_to_ambient, remove_pair_decomposable_curve_candidates,
+        subcutoff_toric_curve_candidates, write_grading_cache,
     };
     use crate::{f64_finite, f64_pos};
     use malachite::Integer;
@@ -1848,6 +1894,28 @@ mod tests {
         let invariants = vec![(vec![1, 2], Integer::from(1))];
 
         assert!(map_basis_gv_invariants_to_ambient(&invariants, &curve_basis).is_err());
+    }
+
+    #[test]
+    fn mori_ray_cdd_dump_uses_cdd_v_representation_for_cone_rays() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time is after unix epoch")
+            .as_nanos();
+        let cache_dir = PathBuf::from("target/cyrus-test-cache")
+            .join(format!("cdd-{}-{nonce}", std::process::id()));
+        let path = cache_dir.join("rays.ext");
+
+        dump_mori_rays_cdd(&path, &[vec![1, 0], vec![0, -2]]).unwrap();
+
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(
+            content,
+            "V-representation\nbegin\n2 3 integer\n0 1 0\n0 0 -2\nend\n"
+        );
+
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir_all(&cache_dir);
     }
 
     #[test]
