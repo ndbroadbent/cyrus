@@ -420,7 +420,7 @@ fn stage5_gv_computation_roadmap() {
             "Further optimize or replace hyperplane dualization; bounded diagnostics still need to prove the full 561658-ray McAllister dualization completes with the corrected ray orientation",
             "Reduce the 561658-ray Mori cap input before dualization, or add a CYTools/PPL-faithful constraint minimization path",
             "Run and validate lattice-point generation under a Python environment with OR-Tools after DDM returns the dual cone",
-            "Implement a first-principles KKLT branch-selection/search path that reaches the McAllister small-curve branch without loading kahler_param.dat as a seed",
+            "Extend first-principles KKLT branch generation/ranking so branch search reaches the McAllister 344-small-curve branch without loading kahler_param.dat as a seed",
         ],
     };
 
