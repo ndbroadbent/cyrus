@@ -13,6 +13,7 @@
 
 use serde::Deserialize;
 use std::path::PathBuf;
+use std::process::Command;
 
 /// Round a float to N decimal places
 fn round_to_decimals(value: f64, decimals: u32) -> f64 {
@@ -39,6 +40,16 @@ fn require_first_principles() -> bool {
     true
 }
 
+fn require_runner_heavy() -> bool {
+    if std::env::var_os("CYRUS_MCALLISTER_RUNNER_HEAVY").is_none() {
+        eprintln!(
+            "Skipping full first-principles runner test (set CYRUS_MCALLISTER_RUNNER_HEAVY=1)"
+        );
+        return false;
+    }
+    true
+}
+
 fn read_csv_i64(path: &PathBuf) -> Vec<i64> {
     let content = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
@@ -47,6 +58,24 @@ fn read_csv_i64(path: &PathBuf) -> Vec<i64> {
         .filter(|s| !s.trim().is_empty())
         .map(|s| s.trim().parse::<i64>().expect("invalid integer"))
         .collect()
+}
+
+fn read_scalar_f64(path: &PathBuf) -> f64 {
+    std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()))
+        .trim()
+        .parse::<f64>()
+        .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", path.display()))
+}
+
+fn extract_result_value(stderr: &str, name: &str) -> f64 {
+    let prefix = format!("[RESULT] {name} = ");
+    stderr
+        .lines()
+        .find_map(|line| line.strip_prefix(&prefix))
+        .unwrap_or_else(|| panic!("missing result line for {name} in runner stderr:\n{stderr}"))
+        .parse::<f64>()
+        .unwrap_or_else(|e| panic!("failed to parse runner result {name}: {e}"))
 }
 
 #[derive(Debug, Deserialize)]
@@ -504,4 +533,76 @@ fn stage11_cosmological_constant() {
     };
 
     insta::assert_json_snapshot!("v0_cosmological_constant", summary);
+}
+
+#[test]
+fn stage11_first_principles_runner_reaches_corrected_volume_and_v0() {
+    if !require_first_principles() || !require_runner_heavy() {
+        return;
+    }
+    let Some(data_dir) = require_data_dir() else {
+        return;
+    };
+
+    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let runner = std::env::var_os("CYRUS_MCALLISTER_RUNNER_BIN")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| workspace_root.join("target/release/mcallister_first_principles"));
+    if !runner.exists() {
+        eprintln!(
+            "Skipping full first-principles runner test (build release runner or set CYRUS_MCALLISTER_RUNNER_BIN)"
+        );
+        return;
+    }
+    let output = Command::new(&runner)
+        .current_dir(&workspace_root)
+        .arg("--data-dir")
+        .arg(&data_dir)
+        .arg("--branch-candidates")
+        .arg("1")
+        .arg("--branch-height-init")
+        .arg("--branch-selection")
+        .arg("first-positive")
+        .arg("--kklt-steps")
+        .arg("64")
+        .output()
+        .unwrap_or_else(|e| panic!("failed to run {}: {e}", runner.display()));
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "first-principles runner failed with status {:?}\nstderr:\n{}",
+        output.status.code(),
+        stderr
+    );
+    assert!(
+        stderr.contains("primal small toric curve GVs selected=344"),
+        "runner did not compute the expected 344 small toric GV values:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("GV volume correction ="),
+        "runner did not compute the GV volume correction:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("transforming Kähler parameters from source basis"),
+        "runner appears to have replayed downstream corrected Kähler parameters:\n{stderr}"
+    );
+
+    let v_string = extract_result_value(&stderr, "V_string");
+    let v0_log10_abs = extract_result_value(&stderr, "log10(|V0|)");
+    let corrected_checkpoint = read_scalar_f64(&data_dir.join("corrected_cy_vol.dat"));
+    let uncorrected_checkpoint = read_scalar_f64(&data_dir.join("cy_vol.dat"));
+
+    assert!(
+        (v_string - corrected_checkpoint).abs() < 0.1,
+        "runner V_string {v_string} should match corrected_cy_vol.dat {corrected_checkpoint}"
+    );
+    assert!(
+        (v_string - corrected_checkpoint).abs() < (v_string - uncorrected_checkpoint).abs(),
+        "runner V_string should be closer to corrected than uncorrected checkpoint"
+    );
+    assert!(
+        (-203.0..-201.0).contains(&v0_log10_abs),
+        "runner log10(|V0|) should be near -202, got {v0_log10_abs}"
+    );
 }
