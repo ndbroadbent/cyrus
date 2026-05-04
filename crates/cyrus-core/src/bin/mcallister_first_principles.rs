@@ -6,7 +6,7 @@
 //! Optional:
 //! - `--dual-basis path/to/dual_basis.json` to supply the flux coordinate basis.
 //! - `--allow-fixtures` to permit JSON fixture fallback when no data dir is set.
-//! - `--branch-candidates N --branch-selection <max-volume|min-volume|first-positive|min-condition|min-toric-gv-missing>`
+//! - `--branch-candidates N --branch-selection <max-volume|min-volume|first-positive|min-condition|min-toric-gv-missing|min-required-gv-degree>`
 //!   to run deterministic KKLT branch search without loading Kähler checkpoints.
 //! - `--branch-height-init` to include the CYTools-style height-projected
 //!   Kähler point as the first branch-search candidate.
@@ -70,6 +70,7 @@ enum BranchSelection {
     FirstPositive,
     MinCondition,
     MinToricGvMissing,
+    MinRequiredGvDegree,
 }
 
 impl BranchSelection {
@@ -80,11 +81,16 @@ impl BranchSelection {
             Self::FirstPositive => "first-positive",
             Self::MinCondition => "min-condition",
             Self::MinToricGvMissing => "min-toric-gv-missing",
+            Self::MinRequiredGvDegree => "min-required-gv-degree",
         }
     }
 
     const fn requires_gv_coverage(self) -> bool {
-        matches!(self, Self::MinToricGvMissing)
+        matches!(self, Self::MinToricGvMissing | Self::MinRequiredGvDegree)
+    }
+
+    const fn requires_gv_degree_summary(self) -> bool {
+        matches!(self, Self::MinRequiredGvDegree)
     }
 }
 
@@ -95,6 +101,7 @@ fn parse_branch_selection(name: &str) -> Option<BranchSelection> {
         "first-positive" => Some(BranchSelection::FirstPositive),
         "min-condition" => Some(BranchSelection::MinCondition),
         "min-toric-gv-missing" | "min-gv-missing" => Some(BranchSelection::MinToricGvMissing),
+        "min-required-gv-degree" | "min-gv-degree" => Some(BranchSelection::MinRequiredGvDegree),
         _ => None,
     }
 }
@@ -1302,6 +1309,57 @@ fn select_min_toric_gv_missing_rank(
         .ok_or_else(|| "cannot select by toric GV coverage without positive branches".into())
 }
 
+fn select_min_required_gv_degree_rank(
+    coverages: &[BranchGvCoverage],
+    volumes_by_rank: &[f64],
+) -> Result<usize, String> {
+    if coverages.is_empty() {
+        return Err("cannot select by required GV degree without branch coverage rows".into());
+    }
+    if coverages.len() != volumes_by_rank.len() {
+        return Err(format!(
+            "branch coverage rows {} do not match branch volume rows {}",
+            coverages.len(),
+            volumes_by_rank.len()
+        ));
+    }
+
+    (0..coverages.len())
+        .map(|rank| {
+            let coverage = &coverages[rank];
+            let degree_max = match (
+                coverage.toric_gv_missing_count,
+                coverage.missing_required_degree_max,
+            ) {
+                (0, None) => 0,
+                (_, Some(value)) => value,
+                (_, None) => {
+                    return Err(format!(
+                        "branch rank {rank} is missing required GV degree summary"
+                    ));
+                }
+            };
+            let degree_min = coverage.missing_required_degree_min.unwrap_or(0);
+            Ok((rank, degree_max, degree_min))
+        })
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .min_by(|(rank_a, max_a, min_a), (rank_b, max_b, min_b)| {
+            max_a
+                .cmp(max_b)
+                .then_with(|| {
+                    coverages[*rank_a]
+                        .toric_gv_missing_count
+                        .cmp(&coverages[*rank_b].toric_gv_missing_count)
+                })
+                .then_with(|| min_a.cmp(min_b))
+                .then_with(|| volumes_by_rank[*rank_a].total_cmp(&volumes_by_rank[*rank_b]))
+                .then_with(|| rank_a.cmp(rank_b))
+        })
+        .map(|(rank, _, _)| rank)
+        .ok_or_else(|| "cannot select by required GV degree without positive branches".into())
+}
+
 fn compute_primal_general_gv_by_ambient_class(
     geom: &PrimalGeom,
     intersection: &PrimalIntersection,
@@ -1900,35 +1958,60 @@ fn stage_volume(
                     branch_report_missing_limit,
                     (branch_report_decomposition_depth > 0)
                         .then_some(branch_report_decomposition_depth),
-                    branch_report_path.is_some(),
+                    branch_report_path.is_some() || branch_selection.requires_gv_degree_summary(),
                 )
                 .unwrap_or_else(|e| {
                     eprintln!("[ERROR] failed to compute branch GV coverage for selection: {e}");
                     std::process::exit(2);
                 });
                 let mut coverage_ranks: Vec<usize> = (0..coverages.len()).collect();
-                coverage_ranks.sort_by(|&a, &b| {
-                    coverages[a]
-                        .toric_gv_missing_count
-                        .cmp(&coverages[b].toric_gv_missing_count)
-                        .then_with(|| {
-                            positive_branches[a]
-                                .classical_volume
-                                .get()
-                                .total_cmp(&positive_branches[b].classical_volume.get())
-                        })
-                        .then_with(|| a.cmp(&b))
-                });
+                match branch_selection {
+                    BranchSelection::MinRequiredGvDegree => {
+                        coverage_ranks.sort_by(|&a, &b| {
+                            coverages[a]
+                                .missing_required_degree_max
+                                .unwrap_or(0)
+                                .cmp(&coverages[b].missing_required_degree_max.unwrap_or(0))
+                                .then_with(|| {
+                                    coverages[a]
+                                        .toric_gv_missing_count
+                                        .cmp(&coverages[b].toric_gv_missing_count)
+                                })
+                                .then_with(|| {
+                                    positive_branches[a]
+                                        .classical_volume
+                                        .get()
+                                        .total_cmp(&positive_branches[b].classical_volume.get())
+                                })
+                                .then_with(|| a.cmp(&b))
+                        });
+                    }
+                    _ => {
+                        coverage_ranks.sort_by(|&a, &b| {
+                            coverages[a]
+                                .toric_gv_missing_count
+                                .cmp(&coverages[b].toric_gv_missing_count)
+                                .then_with(|| {
+                                    positive_branches[a]
+                                        .classical_volume
+                                        .get()
+                                        .total_cmp(&positive_branches[b].classical_volume.get())
+                                })
+                                .then_with(|| a.cmp(&b))
+                        });
+                    }
+                }
                 for rank_by_volume in coverage_ranks.iter().take(5) {
                     let coverage = &coverages[*rank_by_volume];
                     let branch = &positive_branches[*rank_by_volume];
                     eprintln!(
-                        "[INFO] KKLT branch GV coverage candidate rank_by_volume={} init={} missing={} covered={} filtered={} phase1_volume={}",
+                        "[INFO] KKLT branch GV coverage candidate rank_by_volume={} init={} missing={} covered={} filtered={} required_degree_max={:?} phase1_volume={}",
                         rank_by_volume,
                         branch.init_index,
                         coverage.toric_gv_missing_count,
                         coverage.toric_gv_covered_count,
                         coverage.filtered_count,
+                        coverage.missing_required_degree_max,
                         branch.classical_volume.get()
                     );
                 }
@@ -1976,6 +2059,22 @@ fn stage_volume(
                             std::process::exit(2);
                         },
                     )
+                }
+                BranchSelection::MinRequiredGvDegree => {
+                    let coverages = branch_gv_coverages
+                        .as_ref()
+                        .expect("GV coverage was computed for coverage-based selection");
+                    let volumes_by_rank: Vec<f64> = positive_branches
+                        .iter()
+                        .map(|branch| branch.classical_volume.get())
+                        .collect();
+                    select_min_required_gv_degree_rank(coverages, &volumes_by_rank)
+                        .unwrap_or_else(|e| {
+                            eprintln!(
+                                "[ERROR] failed to select branch by required GV degree: {e}"
+                            );
+                            std::process::exit(2);
+                        })
                 }
             };
             let best_branch = positive_branches[selected_rank_by_volume].clone();
@@ -2516,6 +2615,7 @@ mod tests {
             "first-positive",
             "min-condition",
             "min-toric-gv-missing",
+            "min-required-gv-degree",
         ] {
             let policy = parse_branch_selection(name)
                 .unwrap_or_else(|| panic!("policy {name} should parse"));
@@ -2525,13 +2625,20 @@ mod tests {
             parse_branch_selection("min-gv-missing").map(BranchSelection::as_str),
             Some("min-toric-gv-missing")
         );
+        assert_eq!(
+            parse_branch_selection("min-gv-degree").map(BranchSelection::as_str),
+            Some("min-required-gv-degree")
+        );
         assert!(parse_branch_selection("condition").is_none());
     }
 
     #[test]
     fn branch_selection_declares_coverage_requirement() {
         assert!(BranchSelection::MinToricGvMissing.requires_gv_coverage());
+        assert!(BranchSelection::MinRequiredGvDegree.requires_gv_coverage());
+        assert!(BranchSelection::MinRequiredGvDegree.requires_gv_degree_summary());
         assert!(!BranchSelection::MinVolume.requires_gv_coverage());
+        assert!(!BranchSelection::MinVolume.requires_gv_degree_summary());
     }
 
     #[test]
@@ -2608,6 +2715,121 @@ mod tests {
             select_min_toric_gv_missing_rank(&coverages, &[])
                 .unwrap_err()
                 .contains("do not match")
+        );
+    }
+
+    #[test]
+    fn min_required_gv_degree_selection_ties_by_missing_then_volume() {
+        let coverages = vec![
+            BranchGvCoverage {
+                ambient_rays: 10,
+                subcutoff_count: 4,
+                filtered_count: 4,
+                toric_gv_covered_count: 2,
+                toric_gv_missing_count: 2,
+                first_missing_class: Some(vec![1]),
+                missing_required_degree_min: Some(2),
+                missing_required_degree_max: Some(20),
+                missing_class_sample: vec![vec![1]],
+                bounded_decomposition_max_terms: None,
+                missing_bounded_decomposable_count: None,
+                first_missing_bounded_decomposition: None,
+            },
+            BranchGvCoverage {
+                ambient_rays: 10,
+                subcutoff_count: 5,
+                filtered_count: 5,
+                toric_gv_covered_count: 1,
+                toric_gv_missing_count: 4,
+                first_missing_class: Some(vec![2]),
+                missing_required_degree_min: Some(3),
+                missing_required_degree_max: Some(10),
+                missing_class_sample: vec![vec![2]],
+                bounded_decomposition_max_terms: None,
+                missing_bounded_decomposable_count: None,
+                first_missing_bounded_decomposition: None,
+            },
+            BranchGvCoverage {
+                ambient_rays: 10,
+                subcutoff_count: 6,
+                filtered_count: 6,
+                toric_gv_covered_count: 3,
+                toric_gv_missing_count: 3,
+                first_missing_class: Some(vec![3]),
+                missing_required_degree_min: Some(4),
+                missing_required_degree_max: Some(10),
+                missing_class_sample: vec![vec![3]],
+                bounded_decomposition_max_terms: None,
+                missing_bounded_decomposable_count: None,
+                first_missing_bounded_decomposition: None,
+            },
+        ];
+        let volumes_by_rank = vec![1.0, 100.0, 50.0];
+
+        let selected = select_min_required_gv_degree_rank(&coverages, &volumes_by_rank).unwrap();
+
+        assert_eq!(selected, 2);
+    }
+
+    #[test]
+    fn min_required_gv_degree_selection_accepts_zero_missing_without_degree_summary() {
+        let coverages = vec![
+            BranchGvCoverage {
+                ambient_rays: 10,
+                subcutoff_count: 4,
+                filtered_count: 4,
+                toric_gv_covered_count: 4,
+                toric_gv_missing_count: 0,
+                first_missing_class: None,
+                missing_required_degree_min: None,
+                missing_required_degree_max: None,
+                missing_class_sample: Vec::new(),
+                bounded_decomposition_max_terms: None,
+                missing_bounded_decomposable_count: None,
+                first_missing_bounded_decomposition: None,
+            },
+            BranchGvCoverage {
+                ambient_rays: 10,
+                subcutoff_count: 5,
+                filtered_count: 5,
+                toric_gv_covered_count: 4,
+                toric_gv_missing_count: 1,
+                first_missing_class: Some(vec![2]),
+                missing_required_degree_min: Some(1),
+                missing_required_degree_max: Some(1),
+                missing_class_sample: vec![vec![2]],
+                bounded_decomposition_max_terms: None,
+                missing_bounded_decomposable_count: None,
+                first_missing_bounded_decomposition: None,
+            },
+        ];
+
+        let selected = select_min_required_gv_degree_rank(&coverages, &[10.0, 1.0]).unwrap();
+
+        assert_eq!(selected, 0);
+    }
+
+    #[test]
+    fn min_required_gv_degree_selection_rejects_missing_degree_summary() {
+        let coverages = vec![BranchGvCoverage {
+            ambient_rays: 10,
+            subcutoff_count: 4,
+            filtered_count: 4,
+            toric_gv_covered_count: 3,
+            toric_gv_missing_count: 1,
+            first_missing_class: Some(vec![1]),
+            missing_required_degree_min: None,
+            missing_required_degree_max: None,
+            missing_class_sample: vec![vec![1]],
+            bounded_decomposition_max_terms: None,
+            missing_bounded_decomposable_count: None,
+            first_missing_bounded_decomposition: None,
+        }];
+
+        assert!(
+            select_min_required_gv_degree_rank(&coverages, &[1.0])
+                .unwrap_err()
+                .contains("missing required GV degree summary")
         );
     }
 

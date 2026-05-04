@@ -535,6 +535,7 @@ fn stage5_gv_computation_roadmap() {
             "generated KKLT branch candidates now use one scaled-uniform baseline plus non-uniform deterministic random starts instead of wasting the prefix on equivalent scaled-uniform duplicates",
             "Intersection iteration is key-sorted for deterministic floating-point accumulation; repeated no-height 48-candidate branch reports are byte-identical for the same seed",
             "mcallister_first_principles supports --branch-selection min-toric-gv-missing to rank generated positive branches by computed small-curve toric GV coverage before falling back to volume",
+            "mcallister_first_principles supports --branch-selection min-required-gv-degree to rank generated positive branches by the max required degree of missing small-curve general GV values",
             "branch-report JSONL can include bounded samples of missing small-curve classes via --branch-report-missing-limit for formula-classification diagnostics",
             "branch-report JSONL records required grading-degree ranges for missing small-curve classes, exposing the cost of general GV fallback per branch",
             "branch-report JSONL can diagnose missing small-curve classes that are exact sums of up to three raw sub-cutoff candidates via --branch-report-decomposition-depth",
