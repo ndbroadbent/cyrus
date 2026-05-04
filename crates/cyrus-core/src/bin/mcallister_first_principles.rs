@@ -62,6 +62,7 @@ use cyrus_core::{
 
 const DEFAULT_MCALLISTER_GV_MIN_POINTS: u32 = 20_000;
 const DEFAULT_CORRECTED_CHAMBER_GENERAL_GV_DIRECT_RAY_LIMIT: usize = 100_000;
+const DEFAULT_CORRECTED_CHAMBER_PROVIDED_GV_GENERATOR_LIMIT: usize = 2_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Stage {
@@ -2061,6 +2062,17 @@ fn diagnose_chamber_gv_volume_correction(
             } else {
                 basis_rays.clone()
             };
+            let provided_generator_limit =
+                std::env::var("CYRUS_CORRECTED_CHAMBER_PROVIDED_GV_GENERATOR_LIMIT")
+                    .ok()
+                    .and_then(|value| value.parse::<usize>().ok())
+                    .unwrap_or(DEFAULT_CORRECTED_CHAMBER_PROVIDED_GV_GENERATOR_LIMIT);
+            if provided_rays.len() > provided_generator_limit {
+                return Err(format!(
+                    "corrected-chamber provided-generator GV diagnostic would pass {} generators to cygv, exceeding limit {provided_generator_limit}; increase CYRUS_CORRECTED_CHAMBER_PROVIDED_GV_GENERATOR_LIMIT for an explicit long attempt, or use a lower --primal-gv-max-deg to inspect a smaller degree window.",
+                    provided_rays.len()
+                ));
+            }
             eprintln!(
                 "[WARN] corrected-chamber provided-generator GV diagnostic is using {} caller-provided generators without Mori-cone lattice augmentation; this is not the exact corrected-chamber GV fallback.",
                 provided_rays.len()
