@@ -9,6 +9,7 @@ use super::util::{
     normalize_ray_preserving_direction,
 };
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn process_hyperplane(
     rays: &[DdmRay],
     h: &DdmHyperplane,
