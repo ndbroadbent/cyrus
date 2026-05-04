@@ -27,6 +27,7 @@ use std::f64::consts::PI;
 
 use malachite::Integer;
 use rand::{Rng, SeedableRng};
+use rayon::prelude::*;
 
 use crate::f64_pos;
 use crate::intersection::Intersection;
@@ -993,6 +994,48 @@ pub fn solve_mixed_basis_path_following_branch_candidates(
     t_initializations: &[Vec<F64<Finite>>],
     steps: CheckedRange<usize>,
 ) -> KkltBranchSearchResult {
+    enum BranchEvaluation {
+        NoResult,
+        NonConverged,
+        NonPositive,
+        Positive(KkltBranchSolution),
+    }
+
+    let evaluations: Vec<BranchEvaluation> = t_initializations
+        .par_iter()
+        .enumerate()
+        .map(|(init_index, t_init)| {
+            let Some(result) = solve_mixed_basis_path_following(
+                kappa_basis,
+                kappa_all,
+                basis,
+                kklt_basis,
+                tau_target,
+                t_init,
+                steps,
+            ) else {
+                return BranchEvaluation::NoResult;
+            };
+            if !result.converged {
+                return BranchEvaluation::NonConverged;
+            }
+            let Some(classical_volume) = classical_volume_for_branch(kappa_basis, &result.t) else {
+                return BranchEvaluation::NonPositive;
+            };
+            let jacobian =
+                compute_kklt_jacobian(kappa_basis, kappa_all, basis, kklt_basis, &result.t)
+                    .expect("converged mixed-basis KKLT branch has a valid final Jacobian");
+            let jacobian_diagnostics = compute_jacobian_diagnostics(&jacobian)
+                .expect("converged mixed-basis KKLT branch has finite Jacobian diagnostics");
+            BranchEvaluation::Positive(KkltBranchSolution {
+                init_index,
+                result,
+                classical_volume,
+                jacobian_diagnostics,
+            })
+        })
+        .collect();
+
     let mut out = KkltBranchSearchResult {
         attempted: t_initializations.len(),
         solved: 0,
@@ -1001,37 +1044,22 @@ pub fn solve_mixed_basis_path_following_branch_candidates(
         positive_volume: Vec::new(),
     };
 
-    for (init_index, t_init) in t_initializations.iter().enumerate() {
-        let Some(result) = solve_mixed_basis_path_following(
-            kappa_basis,
-            kappa_all,
-            basis,
-            kklt_basis,
-            tau_target,
-            t_init,
-            steps,
-        ) else {
-            continue;
-        };
-        out.solved += 1;
-        if !result.converged {
-            out.non_converged += 1;
-            continue;
+    for evaluation in evaluations {
+        match evaluation {
+            BranchEvaluation::NoResult => {}
+            BranchEvaluation::NonConverged => {
+                out.solved += 1;
+                out.non_converged += 1;
+            }
+            BranchEvaluation::NonPositive => {
+                out.solved += 1;
+                out.non_positive_volume += 1;
+            }
+            BranchEvaluation::Positive(solution) => {
+                out.solved += 1;
+                out.positive_volume.push(solution);
+            }
         }
-        let Some(classical_volume) = classical_volume_for_branch(kappa_basis, &result.t) else {
-            out.non_positive_volume += 1;
-            continue;
-        };
-        let jacobian = compute_kklt_jacobian(kappa_basis, kappa_all, basis, kklt_basis, &result.t)
-            .expect("converged mixed-basis KKLT branch has a valid final Jacobian");
-        let jacobian_diagnostics = compute_jacobian_diagnostics(&jacobian)
-            .expect("converged mixed-basis KKLT branch has finite Jacobian diagnostics");
-        out.positive_volume.push(KkltBranchSolution {
-            init_index,
-            result,
-            classical_volume,
-            jacobian_diagnostics,
-        });
     }
 
     out
