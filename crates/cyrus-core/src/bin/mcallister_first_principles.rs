@@ -5379,6 +5379,48 @@ fn compare_corrected_kahler_checkpoint(
     );
 }
 
+fn compare_corrected_target_volume_checkpoint(
+    data_dir: Option<&str>,
+    computed_target_tau: &[F64<Finite>],
+) {
+    let Some(dir) = data_dir.map(PathBuf::from) else {
+        return;
+    };
+    let target_path = dir.join("corrected_target_volumes.dat");
+    if !target_path.exists() {
+        eprintln!(
+            "[COMPARE] corrected_target_volumes.dat checkpoint not found; skipping corrected target-volume comparison"
+        );
+        return;
+    }
+    let checkpoint = read_csv_f64(&target_path)
+        .into_iter()
+        .map(|value| {
+            F64::<Finite>::new(value).expect("corrected target-volume checkpoint is finite")
+        })
+        .collect::<Vec<_>>();
+    if checkpoint.len() != computed_target_tau.len() {
+        eprintln!(
+            "[COMPARE] corrected target-volume checkpoint length mismatch: checkpoint={} computed={}",
+            checkpoint.len(),
+            computed_target_tau.len()
+        );
+        return;
+    }
+    let summary =
+        target_correction_delta_summary(&checkpoint, computed_target_tau).unwrap_or_else(|e| {
+            eprintln!("[ERROR] failed to compare corrected target-volume checkpoint: {e}");
+            std::process::exit(2);
+        });
+    eprintln!(
+        "[COMPARE] corrected target-volume checkpoint delta: max_abs={} relative_l2={} max_abs_checkpoint={} max_abs_computed={}",
+        summary.max_abs_delta,
+        summary.relative_l2_delta,
+        summary.max_abs_reference,
+        summary.max_abs_candidate
+    );
+}
+
 fn stage_volume(
     data_dir: Option<&str>,
     manifest_dir: &PathBuf,
@@ -6161,6 +6203,20 @@ fn stage_volume(
             eprintln!("[ERROR] failed to compute input-chamber GV target correction at solved t");
             std::process::exit(2);
         };
+        let Some(input_chamber_target_tau) = cyrus_core::kklt::compute_gv_corrected_target_tau(
+            &c_i,
+            &chi_divisor,
+            c_tau,
+            &input_chamber_gv_target_correction,
+        ) else {
+            eprintln!("[ERROR] failed to reconstruct input-chamber GV-corrected target tau");
+            std::process::exit(2);
+        };
+        let input_chamber_target_tau_finite = input_chamber_target_tau
+            .iter()
+            .map(|value| F64::<Finite>::new(value.get()).expect("target tau is finite"))
+            .collect::<Vec<_>>();
+        compare_corrected_target_volume_checkpoint(data_dir, &input_chamber_target_tau_finite);
         if diagnose_chamber_updated_kklt {
             eprintln!(
                 "[WARN] chamber-updated KKLT diagnostic is toric-covered-only when a chamber has missing toric GV values; it is not promoted to the production volume."
