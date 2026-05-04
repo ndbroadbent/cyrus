@@ -28,10 +28,11 @@ expression: roadmap
     "first-principles binaries do not load small_curves.dat or small_curves_gv.dat",
     "basis-coordinate GV invariants can be mapped back to ambient divisor-intersection curve classes for primal volume corrections",
     "mcallister_first_principles can explicitly attempt general primal GV fallback for missing small-curve toric formula coverage via --primal-gv-max-deg or --primal-gv-min-points",
-    "compute_gv_invariants can dump the exact pre-lattice Mori-cap generator matrix as a CDD V-representation for PPL/cdd diagnostics"
+    "compute_gv_invariants can dump the exact pre-lattice Mori-cap generator matrix as a CDD V-representation for PPL/cdd diagnostics",
+    "mcallister_first_principles rejects insufficient primal --primal-gv-max-deg values before full GV enumeration; for the selected 4-214-647 missing small curves, degree 1 is impossible because the required grading degrees are 10..2386"
   ],
   "remaining_gaps": [
-    "The explicit general primal GV fallback currently reaches full 214-dimensional Mori-cone dualization; bounded DDM diagnostics stop loudly at configured limits, e.g. hyperplane 350/561658 with --primal-gv-max-deg 1",
+    "The explicit general primal GV fallback still reaches full 214-dimensional Mori-cone dualization for any max_deg high enough to cover the selected missing curves, or for min_points-driven runs; bounded DDM diagnostics stop loudly at configured limits",
     "A PPL/cdd diagnostic on the dumped 561658-ray, 214-dimensional V-representation also exceeded a 300-second cap without producing an H-representation",
     "Finish a post-orientation-fix validation run of adjacency-filtered DDM on the full 214-dimensional McAllister Mori cone",
     "Further optimize or replace hyperplane dualization; bounded diagnostics still need to prove the full 561658-ray McAllister dualization completes with the corrected ray orientation",

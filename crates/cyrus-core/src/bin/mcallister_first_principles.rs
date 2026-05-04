@@ -1155,6 +1155,7 @@ fn compute_branch_gv_coverages(
 fn compute_primal_general_gv_by_ambient_class(
     geom: &PrimalGeom,
     intersection: &PrimalIntersection,
+    required_ambient_classes: &[Vec<i64>],
     min_points: Option<u32>,
     max_deg: Option<u32>,
 ) -> Result<HashMap<Vec<i64>, malachite::Integer>, String> {
@@ -1176,6 +1177,29 @@ fn compute_primal_general_gv_by_ambient_class(
     .map_err(|e| format!("failed to compute primal basis Mori-cap rays: {e}"))?;
     let grading = compute_grading_vector(&rays)
         .ok_or_else(|| "failed to compute primal GV grading vector".to_string())?;
+    let degree_summary = summarize_required_gv_degrees(
+        required_ambient_classes,
+        &intersection.basis,
+        &grading,
+        max_deg,
+    )?;
+    if degree_summary.count > 0 {
+        eprintln!(
+            "[INFO] missing primal GV curve degree range: min={} max={} count={}",
+            degree_summary.min_degree, degree_summary.max_degree, degree_summary.count
+        );
+    }
+    if let Some(max_deg) = max_deg
+        && degree_summary.max_degree > i128::from(max_deg)
+    {
+        return Err(format!(
+            "primal general GV max_deg={max_deg} cannot cover all selected missing curves: required degree range {}..{} ({} curves), first_over_max={:?}",
+            degree_summary.min_degree,
+            degree_summary.max_degree,
+            degree_summary.count,
+            degree_summary.first_over_max
+        ));
+    }
     let curve_basis = compute_curve_basis_matrix(&intersection.linrels, &intersection.basis)
         .map_err(|e| format!("failed to compute primal curve basis matrix: {e}"))?;
     let q_matrix = curve_basis
@@ -1219,6 +1243,82 @@ fn compute_primal_general_gv_by_ambient_class(
         }
     }
     Ok(out)
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct RequiredGvDegreeSummary {
+    count: usize,
+    min_degree: i128,
+    max_degree: i128,
+    first_over_max: Option<Vec<i64>>,
+}
+
+fn summarize_required_gv_degrees(
+    ambient_classes: &[Vec<i64>],
+    basis: &[usize],
+    grading: &[i64],
+    max_deg: Option<u32>,
+) -> Result<RequiredGvDegreeSummary, String> {
+    if basis.len() != grading.len() {
+        return Err(format!(
+            "basis length {} does not match grading vector length {}",
+            basis.len(),
+            grading.len()
+        ));
+    }
+    if ambient_classes.is_empty() {
+        return Ok(RequiredGvDegreeSummary {
+            count: 0,
+            min_degree: 0,
+            max_degree: 0,
+            first_over_max: None,
+        });
+    }
+
+    let mut min_degree = i128::MAX;
+    let mut max_degree = i128::MIN;
+    let mut first_over_max = None;
+    for class in ambient_classes {
+        let degree = ambient_curve_grading_degree(class, basis, grading)?;
+        min_degree = min_degree.min(degree);
+        max_degree = max_degree.max(degree);
+        if degree <= 0 {
+            return Err(format!(
+                "required primal GV curve has non-positive grading degree {degree}: {class:?}"
+            ));
+        }
+        if let Some(max_deg) = max_deg
+            && degree > i128::from(max_deg)
+            && first_over_max.is_none()
+        {
+            first_over_max = Some(class.clone());
+        }
+    }
+
+    Ok(RequiredGvDegreeSummary {
+        count: ambient_classes.len(),
+        min_degree,
+        max_degree,
+        first_over_max,
+    })
+}
+
+fn ambient_curve_grading_degree(
+    ambient_class: &[i64],
+    basis: &[usize],
+    grading: &[i64],
+) -> Result<i128, String> {
+    let mut degree = 0i128;
+    for (&idx, &weight) in basis.iter().zip(grading.iter()) {
+        let Some(&coefficient) = ambient_class.get(idx) else {
+            return Err(format!(
+                "basis index {idx} is out of bounds for ambient curve dimension {}",
+                ambient_class.len()
+            ));
+        };
+        degree += i128::from(coefficient) * i128::from(weight);
+    }
+    Ok(degree)
 }
 
 fn write_branch_report_jsonl(
@@ -1752,6 +1852,7 @@ fn stage_volume(
             let general_gvs = compute_primal_general_gv_by_ambient_class(
                 geom,
                 intersection,
+                &missing_gv_classes,
                 primal_gv_min_points,
                 primal_gv_max_deg,
             )
@@ -2092,6 +2193,41 @@ mod tests {
             assert_eq!(policy.as_str(), name);
         }
         assert!(parse_branch_selection("condition").is_none());
+    }
+
+    #[test]
+    fn required_gv_degree_summary_projects_ambient_classes_to_basis() {
+        let classes = vec![vec![99, 2, 0], vec![99, 0, 3]];
+        let summary = summarize_required_gv_degrees(&classes, &[1, 2], &[5, 7], Some(10)).unwrap();
+
+        assert_eq!(
+            summary,
+            RequiredGvDegreeSummary {
+                count: 2,
+                min_degree: 10,
+                max_degree: 21,
+                first_over_max: Some(vec![99, 0, 3]),
+            }
+        );
+    }
+
+    #[test]
+    fn required_gv_degree_summary_rejects_invalid_projection_inputs() {
+        assert!(
+            summarize_required_gv_degrees(&[vec![1, 2]], &[0, 1], &[1], None)
+                .unwrap_err()
+                .contains("basis length")
+        );
+        assert!(
+            summarize_required_gv_degrees(&[vec![1]], &[1], &[1], None)
+                .unwrap_err()
+                .contains("out of bounds")
+        );
+        assert!(
+            summarize_required_gv_degrees(&[vec![0, -1]], &[1], &[1], None)
+                .unwrap_err()
+                .contains("non-positive")
+        );
     }
 }
 
