@@ -494,6 +494,9 @@ struct ChamberGvDiagnostic {
     lp_face_gv_failed_count: Option<usize>,
     lp_face_gv_volume_correction: Option<F64<Finite>>,
     lp_face_gv_sample: Vec<FaceGvDiagnosticSample>,
+    combined_diagnostic_gv_covered_count: Option<usize>,
+    combined_diagnostic_gv_missing_count: Option<usize>,
+    combined_diagnostic_gv_volume_correction: Option<F64<Finite>>,
     remaining_gv_missing_count: usize,
     first_missing_class: Option<Vec<i64>>,
     missing_required_degree_min: Option<i128>,
@@ -3631,6 +3634,29 @@ fn sparse_i64(values: &[i64]) -> Vec<(usize, i64)> {
         .collect()
 }
 
+fn insert_missing_diagnostic_gv(
+    diagnostic_gvs: &mut HashMap<Vec<i64>, malachite::Integer>,
+    ambient_class: &[i64],
+    gv: &malachite::Integer,
+    source: &str,
+) -> Result<(), String> {
+    let sparse_class = sparse_i64(ambient_class);
+    match diagnostic_gvs.entry(ambient_class.to_vec()) {
+        std::collections::hash_map::Entry::Occupied(existing) => {
+            if existing.get() != gv {
+                return Err(format!(
+                    "conflicting corrected-chamber diagnostic GV values for {source} class {sparse_class:?}: existing={} new={gv}",
+                    existing.get()
+                ));
+            }
+        }
+        std::collections::hash_map::Entry::Vacant(slot) => {
+            slot.insert(gv.clone());
+        }
+    }
+    Ok(())
+}
+
 fn write_branch_report_jsonl(
     path: &PathBuf,
     ctx: &BranchReportContext,
@@ -3945,6 +3971,8 @@ fn diagnose_chamber_gv_volume_correction(
     }
     let toric_gv_covered_count = small_curve_gvs.len();
     let toric_gv_missing_count = missing_gv_classes.len();
+    let toric_small_curve_gvs = small_curve_gvs.clone();
+    let toric_missing_gv_classes = missing_gv_classes.clone();
 
     let mut basis_ray_stats = None;
     let mut basis_rays_for_missing = None;
@@ -4026,6 +4054,7 @@ fn diagnose_chamber_gv_volume_correction(
     let mut lp_face_gv_failed_count = None;
     let mut lp_face_gv_sample = Vec::new();
     let mut lp_face_gv_volume_correction = None;
+    let mut diagnostic_missing_gvs: HashMap<Vec<i64>, malachite::Integer> = HashMap::new();
     if !missing_gv_classes.is_empty() && ray_gv_requested {
         if cfg!(panic = "abort") {
             return Err(
@@ -4100,6 +4129,14 @@ fn diagnose_chamber_gv_volume_correction(
             &q_matrix,
             &corrected_kappa_basis,
         )?;
+        for (ambient_class, gv, _) in &ray_gvs {
+            insert_missing_diagnostic_gv(
+                &mut diagnostic_missing_gvs,
+                ambient_class,
+                gv,
+                "one-dimensional ray",
+            )?;
+        }
         ray_gv_covered_count = Some(ray_gvs.len());
         ray_gv_sample = ray_gvs
             .iter()
@@ -4183,6 +4220,16 @@ fn diagnose_chamber_gv_volume_correction(
         )?;
         let covered_count = face_gvs.iter().filter(|result| result.gv.is_some()).count();
         let failed_count = face_gvs.len().saturating_sub(covered_count);
+        for result in &face_gvs {
+            if let Some(gv) = result.gv.as_ref() {
+                insert_missing_diagnostic_gv(
+                    &mut diagnostic_missing_gvs,
+                    &result.ambient_class,
+                    gv,
+                    "LP-witness face",
+                )?;
+            }
+        }
         lp_face_gv_covered_count = Some(covered_count);
         lp_face_gv_failed_count = Some(failed_count);
         lp_face_gv_sample = face_gvs
@@ -4382,6 +4429,47 @@ fn diagnose_chamber_gv_volume_correction(
         }
     }
 
+    let mut combined_diagnostic_gv_covered_count = None;
+    let mut combined_diagnostic_gv_missing_count = None;
+    let mut combined_diagnostic_gv_volume_correction = None;
+    if !diagnostic_missing_gvs.is_empty() {
+        if let Some(unexpected) = diagnostic_missing_gvs.keys().find(|class| {
+            !toric_missing_gv_classes
+                .iter()
+                .any(|missing| missing == *class)
+        }) {
+            return Err(format!(
+                "corrected-chamber diagnostic GV produced a class that was not a toric miss: {:?}",
+                sparse_i64(unexpected)
+            ));
+        }
+        let mut combined_small_curve_gvs = toric_small_curve_gvs.clone();
+        let mut covered_count = 0usize;
+        for missing_class in &toric_missing_gv_classes {
+            if let Some(gv) = diagnostic_missing_gvs.get(missing_class) {
+                covered_count += 1;
+                combined_small_curve_gvs.push((missing_class.clone(), gv.clone()));
+            }
+        }
+        let missing_count = toric_missing_gv_classes.len().saturating_sub(covered_count);
+        combined_diagnostic_gv_covered_count = Some(covered_count);
+        combined_diagnostic_gv_missing_count = Some(missing_count);
+        if covered_count > 0 {
+            combined_diagnostic_gv_volume_correction = Some(
+                cyrus_core::kklt::compute_gv_volume_correction_for_ambient_curves(
+                    &combined_small_curve_gvs,
+                    &intersection.basis,
+                    kahler,
+                    Some(gamma),
+                )
+                .ok_or_else(|| {
+                    "failed to compute combined diagnostic corrected-chamber GV volume correction"
+                        .to_string()
+                })?,
+            );
+        }
+    }
+
     let covered_gv_volume_correction = if small_curve_gvs.is_empty() {
         None
     } else {
@@ -4428,6 +4516,9 @@ fn diagnose_chamber_gv_volume_correction(
         lp_face_gv_failed_count,
         lp_face_gv_volume_correction,
         lp_face_gv_sample,
+        combined_diagnostic_gv_covered_count,
+        combined_diagnostic_gv_missing_count,
+        combined_diagnostic_gv_volume_correction,
         remaining_gv_missing_count: missing_gv_classes.len(),
         first_missing_class: missing_gv_classes.first().cloned(),
         missing_required_degree_min,
@@ -5292,6 +5383,32 @@ fn stage_volume(
                     eprintln!(
                         "[INFO] corrected-chamber LP-witness face GV volume correction delta_vs_input_chamber (diagnostic) = {}",
                         face_correction.get() - input_chamber_correction.get()
+                    );
+                }
+            }
+        }
+        if let Some(combined_covered) = diag.combined_diagnostic_gv_covered_count {
+            let combined_missing = diag.combined_diagnostic_gv_missing_count.unwrap_or(0);
+            eprintln!(
+                "[INFO] corrected-chamber combined diagnostic GV covered {}/{} toric-missing curves; remaining={}",
+                combined_covered, diag.toric_gv_missing_count, combined_missing
+            );
+            if let Some(combined_correction) =
+                diag.combined_diagnostic_gv_volume_correction.as_ref()
+            {
+                let scope = if combined_missing == 0 {
+                    ""
+                } else {
+                    "partial "
+                };
+                eprintln!(
+                    "[INFO] corrected-chamber combined diagnostic GV {scope}volume correction (diagnostic, not promoted) = {}",
+                    combined_correction.get()
+                );
+                if let Some(input_chamber_correction) = gv_volume_correction.as_ref() {
+                    eprintln!(
+                        "[INFO] corrected-chamber combined diagnostic GV volume correction delta_vs_input_chamber (diagnostic, not promoted) = {}",
+                        combined_correction.get() - input_chamber_correction.get()
                     );
                 }
             }
@@ -6254,6 +6371,39 @@ mod tests {
                 vec![2, 0],
                 vec![2, 1],
             ]
+        );
+    }
+
+    #[test]
+    fn insert_missing_diagnostic_gv_rejects_conflicting_duplicates() {
+        let mut diagnostic_gvs = HashMap::new();
+        insert_missing_diagnostic_gv(
+            &mut diagnostic_gvs,
+            &[0, 2, -1],
+            &malachite::Integer::from(3),
+            "test-a",
+        )
+        .unwrap();
+        insert_missing_diagnostic_gv(
+            &mut diagnostic_gvs,
+            &[0, 2, -1],
+            &malachite::Integer::from(3),
+            "test-b",
+        )
+        .unwrap();
+
+        let err = insert_missing_diagnostic_gv(
+            &mut diagnostic_gvs,
+            &[0, 2, -1],
+            &malachite::Integer::from(4),
+            "test-c",
+        )
+        .unwrap_err();
+
+        assert!(err.contains("conflicting corrected-chamber diagnostic GV values"));
+        assert_eq!(
+            diagnostic_gvs.get(&vec![0, 2, -1]),
+            Some(&malachite::Integer::from(3))
         );
     }
 
