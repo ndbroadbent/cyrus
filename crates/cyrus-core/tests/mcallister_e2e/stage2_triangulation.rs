@@ -104,6 +104,44 @@ fn load_stage2_fixture() -> Stage2Fixture {
     }
 }
 
+fn load_primal_points_raw() -> Vec<Vec<i64>> {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let data_dir = crate::mcallister_data_dir();
+    assert!(
+        !(crate::first_principles_enabled() && data_dir.is_none()),
+        "CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests"
+    );
+
+    if let Some(dir) = data_dir {
+        return read_csv_rows_i64(&dir.join("points.dat"));
+    }
+
+    assert!(
+        crate::fixtures_enabled(),
+        "Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures"
+    );
+    let input_path = manifest_dir.join("tests/mcallister_e2e/inputs/polytope.json");
+    let content = std::fs::read_to_string(&input_path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", input_path.display()));
+    let input: PolytopeInput = serde_json::from_str(&content)
+        .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", input_path.display()));
+    input.points
+}
+
+fn read_csv_rows_usize(path: &PathBuf) -> Vec<Vec<usize>> {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+    content
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|line| {
+            line.split(',')
+                .map(|s| s.trim().parse::<usize>().expect("invalid integer"))
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
 // =============================================================================
 // Common assertions (apply to both branches)
 // =============================================================================
@@ -278,5 +316,50 @@ fn stage2_theirs_is_star() {
     assert!(
         triangulation.is_star(fixture.origin_idx),
         "McAllister's triangulation must have star property"
+    );
+}
+
+#[test]
+fn stage2_dual_frst_matches_mcallister_dual_simplices_checkpoint() {
+    if !require_first_principles() {
+        return;
+    }
+    let Some(data_dir) = crate::mcallister_data_dir() else {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    };
+
+    let primal_points = load_primal_points_raw();
+    let all_points: Vec<Point> = primal_points
+        .iter()
+        .map(|coords| Point::new(coords.clone()))
+        .collect();
+    let primal = Polytope::from_vertices(all_points).expect("failed to create primal polytope");
+    let dual = primal
+        .compute_dual()
+        .expect("failed to compute dual polytope");
+    let dual_triangulation_points = dual
+        .points_not_interior_to_facets()
+        .expect("failed to filter dual triangulation points");
+    let origin_idx = dual_triangulation_points
+        .iter()
+        .position(|point| point.coords().iter().all(|&x| x == 0))
+        .expect("dual origin not found");
+
+    let (_heights, triangulation) = compute_frst_heights(&dual_triangulation_points, origin_idx)
+        .expect("failed to compute dual FRST triangulation");
+    let mut actual = triangulation.simplices().to_vec();
+    actual.sort();
+
+    let mut expected = read_csv_rows_usize(&data_dir.join("dual_simplices.dat"));
+    expected.sort();
+
+    assert_eq!(
+        dual_triangulation_points.len(),
+        9,
+        "dual triangulation should use origin plus non-facet-interior points"
+    );
+    assert_eq!(
+        actual, expected,
+        "Cyrus-computed dual FRST should match the McAllister dual_simplices.dat checkpoint"
     );
 }

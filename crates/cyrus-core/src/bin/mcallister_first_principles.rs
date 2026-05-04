@@ -196,6 +196,58 @@ fn validate_basis_checkpoint(
     eprintln!("[WARN] basis.dat is checkpoint-only; continuing with Cyrus computed basis");
 }
 
+fn sorted_point_coords(points: &[Point]) -> Vec<Vec<i64>> {
+    let mut coords: Vec<Vec<i64>> = points.iter().map(|point| point.coords().to_vec()).collect();
+    coords.sort();
+    coords
+}
+
+fn sorted_simplices(triangulation: &Triangulation) -> Vec<Vec<usize>> {
+    let mut simplices = triangulation.simplices().to_vec();
+    simplices.sort();
+    simplices
+}
+
+fn validate_dual_checkpoint(
+    dual_polytope: &Polytope,
+    dual_triangulation: &Triangulation,
+    data_dir: &str,
+) {
+    let dir = PathBuf::from(data_dir);
+    let expected_dual_points = read_points(&dir.join("dual_points.dat"));
+    let expected_dual_set = {
+        let mut points = expected_dual_points;
+        points.sort();
+        points
+    };
+    let actual_dual_set = sorted_point_coords(dual_polytope.vertices());
+    if actual_dual_set != expected_dual_set {
+        eprintln!("[ERROR] computed dual polytope points differ from dual_points.dat checkpoint");
+        std::process::exit(2);
+    }
+
+    let expected_simplices_i64 = read_points(&dir.join("dual_simplices.dat"));
+    let mut expected_simplices: Vec<Vec<usize>> = expected_simplices_i64
+        .into_iter()
+        .map(|row| {
+            row.into_iter()
+                .map(|value| {
+                    usize::try_from(value).expect("dual_simplices.dat index must be non-negative")
+                })
+                .collect()
+        })
+        .collect();
+    expected_simplices.sort();
+    let actual_simplices = sorted_simplices(dual_triangulation);
+    if actual_simplices != expected_simplices {
+        eprintln!("[ERROR] computed dual FRST differs from dual_simplices.dat checkpoint");
+        std::process::exit(2);
+    }
+    eprintln!(
+        "[INFO] computed dual polytope/FRST match dual_points.dat and dual_simplices.dat checkpoints"
+    );
+}
+
 fn read_points(path: &PathBuf) -> Vec<Vec<i64>> {
     let content = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
@@ -241,16 +293,6 @@ struct TargetVolumesInput {
 #[derive(Debug, Deserialize)]
 struct BasisOverride {
     indices: Vec<usize>,
-}
-
-#[derive(Debug, Deserialize)]
-struct DualPointsFixture {
-    points: Vec<Vec<i64>>,
-}
-
-#[derive(Debug, Deserialize)]
-struct DualSimplicesFixture {
-    simplices: Vec<Vec<usize>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -467,38 +509,6 @@ fn load_primal_inputs(data_dir: Option<&str>, manifest_dir: &PathBuf) -> (Vec<Ve
     )
 }
 
-fn load_dual_inputs(
-    data_dir: Option<&str>,
-    manifest_dir: &PathBuf,
-) -> (Vec<Vec<i64>>, Vec<Vec<usize>>) {
-    data_dir.map_or_else(
-        || {
-            eprintln!("[WARN] using dual points/simplices JSON fixtures");
-            let dual_points_path =
-                manifest_dir.join("tests/mcallister_e2e/overrides/dual_points.json");
-            let dual_points: DualPointsFixture = load_json(&dual_points_path);
-            let dual_simplices_path =
-                manifest_dir.join("tests/mcallister_e2e/overrides/dual_simplices.json");
-            let dual_simplices: DualSimplicesFixture = load_json(&dual_simplices_path);
-            (dual_points.points, dual_simplices.simplices)
-        },
-        |dir| {
-            let dir = PathBuf::from(dir);
-            let points = read_points(&dir.join("dual_points.dat"));
-            let simplices_i64 = read_points(&dir.join("dual_simplices.dat"));
-            let simplices = simplices_i64
-                .into_iter()
-                .map(|row| {
-                    row.into_iter()
-                        .map(|v| usize::try_from(v).expect("simplex index must be non-negative"))
-                        .collect::<Vec<usize>>()
-                })
-                .collect();
-            (points, simplices)
-        },
-    )
-}
-
 fn load_flux_vectors(data_dir: Option<&str>, manifest_dir: &PathBuf) -> (Vec<i64>, Vec<i64>) {
     data_dir.map_or_else(
         || {
@@ -513,15 +523,6 @@ fn load_flux_vectors(data_dir: Option<&str>, manifest_dir: &PathBuf) -> (Vec<i64
             (k, m)
         },
     )
-}
-
-fn simplex_point_count(simplices: &[Vec<usize>]) -> usize {
-    simplices
-        .iter()
-        .flatten()
-        .copied()
-        .max()
-        .map_or(0, |idx| idx + 1)
 }
 
 fn transform_i64_coordinates(
@@ -838,23 +839,28 @@ fn select_dual_basis(override_opt: Option<&BasisOverride>, computed: Vec<usize>)
 fn stage_flat_direction(
     data_dir: Option<&str>,
     manifest_dir: &PathBuf,
+    geom: &PrimalGeom,
     allow_invalid_ek0: bool,
     dual_basis_override: Option<&BasisOverride>,
     t0: &Instant,
 ) -> FlatDirectionData {
-    let (dual_points_raw, dual_simplices_raw) = load_dual_inputs(data_dir, manifest_dir);
-    let dual_all_points: Vec<Point> = dual_points_raw
+    let dual_polytope = geom
+        .polytope
+        .compute_dual()
+        .expect("Failed to compute dual polytope");
+    let dual_points_vec = dual_polytope
+        .points_not_interior_to_facets()
+        .expect("Failed to filter dual triangulation points");
+    let dual_origin_idx = dual_points_vec
         .iter()
-        .map(|coords| Point::new(coords.clone()))
-        .collect();
-    let dual_polytope = Polytope::from_vertices(dual_all_points).expect("Failed dual polytope");
-    let triangulation_point_count = simplex_point_count(&dual_simplices_raw);
-    let dual_points_vec: Vec<Point> = dual_points_raw
-        .iter()
-        .take(triangulation_point_count)
-        .map(|coords| Point::new(coords.clone()))
-        .collect();
-    let dual_triangulation = Triangulation::new(dual_simplices_raw);
+        .position(|point| point.coords().iter().all(|&coord| coord == 0))
+        .expect("dual origin not found in triangulation points");
+    let (_dual_heights, dual_triangulation) =
+        cyrus_core::compute_frst_heights(&dual_points_vec, dual_origin_idx)
+            .expect("Failed to compute dual FRST");
+    if let Some(dir) = data_dir {
+        validate_dual_checkpoint(&dual_polytope, &dual_triangulation, dir);
+    }
     let (dual_glsm, dual_linrel, dual_basis_auto) =
         compute_glsm_and_linrels(&dual_points_vec).expect("Failed dual GLSM");
     let dual_basis = select_dual_basis(None, dual_basis_auto);
@@ -1685,6 +1691,7 @@ fn run_pipeline(args: PipelineArgs) {
     let flat = stage_flat_direction(
         data_dir,
         &manifest_dir,
+        &geom,
         args.allow_invalid_ek0,
         args.dual_basis_override.as_ref(),
         &t0,
