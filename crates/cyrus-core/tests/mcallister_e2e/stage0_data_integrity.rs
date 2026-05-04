@@ -131,6 +131,16 @@ fn fixtures_enabled() -> bool {
     true
 }
 
+fn runner_heavy_enabled() -> bool {
+    if std::env::var_os("CYRUS_MCALLISTER_RUNNER_HEAVY").is_none() {
+        eprintln!(
+            "Skipping full first-principles runner test (set CYRUS_MCALLISTER_RUNNER_HEAVY=1)"
+        );
+        return false;
+    }
+    true
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ArtifactUse {
     DeclaredInput,
@@ -520,6 +530,89 @@ fn stage0_mcallister_binaries_do_not_use_validation_replay_artifacts() {
             }
         }
     }
+}
+
+#[test]
+fn stage0_first_principles_runner_accepts_declared_inputs_only_data_dir() {
+    if !crate::first_principles_enabled() || !runner_heavy_enabled() {
+        return;
+    }
+    let Some(source_dir) = require_data_dir() else {
+        return;
+    };
+
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let workspace_root = manifest_dir.join("../..");
+    let runner = std::env::var_os("CYRUS_MCALLISTER_RUNNER_BIN")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| workspace_root.join("target/release/mcallister_first_principles"));
+    if !runner.exists() {
+        eprintln!(
+            "Skipping declared-input runner test (build release runner or set CYRUS_MCALLISTER_RUNNER_BIN)"
+        );
+        return;
+    }
+
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("system time should be after UNIX_EPOCH")
+        .as_nanos();
+    let temp_dir = std::env::temp_dir().join(format!(
+        "cyrus-mcallister-declared-inputs-{}-{stamp}",
+        std::process::id()
+    ));
+    std::fs::create_dir(&temp_dir)
+        .unwrap_or_else(|e| panic!("Failed to create {}: {e}", temp_dir.display()));
+    for file in [
+        "points.dat",
+        "heights.dat",
+        "K_vec.dat",
+        "M_vec.dat",
+        "kklt_basis.dat",
+        "target_volumes.dat",
+    ] {
+        std::fs::copy(source_dir.join(file), temp_dir.join(file))
+            .unwrap_or_else(|e| panic!("Failed to copy declared input {file}: {e}"));
+    }
+
+    let output = std::process::Command::new(&runner)
+        .current_dir(&workspace_root)
+        .arg("--data-dir")
+        .arg(&temp_dir)
+        .arg("--kklt-steps")
+        .arg("64")
+        .output()
+        .unwrap_or_else(|e| panic!("failed to run {}: {e}", runner.display()));
+    let _ = std::fs::remove_dir_all(&temp_dir);
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "first-principles runner failed with status {:?}\nstderr:\n{}",
+        output.status.code(),
+        stderr
+    );
+    for checkpoint in [
+        "basis.dat checkpoint not found",
+        "dual_points.dat checkpoint not found",
+        "dual_simplices.dat checkpoint not found",
+        "g_s.dat checkpoint not found",
+        "W_0.dat checkpoint not found",
+        "corrected_cy_vol.dat checkpoint not found",
+    ] {
+        assert!(
+            stderr.contains(checkpoint),
+            "declared-input run should skip missing validation checkpoint {checkpoint}:\n{stderr}"
+        );
+    }
+    assert!(
+        stderr.contains("[RESULT] V_string = 4711.504666573377"),
+        "declared-input run should reach the current no-replay V_string result:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("[RESULT] log10(|V0|) = -202.26279591106547"),
+        "declared-input run should reach the current no-replay V0 result:\n{stderr}"
+    );
 }
 
 #[test]
