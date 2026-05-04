@@ -380,15 +380,17 @@ fn stage5_gv_computation_roadmap() {
     struct GvComputationRoadmap {
         status: &'static str,
         /// Bitmask of completed components:
-        /// cygv=1, mori=2, grading=4, pipeline=8, small-toric-curves=16.
+        /// cygv=1, mori=2, grading=4, pipeline=8, small-toric-curves=16,
+        /// small-toric-gvs=32.
         completed_components: u8,
         verified_components: Vec<&'static str>,
         remaining_gaps: Vec<&'static str>,
     }
 
     // Components: cygv integrated (1), mori cap (2), grading vector (4),
-    // one-off pipeline wiring (8), small toric curve checkpoint (16).
-    let completed = 1u8 | 2 | 4 | 8 | 16;
+    // one-off pipeline wiring (8), small toric curve checkpoint (16),
+    // small toric curve GV checkpoint (32).
+    let completed = 1u8 | 2 | 4 | 8 | 16 | 32;
 
     let roadmap = GvComputationRoadmap {
         status: "In Progress - Cyrus computes GV inputs, McAllister-sized validation is expensive",
@@ -410,6 +412,7 @@ fn stage5_gv_computation_roadmap() {
             "DDM preserves ray orientation when normalizing primitive integer rays; sign-flipping was a correctness bug and is now unit-tested",
             "compute_gv_invariants wraps cygv::compute_gv_rat_threefold",
             "McAllister 4-214-647 small toric curve classes are computed from Cyrus Mori-cap rays and pair-decomposable pruning",
+            "McAllister 4-214-647 small toric curve GV values are computed from toric two-face/origin-circuit formulas and match small_curves_gv.dat as a checkpoint",
             "first-principles binaries do not load small_curves.dat or small_curves_gv.dat",
         ],
         remaining_gaps: vec![
@@ -417,8 +420,7 @@ fn stage5_gv_computation_roadmap() {
             "Further optimize or replace hyperplane dualization; bounded diagnostics still need to prove the full 561658-ray McAllister dualization completes with the corrected ray orientation",
             "Reduce the 561658-ray Mori cap input before dualization, or add a CYTools/PPL-faithful constraint minimization path",
             "Run and validate lattice-point generation under a Python environment with OR-Tools after DDM returns the dual cone",
-            "Compute the GV values for the 344 McAllister small toric curves from first principles instead of using small_curves_gv.dat",
-            "Add an explicit expensive checkpoint test comparing computed small GV values to McAllister data",
+            "Implement a first-principles KKLT branch-selection/search path that reaches the McAllister small-curve branch without loading kahler_param.dat as a seed",
         ],
     };
 
