@@ -332,6 +332,18 @@ struct BranchReportSummary {
     selected_jacobian_rank: usize,
     selected_jacobian_max_rank: usize,
     selected_jacobian_condition_number: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    selected_small_curve_ambient_rays: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    selected_small_curve_subcutoff_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    selected_small_curve_filtered_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    selected_small_curve_toric_gv_covered_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    selected_small_curve_toric_gv_missing_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    selected_small_curve_first_missing_class: Option<Vec<i64>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -354,6 +366,28 @@ struct BranchReportBranch {
     t_phase1: Vec<f64>,
     tau_phase1: Vec<f64>,
     tau_phase1_target: Vec<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    small_curve_ambient_rays: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    small_curve_subcutoff_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    small_curve_filtered_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    small_curve_toric_gv_covered_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    small_curve_toric_gv_missing_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    small_curve_first_missing_class: Option<Vec<i64>>,
+}
+
+#[derive(Clone, Debug)]
+struct BranchGvCoverage {
+    ambient_rays: usize,
+    subcutoff_count: usize,
+    filtered_count: usize,
+    toric_gv_covered_count: usize,
+    toric_gv_missing_count: usize,
+    first_missing_class: Option<Vec<i64>>,
 }
 
 struct BranchReportContext {
@@ -1030,11 +1064,79 @@ fn pos_values(values: &[F64<Pos>]) -> Vec<f64> {
     values.iter().map(|value| value.get()).collect()
 }
 
+fn compute_branch_gv_coverages(
+    geom: &PrimalGeom,
+    intersection: &PrimalIntersection,
+    branches_by_volume: &[cyrus_core::KkltBranchSolution],
+    small_curve_cutoff: F64<Pos>,
+) -> Result<Vec<BranchGvCoverage>, String> {
+    let ambient_rays = compute_mori_cone_cap_rays(
+        &geom.triangulation,
+        &geom.triangulation_points,
+        &geom.polytope,
+        false,
+        false,
+        None,
+    )
+    .map_err(|e| format!("failed to compute primal ambient Mori-cap rays: {e}"))?;
+
+    let toric_gvs = compute_toric_two_face_curve_gv_invariants(
+        &geom.triangulation,
+        &geom.triangulation_points,
+        &geom.polytope,
+    )
+    .map_err(|e| format!("failed to compute primal toric curve GV values: {e}"))?;
+    let gv_by_class: HashMap<Vec<i64>, malachite::Integer> = toric_gvs
+        .into_iter()
+        .map(|item| (item.class, item.gv))
+        .collect();
+
+    branches_by_volume
+        .iter()
+        .map(|branch| {
+            let small_curve_candidates = subcutoff_toric_curve_candidates(
+                &ambient_rays,
+                &intersection.basis,
+                &branch.result.t,
+                small_curve_cutoff,
+            )
+            .map_err(|e| format!("failed to select branch small toric curve candidates: {e}"))?;
+            let small_curves =
+                remove_pair_decomposable_curve_candidates(&small_curve_candidates)
+                    .map_err(|e| format!("failed to prune branch pair-decomposable curves: {e}"))?;
+
+            let mut toric_gv_covered_count = 0usize;
+            let mut toric_gv_missing_count = 0usize;
+            let mut first_missing_class = None;
+            for curve in &small_curves {
+                if gv_by_class.contains_key(&curve.class) {
+                    toric_gv_covered_count += 1;
+                } else {
+                    toric_gv_missing_count += 1;
+                    if first_missing_class.is_none() {
+                        first_missing_class = Some(curve.class.clone());
+                    }
+                }
+            }
+
+            Ok(BranchGvCoverage {
+                ambient_rays: ambient_rays.len(),
+                subcutoff_count: small_curve_candidates.len(),
+                filtered_count: small_curves.len(),
+                toric_gv_covered_count,
+                toric_gv_missing_count,
+                first_missing_class,
+            })
+        })
+        .collect()
+}
+
 fn write_branch_report_jsonl(
     path: &PathBuf,
     ctx: &BranchReportContext,
     branches_by_volume: &[cyrus_core::KkltBranchSolution],
     t_initializations: &[Vec<F64<Finite>>],
+    branch_gv_coverages: Option<&[BranchGvCoverage]>,
 ) -> Result<(), String> {
     let Some(selected) = branches_by_volume.get(ctx.selected_rank_by_volume) else {
         return Err(format!(
@@ -1043,6 +1145,17 @@ fn write_branch_report_jsonl(
             branches_by_volume.len()
         ));
     };
+    if let Some(coverages) = branch_gv_coverages
+        && coverages.len() != branches_by_volume.len()
+    {
+        return Err(format!(
+            "branch GV coverage rows {} do not match branch rows {}",
+            coverages.len(),
+            branches_by_volume.len()
+        ));
+    }
+    let selected_gv_coverage =
+        branch_gv_coverages.and_then(|coverages| coverages.get(ctx.selected_rank_by_volume));
 
     let positive_volume = branches_by_volume.len();
     let mut lines = String::new();
@@ -1066,6 +1179,18 @@ fn write_branch_report_jsonl(
             .jacobian_diagnostics
             .condition_number
             .map(|value| value.get()),
+        selected_small_curve_ambient_rays: selected_gv_coverage
+            .map(|coverage| coverage.ambient_rays),
+        selected_small_curve_subcutoff_count: selected_gv_coverage
+            .map(|coverage| coverage.subcutoff_count),
+        selected_small_curve_filtered_count: selected_gv_coverage
+            .map(|coverage| coverage.filtered_count),
+        selected_small_curve_toric_gv_covered_count: selected_gv_coverage
+            .map(|coverage| coverage.toric_gv_covered_count),
+        selected_small_curve_toric_gv_missing_count: selected_gv_coverage
+            .map(|coverage| coverage.toric_gv_missing_count),
+        selected_small_curve_first_missing_class: selected_gv_coverage
+            .and_then(|coverage| coverage.first_missing_class.clone()),
     };
     lines.push_str(&serde_json::to_string(&summary).map_err(|e| e.to_string())?);
     lines.push('\n');
@@ -1078,6 +1203,7 @@ fn write_branch_report_jsonl(
                 t_initializations.len()
             ));
         };
+        let gv_coverage = branch_gv_coverages.and_then(|coverages| coverages.get(rank_by_volume));
         let row = BranchReportBranch {
             record_type: "positive_branch",
             branch_seed: ctx.branch_seed,
@@ -1102,6 +1228,15 @@ fn write_branch_report_jsonl(
             t_phase1: finite_values(&branch.result.t),
             tau_phase1: finite_values(&branch.result.tau),
             tau_phase1_target: pos_values(&branch.result.tau_target),
+            small_curve_ambient_rays: gv_coverage.map(|coverage| coverage.ambient_rays),
+            small_curve_subcutoff_count: gv_coverage.map(|coverage| coverage.subcutoff_count),
+            small_curve_filtered_count: gv_coverage.map(|coverage| coverage.filtered_count),
+            small_curve_toric_gv_covered_count: gv_coverage
+                .map(|coverage| coverage.toric_gv_covered_count),
+            small_curve_toric_gv_missing_count: gv_coverage
+                .map(|coverage| coverage.toric_gv_missing_count),
+            small_curve_first_missing_class: gv_coverage
+                .and_then(|coverage| coverage.first_missing_class.clone()),
         };
         lines.push_str(&serde_json::to_string(&row).map_err(|e| e.to_string())?);
         lines.push('\n');
@@ -1345,6 +1480,16 @@ fn stage_volume(
             let small_curve_selection_t = best_branch.result.t.clone();
             if let Some(path) = branch_report_path {
                 let report_path = PathBuf::from(path);
+                let branch_gv_coverages = compute_branch_gv_coverages(
+                    geom,
+                    intersection,
+                    &positive_branches,
+                    small_curve_cutoff,
+                )
+                .unwrap_or_else(|e| {
+                    eprintln!("[ERROR] failed to compute branch GV coverage report data: {e}");
+                    std::process::exit(2);
+                });
                 let ctx = BranchReportContext {
                     branch_seed,
                     branch_selection,
@@ -1360,6 +1505,7 @@ fn stage_volume(
                     &ctx,
                     &positive_branches,
                     &t_initializations,
+                    Some(&branch_gv_coverages),
                 )
                 .unwrap_or_else(|e| {
                     eprintln!(
