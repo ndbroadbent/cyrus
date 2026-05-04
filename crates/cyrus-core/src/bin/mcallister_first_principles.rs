@@ -77,6 +77,7 @@ const DEFAULT_CORRECTED_CHAMBER_LP_FACE_LATTICE_GENERATOR_LIMIT: usize = 64;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_LATTICE_ELEMENT_LIMIT: usize = 50_000;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_INTEGER_DECOMPOSITION_MAX_TERMS: usize = 3;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_INTEGER_DECOMPOSITION_MAX_WITNESSES: usize = 8;
+const DEFAULT_CORRECTED_CHAMBER_COVERED_GV_DIVISOR_REPRESENTATION_CLASS_LIMIT: usize = 24;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Stage {
@@ -497,6 +498,8 @@ struct ChamberGvDiagnostic {
     missing_required_degree_min: Option<i128>,
     missing_required_degree_max: Option<i128>,
     missing_target_stats: Option<MissingGvTargetStats>,
+    covered_toric_gv_divisor_representation_baseline:
+        Option<CoveredToricGvDivisorRepresentationBaseline>,
     covered_gv_volume_correction: Option<F64<Finite>>,
     gv_volume_correction: Option<F64<Finite>>,
 }
@@ -552,6 +555,29 @@ struct CmsGeneralDivisorIntersectionCheck {
     solution_is_integral: Option<bool>,
     computed_other_normal_degree: Option<String>,
     matches_inferred_other_normal_degree: Option<bool>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CoveredToricGvDivisorRepresentationBaseline {
+    checked_class_count: usize,
+    class_limit: usize,
+    support_index_checks: usize,
+    classes_with_support_divisor_solution: usize,
+    first_without_support_divisor_solution: Option<Vec<(usize, i64)>>,
+    sample: Vec<CoveredToricGvDivisorRepresentationSample>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CoveredToricGvDivisorRepresentationSample {
+    ambient_nonzero: Vec<(usize, i64)>,
+    support_indices_with_solution: Vec<usize>,
+    support_indices_without_solution: Vec<usize>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct DivisorRepresentationSolution {
+    coefficients: Vec<malachite::Rational>,
+    other_normal_degree: malachite::Rational,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2319,42 +2345,9 @@ fn cms_general_divisor_intersection_check(
     kappa_full: &cyrus_core::Intersection,
     basis: &[usize],
 ) -> Result<CmsGeneralDivisorIntersectionCheck, String> {
-    if ambient_class.len() != kappa_full.dim() {
-        return Err(format!(
-            "CMS divisor check curve dimension {} does not match intersection dimension {}",
-            ambient_class.len(),
-            kappa_full.dim()
-        ));
-    }
     let i = candidate.shrinking_divisor_index;
-    if i >= kappa_full.dim() {
-        return Err(format!(
-            "CMS divisor check shrinking divisor index {i} is out of bounds for dimension {}",
-            kappa_full.dim()
-        ));
-    }
-    for &basis_idx in basis {
-        if basis_idx >= kappa_full.dim() {
-            return Err(format!(
-                "CMS divisor check basis index {basis_idx} is out of bounds for dimension {}",
-                kappa_full.dim()
-            ));
-        }
-    }
-
-    let matrix: Vec<Vec<malachite::Rational>> = (0..kappa_full.dim())
-        .map(|row_idx| {
-            basis
-                .iter()
-                .map(|&basis_idx| kappa_full.get(row_idx, i, basis_idx).get().clone())
-                .collect()
-        })
-        .collect();
-    let rhs: Vec<malachite::Rational> = ambient_class
-        .iter()
-        .map(|&coefficient| malachite::Rational::from(coefficient))
-        .collect();
-    let Some(solution) = solve_rational_linear_system(&matrix, &rhs)? else {
+    let Some(solution) = divisor_representation_solution(ambient_class, i, kappa_full, basis)?
+    else {
         return Ok(CmsGeneralDivisorIntersectionCheck {
             shrinking_divisor_index: i,
             has_rational_divisor_solution: false,
@@ -2364,18 +2357,140 @@ fn cms_general_divisor_intersection_check(
             matches_inferred_other_normal_degree: None,
         });
     };
-    let support_len = solution.iter().filter(|value| **value != 0).count();
-    let solution_is_integral = solution.iter().all(rational_is_integer);
-    let computed_m = divisor_square_against_point(kappa_full, i, basis, &solution)?;
+    let support_len = solution
+        .coefficients
+        .iter()
+        .filter(|value| **value != 0)
+        .count();
+    let solution_is_integral = solution.coefficients.iter().all(rational_is_integer);
     let inferred_m = malachite::Rational::from(candidate.inferred_other_normal_degree);
     Ok(CmsGeneralDivisorIntersectionCheck {
         shrinking_divisor_index: i,
         has_rational_divisor_solution: true,
         solution_basis_support_len: Some(support_len),
         solution_is_integral: Some(solution_is_integral),
-        computed_other_normal_degree: Some(computed_m.to_string()),
-        matches_inferred_other_normal_degree: Some(computed_m == inferred_m),
+        computed_other_normal_degree: Some(solution.other_normal_degree.to_string()),
+        matches_inferred_other_normal_degree: Some(solution.other_normal_degree == inferred_m),
     })
+}
+
+fn compute_covered_toric_gv_divisor_representation_baseline(
+    covered_classes: &[(Vec<i64>, malachite::Integer)],
+    origin_idx: usize,
+    kappa_full: &cyrus_core::Intersection,
+    basis: &[usize],
+    class_limit: usize,
+) -> Result<Option<CoveredToricGvDivisorRepresentationBaseline>, String> {
+    if covered_classes.is_empty() {
+        return Ok(None);
+    }
+    if class_limit == 0 {
+        return Ok(None);
+    }
+
+    let mut support_index_checks = 0usize;
+    let mut classes_with_support_divisor_solution = 0usize;
+    let mut first_without_support_divisor_solution = None;
+    let mut sample = Vec::new();
+    let mut checked_class_count = 0usize;
+    for (ambient_class, _) in covered_classes.iter().take(class_limit) {
+        checked_class_count += 1;
+        let mut support_indices_with_solution = Vec::new();
+        let mut support_indices_without_solution = Vec::new();
+        for (point_idx, &coefficient) in ambient_class.iter().enumerate() {
+            if coefficient == 0 || point_idx == origin_idx {
+                continue;
+            }
+            support_index_checks += 1;
+            if divisor_representation_solution(ambient_class, point_idx, kappa_full, basis)?
+                .is_some()
+            {
+                support_indices_with_solution.push(point_idx);
+            } else {
+                support_indices_without_solution.push(point_idx);
+            }
+        }
+        if support_indices_with_solution.is_empty() {
+            first_without_support_divisor_solution
+                .get_or_insert_with(|| nonzero_entries_i64(ambient_class));
+        } else {
+            classes_with_support_divisor_solution += 1;
+        }
+        if sample.len() < 8 {
+            sample.push(CoveredToricGvDivisorRepresentationSample {
+                ambient_nonzero: nonzero_entries_i64(ambient_class),
+                support_indices_with_solution,
+                support_indices_without_solution,
+            });
+        }
+    }
+
+    Ok(Some(CoveredToricGvDivisorRepresentationBaseline {
+        checked_class_count,
+        class_limit,
+        support_index_checks,
+        classes_with_support_divisor_solution,
+        first_without_support_divisor_solution,
+        sample,
+    }))
+}
+
+fn covered_toric_gv_divisor_representation_class_limit() -> usize {
+    std::env::var("CYRUS_CORRECTED_CHAMBER_COVERED_GV_DIVISOR_REPRESENTATION_CLASS_LIMIT")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(DEFAULT_CORRECTED_CHAMBER_COVERED_GV_DIVISOR_REPRESENTATION_CLASS_LIMIT)
+}
+
+fn divisor_representation_solution(
+    ambient_class: &[i64],
+    point_idx: usize,
+    kappa_full: &cyrus_core::Intersection,
+    basis: &[usize],
+) -> Result<Option<DivisorRepresentationSolution>, String> {
+    if ambient_class.len() != kappa_full.dim() {
+        return Err(format!(
+            "divisor representation curve dimension {} does not match intersection dimension {}",
+            ambient_class.len(),
+            kappa_full.dim()
+        ));
+    }
+    if point_idx >= kappa_full.dim() {
+        return Err(format!(
+            "divisor representation point index {point_idx} is out of bounds for dimension {}",
+            kappa_full.dim()
+        ));
+    }
+    for &basis_idx in basis {
+        if basis_idx >= kappa_full.dim() {
+            return Err(format!(
+                "divisor representation basis index {basis_idx} is out of bounds for dimension {}",
+                kappa_full.dim()
+            ));
+        }
+    }
+
+    let matrix: Vec<Vec<malachite::Rational>> = (0..kappa_full.dim())
+        .map(|row_idx| {
+            basis
+                .iter()
+                .map(|&basis_idx| kappa_full.get(row_idx, point_idx, basis_idx).get().clone())
+                .collect()
+        })
+        .collect();
+    let rhs: Vec<malachite::Rational> = ambient_class
+        .iter()
+        .map(|&coefficient| malachite::Rational::from(coefficient))
+        .collect();
+    let Some(coefficients) = solve_rational_linear_system(&matrix, &rhs)? else {
+        return Ok(None);
+    };
+    let other_normal_degree =
+        divisor_square_against_point(kappa_full, point_idx, basis, &coefficients)?;
+    Ok(Some(DivisorRepresentationSolution {
+        coefficients,
+        other_normal_degree,
+    }))
 }
 
 fn divisor_square_against_point(
@@ -2476,6 +2591,14 @@ fn solve_rational_linear_system(
 
 fn rational_is_integer(value: &malachite::Rational) -> bool {
     value.denominator_ref() == &1u32
+}
+
+fn nonzero_entries_i64(values: &[i64]) -> Vec<(usize, i64)> {
+    values
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, &value)| (value != 0).then_some((idx, value)))
+        .collect()
 }
 
 fn cms_general_divisor_shape_candidates_for_witness(
@@ -3590,6 +3713,7 @@ fn diagnose_chamber_gv_volume_correction(
     let mut grading_for_missing = None;
     let mut degree_summary = None;
     let mut missing_target_stats = None;
+    let mut covered_toric_gv_divisor_representation_baseline = None;
     if !missing_gv_classes.is_empty() {
         let origin_idx = geom
             .triangulation_points
@@ -3620,6 +3744,14 @@ fn diagnose_chamber_gv_volume_correction(
             &corrected_kappa_full,
             &intersection.basis,
         )?;
+        covered_toric_gv_divisor_representation_baseline =
+            compute_covered_toric_gv_divisor_representation_baseline(
+                &small_curve_gvs,
+                origin_idx,
+                &corrected_kappa_full,
+                &intersection.basis,
+                covered_toric_gv_divisor_representation_class_limit(),
+            )?;
         let grading = compute_grading_vector(&basis_rays).ok_or_else(|| {
             "failed to compute corrected-chamber GV degree grading vector".to_string()
         })?;
@@ -4061,6 +4193,7 @@ fn diagnose_chamber_gv_volume_correction(
         missing_required_degree_min,
         missing_required_degree_max,
         missing_target_stats,
+        covered_toric_gv_divisor_representation_baseline,
         covered_gv_volume_correction,
         gv_volume_correction,
     })
@@ -4970,6 +5103,20 @@ fn stage_volume(
                 stats.sample
             );
         }
+        if let Some(baseline) = diag
+            .covered_toric_gv_divisor_representation_baseline
+            .as_ref()
+        {
+            eprintln!(
+                "[INFO] corrected-chamber covered toric GV divisor-representation baseline: checked_classes={} class_limit={} support_index_checks={} classes_with_support_solution={} first_without_support_solution={:?} sample={:?}",
+                baseline.checked_class_count,
+                baseline.class_limit,
+                baseline.support_index_checks,
+                baseline.classes_with_support_divisor_solution,
+                baseline.first_without_support_divisor_solution,
+                baseline.sample
+            );
+        }
         if let Some(first_missing) = &diag.first_missing_class {
             if let (Some(min_degree), Some(max_degree)) = (
                 diag.missing_required_degree_min,
@@ -5741,6 +5888,52 @@ mod tests {
                 solution_is_integral: Some(true),
                 computed_other_normal_degree: Some("1".to_string()),
                 matches_inferred_other_normal_degree: Some(true),
+            }
+        );
+    }
+
+    #[test]
+    fn covered_toric_gv_divisor_representation_baseline_checks_support_divisors() {
+        let mut kappa = cyrus_core::Intersection::new(3);
+        kappa.set(
+            2,
+            1,
+            1,
+            cyrus_core::types::rational::Rational::<Finite>::from_raw(malachite::Rational::from(4)),
+        );
+        kappa.set(
+            2,
+            2,
+            2,
+            cyrus_core::types::rational::Rational::<Finite>::from_raw(malachite::Rational::from(
+                -3,
+            )),
+        );
+        let covered_classes = vec![(vec![0, 4, -3], malachite::Integer::from(3))];
+
+        let baseline = compute_covered_toric_gv_divisor_representation_baseline(
+            &covered_classes,
+            0,
+            &kappa,
+            &[1, 2],
+            1,
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(
+            baseline,
+            CoveredToricGvDivisorRepresentationBaseline {
+                checked_class_count: 1,
+                class_limit: 1,
+                support_index_checks: 2,
+                classes_with_support_divisor_solution: 1,
+                first_without_support_divisor_solution: None,
+                sample: vec![CoveredToricGvDivisorRepresentationSample {
+                    ambient_nonzero: vec![(1, 4), (2, -3)],
+                    support_indices_with_solution: vec![1, 2],
+                    support_indices_without_solution: vec![],
+                }],
             }
         );
     }
