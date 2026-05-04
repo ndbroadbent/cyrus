@@ -21,9 +21,10 @@
 use std::path::Path;
 
 use cyrus_core::{
-    F64, Finite, Point, Polytope, compute_mori_cone_cap_rays, compute_regular_triangulation,
-    compute_toric_two_face_curve_gv_invariants, remove_pair_decomposable_curve_candidates,
-    subcutoff_toric_curve_candidates,
+    F64, Finite, Point, Polytope, compute_curve_basis_matrix, compute_glsm_and_linrels,
+    compute_mori_cone_cap_rays, compute_regular_triangulation,
+    compute_toric_two_face_curve_gv_invariants, effective_prime_divisors_from_curve_basis,
+    heights_to_kahler, remove_pair_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
 };
 
 fn read_csv_rows_i64(path: &Path) -> Vec<Vec<i64>> {
@@ -372,6 +373,114 @@ fn stage5_mcallister_small_toric_curve_gvs_match_checkpoint() {
     );
 }
 
+#[test]
+fn stage5_height_projected_kahler_matches_uncorrected_branch_checkpoint() {
+    if !require_first_principles() {
+        return;
+    }
+    let Some(data_dir) = crate::mcallister_data_dir() else {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    };
+
+    let points_raw = read_csv_rows_i64(&data_dir.join("points.dat"));
+    let heights = read_csv_finite(&data_dir.join("heights.dat"));
+    let basis = read_csv_usize(&data_dir.join("basis.dat"));
+    let mcallister_kahler = read_csv_finite(&data_dir.join("kahler_param.dat"));
+
+    let all_points: Vec<Point> = points_raw.into_iter().map(Point::new).collect();
+    let polytope = Polytope::from_vertices(all_points).expect("failed to create polytope");
+    let triangulation_points = polytope
+        .points_not_interior_to_facets()
+        .expect("failed to filter points");
+    let (_glsm, linrels, _computed_basis) =
+        compute_glsm_and_linrels(&triangulation_points).expect("failed to compute GLSM linrels");
+    let basis_non_origin = basis
+        .iter()
+        .map(|idx| idx.checked_sub(1).expect("basis should not contain origin"))
+        .collect::<Vec<_>>();
+    let curve_basis =
+        compute_curve_basis_matrix(&linrels, &basis).expect("failed to compute curve basis");
+    let prime_divisors = effective_prime_divisors_from_curve_basis(&curve_basis, &basis_non_origin)
+        .expect("failed to extract effective-cone rays");
+    let height_kahler = heights_to_kahler(&heights, &basis_non_origin, &prime_divisors)
+        .expect("failed to project heights to Kähler parameters");
+
+    assert_eq!(height_kahler.len(), mcallister_kahler.len());
+    let correlation = pearson_correlation(&height_kahler, &mcallister_kahler);
+    let relative_l2_error = relative_l2_error(&height_kahler, &mcallister_kahler);
+    let max_abs_error = max_abs_error(&height_kahler, &mcallister_kahler);
+    let negative_count = height_kahler
+        .iter()
+        .filter(|value| value.get() < 0.0)
+        .count();
+
+    #[derive(serde::Serialize)]
+    struct HeightKahlerDiagnostic {
+        dimension: usize,
+        negative_count: usize,
+        correlation_with_mcallister_uncorrected: f64,
+        relative_l2_error: f64,
+        max_abs_error: f64,
+        first_5: Vec<f64>,
+    }
+
+    let summary = HeightKahlerDiagnostic {
+        dimension: height_kahler.len(),
+        negative_count,
+        correlation_with_mcallister_uncorrected: correlation,
+        relative_l2_error,
+        max_abs_error,
+        first_5: height_kahler
+            .iter()
+            .take(5)
+            .map(|value| value.get())
+            .collect(),
+    };
+
+    insta::assert_json_snapshot!("height_projected_kahler_diagnostic", summary);
+    assert!(
+        relative_l2_error < 1e-12,
+        "height-projected Kähler point must reproduce kahler_param.dat checkpoint without loading it as input: rel_l2={relative_l2_error}"
+    );
+}
+
+fn pearson_correlation(lhs: &[F64<Finite>], rhs: &[F64<Finite>]) -> f64 {
+    assert_eq!(lhs.len(), rhs.len());
+    let n = lhs.len() as f64;
+    let lhs_mean = lhs.iter().map(|value| value.get()).sum::<f64>() / n;
+    let rhs_mean = rhs.iter().map(|value| value.get()).sum::<f64>() / n;
+    let mut numerator = 0.0;
+    let mut lhs_sq = 0.0;
+    let mut rhs_sq = 0.0;
+    for (l, r) in lhs.iter().zip(rhs.iter()) {
+        let dl = l.get() - lhs_mean;
+        let dr = r.get() - rhs_mean;
+        numerator += dl * dr;
+        lhs_sq += dl * dl;
+        rhs_sq += dr * dr;
+    }
+    numerator / (lhs_sq.sqrt() * rhs_sq.sqrt())
+}
+
+fn relative_l2_error(lhs: &[F64<Finite>], rhs: &[F64<Finite>]) -> f64 {
+    assert_eq!(lhs.len(), rhs.len());
+    let mut numerator = 0.0;
+    let mut denominator = 0.0;
+    for (l, r) in lhs.iter().zip(rhs.iter()) {
+        numerator += (l.get() - r.get()).powi(2);
+        denominator += r.get().powi(2);
+    }
+    numerator.sqrt() / denominator.sqrt()
+}
+
+fn max_abs_error(lhs: &[F64<Finite>], rhs: &[F64<Finite>]) -> f64 {
+    assert_eq!(lhs.len(), rhs.len());
+    lhs.iter()
+        .zip(rhs.iter())
+        .map(|(l, r)| (l.get() - r.get()).abs())
+        .fold(0.0, f64::max)
+}
+
 /// Document what's needed to compute GV invariants from scratch
 /// This test serves as a roadmap for the full implementation
 #[test]
@@ -413,6 +522,8 @@ fn stage5_gv_computation_roadmap() {
             "compute_gv_invariants wraps cygv::compute_gv_rat_threefold",
             "McAllister 4-214-647 small toric curve classes are computed from Cyrus Mori-cap rays and pair-decomposable pruning",
             "McAllister 4-214-647 small toric curve GV values are computed from toric two-face/origin-circuit formulas and match small_curves_gv.dat as a checkpoint",
+            "CYTools-style height projection from heights plus curve-basis effective-cone rows reproduces McAllister 4-214-647 kahler_param.dat exactly as an uncorrected-branch checkpoint",
+            "The no-replay runner reaches GV-corrected KKLT volume and V0 using the height-projected branch initializer, computed B-field gamma, and computed toric GV values",
             "first-principles binaries do not load small_curves.dat or small_curves_gv.dat",
         ],
         remaining_gaps: vec![
@@ -420,7 +531,6 @@ fn stage5_gv_computation_roadmap() {
             "Further optimize or replace hyperplane dualization; bounded diagnostics still need to prove the full 561658-ray McAllister dualization completes with the corrected ray orientation",
             "Reduce the 561658-ray Mori cap input before dualization, or add a CYTools/PPL-faithful constraint minimization path",
             "Run and validate lattice-point generation under a Python environment with OR-Tools after DDM returns the dual cone",
-            "Extend first-principles KKLT branch generation/ranking so branch search reaches the McAllister 344-small-curve branch without loading kahler_param.dat as a seed",
         ],
     };
 

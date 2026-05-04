@@ -140,9 +140,12 @@ fn real_dilog_series(x: f64) -> Option<f64> {
     None
 }
 
-fn real_dilog_unit_disk(x: f64) -> Option<f64> {
-    if !x.is_finite() || x.abs() >= 1.0 {
+fn real_dilog_real_axis(x: f64) -> Option<f64> {
+    if !x.is_finite() || x > 1.0 {
         return None;
+    }
+    if (x - 1.0).abs() <= f64::EPSILON {
+        return Some(PI * PI / 6.0);
     }
     if x.abs() < 1e-100 {
         return Some(0.0);
@@ -161,13 +164,28 @@ fn real_dilog_unit_disk(x: f64) -> Option<f64> {
     }
 }
 
+fn gv_dilog_from_curve_volume(q_dot_t: f64, parity: i128) -> Option<f64> {
+    if !q_dot_t.is_finite() || q_dot_t == 0.0 {
+        return None;
+    }
+    let sign = if parity.rem_euclid(2) == 0 { 1.0 } else { -1.0 };
+    let arg = sign * (-TWO_PI.get() * q_dot_t).exp();
+    if !arg.is_finite() || arg > 1.0 {
+        return None;
+    }
+    if arg.abs() < 1e-100 {
+        return Some(0.0);
+    }
+
+    real_dilog_real_axis(arg)
+}
+
 /// Compute the divisor GV correction
 /// `GV_i(t) = 1/(2π)^2 Σ_q q_i N_q Li_2((-1)^(γ·q) exp(-2π q·t))`.
 ///
 /// Returns `None` if dimensions do not match, a GV integer cannot be represented
-/// as a finite `f64`, or any curve has non-positive `q·t`. The last condition is
-/// a physics failure for the intended use: the unit-disk dilogarithm expansion is
-/// only valid inside the Kähler cone where effective curve volumes are positive.
+/// as a finite `f64`, or the signed dilogarithm argument lies on the complex
+/// branch cut `arg > 1`.
 #[must_use]
 pub fn compute_gv_target_correction(
     gv_invariants: &[(Vec<i32>, Integer)],
@@ -190,9 +208,6 @@ pub fn compute_gv_target_correction(
             .zip(t.iter())
             .map(|(&qi, ti)| f64::from(qi) * ti.get())
             .sum::<f64>();
-        if !q_dot_t.is_finite() || q_dot_t <= 0.0 {
-            return None;
-        }
 
         let parity = gamma.map_or(0_i128, |g| {
             curve
@@ -201,13 +216,10 @@ pub fn compute_gv_target_correction(
                 .map(|(&qi, gi)| i128::from(qi) * i128::from(gi.get()))
                 .sum::<i128>()
         });
-        let sign = if parity.rem_euclid(2) == 0 { 1.0 } else { -1.0 };
-        let arg = sign * (-TWO_PI.get() * q_dot_t).exp();
-        if arg.abs() < 1e-100 {
+        let dilog = gv_dilog_from_curve_volume(q_dot_t, parity)?;
+        if dilog == 0.0 {
             continue;
         }
-
-        let dilog = real_dilog_unit_disk(arg)?;
         let invariant_f = invariant.to_string().parse::<f64>().ok()?;
         if !invariant_f.is_finite() {
             return None;
@@ -290,9 +302,6 @@ pub fn compute_gv_target_correction_for_divisors(
             .zip(t.iter())
             .map(|(&qi, ti)| f64::from(qi) * ti.get())
             .sum::<f64>();
-        if !q_dot_t.is_finite() || q_dot_t <= 0.0 {
-            return None;
-        }
 
         let parity = gamma.map_or(0_i128, |g| {
             curve
@@ -301,13 +310,10 @@ pub fn compute_gv_target_correction_for_divisors(
                 .map(|(&qi, gi)| i128::from(qi) * i128::from(gi.get()))
                 .sum::<i128>()
         });
-        let sign = if parity.rem_euclid(2) == 0 { 1.0 } else { -1.0 };
-        let arg = sign * (-TWO_PI.get() * q_dot_t).exp();
-        if arg.abs() < 1e-100 {
+        let dilog = gv_dilog_from_curve_volume(q_dot_t, parity)?;
+        if dilog == 0.0 {
             continue;
         }
-
-        let dilog = real_dilog_unit_disk(arg)?;
         let invariant_f = invariant.to_string().parse::<f64>().ok()?;
         if !invariant_f.is_finite() {
             return None;
@@ -365,8 +371,15 @@ pub fn compute_gv_target_correction_for_ambient_curves(
     }
 
     let mut correction = vec![0.0f64; kklt_basis.len()];
-    for (curve, invariant) in gv_invariants {
+    let debug = kklt_debug_enabled();
+    for (curve_index, (curve, invariant)) in gv_invariants.iter().enumerate() {
         if curve.len() != ambient_dim {
+            if debug {
+                eprintln!(
+                    "[KKLT] ambient GV curve {curve_index} has dimension {}, expected {ambient_dim}",
+                    curve.len()
+                );
+            }
             return None;
         }
 
@@ -375,9 +388,6 @@ pub fn compute_gv_target_correction_for_ambient_curves(
             .zip(t.iter())
             .map(|(&idx, ti)| curve[idx] as f64 * ti.get())
             .sum::<f64>();
-        if !q_dot_t.is_finite() || q_dot_t <= 0.0 {
-            return None;
-        }
 
         let parity = gamma.map_or(0_i128, |g| {
             basis
@@ -386,13 +396,20 @@ pub fn compute_gv_target_correction_for_ambient_curves(
                 .map(|(&idx, gi)| i128::from(curve[idx]) * i128::from(gi.get()))
                 .sum::<i128>()
         });
-        let sign = if parity.rem_euclid(2) == 0 { 1.0 } else { -1.0 };
-        let arg = sign * (-TWO_PI.get() * q_dot_t).exp();
-        if arg.abs() < 1e-100 {
+        let Some(dilog) = gv_dilog_from_curve_volume(q_dot_t, parity) else {
+            if debug {
+                let sign = if parity.rem_euclid(2) == 0 { 1.0 } else { -1.0 };
+                let arg = sign * (-TWO_PI.get() * q_dot_t).exp();
+                eprintln!(
+                    "[KKLT] ambient GV curve {curve_index} has invalid q.t={q_dot_t} parity={parity} arg={arg}; first coefficients={:?}",
+                    curve.iter().take(16).collect::<Vec<_>>()
+                );
+            }
+            return None;
+        };
+        if dilog == 0.0 {
             continue;
         }
-
-        let dilog = real_dilog_unit_disk(arg)?;
         let invariant_f = invariant.to_string().parse::<f64>().ok()?;
         if !invariant_f.is_finite() {
             return None;
@@ -1673,6 +1690,19 @@ mod tests {
         let negative = compute_gv_target_correction(&invariants, &t, Some(&gamma)).unwrap();
         let expected_negative = -0.448_414_206_923_646_2 / (4.0 * PI * PI);
         assert!((negative[0].get() - expected_negative).abs() < 1e-14);
+    }
+
+    #[test]
+    fn test_compute_gv_target_correction_accepts_real_negative_branch() {
+        let t = vec![finite_f64(-2.0_f64.ln() / (2.0 * PI))];
+        let invariants = vec![(vec![1], Integer::from(1))];
+        let gamma = vec![finite_i64(1)];
+
+        assert!(compute_gv_target_correction(&invariants, &t, None).is_none());
+
+        let correction = compute_gv_target_correction(&invariants, &t, Some(&gamma)).unwrap();
+        let expected = -1.436_746_366_883_680_8 / (4.0 * PI * PI);
+        assert!((correction[0].get() - expected).abs() < 1e-14);
     }
 
     #[test]

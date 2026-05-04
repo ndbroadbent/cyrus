@@ -1,0 +1,18 @@
+---
+source: crates/cyrus-core/tests/mcallister_e2e/stage5_gv.rs
+expression: summary
+---
+{
+  "dimension": 214,
+  "negative_count": 19,
+  "correlation_with_mcallister_uncorrected": 1.0000000000000002,
+  "relative_l2_error": 0.0,
+  "max_abs_error": 0.0,
+  "first_5": [
+    0.7382695471530951,
+    10.467851782744788,
+    0.46998321457721204,
+    68.48967675480708,
+    108.27404383857265
+  ]
+}

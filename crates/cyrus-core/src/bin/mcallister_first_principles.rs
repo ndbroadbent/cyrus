@@ -602,6 +602,52 @@ fn transform_kahler_to_computed_basis(
     transform_f64_coordinates(&transform, values, "Kähler")
 }
 
+fn compute_b_field_gamma_for_o7_divisors(
+    glsm: &[Vec<malachite::Integer>],
+    kklt_basis: &[usize],
+    c_i: &[I64<Pos>],
+) -> Vec<I64<Finite>> {
+    if kklt_basis.len() != c_i.len() {
+        eprintln!("[ERROR] KKLT basis and c_i length mismatch when computing B-field gamma");
+        std::process::exit(2);
+    }
+    if glsm.is_empty() {
+        eprintln!("[ERROR] GLSM matrix is empty when computing B-field gamma");
+        std::process::exit(2);
+    }
+    let ambient_dim = glsm[0].len();
+    if glsm.iter().any(|row| row.len() != ambient_dim) {
+        eprintln!("[ERROR] GLSM matrix is ragged when computing B-field gamma");
+        std::process::exit(2);
+    }
+
+    let mut gamma = vec![malachite::Integer::from(0); glsm.len()];
+    for (&divisor_idx, ci) in kklt_basis.iter().zip(c_i.iter()) {
+        if divisor_idx >= ambient_dim {
+            eprintln!(
+                "[ERROR] KKLT divisor index {divisor_idx} exceeds GLSM ambient dimension {ambient_dim}"
+            );
+            std::process::exit(2);
+        }
+        if ci.get() == 6 {
+            for (entry, row) in gamma.iter_mut().zip(glsm.iter()) {
+                *entry += &row[divisor_idx];
+            }
+        }
+    }
+
+    gamma
+        .into_iter()
+        .map(|value| {
+            let value = i64::try_from(&value).unwrap_or_else(|_| {
+                eprintln!("[ERROR] B-field gamma coordinate does not fit in i64");
+                std::process::exit(2);
+            });
+            I64::<Finite>::new(value)
+        })
+        .collect()
+}
+
 fn transform_i64_coordinates_transpose(
     transform: &[Vec<malachite::Integer>],
     values: &[i64],
@@ -1151,6 +1197,16 @@ fn stage_volume(
             eprintln!("[ERROR] failed to compute KKLT divisor chi: {e}");
             std::process::exit(2);
         });
+        let gamma = compute_b_field_gamma_for_o7_divisors(&intersection.glsm, &kklt_basis, &c_i);
+        let gamma_odd_count = gamma
+            .iter()
+            .filter(|value| value.get().rem_euclid(2) != 0)
+            .count();
+        eprintln!(
+            "[INFO] computed B-field gamma from O7 divisors: dim={} odd_entries={}",
+            gamma.len(),
+            gamma_odd_count
+        );
         eprintln!(
             "[WARN] corrected_kahler_param.dat remains validation-only replay and is not loaded without --allow-downstream-kahler."
         );
@@ -1160,7 +1216,7 @@ fn stage_volume(
             eprintln!("[ERROR] corrected KKLT target construction failed");
             std::process::exit(2);
         };
-        let zeroth_order = if branch_candidates == 0 {
+        let (zeroth_order, small_curve_selection_t) = if branch_candidates == 0 {
             let Some(result) = cyrus_core::kklt::solve_two_phase_mixed_basis_path_following(
                 &intersection.kappa_basis,
                 &intersection.kappa_full,
@@ -1173,7 +1229,8 @@ fn stage_volume(
                 eprintln!("[ERROR] zeroth-order mixed-basis KKLT path-following failed");
                 std::process::exit(2);
             };
-            result
+            let small_curve_selection_t = result.t.clone();
+            (result, small_curve_selection_t)
         } else {
             let tau_phase1: Vec<F64<Pos>> = c_i.iter().map(|ci| ci.to_f64()).collect();
             let Some(mut t_initializations) = generate_scaled_kklt_branch_initializations(
@@ -1278,6 +1335,7 @@ fn stage_volume(
                     }),
             };
             let best_branch = positive_branches[selected_rank_by_volume].clone();
+            let small_curve_selection_t = best_branch.result.t.clone();
             if let Some(path) = branch_report_path {
                 let report_path = PathBuf::from(path);
                 let ctx = BranchReportContext {
@@ -1338,7 +1396,7 @@ fn stage_volume(
                 );
                 std::process::exit(2);
             }
-            result
+            (result, small_curve_selection_t)
         };
         eprintln!(
             "[INFO] zeroth-order mixed-basis KKLT converged={} rel_err={}",
@@ -1360,7 +1418,7 @@ fn stage_volume(
         let small_curve_candidates = subcutoff_toric_curve_candidates(
             &ambient_rays,
             &intersection.basis,
-            &zeroth_order.t,
+            &small_curve_selection_t,
             small_curve_cutoff,
         )
         .unwrap_or_else(|e| {
@@ -1414,18 +1472,19 @@ fn stage_volume(
         );
 
         let mut corrected = zeroth_order;
+        let mut correction_source_t = small_curve_selection_t;
         let max_gv_iterations = 20usize;
         let gv_tolerance = 1e-10f64;
         let mut gv_converged = false;
         for iter in 0..max_gv_iterations {
-            let previous_t = corrected.t.clone();
+            let previous_t = correction_source_t.clone();
             let Some(gv_correction) =
                 cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
                     &small_curve_gvs,
                     &intersection.basis,
                     &kklt_basis,
                     &previous_t,
-                    None,
+                    Some(&gamma),
                 )
             else {
                 eprintln!(
@@ -1475,6 +1534,7 @@ fn stage_volume(
                 next.relative_error.get()
             );
             corrected = next;
+            correction_source_t = corrected.t.clone();
             if max_relative_step <= gv_tolerance {
                 gv_converged = true;
                 break;
