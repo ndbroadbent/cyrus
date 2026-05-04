@@ -534,6 +534,7 @@ fn stage5_gv_computation_roadmap() {
             "generated KKLT branch candidates now use one scaled-uniform baseline plus non-uniform deterministic random starts instead of wasting the prefix on equivalent scaled-uniform duplicates",
             "Intersection iteration is key-sorted for deterministic floating-point accumulation; repeated no-height 48-candidate branch reports are byte-identical for the same seed",
             "mcallister_first_principles supports --branch-selection min-toric-gv-missing to rank generated positive branches by computed small-curve toric GV coverage before falling back to volume",
+            "branch-report JSONL can include bounded samples of missing small-curve classes via --branch-report-missing-limit for formula-classification diagnostics",
         ],
         remaining_gaps: vec![
             "Generated branch candidates without the height_projected initializer still did not find the 4-214-647 paper branch in a deterministic 48-candidate diagnostic: the lowest sampled phase-1 volume was about 20611 rather than 17901, and even coverage-aware selection still had at least 412 small curves missing toric GV coverage",
