@@ -13,7 +13,8 @@
 //! - `--branch-report-jsonl path` to export positive phase-1 branch candidates
 //!   discovered by that search for GA/debug ranking.
 //! - `--branch-report-missing-limit N` to include up to N missing small-curve
-//!   classes per branch in the JSONL report.
+//!   classes per branch in the JSONL report. GV-enriched reports also include
+//!   the required grading-degree range for missing classes.
 //! - `--branch-report-decomposition-depth N` to diagnose missing small-curve
 //!   classes that are sums of up to N selected raw candidates. Currently N
 //!   may be at most 3.
@@ -364,6 +365,10 @@ struct BranchReportSummary {
     #[serde(skip_serializing_if = "Option::is_none")]
     selected_small_curve_first_missing_class: Option<Vec<i64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    selected_small_curve_missing_required_degree_min: Option<i128>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    selected_small_curve_missing_required_degree_max: Option<i128>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     selected_small_curve_missing_class_sample: Option<Vec<Vec<i64>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     selected_small_curve_missing_bounded_decomposition_max_terms: Option<usize>,
@@ -407,6 +412,10 @@ struct BranchReportBranch {
     #[serde(skip_serializing_if = "Option::is_none")]
     small_curve_first_missing_class: Option<Vec<i64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    small_curve_missing_required_degree_min: Option<i128>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    small_curve_missing_required_degree_max: Option<i128>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     small_curve_missing_class_sample: Option<Vec<Vec<i64>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     small_curve_missing_bounded_decomposition_max_terms: Option<usize>,
@@ -424,6 +433,8 @@ struct BranchGvCoverage {
     toric_gv_covered_count: usize,
     toric_gv_missing_count: usize,
     first_missing_class: Option<Vec<i64>>,
+    missing_required_degree_min: Option<i128>,
+    missing_required_degree_max: Option<i128>,
     missing_class_sample: Vec<Vec<i64>>,
     bounded_decomposition_max_terms: Option<usize>,
     missing_bounded_decomposable_count: Option<usize>,
@@ -1135,6 +1146,7 @@ fn compute_branch_gv_coverages(
     small_curve_cutoff: F64<Pos>,
     missing_class_sample_limit: usize,
     bounded_decomposition_max_terms: Option<usize>,
+    include_required_degree_summary: bool,
 ) -> Result<Vec<BranchGvCoverage>, String> {
     let ambient_rays = compute_mori_cone_cap_rays(
         &geom.triangulation,
@@ -1156,6 +1168,23 @@ fn compute_branch_gv_coverages(
         .into_iter()
         .map(|item| (item.class, item.gv))
         .collect();
+    let required_degree_grading = if include_required_degree_summary {
+        let basis_rays = compute_mori_cone_cap_rays(
+            &geom.triangulation,
+            &geom.triangulation_points,
+            &geom.polytope,
+            true,
+            false,
+            Some(&intersection.basis),
+        )
+        .map_err(|e| format!("failed to compute primal basis Mori-cap rays: {e}"))?;
+        Some(
+            compute_grading_vector(&basis_rays)
+                .ok_or_else(|| "failed to compute branch GV degree grading vector".to_string())?,
+        )
+    } else {
+        None
+    };
 
     branches_by_volume
         .iter()
@@ -1180,6 +1209,7 @@ fn compute_branch_gv_coverages(
             let mut toric_gv_covered_count = 0usize;
             let mut toric_gv_missing_count = 0usize;
             let mut first_missing_class = None;
+            let mut missing_classes = Vec::new();
             let mut missing_class_sample = Vec::new();
             let mut missing_bounded_decomposable_count = 0usize;
             let mut first_missing_bounded_decomposition = None;
@@ -1191,6 +1221,7 @@ fn compute_branch_gv_coverages(
                     if first_missing_class.is_none() {
                         first_missing_class = Some(curve.class.clone());
                     }
+                    missing_classes.push(curve.class.clone());
                     if missing_class_sample.len() < missing_class_sample_limit {
                         missing_class_sample.push(curve.class.clone());
                     }
@@ -1211,6 +1242,20 @@ fn compute_branch_gv_coverages(
                     }
                 }
             }
+            let (missing_required_degree_min, missing_required_degree_max) = if let Some(grading) =
+                required_degree_grading.as_ref()
+                && !missing_classes.is_empty()
+            {
+                let summary = summarize_required_gv_degrees(
+                    &missing_classes,
+                    &intersection.basis,
+                    grading,
+                    None,
+                )?;
+                (Some(summary.min_degree), Some(summary.max_degree))
+            } else {
+                (None, None)
+            };
 
             Ok(BranchGvCoverage {
                 ambient_rays: ambient_rays.len(),
@@ -1219,6 +1264,8 @@ fn compute_branch_gv_coverages(
                 toric_gv_covered_count,
                 toric_gv_missing_count,
                 first_missing_class,
+                missing_required_degree_min,
+                missing_required_degree_max,
                 missing_class_sample,
                 bounded_decomposition_max_terms,
                 missing_bounded_decomposable_count: bounded_decomposition_max_terms
@@ -1500,6 +1547,10 @@ fn write_branch_report_jsonl(
             .map(|coverage| coverage.toric_gv_missing_count),
         selected_small_curve_first_missing_class: selected_gv_coverage
             .and_then(|coverage| coverage.first_missing_class.clone()),
+        selected_small_curve_missing_required_degree_min: selected_gv_coverage
+            .and_then(|coverage| coverage.missing_required_degree_min),
+        selected_small_curve_missing_required_degree_max: selected_gv_coverage
+            .and_then(|coverage| coverage.missing_required_degree_max),
         selected_small_curve_missing_class_sample: selected_gv_coverage.and_then(|coverage| {
             (!coverage.missing_class_sample.is_empty())
                 .then(|| coverage.missing_class_sample.clone())
@@ -1564,6 +1615,10 @@ fn write_branch_report_jsonl(
                 .map(|coverage| coverage.toric_gv_missing_count),
             small_curve_first_missing_class: gv_coverage
                 .and_then(|coverage| coverage.first_missing_class.clone()),
+            small_curve_missing_required_degree_min: gv_coverage
+                .and_then(|coverage| coverage.missing_required_degree_min),
+            small_curve_missing_required_degree_max: gv_coverage
+                .and_then(|coverage| coverage.missing_required_degree_max),
             small_curve_missing_class_sample: gv_coverage.and_then(|coverage| {
                 (!coverage.missing_class_sample.is_empty())
                     .then(|| coverage.missing_class_sample.clone())
@@ -1845,6 +1900,7 @@ fn stage_volume(
                     branch_report_missing_limit,
                     (branch_report_decomposition_depth > 0)
                         .then_some(branch_report_decomposition_depth),
+                    branch_report_path.is_some(),
                 )
                 .unwrap_or_else(|e| {
                     eprintln!("[ERROR] failed to compute branch GV coverage for selection: {e}");
@@ -1970,6 +2026,7 @@ fn stage_volume(
                             branch_report_missing_limit,
                             (branch_report_decomposition_depth > 0)
                                 .then_some(branch_report_decomposition_depth),
+                            true,
                         )
                         .unwrap_or_else(|e| {
                             eprintln!(
@@ -2487,6 +2544,8 @@ mod tests {
                 toric_gv_covered_count: 3,
                 toric_gv_missing_count: 1,
                 first_missing_class: Some(vec![1]),
+                missing_required_degree_min: None,
+                missing_required_degree_max: None,
                 missing_class_sample: vec![vec![1]],
                 bounded_decomposition_max_terms: None,
                 missing_bounded_decomposable_count: None,
@@ -2499,6 +2558,8 @@ mod tests {
                 toric_gv_covered_count: 3,
                 toric_gv_missing_count: 2,
                 first_missing_class: Some(vec![2]),
+                missing_required_degree_min: None,
+                missing_required_degree_max: None,
                 missing_class_sample: vec![vec![2]],
                 bounded_decomposition_max_terms: None,
                 missing_bounded_decomposable_count: None,
@@ -2511,6 +2572,8 @@ mod tests {
                 toric_gv_covered_count: 5,
                 toric_gv_missing_count: 1,
                 first_missing_class: Some(vec![3]),
+                missing_required_degree_min: None,
+                missing_required_degree_max: None,
                 missing_class_sample: vec![vec![3]],
                 bounded_decomposition_max_terms: None,
                 missing_bounded_decomposable_count: None,
@@ -2533,6 +2596,8 @@ mod tests {
             toric_gv_covered_count: 3,
             toric_gv_missing_count: 1,
             first_missing_class: Some(vec![1]),
+            missing_required_degree_min: None,
+            missing_required_degree_max: None,
             missing_class_sample: vec![vec![1]],
             bounded_decomposition_max_terms: None,
             missing_bounded_decomposable_count: None,
