@@ -526,10 +526,21 @@ struct MissingGvTargetSample {
     origin_circuit_pattern: Option<String>,
     origin_circuit_witness_count: Option<usize>,
     origin_circuit_first_witness: Option<OriginCircuitWitnessSample>,
+    cms_general_divisor_shape_candidates: Option<Vec<CmsGeneralDivisorShapeCandidate>>,
     real_cone_decomposable_by_other_generators: bool,
     real_cone_decomposition_active_generators: Option<usize>,
     ambient_nonzero: Vec<(usize, i64)>,
     basis_nonzero: Vec<(usize, i64)>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CmsGeneralDivisorShapeCandidate {
+    shrinking_divisor_index: usize,
+    shrinking_divisor_coefficient: i64,
+    shrinking_divisor_coordinates: Vec<i64>,
+    inferred_other_normal_degree: i64,
+    toric_gv1_formula_value: Option<i64>,
+    all_non_origin_relation_points_are_two_face: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1932,6 +1943,9 @@ fn missing_gv_target_stats(
         let origin_circuit_first_witness = origin_circuit_diagnostic
             .and_then(|diagnostic| diagnostic.witnesses.first())
             .map(origin_circuit_witness_sample);
+        let cms_general_divisor_shape_candidates = origin_circuit_diagnostic
+            .map(cms_general_divisor_shape_candidates)
+            .filter(|candidates| !candidates.is_empty());
         min_generators = min_generators.min(generators_le_degree);
         max_generators = max_generators.max(generators_le_degree);
         if sample.len() < sample_limit {
@@ -1942,6 +1956,7 @@ fn missing_gv_target_stats(
                 origin_circuit_pattern: origin_circuit_pattern_label,
                 origin_circuit_witness_count,
                 origin_circuit_first_witness,
+                cms_general_divisor_shape_candidates,
                 real_cone_decomposable_by_other_generators: real_cone_decomposable,
                 real_cone_decomposition_active_generators,
                 ambient_nonzero: ambient_class
@@ -2237,6 +2252,51 @@ fn origin_circuit_witness_sample(
             })
             .collect(),
     }
+}
+
+fn cms_general_divisor_shape_candidates(
+    diagnostic: &cyrus_core::OriginCircuitCurveDiagnostic,
+) -> Vec<CmsGeneralDivisorShapeCandidate> {
+    diagnostic
+        .witnesses
+        .iter()
+        .flat_map(cms_general_divisor_shape_candidates_for_witness)
+        .collect()
+}
+
+fn cms_general_divisor_shape_candidates_for_witness(
+    witness: &cyrus_core::OriginCircuitCurveWitness,
+) -> Vec<CmsGeneralDivisorShapeCandidate> {
+    let all_non_origin_relation_points_are_two_face = witness
+        .relation_points
+        .iter()
+        .filter(|point| point.point_index != 0)
+        .all(|point| point.face_dimension == Some(2));
+    witness
+        .relation_points
+        .iter()
+        .filter(|point| point.point_index != 0 && point.coefficient < 0)
+        .map(|point| {
+            let inferred_other_normal_degree = -2 - point.coefficient;
+            CmsGeneralDivisorShapeCandidate {
+                shrinking_divisor_index: point.point_index,
+                shrinking_divisor_coefficient: point.coefficient,
+                shrinking_divisor_coordinates: point.coordinates.clone(),
+                inferred_other_normal_degree,
+                toric_gv1_formula_value: toric_gv1_formula_value(inferred_other_normal_degree),
+                all_non_origin_relation_points_are_two_face,
+            }
+        })
+        .collect()
+}
+
+fn toric_gv1_formula_value(m: i64) -> Option<i64> {
+    let magnitude = m + 2;
+    if magnitude < 0 {
+        return None;
+    }
+    let sign = if (m + 1).rem_euclid(2) == 0 { 1 } else { -1 };
+    Some(sign * magnitude)
 }
 
 fn project_ambient_curve_to_basis(
@@ -5285,6 +5345,7 @@ mod tests {
                     origin_circuit_pattern: None,
                     origin_circuit_witness_count: None,
                     origin_circuit_first_witness: None,
+                    cms_general_divisor_shape_candidates: None,
                     real_cone_decomposable_by_other_generators: true,
                     real_cone_decomposition_active_generators: Some(2),
                     ambient_nonzero: vec![(1, 1), (2, 1)],
@@ -5297,12 +5358,72 @@ mod tests {
                     origin_circuit_pattern: None,
                     origin_circuit_witness_count: None,
                     origin_circuit_first_witness: None,
+                    cms_general_divisor_shape_candidates: None,
                     real_cone_decomposable_by_other_generators: true,
                     real_cone_decomposition_active_generators: Some(1),
                     ambient_nonzero: vec![(1, 2)],
                     basis_nonzero: vec![(0, 2)]
                 }
             ]
+        );
+    }
+
+    #[test]
+    fn cms_general_divisor_shape_candidates_report_negative_two_face_divisors() {
+        let witness = cyrus_core::OriginCircuitCurveWitness {
+            class: vec![-1, 0, 2, 1, 1, -3],
+            first_facet_exclusive_point: 3,
+            second_facet_exclusive_point: 4,
+            shared_two_simplex: vec![2, 5, 1],
+            first_facet: vec![1, 2, 3, 5],
+            second_facet: vec![1, 2, 4, 5],
+            sparse_relation: vec![(0, -1), (2, 2), (3, 1), (4, 1), (5, -3)],
+            relation_points: vec![
+                cyrus_core::OriginCircuitRelationPoint {
+                    point_index: 0,
+                    coefficient: -1,
+                    coordinates: vec![0, 0, 0, 0],
+                    face_dimension: Some(4),
+                },
+                cyrus_core::OriginCircuitRelationPoint {
+                    point_index: 2,
+                    coefficient: 2,
+                    coordinates: vec![1, 2, 2, 2],
+                    face_dimension: Some(2),
+                },
+                cyrus_core::OriginCircuitRelationPoint {
+                    point_index: 3,
+                    coefficient: 1,
+                    coordinates: vec![2, 2, 1, 2],
+                    face_dimension: Some(2),
+                },
+                cyrus_core::OriginCircuitRelationPoint {
+                    point_index: 4,
+                    coefficient: 1,
+                    coordinates: vec![2, 3, 1, 3],
+                    face_dimension: Some(2),
+                },
+                cyrus_core::OriginCircuitRelationPoint {
+                    point_index: 5,
+                    coefficient: -3,
+                    coordinates: vec![2, 3, 2, 3],
+                    face_dimension: Some(2),
+                },
+            ],
+        };
+
+        let candidates = cms_general_divisor_shape_candidates_for_witness(&witness);
+
+        assert_eq!(
+            candidates,
+            vec![CmsGeneralDivisorShapeCandidate {
+                shrinking_divisor_index: 5,
+                shrinking_divisor_coefficient: -3,
+                shrinking_divisor_coordinates: vec![2, 3, 2, 3],
+                inferred_other_normal_degree: 1,
+                toric_gv1_formula_value: Some(3),
+                all_non_origin_relation_points_are_two_face: true,
+            }]
         );
     }
 
