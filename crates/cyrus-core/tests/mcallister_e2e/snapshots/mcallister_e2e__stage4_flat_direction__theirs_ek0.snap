@@ -5,11 +5,11 @@ expression: snapshot
 {
   "value": 0.2343929955,
   "basis_used": [
-    3,
-    4,
     5,
+    6,
+    7,
     8
   ],
   "mcallister_expected": 0.234393,
-  "note": "Using McAllister's dual basis override - must match exactly"
+  "note": "Using McAllister flux basis transformed into Cyrus' computed dual basis"
 }
