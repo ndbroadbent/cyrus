@@ -58,6 +58,7 @@ use cyrus_core::{
 };
 
 const DEFAULT_MCALLISTER_GV_MIN_POINTS: u32 = 20_000;
+const DEFAULT_CORRECTED_CHAMBER_GENERAL_GV_DIRECT_RAY_LIMIT: usize = 100_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Stage {
@@ -1563,20 +1564,6 @@ fn non_positive_basis_generator_degrees(
     Ok((count, first))
 }
 
-fn non_positive_grading_weights(grading: &[i64]) -> (usize, Option<(usize, i64)>) {
-    let mut count = 0usize;
-    let mut first = None;
-    for (idx, &weight) in grading.iter().enumerate() {
-        if weight <= 0 {
-            count += 1;
-            if first.is_none() {
-                first = Some((idx, weight));
-            }
-        }
-    }
-    (count, first)
-}
-
 fn write_branch_report_jsonl(
     path: &PathBuf,
     ctx: &BranchReportContext,
@@ -1923,12 +1910,14 @@ fn diagnose_chamber_gv_volume_correction(
         let grading = grading_for_missing
             .as_ref()
             .expect("grading computed for corrected-chamber missing curves");
-        let (non_positive_weight_count, first_non_positive_weight) =
-            non_positive_grading_weights(grading);
-        if let Some((idx, weight)) = first_non_positive_weight {
+        let direct_ray_limit = std::env::var("CYRUS_CORRECTED_CHAMBER_GENERAL_GV_DIRECT_RAY_LIMIT")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or(DEFAULT_CORRECTED_CHAMBER_GENERAL_GV_DIRECT_RAY_LIMIT);
+        if basis_rays.len() > direct_ray_limit {
             return Err(format!(
-                "corrected-chamber general GV fallback requires a positive coordinate grading vector for bounded lattice enumeration; found {non_positive_weight_count}/{} non-positive weights, first index={idx} weight={weight}",
-                grading.len()
+                "corrected-chamber general GV direct fallback would dualize {} Mori generators, exceeding limit {direct_ray_limit}; current backend computes cone hyperplanes by DDM before bounded lattice enumeration. Need a reduced corrected-chamber cone/lattice formulation, or set CYRUS_CORRECTED_CHAMBER_GENERAL_GV_DIRECT_RAY_LIMIT to force the direct attempt.",
+                basis_rays.len()
             ));
         }
         let (non_positive_count, first_non_positive) =
@@ -3379,14 +3368,6 @@ mod tests {
             non_positive_basis_generator_degrees(&[vec![1, 2, 3]], &[1, 1])
                 .unwrap_err()
                 .contains("basis ray length")
-        );
-    }
-
-    #[test]
-    fn non_positive_grading_weight_reports_first_bad_weight() {
-        assert_eq!(
-            non_positive_grading_weights(&[3, -1, 0, 2]),
-            (2, Some((1, -1)))
         );
     }
 }
