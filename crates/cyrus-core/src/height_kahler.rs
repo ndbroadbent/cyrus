@@ -7,6 +7,8 @@
 
 use std::collections::HashSet;
 
+use malachite::Integer;
+
 use crate::types::f64::F64;
 use crate::types::tags::Finite;
 
@@ -62,6 +64,50 @@ pub fn project_heights_to_kahler(
     with_origin.push(F64::<Finite>::ZERO);
     with_origin.extend(projected);
     Some(with_origin)
+}
+
+/// Extract CYTools-style non-basis prime-divisor rows from a curve-basis matrix.
+///
+/// CYTools builds the toric effective cone as
+/// `Cone(curve_basis(include_origin=False, as_matrix=True).T)`.  This helper
+/// performs the same transpose/exclusion step for the non-origin divisors that
+/// are not in the chosen basis, yielding rows suitable for
+/// [`project_heights_to_kahler`].
+#[must_use]
+pub fn effective_prime_divisors_from_curve_basis(
+    curve_basis: &[Vec<Integer>],
+    basis_non_origin: &[usize],
+) -> Option<Vec<Vec<F64<Finite>>>> {
+    if curve_basis.is_empty() || curve_basis.len() != basis_non_origin.len() {
+        return None;
+    }
+    let n_cols = curve_basis[0].len();
+    let non_origin_count = n_cols.checked_sub(1)?;
+    if curve_basis.iter().any(|row| row.len() != n_cols)
+        || basis_non_origin.iter().any(|&idx| idx >= non_origin_count)
+    {
+        return None;
+    }
+
+    let basis_set: HashSet<usize> = basis_non_origin.iter().copied().collect();
+    if basis_set.len() != basis_non_origin.len() {
+        return None;
+    }
+
+    let mut out = Vec::new();
+    for divisor_idx in 0..non_origin_count {
+        if basis_set.contains(&divisor_idx) {
+            continue;
+        }
+        let col = divisor_idx + 1;
+        let mut ray = Vec::with_capacity(curve_basis.len());
+        for row in curve_basis {
+            let value = i64::try_from(&row[col]).ok()?;
+            ray.push(F64::<Finite>::new(value as f64)?);
+        }
+        out.push(ray);
+    }
+    Some(out)
 }
 
 /// Project heights directly to the chosen Kähler basis coordinates.
@@ -140,6 +186,30 @@ mod tests {
         assert!((heights[1].get() - 12.0).abs() < 1e-12);
         assert!((heights[2].get() - 0.0).abs() < 1e-12);
         assert!((heights[3].get() + 5.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn effective_prime_divisors_are_transposed_nonbasis_curve_basis_columns() {
+        let curve_basis = vec![
+            vec![
+                Integer::from(0),
+                Integer::from(1),
+                Integer::from(2),
+                Integer::from(0),
+            ],
+            vec![
+                Integer::from(0),
+                Integer::from(0),
+                Integer::from(-3),
+                Integer::from(1),
+            ],
+        ];
+
+        let rays = effective_prime_divisors_from_curve_basis(&curve_basis, &[0, 2]).unwrap();
+
+        assert_eq!(rays.len(), 1);
+        assert!((rays[0][0].get() - 2.0).abs() < 1e-12);
+        assert!((rays[0][1].get() + 3.0).abs() < 1e-12);
     }
 
     #[test]
