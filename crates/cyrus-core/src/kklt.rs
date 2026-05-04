@@ -25,6 +25,9 @@ use std::collections::HashMap;
 use std::env;
 use std::f64::consts::PI;
 
+use malachite::Integer;
+use rand::{Rng, SeedableRng};
+
 use crate::f64_pos;
 use crate::intersection::Intersection;
 use crate::types::f64::F64;
@@ -32,7 +35,6 @@ use crate::types::i64::I64;
 use crate::types::physics::{CTau, DivisorVolume, RelativeError, StringCoupling};
 use crate::types::range::CheckedRange;
 use crate::types::tags::{Finite, NonNeg, Pos};
-use malachite::Integer;
 
 /// 2π as a typed positive constant.
 const TWO_PI: F64<Pos> = f64_pos!(2.0 * PI);
@@ -835,6 +837,138 @@ pub fn solve_mixed_basis_path_following_branch_candidates(
     }
 
     out
+}
+
+/// Generate deterministic KKLT branch initializations from a random seed.
+///
+/// The patterns mirror the Python branch-search experiments: scaled uniform
+/// starts, positive random starts, sparse large directions, log-uniform starts,
+/// and contiguous cluster starts. Each candidate is rescaled, when possible,
+/// so the mean absolute initial divisor volume is comparable to the target
+/// divisor-volume scale. The caller still evaluates every candidate explicitly;
+/// this function does not choose or discard a branch.
+#[must_use]
+pub fn generate_scaled_kklt_branch_initializations(
+    kappa_basis: &Intersection,
+    kappa_all: &Intersection,
+    basis: &[usize],
+    kklt_basis: &[usize],
+    tau_target: &[DivisorVolume],
+    count: usize,
+    seed: u64,
+) -> Option<Vec<Vec<F64<Finite>>>> {
+    let dim = basis.len();
+    if dim == 0
+        || kappa_basis.dim() != dim
+        || tau_target.len() != kklt_basis.len()
+        || kklt_basis.iter().any(|&idx| idx >= kappa_all.dim())
+    {
+        return None;
+    }
+
+    let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+    let mut out = Vec::with_capacity(count);
+    let uniform_scales = [0.1, 0.5, 1.0, 2.0, 5.0, 10.0];
+    for scale in uniform_scales.into_iter().take(count) {
+        let raw = vec![F64::<Finite>::new(scale).expect("finite scale"); dim];
+        out.push(scale_branch_initialization_to_target(
+            kappa_basis,
+            kappa_all,
+            basis,
+            kklt_basis,
+            tau_target,
+            &raw,
+        )?);
+    }
+
+    while out.len() < count {
+        let pattern = rng.gen_range(0..5);
+        let raw = match pattern {
+            0 => {
+                let scale = 10.0_f64.powf(rng.gen_range(-0.5..1.5));
+                vec![F64::<Finite>::new(scale)?; dim]
+            }
+            1 => {
+                let scale = 10.0_f64.powf(rng.gen_range(-0.5..1.5));
+                (0..dim)
+                    .map(|_| F64::<Finite>::new(standard_normal(&mut rng).abs() * scale + 0.1))
+                    .collect::<Option<Vec<_>>>()?
+            }
+            2 => {
+                let mut t = vec![F64::<Finite>::new(0.1).expect("finite"); dim];
+                let n_large = rng.gen_range(1..=usize::max(1, dim / 10));
+                for _ in 0..n_large {
+                    let idx = rng.gen_range(0..dim);
+                    t[idx] = F64::<Finite>::new(rng.gen_range(1.0..25.0))?;
+                }
+                t
+            }
+            3 => (0..dim)
+                .map(|_| F64::<Finite>::new(10.0_f64.powf(rng.gen_range(-0.5..1.5))))
+                .collect::<Option<Vec<_>>>()?,
+            _ => {
+                let mut t = vec![F64::<Finite>::new(0.5).expect("finite"); dim];
+                let cluster_size = usize::max(1, dim / 4);
+                let start = if cluster_size >= dim {
+                    0
+                } else {
+                    rng.gen_range(0..=(dim - cluster_size))
+                };
+                for entry in t.iter_mut().skip(start).take(cluster_size) {
+                    *entry = F64::<Finite>::new(rng.gen_range(5.0..20.0))?;
+                }
+                t
+            }
+        };
+        out.push(scale_branch_initialization_to_target(
+            kappa_basis,
+            kappa_all,
+            basis,
+            kklt_basis,
+            tau_target,
+            &raw,
+        )?);
+    }
+
+    Some(out)
+}
+
+fn scale_branch_initialization_to_target(
+    kappa_basis: &Intersection,
+    kappa_all: &Intersection,
+    basis: &[usize],
+    kklt_basis: &[usize],
+    tau_target: &[DivisorVolume],
+    t: &[F64<Finite>],
+) -> Option<Vec<F64<Finite>>> {
+    let tau_init = compute_kklt_divisor_volumes(kappa_basis, kappa_all, basis, kklt_basis, t)?;
+    let mean_tau_init =
+        tau_init.iter().map(|entry| entry.get().abs()).sum::<f64>() / tau_init.len() as f64;
+    let mean_tau_target = tau_target
+        .iter()
+        .map(|entry| entry.get().abs())
+        .sum::<f64>()
+        / tau_target.len() as f64;
+    if !mean_tau_init.is_finite()
+        || !mean_tau_target.is_finite()
+        || mean_tau_init <= 0.0
+        || mean_tau_target <= 0.0
+    {
+        return Some(t.to_vec());
+    }
+
+    let scale = (mean_tau_target / mean_tau_init).sqrt();
+    if !scale.is_finite() || !(0.01..100.0).contains(&scale) {
+        return Some(t.to_vec());
+    }
+    let scale = F64::<Finite>::new(scale)?;
+    t.iter().map(|entry| Some(*entry * scale)).collect()
+}
+
+fn standard_normal<R: Rng + ?Sized>(rng: &mut R) -> f64 {
+    let u1 = rng.gen_range(f64::MIN_POSITIVE..1.0);
+    let u2 = rng.gen_range(0.0..1.0);
+    (-2.0 * u1.ln()).sqrt() * (2.0 * PI * u2).cos()
 }
 
 fn classical_volume_for_branch(kappa_basis: &Intersection, t: &[F64<Finite>]) -> Option<F64<Pos>> {
@@ -1792,6 +1926,67 @@ mod tests {
         assert_eq!(search.positive_volume[0].init_index, 0);
         assert!((search.positive_volume[0].result.t[0].get() - 2.0).abs() < 1e-4);
         assert!((search.positive_volume[0].classical_volume.get() - 8.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn test_branch_initialization_generation_is_seeded_and_scaled() {
+        let mut kappa_basis = Intersection::new(1);
+        kappa_basis.set(
+            0,
+            0,
+            0,
+            TypedRational::<Finite>::from_raw(Rational::from(6)),
+        );
+        let mut kappa_all = Intersection::new(2);
+        kappa_all.set(
+            1,
+            0,
+            0,
+            TypedRational::<Finite>::from_raw(Rational::from(6)),
+        );
+
+        let basis = vec![0];
+        let kklt_basis = vec![1];
+        let tau_target = vec![f64_pos!(12.0)];
+        let first = generate_scaled_kklt_branch_initializations(
+            &kappa_basis,
+            &kappa_all,
+            &basis,
+            &kklt_basis,
+            &tau_target,
+            8,
+            123,
+        )
+        .unwrap();
+        let second = generate_scaled_kklt_branch_initializations(
+            &kappa_basis,
+            &kappa_all,
+            &basis,
+            &kklt_basis,
+            &tau_target,
+            8,
+            123,
+        )
+        .unwrap();
+
+        assert_eq!(first, second);
+        assert_eq!(first.len(), 8);
+        assert!(first.iter().all(|candidate| candidate.len() == 1));
+        for candidate in first {
+            let tau = compute_kklt_divisor_volumes(
+                &kappa_basis,
+                &kappa_all,
+                &basis,
+                &kklt_basis,
+                &candidate,
+            )
+            .unwrap();
+            assert!(
+                (tau[0].get().abs() - 12.0).abs() < 1e-8,
+                "tau = {}",
+                tau[0].get()
+            );
+        }
     }
 
     #[test]
