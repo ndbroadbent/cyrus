@@ -62,6 +62,7 @@ expression: roadmap
     "Further optimize or replace hyperplane dualization; bounded diagnostics still need to prove the full 561658-ray McAllister dualization completes with the corrected ray orientation",
     "Do not promote degree-bounded generator filtering as an exact GV shortcut: a high-degree cone ray can still affect low-degree lattice points through fractional cone combinations, so exact bounded GV needs full inequalities or a proven reduced formulation",
     "The corrected-chamber provided-generator diagnostic with max_deg=26 and 2963 degree-bounded rows exceeded a 600-second timeout without producing a cygv result, so naive mcap_generators truncation is not a useful replacement for an exact reduced formulation",
+    "The corrected-chamber LP-face supporting-certificate diagnostic with default 16-anchor search exceeded a 300-second timeout before producing a certificate summary; the smaller 2-anchor sample still certified 0/9 faces",
     "Reduce the 561658-ray Mori cap input before dualization, or add a CYTools/PPL-faithful constraint minimization path",
     "Run and validate lattice-point generation under a Python environment with OR-Tools after DDM returns the dual cone"
   ]
