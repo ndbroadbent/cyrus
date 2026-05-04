@@ -418,6 +418,14 @@ fn stage0_first_principles_runner_does_not_silently_replay_downstream_outputs() 
             && stage_vacuum.contains("if !validate_mcallister_assertions"),
         "McAllister final assertion checks must be explicitly skippable for non-validation candidates"
     );
+    let stage_flat_direction =
+        source_region_before_fn(&runner, "stage_flat_direction", "sparse_i64");
+    assert!(
+        stage_flat_direction.contains("use_mcallister_flux_basis_default")
+            && stage_flat_direction.contains("using computed dual basis as flux coordinate basis")
+            && stage_flat_direction.contains("using McAllister flux source basis [3, 4, 5, 8]"),
+        "generic runs must not default to the McAllister flux source basis"
+    );
     let validate_basis =
         source_region_before_fn(&runner, "validate_basis_checkpoint", "sorted_point_coords");
     assert!(

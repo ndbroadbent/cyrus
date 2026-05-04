@@ -4,7 +4,9 @@
 //! invalid physics. This is intentionally a binary, not a test.
 //!
 //! Optional:
-//! - `--dual-basis path/to/dual_basis.json` to supply the flux coordinate basis.
+//! - `--dual-basis path/to/dual_basis.json` to supply the source coordinate
+//!   basis for K/M flux vectors. Without this, McAllister validation mode uses
+//!   the paper basis `[3, 4, 5, 8]`; generic mode uses Cyrus' computed dual basis.
 //! - `--allow-fixtures` to permit JSON fixture fallback when no data dir is set.
 //! - `--skip-mcallister-assertions` to run the computed pipeline without
 //!   comparing final observables to the 4-214-647 validation target.
@@ -1253,6 +1255,7 @@ fn stage_flat_direction(
     manifest_dir: &PathBuf,
     geom: &PrimalGeom,
     allow_invalid_ek0: bool,
+    use_mcallister_flux_basis_default: bool,
     dual_basis_override: Option<&BasisOverride>,
     t0: &Instant,
 ) -> FlatDirectionData {
@@ -1276,8 +1279,21 @@ fn stage_flat_direction(
     let (dual_glsm, dual_linrel, dual_basis_auto) =
         compute_glsm_and_linrels(&dual_points_vec).expect("Failed dual GLSM");
     let dual_basis = select_dual_basis(None, dual_basis_auto);
-    let flux_basis =
-        dual_basis_override.map_or_else(|| vec![3, 4, 5, 8], |basis| basis.indices.clone());
+    let flux_basis = dual_basis_override.map_or_else(
+        || {
+            if use_mcallister_flux_basis_default {
+                eprintln!("[INFO] using McAllister flux source basis [3, 4, 5, 8]");
+                vec![3, 4, 5, 8]
+            } else {
+                eprintln!("[INFO] using computed dual basis as flux coordinate basis");
+                dual_basis.clone()
+            }
+        },
+        |basis| {
+            eprintln!("[INFO] using explicit flux source basis from --dual-basis");
+            basis.indices.clone()
+        },
+    );
     let dual_points_i64: Vec<Vec<i64>> = dual_points_vec
         .iter()
         .map(|p| p.coords().to_vec())
@@ -6142,6 +6158,7 @@ fn run_pipeline(args: PipelineArgs) {
         &manifest_dir,
         &geom,
         args.allow_invalid_ek0,
+        args.validate_mcallister_assertions,
         args.dual_basis_override.as_ref(),
         &t0,
     );
