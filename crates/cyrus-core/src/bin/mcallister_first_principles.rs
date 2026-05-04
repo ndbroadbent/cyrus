@@ -80,6 +80,7 @@ const DEFAULT_CORRECTED_CHAMBER_LP_FACE_INTEGER_DECOMPOSITION_MAX_WITNESSES: usi
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_DECOMPOSITION_CLOSURE_ELEMENT_LIMIT: usize = 20_000;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE_RAY_LIMIT: usize = 1_000_000;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE_ANCHOR_ATTEMPTS: usize = 16;
+const DEFAULT_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE_CUTTING_ROUNDS: usize = 64;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE_SCALE_LIMIT: i64 = 100_000;
 const DEFAULT_CORRECTED_CHAMBER_COVERED_GV_DIVISOR_REPRESENTATION_CLASS_LIMIT: usize = 24;
 
@@ -3152,6 +3153,39 @@ fn solve_supporting_face_normal_lp(
     basis_rays: &[Vec<i64>],
     anchor: &[i64],
 ) -> Result<Option<Vec<f64>>, String> {
+    let max_rounds = std::env::var("CYRUS_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE_CUTTING_ROUNDS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(DEFAULT_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE_CUTTING_ROUNDS);
+    let mut enforced_ray_indices = Vec::new();
+    let mut enforced_ray_set = HashSet::new();
+    for _ in 0..max_rounds {
+        let Some(normal) = solve_supporting_face_normal_lp_with_enforced_rays(
+            face_generators,
+            basis_rays,
+            anchor,
+            &enforced_ray_indices,
+        )?
+        else {
+            return Ok(None);
+        };
+        let Some(violating_idx) = most_negative_lp_normal_violation(&normal, basis_rays) else {
+            return Ok(Some(normal));
+        };
+        if !enforced_ray_set.insert(violating_idx) {
+            return Ok(None);
+        }
+        enforced_ray_indices.push(violating_idx);
+    }
+    Ok(None)
+}
+
+fn solve_supporting_face_normal_lp_with_enforced_rays(
+    face_generators: &[Vec<i64>],
+    basis_rays: &[Vec<i64>],
+    anchor: &[i64],
+    enforced_ray_indices: &[usize],
+) -> Result<Option<Vec<f64>>, String> {
     let dim = anchor.len();
     let mut vars = ProblemVariables::new();
     let bound = 1.0e9;
@@ -3181,7 +3215,10 @@ fn solve_supporting_face_normal_lp(
     }
     model = model.with(anchor_expr.eq(1.0));
 
-    for ray in basis_rays {
+    for &ray_idx in enforced_ray_indices {
+        let ray = basis_rays.get(ray_idx).ok_or_else(|| {
+            format!("supporting-face enforced ray index {ray_idx} is out of bounds")
+        })?;
         let mut expr = Expression::from(0.0);
         for (var, &coefficient) in normal_vars.iter().zip(ray) {
             if coefficient != 0 {
@@ -3207,6 +3244,23 @@ fn solve_supporting_face_normal_lp(
     } else {
         Err("supporting-face normal LP returned a non-finite value".to_string())
     }
+}
+
+fn most_negative_lp_normal_violation(lp_normal: &[f64], basis_rays: &[Vec<i64>]) -> Option<usize> {
+    let mut worst_idx = None;
+    let mut worst_dot = -1.0e-7;
+    for (idx, ray) in basis_rays.iter().enumerate() {
+        let dot = lp_normal
+            .iter()
+            .zip(ray)
+            .map(|(&normal_coeff, &ray_coeff)| normal_coeff * ray_coeff as f64)
+            .sum::<f64>();
+        if dot < worst_dot {
+            worst_dot = dot;
+            worst_idx = Some(idx);
+        }
+    }
+    worst_idx
 }
 
 fn integer_supporting_face_certificate_from_lp(
