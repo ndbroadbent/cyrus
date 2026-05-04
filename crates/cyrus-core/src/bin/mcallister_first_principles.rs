@@ -72,6 +72,7 @@ use cyrus_core::{
 const DEFAULT_MCALLISTER_GV_MIN_POINTS: u32 = 20_000;
 const DEFAULT_CORRECTED_CHAMBER_GENERAL_GV_DIRECT_RAY_LIMIT: usize = 100_000;
 const DEFAULT_CORRECTED_CHAMBER_PROVIDED_GV_GENERATOR_LIMIT: usize = 2_000;
+const DEFAULT_CORRECTED_CHAMBER_LP_FACE_SPAN_GENERATOR_LIMIT: usize = 64;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Stage {
@@ -549,6 +550,8 @@ struct FaceGvDiagnosticSample {
     degree: i128,
     generator_count: usize,
     active_generator_count: usize,
+    span_generator_count: usize,
+    used_span_expansion: bool,
     gv: Option<malachite::Integer>,
     error: Option<String>,
     ambient_nonzero: Vec<(usize, i64)>,
@@ -560,6 +563,8 @@ struct FaceGvDiagnosticResult {
     degree: i128,
     generator_count: usize,
     active_generator_count: usize,
+    span_generator_count: usize,
+    used_span_expansion: bool,
     gv: Option<malachite::Integer>,
     error: Option<String>,
 }
@@ -2214,49 +2219,61 @@ fn compute_missing_lp_witness_face_gvs(
         provided_generators.push(basis_class.clone());
         provided_generators.sort();
         provided_generators.dedup();
-
-        let previous_panic_hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(|_| {}));
-        let gvs_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            cyrus_core::compute_gv_invariants_with_provided_generators(
-                &provided_generators,
-                grading,
-                q_matrix,
-                intnums,
-                None,
-                Some(max_deg),
-            )
-        }));
-        std::panic::set_hook(previous_panic_hook);
-
-        let (gv, error) = match gvs_result {
-            Ok(Ok(gvs)) => {
-                let target_i32 = basis_class
-                    .iter()
-                    .map(|&value| {
-                        i32::try_from(value).map_err(|_| {
-                            "LP-witness face GV target coordinate does not fit in i32".to_string()
-                        })
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                let gv = gvs
-                    .into_iter()
-                    .find_map(|(curve, gv)| (curve == target_i32).then_some(gv))
-                    .unwrap_or_else(|| malachite::Integer::from(0));
-                (Some(gv), None)
+        let span_generators =
+            degree_bounded_span_generators(&provided_generators, basis_rays, grading, degree)?;
+        let span_generator_count = span_generators.len();
+        let mut used_span_expansion = false;
+        let (gv, error) = match compute_provided_generator_target_gv(
+            &provided_generators,
+            &basis_class,
+            grading,
+            q_matrix,
+            intnums,
+            max_deg,
+            "LP-witness face",
+            ambient_class,
+        ) {
+            Ok(gv) => (Some(gv), None),
+            Err(first_error) => {
+                let span_limit =
+                    std::env::var("CYRUS_CORRECTED_CHAMBER_LP_FACE_SPAN_GENERATOR_LIMIT")
+                        .ok()
+                        .and_then(|value| value.parse::<usize>().ok())
+                        .unwrap_or(DEFAULT_CORRECTED_CHAMBER_LP_FACE_SPAN_GENERATOR_LIMIT);
+                if span_generators.len() > provided_generators.len()
+                    && span_generators.len() <= span_limit
+                {
+                    used_span_expansion = true;
+                    match compute_provided_generator_target_gv(
+                        &span_generators,
+                        &basis_class,
+                        grading,
+                        q_matrix,
+                        intnums,
+                        max_deg,
+                        "span-expanded LP-witness face",
+                        ambient_class,
+                    ) {
+                        Ok(gv) => (Some(gv), None),
+                        Err(second_error) => (
+                            None,
+                            Some(format!(
+                                "{first_error}; span-expanded retry also failed: {second_error}"
+                            )),
+                        ),
+                    }
+                } else if span_generators.len() > span_limit {
+                    (
+                        None,
+                        Some(format!(
+                            "{first_error}; span-expanded retry skipped because {} generators exceed limit {span_limit}",
+                            span_generators.len()
+                        )),
+                    )
+                } else {
+                    (None, Some(first_error))
+                }
             }
-            Ok(Err(e)) => (
-                None,
-                Some(format!("failed LP-witness face GV computation: {e}")),
-            ),
-            Err(payload) => (
-                None,
-                Some(format!(
-                    "LP-witness face GV computation panicked for target degree {degree}, ambient_nonzero={:?}: {}",
-                    sparse_i64(ambient_class),
-                    panic_payload_message(payload.as_ref())
-                )),
-            ),
         };
 
         out.push(FaceGvDiagnosticResult {
@@ -2264,11 +2281,119 @@ fn compute_missing_lp_witness_face_gvs(
             degree,
             generator_count: provided_generators.len(),
             active_generator_count: witness.active_generator_indices.len(),
+            span_generator_count,
+            used_span_expansion,
             gv,
             error,
         });
     }
     Ok(out)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn compute_provided_generator_target_gv(
+    provided_generators: &[Vec<i64>],
+    target_class: &[i64],
+    grading: &[i64],
+    q_matrix: &[Vec<i64>],
+    intnums: &cyrus_core::Intersection,
+    max_deg: u32,
+    label: &str,
+    ambient_class: &[i64],
+) -> Result<malachite::Integer, String> {
+    let target_i32 = target_class
+        .iter()
+        .map(|&value| {
+            i32::try_from(value)
+                .map_err(|_| format!("{label} GV target coordinate does not fit in i32"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let previous_panic_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let gvs_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        cyrus_core::compute_gv_invariants_with_provided_generators(
+            provided_generators,
+            grading,
+            q_matrix,
+            intnums,
+            None,
+            Some(max_deg),
+        )
+    }));
+    std::panic::set_hook(previous_panic_hook);
+
+    match gvs_result {
+        Ok(Ok(gvs)) => Ok(gvs
+            .into_iter()
+            .find_map(|(curve, gv)| (curve == target_i32).then_some(gv))
+            .unwrap_or_else(|| malachite::Integer::from(0))),
+        Ok(Err(e)) => Err(format!("failed {label} GV computation: {e}")),
+        Err(payload) => Err(format!(
+            "{label} GV computation panicked for ambient_nonzero={:?}: {}",
+            sparse_i64(ambient_class),
+            panic_payload_message(payload.as_ref())
+        )),
+    }
+}
+
+fn degree_bounded_span_generators(
+    seed_rows: &[Vec<i64>],
+    basis_rays: &[Vec<i64>],
+    grading: &[i64],
+    target_degree: i128,
+) -> Result<Vec<Vec<i64>>, String> {
+    if seed_rows.is_empty() {
+        return Ok(Vec::new());
+    }
+    let dim = seed_rows[0].len();
+    if dim != grading.len() {
+        return Err(format!(
+            "seed row dimension {dim} does not match grading vector length {}",
+            grading.len()
+        ));
+    }
+    if seed_rows.iter().any(|row| row.len() != dim) {
+        return Err("seed row dimensions are inconsistent".to_string());
+    }
+    let seed_rank = rational_rank_i64_rows(seed_rows);
+    let mut out = Vec::new();
+    for ray in basis_rays {
+        if ray.len() != dim {
+            return Err(format!(
+                "basis ray dimension {} does not match seed dimension {dim}",
+                ray.len()
+            ));
+        }
+        let degree = ray
+            .iter()
+            .zip(grading.iter())
+            .map(|(&coefficient, &weight)| i128::from(coefficient) * i128::from(weight))
+            .sum::<i128>();
+        if degree <= 0 || degree > target_degree {
+            continue;
+        }
+        let mut rows = seed_rows.to_vec();
+        rows.push(ray.clone());
+        if rational_rank_i64_rows(&rows) == seed_rank {
+            out.push(ray.clone());
+        }
+    }
+    out.sort();
+    out.dedup();
+    Ok(out)
+}
+
+fn rational_rank_i64_rows(rows: &[Vec<i64>]) -> usize {
+    let rational_rows = rows
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|&value| malachite::Rational::from(value))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    cyrus_core::integer_math::matrix_rank(&rational_rows)
 }
 
 fn panic_payload_message(payload: &(dyn std::any::Any + Send)) -> String {
@@ -2825,6 +2950,8 @@ fn diagnose_chamber_gv_volume_correction(
                 degree: result.degree,
                 generator_count: result.generator_count,
                 active_generator_count: result.active_generator_count,
+                span_generator_count: result.span_generator_count,
+                used_span_expansion: result.used_span_expansion,
                 gv: result.gv.clone(),
                 error: result.error.clone(),
                 ambient_nonzero: result
@@ -4607,6 +4734,20 @@ mod tests {
                 skipped_decomposable_generators: 1,
             }
         );
+    }
+
+    #[test]
+    fn degree_bounded_span_generator_count_uses_exact_rank() {
+        let count = degree_bounded_span_generators(
+            &[vec![1, 0]],
+            &[vec![1, 0], vec![2, 0], vec![0, 1], vec![1, 1]],
+            &[1, 1],
+            2,
+        )
+        .unwrap()
+        .len();
+
+        assert_eq!(count, 2);
     }
 }
 
