@@ -14,11 +14,14 @@ use std::path::{Path, PathBuf};
 
 use good_lp::{Expression, ProblemVariables, Solution, SolverModel, default_solver, variable};
 use malachite::Integer;
+use malachite::Rational;
 use malachite::num::arithmetic::traits::Abs;
 use nalgebra::{DMatrix, DVector, RowDVector};
 
 use crate::cone::Cone;
 use crate::error::{Error, Result};
+use crate::geometry::ConvexHull;
+use crate::integer_math::matrix_rank;
 use crate::integer_math::{gcd_integer, integer_kernel};
 use crate::intersection::Intersection;
 use crate::lattice::Point;
@@ -227,6 +230,15 @@ pub struct ToricCurveCandidate {
     pub volume: F64<Pos>,
 }
 
+/// A toric curve class with its genus-zero GV invariant.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ToricCurveGvInvariant {
+    /// Curve class in ambient divisor-intersection coordinates.
+    pub class: Vec<i64>,
+    /// Genus-zero GV invariant for this toric curve class.
+    pub gv: Integer,
+}
+
 /// Compute the volume of an ambient curve class from Kähler parameters in a divisor basis.
 pub fn curve_volume_in_divisor_basis(
     curve: &[i64],
@@ -331,6 +343,139 @@ pub fn remove_pair_decomposable_curve_candidates(
         .collect())
 }
 
+/// Compute genus-zero GV invariants for simple toric curve classes.
+///
+/// This implements the analytic formulas from Demirtas-Kim-McAllister-Moritz-
+/// Rios-Tascon, "Computational Mirror Symmetry", section 6. The supported
+/// classes are complete intersections `C_IJ = D_I cap D_J` where the edge
+/// `(I,J)` lies in a two-face of the reflexive polytope, plus origin circuits
+/// that realize the isolated resolved-conifold normal bundle
+/// `O(-1) + O(-1)`. The returned classes use the same ambient
+/// divisor-intersection coordinates as [`compute_mori_cone_cap_rays`] with
+/// `in_basis=false`.
+pub fn compute_toric_two_face_curve_gv_invariants(
+    tri: &Triangulation,
+    points: &[Point],
+    polytope: &Polytope,
+) -> Result<Vec<ToricCurveGvInvariant>> {
+    if points.is_empty() {
+        return Err(Error::InvalidInput("No points provided".into()));
+    }
+    if polytope.dim() != 4 {
+        return Err(Error::InvalidInput(
+            "toric two-face GV formulas are only implemented for 4D polytopes".into(),
+        ));
+    }
+
+    let pts_ext: Vec<Vec<i64>> = points
+        .iter()
+        .map(|p| {
+            let mut v = p.coords().to_vec();
+            v.push(1);
+            v
+        })
+        .collect();
+    let face_data = compute_two_face_data_4d(points, polytope)?;
+    let point_face_dims = classify_primal_point_face_dimensions(points, polytope)?;
+    let one_face_genera = compute_primal_one_face_genera(points, polytope, &point_face_dims)?;
+    let (facets, _) = compute_faces_4d(points, polytope)?;
+    let origin_idx = points
+        .iter()
+        .position(|p| p.coords().iter().all(|&x| x == 0))
+        .ok_or_else(|| Error::InvalidInput("Origin not found in points".into()))?;
+
+    let mut gv_by_class: HashMap<Vec<i64>, Integer> = HashMap::new();
+    let mut simp_2d_all: HashSet<Vec<usize>> = HashSet::new();
+    for face in &face_data {
+        if face.points.len() < 4 {
+            continue;
+        }
+        let face_pts: HashSet<usize> = face.points.iter().copied().collect();
+        let mut simp_2d: HashSet<Vec<usize>> = HashSet::new();
+
+        for simplex in tri.simplices() {
+            let inter: Vec<usize> = simplex
+                .iter()
+                .filter(|idx| face_pts.contains(idx))
+                .copied()
+                .collect();
+            if inter.len() == 3 {
+                let mut inter_sorted = inter;
+                inter_sorted.sort_unstable();
+                simp_2d.insert(inter_sorted.clone());
+                simp_2d_all.insert(inter_sorted);
+            }
+        }
+
+        let simps: Vec<Vec<usize>> = simp_2d.into_iter().collect();
+        for i in 0..simps.len() {
+            for j in i..simps.len() {
+                let s1: HashSet<usize> = simps[i].iter().copied().collect();
+                let s2: HashSet<usize> = simps[j].iter().copied().collect();
+                let comm: Vec<usize> = s1.intersection(&s2).copied().collect();
+                if comm.len() != 2 {
+                    continue;
+                }
+                let diff: Vec<usize> = s1.symmetric_difference(&s2).copied().collect();
+                if diff.len() != 2 {
+                    continue;
+                }
+
+                let Some(v) = nullspace_vector(&pts_ext, &diff, &comm, false) else {
+                    continue;
+                };
+                let full_v = build_full_v(&diff, &comm, &v);
+                let class = normalized_row_from_sparse_relation(points.len(), full_v);
+                if class.iter().all(|&x| x == 0) {
+                    continue;
+                }
+                let gv = toric_two_face_curve_gv(
+                    &class,
+                    &comm,
+                    face.genus,
+                    &point_face_dims,
+                    &one_face_genera,
+                )?;
+                insert_toric_gv(&mut gv_by_class, class, gv)?;
+            }
+        }
+    }
+
+    for class in compute_origin_circuit_curve_classes(&pts_ext, &facets, &simp_2d_all, origin_idx) {
+        if let Some(gv) = resolved_conifold_origin_circuit_gv(&class, origin_idx) {
+            insert_toric_gv(&mut gv_by_class, class, gv)?;
+        }
+    }
+
+    let mut out: Vec<ToricCurveGvInvariant> = gv_by_class
+        .into_iter()
+        .map(|(class, gv)| ToricCurveGvInvariant { class, gv })
+        .collect();
+    out.sort_by(|a, b| a.class.cmp(&b.class));
+    Ok(out)
+}
+
+fn insert_toric_gv(
+    gv_by_class: &mut HashMap<Vec<i64>, Integer>,
+    class: Vec<i64>,
+    gv: Integer,
+) -> Result<()> {
+    match gv_by_class.entry(class) {
+        std::collections::hash_map::Entry::Occupied(existing) => {
+            if existing.get() != &gv {
+                return Err(Error::InvalidInput(format!(
+                    "conflicting toric GV values for duplicate curve class: {} vs {gv}",
+                    existing.get()
+                )));
+            }
+        }
+        std::collections::hash_map::Entry::Vacant(slot) => {
+            slot.insert(gv);
+        }
+    }
+    Ok(())
+}
+
 fn find_pair_decomposition_with_set(
     target: &ToricCurveCandidate,
     candidates: &[ToricCurveCandidate],
@@ -351,6 +496,143 @@ fn find_pair_decomposition_with_set(
 fn subtract_curve(lhs: &[i64], rhs: &[i64]) -> Vec<i64> {
     debug_assert_eq!(lhs.len(), rhs.len());
     lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a - b).collect()
+}
+
+fn toric_two_face_curve_gv(
+    class: &[i64],
+    edge: &[usize],
+    two_face_genus: usize,
+    point_face_dims: &[usize],
+    one_face_genera: &[Option<usize>],
+) -> Result<Integer> {
+    if edge.len() != 2 {
+        return Err(Error::InvalidInput(
+            "two-face toric curve edge must have two endpoints".into(),
+        ));
+    }
+    let i = edge[0];
+    let j = edge[1];
+    let Some(&di) = class.get(i) else {
+        return Err(Error::InvalidInput(
+            "edge endpoint out of class bounds".into(),
+        ));
+    };
+    let Some(&dj) = class.get(j) else {
+        return Err(Error::InvalidInput(
+            "edge endpoint out of class bounds".into(),
+        ));
+    };
+    let (m, n_idx, n) = if di >= dj { (di, j, dj) } else { (dj, i, di) };
+    if m + n != -2 {
+        return Err(Error::InvalidInput(format!(
+            "two-face curve normal degrees must sum to -2, got {m}+{n} for edge ({i},{j})"
+        )));
+    }
+
+    let i_is_two_face = point_face_dims.get(i).copied() == Some(2);
+    let j_is_two_face = point_face_dims.get(j).copied() == Some(2);
+
+    if m == 0 && point_face_dims.get(n_idx).copied() == Some(1) {
+        let Some(g_prime) = one_face_genera.get(n_idx).copied().flatten() else {
+            return Err(Error::InvalidInput(format!(
+                "missing dual two-face genus for one-face divisor {n_idx}"
+            )));
+        };
+        return Ok(Integer::from(2i64 * g_prime as i64 - 2));
+    }
+
+    if i_is_two_face || j_is_two_face || (m, n) != (-1, -1) {
+        let magnitude = m + 2;
+        if magnitude < 0 {
+            return Err(Error::InvalidInput(format!(
+                "unsupported toric curve normal degree m={m} for edge ({i},{j})"
+            )));
+        }
+        let sign = if (m + 1).rem_euclid(2) == 0 { 1 } else { -1 };
+        return Ok(Integer::from(sign * magnitude));
+    }
+
+    Ok(Integer::from(two_face_genus as i64 + 1))
+}
+
+fn compute_origin_circuit_curve_classes(
+    pts_ext: &[Vec<i64>],
+    facets: &[Vec<usize>],
+    simp_2d_all: &HashSet<Vec<usize>>,
+    origin_idx: usize,
+) -> Vec<Vec<i64>> {
+    let mut out = Vec::new();
+    for s2d in simp_2d_all {
+        let s2d_set: HashSet<usize> = s2d.iter().copied().collect();
+        let mut f1: Option<Vec<usize>> = None;
+        let mut f2: Option<Vec<usize>> = None;
+        for facet in facets {
+            let facet_set: HashSet<usize> = facet.iter().copied().collect();
+            if s2d_set.is_subset(&facet_set) {
+                if f1.is_none() {
+                    f1 = Some(facet.clone());
+                } else {
+                    f2 = Some(facet.clone());
+                    break;
+                }
+            }
+        }
+        let (Some(f1), Some(f2)) = (f1, f2) else {
+            continue;
+        };
+
+        let f1_set: HashSet<usize> = f1.iter().copied().collect();
+        let f2_set: HashSet<usize> = f2.iter().copied().collect();
+        let pts_f1: Vec<usize> = f1_set.difference(&f2_set).copied().collect();
+        let pts_f2: Vec<usize> = f2_set.difference(&f1_set).copied().collect();
+
+        for p1 in &pts_f1 {
+            for p2 in &pts_f2 {
+                let diff = vec![*p1, *p2];
+                let mut comm = s2d.clone();
+                comm.push(origin_idx);
+                let Some(v) = nullspace_vector(pts_ext, &diff, &comm, true) else {
+                    continue;
+                };
+                let full_v = build_full_v(&diff, &comm, &v);
+                let origin_coeff = full_v
+                    .iter()
+                    .find(|(idx, _)| *idx == origin_idx)
+                    .map_or(0, |(_, coeff)| *coeff);
+                if origin_coeff >= 0 {
+                    continue;
+                }
+                out.push(normalized_row_from_sparse_relation(pts_ext.len(), full_v));
+            }
+        }
+    }
+    out
+}
+
+fn resolved_conifold_origin_circuit_gv(class: &[i64], origin_idx: usize) -> Option<Integer> {
+    if class.get(origin_idx).copied()? != -1 {
+        return None;
+    }
+
+    let mut non_origin_neg_ones = 0usize;
+    let mut pos_ones = 0usize;
+    for (idx, &coeff) in class.iter().enumerate() {
+        match (idx == origin_idx, coeff) {
+            (_, 0) => {}
+            (true, -1) => {}
+            (false, -1) => non_origin_neg_ones += 1,
+            (false, 1) => pos_ones += 1,
+            _ => return None,
+        }
+    }
+
+    if non_origin_neg_ones == 2 && pos_ones == 3 {
+        // An isolated resolved conifold curve has normal bundle
+        // O(-1) + O(-1), so section 6 gives GV^0 = 1.
+        Some(Integer::from(1))
+    } else {
+        None
+    }
 }
 
 /// Compute a grading vector for the Mori cone cap.
@@ -1065,6 +1347,204 @@ fn dump_gv_inputs(
         .map_err(|err| Error::InvalidInput(format!("GV input dump write failed: {err}")))?;
     eprintln!("[DEBUG] wrote GV input dump: {}", path.display());
     Ok(())
+}
+
+#[derive(Clone, Debug)]
+struct TwoFaceData {
+    points: Vec<usize>,
+    genus: usize,
+}
+
+fn compute_two_face_data_4d(points: &[Point], polytope: &Polytope) -> Result<Vec<TwoFaceData>> {
+    let dual_vertices = polytope.dual_vertices()?;
+    if dual_vertices.is_empty() {
+        return Err(Error::InvalidInput("no dual vertices found".into()));
+    }
+
+    let hull_vertices = hull_vertex_coords(polytope)?;
+    let mut facet_vertex_sets: Vec<HashSet<usize>> = Vec::with_capacity(dual_vertices.len());
+    for dv in &dual_vertices {
+        let mut vert_set: HashSet<usize> = HashSet::new();
+        for (idx, vtx) in hull_vertices.iter().enumerate() {
+            let dot: i64 = vtx
+                .iter()
+                .zip(dv.coords().iter())
+                .map(|(&a, &b)| a * b)
+                .sum();
+            if dot == -1 {
+                vert_set.insert(idx);
+            }
+        }
+        facet_vertex_sets.push(vert_set);
+    }
+
+    let mut out = Vec::new();
+    for i in 0..facet_vertex_sets.len() {
+        for j in (i + 1)..facet_vertex_sets.len() {
+            let inter_vertices = facet_vertex_sets[i]
+                .intersection(&facet_vertex_sets[j])
+                .count();
+            if inter_vertices < 3 {
+                continue;
+            }
+
+            let mut face_pts: Vec<usize> = Vec::new();
+            for (idx, pt) in points.iter().enumerate() {
+                let dot_i: i64 = pt
+                    .coords()
+                    .iter()
+                    .zip(dual_vertices[i].coords().iter())
+                    .map(|(&a, &b)| a * b)
+                    .sum();
+                if dot_i != -1 {
+                    continue;
+                }
+                let dot_j: i64 = pt
+                    .coords()
+                    .iter()
+                    .zip(dual_vertices[j].coords().iter())
+                    .map(|(&a, &b)| a * b)
+                    .sum();
+                if dot_j == -1 {
+                    face_pts.push(idx);
+                }
+            }
+            face_pts.sort_unstable();
+            out.push(TwoFaceData {
+                points: face_pts,
+                genus: lattice_segment_interior_points(
+                    dual_vertices[i].coords(),
+                    dual_vertices[j].coords(),
+                ),
+            });
+        }
+    }
+    Ok(out)
+}
+
+fn classify_primal_point_face_dimensions(
+    points: &[Point],
+    polytope: &Polytope,
+) -> Result<Vec<usize>> {
+    let dual_vertices = polytope.dual_vertices()?;
+    Ok(points
+        .iter()
+        .map(|pt| {
+            let active: Vec<Vec<i64>> = dual_vertices
+                .iter()
+                .filter(|dv| {
+                    pt.coords()
+                        .iter()
+                        .zip(dv.coords().iter())
+                        .map(|(&a, &b)| a * b)
+                        .sum::<i64>()
+                        == -1
+                })
+                .map(|dv| dv.coords().to_vec())
+                .collect();
+            4usize.saturating_sub(integer_matrix_rank(&active))
+        })
+        .collect())
+}
+
+fn compute_primal_one_face_genera(
+    points: &[Point],
+    polytope: &Polytope,
+    point_face_dims: &[usize],
+) -> Result<Vec<Option<usize>>> {
+    let dual_polytope = polytope.compute_dual()?;
+    let dual_points = dual_polytope.vertices();
+    let primal_hull_vertices = hull_vertex_coords(polytope)?;
+
+    let dual_face_dims: Vec<usize> = dual_points
+        .iter()
+        .map(|dual_pt| {
+            let active: Vec<Vec<i64>> = primal_hull_vertices
+                .iter()
+                .filter(|vtx| {
+                    vtx.iter()
+                        .zip(dual_pt.coords().iter())
+                        .map(|(&a, &b)| a * b)
+                        .sum::<i64>()
+                        == -1
+                })
+                .cloned()
+                .collect();
+            4usize.saturating_sub(integer_matrix_rank(&active))
+        })
+        .collect();
+
+    Ok(points
+        .iter()
+        .enumerate()
+        .map(|(idx, pt)| {
+            if point_face_dims.get(idx).copied() != Some(1) {
+                return None;
+            }
+            Some(
+                dual_points
+                    .iter()
+                    .zip(dual_face_dims.iter())
+                    .filter(|(dual_pt, dual_face_dim)| {
+                        **dual_face_dim == 2
+                            && pt
+                                .coords()
+                                .iter()
+                                .zip(dual_pt.coords().iter())
+                                .map(|(&a, &b)| a * b)
+                                .sum::<i64>()
+                                == -1
+                    })
+                    .count(),
+            )
+        })
+        .collect())
+}
+
+fn hull_vertex_coords(polytope: &Polytope) -> Result<Vec<Vec<i64>>> {
+    let all_points: Vec<Vec<i64>> = polytope
+        .vertices()
+        .iter()
+        .map(|p| p.coords().to_vec())
+        .collect();
+    let hull = ConvexHull::compute(&all_points)
+        .ok_or_else(|| Error::InvalidInput("failed to compute convex hull".into()))?;
+    Ok(hull
+        .vertex_indices
+        .iter()
+        .map(|&idx| all_points[idx].clone())
+        .collect())
+}
+
+fn lattice_segment_interior_points(a: &[i64], b: &[i64]) -> usize {
+    let mut g = 0i64;
+    for (&ai, &bi) in a.iter().zip(b.iter()) {
+        g = gcd_i64(g, (bi - ai).abs());
+    }
+    g.saturating_sub(1) as usize
+}
+
+fn integer_matrix_rank(rows: &[Vec<i64>]) -> usize {
+    let rational_rows: Vec<Vec<Rational>> = rows
+        .iter()
+        .map(|row| row.iter().map(|&value| Rational::from(value)).collect())
+        .collect();
+    matrix_rank(&rational_rows)
+}
+
+fn normalized_row_from_sparse_relation(n_points: usize, relation: Vec<(usize, i64)>) -> Vec<i64> {
+    let mut row = vec![0i64; n_points];
+    for (idx, coeff) in relation {
+        row[idx] = coeff;
+    }
+    let mut g = 0i64;
+    for &x in &row {
+        g = gcd_i64(g, x.abs());
+    }
+    if g == 0 {
+        return row;
+    }
+    row.into_iter().map(|x| x / g).collect()
 }
 
 fn compute_faces_4d(

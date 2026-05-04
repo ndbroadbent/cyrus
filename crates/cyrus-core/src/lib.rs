@@ -94,7 +94,8 @@ pub use glsm::compute_glsm_and_linrels;
 pub use glsm::compute_glsm_charge_matrix;
 pub use glsm::compute_glsm_linear_relations;
 pub use gv::{
-    ToricCurveCandidate, compute_grading_vector, compute_gv_invariants, compute_mori_cone_cap_rays,
+    ToricCurveCandidate, ToricCurveGvInvariant, compute_grading_vector, compute_gv_invariants,
+    compute_mori_cone_cap_rays, compute_toric_two_face_curve_gv_invariants,
     curve_volume_in_divisor_basis, find_pair_decomposition,
     remove_pair_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
 };

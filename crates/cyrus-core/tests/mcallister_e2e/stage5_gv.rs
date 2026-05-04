@@ -22,7 +22,8 @@ use std::path::Path;
 
 use cyrus_core::{
     F64, Finite, Point, Polytope, compute_mori_cone_cap_rays, compute_regular_triangulation,
-    remove_pair_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
+    compute_toric_two_face_curve_gv_invariants, remove_pair_decomposable_curve_candidates,
+    subcutoff_toric_curve_candidates,
 };
 
 fn read_csv_rows_i64(path: &Path) -> Vec<Vec<i64>> {
@@ -46,6 +47,16 @@ fn read_csv_usize(path: &Path) -> Vec<usize> {
         .split([',', '\n', '\r'])
         .filter(|s| !s.trim().is_empty())
         .map(|s| s.trim().parse::<usize>().expect("invalid usize"))
+        .collect()
+}
+
+fn read_csv_i64(path: &Path) -> Vec<i64> {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+    content
+        .split([',', '\n', '\r'])
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.trim().parse::<i64>().expect("invalid i64"))
         .collect()
 }
 
@@ -298,6 +309,66 @@ fn stage5_mcallister_small_toric_curves_match_checkpoint() {
     assert_eq!(
         actual, expected,
         "Cyrus-computed filtered small toric curves must match McAllister checkpoint"
+    );
+}
+
+/// Compute the GV values of the McAllister small toric curves from toric
+/// two-face curve formulas, using `small_curves_gv.dat` only as a checkpoint.
+#[test]
+fn stage5_mcallister_small_toric_curve_gvs_match_checkpoint() {
+    if !require_first_principles() {
+        return;
+    }
+    let Some(data_dir) = crate::mcallister_data_dir() else {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    };
+
+    let points_raw = read_csv_rows_i64(&data_dir.join("points.dat"));
+    let heights = read_csv_f64(&data_dir.join("heights.dat"));
+    let expected_small = read_csv_rows_i64(&data_dir.join("small_curves.dat"));
+    let expected_gv = read_csv_i64(&data_dir.join("small_curves_gv.dat"));
+    assert_eq!(
+        expected_small.len(),
+        expected_gv.len(),
+        "small curve/GV checkpoint length mismatch"
+    );
+
+    let all_points: Vec<Point> = points_raw.into_iter().map(Point::new).collect();
+    let polytope = Polytope::from_vertices(all_points).expect("failed to create polytope");
+    let triangulation_points = polytope
+        .points_not_interior_to_facets()
+        .expect("failed to filter points");
+    let triangulation = compute_regular_triangulation(&triangulation_points, &heights)
+        .expect("failed to compute triangulation");
+
+    let actual_gvs = compute_toric_two_face_curve_gv_invariants(
+        &triangulation,
+        &triangulation_points,
+        &polytope,
+    )
+    .expect("failed to compute toric two-face curve GV invariants");
+    let actual_by_class: std::collections::BTreeMap<Vec<i64>, String> = actual_gvs
+        .into_iter()
+        .map(|item| (item.class, item.gv.to_string()))
+        .collect();
+
+    let mut missing = Vec::new();
+    let mut mismatched = Vec::new();
+    for (class, expected) in expected_small.iter().zip(expected_gv.iter()) {
+        match actual_by_class.get(class) {
+            Some(actual) if actual == &expected.to_string() => {}
+            Some(actual) => mismatched.push((class.clone(), expected.to_string(), actual.clone())),
+            None => missing.push(class.clone()),
+        }
+    }
+
+    assert!(
+        missing.is_empty() && mismatched.is_empty(),
+        "toric GV checkpoint mismatch: missing={} mismatched={} first_missing={:?} first_mismatch={:?}",
+        missing.len(),
+        mismatched.len(),
+        missing.first(),
+        mismatched.first()
     );
 }
 
