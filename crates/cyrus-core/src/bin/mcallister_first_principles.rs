@@ -1534,6 +1534,49 @@ fn ambient_curve_grading_degree(
     Ok(degree)
 }
 
+fn non_positive_basis_generator_degrees(
+    rays: &[Vec<i64>],
+    grading: &[i64],
+) -> Result<(usize, Option<(usize, i128, Vec<i64>)>), String> {
+    let mut count = 0usize;
+    let mut first = None;
+    for (idx, ray) in rays.iter().enumerate() {
+        if ray.len() != grading.len() {
+            return Err(format!(
+                "basis ray length {} does not match grading vector length {}",
+                ray.len(),
+                grading.len()
+            ));
+        }
+        let degree = ray
+            .iter()
+            .zip(grading.iter())
+            .map(|(&coefficient, &weight)| i128::from(coefficient) * i128::from(weight))
+            .sum::<i128>();
+        if degree <= 0 {
+            count += 1;
+            if first.is_none() {
+                first = Some((idx, degree, ray.clone()));
+            }
+        }
+    }
+    Ok((count, first))
+}
+
+fn non_positive_grading_weights(grading: &[i64]) -> (usize, Option<(usize, i64)>) {
+    let mut count = 0usize;
+    let mut first = None;
+    for (idx, &weight) in grading.iter().enumerate() {
+        if weight <= 0 {
+            count += 1;
+            if first.is_none() {
+                first = Some((idx, weight));
+            }
+        }
+    }
+    (count, first)
+}
+
 fn write_branch_report_jsonl(
     path: &PathBuf,
     ctx: &BranchReportContext,
@@ -1874,18 +1917,34 @@ fn diagnose_chamber_gv_volume_correction(
                 summary.min_degree, summary.max_degree, summary.count, summary.first_over_max
             ));
         }
-        eprintln!(
-            "[INFO] toric formulas missed {} corrected-chamber small curves; computing corrected-chamber general GV fallback with min_points={:?} max_deg={:?}",
-            missing_gv_classes.len(),
-            general_min_points,
-            general_max_deg
-        );
         let basis_rays = basis_rays_for_missing
             .as_ref()
             .expect("basis rays computed for corrected-chamber missing curves");
         let grading = grading_for_missing
             .as_ref()
             .expect("grading computed for corrected-chamber missing curves");
+        let (non_positive_weight_count, first_non_positive_weight) =
+            non_positive_grading_weights(grading);
+        if let Some((idx, weight)) = first_non_positive_weight {
+            return Err(format!(
+                "corrected-chamber general GV fallback requires a positive coordinate grading vector for bounded lattice enumeration; found {non_positive_weight_count}/{} non-positive weights, first index={idx} weight={weight}",
+                grading.len()
+            ));
+        }
+        let (non_positive_count, first_non_positive) =
+            non_positive_basis_generator_degrees(basis_rays, grading)?;
+        if let Some((idx, degree, ray)) = first_non_positive {
+            return Err(format!(
+                "corrected-chamber general GV fallback requires a grading positive on all Mori generators; found {non_positive_count}/{} non-positive generator degrees, first index={idx} degree={degree} ray={ray:?}",
+                basis_rays.len()
+            ));
+        }
+        eprintln!(
+            "[INFO] toric formulas missed {} corrected-chamber small curves; computing corrected-chamber general GV fallback with min_points={:?} max_deg={:?}",
+            missing_gv_classes.len(),
+            general_min_points,
+            general_max_deg
+        );
         let curve_basis = compute_curve_basis_matrix(&intersection.linrels, &intersection.basis)
             .map_err(|e| format!("failed to compute corrected-chamber curve basis matrix: {e}"))?;
         let q_matrix = curve_basis
@@ -3302,6 +3361,32 @@ mod tests {
             summarize_required_gv_degrees(&[vec![0, -1]], &[1], &[1], None)
                 .unwrap_err()
                 .contains("non-positive")
+        );
+    }
+
+    #[test]
+    fn non_positive_basis_generator_degree_reports_first_bad_ray() {
+        let rays = vec![vec![1, 0], vec![-2, 1], vec![0, 1]];
+        let (count, first) = non_positive_basis_generator_degrees(&rays, &[1, 1]).unwrap();
+
+        assert_eq!(count, 1);
+        assert_eq!(first, Some((1, -1, vec![-2, 1])));
+    }
+
+    #[test]
+    fn non_positive_basis_generator_degree_rejects_shape_mismatch() {
+        assert!(
+            non_positive_basis_generator_degrees(&[vec![1, 2, 3]], &[1, 1])
+                .unwrap_err()
+                .contains("basis ray length")
+        );
+    }
+
+    #[test]
+    fn non_positive_grading_weight_reports_first_bad_weight() {
+        assert_eq!(
+            non_positive_grading_weights(&[3, -1, 0, 2]),
+            (2, Some((1, -1)))
         );
     }
 }
