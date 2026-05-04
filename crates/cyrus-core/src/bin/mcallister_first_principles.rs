@@ -6,7 +6,7 @@
 //! Optional:
 //! - `--dual-basis path/to/dual_basis.json` to supply the flux coordinate basis.
 //! - `--allow-fixtures` to permit JSON fixture fallback when no data dir is set.
-//! - `--branch-candidates N --branch-selection <max-volume|min-volume|first-positive|min-condition>`
+//! - `--branch-candidates N --branch-selection <max-volume|min-volume|first-positive|min-condition|min-toric-gv-missing>`
 //!   to run deterministic KKLT branch search without loading Kähler checkpoints.
 //! - `--branch-height-init` to include the CYTools-style height-projected
 //!   Kähler point as the first branch-search candidate.
@@ -62,6 +62,7 @@ enum BranchSelection {
     MinVolume,
     FirstPositive,
     MinCondition,
+    MinToricGvMissing,
 }
 
 impl BranchSelection {
@@ -71,7 +72,12 @@ impl BranchSelection {
             Self::MinVolume => "min-volume",
             Self::FirstPositive => "first-positive",
             Self::MinCondition => "min-condition",
+            Self::MinToricGvMissing => "min-toric-gv-missing",
         }
+    }
+
+    const fn requires_gv_coverage(self) -> bool {
+        matches!(self, Self::MinToricGvMissing)
     }
 }
 
@@ -81,6 +87,7 @@ fn parse_branch_selection(name: &str) -> Option<BranchSelection> {
         "min-volume" => Some(BranchSelection::MinVolume),
         "first-positive" => Some(BranchSelection::FirstPositive),
         "min-condition" => Some(BranchSelection::MinCondition),
+        "min-toric-gv-missing" | "min-gv-missing" => Some(BranchSelection::MinToricGvMissing),
         _ => None,
     }
 }
@@ -1154,6 +1161,32 @@ fn compute_branch_gv_coverages(
         .collect()
 }
 
+fn select_min_toric_gv_missing_rank(
+    coverages: &[BranchGvCoverage],
+    volumes_by_rank: &[f64],
+) -> Result<usize, String> {
+    if coverages.is_empty() {
+        return Err("cannot select by toric GV coverage without branch coverage rows".into());
+    }
+    if coverages.len() != volumes_by_rank.len() {
+        return Err(format!(
+            "branch coverage rows {} do not match branch volume rows {}",
+            coverages.len(),
+            volumes_by_rank.len()
+        ));
+    }
+
+    (0..coverages.len())
+        .min_by(|&a, &b| {
+            coverages[a]
+                .toric_gv_missing_count
+                .cmp(&coverages[b].toric_gv_missing_count)
+                .then_with(|| volumes_by_rank[a].total_cmp(&volumes_by_rank[b]))
+                .then_with(|| a.cmp(&b))
+        })
+        .ok_or_else(|| "cannot select by toric GV coverage without positive branches".into())
+}
+
 fn compute_primal_general_gv_by_ambient_class(
     geom: &PrimalGeom,
     intersection: &PrimalIntersection,
@@ -1530,6 +1563,13 @@ fn stage_volume(
         eprintln!("[ERROR] --branch-report-skip-gv-coverage requires --branch-report-jsonl path");
         std::process::exit(2);
     }
+    if branch_report_skip_gv_coverage && branch_selection.requires_gv_coverage() {
+        eprintln!(
+            "[ERROR] branch selection policy={} requires GV coverage, so it cannot be combined with --branch-report-skip-gv-coverage",
+            branch_selection.as_str()
+        );
+        std::process::exit(2);
+    }
     if branch_height_init && branch_candidates == 0 {
         eprintln!("[ERROR] --branch-height-init requires --branch-candidates N with N > 0");
         std::process::exit(2);
@@ -1679,6 +1719,46 @@ fn stage_volume(
                 eprintln!("[ERROR] KKLT branch search found no positive-volume phase-1 branch");
                 std::process::exit(2);
             }
+            let mut branch_gv_coverages: Option<Vec<BranchGvCoverage>> = None;
+            if branch_selection.requires_gv_coverage() {
+                let coverages = compute_branch_gv_coverages(
+                    geom,
+                    intersection,
+                    &positive_branches,
+                    small_curve_cutoff,
+                )
+                .unwrap_or_else(|e| {
+                    eprintln!("[ERROR] failed to compute branch GV coverage for selection: {e}");
+                    std::process::exit(2);
+                });
+                let mut coverage_ranks: Vec<usize> = (0..coverages.len()).collect();
+                coverage_ranks.sort_by(|&a, &b| {
+                    coverages[a]
+                        .toric_gv_missing_count
+                        .cmp(&coverages[b].toric_gv_missing_count)
+                        .then_with(|| {
+                            positive_branches[a]
+                                .classical_volume
+                                .get()
+                                .total_cmp(&positive_branches[b].classical_volume.get())
+                        })
+                        .then_with(|| a.cmp(&b))
+                });
+                for rank_by_volume in coverage_ranks.iter().take(5) {
+                    let coverage = &coverages[*rank_by_volume];
+                    let branch = &positive_branches[*rank_by_volume];
+                    eprintln!(
+                        "[INFO] KKLT branch GV coverage candidate rank_by_volume={} init={} missing={} covered={} filtered={} phase1_volume={}",
+                        rank_by_volume,
+                        branch.init_index,
+                        coverage.toric_gv_missing_count,
+                        coverage.toric_gv_covered_count,
+                        coverage.filtered_count,
+                        branch.classical_volume.get()
+                    );
+                }
+                branch_gv_coverages = Some(coverages);
+            }
             let selected_rank_by_volume = match branch_selection {
                 BranchSelection::MinVolume => 0,
                 BranchSelection::MaxVolume => positive_branches.len() - 1,
@@ -1705,6 +1785,23 @@ fn stage_volume(
                         );
                         std::process::exit(2);
                     }),
+                BranchSelection::MinToricGvMissing => {
+                    let coverages = branch_gv_coverages
+                        .as_ref()
+                        .expect("GV coverage was computed for coverage-based selection");
+                    let volumes_by_rank: Vec<f64> = positive_branches
+                        .iter()
+                        .map(|branch| branch.classical_volume.get())
+                        .collect();
+                    select_min_toric_gv_missing_rank(coverages, &volumes_by_rank).unwrap_or_else(
+                        |e| {
+                            eprintln!(
+                                "[ERROR] failed to select branch by toric GV coverage: {e}"
+                            );
+                            std::process::exit(2);
+                        },
+                    )
+                }
             };
             let best_branch = positive_branches[selected_rank_by_volume].clone();
             let small_curve_selection_t = best_branch.result.t.clone();
@@ -1726,7 +1823,7 @@ fn stage_volume(
                     &positive_branches,
                     &t_initializations,
                     &t_initialization_sources,
-                    None,
+                    branch_gv_coverages.as_deref(),
                 )
                 .unwrap_or_else(|e| {
                     eprintln!(
@@ -1736,27 +1833,36 @@ fn stage_volume(
                     std::process::exit(2);
                 });
                 eprintln!(
-                    "[INFO] wrote KKLT branch report {} without GV coverage",
-                    report_path.display()
+                    "[INFO] wrote KKLT branch report {} {}",
+                    report_path.display(),
+                    if branch_gv_coverages.is_some() {
+                        "with GV coverage"
+                    } else {
+                        "without GV coverage"
+                    }
                 );
-                if !branch_report_skip_gv_coverage {
-                    let branch_gv_coverages = compute_branch_gv_coverages(
-                        geom,
-                        intersection,
-                        &positive_branches,
-                        small_curve_cutoff,
-                    )
-                    .unwrap_or_else(|e| {
-                        eprintln!("[ERROR] failed to compute branch GV coverage report data: {e}");
-                        std::process::exit(2);
-                    });
+                if !branch_report_skip_gv_coverage && branch_gv_coverages.is_none() {
+                    branch_gv_coverages = Some(
+                        compute_branch_gv_coverages(
+                            geom,
+                            intersection,
+                            &positive_branches,
+                            small_curve_cutoff,
+                        )
+                        .unwrap_or_else(|e| {
+                            eprintln!(
+                                "[ERROR] failed to compute branch GV coverage report data: {e}"
+                            );
+                            std::process::exit(2);
+                        }),
+                    );
                     write_branch_report_jsonl(
                         &report_path,
                         &ctx,
                         &positive_branches,
                         &t_initializations,
                         &t_initialization_sources,
-                        Some(&branch_gv_coverages),
+                        branch_gv_coverages.as_deref(),
                     )
                     .unwrap_or_else(|e| {
                         eprintln!(
@@ -1789,6 +1895,17 @@ fn stage_volume(
                     .condition_number
                     .map(|value| value.get())
             );
+            if let Some(coverage) = branch_gv_coverages
+                .as_ref()
+                .and_then(|coverages| coverages.get(selected_rank_by_volume))
+            {
+                eprintln!(
+                    "[INFO] selected branch toric GV coverage: covered={} missing={} filtered={}",
+                    coverage.toric_gv_covered_count,
+                    coverage.toric_gv_missing_count,
+                    coverage.filtered_count
+                );
+            }
             let Some(result) = solve_mixed_basis_path_following(
                 &intersection.kappa_basis,
                 &intersection.kappa_full,
@@ -2217,12 +2334,76 @@ mod tests {
             "min-volume",
             "first-positive",
             "min-condition",
+            "min-toric-gv-missing",
         ] {
             let policy = parse_branch_selection(name)
                 .unwrap_or_else(|| panic!("policy {name} should parse"));
             assert_eq!(policy.as_str(), name);
         }
+        assert_eq!(
+            parse_branch_selection("min-gv-missing").map(BranchSelection::as_str),
+            Some("min-toric-gv-missing")
+        );
         assert!(parse_branch_selection("condition").is_none());
+    }
+
+    #[test]
+    fn branch_selection_declares_coverage_requirement() {
+        assert!(BranchSelection::MinToricGvMissing.requires_gv_coverage());
+        assert!(!BranchSelection::MinVolume.requires_gv_coverage());
+    }
+
+    #[test]
+    fn min_toric_gv_missing_selection_ties_by_volume() {
+        let coverages = vec![
+            BranchGvCoverage {
+                ambient_rays: 10,
+                subcutoff_count: 4,
+                filtered_count: 4,
+                toric_gv_covered_count: 3,
+                toric_gv_missing_count: 1,
+                first_missing_class: Some(vec![1]),
+            },
+            BranchGvCoverage {
+                ambient_rays: 10,
+                subcutoff_count: 5,
+                filtered_count: 5,
+                toric_gv_covered_count: 3,
+                toric_gv_missing_count: 2,
+                first_missing_class: Some(vec![2]),
+            },
+            BranchGvCoverage {
+                ambient_rays: 10,
+                subcutoff_count: 6,
+                filtered_count: 6,
+                toric_gv_covered_count: 5,
+                toric_gv_missing_count: 1,
+                first_missing_class: Some(vec![3]),
+            },
+        ];
+        let volumes_by_rank = vec![20.0, 1.0, 10.0];
+
+        let selected = select_min_toric_gv_missing_rank(&coverages, &volumes_by_rank).unwrap();
+
+        assert_eq!(selected, 2);
+    }
+
+    #[test]
+    fn min_toric_gv_missing_selection_rejects_mismatched_rows() {
+        let coverages = vec![BranchGvCoverage {
+            ambient_rays: 10,
+            subcutoff_count: 4,
+            filtered_count: 4,
+            toric_gv_covered_count: 3,
+            toric_gv_missing_count: 1,
+            first_missing_class: Some(vec![1]),
+        }];
+
+        assert!(
+            select_min_toric_gv_missing_rank(&coverages, &[])
+                .unwrap_err()
+                .contains("do not match")
+        );
     }
 
     #[test]

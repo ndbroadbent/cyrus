@@ -533,9 +533,10 @@ fn stage5_gv_computation_roadmap() {
             "branch-report JSONL records init_source so validation artifacts distinguish generated branch-search candidates from the computed height_projected secondary-fan initializer",
             "generated KKLT branch candidates now use one scaled-uniform baseline plus non-uniform deterministic random starts instead of wasting the prefix on equivalent scaled-uniform duplicates",
             "Intersection iteration is key-sorted for deterministic floating-point accumulation; repeated no-height 48-candidate branch reports are byte-identical for the same seed",
+            "mcallister_first_principles supports --branch-selection min-toric-gv-missing to rank generated positive branches by computed small-curve toric GV coverage before falling back to volume",
         ],
         remaining_gaps: vec![
-            "Generated branch candidates without the height_projected initializer still did not find the 4-214-647 paper branch in a deterministic 48-candidate diagnostic: the lowest sampled phase-1 volume was about 20611 rather than 17901, and every sampled positive branch still had at least 412 small curves missing toric GV coverage",
+            "Generated branch candidates without the height_projected initializer still did not find the 4-214-647 paper branch in a deterministic 48-candidate diagnostic: the lowest sampled phase-1 volume was about 20611 rather than 17901, and even coverage-aware selection still had at least 412 small curves missing toric GV coverage",
             "The explicit general primal GV fallback still reaches full 214-dimensional Mori-cone dualization for any max_deg high enough to cover the selected missing curves, or for min_points-driven runs; bounded DDM diagnostics stop loudly at configured limits",
             "A PPL/cdd diagnostic on the dumped 561658-ray, 214-dimensional V-representation also exceeded a 300-second cap without producing an H-representation",
             "Finish a post-orientation-fix validation run of adjacency-filtered DDM on the full 214-dimensional McAllister Mori cone",
