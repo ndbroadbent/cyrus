@@ -3,17 +3,43 @@
 //! Converts between H-representation (hyperplanes) and V-representation (rays).
 //!
 //! Reference: PPL (Parma Polyhedra Library), cddlib
-//!
-//! The basic algorithm:
-//! 1. Start with initial rays (from identity or first hyperplanes)
-//! 2. For each hyperplane, partition rays into positive/zero/negative
-//! 3. Keep positive and zero rays
-//! 4. For each (positive, negative) pair, compute the intersection ray
-//! 5. Remove redundant rays
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 
-use good_lp::{constraint, default_solver, variable, ProblemVariables, SolverModel};
+mod init;
+mod order;
+mod rank;
+mod step;
+mod types;
+mod util;
+
+use init::{full_space_initialization, initialize_ddm};
+use order::choose_next_hyperplane;
+use step::{deduplicate_rays, log_step, process_hyperplane, should_log_step};
+
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+use crate::integer_math::invert_matrix;
+#[cfg(test)]
+use malachite::{Integer, Rational};
+#[cfg(test)]
+use order::{choose_next_hyperplane_with_window, order_remaining_hyperplanes};
+#[cfg(test)]
+use rank::{
+    RANK_MODULUS, RankContext, RankTracker, active_rank_at_least, active_rank_mod_prime_at_least,
+    are_adjacent, integer_mod_prime, quotient_rank_mod_prime_at_least,
+};
+#[cfg(test)]
+use step::{compute_intersection_ray, parse_pair_log_interval};
+#[cfg(test)]
+use types::{DdmHyperplane, DdmRay, RankStats};
+#[cfg(test)]
+use util::{
+    active_set_for_intersection, dot_product, hyperplanes_from_dense,
+    normalize_ray_preserving_direction,
+};
 
 /// Convert hyperplanes to rays (or vice versa).
 ///
@@ -50,25 +76,44 @@ pub fn dualize(matrix: &[Vec<i128>], ambient_dim: usize) -> Vec<Vec<i128>> {
 ///
 /// Start with the full space (identity rays), then add constraints one by one.
 fn ddm_incremental(hyperplanes: &[Vec<i128>], dim: usize) -> Vec<Vec<i128>> {
-    // Start with identity rays (full space before any constraints)
-    let mut rays: Vec<Vec<i128>> = (0..dim)
-        .flat_map(|i| {
-            let mut pos = vec![0i128; dim];
-            let mut neg = vec![0i128; dim];
-            pos[i] = 1;
-            neg[i] = -1;
-            vec![pos, neg]
-        })
-        .collect();
+    let init = initialize_ddm(hyperplanes, dim).unwrap_or_else(|| {
+        eprintln!("[WARN] ddm: full-rank initialization failed; starting from full space");
+        full_space_initialization(hyperplanes, dim)
+    });
+    let (mut rays, mut ordered_hyperplanes, start_idx, mut processed_rank, mut rank_context) = init;
+    let mut adjacency_cache = HashMap::<Vec<usize>, bool>::new();
 
     // Process each hyperplane
-    for (idx, h) in hyperplanes.iter().enumerate() {
-        if idx % 25 == 0 {
-            eprintln!("[DEBUG] ddm: hyperplane {}/{}", idx + 1, hyperplanes.len());
+    for idx in start_idx..ordered_hyperplanes.len() {
+        let best_idx = choose_next_hyperplane(&ordered_hyperplanes, idx, &rays);
+        if best_idx != idx {
+            ordered_hyperplanes.swap(idx, best_idx);
         }
-        rays = process_hyperplane(&rays, h);
+        let h = &ordered_hyperplanes[idx];
+        let pointed_before = processed_rank.rank() == dim;
+        let (next_rays, stats) = process_hyperplane(
+            &rays,
+            h,
+            idx,
+            &ordered_hyperplanes[..idx],
+            dim,
+            pointed_before,
+            &mut rank_context,
+            &mut adjacency_cache,
+        );
+        if stats.redundant {
+            if should_log_step(idx, &stats) {
+                log_step(idx, ordered_hyperplanes.len(), rays.len(), &stats);
+            }
+            continue;
+        }
+        rays = next_rays;
         if rays.len() > 2000 || idx % 20 == 0 {
-            rays = prune_rays(rays);
+            rays = deduplicate_rays(rays);
+        }
+        processed_rank.add_row(h.dense());
+        if should_log_step(idx, &stats) {
+            log_step(idx, ordered_hyperplanes.len(), rays.len(), &stats);
         }
 
         // Early termination if cone becomes empty
@@ -78,281 +123,8 @@ fn ddm_incremental(hyperplanes: &[Vec<i128>], dim: usize) -> Vec<Vec<i128>> {
     }
 
     // Remove duplicates and normalize
-    prune_rays(rays)
-}
-
-/// Process one hyperplane in the DDM algorithm.
-///
-/// Partition rays by their dot product with h:
-/// - Positive: h·r > 0 (strictly inside)
-/// - Zero: h·r = 0 (on boundary)
-/// - Negative: h·r < 0 (outside, will be cut)
-///
-/// New rays = positive + zero + (positive × negative intersections)
-fn process_hyperplane(rays: &[Vec<i128>], h: &[i128]) -> Vec<Vec<i128>> {
-    let mut positive = Vec::new();
-    let mut zero = Vec::new();
-    let mut negative = Vec::new();
-
-    // Partition rays
-    for ray in rays {
-        let dot = dot_product(h, ray);
-        match dot.cmp(&0) {
-            std::cmp::Ordering::Greater => positive.push(ray.clone()),
-            std::cmp::Ordering::Equal => zero.push(ray.clone()),
-            std::cmp::Ordering::Less => negative.push(ray.clone()),
-        }
-    }
-
-    // Start with rays that satisfy the constraint
-    let mut new_rays = positive.clone();
-    new_rays.extend(zero);
-
-    // For each (positive, negative) pair, compute intersection
-    for p in &positive {
-        for n in &negative {
-            if let Some(intersection) = compute_intersection_ray(p, n, h) {
-                new_rays.push(intersection);
-            }
-        }
-    }
-
-    new_rays
-}
-
-/// Compute the intersection ray for a (positive, negative) pair.
-///
-/// Given rays r+ and r- with h·r+ > 0 and h·r- < 0,
-/// find the ray r on the hyperplane h·r = 0 that lies between them.
-///
-/// r = (h·r+) * r- - (h·r-) * r+
-///
-/// This makes h·r = (h·r+)(h·r-) - (h·r-)(h·r+) = 0.
-fn compute_intersection_ray(pos: &[i128], neg: &[i128], h: &[i128]) -> Option<Vec<i128>> {
-    let dp = dot_product(h, pos); // > 0
-    let dn = dot_product(h, neg); // < 0
-
-    // r = dp * neg - dn * pos
-    let mut result: Vec<i128> = pos
-        .iter()
-        .zip(neg.iter())
-        .map(|(&p, &n)| dp * n - dn * p)
-        .collect();
-
-    // Normalize by GCD
-    let g = gcd_vec(&result);
-    if g == 0 {
-        return None;
-    }
-
-    for x in &mut result {
-        *x /= g;
-    }
-
-    Some(result)
-}
-
-/// Remove duplicate rays (after normalization).
-fn deduplicate_rays(rays: Vec<Vec<i128>>) -> Vec<Vec<i128>> {
-    let mut seen: HashSet<Vec<i128>> = HashSet::new();
-    let mut result = Vec::new();
-
-    for ray in rays {
-        // Normalize direction: make first non-zero positive
-        let normalized = normalize_direction(ray);
-        if !normalized.iter().all(|&x| x == 0) && !seen.contains(&normalized) {
-            seen.insert(normalized.clone());
-            result.push(normalized);
-        }
-    }
-
-    result
-}
-
-fn prune_rays(rays: Vec<Vec<i128>>) -> Vec<Vec<i128>> {
-    let rays = deduplicate_rays(rays);
-    if rays.len() <= 1 {
-        return rays;
-    }
-    let mut keep = Vec::with_capacity(rays.len());
-    for i in 0..rays.len() {
-        if is_extremal_ray(&rays, i) {
-            keep.push(rays[i].clone());
-        }
-    }
-    if keep.is_empty() {
-        rays
-    } else {
-        keep
-    }
-}
-
-fn is_extremal_ray(rays: &[Vec<i128>], i: usize) -> bool {
-    let target = &rays[i];
-    let others: Vec<&Vec<i128>> = rays
-        .iter()
-        .enumerate()
-        .filter(|&(j, _)| j != i)
-        .map(|(_, r)| r)
-        .collect();
-
-    if others.is_empty() {
-        return true;
-    }
-
-    let dim = target.len();
-    let mut vars = ProblemVariables::new();
-    let lambdas: Vec<_> = (0..others.len())
-        .map(|_| vars.add(variable().min(0.0)))
-        .collect();
-    let mut model = vars.minimise(0.0).using(default_solver);
-
-    for k in 0..dim {
-        let mut expr = good_lp::Expression::from(0.0);
-        for (j, ray) in others.iter().enumerate() {
-            expr.add_mul(ray[k] as f64, lambdas[j]);
-        }
-        model = model.with(constraint!(expr == target[k] as f64));
-    }
-
-    model.solve().is_err()
-}
-
-/// Normalize ray direction so first non-zero element is positive.
-fn normalize_direction(mut ray: Vec<i128>) -> Vec<i128> {
-    // First normalize by GCD
-    let g = gcd_vec(&ray);
-    if g > 0 {
-        for x in &mut ray {
-            *x /= g;
-        }
-    }
-
-    // Make first non-zero positive
-    for &x in &ray {
-        if x > 0 {
-            return ray;
-        } else if x < 0 {
-            return ray.iter().map(|&v| -v).collect();
-        }
-    }
-
-    ray
-}
-
-/// Dot product of two integer vectors.
-fn dot_product(a: &[i128], b: &[i128]) -> i128 {
-    a.iter().zip(b.iter()).map(|(&x, &y)| x * y).sum()
-}
-
-/// GCD of a vector.
-fn gcd_vec(v: &[i128]) -> i128 {
-    v.iter().fold(0, |acc, &x| gcd(acc, x.abs()))
-}
-
-/// GCD of two integers.
-fn gcd(a: i128, b: i128) -> i128 {
-    if b == 0 { a } else { gcd(b, a % b) }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_dualize_first_quadrant() {
-        // First quadrant in 2D: x >= 0, y >= 0
-        let hyperplanes = vec![
-            vec![1, 0], // x >= 0
-            vec![0, 1], // y >= 0
-        ];
-
-        let rays = dualize(&hyperplanes, 2);
-
-        // Should get rays (1,0) and (0,1)
-        assert_eq!(rays.len(), 2);
-        assert!(rays.contains(&vec![1, 0]));
-        assert!(rays.contains(&vec![0, 1]));
-    }
-
-    #[test]
-    fn test_dualize_half_plane() {
-        // Half-plane: x >= 0
-        let hyperplanes = vec![vec![1, 0]];
-
-        let rays = dualize(&hyperplanes, 2);
-
-        // Should get rays (1,0), (0,1), (0,-1)
-        // Because y can be anything, x must be >= 0
-        assert!(rays.len() >= 2);
-        assert!(rays.contains(&vec![1, 0]));
-    }
-
-    #[test]
-    fn test_dualize_empty() {
-        // No hyperplanes = full space
-        let rays = dualize(&[], 2);
-
-        // Should get ±e_i for i in 0..2
-        assert_eq!(rays.len(), 4);
-    }
-
-    #[test]
-    fn test_dualize_single_ray_cone() {
-        // Cone generated by single ray (1,1)
-        // Dual hyperplanes are: h such that h·(1,1) >= 0
-        // i.e., h1 + h2 >= 0
-        let rays = vec![vec![1, 1]];
-        let hyperplanes = dualize(&rays, 2);
-
-        // Check that (1,1)·h >= 0 for all h
-        for h in &hyperplanes {
-            let dot: i128 = h.iter().sum();
-            assert!(dot >= 0, "Hyperplane {h:?} violates constraint");
-        }
-    }
-
-    #[test]
-    fn test_process_hyperplane() {
-        // Start with ±e_1, ±e_2 and add x >= 0
-        let rays = vec![vec![1, 0], vec![-1, 0], vec![0, 1], vec![0, -1]];
-        let h = vec![1, 0];
-
-        let new_rays = process_hyperplane(&rays, &h);
-
-        // Should keep (1,0), (0,1), (0,-1) and intersection of (-1,0) with positives
-        assert!(new_rays.contains(&vec![1, 0]));
-        assert!(new_rays.contains(&vec![0, 1]));
-        assert!(new_rays.contains(&vec![0, -1]));
-        assert!(!new_rays.contains(&vec![-1, 0]));
-    }
-
-    #[test]
-    fn test_compute_intersection_ray() {
-        // pos = (1, 0), neg = (-1, 0), h = (1, 0)
-        // h·pos = 1, h·neg = -1
-        // r = 1*(-1,0) - (-1)*(1,0) = (-1,0) + (1,0) = (0,0)
-        // This is degenerate - correct behavior
-
-        // Better test: pos = (1,1), neg = (-1,1), h = (1,0)
-        // h·pos = 1, h·neg = -1
-        // r = 1*(-1,1) - (-1)*(1,1) = (-1,1) + (1,1) = (0,2)
-        let pos = vec![1, 1];
-        let neg = vec![-1, 1];
-        let h = vec![1, 0];
-
-        let ray = compute_intersection_ray(&pos, &neg, &h).unwrap();
-        assert_eq!(ray, vec![0, 1]); // normalized (0,2) -> (0,1)
-
-        // Verify: h·ray = 0
-        let dot: i128 = h.iter().zip(ray.iter()).map(|(&a, &b)| a * b).sum();
-        assert_eq!(dot, 0);
-    }
-
-    #[test]
-    fn test_normalize_direction() {
-        assert_eq!(normalize_direction(vec![2, 4, 6]), vec![1, 2, 3]);
-        assert_eq!(normalize_direction(vec![-2, -4, -6]), vec![1, 2, 3]);
-        assert_eq!(normalize_direction(vec![0, -2, 4]), vec![0, 1, -2]);
-    }
+    deduplicate_rays(rays)
+        .into_iter()
+        .map(|ray| ray.coeffs)
+        .collect()
 }

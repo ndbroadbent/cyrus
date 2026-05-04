@@ -10,8 +10,10 @@
 //!
 //! **Current Status:**
 //! - cygv crate is integrated as a dev dependency
-//! - Full Mori cone computation needs to be ported from CYTools
-//! - For now, we validate by loading GV invariants from McAllister's data files
+//! - Cyrus computes Mori cone cap rays, a grading vector, and cygv inputs
+//! - Full McAllister-sized GV validation is still too expensive for the normal
+//!   suite: the 214-dimensional cone has hundreds of thousands of rays, and
+//!   lattice-point generation needs a faster CYTools-faithful implementation
 
 #![allow(missing_docs)]
 #![allow(dead_code)]
@@ -106,9 +108,10 @@ fn stage5_mcallister_gv_data_available() {
     use std::fs;
 
     let Some(data_dir) = crate::mcallister_data_dir() else {
-        if crate::first_principles_enabled() {
-            panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
-        }
+        assert!(
+            !crate::first_principles_enabled(),
+            "CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests"
+        );
         eprintln!("Skipping GV data availability check (set CYRUS_MCALLISTER_DATA_DIR)");
         return;
     };
@@ -185,21 +188,42 @@ fn stage5_gv_computation_roadmap() {
         status: &'static str,
         /// Bitmask of completed components: cygv=1, mori=2, grading=4, pipeline=8
         completed_components: u8,
-        steps_remaining: Vec<&'static str>,
+        verified_components: Vec<&'static str>,
+        remaining_gaps: Vec<&'static str>,
     }
 
-    // Components: cygv integrated (1), mori cone (0), grading vector (0), full pipeline (0)
-    let completed = 1u8; // Only cygv is integrated
+    // Components: cygv integrated (1), mori cap (2), grading vector (4),
+    // one-off pipeline wiring (8).
+    let completed = 1u8 | 2 | 4 | 8;
 
     let roadmap = GvComputationRoadmap {
-        status: "In Progress - cygv integrated, Mori cone needed",
+        status: "In Progress - Cyrus computes GV inputs, McAllister-sized validation is expensive",
         completed_components: completed,
-        steps_remaining: vec![
-            "Port mori_cone_cap from CYTools calabiyau.py lines 2295-2400",
-            "Port find_grading_vector from CYTools cone.py",
-            "Create compute_gvs wrapper using cygv::compute_gv_rat_threefold",
-            "Verify computed GVs match McAllister's data files",
-            "Integrate into W₀ computation pipeline",
+        verified_components: vec![
+            "compute_mori_cone_cap_rays is wired into mcallister_gv and mcallister_first_principles",
+            "compute_grading_vector is wired into the GV pipeline",
+            "grading-vector results are content-address cached after strict dual-cone validation",
+            "DDM skips non-adjacent positive/negative ray pairs and no longer LP-prefilters every Mori ray",
+            "DDM initializes from an exact full-rank hyperplane basis instead of the full ambient space when possible",
+            "DDM tracks active constraints exactly for intersection rays using parent common-active sets plus the new hyperplane",
+            "DDM rank checks use modular true certificates, exact integer false checks, and a global active-set rank cache",
+            "DDM quotient-rank checks have modular true certificates plus exact small-residual true/false paths covered by unit tests",
+            "DDM caches sparse hyperplane rows for partition/intersection dot products and quotient-coordinate projection while retaining dense rows for exact rank algebra",
+            "DDM skips redundant hyperplanes that do not cut the current generated cone, avoiding active-set bloat from implied constraints",
+            "DDM prunes constraints already redundant against the exact initial full-rank basis cone",
+            "DDM uses bounded dynamic lookahead to process cheaper currently cutting hyperplanes before high-pair cuts",
+            "DDM quotient-rank checks run before full dense modular checks when a basis context exists, with their own modular true certificate and exact integer false path",
+            "DDM preserves ray orientation when normalizing primitive integer rays; sign-flipping was a correctness bug and is now unit-tested",
+            "compute_gv_invariants wraps cygv::compute_gv_rat_threefold",
+            "first-principles binaries do not load small_curves.dat or small_curves_gv.dat",
+        ],
+        remaining_gaps: vec![
+            "Finish a post-orientation-fix validation run of adjacency-filtered DDM on the full 214-dimensional McAllister Mori cone",
+            "Further optimize or replace hyperplane dualization; bounded diagnostics still need to prove the full 561658-ray McAllister dualization completes with the corrected ray orientation",
+            "Reduce the 561658-ray Mori cap input before dualization, or add a CYTools/PPL-faithful constraint minimization path",
+            "Run and validate lattice-point generation under a Python environment with OR-Tools after DDM returns the dual cone",
+            "Add an explicit expensive checkpoint test comparing computed small GV invariants to McAllister data",
+            "Validate the computed curve ordering and basis conversion against McAllister checkpoints",
         ],
     };
 

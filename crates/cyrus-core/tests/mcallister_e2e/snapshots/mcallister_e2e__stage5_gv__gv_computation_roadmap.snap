@@ -3,13 +3,32 @@ source: crates/cyrus-core/tests/mcallister_e2e/stage5_gv.rs
 expression: roadmap
 ---
 {
-  "status": "In Progress - cygv integrated, Mori cone needed",
-  "completed_components": 1,
-  "steps_remaining": [
-    "Port mori_cone_cap from CYTools calabiyau.py lines 2295-2400",
-    "Port find_grading_vector from CYTools cone.py",
-    "Create compute_gvs wrapper using cygv::compute_gv_rat_threefold",
-    "Verify computed GVs match McAllister's data files",
-    "Integrate into W₀ computation pipeline"
+  "status": "In Progress - Cyrus computes GV inputs, McAllister-sized validation is expensive",
+  "completed_components": 15,
+  "verified_components": [
+    "compute_mori_cone_cap_rays is wired into mcallister_gv and mcallister_first_principles",
+    "compute_grading_vector is wired into the GV pipeline",
+    "grading-vector results are content-address cached after strict dual-cone validation",
+    "DDM skips non-adjacent positive/negative ray pairs and no longer LP-prefilters every Mori ray",
+    "DDM initializes from an exact full-rank hyperplane basis instead of the full ambient space when possible",
+    "DDM tracks active constraints exactly for intersection rays using parent common-active sets plus the new hyperplane",
+    "DDM rank checks use modular true certificates, exact integer false checks, and a global active-set rank cache",
+    "DDM quotient-rank checks have modular true certificates plus exact small-residual true/false paths covered by unit tests",
+    "DDM caches sparse hyperplane rows for partition/intersection dot products and quotient-coordinate projection while retaining dense rows for exact rank algebra",
+    "DDM skips redundant hyperplanes that do not cut the current generated cone, avoiding active-set bloat from implied constraints",
+    "DDM prunes constraints already redundant against the exact initial full-rank basis cone",
+    "DDM uses bounded dynamic lookahead to process cheaper currently cutting hyperplanes before high-pair cuts",
+    "DDM quotient-rank checks run before full dense modular checks when a basis context exists, with their own modular true certificate and exact integer false path",
+    "DDM preserves ray orientation when normalizing primitive integer rays; sign-flipping was a correctness bug and is now unit-tested",
+    "compute_gv_invariants wraps cygv::compute_gv_rat_threefold",
+    "first-principles binaries do not load small_curves.dat or small_curves_gv.dat"
+  ],
+  "remaining_gaps": [
+    "Finish a post-orientation-fix validation run of adjacency-filtered DDM on the full 214-dimensional McAllister Mori cone",
+    "Further optimize or replace hyperplane dualization; bounded diagnostics still need to prove the full 561658-ray McAllister dualization completes with the corrected ray orientation",
+    "Reduce the 561658-ray Mori cap input before dualization, or add a CYTools/PPL-faithful constraint minimization path",
+    "Run and validate lattice-point generation under a Python environment with OR-Tools after DDM returns the dual cone",
+    "Add an explicit expensive checkpoint test comparing computed small GV invariants to McAllister data",
+    "Validate the computed curve ordering and basis conversion against McAllister checkpoints"
   ]
 }
