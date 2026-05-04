@@ -73,6 +73,8 @@ const DEFAULT_MCALLISTER_GV_MIN_POINTS: u32 = 20_000;
 const DEFAULT_CORRECTED_CHAMBER_GENERAL_GV_DIRECT_RAY_LIMIT: usize = 100_000;
 const DEFAULT_CORRECTED_CHAMBER_PROVIDED_GV_GENERATOR_LIMIT: usize = 2_000;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_SPAN_GENERATOR_LIMIT: usize = 64;
+const DEFAULT_CORRECTED_CHAMBER_LP_FACE_LATTICE_GENERATOR_LIMIT: usize = 64;
+const DEFAULT_CORRECTED_CHAMBER_LP_FACE_LATTICE_ELEMENT_LIMIT: usize = 50_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Stage {
@@ -552,6 +554,8 @@ struct FaceGvDiagnosticSample {
     active_generator_count: usize,
     span_generator_count: usize,
     used_span_expansion: bool,
+    used_lattice_saturation: bool,
+    lattice_semigroup_element_count: Option<usize>,
     gv: Option<malachite::Integer>,
     error: Option<String>,
     ambient_nonzero: Vec<(usize, i64)>,
@@ -565,6 +569,8 @@ struct FaceGvDiagnosticResult {
     active_generator_count: usize,
     span_generator_count: usize,
     used_span_expansion: bool,
+    used_lattice_saturation: bool,
+    lattice_semigroup_element_count: Option<usize>,
     gv: Option<malachite::Integer>,
     error: Option<String>,
 }
@@ -575,6 +581,8 @@ struct FaceGvAttempt {
     active_generator_count: usize,
     span_generator_count: usize,
     used_span_expansion: bool,
+    used_lattice_saturation: bool,
+    lattice_semigroup_element_count: Option<usize>,
     gv: Option<malachite::Integer>,
     error: Option<String>,
 }
@@ -2330,6 +2338,8 @@ fn compute_missing_lp_witness_face_gvs(
             active_generator_count: attempt.active_generator_count,
             span_generator_count: attempt.span_generator_count,
             used_span_expansion: attempt.used_span_expansion,
+            used_lattice_saturation: attempt.used_lattice_saturation,
+            lattice_semigroup_element_count: attempt.lattice_semigroup_element_count,
             gv: attempt.gv,
             error: attempt.error,
         });
@@ -2361,6 +2371,8 @@ fn compute_lp_witness_face_attempt(
         degree_bounded_span_generators(&provided_generators, basis_rays, grading, degree)?;
     let span_generator_count = span_generators.len();
     let mut used_span_expansion = false;
+    let mut used_lattice_saturation = false;
+    let mut lattice_semigroup_element_count = None;
     let (gv, error) = match compute_provided_generator_target_gv(
         &provided_generators,
         basis_class,
@@ -2377,7 +2389,8 @@ fn compute_lp_witness_face_attempt(
                 .ok()
                 .and_then(|value| value.parse::<usize>().ok())
                 .unwrap_or(DEFAULT_CORRECTED_CHAMBER_LP_FACE_SPAN_GENERATOR_LIMIT);
-            if span_generators.len() > provided_generators.len()
+            let (lattice_seed_generators, accumulated_error) = if span_generators.len()
+                > provided_generators.len()
                 && span_generators.len() <= span_limit
             {
                 used_span_expansion = true;
@@ -2391,24 +2404,70 @@ fn compute_lp_witness_face_attempt(
                     "span-expanded LP-witness face",
                     ambient_class,
                 ) {
-                    Ok(gv) => (Some(gv), None),
+                    Ok(gv) => {
+                        return Ok(FaceGvAttempt {
+                            generator_count: provided_generators.len(),
+                            active_generator_count: witness.active_generator_indices.len(),
+                            span_generator_count,
+                            used_span_expansion,
+                            used_lattice_saturation,
+                            lattice_semigroup_element_count,
+                            gv: Some(gv),
+                            error: None,
+                        });
+                    }
                     Err(second_error) => (
-                        None,
-                        Some(format!(
-                            "{first_error}; span-expanded retry also failed: {second_error}"
-                        )),
+                        span_generators.as_slice(),
+                        format!("{first_error}; span-expanded retry also failed: {second_error}"),
                     ),
                 }
             } else if span_generators.len() > span_limit {
                 (
-                    None,
-                    Some(format!(
+                    provided_generators.as_slice(),
+                    format!(
                         "{first_error}; span-expanded retry skipped because {} generators exceed limit {span_limit}",
                         span_generators.len()
-                    )),
+                    ),
                 )
             } else {
-                (None, Some(first_error))
+                (provided_generators.as_slice(), first_error)
+            };
+
+            let lattice_generator_limit =
+                std::env::var("CYRUS_CORRECTED_CHAMBER_LP_FACE_LATTICE_GENERATOR_LIMIT")
+                    .ok()
+                    .and_then(|value| value.parse::<usize>().ok())
+                    .unwrap_or(DEFAULT_CORRECTED_CHAMBER_LP_FACE_LATTICE_GENERATOR_LIMIT);
+            if lattice_seed_generators.len() <= lattice_generator_limit {
+                match compute_lattice_saturated_face_target_gv(
+                    lattice_seed_generators,
+                    basis_class,
+                    grading,
+                    q_matrix,
+                    intnums,
+                    max_deg,
+                    ambient_class,
+                ) {
+                    Ok((gv, element_count)) => {
+                        used_lattice_saturation = true;
+                        lattice_semigroup_element_count = Some(element_count);
+                        (Some(gv), None)
+                    }
+                    Err(lattice_error) => (
+                        None,
+                        Some(format!(
+                            "{accumulated_error}; lattice-saturated retry also failed: {lattice_error}"
+                        )),
+                    ),
+                }
+            } else {
+                (
+                    None,
+                    Some(format!(
+                        "{accumulated_error}; lattice-saturated retry skipped because {} seed generators exceed limit {lattice_generator_limit}",
+                        lattice_seed_generators.len()
+                    )),
+                )
             }
         }
     };
@@ -2418,6 +2477,8 @@ fn compute_lp_witness_face_attempt(
         active_generator_count: witness.active_generator_indices.len(),
         span_generator_count,
         used_span_expansion,
+        used_lattice_saturation,
+        lattice_semigroup_element_count,
         gv,
         error,
     })
@@ -2468,6 +2529,129 @@ fn compute_provided_generator_target_gv(
             panic_payload_message(payload.as_ref())
         )),
     }
+}
+
+fn compute_lattice_saturated_face_target_gv(
+    seed_generators: &[Vec<i64>],
+    target_class: &[i64],
+    grading: &[i64],
+    q_matrix: &[Vec<i64>],
+    intnums: &cyrus_core::Intersection,
+    max_deg: u32,
+    ambient_class: &[i64],
+) -> Result<(malachite::Integer, usize), String> {
+    let target_i32 = target_class
+        .iter()
+        .map(|&value| {
+            i32::try_from(value).map_err(|_| {
+                "lattice-saturated face GV target coordinate does not fit in i32".to_string()
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let semigroup_elements = degree_bounded_face_lattice_points(seed_generators, grading, max_deg)?;
+    if !semigroup_elements
+        .iter()
+        .any(|element| element.as_slice() == target_class)
+    {
+        return Err(format!(
+            "lattice-saturated face enumeration did not include target ambient_nonzero={:?}",
+            sparse_i64(ambient_class)
+        ));
+    }
+
+    let element_limit = std::env::var("CYRUS_CORRECTED_CHAMBER_LP_FACE_LATTICE_ELEMENT_LIMIT")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(DEFAULT_CORRECTED_CHAMBER_LP_FACE_LATTICE_ELEMENT_LIMIT);
+    if semigroup_elements.len() > element_limit {
+        return Err(format!(
+            "lattice-saturated face enumeration produced {} semigroup elements, exceeding limit {element_limit}",
+            semigroup_elements.len()
+        ));
+    }
+
+    let gvs = cyrus_core::compute_gv_invariants_with_explicit_semigroup(
+        &semigroup_elements,
+        grading,
+        q_matrix,
+        intnums,
+    )
+    .map_err(|e| {
+        format!(
+            "failed lattice-saturated face GV computation with {} explicit semigroup elements for ambient_nonzero={:?}: {e}",
+            semigroup_elements.len(),
+            sparse_i64(ambient_class),
+        )
+    })?;
+    let gv = gvs
+        .into_iter()
+        .find_map(|(curve, gv)| (curve == target_i32).then_some(gv))
+        .unwrap_or_else(|| malachite::Integer::from(0));
+    Ok((gv, semigroup_elements.len()))
+}
+
+fn degree_bounded_face_lattice_points(
+    seed_generators: &[Vec<i64>],
+    grading: &[i64],
+    max_deg: u32,
+) -> Result<Vec<Vec<i64>>, String> {
+    if seed_generators.is_empty() {
+        return Err("face lattice saturation requires at least one seed generator".to_string());
+    }
+    let dim = seed_generators[0].len();
+    if dim != grading.len() {
+        return Err(format!(
+            "seed generator dimension {dim} does not match grading vector length {}",
+            grading.len()
+        ));
+    }
+    if seed_generators.iter().any(|row| row.len() != dim) {
+        return Err("seed generator dimensions are inconsistent".to_string());
+    }
+
+    let support: Vec<usize> = (0..dim)
+        .filter(|&coord| seed_generators.iter().any(|row| row[coord] != 0))
+        .collect();
+    if support.is_empty() {
+        return Err("face lattice saturation seed generators are all zero".to_string());
+    }
+
+    let reduced_rays = seed_generators
+        .iter()
+        .map(|row| {
+            support
+                .iter()
+                .map(|&coord| i128::from(row[coord]))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let reduced_grading = support
+        .iter()
+        .map(|&coord| grading[coord])
+        .collect::<Vec<_>>();
+    let mut cone = cyrus_core::Cone::from_rays(reduced_rays);
+    let reduced_points = cone
+        .find_lattice_points_ortools(None, Some(i64::from(max_deg)), &reduced_grading, 1000, 0)
+        .map_err(|e| format!("failed to enumerate lattice-saturated face points: {e}"))?;
+
+    let mut lifted_points = Vec::with_capacity(reduced_points.len());
+    for point in reduced_points {
+        if point.len() != support.len() {
+            return Err(format!(
+                "face lattice point dimension {} does not match support dimension {}",
+                point.len(),
+                support.len()
+            ));
+        }
+        let mut lifted = vec![0i64; dim];
+        for (&coord, value) in support.iter().zip(point) {
+            lifted[coord] = value;
+        }
+        lifted_points.push(lifted);
+    }
+    lifted_points.sort();
+    lifted_points.dedup();
+    Ok(lifted_points)
 }
 
 fn degree_bounded_span_generators(
@@ -3062,7 +3246,7 @@ fn diagnose_chamber_gv_volume_correction(
         let corrected_kappa_basis =
             chamber_intersection_in_basis(tri, &geom.triangulation_points, &intersection.basis)?;
         eprintln!(
-            "[WARN] corrected-chamber LP-witness face GV diagnostic uses small provided-generator cones from floating LP witnesses; this is not yet promoted to the exact corrected-chamber GV fallback."
+            "[WARN] corrected-chamber LP-witness face GV diagnostic uses small provided-generator cones from floating LP witnesses, with a lattice-saturated local face retry on failures; this is not yet promoted to the exact corrected-chamber GV fallback."
         );
         let face_gvs = compute_missing_lp_witness_face_gvs(
             &missing_gv_classes,
@@ -3085,6 +3269,8 @@ fn diagnose_chamber_gv_volume_correction(
                 active_generator_count: result.active_generator_count,
                 span_generator_count: result.span_generator_count,
                 used_span_expansion: result.used_span_expansion,
+                used_lattice_saturation: result.used_lattice_saturation,
+                lattice_semigroup_element_count: result.lattice_semigroup_element_count,
                 gv: result.gv.clone(),
                 error: result.error.clone(),
                 ambient_nonzero: result
@@ -4881,6 +5067,16 @@ mod tests {
         .len();
 
         assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn degree_bounded_face_lattice_points_saturates_non_unimodular_cone() {
+        let points =
+            degree_bounded_face_lattice_points(&[vec![1, 0], vec![1, 2]], &[1, 1], 3).unwrap();
+
+        assert!(points.contains(&vec![1, 1]));
+        assert!(points.contains(&vec![1, 0]));
+        assert!(points.contains(&vec![1, 2]));
     }
 }
 
