@@ -576,6 +576,7 @@ fn stage5_gv_computation_roadmap() {
             "The no-replay runner reaches GV-corrected KKLT volume and V0 using the height-projected branch initializer, computed B-field gamma, and computed toric GV values",
             "mcallister_first_principles now uses the height-projected KKLT initializer by default when no explicit branch search is requested, so the standard no-replay command no longer needs branch flags to reach the McAllister branch",
             "mcallister_first_principles derives the BBHL Hodge inputs from the computed primal and dual bases instead of hard-coding the 4-214-647 values",
+            "mcallister_first_principles validates the no-replay corrected volume against corrected_cy_vol.dat when McAllister comparison data is available",
             "first-principles binaries do not load small_curves.dat or small_curves_gv.dat",
             "basis-coordinate GV invariants can be mapped back to ambient divisor-intersection curve classes for primal volume corrections",
             "mcallister_first_principles can explicitly attempt general primal GV fallback for missing small-curve toric formula coverage via --primal-gv-max-deg or --primal-gv-min-points",
