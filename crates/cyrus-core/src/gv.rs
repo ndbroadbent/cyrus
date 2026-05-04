@@ -221,6 +221,48 @@ pub fn compute_mori_cone_cap_rays(
     Ok(deduped)
 }
 
+/// Project ambient Mori-cap rays to a divisor basis, then normalize and deduplicate.
+///
+/// This matches the final `in_basis=true` projection/normalization step of
+/// [`compute_mori_cone_cap_rays`] when the caller already has ambient rays.
+pub fn project_mori_cone_cap_rays_to_basis(
+    ambient_rays: &[Vec<i64>],
+    basis: &[usize],
+) -> Result<Vec<Vec<i64>>> {
+    let mut projected: Vec<Vec<i64>> = Vec::with_capacity(ambient_rays.len());
+    for ray in ambient_rays {
+        let mut row = Vec::with_capacity(basis.len());
+        for &idx in basis {
+            let Some(&value) = ray.get(idx) else {
+                return Err(Error::InvalidInput(format!(
+                    "basis index {idx} is out of bounds for Mori ray dimension {}",
+                    ray.len()
+                )));
+            };
+            row.push(value);
+        }
+
+        let mut g = 0i64;
+        for &x in &row {
+            g = gcd_i64(g, x.abs());
+        }
+        if g == 0 {
+            continue;
+        }
+        projected.push(row.into_iter().map(|x| x / g).collect());
+    }
+
+    let mut uniq: HashSet<Vec<i64>> = HashSet::new();
+    let mut deduped = Vec::with_capacity(projected.len());
+    for row in projected {
+        if uniq.insert(row.clone()) {
+            deduped.push(row);
+        }
+    }
+    deduped.sort();
+    Ok(deduped)
+}
+
 /// A toric curve candidate with its volume at a specific point in Kähler moduli space.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ToricCurveCandidate {
@@ -2004,8 +2046,8 @@ mod tests {
         BoundedCurveDecompositionIndex, ToricCurveCandidate, compute_grading_vector,
         curve_volume_in_divisor_basis, dump_mori_rays_cdd, find_pair_decomposition,
         gv_lattice_search_request, load_grading_cache, map_basis_gv_invariants_to_ambient,
-        remove_pair_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
-        write_grading_cache,
+        project_mori_cone_cap_rays_to_basis, remove_pair_decomposable_curve_candidates,
+        subcutoff_toric_curve_candidates, write_grading_cache,
     };
     use crate::{f64_finite, f64_pos};
     use malachite::Integer;
@@ -2225,6 +2267,22 @@ mod tests {
     fn gv_lattice_search_uses_max_degree_when_requested() {
         assert_eq!(gv_lattice_search_request(400, None), (Some(400), None));
         assert_eq!(gv_lattice_search_request(400, Some(7)), (None, Some(7)));
+    }
+
+    #[test]
+    fn project_mori_rays_to_basis_normalizes_and_deduplicates() {
+        let ambient = vec![vec![0, 2, 4], vec![0, 1, 2], vec![5, 0, 0]];
+        let projected = project_mori_cone_cap_rays_to_basis(&ambient, &[1, 2]).unwrap();
+
+        assert_eq!(projected, vec![vec![1, 2]]);
+    }
+
+    #[test]
+    fn project_mori_rays_to_basis_rejects_bad_basis_index() {
+        let err = project_mori_cone_cap_rays_to_basis(&[vec![1, 2]], &[2])
+            .expect_err("basis index must be in range");
+
+        assert!(format!("{err}").contains("out of bounds"));
     }
 
     #[test]

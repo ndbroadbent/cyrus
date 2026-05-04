@@ -30,7 +30,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use cyrus_core::flat_direction::{compute_flat_direction, compute_flat_direction_full};
-use cyrus_core::gv::BoundedCurveDecompositionIndex;
+use cyrus_core::gv::{BoundedCurveDecompositionIndex, project_mori_cone_cap_rays_to_basis};
 use cyrus_core::types::f64::F64;
 use cyrus_core::types::i64::I64;
 use cyrus_core::types::range::CheckedRange;
@@ -1176,15 +1176,8 @@ fn compute_branch_gv_coverages(
         .map(|item| (item.class, item.gv))
         .collect();
     let required_degree_grading = if include_required_degree_summary {
-        let basis_rays = compute_mori_cone_cap_rays(
-            &geom.triangulation,
-            &geom.triangulation_points,
-            &geom.polytope,
-            true,
-            false,
-            Some(&intersection.basis),
-        )
-        .map_err(|e| format!("failed to compute primal basis Mori-cap rays: {e}"))?;
+        let basis_rays = project_mori_cone_cap_rays_to_basis(&ambient_rays, &intersection.basis)
+            .map_err(|e| format!("failed to project primal Mori-cap rays to basis: {e}"))?;
         Some(
             compute_grading_vector(&basis_rays)
                 .ok_or_else(|| "failed to compute branch GV degree grading vector".to_string())?,
@@ -1364,6 +1357,7 @@ fn compute_primal_general_gv_by_ambient_class(
     geom: &PrimalGeom,
     intersection: &PrimalIntersection,
     required_ambient_classes: &[Vec<i64>],
+    basis_rays: Option<&[Vec<i64>]>,
     min_points: Option<u32>,
     max_deg: Option<u32>,
 ) -> Result<HashMap<Vec<i64>, malachite::Integer>, String> {
@@ -1374,15 +1368,21 @@ fn compute_primal_general_gv_by_ambient_class(
         );
     }
 
-    let rays = compute_mori_cone_cap_rays(
-        &geom.triangulation,
-        &geom.triangulation_points,
-        &geom.polytope,
-        true,
-        false,
-        Some(&intersection.basis),
-    )
-    .map_err(|e| format!("failed to compute primal basis Mori-cap rays: {e}"))?;
+    let computed_rays;
+    let rays = if let Some(basis_rays) = basis_rays {
+        basis_rays
+    } else {
+        computed_rays = compute_mori_cone_cap_rays(
+            &geom.triangulation,
+            &geom.triangulation_points,
+            &geom.polytope,
+            true,
+            false,
+            Some(&intersection.basis),
+        )
+        .map_err(|e| format!("failed to compute primal basis Mori-cap rays: {e}"))?;
+        &computed_rays
+    };
     let grading = compute_grading_vector(&rays)
         .ok_or_else(|| "failed to compute primal GV grading vector".to_string())?;
     let degree_summary = summarize_required_gv_degrees(
@@ -2274,10 +2274,17 @@ fn stage_volume(
                 primal_gv_min_points,
                 primal_gv_max_deg
             );
+            let basis_rays =
+                project_mori_cone_cap_rays_to_basis(&ambient_rays, &intersection.basis)
+                    .unwrap_or_else(|e| {
+                        eprintln!("[ERROR] failed to project primal Mori-cap rays to basis: {e}");
+                        std::process::exit(2);
+                    });
             let general_gvs = compute_primal_general_gv_by_ambient_class(
                 geom,
                 intersection,
                 &missing_gv_classes,
+                Some(&basis_rays),
                 primal_gv_min_points,
                 primal_gv_max_deg,
             )
