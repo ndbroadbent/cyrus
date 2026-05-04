@@ -21,6 +21,7 @@
 //!
 //! Reference: arXiv:2107.09064, Section 5
 
+use std::collections::HashMap;
 use std::f64::consts::PI;
 
 use crate::f64_pos;
@@ -30,9 +31,12 @@ use crate::types::i64::I64;
 use crate::types::physics::{CTau, DivisorVolume, RelativeError, StringCoupling};
 use crate::types::range::CheckedRange;
 use crate::types::tags::{Finite, NonNeg, Pos};
+use malachite::Integer;
 
 /// 2π as a typed positive constant.
 const TWO_PI: F64<Pos> = f64_pos!(2.0 * PI);
+const DILOG_TOL: f64 = 1e-16;
+const DILOG_MAX_TERMS: usize = 100_000;
 
 /// Compute target divisor volumes `τ_i` = `c_i` / `c_τ`.
 ///
@@ -46,6 +50,171 @@ pub fn compute_target_tau(c_i: &[I64<Pos>], c_tau: CTau) -> Vec<DivisorVolume> {
             // Pos / Pos = Pos
             ci.to_f64() / c_tau
         })
+        .collect()
+}
+
+/// Compute corrected target divisor volumes
+/// `τ_i = c_i / c_τ + χ(D_i) / 24`.
+///
+/// This is the zeroth-order McAllister KKLT target after including the divisor
+/// Euler-characteristic term from the corrected divisor volume formula.
+///
+/// Returns `None` if dimensions do not match or any corrected target is not
+/// positive.
+#[must_use]
+pub fn compute_corrected_target_tau(
+    c_i: &[I64<Pos>],
+    chi_divisor: &[I64<Finite>],
+    c_tau: CTau,
+) -> Option<Vec<DivisorVolume>> {
+    if c_i.len() != chi_divisor.len() {
+        return None;
+    }
+
+    let twenty_four = f64_pos!(24.0);
+
+    c_i.iter()
+        .zip(chi_divisor.iter())
+        .map(|(ci, chi)| {
+            let kklt_target = ci.to_f64() / c_tau;
+            let euler_shift = chi.to_f64() / twenty_four;
+            (kklt_target + euler_shift).try_to_pos()
+        })
+        .collect()
+}
+
+/// Compute corrected target divisor volumes including divisor GV corrections:
+/// `τ_i = c_i / c_τ + χ(D_i) / 24 - GV_i(t)`.
+///
+/// This is the classical target that must be hit by
+/// `1/2 κ_ijk t^j t^k` when the corrected divisor volume is
+/// `T_i = 1/2 κ_ijk t^j t^k - χ(D_i)/24 + GV_i(t)`.
+#[must_use]
+pub fn compute_gv_corrected_target_tau(
+    c_i: &[I64<Pos>],
+    chi_divisor: &[I64<Finite>],
+    c_tau: CTau,
+    gv_correction: &[F64<Finite>],
+) -> Option<Vec<DivisorVolume>> {
+    if c_i.len() != chi_divisor.len() || c_i.len() != gv_correction.len() {
+        return None;
+    }
+
+    let twenty_four = f64_pos!(24.0);
+
+    c_i.iter()
+        .zip(chi_divisor.iter())
+        .zip(gv_correction.iter())
+        .map(|((ci, chi), gv)| {
+            let kklt_target = ci.to_f64() / c_tau;
+            let euler_shift = chi.to_f64() / twenty_four;
+            (kklt_target + euler_shift - *gv).try_to_pos()
+        })
+        .collect()
+}
+
+fn real_dilog_series(x: f64) -> Option<f64> {
+    if !x.is_finite() || x.abs() >= 1.0 {
+        return None;
+    }
+
+    let mut sum = 0.0;
+    let mut power = x;
+    for n in 1..=DILOG_MAX_TERMS {
+        let n_f = n as f64;
+        let term = power / (n_f * n_f);
+        sum += term;
+        if term.abs() < DILOG_TOL {
+            return Some(sum);
+        }
+        power *= x;
+    }
+
+    None
+}
+
+fn real_dilog_unit_disk(x: f64) -> Option<f64> {
+    if !x.is_finite() || x.abs() >= 1.0 {
+        return None;
+    }
+    if x.abs() < 1e-100 {
+        return Some(0.0);
+    }
+
+    if x > 0.5 {
+        let one_minus_x = 1.0 - x;
+        let reduced = real_dilog_series(one_minus_x)?;
+        Some(PI * PI / 6.0 - x.ln() * one_minus_x.ln() - reduced)
+    } else if x < -0.5 {
+        let reduced_arg = x / (x - 1.0);
+        let reduced = real_dilog_series(reduced_arg)?;
+        Some(-reduced - 0.5 * (1.0 - x).ln().powi(2))
+    } else {
+        real_dilog_series(x)
+    }
+}
+
+/// Compute the divisor GV correction
+/// `GV_i(t) = 1/(2π)^2 Σ_q q_i N_q Li_2((-1)^(γ·q) exp(-2π q·t))`.
+///
+/// Returns `None` if dimensions do not match, a GV integer cannot be represented
+/// as a finite `f64`, or any curve has non-positive `q·t`. The last condition is
+/// a physics failure for the intended use: the unit-disk dilogarithm expansion is
+/// only valid inside the Kähler cone where effective curve volumes are positive.
+#[must_use]
+pub fn compute_gv_target_correction(
+    gv_invariants: &[(Vec<i32>, Integer)],
+    t: &[F64<Finite>],
+    gamma: Option<&[I64<Finite>]>,
+) -> Option<Vec<F64<Finite>>> {
+    let dim = t.len();
+    if dim == 0 || gamma.is_some_and(|g| g.len() != dim) {
+        return None;
+    }
+
+    let mut correction = vec![0.0f64; dim];
+    for (curve, invariant) in gv_invariants {
+        if curve.len() != dim {
+            return None;
+        }
+
+        let q_dot_t = curve
+            .iter()
+            .zip(t.iter())
+            .map(|(&qi, ti)| f64::from(qi) * ti.get())
+            .sum::<f64>();
+        if !q_dot_t.is_finite() || q_dot_t <= 0.0 {
+            return None;
+        }
+
+        let parity = gamma.map_or(0_i128, |g| {
+            curve
+                .iter()
+                .zip(g.iter())
+                .map(|(&qi, gi)| i128::from(qi) * i128::from(gi.get()))
+                .sum::<i128>()
+        });
+        let sign = if parity.rem_euclid(2) == 0 { 1.0 } else { -1.0 };
+        let arg = sign * (-TWO_PI.get() * q_dot_t).exp();
+        if arg.abs() < 1e-100 {
+            continue;
+        }
+
+        let dilog = real_dilog_unit_disk(arg)?;
+        let invariant_f = invariant.to_string().parse::<f64>().ok()?;
+        if !invariant_f.is_finite() {
+            return None;
+        }
+
+        for (entry, &qi) in correction.iter_mut().zip(curve.iter()) {
+            *entry += f64::from(qi) * invariant_f * dilog;
+        }
+    }
+
+    let prefactor = 1.0 / (4.0 * PI * PI);
+    correction
+        .into_iter()
+        .map(|value| F64::<Finite>::new(prefactor * value))
         .collect()
 }
 
@@ -66,8 +235,10 @@ pub fn compute_c_tau(g_s: StringCoupling, w0: F64<Pos>) -> CTau {
     let denominator = g_s * ln_w0_inv;
 
     // This should be positive for valid KKLT
-    let result = TWO_PI / denominator;
-    result.try_to_pos().expect("c_tau must be positive for valid KKLT")
+    let denominator_pos = denominator
+        .try_to_pos()
+        .expect("c_tau denominator must be positive for valid KKLT");
+    TWO_PI / denominator_pos
 }
 
 /// Compute divisor volumes `τ_i` = (1/2) `κ_ijk` t^j t^k.
@@ -123,6 +294,112 @@ pub fn compute_jacobian(kappa: &Intersection, t: &[F64<Finite>]) -> Vec<Vec<F64<
     }
 
     j
+}
+
+fn kklt_to_basis_map(
+    basis: &[usize],
+    kklt_basis: &[usize],
+    kappa_all_dim: usize,
+) -> Option<Vec<Option<usize>>> {
+    if basis.iter().any(|&idx| idx >= kappa_all_dim)
+        || kklt_basis.iter().any(|&idx| idx >= kappa_all_dim)
+    {
+        return None;
+    }
+
+    let pt_to_basis_idx: HashMap<usize, usize> = basis
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(idx, pt)| (pt, idx))
+        .collect();
+
+    Some(
+        kklt_basis
+            .iter()
+            .map(|pt| pt_to_basis_idx.get(pt).copied())
+            .collect(),
+    )
+}
+
+/// Compute divisor volumes for KKLT divisors when the KKLT divisor set differs
+/// from the Kähler coordinate basis.
+///
+/// `basis` indexes the divisors used as Kähler coordinates. `kklt_basis`
+/// indexes the divisors that appear in the non-perturbative superpotential.
+/// If a KKLT divisor is not in `basis`, its volume is computed from the full
+/// divisor tensor as `τ_D = 1/2 κ_{D,b_j,b_k} t^j t^k`.
+#[must_use]
+pub fn compute_kklt_divisor_volumes(
+    kappa_basis: &Intersection,
+    kappa_all: &Intersection,
+    basis: &[usize],
+    kklt_basis: &[usize],
+    t: &[F64<Finite>],
+) -> Option<Vec<F64<Finite>>> {
+    let basis_dim = basis.len();
+    if kappa_basis.dim() != basis_dim || t.len() != basis_dim {
+        return None;
+    }
+    let kklt_to_basis = kklt_to_basis_map(basis, kklt_basis, kappa_all.dim())?;
+    let basis_tau = compute_divisor_volumes(kappa_basis, t);
+    let half = F64::<Finite>::new(0.5).expect("0.5 is finite");
+
+    let mut tau = Vec::with_capacity(kklt_basis.len());
+    for (&pt, basis_idx) in kklt_basis.iter().zip(kklt_to_basis.iter()) {
+        if let Some(idx) = *basis_idx {
+            tau.push(basis_tau[idx]);
+            continue;
+        }
+
+        let mut tau_a = F64::<Finite>::ZERO;
+        for (j, &bj) in basis.iter().enumerate() {
+            for (k, &bk) in basis.iter().enumerate() {
+                let kappa = kappa_all.get(pt, bj, bk).to_f64();
+                tau_a = tau_a + kappa * t[j] * t[k];
+            }
+        }
+        tau.push(half * tau_a);
+    }
+
+    Some(tau)
+}
+
+/// Compute the KKLT mixed-basis Jacobian
+/// `J[a][k] = ∂τ_a / ∂t^k`.
+#[must_use]
+pub fn compute_kklt_jacobian(
+    kappa_basis: &Intersection,
+    kappa_all: &Intersection,
+    basis: &[usize],
+    kklt_basis: &[usize],
+    t: &[F64<Finite>],
+) -> Option<Vec<Vec<F64<Finite>>>> {
+    let basis_dim = basis.len();
+    if kappa_basis.dim() != basis_dim || t.len() != basis_dim {
+        return None;
+    }
+    let kklt_to_basis = kklt_to_basis_map(basis, kklt_basis, kappa_all.dim())?;
+    let basis_jacobian = compute_jacobian(kappa_basis, t);
+
+    let mut jacobian = Vec::with_capacity(kklt_basis.len());
+    for (&pt, basis_idx) in kklt_basis.iter().zip(kklt_to_basis.iter()) {
+        if let Some(idx) = *basis_idx {
+            jacobian.push(basis_jacobian[idx].clone());
+            continue;
+        }
+
+        let mut row = vec![F64::<Finite>::ZERO; basis.len()];
+        for (j, &bj) in basis.iter().enumerate() {
+            for (k, &bk) in basis.iter().enumerate() {
+                let kappa = kappa_all.get(pt, bj, bk).to_f64();
+                row[k] = row[k] + kappa * t[j];
+            }
+        }
+        jacobian.push(row);
+    }
+
+    Some(jacobian)
 }
 
 /// Generate all unique permutations of three indices.
@@ -193,22 +470,26 @@ pub fn solve_path_following(
     let dim = kappa.dim();
     assert_eq!(t_init.len(), dim);
     assert_eq!(tau_target.len(), dim);
+    if steps.end <= steps.start {
+        return None;
+    }
 
     let mut t = t_init.to_vec();
     let tau_init = compute_divisor_volumes(kappa, &t);
 
-    let n_steps = I64::<Pos>::new(steps.end as i64)?;
+    let n_steps = I64::<Pos>::new((steps.end - steps.start) as i64)?;
 
-    for m in steps.iter_pos() {
-        // m is I64<Pos>, n_steps is I64<Pos>, division yields F64<Pos>
-        let alpha = m.to_f64() / n_steps.to_f64();
+    for m in steps.iter_non_neg() {
+        let step_index = I64::<Pos>::new(m.get() - steps.start as i64 + 1)?;
+        // step_index and n_steps are I64<Pos>, division yields F64<Pos>.
+        let alpha = step_index.to_f64() / n_steps.to_f64();
         let one_minus_alpha = f64_pos!(1.0) - alpha;
 
         // Interpolate target
         let tau_step: Vec<F64<Finite>> = tau_init
             .iter()
             .zip(tau_target.iter())
-            .map(|(ti, tt)| one_minus_alpha * *ti + alpha * tt.to_finite())
+            .map(|(ti, tt)| one_minus_alpha * *ti + alpha * *tt)
             .collect();
 
         let tau_current = compute_divisor_volumes(kappa, &t);
@@ -230,35 +511,33 @@ pub fn solve_path_following(
         }
 
         // Check for divergence
-        let divergence_threshold = f64_pos!(1e6);
+        let divergence_threshold = F64::<NonNeg>::new(1e6).expect("threshold is non-negative");
         if t.iter().any(|ti| ti.abs() > divergence_threshold) {
             return None;
         }
     }
 
     let tau = compute_divisor_volumes(kappa, &t);
+    let n_targets = I64::<Pos>::new(tau_target.len() as i64)?;
 
     // Compute error: sum of squared differences
     let error_sq: F64<NonNeg> = tau
         .iter()
         .zip(tau_target.iter())
-        .map(|(ta, tt)| (*ta - tt.to_finite()).square())
+        .map(|(ta, tt)| (*ta - *tt).square())
         .fold(F64::<NonNeg>::ZERO, |acc, x| acc + x);
 
-    let error = error_sq.sqrt();
+    let error = (error_sq / n_targets.to_f64()).sqrt();
 
     // Mean of target tau values (all positive, so sum and mean are positive)
-    let n_targets = I64::<Pos>::new(tau_target.len() as i64)?;
-    let sum_target: F64<Pos> = tau_target
-        .iter()
-        .copied()
-        .reduce(|acc, x| acc + x)?;
+    let sum_target: F64<Pos> = tau_target.iter().copied().reduce(|acc, x| acc + x)?;
     let mean_target = sum_target / n_targets.to_f64();
 
     // Relative error = error / mean_target (both NonNeg/Pos, result is NonNeg)
     let relative_error = error / mean_target;
 
-    let converged = relative_error < f64_pos!(0.001);
+    let convergence_threshold = F64::<NonNeg>::new(0.001).expect("threshold is non-negative");
+    let converged = relative_error < convergence_threshold;
 
     Some(KkltResult {
         t,
@@ -269,7 +548,279 @@ pub fn solve_path_following(
     })
 }
 
-/// Solve Ax = b using least squares (normal equations).
+/// Solve KKLT with the two-phase branch selection used in the McAllister
+/// reproduction.
+///
+/// Phase 1 follows from a scaled uniform initial point to the uncorrected
+/// integer target `τ_i = c_i`, which selects the branch used by the reference
+/// computation. Phase 2 follows from that branch to the corrected target.
+///
+/// Returns `None` if either phase fails or does not converge.
+pub fn solve_two_phase_path_following(
+    kappa: &Intersection,
+    tau_target: &[DivisorVolume],
+    c_i: &[I64<Pos>],
+    steps: CheckedRange<usize>,
+) -> Option<KkltResult> {
+    let dim = kappa.dim();
+    if dim == 0 || tau_target.len() != dim || c_i.len() != dim || steps.end <= steps.start {
+        return None;
+    }
+
+    let tau_phase1: Vec<DivisorVolume> = c_i.iter().map(|ci| ci.to_f64()).collect();
+
+    let half = F64::<Finite>::new(0.5).expect("0.5 is finite");
+    let mut t_uniform = vec![half; dim];
+
+    let tau_at_uniform = compute_divisor_volumes(kappa, &t_uniform);
+    let n_dim = I64::<Pos>::new(dim as i64)?;
+
+    let mean_phase1 = tau_phase1.iter().copied().reduce(|acc, x| acc + x)? / n_dim.to_f64();
+    let mean_uniform = tau_at_uniform
+        .iter()
+        .copied()
+        .fold(F64::<Finite>::ZERO, |acc, x| acc + x)
+        / n_dim.to_f64();
+
+    if let Some(mean_uniform_pos) = mean_uniform.try_to_pos() {
+        let scale = (mean_phase1 / mean_uniform_pos).sqrt();
+        for ti in &mut t_uniform {
+            *ti = *ti * scale;
+        }
+    }
+
+    let phase1 = solve_path_following(kappa, &tau_phase1, &t_uniform, steps)?;
+    if !phase1.converged {
+        return None;
+    }
+
+    let phase2 = solve_path_following(kappa, tau_target, &phase1.t, steps)?;
+    if phase2.converged { Some(phase2) } else { None }
+}
+
+/// Solve KKLT path-following for the McAllister mixed-basis setup.
+///
+/// This is the direct Rust counterpart of the Python `SparseKappa` adapter:
+/// Kähler coordinates are in `basis`, while target divisor volumes are ordered
+/// by `kklt_basis`.
+pub fn solve_mixed_basis_path_following(
+    kappa_basis: &Intersection,
+    kappa_all: &Intersection,
+    basis: &[usize],
+    kklt_basis: &[usize],
+    tau_target: &[DivisorVolume],
+    t_init: &[F64<Finite>],
+    steps: CheckedRange<usize>,
+) -> Option<KkltResult> {
+    let basis_dim = basis.len();
+    if kappa_basis.dim() != basis_dim
+        || t_init.len() != basis_dim
+        || tau_target.len() != kklt_basis.len()
+        || steps.end <= steps.start
+    {
+        return None;
+    }
+
+    let mut t = t_init.to_vec();
+    let tau_init = compute_kklt_divisor_volumes(kappa_basis, kappa_all, basis, kklt_basis, &t)?;
+    let n_steps = I64::<Pos>::new((steps.end - steps.start) as i64)?;
+
+    for m in steps.iter_non_neg() {
+        let step_index = I64::<Pos>::new(m.get() - steps.start as i64 + 1)?;
+        let alpha = step_index.to_f64() / n_steps.to_f64();
+        let one_minus_alpha = f64_pos!(1.0) - alpha;
+
+        let tau_step: Vec<F64<Finite>> = tau_init
+            .iter()
+            .zip(tau_target.iter())
+            .map(|(ti, tt)| one_minus_alpha * *ti + alpha * *tt)
+            .collect();
+
+        let tau_current =
+            compute_kklt_divisor_volumes(kappa_basis, kappa_all, basis, kklt_basis, &t)?;
+        let delta_tau: Vec<F64<Finite>> = tau_step
+            .iter()
+            .zip(tau_current.iter())
+            .map(|(ts, tc)| *ts - *tc)
+            .collect();
+
+        let j = compute_kklt_jacobian(kappa_basis, kappa_all, basis, kklt_basis, &t)?;
+        let epsilon = solve_least_squares(&j, &delta_tau)?;
+
+        for (ti, ei) in t.iter_mut().zip(epsilon.iter()) {
+            *ti = *ti + *ei;
+        }
+
+        let divergence_threshold = F64::<NonNeg>::new(1e6).expect("threshold is non-negative");
+        if t.iter().any(|ti| ti.abs() > divergence_threshold) {
+            return None;
+        }
+    }
+
+    let tau = compute_kklt_divisor_volumes(kappa_basis, kappa_all, basis, kklt_basis, &t)?;
+    let n_targets = I64::<Pos>::new(tau_target.len() as i64)?;
+    let error_sq: F64<NonNeg> = tau
+        .iter()
+        .zip(tau_target.iter())
+        .map(|(ta, tt)| (*ta - *tt).square())
+        .fold(F64::<NonNeg>::ZERO, |acc, x| acc + x);
+    let error = (error_sq / n_targets.to_f64()).sqrt();
+    let sum_target: F64<Pos> = tau_target.iter().copied().reduce(|acc, x| acc + x)?;
+    let mean_target = sum_target / n_targets.to_f64();
+    let relative_error = error / mean_target;
+    let convergence_threshold = F64::<NonNeg>::new(0.001).expect("threshold is non-negative");
+    let converged = relative_error < convergence_threshold;
+
+    Some(KkltResult {
+        t,
+        tau,
+        tau_target: tau_target.to_vec(),
+        converged,
+        relative_error,
+    })
+}
+
+/// Solve KKLT with two-phase branch selection for mixed `basis`/`kklt_basis`
+/// divisor sets.
+pub fn solve_two_phase_mixed_basis_path_following(
+    kappa_basis: &Intersection,
+    kappa_all: &Intersection,
+    basis: &[usize],
+    kklt_basis: &[usize],
+    tau_target: &[DivisorVolume],
+    c_i: &[I64<Pos>],
+    steps: CheckedRange<usize>,
+) -> Option<KkltResult> {
+    let dim = basis.len();
+    if dim == 0
+        || kappa_basis.dim() != dim
+        || kklt_basis.len() != tau_target.len()
+        || kklt_basis.len() != c_i.len()
+        || steps.end <= steps.start
+    {
+        return None;
+    }
+
+    let tau_phase1: Vec<DivisorVolume> = c_i.iter().map(|ci| ci.to_f64()).collect();
+    let half = F64::<Finite>::new(0.5).expect("0.5 is finite");
+    let mut t_uniform = vec![half; dim];
+    let tau_at_uniform =
+        compute_kklt_divisor_volumes(kappa_basis, kappa_all, basis, kklt_basis, &t_uniform)?;
+    let n_kklt = I64::<Pos>::new(kklt_basis.len() as i64)?;
+
+    let mean_phase1 = tau_phase1.iter().copied().reduce(|acc, x| acc + x)? / n_kklt.to_f64();
+    let mean_uniform = tau_at_uniform
+        .iter()
+        .copied()
+        .fold(F64::<Finite>::ZERO, |acc, x| acc + x)
+        / n_kklt.to_f64();
+
+    if let Some(mean_uniform_pos) = mean_uniform.try_to_pos() {
+        let scale = (mean_phase1 / mean_uniform_pos).sqrt();
+        for ti in &mut t_uniform {
+            *ti = *ti * scale;
+        }
+    }
+
+    let phase1 = solve_mixed_basis_path_following(
+        kappa_basis,
+        kappa_all,
+        basis,
+        kklt_basis,
+        &tau_phase1,
+        &t_uniform,
+        steps,
+    )?;
+    if !phase1.converged {
+        return None;
+    }
+
+    let phase2 = solve_mixed_basis_path_following(
+        kappa_basis,
+        kappa_all,
+        basis,
+        kklt_basis,
+        tau_target,
+        &phase1.t,
+        steps,
+    )?;
+    if phase2.converged { Some(phase2) } else { None }
+}
+
+/// Solve the mixed-basis KKLT system with a fixed-point update for divisor GV
+/// target corrections.
+///
+/// The first solve uses the zeroth-order target
+/// `c_i/c_tau + χ(D_i)/24` to select the branch. Each subsequent iteration
+/// recomputes `GV_i(t)`, updates the classical target
+/// `c_i/c_tau + χ(D_i)/24 - GV_i(t)`, and follows from the previous solution.
+///
+/// Returns `None` if branch selection fails, any GV correction is invalid, a
+/// corrected target is non-positive, or the fixed-point iteration does not
+/// converge within `max_gv_iterations`.
+#[allow(clippy::too_many_arguments)]
+pub fn solve_two_phase_mixed_basis_path_following_with_gv(
+    kappa_basis: &Intersection,
+    kappa_all: &Intersection,
+    basis: &[usize],
+    kklt_basis: &[usize],
+    c_i: &[I64<Pos>],
+    chi_divisor: &[I64<Finite>],
+    c_tau: CTau,
+    gv_invariants: &[(Vec<i32>, Integer)],
+    gamma: Option<&[I64<Finite>]>,
+    steps: CheckedRange<usize>,
+    max_gv_iterations: usize,
+    gv_tolerance: F64<NonNeg>,
+) -> Option<KkltResult> {
+    if max_gv_iterations == 0 {
+        return None;
+    }
+
+    let tau_target = compute_corrected_target_tau(c_i, chi_divisor, c_tau)?;
+    let mut result = solve_two_phase_mixed_basis_path_following(
+        kappa_basis,
+        kappa_all,
+        basis,
+        kklt_basis,
+        &tau_target,
+        c_i,
+        steps,
+    )?;
+
+    for _ in 0..max_gv_iterations {
+        let previous_t = result.t.clone();
+        let gv_correction = compute_gv_target_correction(gv_invariants, &previous_t, gamma)?;
+        let tau_target = compute_gv_corrected_target_tau(c_i, chi_divisor, c_tau, &gv_correction)?;
+        let next = solve_mixed_basis_path_following(
+            kappa_basis,
+            kappa_all,
+            basis,
+            kklt_basis,
+            &tau_target,
+            &previous_t,
+            steps,
+        )?;
+        if !next.converged {
+            return None;
+        }
+
+        let max_relative_step = next
+            .t
+            .iter()
+            .zip(previous_t.iter())
+            .map(|(new, old)| (new.get() - old.get()).abs() / (old.get().abs() + 1e-12))
+            .fold(0.0f64, f64::max);
+        result = next;
+        if max_relative_step <= gv_tolerance.get() {
+            return Some(result);
+        }
+    }
+
+    None
+}
+
+/// Solve Ax = b using SVD least squares.
 fn solve_least_squares(a: &[Vec<F64<Finite>>], b: &[F64<Finite>]) -> Option<Vec<F64<Finite>>> {
     let m = a.len();
     if m == 0 {
@@ -279,96 +830,41 @@ fn solve_least_squares(a: &[Vec<F64<Finite>>], b: &[F64<Finite>]) -> Option<Vec<
     if n == 0 || b.len() != m {
         return None;
     }
-
-    // Compute A^T A
-    let mut ata = vec![vec![F64::<Finite>::ZERO; n]; n];
-    for i in 0..n {
-        for j in 0..n {
-            for k in 0..m {
-                ata[i][j] = ata[i][j] + a[k][i] * a[k][j];
-            }
-        }
-    }
-
-    // Compute A^T b
-    let mut atb = vec![F64::<Finite>::ZERO; n];
-    for i in 0..n {
-        for k in 0..m {
-            atb[i] = atb[i] + a[k][i] * b[k];
-        }
-    }
-
-    // Solve (A^T A) x = A^T b using Gaussian elimination
-    solve_linear_system(&ata, &atb)
-}
-
-/// Solve Ax = b using Gaussian elimination with partial pivoting.
-fn solve_linear_system(a: &[Vec<F64<Finite>>], b: &[F64<Finite>]) -> Option<Vec<F64<Finite>>> {
-    let n = a.len();
-    if n == 0 || b.len() != n {
+    if a.iter().any(|row| row.len() != n) {
         return None;
     }
 
-    // Create augmented matrix
-    let mut aug: Vec<Vec<F64<Finite>>> = a
+    let data: Vec<f64> = a
         .iter()
-        .zip(b.iter())
-        .map(|(row, bi)| {
-            let mut r = row.clone();
-            r.push(*bi);
-            r
-        })
+        .flat_map(|row| row.iter().map(|entry| entry.get()))
         .collect();
+    let matrix = nalgebra::DMatrix::<f64>::from_row_slice(m, n, &data);
+    let rhs = nalgebra::DVector::<f64>::from_iterator(m, b.iter().map(|entry| entry.get()));
+    let solution = matrix.svd(true, true).solve(&rhs, 1e-8).ok()?;
 
-    // Gaussian elimination with partial pivoting
-    let singular_threshold = f64_pos!(1e-14);
-    for col in 0..n {
-        // Find pivot (largest absolute value in column)
-        let (max_row, max_abs) = aug
-            .iter()
-            .enumerate()
-            .skip(col)
-            .map(|(row, r)| (row, r[col].abs()))
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())?;
-
-        if max_abs < singular_threshold {
-            return None; // Singular matrix
-        }
-
-        // Swap rows
-        aug.swap(col, max_row);
-
-        // Eliminate column
-        let pivot = aug[col][col];
-        for row in (col + 1)..n {
-            let factor = aug[row][col] / pivot;
-            for c in col..=n {
-                aug[row][c] = aug[row][c] - factor * aug[col][c];
-            }
-        }
+    if solution.iter().any(|value| !value.is_finite()) {
+        return None;
     }
 
-    // Back substitution
-    let mut x = vec![F64::<Finite>::ZERO; n];
-    for i in (0..n).rev() {
-        let mut sum = aug[i][n];
-        for (j, xj) in x.iter().enumerate().skip(i + 1) {
-            sum = sum - aug[i][j] * *xj;
-        }
-        x[i] = sum / aug[i][i];
-    }
-
-    Some(x)
+    solution
+        .iter()
+        .map(|value| F64::<Finite>::new(*value))
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::range;
     use crate::types::rational::Rational as TypedRational;
-    use malachite::Rational;
+    use malachite::{Integer, Rational};
 
     fn pos_i64(v: i64) -> I64<Pos> {
         I64::<Pos>::new(v).unwrap()
+    }
+
+    fn finite_i64(v: i64) -> I64<Finite> {
+        I64::<Finite>::new(v)
     }
 
     fn finite_f64(v: f64) -> F64<Finite> {
@@ -396,12 +892,93 @@ mod tests {
     }
 
     #[test]
+    fn test_compute_corrected_target_tau() {
+        let c_i = vec![pos_i64(6), pos_i64(1)];
+        let chi_divisor = vec![finite_i64(24), finite_i64(24)];
+        let c_tau = f64_pos!(3.0);
+
+        let tau = compute_corrected_target_tau(&c_i, &chi_divisor, c_tau).unwrap();
+
+        assert_eq!(tau.len(), 2);
+        assert!((tau[0].get() - 3.0).abs() < 1e-10);
+        assert!((tau[1].get() - (1.0 / 3.0 + 1.0)).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_compute_corrected_target_tau_rejects_invalid_targets() {
+        let c_i = vec![pos_i64(1)];
+        let chi_divisor = vec![finite_i64(-24)];
+        let c_tau = f64_pos!(3.0);
+
+        assert!(compute_corrected_target_tau(&c_i, &chi_divisor, c_tau).is_none());
+        assert!(compute_corrected_target_tau(&c_i, &[], c_tau).is_none());
+    }
+
+    #[test]
+    fn test_compute_gv_corrected_target_tau() {
+        let c_i = vec![pos_i64(1)];
+        let chi_divisor = vec![finite_i64(24)];
+        let c_tau = f64_pos!(2.0);
+        let gv_correction = vec![finite_f64(0.25)];
+
+        let tau =
+            compute_gv_corrected_target_tau(&c_i, &chi_divisor, c_tau, &gv_correction).unwrap();
+
+        assert_eq!(tau.len(), 1);
+        assert!((tau[0].get() - 1.25).abs() < 1e-12);
+        assert!(compute_gv_corrected_target_tau(&c_i, &chi_divisor, c_tau, &[]).is_none());
+    }
+
+    #[test]
+    fn test_compute_gv_corrected_target_tau_rejects_non_positive_target() {
+        let c_i = vec![pos_i64(1)];
+        let chi_divisor = vec![finite_i64(-24)];
+        let c_tau = f64_pos!(1.0);
+        let gv_correction = vec![finite_f64(1.0)];
+
+        assert!(
+            compute_gv_corrected_target_tau(&c_i, &chi_divisor, c_tau, &gv_correction).is_none()
+        );
+    }
+
+    #[test]
+    fn test_compute_gv_target_correction_real_dilog_signs() {
+        let t = vec![finite_f64(2.0_f64.ln() / (2.0 * PI))];
+        let invariants = vec![(vec![1], Integer::from(1))];
+
+        let positive = compute_gv_target_correction(&invariants, &t, None).unwrap();
+        let li2_half = PI * PI / 12.0 - 0.5 * 2.0_f64.ln().powi(2);
+        let expected_positive = li2_half / (4.0 * PI * PI);
+        assert!((positive[0].get() - expected_positive).abs() < 1e-14);
+
+        let gamma = vec![finite_i64(1)];
+        let negative = compute_gv_target_correction(&invariants, &t, Some(&gamma)).unwrap();
+        let expected_negative = -0.448_414_206_923_646_2 / (4.0 * PI * PI);
+        assert!((negative[0].get() - expected_negative).abs() < 1e-14);
+    }
+
+    #[test]
+    fn test_compute_gv_target_correction_rejects_invalid_curve_volume() {
+        let t = vec![finite_f64(1.0)];
+        let zero_curve = vec![(vec![0], Integer::from(1))];
+        let negative_curve = vec![(vec![-1], Integer::from(1))];
+
+        assert!(compute_gv_target_correction(&zero_curve, &t, None).is_none());
+        assert!(compute_gv_target_correction(&negative_curve, &t, None).is_none());
+        assert!(
+            compute_gv_target_correction(&[(vec![1, 0], Integer::from(1))], &t, None).is_none()
+        );
+    }
+
+    #[test]
     fn test_compute_divisor_volumes_simple() {
         // κ_000 = 6, t = [2]
         // τ_0 = (1/2) × 6 × 2 × 2 = 12
         let mut kappa = Intersection::new(1);
         kappa.set(
-            0, 0, 0,
+            0,
+            0,
+            0,
             TypedRational::<Finite>::from_raw(Rational::from(6)),
         );
 
@@ -416,12 +993,196 @@ mod tests {
         // ∂τ_0/∂t = 6t = 12
         let mut kappa = Intersection::new(1);
         kappa.set(
-            0, 0, 0,
+            0,
+            0,
+            0,
             TypedRational::<Finite>::from_raw(Rational::from(6)),
         );
 
         let t = vec![finite_f64(2.0)];
         let j = compute_jacobian(&kappa, &t);
-        assert!((j[0][0].get() - 12.0).abs() < 1e-10, "J[0][0] = {}", j[0][0].get());
+        assert!(
+            (j[0][0].get() - 12.0).abs() < 1e-10,
+            "J[0][0] = {}",
+            j[0][0].get()
+        );
+    }
+
+    #[test]
+    fn test_compute_kklt_mixed_basis_tau_and_jacobian() {
+        // Kähler coordinates use basis divisors [0, 1].
+        // KKLT targets are ordered by [0, 2], so divisor 2 must be evaluated
+        // from the full tensor κ_{2,b_j,b_k}.
+        let mut kappa_basis = Intersection::new(2);
+        kappa_basis.set(
+            0,
+            0,
+            0,
+            TypedRational::<Finite>::from_raw(Rational::from(2)),
+        );
+
+        let mut kappa_all = Intersection::new(3);
+        kappa_all.set(
+            2,
+            0,
+            0,
+            TypedRational::<Finite>::from_raw(Rational::from(4)),
+        );
+        kappa_all.set(
+            2,
+            0,
+            1,
+            TypedRational::<Finite>::from_raw(Rational::from(5)),
+        );
+
+        let basis = vec![0, 1];
+        let kklt_basis = vec![0, 2];
+        let t = vec![finite_f64(2.0), finite_f64(3.0)];
+
+        let tau = compute_kklt_divisor_volumes(&kappa_basis, &kappa_all, &basis, &kklt_basis, &t)
+            .unwrap();
+        assert!((tau[0].get() - 4.0).abs() < 1e-10);
+        assert!((tau[1].get() - 38.0).abs() < 1e-10);
+
+        let jacobian =
+            compute_kklt_jacobian(&kappa_basis, &kappa_all, &basis, &kklt_basis, &t).unwrap();
+        assert!((jacobian[0][0].get() - 4.0).abs() < 1e-10);
+        assert!((jacobian[0][1].get() - 0.0).abs() < 1e-10);
+        assert!((jacobian[1][0].get() - 23.0).abs() < 1e-10);
+        assert!((jacobian[1][1].get() - 10.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_least_squares_handles_rank_deficient_system() {
+        let a = vec![
+            vec![finite_f64(1.0), finite_f64(1.0)],
+            vec![finite_f64(2.0), finite_f64(2.0)],
+        ];
+        let b = vec![finite_f64(2.0), finite_f64(4.0)];
+
+        let x = solve_least_squares(&a, &b).unwrap();
+        let residual_0 = x[0].get() + x[1].get() - 2.0;
+        let residual_1 = 2.0 * x[0].get() + 2.0 * x[1].get() - 4.0;
+
+        assert!(residual_0.abs() < 1e-10, "residual_0 = {residual_0}");
+        assert!(residual_1.abs() < 1e-10, "residual_1 = {residual_1}");
+    }
+
+    #[test]
+    fn test_solve_two_phase_path_following_one_modulus() {
+        // κ_000 = 6 gives τ = 3t².
+        // Phase 1 target c_i = 3 lands on t = 1; phase 2 target τ = 12 lands on t = 2.
+        let mut kappa = Intersection::new(1);
+        kappa.set(
+            0,
+            0,
+            0,
+            TypedRational::<Finite>::from_raw(Rational::from(6)),
+        );
+
+        let c_i = vec![pos_i64(3)];
+        let tau_target = vec![f64_pos!(12.0)];
+
+        let result =
+            solve_two_phase_path_following(&kappa, &tau_target, &c_i, range!(0, 400)).unwrap();
+
+        assert!(result.converged);
+        assert!(
+            (result.t[0].get() - 2.0).abs() < 1e-5,
+            "t = {}",
+            result.t[0].get()
+        );
+        assert!(
+            (result.tau[0].get() - 12.0).abs() < 1e-4,
+            "tau = {}",
+            result.tau[0].get()
+        );
+    }
+
+    #[test]
+    fn test_solve_two_phase_mixed_basis_path_following_one_modulus() {
+        // One Kähler coordinate D0, but the KKLT target is for non-basis D1.
+        // κ_100 = 6 still gives τ_D1 = 3t².
+        let kappa_basis = Intersection::new(1);
+        let mut kappa_all = Intersection::new(2);
+        kappa_all.set(
+            1,
+            0,
+            0,
+            TypedRational::<Finite>::from_raw(Rational::from(6)),
+        );
+
+        let basis = vec![0];
+        let kklt_basis = vec![1];
+        let c_i = vec![pos_i64(3)];
+        let tau_target = vec![f64_pos!(12.0)];
+
+        let result = solve_two_phase_mixed_basis_path_following(
+            &kappa_basis,
+            &kappa_all,
+            &basis,
+            &kklt_basis,
+            &tau_target,
+            &c_i,
+            range!(0, 400),
+        )
+        .unwrap();
+
+        assert!(result.converged);
+        assert!(
+            (result.t[0].get() - 2.0).abs() < 1e-5,
+            "t = {}",
+            result.t[0].get()
+        );
+        assert!(
+            (result.tau[0].get() - 12.0).abs() < 1e-4,
+            "tau = {}",
+            result.tau[0].get()
+        );
+    }
+
+    #[test]
+    fn test_solve_two_phase_mixed_basis_path_following_with_gv_one_modulus() {
+        let mut kappa_basis = Intersection::new(1);
+        kappa_basis.set(
+            0,
+            0,
+            0,
+            TypedRational::<Finite>::from_raw(Rational::from(6)),
+        );
+        let kappa_all = kappa_basis.clone();
+        let basis = vec![0];
+        let kklt_basis = vec![0];
+        let c_i = vec![pos_i64(1)];
+        let chi_divisor = vec![finite_i64(0)];
+        let c_tau = f64_pos!(1.0);
+        let invariants = vec![(vec![1], Integer::from(100))];
+
+        let result = solve_two_phase_mixed_basis_path_following_with_gv(
+            &kappa_basis,
+            &kappa_all,
+            &basis,
+            &kklt_basis,
+            &c_i,
+            &chi_divisor,
+            c_tau,
+            &invariants,
+            None,
+            range!(0, 400),
+            20,
+            F64::<NonNeg>::new(1e-10).unwrap(),
+        )
+        .unwrap();
+
+        assert!(result.converged);
+        let gv_correction = compute_gv_target_correction(&invariants, &result.t, None).unwrap();
+        let tau_target =
+            compute_gv_corrected_target_tau(&c_i, &chi_divisor, c_tau, &gv_correction).unwrap();
+        assert!(
+            (result.tau[0].get() - tau_target[0].get()).abs() < 1e-6,
+            "tau={}, target={}",
+            result.tau[0].get(),
+            tau_target[0].get()
+        );
     }
 }

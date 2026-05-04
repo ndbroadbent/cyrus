@@ -14,10 +14,16 @@
 
 use malachite::num::conversion::traits::RoundingFrom;
 use malachite::rounding_modes::RoundingMode;
+use std::collections::HashSet;
 
+use crate::error::{Error, Result};
 use crate::f64_pos;
+use crate::geometry::ConvexHull;
 use crate::intersection::Intersection;
+use crate::lattice::Point;
+use crate::polytope::Polytope;
 use crate::types::f64::F64;
+use crate::types::i64::I64;
 use crate::types::tags::Finite;
 
 /// Compute divisor volumes `τ_i` = (1/2) `κ_ijk` t^j t^k.
@@ -124,6 +130,169 @@ pub fn compute_divisor_jacobian(kappa: &Intersection, t: &[F64<Finite>]) -> Vec<
     jac
 }
 
+fn dot(a: &[i64], b: &[i64]) -> i64 {
+    a.iter().zip(b.iter()).map(|(&x, &y)| x * y).sum()
+}
+
+fn integral_rational_to_i64(
+    value: &crate::types::rational::Rational<Finite>,
+    label: &str,
+) -> Result<i64> {
+    if value.get().denominator_ref() != &1u32 {
+        return Err(Error::InvalidInput(format!("{label} is not integral")));
+    }
+    let signed = malachite::Integer::try_from(value.get().clone())
+        .map_err(|_| Error::InvalidInput(format!("{label} is not integral")))?;
+    i64::try_from(&signed).map_err(|_| Error::InvalidInput(format!("{label} does not fit in i64")))
+}
+
+fn saturated_facets(point: &Point, dual_vertices: &[Point]) -> Vec<usize> {
+    dual_vertices
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, dual_vertex)| {
+            (dot(point.coords(), dual_vertex.coords()) == -1).then_some(idx)
+        })
+        .collect()
+}
+
+fn dual_face_interior_lattice_points(
+    points: &[Point],
+    hull_vertices: &[usize],
+    dual_points: &[Point],
+    dual_vertices: &[Point],
+    point_saturated_facets: &[usize],
+) -> Result<usize> {
+    let face_vertices: HashSet<usize> = hull_vertices
+        .iter()
+        .copied()
+        .filter(|&point_idx| {
+            point_saturated_facets.iter().all(|&facet_idx| {
+                dot(
+                    points[point_idx].coords(),
+                    dual_vertices[facet_idx].coords(),
+                ) == -1
+            })
+        })
+        .collect();
+
+    if face_vertices.is_empty() {
+        return Err(Error::InvalidInput(
+            "could not determine primal face vertices for divisor point".into(),
+        ));
+    }
+
+    let mut count = 0usize;
+    'dual_points: for dual_point in dual_points {
+        for &point_idx in &face_vertices {
+            if dot(dual_point.coords(), points[point_idx].coords()) != -1 {
+                continue 'dual_points;
+            }
+        }
+        for &point_idx in hull_vertices {
+            if face_vertices.contains(&point_idx) {
+                continue;
+            }
+            if dot(dual_point.coords(), points[point_idx].coords()) == -1 {
+                continue 'dual_points;
+            }
+        }
+        count += 1;
+    }
+
+    Ok(count)
+}
+
+/// Compute topological divisor Euler characteristics for KKLT divisors.
+///
+/// Uses the Braun et al. combinatorial formula used in the McAllister
+/// reproduction:
+///
+/// ```text
+/// χ(D) = 12 χ(O_D) - D³
+/// ```
+///
+/// `points` must be the CYTools-ordered divisor points used by the intersection
+/// tensor, and `kklt_basis` indexes into that point list.
+pub fn compute_kklt_divisor_chi(
+    polytope: &Polytope,
+    points: &[Point],
+    kappa_all: &Intersection,
+    kklt_basis: &[usize],
+) -> Result<Vec<I64<Finite>>> {
+    if polytope.dim() != 4 {
+        return Err(Error::InvalidInput(
+            "divisor chi is currently implemented for 4D CY hypersurface polytopes".into(),
+        ));
+    }
+    if points.len() != kappa_all.dim() {
+        return Err(Error::InvalidInput(format!(
+            "point/intersection dimension mismatch: points={}, kappa_dim={}",
+            points.len(),
+            kappa_all.dim()
+        )));
+    }
+
+    let point_coords: Vec<Vec<i64>> = points.iter().map(|point| point.coords().to_vec()).collect();
+    let hull = ConvexHull::compute(&point_coords)
+        .ok_or_else(|| Error::InvalidInput("failed to compute primal convex hull".into()))?;
+    let dual_vertices = polytope.dual_vertices()?;
+    let dual_polytope = polytope.compute_dual()?;
+    let dual_points = dual_polytope.vertices();
+
+    let mut out = Vec::with_capacity(kklt_basis.len());
+    for &point_idx in kklt_basis {
+        let Some(point) = points.get(point_idx) else {
+            return Err(Error::InvalidInput(format!(
+                "KKLT basis index {point_idx} out of bounds for {} points",
+                points.len()
+            )));
+        };
+        if point.coords().iter().all(|&coord| coord == 0) {
+            return Err(Error::InvalidInput(
+                "origin does not define a prime toric divisor".into(),
+            ));
+        }
+
+        let sat = saturated_facets(point, &dual_vertices);
+        let chi_o = match sat.len() {
+            0 => {
+                return Err(Error::InvalidInput(
+                    "interior point does not define a prime toric divisor".into(),
+                ));
+            }
+            1 => 1,
+            2 => 1,
+            3 => {
+                let g = dual_face_interior_lattice_points(
+                    points,
+                    &hull.vertex_indices,
+                    dual_points,
+                    &dual_vertices,
+                    &sat,
+                )?;
+                1_i64 - i64::try_from(g).expect("dual-face interior count fits i64")
+            }
+            _ => {
+                let g = dual_face_interior_lattice_points(
+                    points,
+                    &hull.vertex_indices,
+                    dual_points,
+                    &dual_vertices,
+                    &sat,
+                )?;
+                1_i64 + i64::try_from(g).expect("dual-face interior count fits i64")
+            }
+        };
+
+        let d_cubed =
+            integral_rational_to_i64(&kappa_all.get(point_idx, point_idx, point_idx), "D^3")?;
+        out.push(I64::<Finite>::new(12 * chi_o - d_cubed));
+    }
+
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -135,6 +304,20 @@ mod tests {
 
     fn finite(v: f64) -> F64<Finite> {
         F64::<Finite>::new(v).unwrap()
+    }
+
+    fn hypercube_4d_vertices() -> Vec<Point> {
+        let mut points = Vec::new();
+        for x0 in [-1, 1] {
+            for x1 in [-1, 1] {
+                for x2 in [-1, 1] {
+                    for x3 in [-1, 1] {
+                        points.push(Point::new(vec![x0, x1, x2, x3]));
+                    }
+                }
+            }
+        }
+        points
     }
 
     #[test]
@@ -195,6 +378,23 @@ mod tests {
 
         assert_eq!(jac.len(), 1);
         assert!((jac[0][0].get() - 12.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_compute_kklt_divisor_chi_vertex_with_no_dual_interior_points() {
+        let points = hypercube_4d_vertices();
+        let polytope = Polytope::from_vertices(points.clone()).unwrap();
+        let mut kappa_all = Intersection::new(points.len());
+        kappa_all.set(
+            0,
+            0,
+            0,
+            TypedRational::<Finite>::from_raw(Rational::from(5)),
+        );
+
+        let chi = compute_kklt_divisor_chi(&polytope, &points, &kappa_all, &[0]).unwrap();
+
+        assert_eq!(chi[0].get(), 7);
     }
 
     #[test]

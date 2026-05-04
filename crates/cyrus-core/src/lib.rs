@@ -6,8 +6,6 @@
 #![allow(clippy::missing_panics_doc)] // Not all panic conditions need documentation
 #![allow(clippy::missing_errors_doc)] // Not all error conditions need documentation
 #![allow(clippy::module_name_repetitions)] // Types like `ConeError` in `cone` module are fine
-#![allow(clippy::too_many_lines)] // Will be fixed when splitting files
-#![allow(clippy::cognitive_complexity)] // Will be fixed when splitting files
 #![allow(clippy::needless_range_loop)] // Matrix operations are clearer with index loops
 #![allow(clippy::branches_sharing_code)] // Sometimes clearer to repeat code in branches
 #![allow(clippy::must_use_candidate)] // Not all methods need #[must_use]
@@ -84,38 +82,38 @@ pub mod volume;
 
 pub use types::{F64, Finite, H11, H21, I32, I64, Neg, Pos};
 
-pub use basis::{
-    basis_change_matrix, compute_divisor_basis, intersection_in_basis, is_unimodular,
-};
-pub use divisor::{compute_divisor_jacobian, compute_divisor_volumes};
+pub use basis::{basis_change_matrix, compute_divisor_basis, intersection_in_basis, is_unimodular};
+pub use curve_basis::compute_curve_basis_matrix;
+pub use divisor::{compute_divisor_jacobian, compute_divisor_volumes, compute_kklt_divisor_chi};
 pub use error::{Error, Result};
 pub use flat_direction::{
     FlatDirectionResult, compute_ek0, compute_flat_direction, compute_flat_direction_full,
     compute_n_matrix, solve_linear_system,
 };
+pub use glsm::compute_glsm_and_linrels;
 pub use glsm::compute_glsm_charge_matrix;
 pub use glsm::compute_glsm_linear_relations;
-pub use glsm::compute_glsm_and_linrels;
 pub use gv::{compute_grading_vector, compute_gv_invariants, compute_mori_cone_cap_rays};
-pub use curve_basis::compute_curve_basis_matrix;
 pub use integer_math::{compute_glsm_and_linear_relations, compute_linear_relations_no_origin};
+pub use intersection::compute_intersection_cytools;
 pub use intersection::{
     Intersection, compute_intersection_numbers, compute_intersection_numbers_with_linear_relations,
     compute_intersection_numbers_with_offset,
 };
-pub use intersection::compute_intersection_cytools;
-// pub mod kklt;
+pub mod kklt;
 
-/*
 pub use kklt::{
-    KkltResult, compute_c_tau as kklt_compute_c_tau, compute_divisor_volumes as kklt_compute_tau,
-    compute_jacobian as kklt_compute_jacobian, compute_target_tau, solve_path_following,
+    KkltResult, compute_c_tau as kklt_compute_c_tau, compute_corrected_target_tau,
+    compute_divisor_volumes as kklt_compute_tau, compute_jacobian as kklt_compute_jacobian,
+    compute_kklt_divisor_volumes, compute_kklt_jacobian, compute_target_tau,
+    solve_mixed_basis_path_following, solve_path_following,
+    solve_two_phase_mixed_basis_path_following, solve_two_phase_path_following,
 };
-*/
 pub use lattice::Point;
 pub use polytope::Polytope;
 pub use racetrack::{
-    GvInvariant, RacetrackResult, RacetrackTerm, build_racetrack_terms, compute_w0, solve_racetrack,
+    GvInvariant, RacetrackResult, RacetrackTerm, build_racetrack_terms, compute_w0,
+    compute_w0_from_terms, solve_racetrack,
 };
 pub use triangulation::{
     Triangulation, compute_delaunay_heights, compute_frst_heights, compute_regular_triangulation,
