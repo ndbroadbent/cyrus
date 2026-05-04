@@ -5765,6 +5765,35 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
                 std::process::exit(2);
             },
         );
+    let corrected_heights_path = dir.join("corrected_heights.dat");
+    let corrected_heights_chamber = if corrected_heights_path.exists() {
+        let corrected_heights = read_csv_f64(&corrected_heights_path);
+        if corrected_heights.len() != geom.triangulation_points.len() {
+            eprintln!(
+                "[COMPARE] corrected_heights.dat length mismatch: heights={} points={}",
+                corrected_heights.len(),
+                geom.triangulation_points.len()
+            );
+            None
+        } else {
+            let height_chamber =
+                compute_regular_triangulation(&geom.triangulation_points, &corrected_heights)
+                    .unwrap_or_else(|e| {
+                        eprintln!("[ERROR] failed to build corrected_heights.dat chamber: {e}");
+                        std::process::exit(2);
+                    });
+            let same_as_checkpoint_t =
+                triangulations_have_same_simplices(&checkpoint_chamber, &height_chamber);
+            eprintln!(
+                "[COMPARE] corrected_heights.dat chamber: simplices={} same_as_checkpoint_t={}",
+                height_chamber.simplices().len(),
+                same_as_checkpoint_t
+            );
+            (!same_as_checkpoint_t).then_some(height_chamber)
+        }
+    } else {
+        None
+    };
     let selection = compute_chamber_toric_gv_selection(
         &checkpoint_chamber,
         geom,
@@ -5807,6 +5836,53 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
         selection.toric_gv_covered_count,
         selection.toric_gv_missing_count
     );
+    if let Some(height_chamber) = corrected_heights_chamber.as_ref() {
+        let height_selection = compute_chamber_toric_gv_selection(
+            height_chamber,
+            geom,
+            intersection,
+            checkpoint_t,
+            cutoff,
+        )
+        .unwrap_or_else(|e| {
+            eprintln!("[ERROR] failed to compute corrected_heights.dat GV selection: {e}");
+            std::process::exit(2);
+        });
+        if let Some(height_target) =
+            cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+                &height_selection.small_curve_gvs,
+                &intersection.basis,
+                kklt_basis,
+                checkpoint_t,
+                Some(gamma),
+            )
+        {
+            let height_summary = target_correction_delta_summary(
+                &checkpoint_implied_gv,
+                &height_target,
+            )
+            .unwrap_or_else(|e| {
+                eprintln!(
+                    "[ERROR] failed to compare corrected_heights.dat GV target correction: {e}"
+                );
+                std::process::exit(2);
+            });
+            eprintln!(
+                "[COMPARE] corrected_heights.dat GV target correction delta: max_abs={} relative_l2={} ambient_rays={} subcutoff={} pair_pruned={} toric_covered={} toric_missing={}",
+                height_summary.max_abs_delta,
+                height_summary.relative_l2_delta,
+                height_selection.ambient_rays,
+                height_selection.subcutoff_count,
+                height_selection.filtered_count,
+                height_selection.toric_gv_covered_count,
+                height_selection.toric_gv_missing_count
+            );
+        } else {
+            eprintln!(
+                "[COMPARE] corrected_heights.dat GV target correction is invalid at checkpoint t"
+            );
+        }
+    }
     for (label, offset) in [
         ("ambient_gamma_shift_minus_1", -1_isize),
         ("ambient_gamma_shift_plus_1", 1_isize),
