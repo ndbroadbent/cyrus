@@ -554,6 +554,8 @@ struct ChamberGvDiagnostic {
     lp_face_gv_sample: Vec<FaceGvDiagnosticSample>,
     combined_diagnostic_gv_covered_count: Option<usize>,
     combined_diagnostic_gv_missing_count: Option<usize>,
+    combined_diagnostic_gv_zero_count: Option<usize>,
+    combined_diagnostic_gv_nonzero_count: Option<usize>,
     combined_diagnostic_gv_volume_correction: Option<F64<Finite>>,
     remaining_gv_missing_count: usize,
     first_missing_class: Option<Vec<i64>>,
@@ -4907,6 +4909,8 @@ fn diagnose_chamber_gv_volume_correction(
 
     let mut combined_diagnostic_gv_covered_count = None;
     let mut combined_diagnostic_gv_missing_count = None;
+    let mut combined_diagnostic_gv_zero_count = None;
+    let mut combined_diagnostic_gv_nonzero_count = None;
     let mut combined_diagnostic_gv_volume_correction = None;
     if !diagnostic_missing_gvs.is_empty() {
         if let Some(unexpected) = diagnostic_missing_gvs.keys().find(|class| {
@@ -4919,6 +4923,9 @@ fn diagnose_chamber_gv_volume_correction(
                 sparse_i64(unexpected)
             ));
         }
+        let (zero_count, nonzero_count) = diagnostic_gv_value_counts(&diagnostic_missing_gvs);
+        combined_diagnostic_gv_zero_count = Some(zero_count);
+        combined_diagnostic_gv_nonzero_count = Some(nonzero_count);
         let mut combined_small_curve_gvs = toric_small_curve_gvs.clone();
         let mut covered_count = 0usize;
         for missing_class in &toric_missing_gv_classes {
@@ -4996,6 +5003,8 @@ fn diagnose_chamber_gv_volume_correction(
         lp_face_gv_sample,
         combined_diagnostic_gv_covered_count,
         combined_diagnostic_gv_missing_count,
+        combined_diagnostic_gv_zero_count,
+        combined_diagnostic_gv_nonzero_count,
         combined_diagnostic_gv_volume_correction,
         remaining_gv_missing_count: missing_gv_classes.len(),
         first_missing_class: missing_gv_classes.first().cloned(),
@@ -5877,6 +5886,15 @@ fn stage_volume(
                 "[INFO] corrected-chamber combined diagnostic GV covered {}/{} toric-missing curves; remaining={}",
                 combined_covered, diag.toric_gv_missing_count, combined_missing
             );
+            if let (Some(zero_count), Some(nonzero_count)) = (
+                diag.combined_diagnostic_gv_zero_count,
+                diag.combined_diagnostic_gv_nonzero_count,
+            ) {
+                eprintln!(
+                    "[INFO] corrected-chamber combined diagnostic GV values: zero={} nonzero={}",
+                    zero_count, nonzero_count
+                );
+            }
             if let Some(combined_correction) =
                 diag.combined_diagnostic_gv_volume_correction.as_ref()
             {
@@ -5893,6 +5911,12 @@ fn stage_volume(
                     eprintln!(
                         "[INFO] corrected-chamber combined diagnostic GV volume correction delta_vs_input_chamber (diagnostic, not promoted) = {}",
                         combined_correction.get() - input_chamber_correction.get()
+                    );
+                }
+                if let Some(covered_correction) = diag.covered_gv_volume_correction.as_ref() {
+                    eprintln!(
+                        "[INFO] corrected-chamber combined diagnostic GV volume correction delta_vs_toric_covered (diagnostic, not promoted) = {}",
+                        combined_correction.get() - covered_correction.get()
                     );
                 }
             }
@@ -6064,6 +6088,15 @@ fn compare_against_dat(
             );
         }
     }
+}
+
+fn diagnostic_gv_value_counts(
+    diagnostic_gvs: &HashMap<Vec<i64>, malachite::Integer>,
+) -> (usize, usize) {
+    let zero = malachite::Integer::from(0);
+    let zero_count = diagnostic_gvs.values().filter(|gv| *gv == &zero).count();
+    let nonzero_count = diagnostic_gvs.len().saturating_sub(zero_count);
+    (zero_count, nonzero_count)
 }
 
 fn stage_vacuum(
@@ -6949,6 +6982,17 @@ mod tests {
             diagnostic_gvs.get(&vec![0, 2, -1]),
             Some(&malachite::Integer::from(3))
         );
+    }
+
+    #[test]
+    fn diagnostic_gv_value_counts_separates_zero_and_nonzero_values() {
+        let diagnostic_gvs = HashMap::from([
+            (vec![1, 0], malachite::Integer::from(0)),
+            (vec![0, 1], malachite::Integer::from(4)),
+            (vec![1, 1], malachite::Integer::from(-2)),
+        ]);
+
+        assert_eq!(diagnostic_gv_value_counts(&diagnostic_gvs), (1, 2));
     }
 
     #[test]
