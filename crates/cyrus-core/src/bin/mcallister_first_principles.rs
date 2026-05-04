@@ -1062,6 +1062,22 @@ fn transform_kahler_to_computed_basis(
     source_basis: &[usize],
     values: &[F64<Finite>],
 ) -> Vec<F64<Finite>> {
+    transform_kahler_to_computed_basis_with_logging(
+        glsm,
+        computed_basis,
+        source_basis,
+        values,
+        true,
+    )
+}
+
+fn transform_kahler_to_computed_basis_with_logging(
+    glsm: &[Vec<malachite::Integer>],
+    computed_basis: &[usize],
+    source_basis: &[usize],
+    values: &[F64<Finite>],
+    log_transform: bool,
+) -> Vec<F64<Finite>> {
     if computed_basis == source_basis {
         return values.to_vec();
     }
@@ -1073,10 +1089,12 @@ fn transform_kahler_to_computed_basis(
         eprintln!("[ERROR] Kähler basis transform is not unimodular");
         std::process::exit(2);
     }
-    eprintln!(
-        "[INFO] transforming Kähler parameters from source basis {:?} to computed basis {:?}",
-        source_basis, computed_basis
-    );
+    if log_transform {
+        eprintln!(
+            "[INFO] transforming Kähler parameters from source basis {:?} to computed basis {:?}",
+            source_basis, computed_basis
+        );
+    }
     transform_f64_coordinates(&transform, values, "Kähler")
 }
 
@@ -5300,6 +5318,67 @@ fn diagnose_chamber_updated_kklt_toric_only(
     })
 }
 
+fn compare_corrected_kahler_checkpoint(
+    data_dir: Option<&str>,
+    intersection: &PrimalIntersection,
+    kahler: &[F64<Finite>],
+) {
+    let Some(dir) = data_dir.map(PathBuf::from) else {
+        return;
+    };
+    let corrected_path = dir.join("corrected_kahler_param.dat");
+    if !corrected_path.exists() {
+        eprintln!(
+            "[COMPARE] corrected_kahler_param.dat checkpoint not found; skipping corrected Kähler comparison"
+        );
+        return;
+    }
+    let basis_path = dir.join("basis.dat");
+    if !basis_path.exists() {
+        eprintln!("[COMPARE] basis.dat checkpoint not found; skipping corrected Kähler comparison");
+        return;
+    }
+    let checkpoint_raw = read_csv_f64(&corrected_path)
+        .into_iter()
+        .map(|value| F64::<Finite>::new(value).expect("corrected Kähler checkpoint is finite"))
+        .collect::<Vec<_>>();
+    let source_basis = read_csv_usize(&basis_path);
+    let checkpoint = transform_kahler_to_computed_basis_with_logging(
+        &intersection.glsm,
+        &intersection.basis,
+        &source_basis,
+        &checkpoint_raw,
+        false,
+    );
+    if checkpoint.len() != kahler.len() {
+        eprintln!(
+            "[COMPARE] corrected Kähler checkpoint length mismatch: checkpoint={} computed={}",
+            checkpoint.len(),
+            kahler.len()
+        );
+        return;
+    }
+    let summary = target_correction_delta_summary(&checkpoint, kahler).unwrap_or_else(|e| {
+        eprintln!("[ERROR] failed to compare corrected Kähler checkpoint: {e}");
+        std::process::exit(2);
+    });
+    let checkpoint_classical = classical_volume_from_t(&intersection.kappa_basis, &checkpoint);
+    let computed_classical = classical_volume_from_t(&intersection.kappa_basis, kahler);
+    eprintln!(
+        "[COMPARE] corrected Kähler checkpoint delta: max_abs={} relative_l2={} max_abs_checkpoint={} max_abs_computed={}",
+        summary.max_abs_delta,
+        summary.relative_l2_delta,
+        summary.max_abs_reference,
+        summary.max_abs_candidate
+    );
+    eprintln!(
+        "[COMPARE] corrected Kähler checkpoint input-chamber V_classical={} computed V_classical={} delta={}",
+        checkpoint_classical,
+        computed_classical,
+        computed_classical - checkpoint_classical
+    );
+}
+
 fn stage_volume(
     data_dir: Option<&str>,
     manifest_dir: &PathBuf,
@@ -6152,6 +6231,8 @@ fn stage_volume(
             Some(input_chamber_gv_target_correction),
         )
     };
+
+    compare_corrected_kahler_checkpoint(data_dir, intersection, &t);
 
     let corrected_chamber = triangulation_from_kahler_point(geom, &intersection.basis, &t)
         .unwrap_or_else(|e| {
