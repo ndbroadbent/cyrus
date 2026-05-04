@@ -660,78 +660,13 @@ pub fn solve_path_following(
         return None;
     }
 
-    let mut t = t_init.to_vec();
-    let tau_init = compute_divisor_volumes(kappa, &t);
-
-    let n_steps = I64::<Pos>::new((steps.end - steps.start) as i64)?;
-
-    for m in steps.iter_non_neg() {
-        let step_index = I64::<Pos>::new(m.get() - steps.start as i64 + 1)?;
-        // step_index and n_steps are I64<Pos>, division yields F64<Pos>.
-        let alpha = step_index.to_f64() / n_steps.to_f64();
-        let one_minus_alpha = f64_pos!(1.0) - alpha;
-
-        // Interpolate target
-        let tau_step: Vec<F64<Finite>> = tau_init
-            .iter()
-            .zip(tau_target.iter())
-            .map(|(ti, tt)| one_minus_alpha * *ti + alpha * *tt)
-            .collect();
-
-        let tau_current = compute_divisor_volumes(kappa, &t);
-
-        // Residual
-        let delta_tau: Vec<F64<Finite>> = tau_step
-            .iter()
-            .zip(tau_current.iter())
-            .map(|(ts, tc)| *ts - *tc)
-            .collect();
-
-        // Solve J @ epsilon = delta_tau using least squares
-        let j = compute_jacobian(kappa, &t);
-        let epsilon = solve_least_squares(&j, &delta_tau)?;
-
-        // Update t
-        for (ti, ei) in t.iter_mut().zip(epsilon.iter()) {
-            *ti = *ti + *ei;
-        }
-
-        // Check for divergence
-        let divergence_threshold = F64::<NonNeg>::new(1e6).expect("threshold is non-negative");
-        if t.iter().any(|ti| ti.abs() > divergence_threshold) {
-            return None;
-        }
-    }
-
-    let tau = compute_divisor_volumes(kappa, &t);
-    let n_targets = I64::<Pos>::new(tau_target.len() as i64)?;
-
-    // Compute error: sum of squared differences
-    let error_sq: F64<NonNeg> = tau
-        .iter()
-        .zip(tau_target.iter())
-        .map(|(ta, tt)| (*ta - *tt).square())
-        .fold(F64::<NonNeg>::ZERO, |acc, x| acc + x);
-
-    let error = (error_sq / n_targets.to_f64()).sqrt();
-
-    // Mean of target tau values (all positive, so sum and mean are positive)
-    let sum_target: F64<Pos> = tau_target.iter().copied().reduce(|acc, x| acc + x)?;
-    let mean_target = sum_target / n_targets.to_f64();
-
-    // Relative error = error / mean_target (both NonNeg/Pos, result is NonNeg)
-    let relative_error = error / mean_target;
-
-    let convergence_threshold = F64::<NonNeg>::new(0.001).expect("threshold is non-negative");
-    let converged = relative_error < convergence_threshold;
-
-    Some(KkltResult {
-        t,
-        tau,
-        tau_target: tau_target.to_vec(),
-        converged,
-        relative_error,
-    })
+    solve_path_following_core(
+        tau_target,
+        t_init,
+        steps,
+        |t| Some(compute_divisor_volumes(kappa, t)),
+        |t| Some(compute_jacobian(kappa, t)),
+    )
 }
 
 /// Solve KKLT with a simple two-phase path-following branch heuristic.
@@ -812,8 +747,28 @@ pub fn solve_mixed_basis_path_following(
         return None;
     }
 
+    solve_path_following_core(
+        tau_target,
+        t_init,
+        steps,
+        |t| compute_kklt_divisor_volumes(kappa_basis, kappa_all, basis, kklt_basis, t),
+        |t| compute_kklt_jacobian(kappa_basis, kappa_all, basis, kklt_basis, t),
+    )
+}
+
+fn solve_path_following_core<TauFn, JacobianFn>(
+    tau_target: &[DivisorVolume],
+    t_init: &[F64<Finite>],
+    steps: CheckedRange<usize>,
+    compute_tau: TauFn,
+    compute_jacobian_fn: JacobianFn,
+) -> Option<KkltResult>
+where
+    TauFn: Fn(&[F64<Finite>]) -> Option<Vec<F64<Finite>>>,
+    JacobianFn: Fn(&[F64<Finite>]) -> Option<Vec<Vec<F64<Finite>>>>,
+{
     let mut t = t_init.to_vec();
-    let tau_init = compute_kklt_divisor_volumes(kappa_basis, kappa_all, basis, kklt_basis, &t)?;
+    let tau_init = compute_tau(&t)?;
     let n_steps = I64::<Pos>::new((steps.end - steps.start) as i64)?;
 
     for m in steps.iter_non_neg() {
@@ -827,19 +782,32 @@ pub fn solve_mixed_basis_path_following(
             .map(|(ti, tt)| one_minus_alpha * *ti + alpha * *tt)
             .collect();
 
-        let tau_current =
-            compute_kklt_divisor_volumes(kappa_basis, kappa_all, basis, kklt_basis, &t)?;
+        let tau_current = compute_tau(&t)?;
         let delta_tau: Vec<F64<Finite>> = tau_step
             .iter()
             .zip(tau_current.iter())
             .map(|(ts, tc)| *ts - *tc)
             .collect();
 
-        let j = compute_kklt_jacobian(kappa_basis, kappa_all, basis, kklt_basis, &t)?;
+        let j = compute_jacobian_fn(&t)?;
         let epsilon = solve_least_squares(&j, &delta_tau)?;
+        apply_delta(&mut t, &epsilon)?;
 
-        for (ti, ei) in t.iter_mut().zip(epsilon.iter()) {
-            *ti = *ti + *ei;
+        for _ in 0..3 {
+            let tau_current = compute_tau(&t)?;
+            let residual = relative_l2_error(&tau_current, &tau_step)?;
+            if residual < 1e-8 {
+                break;
+            }
+            let delta_tau: Vec<F64<Finite>> = tau_step
+                .iter()
+                .zip(tau_current.iter())
+                .map(|(ts, tc)| *ts - *tc)
+                .collect();
+            let j = compute_jacobian_fn(&t)?;
+            let mut correction = solve_least_squares(&j, &delta_tau)?;
+            damp_delta_to_max_norm(&mut correction, 1.0)?;
+            apply_delta(&mut t, &correction)?;
         }
 
         let divergence_threshold = F64::<NonNeg>::new(1e6).expect("threshold is non-negative");
@@ -848,7 +816,7 @@ pub fn solve_mixed_basis_path_following(
         }
     }
 
-    let tau = compute_kklt_divisor_volumes(kappa_basis, kappa_all, basis, kklt_basis, &t)?;
+    let tau = compute_tau(&t)?;
     let n_targets = I64::<Pos>::new(tau_target.len() as i64)?;
     let error_sq: F64<NonNeg> = tau
         .iter()
@@ -869,6 +837,59 @@ pub fn solve_mixed_basis_path_following(
         converged,
         relative_error,
     })
+}
+
+fn apply_delta(t: &mut [F64<Finite>], delta: &[F64<Finite>]) -> Option<()> {
+    if t.len() != delta.len() {
+        return None;
+    }
+    for (ti, di) in t.iter_mut().zip(delta.iter()) {
+        *ti = *ti + *di;
+    }
+    Some(())
+}
+
+fn damp_delta_to_max_norm(delta: &mut [F64<Finite>], max_norm: f64) -> Option<()> {
+    let norm_sq = delta
+        .iter()
+        .map(|entry| entry.get() * entry.get())
+        .sum::<f64>();
+    if !norm_sq.is_finite() {
+        return None;
+    }
+    let norm = norm_sq.sqrt();
+    if norm <= max_norm {
+        return Some(());
+    }
+    let scale = F64::<Finite>::new(max_norm / norm)?;
+    for entry in delta {
+        *entry = *entry * scale;
+    }
+    Some(())
+}
+
+fn relative_l2_error(actual: &[F64<Finite>], target: &[F64<Finite>]) -> Option<f64> {
+    if actual.len() != target.len() || actual.is_empty() {
+        return None;
+    }
+    let numerator = actual
+        .iter()
+        .zip(target.iter())
+        .map(|(a, b)| {
+            let delta = a.get() - b.get();
+            delta * delta
+        })
+        .sum::<f64>()
+        .sqrt();
+    let denominator = target
+        .iter()
+        .map(|value| value.get() * value.get())
+        .sum::<f64>()
+        .sqrt();
+    if !numerator.is_finite() || !denominator.is_finite() || denominator == 0.0 {
+        return None;
+    }
+    Some(numerator / denominator)
 }
 
 /// Solve KKLT with a two-phase branch heuristic for mixed `basis`/`kklt_basis`
@@ -1593,6 +1614,49 @@ mod tests {
         assert!(result.converged);
         assert!(
             (result.t[0].get() - 2.0).abs() < 1e-5,
+            "t = {}",
+            result.t[0].get()
+        );
+        assert!(
+            (result.tau[0].get() - 12.0).abs() < 1e-4,
+            "tau = {}",
+            result.tau[0].get()
+        );
+    }
+
+    #[test]
+    fn test_mixed_basis_path_following_corrects_single_large_step() {
+        // With one interpolation step, the predictor alone lands at t=2.5 for
+        // τ=3t² and target τ=12. The Newton corrector should bring it back to
+        // the true branch point t=2.
+        let kappa_basis = Intersection::new(1);
+        let mut kappa_all = Intersection::new(2);
+        kappa_all.set(
+            1,
+            0,
+            0,
+            TypedRational::<Finite>::from_raw(Rational::from(6)),
+        );
+
+        let basis = vec![0];
+        let kklt_basis = vec![1];
+        let tau_target = vec![f64_pos!(12.0)];
+        let t_init = vec![finite_f64(1.0)];
+
+        let result = solve_mixed_basis_path_following(
+            &kappa_basis,
+            &kappa_all,
+            &basis,
+            &kklt_basis,
+            &tau_target,
+            &t_init,
+            range!(0, 1),
+        )
+        .unwrap();
+
+        assert!(result.converged);
+        assert!(
+            (result.t[0].get() - 2.0).abs() < 1e-4,
             "t = {}",
             result.t[0].get()
         );
