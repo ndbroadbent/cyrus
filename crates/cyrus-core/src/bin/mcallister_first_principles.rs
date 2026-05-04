@@ -63,14 +63,15 @@ use cyrus_core::types::tags::{Finite, Pos};
 use cyrus_core::vacuum::compute_vacuum;
 use cyrus_core::volume::bbhl_correction;
 use cyrus_core::{
-    Point, Polytope, Triangulation, basis_change_matrix, build_racetrack_terms,
-    compute_curve_basis_matrix, compute_glsm_and_linrels, compute_grading_vector,
-    compute_intersection_cytools, compute_linear_relations_no_origin, compute_mori_cone_cap_rays,
-    compute_origin_circuit_curve_diagnostics, compute_regular_triangulation,
-    compute_toric_two_face_curve_gv_invariants, compute_w0_from_terms,
-    effective_prime_divisors_from_curve_basis, generate_scaled_kklt_branch_initializations,
-    heights_to_kahler, intersection_in_basis, is_unimodular, kahler_to_heights,
-    map_basis_gv_invariants_to_ambient, remove_pair_decomposable_curve_candidates,
+    Point, Polytope, ToricCurveCandidate, Triangulation, basis_change_matrix,
+    build_racetrack_terms, compute_curve_basis_matrix, compute_glsm_and_linrels,
+    compute_grading_vector, compute_intersection_cytools, compute_linear_relations_no_origin,
+    compute_mori_cone_cap_rays, compute_origin_circuit_curve_diagnostics,
+    compute_regular_triangulation, compute_toric_two_face_curve_gv_invariants,
+    compute_w0_from_terms, effective_prime_divisors_from_curve_basis,
+    generate_scaled_kklt_branch_initializations, heights_to_kahler, intersection_in_basis,
+    is_unimodular, kahler_to_heights, map_basis_gv_invariants_to_ambient,
+    remove_pair_decomposable_curve_candidates,
     scale_mixed_basis_kklt_branch_initialization_to_target, solve_mixed_basis_path_following,
     solve_mixed_basis_path_following_branch_candidates, solve_racetrack,
     subcutoff_toric_curve_candidates,
@@ -580,7 +581,18 @@ struct ChamberToricGvSelection {
     toric_gv_covered_count: usize,
     toric_gv_missing_count: usize,
     first_missing_class: Option<Vec<i64>>,
+    small_curve_candidates: Vec<ToricCurveCandidate>,
+    small_curves: Vec<ToricCurveCandidate>,
     small_curve_gvs: Vec<(Vec<i64>, malachite::Integer)>,
+}
+
+struct AmbientTargetContributionRow {
+    class: Vec<i64>,
+    gv: malachite::Integer,
+    q_divisor: i64,
+    q_dot_t: f64,
+    parity: i128,
+    contribution: f64,
 }
 
 struct ChamberUpdatedKkltDiagnostic {
@@ -4152,6 +4164,78 @@ fn sparse_i64(values: &[i64]) -> Vec<(usize, i64)> {
         .collect()
 }
 
+fn ambient_curve_b_field_parity_diagnostic(
+    curve: &[i64],
+    basis: &[usize],
+    gamma: &[I64<Finite>],
+) -> Option<i128> {
+    if gamma.len() == basis.len() {
+        if basis.iter().any(|&idx| idx >= curve.len()) {
+            return None;
+        }
+        return Some(
+            basis
+                .iter()
+                .zip(gamma.iter())
+                .map(|(&idx, gi)| i128::from(curve[idx]) * i128::from(gi.get()))
+                .sum(),
+        );
+    }
+    if gamma.len() == curve.len() {
+        return Some(
+            curve
+                .iter()
+                .zip(gamma.iter())
+                .map(|(&qi, gi)| i128::from(qi) * i128::from(gi.get()))
+                .sum(),
+        );
+    }
+    None
+}
+
+fn ambient_target_contribution_rows(
+    gv_invariants: &[(Vec<i64>, malachite::Integer)],
+    basis: &[usize],
+    divisor_idx: usize,
+    t: &[F64<Finite>],
+    gamma: &[I64<Finite>],
+) -> Option<Vec<AmbientTargetContributionRow>> {
+    if basis.len() != t.len() {
+        return None;
+    }
+    let mut rows = Vec::with_capacity(gv_invariants.len());
+    for (curve, invariant) in gv_invariants {
+        if divisor_idx >= curve.len() || basis.iter().any(|&idx| idx >= curve.len()) {
+            return None;
+        }
+        let q_dot_t = basis
+            .iter()
+            .zip(t.iter())
+            .map(|(&idx, ti)| curve[idx] as f64 * ti.get())
+            .sum::<f64>();
+        let parity = ambient_curve_b_field_parity_diagnostic(curve, basis, gamma)?;
+        let single = [(curve.clone(), invariant.clone())];
+        let contribution = cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+            &single,
+            basis,
+            &[divisor_idx],
+            t,
+            Some(gamma),
+        )?
+        .first()?
+        .get();
+        rows.push(AmbientTargetContributionRow {
+            class: curve.clone(),
+            gv: invariant.clone(),
+            q_divisor: curve[divisor_idx],
+            q_dot_t,
+            parity,
+            contribution,
+        });
+    }
+    Some(rows)
+}
+
 fn insert_missing_diagnostic_gv(
     diagnostic_gvs: &mut HashMap<Vec<i64>, malachite::Integer>,
     ambient_class: &[i64],
@@ -5155,6 +5239,8 @@ fn compute_chamber_toric_gv_selection(
         toric_gv_covered_count: small_curve_gvs.len(),
         toric_gv_missing_count: missing_gv_classes.len(),
         first_missing_class: missing_gv_classes.first().cloned(),
+        small_curve_candidates,
+        small_curves,
         small_curve_gvs,
     })
 }
@@ -5722,8 +5808,7 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
         })
         .collect::<Vec<_>>();
     gv_deltas.sort_unstable_by(|lhs, rhs| rhs.1.total_cmp(&lhs.1));
-    for (idx, _abs_delta, delta, checkpoint_implied, toric_covered) in gv_deltas.into_iter().take(8)
-    {
+    for &(idx, _abs_delta, delta, checkpoint_implied, toric_covered) in gv_deltas.iter().take(8) {
         eprintln!(
             "[COMPARE] checkpoint-t corrected-chamber GV target top_delta kklt_idx={} point_idx={} delta={} checkpoint_implied={} toric_covered={} base_tau={} checkpoint_tau={}",
             idx,
@@ -5734,6 +5819,60 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
             base_target_tau[idx].get(),
             checkpoint_target[idx].get()
         );
+    }
+    let decomposition_index = BoundedCurveDecompositionIndex::new(
+        &selection.small_curve_candidates,
+    )
+    .unwrap_or_else(|e| {
+        eprintln!(
+            "[ERROR] failed to build checkpoint-t corrected-chamber decomposition index: {e}"
+        );
+        std::process::exit(2);
+    });
+    let small_curve_by_class = selection
+        .small_curves
+        .iter()
+        .map(|candidate| (candidate.class.clone(), candidate))
+        .collect::<HashMap<_, _>>();
+    for &(idx, _abs_delta, _delta, _checkpoint_implied, _toric_covered) in gv_deltas.iter().take(4)
+    {
+        let divisor_idx = kklt_basis[idx];
+        let Some(mut rows) = ambient_target_contribution_rows(
+            &selection.small_curve_gvs,
+            &intersection.basis,
+            divisor_idx,
+            checkpoint_t,
+            gamma,
+        ) else {
+            eprintln!(
+                "[ERROR] failed to compute checkpoint-t corrected-chamber GV target contribution rows for kklt_idx={idx}"
+            );
+            continue;
+        };
+        rows.sort_unstable_by(|lhs, rhs| rhs.contribution.abs().total_cmp(&lhs.contribution.abs()));
+        for row in rows.into_iter().take(6) {
+            let decomp_terms = small_curve_by_class
+                .get(&row.class)
+                .and_then(|candidate| {
+                    decomposition_index
+                        .find_decomposition(candidate, 3)
+                        .ok()
+                        .flatten()
+                })
+                .map(|decomposition| decomposition.len());
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber GV target contribution kklt_idx={} point_idx={} contribution={} q_i={} q_dot_t={} parity_mod2={} gv={} decomp_terms_le3={:?} class={:?}",
+                idx,
+                divisor_idx,
+                row.contribution,
+                row.q_divisor,
+                row.q_dot_t,
+                row.parity.rem_euclid(2),
+                row.gv,
+                decomp_terms,
+                sparse_i64(&row.class)
+            );
+        }
     }
 }
 
