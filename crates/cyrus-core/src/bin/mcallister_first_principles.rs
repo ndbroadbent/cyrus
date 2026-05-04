@@ -8,6 +8,7 @@
 //! - `--allow-fixtures` to permit JSON fixture fallback when no data dir is set.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -22,8 +23,10 @@ use cyrus_core::{
     Point, Polytope, Triangulation, basis_change_matrix, build_racetrack_terms,
     compute_curve_basis_matrix, compute_glsm_and_linrels, compute_grading_vector,
     compute_intersection_cytools, compute_linear_relations_no_origin, compute_mori_cone_cap_rays,
-    compute_regular_triangulation, compute_w0_from_terms, intersection_in_basis, is_unimodular,
-    remove_pair_decomposable_curve_candidates, solve_racetrack, subcutoff_toric_curve_candidates,
+    compute_regular_triangulation, compute_toric_two_face_curve_gv_invariants,
+    compute_w0_from_terms, intersection_in_basis, is_unimodular,
+    remove_pair_decomposable_curve_candidates, solve_mixed_basis_path_following, solve_racetrack,
+    subcutoff_toric_curve_candidates,
 };
 
 const DEFAULT_MCALLISTER_GV_MIN_POINTS: u32 = 20_000;
@@ -951,10 +954,114 @@ fn stage_volume(
             small_curves.len(),
             small_curve_cutoff.get()
         );
+        let toric_gvs = compute_toric_two_face_curve_gv_invariants(
+            &geom.triangulation,
+            &geom.triangulation_points,
+            &geom.polytope,
+        )
+        .unwrap_or_else(|e| {
+            eprintln!("[ERROR] failed to compute primal toric curve GV values: {e}");
+            std::process::exit(2);
+        });
+        let gv_by_class: HashMap<Vec<i64>, malachite::Integer> = toric_gvs
+            .into_iter()
+            .map(|item| (item.class, item.gv))
+            .collect();
+        let mut small_curve_gvs = Vec::with_capacity(small_curves.len());
+        let mut missing_gv_classes = Vec::new();
+        for curve in &small_curves {
+            match gv_by_class.get(&curve.class) {
+                Some(gv) => small_curve_gvs.push((curve.class.clone(), gv.clone())),
+                None => missing_gv_classes.push(curve.class.clone()),
+            }
+        }
+        if !missing_gv_classes.is_empty() {
+            eprintln!(
+                "[ERROR] missing computed GV values for {} selected primal small toric curves; first_missing={:?}",
+                missing_gv_classes.len(),
+                missing_gv_classes.first()
+            );
+            std::process::exit(2);
+        }
         eprintln!(
-            "[ERROR] primal small toric curve classes are computed, but their GV values are not yet computed by Cyrus; refusing to reuse downstream GV artifacts"
+            "[INFO] primal small toric curve GVs selected={}",
+            small_curve_gvs.len()
         );
-        std::process::exit(2);
+
+        let mut corrected = zeroth_order;
+        let max_gv_iterations = 20usize;
+        let gv_tolerance = 1e-10f64;
+        let mut gv_converged = false;
+        for iter in 0..max_gv_iterations {
+            let previous_t = corrected.t.clone();
+            let Some(gv_correction) =
+                cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+                    &small_curve_gvs,
+                    &intersection.basis,
+                    &kklt_basis,
+                    &previous_t,
+                    None,
+                )
+            else {
+                eprintln!(
+                    "[ERROR] failed to compute primal ambient GV target correction at iteration {iter}"
+                );
+                std::process::exit(2);
+            };
+            let Some(tau_target) = cyrus_core::kklt::compute_gv_corrected_target_tau(
+                &c_i,
+                &chi_divisor,
+                c_tau,
+                &gv_correction,
+            ) else {
+                eprintln!(
+                    "[ERROR] GV-corrected KKLT target construction failed at iteration {iter}"
+                );
+                std::process::exit(2);
+            };
+            let Some(next) = solve_mixed_basis_path_following(
+                &intersection.kappa_basis,
+                &intersection.kappa_full,
+                &intersection.basis,
+                &kklt_basis,
+                &tau_target,
+                &previous_t,
+                CheckedRange::new(0, kklt_steps),
+            ) else {
+                eprintln!("[ERROR] GV-corrected mixed-basis KKLT solve failed at iteration {iter}");
+                std::process::exit(2);
+            };
+            if !next.converged {
+                eprintln!(
+                    "[ERROR] GV-corrected mixed-basis KKLT solve did not converge at iteration {iter}: rel_err={}",
+                    next.relative_error.get()
+                );
+                std::process::exit(2);
+            }
+            let max_relative_step = next
+                .t
+                .iter()
+                .zip(previous_t.iter())
+                .map(|(new, old)| (new.get() - old.get()).abs() / (old.get().abs() + 1e-12))
+                .fold(0.0f64, f64::max);
+            eprintln!(
+                "[INFO] GV-corrected KKLT iteration {iter}: max_relative_step={} rel_err={}",
+                max_relative_step,
+                next.relative_error.get()
+            );
+            corrected = next;
+            if max_relative_step <= gv_tolerance {
+                gv_converged = true;
+                break;
+            }
+        }
+        if !gv_converged {
+            eprintln!(
+                "[ERROR] GV-corrected KKLT fixed-point iteration did not converge in {max_gv_iterations} iterations"
+            );
+            std::process::exit(2);
+        }
+        corrected.t
     };
 
     let classical_volume = classical_volume_from_t(&intersection.kappa_basis, &t);
