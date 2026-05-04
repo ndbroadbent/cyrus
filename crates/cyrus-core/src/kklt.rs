@@ -635,6 +635,32 @@ pub struct KkltResult {
     pub relative_error: RelativeError,
 }
 
+/// A converged KKLT branch produced from an explicit initial Kähler point.
+#[derive(Debug, Clone)]
+pub struct KkltBranchSolution {
+    /// Index of the initial point in the input candidate list.
+    pub init_index: usize,
+    /// Path-following solve result for this branch.
+    pub result: KkltResult,
+    /// Classical Calabi-Yau volume `(1/6) κ_ijk t^i t^j t^k`.
+    pub classical_volume: F64<Pos>,
+}
+
+/// Summary of an explicit KKLT branch-candidate search.
+#[derive(Debug, Clone)]
+pub struct KkltBranchSearchResult {
+    /// Number of input initial points evaluated.
+    pub attempted: usize,
+    /// Number of candidates whose path-following solve returned a result.
+    pub solved: usize,
+    /// Number of solved candidates that failed the convergence threshold.
+    pub non_converged: usize,
+    /// Number of converged candidates with non-positive classical volume.
+    pub non_positive_volume: usize,
+    /// Converged positive-volume branch solutions.
+    pub positive_volume: Vec<KkltBranchSolution>,
+}
+
 /// Solve KKLT using path-following.
 ///
 /// This implements the predictor-corrector algorithm from `McAllister` Section 5.2.
@@ -754,6 +780,65 @@ pub fn solve_mixed_basis_path_following(
         |t| compute_kklt_divisor_volumes(kappa_basis, kappa_all, basis, kklt_basis, t),
         |t| compute_kklt_jacobian(kappa_basis, kappa_all, basis, kklt_basis, t),
     )
+}
+
+/// Evaluate explicit initial Kähler points as KKLT branch candidates.
+///
+/// This is the reusable branch-selection hook for GA search: the caller owns
+/// the generation/evolution of `t_initializations`, while Cyrus evaluates each
+/// candidate by solving the mixed-basis KKLT equation and reporting which
+/// branches converge with positive classical volume.
+#[must_use]
+pub fn solve_mixed_basis_path_following_branch_candidates(
+    kappa_basis: &Intersection,
+    kappa_all: &Intersection,
+    basis: &[usize],
+    kklt_basis: &[usize],
+    tau_target: &[DivisorVolume],
+    t_initializations: &[Vec<F64<Finite>>],
+    steps: CheckedRange<usize>,
+) -> KkltBranchSearchResult {
+    let mut out = KkltBranchSearchResult {
+        attempted: t_initializations.len(),
+        solved: 0,
+        non_converged: 0,
+        non_positive_volume: 0,
+        positive_volume: Vec::new(),
+    };
+
+    for (init_index, t_init) in t_initializations.iter().enumerate() {
+        let Some(result) = solve_mixed_basis_path_following(
+            kappa_basis,
+            kappa_all,
+            basis,
+            kklt_basis,
+            tau_target,
+            t_init,
+            steps,
+        ) else {
+            continue;
+        };
+        out.solved += 1;
+        if !result.converged {
+            out.non_converged += 1;
+            continue;
+        }
+        let Some(classical_volume) = classical_volume_for_branch(kappa_basis, &result.t) else {
+            out.non_positive_volume += 1;
+            continue;
+        };
+        out.positive_volume.push(KkltBranchSolution {
+            init_index,
+            result,
+            classical_volume,
+        });
+    }
+
+    out
+}
+
+fn classical_volume_for_branch(kappa_basis: &Intersection, t: &[F64<Finite>]) -> Option<F64<Pos>> {
+    Some(kappa_basis.contract_triple_finite(t)? / f64_pos!(6.0))
 }
 
 fn solve_path_following_core<TauFn, JacobianFn>(
@@ -1665,6 +1750,48 @@ mod tests {
             "tau = {}",
             result.tau[0].get()
         );
+    }
+
+    #[test]
+    fn test_branch_candidates_report_positive_volume_solutions() {
+        let mut kappa_basis = Intersection::new(1);
+        kappa_basis.set(
+            0,
+            0,
+            0,
+            TypedRational::<Finite>::from_raw(Rational::from(6)),
+        );
+        let mut kappa_all = Intersection::new(2);
+        kappa_all.set(
+            1,
+            0,
+            0,
+            TypedRational::<Finite>::from_raw(Rational::from(6)),
+        );
+
+        let basis = vec![0];
+        let kklt_basis = vec![1];
+        let tau_target = vec![f64_pos!(12.0)];
+        let candidates = vec![vec![finite_f64(1.0)], vec![finite_f64(-1.0)]];
+
+        let search = solve_mixed_basis_path_following_branch_candidates(
+            &kappa_basis,
+            &kappa_all,
+            &basis,
+            &kklt_basis,
+            &tau_target,
+            &candidates,
+            range!(0, 4),
+        );
+
+        assert_eq!(search.attempted, 2);
+        assert_eq!(search.solved, 2);
+        assert_eq!(search.non_converged, 0);
+        assert_eq!(search.non_positive_volume, 1);
+        assert_eq!(search.positive_volume.len(), 1);
+        assert_eq!(search.positive_volume[0].init_index, 0);
+        assert!((search.positive_volume[0].result.t[0].get() - 2.0).abs() < 1e-4);
+        assert!((search.positive_volume[0].classical_volume.get() - 8.0).abs() < 1e-4);
     }
 
     #[test]
