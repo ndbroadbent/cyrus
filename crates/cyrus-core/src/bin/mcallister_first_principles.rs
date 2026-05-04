@@ -27,9 +27,11 @@
 //!   primal GV invariants if toric formulas do not cover selected small curves.
 //! - `--diagnose-corrected-chamber-gv` to recompute toric small-curve/GV data
 //!   in the FRST induced by the solved corrected Kähler point.
+//!   When combined with primal GV bounds, also tries bounded general GV fallback
+//!   for corrected-chamber small curves not covered by toric formulas.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -459,6 +461,8 @@ struct ChamberGvDiagnostic {
     filtered_count: usize,
     toric_gv_covered_count: usize,
     toric_gv_missing_count: usize,
+    general_gv_covered_count: Option<usize>,
+    remaining_gv_missing_count: usize,
     first_missing_class: Option<Vec<i64>>,
     missing_required_degree_min: Option<i128>,
     missing_required_degree_max: Option<i128>,
@@ -1754,6 +1758,29 @@ fn triangulation_from_kahler_point(
         .map_err(|e| format!("failed to compute triangulation from corrected Kähler heights: {e}"))
 }
 
+fn chamber_intersection_in_basis(
+    tri: &Triangulation,
+    points: &[Point],
+    basis: &[usize],
+) -> Result<cyrus_core::Intersection, String> {
+    let points_i64: Vec<Vec<i64>> = points.iter().map(|point| point.coords().to_vec()).collect();
+    let linrels_reduced = compute_linear_relations_no_origin(&points_i64);
+    let linrels_i64: Vec<Vec<i64>> = linrels_reduced
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|value| {
+                    i64::try_from(value)
+                        .map_err(|_| "corrected-chamber linear relation does not fit in i64")
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let kappa_full = compute_intersection_cytools(tri, points, &linrels_i64)
+        .map_err(|e| format!("failed to compute corrected-chamber intersections: {e}"))?;
+    Ok(intersection_in_basis(&kappa_full, basis))
+}
+
 fn triangulations_have_same_simplices(lhs: &Triangulation, rhs: &Triangulation) -> bool {
     let mut lhs_simplices = lhs.simplices().to_vec();
     let mut rhs_simplices = rhs.simplices().to_vec();
@@ -1775,6 +1802,8 @@ fn diagnose_chamber_gv_volume_correction(
     kahler: &[F64<Finite>],
     gamma: &[I64<Finite>],
     cutoff: F64<Pos>,
+    general_min_points: Option<u32>,
+    general_max_deg: Option<u32>,
 ) -> Result<ChamberGvDiagnostic, String> {
     let ambient_rays = compute_mori_cone_cap_rays(
         tri,
@@ -1794,7 +1823,7 @@ fn diagnose_chamber_gv_volume_correction(
         compute_toric_two_face_curve_gv_invariants(tri, &geom.triangulation_points, &geom.polytope)
             .map_err(|e| format!("failed to compute corrected-chamber toric GV values: {e}"))?;
 
-    let gv_by_class: HashMap<Vec<i64>, malachite::Integer> = toric_gvs
+    let mut gv_by_class: HashMap<Vec<i64>, malachite::Integer> = toric_gvs
         .into_iter()
         .map(|item| (item.class, item.gv))
         .collect();
@@ -1804,6 +1833,118 @@ fn diagnose_chamber_gv_volume_correction(
         match gv_by_class.get(&curve.class) {
             Some(gv) => small_curve_gvs.push((curve.class.clone(), gv.clone())),
             None => missing_gv_classes.push(curve.class.clone()),
+        }
+    }
+    let toric_gv_covered_count = small_curve_gvs.len();
+    let toric_gv_missing_count = missing_gv_classes.len();
+
+    let mut basis_rays_for_missing = None;
+    let mut grading_for_missing = None;
+    let mut degree_summary = None;
+    if !missing_gv_classes.is_empty() {
+        let basis_rays = project_mori_cone_cap_rays_to_basis(&ambient_rays, &intersection.basis)
+            .map_err(|e| {
+                format!("failed to project corrected-chamber Mori-cap rays to basis: {e}")
+            })?;
+        let grading = compute_grading_vector(&basis_rays).ok_or_else(|| {
+            "failed to compute corrected-chamber GV degree grading vector".to_string()
+        })?;
+        let summary = summarize_required_gv_degrees(
+            &missing_gv_classes,
+            &intersection.basis,
+            &grading,
+            general_max_deg,
+        )?;
+        basis_rays_for_missing = Some(basis_rays);
+        grading_for_missing = Some(grading);
+        degree_summary = Some(summary);
+    }
+
+    let general_gv_requested = general_min_points.is_some() || general_max_deg.is_some();
+    let mut general_gv_covered_count = None;
+    if !missing_gv_classes.is_empty() && general_gv_requested {
+        let summary = degree_summary
+            .as_ref()
+            .expect("degree summary computed for missing corrected-chamber curves");
+        if let Some(max_deg) = general_max_deg
+            && summary.max_degree > i128::from(max_deg)
+        {
+            return Err(format!(
+                "corrected-chamber general GV max_deg={max_deg} cannot cover all missing curves: required degree range {}..{} ({} curves), first_over_max={:?}",
+                summary.min_degree, summary.max_degree, summary.count, summary.first_over_max
+            ));
+        }
+        eprintln!(
+            "[INFO] toric formulas missed {} corrected-chamber small curves; computing corrected-chamber general GV fallback with min_points={:?} max_deg={:?}",
+            missing_gv_classes.len(),
+            general_min_points,
+            general_max_deg
+        );
+        let basis_rays = basis_rays_for_missing
+            .as_ref()
+            .expect("basis rays computed for corrected-chamber missing curves");
+        let grading = grading_for_missing
+            .as_ref()
+            .expect("grading computed for corrected-chamber missing curves");
+        let curve_basis = compute_curve_basis_matrix(&intersection.linrels, &intersection.basis)
+            .map_err(|e| format!("failed to compute corrected-chamber curve basis matrix: {e}"))?;
+        let q_matrix = curve_basis
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .skip(1)
+                    .map(|value| {
+                        i64::try_from(value).map_err(|_| {
+                            "corrected-chamber q-matrix entry does not fit in i64".to_string()
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let corrected_kappa_basis =
+            chamber_intersection_in_basis(tri, &geom.triangulation_points, &intersection.basis)?;
+        let general_gvs = cyrus_core::compute_gv_invariants(
+            basis_rays,
+            grading,
+            &q_matrix,
+            &corrected_kappa_basis,
+            general_min_points,
+            general_max_deg,
+        )
+        .map_err(|e| format!("failed to compute corrected-chamber general GV invariants: {e}"))?;
+        let ambient_gvs =
+            map_basis_gv_invariants_to_ambient(&general_gvs, &curve_basis).map_err(|e| {
+                format!("failed to map corrected-chamber general GV invariants to ambient: {e}")
+            })?;
+        let missing_set: HashSet<Vec<i64>> = missing_gv_classes.iter().cloned().collect();
+        let mut newly_covered = 0usize;
+        for (class, gv) in ambient_gvs {
+            match gv_by_class.entry(class) {
+                std::collections::hash_map::Entry::Occupied(existing) => {
+                    if existing.get() != &gv {
+                        return Err(format!(
+                            "toric/general GV conflict for corrected-chamber curve: {} vs {gv}",
+                            existing.get()
+                        ));
+                    }
+                }
+                std::collections::hash_map::Entry::Vacant(slot) => {
+                    if missing_set.contains(slot.key()) {
+                        newly_covered += 1;
+                    }
+                    slot.insert(gv);
+                }
+            }
+        }
+        general_gv_covered_count = Some(newly_covered);
+
+        small_curve_gvs.clear();
+        missing_gv_classes.clear();
+        for curve in &small_curves {
+            match gv_by_class.get(&curve.class) {
+                Some(gv) => small_curve_gvs.push((curve.class.clone(), gv.clone())),
+                None => missing_gv_classes.push(curve.class.clone()),
+            }
         }
     }
 
@@ -1828,32 +1969,19 @@ fn diagnose_chamber_gv_volume_correction(
     } else {
         None
     };
-    let (missing_required_degree_min, missing_required_degree_max) =
-        if missing_gv_classes.is_empty() {
-            (None, None)
-        } else {
-            let basis_rays =
-                project_mori_cone_cap_rays_to_basis(&ambient_rays, &intersection.basis).map_err(
-                    |e| format!("failed to project corrected-chamber Mori-cap rays to basis: {e}"),
-                )?;
-            let grading = compute_grading_vector(&basis_rays).ok_or_else(|| {
-                "failed to compute corrected-chamber GV degree grading vector".to_string()
-            })?;
-            let summary = summarize_required_gv_degrees(
-                &missing_gv_classes,
-                &intersection.basis,
-                &grading,
-                None,
-            )?;
+    let (missing_required_degree_min, missing_required_degree_max) = degree_summary
+        .map_or((None, None), |summary| {
             (Some(summary.min_degree), Some(summary.max_degree))
-        };
+        });
 
     Ok(ChamberGvDiagnostic {
         ambient_rays: ambient_rays.len(),
         subcutoff_count: small_curve_candidates.len(),
         filtered_count: small_curves.len(),
-        toric_gv_covered_count: small_curve_gvs.len(),
-        toric_gv_missing_count: missing_gv_classes.len(),
+        toric_gv_covered_count,
+        toric_gv_missing_count,
+        general_gv_covered_count,
+        remaining_gv_missing_count: missing_gv_classes.len(),
         first_missing_class: missing_gv_classes.first().cloned(),
         missing_required_degree_min,
         missing_required_degree_max,
@@ -2641,6 +2769,8 @@ fn stage_volume(
             &t,
             gamma,
             small_curve_cutoff,
+            primal_gv_min_points,
+            primal_gv_max_deg,
         )
         .unwrap_or_else(|e| {
             eprintln!("[ERROR] corrected-chamber GV diagnostic failed: {e}");
@@ -2655,6 +2785,12 @@ fn stage_volume(
             diag.toric_gv_missing_count,
             small_curve_cutoff.get()
         );
+        if let Some(general_covered) = diag.general_gv_covered_count {
+            eprintln!(
+                "[INFO] corrected-chamber general GV fallback covered {} missing curves; remaining_missing={}",
+                general_covered, diag.remaining_gv_missing_count
+            );
+        }
         if let Some(first_missing) = &diag.first_missing_class {
             if let (Some(min_degree), Some(max_degree)) = (
                 diag.missing_required_degree_min,
@@ -2667,18 +2803,18 @@ fn stage_volume(
             }
             if let Some(chamber_correction) = diag.covered_gv_volume_correction.as_ref() {
                 eprintln!(
-                    "[INFO] corrected-chamber covered toric GV volume correction (partial) = {}",
+                    "[INFO] corrected-chamber covered GV volume correction (partial) = {}",
                     chamber_correction.get()
                 );
                 if let Some(input_chamber_correction) = gv_volume_correction.as_ref() {
                     eprintln!(
-                        "[INFO] corrected-chamber covered toric GV volume correction delta_vs_input_chamber (partial) = {}",
+                        "[INFO] corrected-chamber covered GV volume correction delta_vs_input_chamber (partial) = {}",
                         chamber_correction.get() - input_chamber_correction.get()
                     );
                 }
             }
             eprintln!(
-                "[WARN] corrected-chamber GV volume correction unavailable: missing toric GV values, first_missing={first_missing:?}"
+                "[WARN] corrected-chamber GV volume correction unavailable: missing GV values, first_missing={first_missing:?}"
             );
         } else if let Some(chamber_correction) = diag.gv_volume_correction.as_ref() {
             eprintln!(
