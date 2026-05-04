@@ -15,7 +15,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
-use good_lp::{constraint, default_solver, variable, ProblemVariables, SolverModel};
+use good_lp::{ProblemVariables, Solution, SolverModel, constraint, default_solver, variable};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
@@ -464,6 +464,14 @@ impl Cone {
             check_grading: true,
         };
 
+        if let Some(points) = find_lattice_points_native(&req)? {
+            eprintln!(
+                "[DEBUG] lattice_points: native bounded enumerator returned {} points",
+                points.len()
+            );
+            return Ok(sort_lattice_points(points, grading_vector));
+        }
+
         let script = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("scripts")
             .join("find_lattice_points_ortools.py");
@@ -575,6 +583,278 @@ impl Cone {
         h1.extend(h2.iter().cloned());
         Self::from_hyperplanes(h1)
     }
+}
+
+fn find_lattice_points_native(req: &LatticeRequest) -> Result<Option<Vec<Vec<i64>>>> {
+    if env::var("CYRUS_LATTICE_NATIVE")
+        .map(|value| value == "0")
+        .unwrap_or(false)
+    {
+        return Ok(None);
+    }
+    if req.max_time_sec.is_some() || req.num_search_workers.is_some() {
+        return Ok(None);
+    }
+    if req.hyperplanes.is_empty() || req.grading_vector.is_empty() {
+        return Ok(None);
+    }
+    if !matches!(req.c, LatticeC::Scalar(c) if c == 0.0) {
+        return Ok(None);
+    }
+
+    let dim = req.grading_vector.len();
+    if dim > 6 || req.hyperplanes.iter().any(|row| row.len() != dim) {
+        return Ok(None);
+    }
+    if req.deg_window < 0 || req.max_coord < 0 {
+        return Err(Error::InvalidInput(
+            "native lattice search requires non-negative max_coord and deg_window".into(),
+        ));
+    }
+
+    if req.check_grading {
+        let check = enumerate_lattice_degree_window(req, None, Some(0), Some(2))?;
+        if check.len() > 1 {
+            return Err(Error::InvalidInput(
+                "grading vector must be positive on the cone".into(),
+            ));
+        }
+    }
+
+    let mut points = Vec::new();
+    if let Some(max_deg) = req.max_deg {
+        points = enumerate_lattice_degree_window(req, None, Some(max_deg), req.max_solutions)?;
+        if let Some(limit) = req.max_solutions
+            && points.len() >= limit
+        {
+            return Err(Error::InvalidInput(
+                "max_solutions reached before completion".into(),
+            ));
+        }
+    } else if let Some(min_points) = req.min_points {
+        let mut degree = 0i64;
+        while points.len() < min_points {
+            if let Some(max_deg_limit) = req.max_deg_limit
+                && degree > max_deg_limit
+            {
+                return Err(Error::InvalidInput(
+                    "max_deg_limit reached before min_points".into(),
+                ));
+            }
+            let remaining_limit = req
+                .max_solutions
+                .map(|limit| limit.saturating_sub(points.len()));
+            let slice = enumerate_lattice_degree_window(
+                req,
+                Some(degree),
+                Some(degree + req.deg_window),
+                remaining_limit,
+            )?;
+            points.extend(slice);
+            if let Some(limit) = req.max_solutions
+                && points.len() >= limit
+                && points.len() < min_points
+            {
+                return Err(Error::InvalidInput(
+                    "max_solutions reached before min_points".into(),
+                ));
+            }
+            degree += req.deg_window + 1;
+        }
+    } else {
+        return Ok(None);
+    }
+
+    Ok(Some(points))
+}
+
+fn enumerate_lattice_degree_window(
+    req: &LatticeRequest,
+    deg_low: Option<i64>,
+    deg_high: Option<i64>,
+    max_solutions: Option<usize>,
+) -> Result<Vec<Vec<i64>>> {
+    let bounds = lattice_coordinate_bounds(req, deg_low, deg_high)?;
+    if bounds.iter().any(|(lo, hi)| lo > hi) {
+        return Ok(Vec::new());
+    }
+
+    let mut points = Vec::new();
+    let mut candidate = vec![0i64; req.grading_vector.len()];
+    enumerate_lattice_recursive(
+        req,
+        &bounds,
+        deg_low,
+        deg_high,
+        max_solutions,
+        0,
+        &mut candidate,
+        &mut points,
+    );
+    Ok(points)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn enumerate_lattice_recursive(
+    req: &LatticeRequest,
+    bounds: &[(i64, i64)],
+    deg_low: Option<i64>,
+    deg_high: Option<i64>,
+    max_solutions: Option<usize>,
+    coord: usize,
+    candidate: &mut [i64],
+    points: &mut Vec<Vec<i64>>,
+) {
+    if max_solutions.is_some_and(|limit| points.len() >= limit) {
+        return;
+    }
+    if coord == candidate.len() {
+        if lattice_point_satisfies(req, candidate, deg_low, deg_high) {
+            points.push(candidate.to_vec());
+        }
+        return;
+    }
+
+    let (lo, hi) = bounds[coord];
+    for value in lo..=hi {
+        candidate[coord] = value;
+        enumerate_lattice_recursive(
+            req,
+            bounds,
+            deg_low,
+            deg_high,
+            max_solutions,
+            coord + 1,
+            candidate,
+            points,
+        );
+        if max_solutions.is_some_and(|limit| points.len() >= limit) {
+            return;
+        }
+    }
+}
+
+fn lattice_coordinate_bounds(
+    req: &LatticeRequest,
+    deg_low: Option<i64>,
+    deg_high: Option<i64>,
+) -> Result<Vec<(i64, i64)>> {
+    let dim = req.grading_vector.len();
+    let mut bounds = Vec::with_capacity(dim);
+    for coord in 0..dim {
+        let min = optimize_lattice_coordinate(req, deg_low, deg_high, coord, false)?;
+        let max = optimize_lattice_coordinate(req, deg_low, deg_high, coord, true)?;
+        let lo = (min - 1e-9).ceil() as i64;
+        let hi = (max + 1e-9).floor() as i64;
+        bounds.push((lo.max(-req.max_coord), hi.min(req.max_coord)));
+    }
+    Ok(bounds)
+}
+
+fn optimize_lattice_coordinate(
+    req: &LatticeRequest,
+    deg_low: Option<i64>,
+    deg_high: Option<i64>,
+    coord: usize,
+    maximize: bool,
+) -> Result<f64> {
+    let dim = req.grading_vector.len();
+    let mut vars = ProblemVariables::new();
+    let x: Vec<_> = (0..dim)
+        .map(|_| {
+            vars.add(
+                variable()
+                    .min(-(req.max_coord as f64))
+                    .max(req.max_coord as f64),
+            )
+        })
+        .collect();
+
+    let mut objective = good_lp::Expression::from(0.0);
+    objective.add_mul(if maximize { -1.0 } else { 1.0 }, x[coord]);
+    let mut model = vars.minimise(objective).using(default_solver);
+
+    for row in &req.hyperplanes {
+        let mut expr = good_lp::Expression::from(0.0);
+        for (coeff, var) in row.iter().zip(x.iter()) {
+            expr.add_mul(*coeff as f64, *var);
+        }
+        model = model.with(constraint!(expr >= 0.0));
+    }
+
+    let mut degree_expr = good_lp::Expression::from(0.0);
+    for (coeff, var) in req.grading_vector.iter().zip(x.iter()) {
+        degree_expr.add_mul(*coeff as f64, *var);
+    }
+    if let Some(low) = deg_low {
+        model = model.with(constraint!(degree_expr.clone() >= low as f64));
+    }
+    if let Some(high) = deg_high {
+        model = model.with(constraint!(degree_expr <= high as f64));
+    }
+
+    let solution = model
+        .solve()
+        .map_err(|e| Error::InvalidInput(format!("native lattice LP bound failed: {e}")))?;
+    Ok(solution.value(x[coord]))
+}
+
+fn lattice_point_satisfies(
+    req: &LatticeRequest,
+    candidate: &[i64],
+    deg_low: Option<i64>,
+    deg_high: Option<i64>,
+) -> bool {
+    if req.hyperplanes.iter().any(|row| {
+        row.iter()
+            .zip(candidate.iter())
+            .map(|(&a, &x)| i128::from(a) * i128::from(x))
+            .sum::<i128>()
+            < 0
+    }) {
+        return false;
+    }
+
+    let degree = req
+        .grading_vector
+        .iter()
+        .zip(candidate.iter())
+        .map(|(&a, &x)| i128::from(a) * i128::from(x))
+        .sum::<i128>();
+    if let Some(low) = deg_low
+        && degree < i128::from(low)
+    {
+        return false;
+    }
+    if let Some(high) = deg_high
+        && degree > i128::from(high)
+    {
+        return false;
+    }
+    true
+}
+
+fn sort_lattice_points(mut points: Vec<Vec<i64>>, grading_vector: &[i64]) -> Vec<Vec<i64>> {
+    let degs: Vec<i64> = points
+        .iter()
+        .map(|p| {
+            p.iter()
+                .zip(grading_vector.iter())
+                .map(|(&x, &g)| x * g)
+                .sum()
+        })
+        .collect();
+    let mut idx: Vec<usize> = (0..points.len()).collect();
+    idx.sort_by(|&a, &b| {
+        let da = degs[a];
+        let db = degs[b];
+        da.cmp(&db).then_with(|| points[a].cmp(&points[b]))
+    });
+    let mut sorted = Vec::with_capacity(points.len());
+    for i in idx {
+        sorted.push(std::mem::take(&mut points[i]));
+    }
+    sorted
 }
 
 /// Normalize vectors by dividing by their GCD.
@@ -840,5 +1120,76 @@ mod tests {
         // Rank 2 for 3x2
         let m3 = vec![vec![1, 0], vec![0, 1], vec![1, 1]];
         assert_eq!(matrix_rank(&m3), 2);
+    }
+
+    #[test]
+    fn test_native_lattice_points_first_quadrant_min_points() {
+        let req = LatticeRequest {
+            hyperplanes: vec![vec![1, 0], vec![0, 1]],
+            grading_vector: vec![1, 1],
+            min_points: Some(4),
+            max_deg: None,
+            max_coord: 10,
+            deg_window: 0,
+            max_deg_limit: Some(3),
+            max_time_sec: None,
+            max_solutions: None,
+            num_search_workers: None,
+            strict: true,
+            c: LatticeC::Scalar(0.0),
+            check_grading: true,
+        };
+
+        let points = find_lattice_points_native(&req)
+            .expect("native enumeration should succeed")
+            .expect("request is native-supported");
+
+        assert_eq!(
+            sort_lattice_points(points, &req.grading_vector),
+            vec![
+                vec![0, 0],
+                vec![0, 1],
+                vec![1, 0],
+                vec![0, 2],
+                vec![1, 1],
+                vec![2, 0],
+            ]
+        );
+    }
+
+    #[test]
+    fn test_native_lattice_points_accepts_negative_coordinates() {
+        let req = LatticeRequest {
+            // Cone generated by (-1, 1) and (1, 0): y >= 0, x + y >= 0.
+            hyperplanes: vec![vec![0, 1], vec![1, 1]],
+            grading_vector: vec![1, 2],
+            min_points: None,
+            max_deg: Some(2),
+            max_coord: 10,
+            deg_window: 0,
+            max_deg_limit: None,
+            max_time_sec: None,
+            max_solutions: None,
+            num_search_workers: None,
+            strict: true,
+            c: LatticeC::Scalar(0.0),
+            check_grading: true,
+        };
+
+        let points = find_lattice_points_native(&req)
+            .expect("native enumeration should succeed")
+            .expect("request is native-supported");
+
+        assert_eq!(
+            sort_lattice_points(points, &req.grading_vector),
+            vec![
+                vec![0, 0],
+                vec![-1, 1],
+                vec![1, 0],
+                vec![-2, 2],
+                vec![0, 1],
+                vec![2, 0],
+            ]
+        );
     }
 }
