@@ -58,6 +58,9 @@ pub type Superpotential = F64<Pos>;
 /// Imaginary part of the axio-dilaton Im(τ) (positive).
 pub type ImTau = F64<Pos>;
 
+/// Real part of the axio-dilaton Re(τ) (non-negative in the racetrack branch used here).
+pub type ReTau = F64<NonNeg>;
+
 // ============================================================================
 // Vacuum Energy
 // ============================================================================
