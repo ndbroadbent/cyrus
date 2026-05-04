@@ -60,6 +60,7 @@ pub mod flat_direction;
 pub mod geometry;
 pub mod glsm;
 pub mod gv;
+pub mod height_kahler;
 pub mod integer_math;
 pub mod intersection;
 pub mod kahler;
@@ -99,6 +100,7 @@ pub use gv::{
     curve_volume_in_divisor_basis, find_pair_decomposition,
     remove_pair_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
 };
+pub use height_kahler::{heights_to_kahler, kahler_to_heights, project_heights_to_kahler};
 pub use integer_math::{compute_glsm_and_linear_relations, compute_linear_relations_no_origin};
 pub use intersection::compute_intersection_cytools;
 pub use intersection::{
