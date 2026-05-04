@@ -1044,6 +1044,26 @@ fn scale_branch_initialization_to_target(
     t.iter().map(|entry| Some(*entry * scale)).collect()
 }
 
+/// Rescale an explicit mixed-basis KKLT branch initialization to the target
+/// divisor-volume scale.
+///
+/// This is the public counterpart of the scaling used by
+/// [`generate_scaled_kklt_branch_initializations`].  It is useful for
+/// deterministic initial points, such as Kähler coordinates projected from
+/// secondary-fan heights, before they are evaluated alongside random branch
+/// candidates.
+#[must_use]
+pub fn scale_mixed_basis_kklt_branch_initialization_to_target(
+    kappa_basis: &Intersection,
+    kappa_all: &Intersection,
+    basis: &[usize],
+    kklt_basis: &[usize],
+    tau_target: &[DivisorVolume],
+    t: &[F64<Finite>],
+) -> Option<Vec<F64<Finite>>> {
+    scale_branch_initialization_to_target(kappa_basis, kappa_all, basis, kklt_basis, tau_target, t)
+}
+
 fn standard_normal<R: Rng + ?Sized>(rng: &mut R) -> f64 {
     let u1 = rng.gen_range(f64::MIN_POSITIVE..1.0);
     let u2 = rng.gen_range(0.0..1.0);
@@ -2065,6 +2085,17 @@ mod tests {
         let basis = vec![0];
         let kklt_basis = vec![1];
         let tau_target = vec![f64_pos!(12.0)];
+        let scaled_explicit = scale_mixed_basis_kklt_branch_initialization_to_target(
+            &kappa_basis,
+            &kappa_all,
+            &basis,
+            &kklt_basis,
+            &tau_target,
+            &[finite_f64(1.0)],
+        )
+        .unwrap();
+        assert!((scaled_explicit[0].get() - 2.0).abs() < 1e-12);
+
         let first = generate_scaled_kklt_branch_initializations(
             &kappa_basis,
             &kappa_all,

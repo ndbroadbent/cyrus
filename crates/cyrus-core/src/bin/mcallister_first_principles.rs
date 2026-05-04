@@ -8,6 +8,8 @@
 //! - `--allow-fixtures` to permit JSON fixture fallback when no data dir is set.
 //! - `--branch-candidates N --branch-selection <max-volume|min-volume|first-positive|min-condition>`
 //!   to run deterministic KKLT branch search without loading Kähler checkpoints.
+//! - `--branch-height-init` to include the CYTools-style height-projected
+//!   Kähler point as the first branch-search candidate.
 //! - `--branch-report-jsonl path` to export positive phase-1 branch candidates
 //!   discovered by that search for GA/debug ranking.
 
@@ -28,8 +30,10 @@ use cyrus_core::{
     compute_curve_basis_matrix, compute_glsm_and_linrels, compute_grading_vector,
     compute_intersection_cytools, compute_linear_relations_no_origin, compute_mori_cone_cap_rays,
     compute_regular_triangulation, compute_toric_two_face_curve_gv_invariants,
-    compute_w0_from_terms, generate_scaled_kklt_branch_initializations, intersection_in_basis,
-    is_unimodular, remove_pair_decomposable_curve_candidates, solve_mixed_basis_path_following,
+    compute_w0_from_terms, effective_prime_divisors_from_curve_basis,
+    generate_scaled_kklt_branch_initializations, heights_to_kahler, intersection_in_basis,
+    is_unimodular, remove_pair_decomposable_curve_candidates,
+    scale_mixed_basis_kklt_branch_initialization_to_target, solve_mixed_basis_path_following,
     solve_mixed_basis_path_following_branch_candidates, solve_racetrack,
     subcutoff_toric_curve_candidates,
 };
@@ -337,18 +341,21 @@ struct PipelineArgs {
     branch_candidates: usize,
     branch_seed: u64,
     branch_selection: BranchSelection,
+    branch_height_init: bool,
     branch_report_path: Option<String>,
     dual_basis_override: Option<BasisOverride>,
 }
 
 struct PrimalGeom {
     polytope: Polytope,
+    heights: Vec<F64<Finite>>,
     triangulation_points: Vec<Point>,
     triangulation: Triangulation,
 }
 
 struct PrimalIntersection {
     glsm: Vec<Vec<malachite::Integer>>,
+    linrels: Vec<Vec<malachite::Integer>>,
     basis: Vec<usize>,
     kappa_full: cyrus_core::Intersection,
     kappa_basis: cyrus_core::Intersection,
@@ -396,6 +403,7 @@ fn parse_args() -> PipelineArgs {
     let branch_selection = parse_arg_value::<String>("--branch-selection")
         .and_then(|s| parse_branch_selection(&s))
         .unwrap_or(BranchSelection::MaxVolume);
+    let branch_height_init = parse_flag("--branch-height-init");
     let branch_report_path = parse_arg_value::<String>("--branch-report-jsonl");
     let dual_basis_override = parse_arg_value::<String>("--dual-basis")
         .map(|path| load_json::<BasisOverride>(&PathBuf::from(path)));
@@ -415,6 +423,7 @@ fn parse_args() -> PipelineArgs {
         branch_candidates,
         branch_seed,
         branch_selection,
+        branch_height_init,
         branch_report_path,
         dual_basis_override,
     }
@@ -701,6 +710,11 @@ fn load_kklt_inputs(data_dir: Option<&str>, manifest_dir: &PathBuf) -> (Vec<I64<
 
 fn stage_triangulation(data_dir: Option<&str>, manifest_dir: &PathBuf, t0: &Instant) -> PrimalGeom {
     let (points_raw, heights_raw) = load_primal_inputs(data_dir, manifest_dir);
+    let heights = heights_raw
+        .iter()
+        .copied()
+        .map(|height| F64::<Finite>::new(height).expect("triangulation height must be finite"))
+        .collect();
     let points: Vec<Point> = points_raw.iter().map(|p| Point::new(p.clone())).collect();
     let polytope = Polytope::from_vertices(points).expect("Failed to build polytope");
     let triangulation_points = polytope
@@ -711,6 +725,7 @@ fn stage_triangulation(data_dir: Option<&str>, manifest_dir: &PathBuf, t0: &Inst
     eprintln!("[TIME] triangulation: {:.2?}", t0.elapsed());
     PrimalGeom {
         polytope,
+        heights,
         triangulation_points,
         triangulation,
     }
@@ -721,7 +736,7 @@ fn stage_intersection(
     geom: &PrimalGeom,
     t0: &Instant,
 ) -> PrimalIntersection {
-    let (glsm, _linrels, basis) =
+    let (glsm, linrels, basis) =
         compute_glsm_and_linrels(&geom.triangulation_points).expect("Failed GLSM/linrels");
     if let Some(dir) = data_dir {
         validate_basis_checkpoint(&glsm, &basis, dir, "primal");
@@ -750,6 +765,7 @@ fn stage_intersection(
     eprintln!("[TIME] intersection: {:.2?}", t0.elapsed());
     PrimalIntersection {
         glsm,
+        linrels,
         basis,
         kappa_full,
         kappa_basis,
@@ -1042,6 +1058,37 @@ fn write_branch_report_jsonl(
     std::fs::write(path, lines).map_err(|e| e.to_string())
 }
 
+fn height_projected_branch_initialization(
+    geom: &PrimalGeom,
+    intersection: &PrimalIntersection,
+    kklt_basis: &[usize],
+    tau_phase1: &[F64<Pos>],
+) -> Result<Vec<F64<Finite>>, String> {
+    let basis_non_origin = intersection
+        .basis
+        .iter()
+        .map(|&idx| {
+            idx.checked_sub(1)
+                .ok_or_else(|| "height projection basis unexpectedly contains origin".to_string())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let curve_basis = compute_curve_basis_matrix(&intersection.linrels, &intersection.basis)
+        .map_err(|e| format!("failed to compute primal curve basis: {e}"))?;
+    let prime_divisors = effective_prime_divisors_from_curve_basis(&curve_basis, &basis_non_origin)
+        .ok_or_else(|| "failed to extract effective-cone prime divisor rows".to_string())?;
+    let raw = heights_to_kahler(&geom.heights, &basis_non_origin, &prime_divisors)
+        .ok_or_else(|| "failed to project triangulation heights to Kähler basis".to_string())?;
+    scale_mixed_basis_kklt_branch_initialization_to_target(
+        &intersection.kappa_basis,
+        &intersection.kappa_full,
+        &intersection.basis,
+        kklt_basis,
+        tau_phase1,
+        &raw,
+    )
+    .ok_or_else(|| "failed to scale height-projected Kähler point to phase-1 target".to_string())
+}
+
 fn stage_volume(
     data_dir: Option<&str>,
     manifest_dir: &PathBuf,
@@ -1053,6 +1100,7 @@ fn stage_volume(
     branch_candidates: usize,
     branch_seed: u64,
     branch_selection: BranchSelection,
+    branch_height_init: bool,
     branch_report_path: Option<&str>,
     small_curve_cutoff: F64<Pos>,
     t0: &Instant,
@@ -1065,6 +1113,10 @@ fn stage_volume(
     }
     if branch_report_path.is_some() && branch_candidates == 0 {
         eprintln!("[ERROR] --branch-report-jsonl requires --branch-candidates N with N > 0");
+        std::process::exit(2);
+    }
+    if branch_height_init && branch_candidates == 0 {
+        eprintln!("[ERROR] --branch-height-init requires --branch-candidates N with N > 0");
         std::process::exit(2);
     }
 
@@ -1124,7 +1176,7 @@ fn stage_volume(
             result
         } else {
             let tau_phase1: Vec<F64<Pos>> = c_i.iter().map(|ci| ci.to_f64()).collect();
-            let Some(t_initializations) = generate_scaled_kklt_branch_initializations(
+            let Some(mut t_initializations) = generate_scaled_kklt_branch_initializations(
                 &intersection.kappa_basis,
                 &intersection.kappa_full,
                 &intersection.basis,
@@ -1136,6 +1188,22 @@ fn stage_volume(
                 eprintln!("[ERROR] failed to generate KKLT branch initializations");
                 std::process::exit(2);
             };
+            if branch_height_init {
+                let height_init = height_projected_branch_initialization(
+                    geom,
+                    intersection,
+                    &kklt_basis,
+                    &tau_phase1,
+                )
+                .unwrap_or_else(|e| {
+                    eprintln!(
+                        "[ERROR] failed to build height-projected KKLT branch initialization: {e}"
+                    );
+                    std::process::exit(2);
+                });
+                t_initializations.insert(0, height_init);
+                eprintln!("[INFO] inserted height-projected KKLT branch initialization at init=0");
+            }
             let branch_search = solve_mixed_basis_path_following_branch_candidates(
                 &intersection.kappa_basis,
                 &intersection.kappa_full,
@@ -1566,6 +1634,7 @@ fn run_pipeline(args: PipelineArgs) {
         args.branch_candidates,
         args.branch_seed,
         args.branch_selection,
+        args.branch_height_init,
         args.branch_report_path.as_deref(),
         small_curve_cutoff,
         &t0,
