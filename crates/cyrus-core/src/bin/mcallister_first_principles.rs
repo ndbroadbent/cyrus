@@ -6026,6 +6026,11 @@ fn compare_against_dat(
         if let Some(corrected_v_expected) = read_optional_scalar_f64(&corrected_volume_path) {
             let abs_v = (v_string - corrected_v_expected).abs();
             eprintln!("[COMPARE] corrected V_string abs_err = {abs_v}");
+            if abs_v > 1e-6 {
+                eprintln!(
+                    "[WARN] corrected V_string comparison is not exact; this residual remains an unresolved instanton/chamber discrepancy, not a reproduced result"
+                );
+            }
             if abs_v > 0.1 {
                 eprintln!(
                     "[ERROR] corrected V_string mismatch: got {v_string}, expected {corrected_v_expected}"

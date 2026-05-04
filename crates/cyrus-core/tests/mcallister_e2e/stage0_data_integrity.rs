@@ -431,6 +431,10 @@ fn stage0_first_principles_runner_does_not_silently_replay_downstream_outputs() 
             && compare.contains("read_optional_scalar_f64(&corrected_volume_path)"),
         "g_s.dat, W_0.dat, and corrected_cy_vol.dat must be optional validation checkpoints, not required inputs"
     );
+    assert!(
+        compare.contains("corrected V_string comparison is not exact"),
+        "non-exact corrected-volume comparisons must be logged as unresolved discrepancies"
+    );
 
     for gv_artifact in [
         "dual_curves.dat",
