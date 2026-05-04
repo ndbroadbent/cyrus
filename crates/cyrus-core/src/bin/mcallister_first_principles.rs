@@ -495,6 +495,7 @@ struct MissingGvTargetStats {
     targets_that_are_mori_generators: usize,
     targets_that_are_origin_circuits: usize,
     targets_real_cone_decomposable_by_other_generators: usize,
+    targets_that_are_lp_extremal_mori_generators: usize,
     origin_circuit_resolved_conifold_count: usize,
     min_generators_le_target_degree: usize,
     max_generators_le_target_degree: usize,
@@ -512,6 +513,13 @@ struct MissingGvTargetSample {
     real_cone_decomposable_by_other_generators: bool,
     ambient_nonzero: Vec<(usize, i64)>,
     basis_nonzero: Vec<(usize, i64)>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct OneDimensionalRayGvTargets {
+    candidates: Vec<Vec<i64>>,
+    skipped_non_generators: usize,
+    skipped_decomposable_generators: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1716,6 +1724,7 @@ fn missing_gv_target_stats(
             targets_that_are_mori_generators: 0,
             targets_that_are_origin_circuits: 0,
             targets_real_cone_decomposable_by_other_generators: 0,
+            targets_that_are_lp_extremal_mori_generators: 0,
             origin_circuit_resolved_conifold_count: 0,
             min_generators_le_target_degree: 0,
             max_generators_le_target_degree: 0,
@@ -1749,6 +1758,7 @@ fn missing_gv_target_stats(
     let mut targets_that_are_mori_generators = 0usize;
     let mut targets_that_are_origin_circuits = 0usize;
     let mut targets_real_cone_decomposable_by_other_generators = 0usize;
+    let mut targets_that_are_lp_extremal_mori_generators = 0usize;
     let mut origin_circuit_resolved_conifold_count = 0usize;
     let mut min_generators = usize::MAX;
     let mut max_generators = 0usize;
@@ -1793,6 +1803,9 @@ fn missing_gv_target_stats(
         if real_cone_decomposable {
             targets_real_cone_decomposable_by_other_generators += 1;
         }
+        if is_mori_generator && !real_cone_decomposable {
+            targets_that_are_lp_extremal_mori_generators += 1;
+        }
         let origin_circuit_pattern_label =
             origin_circuits_by_class
                 .get(ambient_class)
@@ -1835,6 +1848,7 @@ fn missing_gv_target_stats(
         targets_that_are_mori_generators,
         targets_that_are_origin_circuits,
         targets_real_cone_decomposable_by_other_generators,
+        targets_that_are_lp_extremal_mori_generators,
         origin_circuit_resolved_conifold_count,
         min_generators_le_target_degree: min_generators,
         max_generators_le_target_degree: max_generators,
@@ -1931,6 +1945,51 @@ fn real_cone_decomposable_by_other_degree_bounded_generators(
         ));
     }
     Ok(true)
+}
+
+fn one_dimensional_ray_gv_targets(
+    ambient_classes: &[Vec<i64>],
+    basis_rays: &[Vec<i64>],
+    basis: &[usize],
+    grading: &[i64],
+) -> Result<OneDimensionalRayGvTargets, String> {
+    let basis_ray_set: HashSet<Vec<i64>> = basis_rays.iter().cloned().collect();
+    let mut candidates = Vec::new();
+    let mut skipped_non_generators = 0usize;
+    let mut skipped_decomposable_generators = 0usize;
+    for ambient_class in ambient_classes {
+        let basis_class = project_ambient_curve_to_basis(ambient_class, basis)?;
+        let degree = basis_class
+            .iter()
+            .zip(grading.iter())
+            .map(|(&coefficient, &weight)| i128::from(coefficient) * i128::from(weight))
+            .sum::<i128>();
+        if degree <= 0 {
+            return Err(format!(
+                "one-dimensional ray GV target has non-positive grading degree {degree}: {ambient_class:?}"
+            ));
+        }
+        if !basis_ray_set.contains(&basis_class) {
+            skipped_non_generators += 1;
+            continue;
+        }
+        if real_cone_decomposable_by_other_degree_bounded_generators(
+            &basis_class,
+            basis_rays,
+            grading,
+            degree,
+        )? {
+            skipped_decomposable_generators += 1;
+            continue;
+        }
+        candidates.push(ambient_class.clone());
+    }
+
+    Ok(OneDimensionalRayGvTargets {
+        candidates,
+        skipped_non_generators,
+        skipped_decomposable_generators,
+    })
 }
 
 fn origin_circuit_pattern(diagnostic: &cyrus_core::OriginCircuitCurveDiagnostic) -> String {
@@ -2423,15 +2482,6 @@ fn diagnose_chamber_gv_volume_correction(
         let missing_target_stats = missing_target_stats
             .as_ref()
             .expect("missing target stats computed for corrected-chamber missing curves");
-        if missing_target_stats.targets_that_are_mori_generators
-            != missing_target_stats.target_count
-        {
-            return Err(format!(
-                "one-dimensional ray GV diagnostic requires each missing target to be a primitive Mori generator; {}/{} satisfy this",
-                missing_target_stats.targets_that_are_mori_generators,
-                missing_target_stats.target_count
-            ));
-        }
         let (non_positive_count, first_non_positive) =
             non_positive_basis_generator_degrees(basis_rays, grading)?;
         if let Some((idx, degree, ray)) = first_non_positive {
@@ -2439,6 +2489,29 @@ fn diagnose_chamber_gv_volume_correction(
                 "one-dimensional ray GV diagnostic requires a grading positive on all Mori generators; found {non_positive_count}/{} non-positive generator degrees, first index={idx} degree={degree} ray={ray:?}",
                 basis_rays.len()
             ));
+        }
+        let ray_targets = one_dimensional_ray_gv_targets(
+            &missing_gv_classes,
+            basis_rays,
+            &intersection.basis,
+            grading,
+        )?;
+        if ray_targets.candidates.is_empty() {
+            return Err(format!(
+                "one-dimensional ray GV diagnostic found no LP-extremal primitive Mori-generator targets among {} missing corrected-chamber curves; skipped_non_generators={} skipped_decomposable_generators={}",
+                missing_target_stats.target_count,
+                ray_targets.skipped_non_generators,
+                ray_targets.skipped_decomposable_generators
+            ));
+        }
+        if ray_targets.candidates.len() != missing_target_stats.target_count {
+            eprintln!(
+                "[WARN] corrected-chamber one-dimensional ray GV diagnostic will try {}/{} missing curves; skipped_non_generators={} skipped_decomposable_generators={}",
+                ray_targets.candidates.len(),
+                missing_target_stats.target_count,
+                ray_targets.skipped_non_generators,
+                ray_targets.skipped_decomposable_generators
+            );
         }
         let curve_basis = compute_curve_basis_matrix(&intersection.linrels, &intersection.basis)
             .map_err(|e| format!("failed to compute corrected-chamber curve basis matrix: {e}"))?;
@@ -2458,10 +2531,10 @@ fn diagnose_chamber_gv_volume_correction(
         let corrected_kappa_basis =
             chamber_intersection_in_basis(tri, &geom.triangulation_points, &intersection.basis)?;
         eprintln!(
-            "[WARN] corrected-chamber one-dimensional ray GV diagnostic assumes each primitive target spans a valid Mori-cone face; this is not yet promoted to the exact corrected-chamber GV fallback."
+            "[WARN] corrected-chamber one-dimensional ray GV diagnostic assumes each LP-extremal primitive target spans a valid Mori-cone face; this is not yet promoted to the exact corrected-chamber GV fallback."
         );
         let ray_gvs = compute_missing_one_dimensional_ray_gvs(
-            &missing_gv_classes,
+            &ray_targets.candidates,
             &intersection.basis,
             grading,
             &q_matrix,
@@ -3520,8 +3593,13 @@ fn stage_volume(
                 ray_covered, diag.ray_gv_sample
             );
             if let Some(ray_correction) = diag.ray_gv_volume_correction.as_ref() {
+                let ray_scope = if ray_covered < diag.toric_gv_missing_count {
+                    "partial "
+                } else {
+                    ""
+                };
                 eprintln!(
-                    "[INFO] corrected-chamber one-dimensional ray GV volume correction (diagnostic) = {}",
+                    "[INFO] corrected-chamber one-dimensional ray GV {ray_scope}volume correction (diagnostic) = {}",
                     ray_correction.get()
                 );
                 if let Some(input_chamber_correction) = gv_volume_correction.as_ref() {
@@ -3549,11 +3627,12 @@ fn stage_volume(
         }
         if let Some(stats) = diag.missing_target_stats.as_ref() {
             eprintln!(
-                "[INFO] corrected-chamber missing GV target reduction: targets={} targets_as_mori_generators={} targets_as_origin_circuits={} real_cone_decomposable_by_other_generators={} origin_circuit_resolved_conifold={} generators_le_target_degree_range={}..{} origin_coefficients={:?}",
+                "[INFO] corrected-chamber missing GV target reduction: targets={} targets_as_mori_generators={} targets_as_origin_circuits={} real_cone_decomposable_by_other_generators={} lp_extremal_mori_generators={} origin_circuit_resolved_conifold={} generators_le_target_degree_range={}..{} origin_coefficients={:?}",
                 stats.target_count,
                 stats.targets_that_are_mori_generators,
                 stats.targets_that_are_origin_circuits,
                 stats.targets_real_cone_decomposable_by_other_generators,
+                stats.targets_that_are_lp_extremal_mori_generators,
                 stats.origin_circuit_resolved_conifold_count,
                 stats.min_generators_le_target_degree,
                 stats.max_generators_le_target_degree,
@@ -4154,6 +4233,7 @@ mod tests {
         assert_eq!(stats.targets_that_are_mori_generators, 1);
         assert_eq!(stats.targets_that_are_origin_circuits, 0);
         assert_eq!(stats.targets_real_cone_decomposable_by_other_generators, 2);
+        assert_eq!(stats.targets_that_are_lp_extremal_mori_generators, 0);
         assert_eq!(stats.origin_circuit_resolved_conifold_count, 0);
         assert_eq!(stats.min_generators_le_target_degree, 2);
         assert_eq!(stats.max_generators_le_target_degree, 3);
@@ -4181,6 +4261,26 @@ mod tests {
                     basis_nonzero: vec![(0, 2)]
                 }
             ]
+        );
+    }
+
+    #[test]
+    fn one_dimensional_ray_gv_targets_keep_only_lp_extremal_generators() {
+        let targets = one_dimensional_ray_gv_targets(
+            &[vec![0, 1, 0], vec![0, 1, 1], vec![0, 2, 0]],
+            &[vec![1, 0], vec![0, 1], vec![1, 1]],
+            &[1, 2],
+            &[2, 3],
+        )
+        .unwrap();
+
+        assert_eq!(
+            targets,
+            OneDimensionalRayGvTargets {
+                candidates: vec![vec![0, 1, 0]],
+                skipped_non_generators: 1,
+                skipped_decomposable_generators: 1,
+            }
         );
     }
 }
