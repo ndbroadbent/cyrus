@@ -462,6 +462,10 @@ struct ChamberGvDiagnostic {
     filtered_count: usize,
     toric_gv_covered_count: usize,
     toric_gv_missing_count: usize,
+    basis_mori_ray_count: Option<usize>,
+    degree_bounded_basis_mori_ray_count: Option<usize>,
+    basis_mori_ray_degree_min: Option<i128>,
+    basis_mori_ray_degree_max: Option<i128>,
     general_gv_covered_count: Option<usize>,
     remaining_gv_missing_count: usize,
     first_missing_class: Option<Vec<i64>>,
@@ -1564,6 +1568,52 @@ fn non_positive_basis_generator_degrees(
     Ok((count, first))
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct GradedRayStats {
+    count: usize,
+    degree_bounded_count: Option<usize>,
+    min_degree: Option<i128>,
+    max_degree: Option<i128>,
+}
+
+fn graded_ray_stats(
+    rays: &[Vec<i64>],
+    grading: &[i64],
+    max_degree: Option<u32>,
+) -> Result<GradedRayStats, String> {
+    let mut bounded = max_degree.map(|_| 0usize);
+    let max_degree_i128 = max_degree.map(i128::from);
+    let mut min_degree = None::<i128>;
+    let mut max_degree_seen = None::<i128>;
+    for ray in rays {
+        if ray.len() != grading.len() {
+            return Err(format!(
+                "basis ray length {} does not match grading vector length {}",
+                ray.len(),
+                grading.len()
+            ));
+        }
+        let degree = ray
+            .iter()
+            .zip(grading.iter())
+            .map(|(&coefficient, &weight)| i128::from(coefficient) * i128::from(weight))
+            .sum::<i128>();
+        min_degree = Some(min_degree.map_or(degree, |current| current.min(degree)));
+        max_degree_seen = Some(max_degree_seen.map_or(degree, |current| current.max(degree)));
+        if let (Some(limit), Some(count)) = (max_degree_i128, bounded.as_mut())
+            && degree <= limit
+        {
+            *count += 1;
+        }
+    }
+    Ok(GradedRayStats {
+        count: rays.len(),
+        degree_bounded_count: bounded,
+        min_degree,
+        max_degree: max_degree_seen,
+    })
+}
+
 fn write_branch_report_jsonl(
     path: &PathBuf,
     ctx: &BranchReportContext,
@@ -1868,6 +1918,7 @@ fn diagnose_chamber_gv_volume_correction(
     let toric_gv_covered_count = small_curve_gvs.len();
     let toric_gv_missing_count = missing_gv_classes.len();
 
+    let mut basis_ray_stats = None;
     let mut basis_rays_for_missing = None;
     let mut grading_for_missing = None;
     let mut degree_summary = None;
@@ -1885,9 +1936,11 @@ fn diagnose_chamber_gv_volume_correction(
             &grading,
             general_max_deg,
         )?;
+        let ray_stats = graded_ray_stats(&basis_rays, &grading, general_max_deg)?;
         basis_rays_for_missing = Some(basis_rays);
         grading_for_missing = Some(grading);
         degree_summary = Some(summary);
+        basis_ray_stats = Some(ray_stats);
     }
 
     let general_gv_requested = general_min_points.is_some() || general_max_deg.is_some();
@@ -1915,9 +1968,16 @@ fn diagnose_chamber_gv_volume_correction(
             .and_then(|value| value.parse::<usize>().ok())
             .unwrap_or(DEFAULT_CORRECTED_CHAMBER_GENERAL_GV_DIRECT_RAY_LIMIT);
         if basis_rays.len() > direct_ray_limit {
+            let bounded_note = basis_ray_stats
+                .as_ref()
+                .and_then(|stats| stats.degree_bounded_count)
+                .map_or_else(
+                    || "no max-degree ray count available".to_string(),
+                    |count| format!("{count} rays have degree <= requested max_deg"),
+                );
             return Err(format!(
-                "corrected-chamber general GV direct fallback would dualize {} Mori generators, exceeding limit {direct_ray_limit}; current backend computes cone hyperplanes by DDM before bounded lattice enumeration. Need a reduced corrected-chamber cone/lattice formulation, or set CYRUS_CORRECTED_CHAMBER_GENERAL_GV_DIRECT_RAY_LIMIT to force the direct attempt.",
-                basis_rays.len()
+                "corrected-chamber general GV direct fallback would dualize {} Mori generators, exceeding limit {direct_ray_limit}; {bounded_note}. Current backend computes cone hyperplanes by DDM before bounded lattice enumeration. Need a reduced corrected-chamber cone/lattice formulation, or set CYRUS_CORRECTED_CHAMBER_GENERAL_GV_DIRECT_RAY_LIMIT to force the direct attempt.",
+                basis_rays.len(),
             ));
         }
         let (non_positive_count, first_non_positive) =
@@ -2028,6 +2088,12 @@ fn diagnose_chamber_gv_volume_correction(
         filtered_count: small_curves.len(),
         toric_gv_covered_count,
         toric_gv_missing_count,
+        basis_mori_ray_count: basis_ray_stats.as_ref().map(|stats| stats.count),
+        degree_bounded_basis_mori_ray_count: basis_ray_stats
+            .as_ref()
+            .and_then(|stats| stats.degree_bounded_count),
+        basis_mori_ray_degree_min: basis_ray_stats.as_ref().and_then(|stats| stats.min_degree),
+        basis_mori_ray_degree_max: basis_ray_stats.as_ref().and_then(|stats| stats.max_degree),
         general_gv_covered_count,
         remaining_gv_missing_count: missing_gv_classes.len(),
         first_missing_class: missing_gv_classes.first().cloned(),
@@ -2839,6 +2905,21 @@ fn stage_volume(
                 general_covered, diag.remaining_gv_missing_count
             );
         }
+        if let Some(ray_count) = diag.basis_mori_ray_count {
+            let degree_window = match (
+                diag.basis_mori_ray_degree_min,
+                diag.basis_mori_ray_degree_max,
+            ) {
+                (Some(min_degree), Some(max_degree)) => {
+                    format!("{min_degree}..{max_degree}")
+                }
+                _ => "unknown".to_string(),
+            };
+            eprintln!(
+                "[INFO] corrected-chamber basis Mori rays for general GV: total={} degree_le_max={:?} degree_range={}",
+                ray_count, diag.degree_bounded_basis_mori_ray_count, degree_window
+            );
+        }
         if let Some(first_missing) = &diag.first_missing_class {
             if let (Some(min_degree), Some(max_degree)) = (
                 diag.missing_required_degree_min,
@@ -3366,6 +3447,31 @@ mod tests {
     fn non_positive_basis_generator_degree_rejects_shape_mismatch() {
         assert!(
             non_positive_basis_generator_degrees(&[vec![1, 2, 3]], &[1, 1])
+                .unwrap_err()
+                .contains("basis ray length")
+        );
+    }
+
+    #[test]
+    fn graded_ray_stats_counts_degree_bounded_rays() {
+        let stats =
+            graded_ray_stats(&[vec![1, 0], vec![2, 1], vec![0, 5]], &[2, 3], Some(7)).unwrap();
+
+        assert_eq!(
+            stats,
+            GradedRayStats {
+                count: 3,
+                degree_bounded_count: Some(2),
+                min_degree: Some(2),
+                max_degree: Some(15),
+            }
+        );
+    }
+
+    #[test]
+    fn graded_ray_stats_rejects_shape_mismatch() {
+        assert!(
+            graded_ray_stats(&[vec![1, 2, 3]], &[1, 1], Some(3))
                 .unwrap_err()
                 .contains("basis ray length")
         );
