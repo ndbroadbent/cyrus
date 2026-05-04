@@ -569,6 +569,16 @@ struct FaceGvDiagnosticResult {
     error: Option<String>,
 }
 
+#[derive(Clone, Debug)]
+struct FaceGvAttempt {
+    generator_count: usize,
+    active_generator_count: usize,
+    span_generator_count: usize,
+    used_span_expansion: bool,
+    gv: Option<malachite::Integer>,
+    error: Option<String>,
+}
+
 struct BranchReportContext {
     branch_seed: u64,
     branch_selection: BranchSelection,
@@ -1944,6 +1954,26 @@ fn real_cone_decomposition_by_other_degree_bounded_generators(
     grading: &[i64],
     target_degree: i128,
 ) -> Result<Option<RealConeDecompositionWitness>, String> {
+    Ok(
+        real_cone_decomposition_witnesses_by_other_degree_bounded_generators(
+            target,
+            basis_rays,
+            grading,
+            target_degree,
+            1,
+        )?
+        .into_iter()
+        .next(),
+    )
+}
+
+fn real_cone_decomposition_witnesses_by_other_degree_bounded_generators(
+    target: &[i64],
+    basis_rays: &[Vec<i64>],
+    grading: &[i64],
+    target_degree: i128,
+    max_witnesses: usize,
+) -> Result<Vec<RealConeDecompositionWitness>, String> {
     if target.len() != grading.len() {
         return Err(format!(
             "target length {} does not match grading vector length {}",
@@ -1974,17 +2004,51 @@ fn real_cone_decomposition_by_other_degree_bounded_generators(
         }
     }
     if candidate_indices.is_empty() {
-        return Ok(None);
+        return Ok(Vec::new());
     }
 
+    let objective_attempts = max_witnesses.saturating_mul(4).max(1);
+    let mut witnesses = Vec::new();
+    let mut seen_active_sets = HashSet::new();
+    for objective_salt in 0..objective_attempts {
+        let Some(witness) = solve_real_cone_decomposition_lp(
+            target,
+            basis_rays,
+            &candidate_indices,
+            target_degree,
+            objective_salt as u64,
+        )?
+        else {
+            continue;
+        };
+        if seen_active_sets.insert(witness.active_generator_indices.clone()) {
+            witnesses.push(witness);
+            if witnesses.len() >= max_witnesses {
+                break;
+            }
+        }
+    }
+    Ok(witnesses)
+}
+
+fn solve_real_cone_decomposition_lp(
+    target: &[i64],
+    basis_rays: &[Vec<i64>],
+    candidate_indices: &[usize],
+    target_degree: i128,
+    objective_salt: u64,
+) -> Result<Option<RealConeDecompositionWitness>, String> {
     let mut vars = ProblemVariables::new();
     let coefficients: Vec<_> = candidate_indices
         .iter()
         .map(|_| vars.add(variable().min(0.0)))
         .collect();
     let mut objective = Expression::from(0.0);
-    for coefficient in &coefficients {
-        objective.add_mul(1.0, *coefficient);
+    for (coefficient, &ray_idx) in coefficients.iter().zip(candidate_indices.iter()) {
+        objective.add_mul(
+            decomposition_objective_weight(ray_idx, &basis_rays[ray_idx], objective_salt),
+            *coefficient,
+        );
     }
     let mut model = vars.minimise(objective).using(default_solver);
     for coord in 0..target.len() {
@@ -2031,6 +2095,7 @@ fn real_cone_decomposition_by_other_degree_bounded_generators(
             active_generator_indices.push(ray_idx);
         }
     }
+    active_generator_indices.sort_unstable();
     if active_generator_indices.is_empty() {
         return Err(
             "real-cone decomposition LP returned no active generators despite zero residual"
@@ -2040,6 +2105,18 @@ fn real_cone_decomposition_by_other_degree_bounded_generators(
     Ok(Some(RealConeDecompositionWitness {
         active_generator_indices,
     }))
+}
+
+fn decomposition_objective_weight(ray_idx: usize, ray: &[i64], objective_salt: u64) -> f64 {
+    if objective_salt == 0 {
+        return 1.0;
+    }
+    let mut hash = 0x9e37_79b9_7f4a_7c15u64 ^ objective_salt.rotate_left(17) ^ ray_idx as u64;
+    for (idx, &value) in ray.iter().enumerate().filter(|(_, value)| **value != 0) {
+        hash ^= (idx as u64).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        hash = hash.rotate_left(11) ^ (value as u64).wrapping_mul(0x94d0_49bb_1331_11ebu64);
+    }
+    1.0 + (hash % 1_000_003) as f64 / 1_000_003.0
 }
 
 fn one_dimensional_ray_gv_targets(
@@ -2199,95 +2276,151 @@ fn compute_missing_lp_witness_face_gvs(
                 "LP-witness face GV target has non-positive grading degree {degree}: {ambient_class:?}"
             ));
         }
-        let Some(witness) = real_cone_decomposition_by_other_degree_bounded_generators(
+        let witnesses = real_cone_decomposition_witnesses_by_other_degree_bounded_generators(
             &basis_class,
             basis_rays,
             grading,
             degree,
-        )?
-        else {
+            8,
+        )?;
+        if witnesses.is_empty() {
             continue;
-        };
+        }
         let max_deg = u32::try_from(degree).map_err(|_| {
             format!("LP-witness face GV target degree {degree} does not fit in u32")
         })?;
-        let mut provided_generators: Vec<Vec<i64>> = witness
-            .active_generator_indices
-            .iter()
-            .map(|&idx| basis_rays[idx].clone())
-            .collect();
-        provided_generators.push(basis_class.clone());
-        provided_generators.sort();
-        provided_generators.dedup();
-        let span_generators =
-            degree_bounded_span_generators(&provided_generators, basis_rays, grading, degree)?;
-        let span_generator_count = span_generators.len();
-        let mut used_span_expansion = false;
-        let (gv, error) = match compute_provided_generator_target_gv(
-            &provided_generators,
-            &basis_class,
-            grading,
-            q_matrix,
-            intnums,
-            max_deg,
-            "LP-witness face",
-            ambient_class,
-        ) {
-            Ok(gv) => (Some(gv), None),
-            Err(first_error) => {
-                let span_limit =
-                    std::env::var("CYRUS_CORRECTED_CHAMBER_LP_FACE_SPAN_GENERATOR_LIMIT")
-                        .ok()
-                        .and_then(|value| value.parse::<usize>().ok())
-                        .unwrap_or(DEFAULT_CORRECTED_CHAMBER_LP_FACE_SPAN_GENERATOR_LIMIT);
-                if span_generators.len() > provided_generators.len()
-                    && span_generators.len() <= span_limit
-                {
-                    used_span_expansion = true;
-                    match compute_provided_generator_target_gv(
-                        &span_generators,
-                        &basis_class,
-                        grading,
-                        q_matrix,
-                        intnums,
-                        max_deg,
-                        "span-expanded LP-witness face",
-                        ambient_class,
-                    ) {
-                        Ok(gv) => (Some(gv), None),
-                        Err(second_error) => (
-                            None,
-                            Some(format!(
-                                "{first_error}; span-expanded retry also failed: {second_error}"
-                            )),
-                        ),
-                    }
-                } else if span_generators.len() > span_limit {
-                    (
-                        None,
-                        Some(format!(
-                            "{first_error}; span-expanded retry skipped because {} generators exceed limit {span_limit}",
-                            span_generators.len()
-                        )),
-                    )
-                } else {
-                    (None, Some(first_error))
-                }
+        let mut selected_attempt = None;
+        let mut errors = Vec::new();
+        for witness in &witnesses {
+            let attempt = compute_lp_witness_face_attempt(
+                witness,
+                &basis_class,
+                basis_rays,
+                grading,
+                q_matrix,
+                intnums,
+                degree,
+                max_deg,
+                ambient_class,
+            )?;
+            if attempt.gv.is_some() {
+                selected_attempt = Some(attempt);
+                break;
             }
-        };
+            if let Some(error) = attempt.error.as_ref() {
+                errors.push(error.clone());
+            }
+            if selected_attempt.is_none() {
+                selected_attempt = Some(attempt);
+            }
+        }
+        let mut attempt = selected_attempt.expect("at least one LP witness was available");
+        if attempt.gv.is_none() && !errors.is_empty() {
+            attempt.error = Some(format!(
+                "{} LP witness attempts failed: {}",
+                witnesses.len(),
+                errors.join(" | ")
+            ));
+        }
 
         out.push(FaceGvDiagnosticResult {
             ambient_class: ambient_class.clone(),
             degree,
-            generator_count: provided_generators.len(),
-            active_generator_count: witness.active_generator_indices.len(),
-            span_generator_count,
-            used_span_expansion,
-            gv,
-            error,
+            generator_count: attempt.generator_count,
+            active_generator_count: attempt.active_generator_count,
+            span_generator_count: attempt.span_generator_count,
+            used_span_expansion: attempt.used_span_expansion,
+            gv: attempt.gv,
+            error: attempt.error,
         });
     }
     Ok(out)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn compute_lp_witness_face_attempt(
+    witness: &RealConeDecompositionWitness,
+    basis_class: &[i64],
+    basis_rays: &[Vec<i64>],
+    grading: &[i64],
+    q_matrix: &[Vec<i64>],
+    intnums: &cyrus_core::Intersection,
+    degree: i128,
+    max_deg: u32,
+    ambient_class: &[i64],
+) -> Result<FaceGvAttempt, String> {
+    let mut provided_generators: Vec<Vec<i64>> = witness
+        .active_generator_indices
+        .iter()
+        .map(|&idx| basis_rays[idx].clone())
+        .collect();
+    provided_generators.push(basis_class.to_vec());
+    provided_generators.sort();
+    provided_generators.dedup();
+    let span_generators =
+        degree_bounded_span_generators(&provided_generators, basis_rays, grading, degree)?;
+    let span_generator_count = span_generators.len();
+    let mut used_span_expansion = false;
+    let (gv, error) = match compute_provided_generator_target_gv(
+        &provided_generators,
+        basis_class,
+        grading,
+        q_matrix,
+        intnums,
+        max_deg,
+        "LP-witness face",
+        ambient_class,
+    ) {
+        Ok(gv) => (Some(gv), None),
+        Err(first_error) => {
+            let span_limit = std::env::var("CYRUS_CORRECTED_CHAMBER_LP_FACE_SPAN_GENERATOR_LIMIT")
+                .ok()
+                .and_then(|value| value.parse::<usize>().ok())
+                .unwrap_or(DEFAULT_CORRECTED_CHAMBER_LP_FACE_SPAN_GENERATOR_LIMIT);
+            if span_generators.len() > provided_generators.len()
+                && span_generators.len() <= span_limit
+            {
+                used_span_expansion = true;
+                match compute_provided_generator_target_gv(
+                    &span_generators,
+                    basis_class,
+                    grading,
+                    q_matrix,
+                    intnums,
+                    max_deg,
+                    "span-expanded LP-witness face",
+                    ambient_class,
+                ) {
+                    Ok(gv) => (Some(gv), None),
+                    Err(second_error) => (
+                        None,
+                        Some(format!(
+                            "{first_error}; span-expanded retry also failed: {second_error}"
+                        )),
+                    ),
+                }
+            } else if span_generators.len() > span_limit {
+                (
+                    None,
+                    Some(format!(
+                        "{first_error}; span-expanded retry skipped because {} generators exceed limit {span_limit}",
+                        span_generators.len()
+                    )),
+                )
+            } else {
+                (None, Some(first_error))
+            }
+        }
+    };
+
+    Ok(FaceGvAttempt {
+        generator_count: provided_generators.len(),
+        active_generator_count: witness.active_generator_indices.len(),
+        span_generator_count,
+        used_span_expansion,
+        gv,
+        error,
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
