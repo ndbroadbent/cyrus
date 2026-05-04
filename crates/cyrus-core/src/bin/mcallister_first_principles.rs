@@ -533,7 +533,7 @@ struct MissingGvTargetSample {
     basis_nonzero: Vec<(usize, i64)>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct CmsGeneralDivisorShapeCandidate {
     shrinking_divisor_index: usize,
     shrinking_divisor_coefficient: i64,
@@ -2257,11 +2257,14 @@ fn origin_circuit_witness_sample(
 fn cms_general_divisor_shape_candidates(
     diagnostic: &cyrus_core::OriginCircuitCurveDiagnostic,
 ) -> Vec<CmsGeneralDivisorShapeCandidate> {
-    diagnostic
+    let mut candidates: Vec<_> = diagnostic
         .witnesses
         .iter()
         .flat_map(cms_general_divisor_shape_candidates_for_witness)
-        .collect()
+        .collect();
+    candidates.sort();
+    candidates.dedup();
+    candidates
 }
 
 fn cms_general_divisor_shape_candidates_for_witness(
@@ -5412,7 +5415,15 @@ mod tests {
             ],
         };
 
-        let candidates = cms_general_divisor_shape_candidates_for_witness(&witness);
+        let diagnostic = cyrus_core::OriginCircuitCurveDiagnostic {
+            class: witness.class.clone(),
+            origin_coefficient: -1,
+            negative_coefficient_counts: BTreeMap::from([(-3, 1)]),
+            positive_coefficient_counts: BTreeMap::from([(1, 2), (2, 1)]),
+            is_resolved_conifold_pattern: false,
+            witnesses: vec![witness.clone(), witness],
+        };
+        let candidates = cms_general_divisor_shape_candidates(&diagnostic);
 
         assert_eq!(
             candidates,
