@@ -5394,7 +5394,7 @@ fn compare_corrected_target_volume_checkpoint(
     chi_divisor: &[I64<Finite>],
     base_target_tau: &[F64<Pos>],
     computed_gv_correction: &[F64<Finite>],
-    alternate_gv_correction: Option<(&str, &[F64<Finite>])>,
+    alternate_gv_corrections: &[(&str, &[F64<Finite>])],
     computed_target_tau: &[F64<Finite>],
 ) {
     let Some(dir) = data_dir.map(PathBuf::from) else {
@@ -5452,28 +5452,30 @@ fn compare_corrected_target_volume_checkpoint(
                 eprintln!("[ERROR] failed to compare implied GV target correction: {e}");
                 std::process::exit(2);
             });
-    let alternate_gv_summary = alternate_gv_correction.map(|(label, correction)| {
-        if correction.len() != implied_gv_correction.len() {
-            eprintln!(
-                "[COMPARE] corrected target-volume alternate GV correction length mismatch: label={} checkpoint_implied={} alternate={}",
-                label,
-                implied_gv_correction.len(),
-                correction.len()
-            );
-            std::process::exit(2);
-        }
-        (
-            label,
-            target_correction_delta_summary(&implied_gv_correction, correction).unwrap_or_else(
-                |e| {
-                    eprintln!(
-                        "[ERROR] failed to compare alternate implied GV target correction ({label}): {e}"
-                    );
-                    std::process::exit(2);
-                },
-            ),
-        )
-    });
+    let alternate_gv_summaries = alternate_gv_corrections
+        .iter()
+        .map(|(label, correction)| {
+            if correction.len() != implied_gv_correction.len() {
+                eprintln!(
+                    "[COMPARE] corrected target-volume alternate GV correction length mismatch: label={} checkpoint_implied={} alternate={}",
+                    label,
+                    implied_gv_correction.len(),
+                    correction.len()
+                );
+                std::process::exit(2);
+            }
+            (
+                *label,
+                target_correction_delta_summary(&implied_gv_correction, correction)
+                    .unwrap_or_else(|e| {
+                        eprintln!(
+                            "[ERROR] failed to compare alternate implied GV target correction ({label}): {e}"
+                        );
+                        std::process::exit(2);
+                    }),
+            )
+        })
+        .collect::<Vec<_>>();
     let target_summary = target_correction_delta_summary(&checkpoint, computed_target_tau)
         .unwrap_or_else(|e| {
             eprintln!("[ERROR] failed to compare corrected target-volume checkpoint: {e}");
@@ -5511,7 +5513,7 @@ fn compare_corrected_target_volume_checkpoint(
         gv_summary.max_abs_reference,
         gv_summary.max_abs_candidate
     );
-    if let Some((label, summary)) = alternate_gv_summary {
+    for (label, summary) in alternate_gv_summaries {
         eprintln!(
             "[COMPARE] corrected target-volume implied GV correction delta ({label}): max_abs={} relative_l2={} max_abs_checkpoint_implied={} max_abs_computed={}",
             summary.max_abs_delta,
@@ -6407,6 +6409,22 @@ fn stage_volume(
                 "[COMPARE] no-gamma input-chamber GV target correction is invalid at solved t"
             );
         }
+        let checkpoint_t_for_gv = load_corrected_kahler_checkpoint(data_dir, intersection);
+        let input_chamber_gv_target_correction_checkpoint_t =
+            checkpoint_t_for_gv.as_ref().and_then(|checkpoint_t| {
+                cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+                    &small_curve_gvs,
+                    &intersection.basis,
+                    &kklt_basis,
+                    checkpoint_t,
+                    Some(&gamma),
+                )
+            });
+        if checkpoint_t_for_gv.is_some()
+            && input_chamber_gv_target_correction_checkpoint_t.is_none()
+        {
+            eprintln!("[COMPARE] checkpoint-t input-chamber GV target correction is invalid");
+        }
         let Some(input_chamber_target_tau) = cyrus_core::kklt::compute_gv_corrected_target_tau(
             &c_i,
             &chi_divisor,
@@ -6420,15 +6438,20 @@ fn stage_volume(
             .iter()
             .map(|value| F64::<Finite>::new(value.get()).expect("target tau is finite"))
             .collect::<Vec<_>>();
+        let mut alternate_gv_corrections = Vec::new();
+        if let Some(correction) = input_chamber_gv_target_correction_no_gamma.as_deref() {
+            alternate_gv_corrections.push(("no_gamma", correction));
+        }
+        if let Some(correction) = input_chamber_gv_target_correction_checkpoint_t.as_deref() {
+            alternate_gv_corrections.push(("checkpoint_t", correction));
+        }
         compare_corrected_target_volume_checkpoint(
             data_dir,
             &kklt_basis,
             &chi_divisor,
             &tau_target,
             &input_chamber_gv_target_correction,
-            input_chamber_gv_target_correction_no_gamma
-                .as_deref()
-                .map(|correction| ("no_gamma", correction)),
+            &alternate_gv_corrections,
             &input_chamber_target_tau_finite,
         );
         if diagnose_chamber_updated_kklt {
