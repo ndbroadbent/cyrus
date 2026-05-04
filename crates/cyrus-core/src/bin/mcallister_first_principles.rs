@@ -5706,6 +5706,35 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
         selection.toric_gv_covered_count,
         selection.toric_gv_missing_count
     );
+    let mut gv_deltas = checkpoint_implied_gv
+        .iter()
+        .zip(covered_gv_target.iter())
+        .enumerate()
+        .map(|(idx, (checkpoint_implied, toric_covered))| {
+            let delta = toric_covered.get() - checkpoint_implied.get();
+            (
+                idx,
+                delta.abs(),
+                delta,
+                checkpoint_implied.get(),
+                toric_covered.get(),
+            )
+        })
+        .collect::<Vec<_>>();
+    gv_deltas.sort_unstable_by(|lhs, rhs| rhs.1.total_cmp(&lhs.1));
+    for (idx, _abs_delta, delta, checkpoint_implied, toric_covered) in gv_deltas.into_iter().take(8)
+    {
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber GV target top_delta kklt_idx={} point_idx={} delta={} checkpoint_implied={} toric_covered={} base_tau={} checkpoint_tau={}",
+            idx,
+            kklt_basis[idx],
+            delta,
+            checkpoint_implied,
+            toric_covered,
+            base_target_tau[idx].get(),
+            checkpoint_target[idx].get()
+        );
+    }
 }
 
 fn stage_volume(
