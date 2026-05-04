@@ -332,6 +332,7 @@ struct BranchReportSummary {
     positive_volume: usize,
     selected_rank_by_volume: usize,
     selected_init_index: usize,
+    selected_init_source: &'static str,
     selected_phase1_volume: f64,
     selected_phase1_rel_err: f64,
     selected_jacobian_rank: usize,
@@ -360,6 +361,7 @@ struct BranchReportBranch {
     rank_by_volume: usize,
     selected: bool,
     init_index: usize,
+    init_source: &'static str,
     phase1_volume: f64,
     phase1_rel_err: f64,
     jacobian_rank: usize,
@@ -1326,13 +1328,28 @@ fn write_branch_report_jsonl(
     ctx: &BranchReportContext,
     branches_by_volume: &[cyrus_core::KkltBranchSolution],
     t_initializations: &[Vec<F64<Finite>>],
+    t_initialization_sources: &[&'static str],
     branch_gv_coverages: Option<&[BranchGvCoverage]>,
 ) -> Result<(), String> {
+    if t_initializations.len() != t_initialization_sources.len() {
+        return Err(format!(
+            "branch initialization source rows {} do not match initialization rows {}",
+            t_initialization_sources.len(),
+            t_initializations.len()
+        ));
+    }
     let Some(selected) = branches_by_volume.get(ctx.selected_rank_by_volume) else {
         return Err(format!(
             "selected branch rank {} is outside {} branch rows",
             ctx.selected_rank_by_volume,
             branches_by_volume.len()
+        ));
+    };
+    let Some(&selected_source) = t_initialization_sources.get(selected.init_index) else {
+        return Err(format!(
+            "selected branch init index {} is outside {} initialization source rows",
+            selected.init_index,
+            t_initialization_sources.len()
         ));
     };
     if let Some(coverages) = branch_gv_coverages
@@ -1361,6 +1378,7 @@ fn write_branch_report_jsonl(
         positive_volume,
         selected_rank_by_volume: ctx.selected_rank_by_volume,
         selected_init_index: selected.init_index,
+        selected_init_source: selected_source,
         selected_phase1_volume: selected.classical_volume.get(),
         selected_phase1_rel_err: selected.result.relative_error.get(),
         selected_jacobian_rank: selected.jacobian_diagnostics.rank,
@@ -1393,6 +1411,13 @@ fn write_branch_report_jsonl(
                 t_initializations.len()
             ));
         };
+        let Some(&init_source) = t_initialization_sources.get(branch.init_index) else {
+            return Err(format!(
+                "branch init index {} is outside {} initialization source rows",
+                branch.init_index,
+                t_initialization_sources.len()
+            ));
+        };
         let gv_coverage = branch_gv_coverages.and_then(|coverages| coverages.get(rank_by_volume));
         let row = BranchReportBranch {
             record_type: "positive_branch",
@@ -1401,6 +1426,7 @@ fn write_branch_report_jsonl(
             rank_by_volume,
             selected: rank_by_volume == ctx.selected_rank_by_volume,
             init_index: branch.init_index,
+            init_source,
             phase1_volume: branch.classical_volume.get(),
             phase1_rel_err: branch.result.relative_error.get(),
             jacobian_rank: branch.jacobian_diagnostics.rank,
@@ -1589,6 +1615,7 @@ fn stage_volume(
                 eprintln!("[ERROR] failed to generate KKLT branch initializations");
                 std::process::exit(2);
             };
+            let mut t_initialization_sources = vec!["generated"; t_initializations.len()];
             if branch_height_init {
                 let height_init = height_projected_branch_initialization(
                     geom,
@@ -1603,6 +1630,7 @@ fn stage_volume(
                     std::process::exit(2);
                 });
                 t_initializations.insert(0, height_init);
+                t_initialization_sources.insert(0, "height_projected");
                 eprintln!("[INFO] inserted height-projected KKLT branch initialization at init=0");
             }
             let branch_search = solve_mixed_basis_path_following_branch_candidates(
@@ -1697,6 +1725,7 @@ fn stage_volume(
                     &ctx,
                     &positive_branches,
                     &t_initializations,
+                    &t_initialization_sources,
                     None,
                 )
                 .unwrap_or_else(|e| {
@@ -1726,6 +1755,7 @@ fn stage_volume(
                         &ctx,
                         &positive_branches,
                         &t_initializations,
+                        &t_initialization_sources,
                         Some(&branch_gv_coverages),
                     )
                     .unwrap_or_else(|e| {
