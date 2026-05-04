@@ -10,9 +10,10 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use cyrus_core::{
-    Point, Polytope, Triangulation, compute_curve_basis_matrix, compute_glsm_and_linrels,
-    compute_grading_vector, compute_gv_invariants, compute_intersection_cytools,
-    compute_linear_relations_no_origin, compute_mori_cone_cap_rays, intersection_in_basis,
+    Point, Polytope, Triangulation, compute_curve_basis_matrix, compute_frst_heights,
+    compute_glsm_and_linrels, compute_grading_vector, compute_gv_invariants,
+    compute_intersection_cytools, compute_linear_relations_no_origin, compute_mori_cone_cap_rays,
+    intersection_in_basis,
 };
 
 const DEFAULT_MCALLISTER_GV_MIN_POINTS: u32 = 20_000;
@@ -20,11 +21,6 @@ const DEFAULT_MCALLISTER_GV_MIN_POINTS: u32 = 20_000;
 #[derive(Debug, Deserialize)]
 struct PolytopeInput {
     points: Vec<Vec<i64>>,
-}
-
-#[derive(Debug, Deserialize)]
-struct SimplicesInput {
-    simplices: Vec<Vec<usize>>,
 }
 
 fn load_json<T: for<'de> Deserialize<'de>>(path: &PathBuf) -> T {
@@ -84,6 +80,48 @@ fn read_simplices(path: &PathBuf) -> Vec<Vec<usize>> {
         .collect()
 }
 
+fn sorted_point_coords(points: &[Point]) -> Vec<Vec<i64>> {
+    let mut coords: Vec<Vec<i64>> = points.iter().map(|point| point.coords().to_vec()).collect();
+    coords.sort();
+    coords
+}
+
+fn sorted_simplices(triangulation: &Triangulation) -> Vec<Vec<usize>> {
+    let mut simplices = triangulation.simplices().to_vec();
+    simplices.sort();
+    simplices
+}
+
+fn validate_dual_checkpoint(
+    dual_polytope: &Polytope,
+    dual_triangulation: &Triangulation,
+    data_dir: &str,
+) {
+    let dir = PathBuf::from(data_dir);
+    let expected_dual_points = {
+        let mut points = read_points(&dir.join("dual_points.dat"));
+        points.sort();
+        points
+    };
+    let actual_dual_points = sorted_point_coords(dual_polytope.vertices());
+    if actual_dual_points != expected_dual_points {
+        eprintln!("[ERROR] computed dual polytope differs from dual_points.dat checkpoint");
+        std::process::exit(2);
+    }
+
+    let mut expected_simplices = read_simplices(&dir.join("dual_simplices.dat"));
+    expected_simplices.sort();
+    let actual_simplices = sorted_simplices(dual_triangulation);
+    if actual_simplices != expected_simplices {
+        eprintln!("[ERROR] computed dual FRST differs from dual_simplices.dat checkpoint");
+        std::process::exit(2);
+    }
+
+    eprintln!(
+        "[INFO] computed dual polytope/FRST match dual_points.dat and dual_simplices.dat checkpoints"
+    );
+}
+
 fn main() {
     let t0 = Instant::now();
     let max_deg = parse_arg_value::<u32>("--max-deg");
@@ -118,38 +156,39 @@ fn main() {
         eprintln!("[INFO] using McAllister data dir: {dir}");
     }
 
-    let (points_raw, simplices_raw) = data_dir.as_ref().map_or_else(
+    let primal_points_raw = data_dir.as_ref().map_or_else(
         || {
             let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-            let poly_path = manifest_dir.join("tests/mcallister_e2e/overrides/dual_points.json");
+            let poly_path = manifest_dir.join("tests/mcallister_e2e/inputs/polytope.json");
             let poly: PolytopeInput = load_json(&poly_path);
-            let simplices_path =
-                manifest_dir.join("tests/mcallister_e2e/overrides/dual_simplices.json");
-            let simplices: SimplicesInput = load_json(&simplices_path);
-            (poly.points, simplices.simplices)
+            poly.points
         },
         |dir| {
             let dir = PathBuf::from(dir);
-            let points = read_points(&dir.join("dual_points.dat"));
-            let simplices = read_simplices(&dir.join("dual_simplices.dat"));
-            (points, simplices)
+            read_points(&dir.join("points.dat"))
         },
     );
 
-    let points: Vec<Point> = points_raw.iter().map(|p| Point::new(p.clone())).collect();
-    let polytope = Polytope::from_vertices(points).expect("Failed to build polytope");
-    let triangulation_point_count = simplices_raw
+    let primal_points: Vec<Point> = primal_points_raw
         .iter()
-        .flatten()
-        .copied()
-        .max()
-        .map_or(0, |idx| idx + 1);
-    let triangulation_points = points_raw
-        .iter()
-        .take(triangulation_point_count)
         .map(|p| Point::new(p.clone()))
         .collect::<Vec<_>>();
-    let triangulation = Triangulation::new(simplices_raw);
+    let primal_polytope = Polytope::from_vertices(primal_points).expect("Failed primal polytope");
+    let polytope = primal_polytope
+        .compute_dual()
+        .expect("Failed dual polytope");
+    let triangulation_points = polytope
+        .points_not_interior_to_facets()
+        .expect("Failed to filter dual triangulation points");
+    let origin_idx = triangulation_points
+        .iter()
+        .position(|point| point.coords().iter().all(|&coord| coord == 0))
+        .expect("dual origin not found");
+    let (_heights, triangulation) =
+        compute_frst_heights(&triangulation_points, origin_idx).expect("Failed dual FRST");
+    if let Some(dir) = &data_dir {
+        validate_dual_checkpoint(&polytope, &triangulation, dir);
+    }
     eprintln!("[TIME] triangulation: {:.2?}", t0.elapsed());
 
     let (_glsm, linrels, basis_auto) =
