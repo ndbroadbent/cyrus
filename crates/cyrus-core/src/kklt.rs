@@ -883,6 +883,12 @@ pub fn solve_two_phase_mixed_basis_path_following_with_gv(
     gv_tolerance: F64<NonNeg>,
 ) -> Option<KkltResult> {
     let debug = kklt_debug_enabled();
+    if basis != kklt_basis {
+        if debug {
+            eprintln!("[KKLT] basis-coordinate GV solver requires basis == kklt_basis");
+        }
+        return None;
+    }
     if max_gv_iterations == 0 {
         if debug {
             eprintln!("[KKLT] max_gv_iterations is zero");
@@ -924,6 +930,134 @@ pub fn solve_two_phase_mixed_basis_path_following_with_gv(
         else {
             if debug {
                 eprintln!("[KKLT] GV correction failed at iteration {iter}");
+            }
+            return None;
+        };
+        let Some(tau_target) =
+            compute_gv_corrected_target_tau(c_i, chi_divisor, c_tau, &gv_correction)
+        else {
+            if debug {
+                eprintln!("[KKLT] GV-corrected target tau failed at iteration {iter}");
+            }
+            return None;
+        };
+        let Some(next) = solve_mixed_basis_path_following(
+            kappa_basis,
+            kappa_all,
+            basis,
+            kklt_basis,
+            &tau_target,
+            &previous_t,
+            steps,
+        ) else {
+            if debug {
+                eprintln!("[KKLT] corrected mixed-basis path failed at iteration {iter}");
+            }
+            return None;
+        };
+        if !next.converged {
+            if debug {
+                eprintln!(
+                    "[KKLT] corrected path did not converge at iteration {iter}: rel_err={}",
+                    next.relative_error.get()
+                );
+            }
+            return None;
+        }
+
+        let max_relative_step = next
+            .t
+            .iter()
+            .zip(previous_t.iter())
+            .map(|(new, old)| (new.get() - old.get()).abs() / (old.get().abs() + 1e-12))
+            .fold(0.0f64, f64::max);
+        if debug {
+            eprintln!(
+                "[KKLT] iteration {iter}: max_relative_step={max_relative_step}, rel_err={}",
+                next.relative_error.get()
+            );
+        }
+        result = next;
+        if max_relative_step <= gv_tolerance.get() {
+            return Some(result);
+        }
+    }
+
+    if debug {
+        eprintln!("[KKLT] GV fixed-point iteration did not converge");
+    }
+    None
+}
+
+/// Solve the mixed-basis KKLT system with GV corrections for explicit KKLT
+/// divisors.
+///
+/// Unlike [`solve_two_phase_mixed_basis_path_following_with_gv`], this handles
+/// `basis != kklt_basis` by using `curve_basis_matrix` to evaluate each
+/// basis-coordinate GV curve on the requested ambient KKLT divisors.
+#[allow(clippy::too_many_arguments)]
+pub fn solve_two_phase_mixed_basis_path_following_with_divisor_gv(
+    kappa_basis: &Intersection,
+    kappa_all: &Intersection,
+    basis: &[usize],
+    kklt_basis: &[usize],
+    c_i: &[I64<Pos>],
+    chi_divisor: &[I64<Finite>],
+    c_tau: CTau,
+    gv_invariants: &[(Vec<i32>, Integer)],
+    curve_basis_matrix: &[Vec<Integer>],
+    gamma: Option<&[I64<Finite>]>,
+    steps: CheckedRange<usize>,
+    max_gv_iterations: usize,
+    gv_tolerance: F64<NonNeg>,
+) -> Option<KkltResult> {
+    let debug = kklt_debug_enabled();
+    if max_gv_iterations == 0 {
+        if debug {
+            eprintln!("[KKLT] max_gv_iterations is zero");
+        }
+        return None;
+    }
+
+    let Some(tau_target) = compute_corrected_target_tau(c_i, chi_divisor, c_tau) else {
+        if debug {
+            eprintln!("[KKLT] corrected target tau construction failed");
+        }
+        return None;
+    };
+    let Some(mut result) = solve_two_phase_mixed_basis_path_following(
+        kappa_basis,
+        kappa_all,
+        basis,
+        kklt_basis,
+        &tau_target,
+        c_i,
+        steps,
+    ) else {
+        if debug {
+            eprintln!("[KKLT] zeroth-order mixed-basis path following failed");
+        }
+        return None;
+    };
+    if debug {
+        eprintln!(
+            "[KKLT] zeroth-order solve converged={} rel_err={}",
+            result.converged,
+            result.relative_error.get()
+        );
+    }
+
+    for iter in 0..max_gv_iterations {
+        let previous_t = result.t.clone();
+        let Some(gv_correction) = compute_gv_target_correction_for_divisors(
+            gv_invariants,
+            curve_basis_matrix,
+            kklt_basis,
+            &previous_t,
+            gamma,
+        ) else {
+            if debug {
+                eprintln!("[KKLT] divisor GV correction failed at iteration {iter}");
             }
             return None;
         };
@@ -1386,6 +1520,60 @@ mod tests {
 
         assert!(result.converged);
         let gv_correction = compute_gv_target_correction(&invariants, &result.t, None).unwrap();
+        let tau_target =
+            compute_gv_corrected_target_tau(&c_i, &chi_divisor, c_tau, &gv_correction).unwrap();
+        assert!(
+            (result.tau[0].get() - tau_target[0].get()).abs() < 1e-6,
+            "tau={}, target={}",
+            result.tau[0].get(),
+            tau_target[0].get()
+        );
+    }
+
+    #[test]
+    fn test_solve_two_phase_mixed_basis_path_following_with_divisor_gv_one_modulus() {
+        let kappa_basis = Intersection::new(1);
+        let mut kappa_all = Intersection::new(2);
+        kappa_all.set(
+            1,
+            0,
+            0,
+            TypedRational::<Finite>::from_raw(Rational::from(6)),
+        );
+        let basis = vec![0];
+        let kklt_basis = vec![1];
+        let c_i = vec![pos_i64(1)];
+        let chi_divisor = vec![finite_i64(0)];
+        let c_tau = f64_pos!(1.0);
+        let invariants = vec![(vec![1], Integer::from(1))];
+        let curve_basis = vec![vec![Integer::from(1), Integer::from(1)]];
+
+        let result = solve_two_phase_mixed_basis_path_following_with_divisor_gv(
+            &kappa_basis,
+            &kappa_all,
+            &basis,
+            &kklt_basis,
+            &c_i,
+            &chi_divisor,
+            c_tau,
+            &invariants,
+            &curve_basis,
+            None,
+            range!(0, 400),
+            20,
+            F64::<NonNeg>::new(1e-10).unwrap(),
+        )
+        .unwrap();
+
+        assert!(result.converged);
+        let gv_correction = compute_gv_target_correction_for_divisors(
+            &invariants,
+            &curve_basis,
+            &kklt_basis,
+            &result.t,
+            None,
+        )
+        .unwrap();
         let tau_target =
             compute_gv_corrected_target_tau(&c_i, &chi_divisor, c_tau, &gv_correction).unwrap();
         assert!(
