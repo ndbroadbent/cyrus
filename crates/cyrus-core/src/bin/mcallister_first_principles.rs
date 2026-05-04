@@ -496,6 +496,8 @@ struct MissingGvTargetStats {
     targets_that_are_origin_circuits: usize,
     targets_real_cone_decomposable_by_other_generators: usize,
     targets_that_are_lp_extremal_mori_generators: usize,
+    real_cone_decomposition_active_generator_min: Option<usize>,
+    real_cone_decomposition_active_generator_max: Option<usize>,
     origin_circuit_resolved_conifold_count: usize,
     min_generators_le_target_degree: usize,
     max_generators_le_target_degree: usize,
@@ -511,8 +513,14 @@ struct MissingGvTargetSample {
     is_mori_generator: bool,
     origin_circuit_pattern: Option<String>,
     real_cone_decomposable_by_other_generators: bool,
+    real_cone_decomposition_active_generators: Option<usize>,
     ambient_nonzero: Vec<(usize, i64)>,
     basis_nonzero: Vec<(usize, i64)>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct RealConeDecompositionWitness {
+    active_generator_indices: Vec<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1725,6 +1733,8 @@ fn missing_gv_target_stats(
             targets_that_are_origin_circuits: 0,
             targets_real_cone_decomposable_by_other_generators: 0,
             targets_that_are_lp_extremal_mori_generators: 0,
+            real_cone_decomposition_active_generator_min: None,
+            real_cone_decomposition_active_generator_max: None,
             origin_circuit_resolved_conifold_count: 0,
             min_generators_le_target_degree: 0,
             max_generators_le_target_degree: 0,
@@ -1759,6 +1769,8 @@ fn missing_gv_target_stats(
     let mut targets_that_are_origin_circuits = 0usize;
     let mut targets_real_cone_decomposable_by_other_generators = 0usize;
     let mut targets_that_are_lp_extremal_mori_generators = 0usize;
+    let mut real_cone_decomposition_active_generator_min = None::<usize>;
+    let mut real_cone_decomposition_active_generator_max = None::<usize>;
     let mut origin_circuit_resolved_conifold_count = 0usize;
     let mut min_generators = usize::MAX;
     let mut max_generators = 0usize;
@@ -1794,15 +1806,29 @@ fn missing_gv_target_stats(
         if is_mori_generator {
             targets_that_are_mori_generators += 1;
         }
-        let real_cone_decomposable = real_cone_decomposable_by_other_degree_bounded_generators(
+        let real_cone_decomposition = real_cone_decomposition_by_other_degree_bounded_generators(
             &basis_class,
             basis_rays,
             grading,
             degree,
         )?;
+        let real_cone_decomposable = real_cone_decomposition.is_some();
         if real_cone_decomposable {
             targets_real_cone_decomposable_by_other_generators += 1;
         }
+        let real_cone_decomposition_active_generators =
+            real_cone_decomposition.as_ref().map(|witness| {
+                let active_count = witness.active_generator_indices.len();
+                real_cone_decomposition_active_generator_min = Some(
+                    real_cone_decomposition_active_generator_min
+                        .map_or(active_count, |current| current.min(active_count)),
+                );
+                real_cone_decomposition_active_generator_max = Some(
+                    real_cone_decomposition_active_generator_max
+                        .map_or(active_count, |current| current.max(active_count)),
+                );
+                active_count
+            });
         if is_mori_generator && !real_cone_decomposable {
             targets_that_are_lp_extremal_mori_generators += 1;
         }
@@ -1829,6 +1855,7 @@ fn missing_gv_target_stats(
                 is_mori_generator,
                 origin_circuit_pattern: origin_circuit_pattern_label,
                 real_cone_decomposable_by_other_generators: real_cone_decomposable,
+                real_cone_decomposition_active_generators,
                 ambient_nonzero: ambient_class
                     .iter()
                     .enumerate()
@@ -1849,6 +1876,8 @@ fn missing_gv_target_stats(
         targets_that_are_origin_circuits,
         targets_real_cone_decomposable_by_other_generators,
         targets_that_are_lp_extremal_mori_generators,
+        real_cone_decomposition_active_generator_min,
+        real_cone_decomposition_active_generator_max,
         origin_circuit_resolved_conifold_count,
         min_generators_le_target_degree: min_generators,
         max_generators_le_target_degree: max_generators,
@@ -1864,6 +1893,21 @@ fn real_cone_decomposable_by_other_degree_bounded_generators(
     grading: &[i64],
     target_degree: i128,
 ) -> Result<bool, String> {
+    Ok(real_cone_decomposition_by_other_degree_bounded_generators(
+        target,
+        basis_rays,
+        grading,
+        target_degree,
+    )?
+    .is_some())
+}
+
+fn real_cone_decomposition_by_other_degree_bounded_generators(
+    target: &[i64],
+    basis_rays: &[Vec<i64>],
+    grading: &[i64],
+    target_degree: i128,
+) -> Result<Option<RealConeDecompositionWitness>, String> {
     if target.len() != grading.len() {
         return Err(format!(
             "target length {} does not match grading vector length {}",
@@ -1894,7 +1938,7 @@ fn real_cone_decomposable_by_other_degree_bounded_generators(
         }
     }
     if candidate_indices.is_empty() {
-        return Ok(false);
+        return Ok(None);
     }
 
     let mut vars = ProblemVariables::new();
@@ -1920,7 +1964,7 @@ fn real_cone_decomposable_by_other_degree_bounded_generators(
 
     let solution = match model.solve() {
         Ok(solution) => solution,
-        Err(ResolutionError::Infeasible) => return Ok(false),
+        Err(ResolutionError::Infeasible) => return Ok(None),
         Err(err) => {
             return Err(format!(
                 "failed real-cone decomposition LP for target degree {target_degree}: {err}"
@@ -1944,7 +1988,22 @@ fn real_cone_decomposable_by_other_degree_bounded_generators(
             "real-cone decomposition LP returned residual {max_residual}"
         ));
     }
-    Ok(true)
+
+    let mut active_generator_indices = Vec::new();
+    for (coefficient, &ray_idx) in coefficients.iter().zip(candidate_indices.iter()) {
+        if solution.value(*coefficient).abs() > 1.0e-8 {
+            active_generator_indices.push(ray_idx);
+        }
+    }
+    if active_generator_indices.is_empty() {
+        return Err(
+            "real-cone decomposition LP returned no active generators despite zero residual"
+                .to_string(),
+        );
+    }
+    Ok(Some(RealConeDecompositionWitness {
+        active_generator_indices,
+    }))
 }
 
 fn one_dimensional_ray_gv_targets(
@@ -3626,13 +3685,23 @@ fn stage_volume(
             );
         }
         if let Some(stats) = diag.missing_target_stats.as_ref() {
+            let active_generator_range = match (
+                stats.real_cone_decomposition_active_generator_min,
+                stats.real_cone_decomposition_active_generator_max,
+            ) {
+                (Some(min_active), Some(max_active)) => {
+                    format!("{min_active}..{max_active}")
+                }
+                _ => "none".to_string(),
+            };
             eprintln!(
-                "[INFO] corrected-chamber missing GV target reduction: targets={} targets_as_mori_generators={} targets_as_origin_circuits={} real_cone_decomposable_by_other_generators={} lp_extremal_mori_generators={} origin_circuit_resolved_conifold={} generators_le_target_degree_range={}..{} origin_coefficients={:?}",
+                "[INFO] corrected-chamber missing GV target reduction: targets={} targets_as_mori_generators={} targets_as_origin_circuits={} real_cone_decomposable_by_other_generators={} lp_extremal_mori_generators={} real_cone_active_generator_range={} origin_circuit_resolved_conifold={} generators_le_target_degree_range={}..{} origin_coefficients={:?}",
                 stats.target_count,
                 stats.targets_that_are_mori_generators,
                 stats.targets_that_are_origin_circuits,
                 stats.targets_real_cone_decomposable_by_other_generators,
                 stats.targets_that_are_lp_extremal_mori_generators,
+                active_generator_range,
                 stats.origin_circuit_resolved_conifold_count,
                 stats.min_generators_le_target_degree,
                 stats.max_generators_le_target_degree,
@@ -4234,6 +4303,8 @@ mod tests {
         assert_eq!(stats.targets_that_are_origin_circuits, 0);
         assert_eq!(stats.targets_real_cone_decomposable_by_other_generators, 2);
         assert_eq!(stats.targets_that_are_lp_extremal_mori_generators, 0);
+        assert_eq!(stats.real_cone_decomposition_active_generator_min, Some(1));
+        assert_eq!(stats.real_cone_decomposition_active_generator_max, Some(2));
         assert_eq!(stats.origin_circuit_resolved_conifold_count, 0);
         assert_eq!(stats.min_generators_le_target_degree, 2);
         assert_eq!(stats.max_generators_le_target_degree, 3);
@@ -4248,6 +4319,7 @@ mod tests {
                     is_mori_generator: true,
                     origin_circuit_pattern: None,
                     real_cone_decomposable_by_other_generators: true,
+                    real_cone_decomposition_active_generators: Some(2),
                     ambient_nonzero: vec![(1, 1), (2, 1)],
                     basis_nonzero: vec![(0, 1), (1, 1)]
                 },
@@ -4257,6 +4329,7 @@ mod tests {
                     is_mori_generator: false,
                     origin_circuit_pattern: None,
                     real_cone_decomposable_by_other_generators: true,
+                    real_cone_decomposition_active_generators: Some(1),
                     ambient_nonzero: vec![(1, 2)],
                     basis_nonzero: vec![(0, 2)]
                 }
