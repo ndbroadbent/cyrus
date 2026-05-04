@@ -17,6 +17,7 @@ use malachite::Integer;
 use malachite::Rational;
 use malachite::num::arithmetic::traits::Abs;
 use nalgebra::{DMatrix, DVector, RowDVector};
+use rug::Rational as RugRational;
 
 use crate::cone::Cone;
 use crate::error::{Error, Result};
@@ -1210,6 +1211,157 @@ pub fn compute_gv_invariants_with_provided_generators(
     )
 }
 
+/// Compute GV invariants using an explicitly truncated semigroup.
+///
+/// Unlike [`compute_gv_invariants_with_provided_generators`], this does not ask
+/// `cygv` to close the provided rows under addition. The rows are passed to
+/// `Semigroup::from_data` as the exact truncation domain for HKTY, with the
+/// identity element inserted if absent. This is the right entry point for
+/// diagnostics that construct a causal-diamond or face-local semigroup
+/// explicitly.
+///
+/// # Errors
+/// Returns an error if the semigroup, grading, GLSM charge matrix, or
+/// intersection numbers are inconsistent, or if HKTY finds non-integral GV
+/// output for the supplied truncation.
+#[allow(clippy::too_many_lines)]
+pub fn compute_gv_invariants_with_explicit_semigroup(
+    elements: &[Vec<i64>],
+    grading_vector: &[i64],
+    q_matrix: &[Vec<i64>],
+    intnums: &Intersection,
+) -> Result<Vec<(Vec<i32>, Integer)>> {
+    if elements.is_empty() {
+        return Err(Error::InvalidInput(
+            "explicit GV semigroup elements are empty".into(),
+        ));
+    }
+    let dim = elements[0].len();
+    if dim == 0 {
+        return Err(Error::InvalidInput(
+            "explicit GV semigroup dimension is zero".into(),
+        ));
+    }
+    if grading_vector.len() != dim {
+        return Err(Error::InvalidInput(
+            "grading vector length must match explicit semigroup dimension".into(),
+        ));
+    }
+
+    let grading_vec_i32: Vec<i32> = grading_vector
+        .iter()
+        .map(|&v| i32::try_from(v))
+        .collect::<std::result::Result<_, _>>()
+        .map_err(|_| Error::InvalidInput("grading vector does not fit in i32".into()))?;
+    let grading = RowDVector::from_row_slice(&grading_vec_i32);
+    let q = cygv_q_matrix(q_matrix, dim)?;
+    let intnums_map = cygv_intnums_map(intnums)?;
+
+    let mut unique = HashSet::new();
+    let zero = vec![0i64; dim];
+    unique.insert(zero.clone());
+    let mut semigroup_rows = vec![zero];
+    for row in elements {
+        if row.len() != dim {
+            return Err(Error::InvalidInput(
+                "explicit GV semigroup rows have inconsistent dimensions".into(),
+            ));
+        }
+        if unique.insert(row.clone()) {
+            semigroup_rows.push(row.clone());
+        }
+    }
+
+    let n_elements = semigroup_rows.len();
+    let mut element_data = Vec::with_capacity(dim * n_elements);
+    for col in 0..n_elements {
+        for row in 0..dim {
+            let val = i32::try_from(semigroup_rows[col][row]).map_err(|_| {
+                Error::InvalidInput("explicit GV semigroup element does not fit in i32".into())
+            })?;
+            element_data.push(val);
+        }
+    }
+    let elements = DMatrix::from_column_slice(dim, n_elements, &element_data);
+    let semigroup = cygv::Semigroup::from_data(elements, grading)
+        .map_err(|e| Error::InvalidInput(format!("explicit GV semigroup is inconsistent: {e}")))?;
+
+    let zero_cutoff = RugRational::new();
+    let poly_props = cygv::PolynomialProperties::new(&semigroup, &zero_cutoff);
+    let (intnum_dict, intnum_idxpairs, n_indices) = cygv::misc::process_int_nums(intnums_map, true)
+        .map_err(|e| Error::InvalidInput(format!("cygv intersection preprocessing failed: {e}")))?;
+
+    let n_threads = env::var("CYRUS_GV_THREADS")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+        .map_or_else(
+            || std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get),
+            |n| {
+                if n == 0 { 1 } else { n as usize }
+            },
+        );
+    let pool_size = env::var("CYRUS_GV_POOL_SIZE")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(1000);
+    let main_pool = cygv::NumberPool::new(poly_props.zero_cutoff.clone(), pool_size);
+    let thread_pools: Vec<_> = (0..n_threads)
+        .map(|_| cygv::NumberPool::new(poly_props.zero_cutoff.clone(), pool_size))
+        .collect();
+    let mut all_pools = (main_pool, thread_pools);
+    let nefpart: Vec<DVector<i32>> = Vec::new();
+
+    let fp = cygv::fundamental_period::compute_omega(
+        &poly_props,
+        &semigroup,
+        &q,
+        &nefpart,
+        &intnum_idxpairs,
+        &mut all_pools,
+    )
+    .map_err(|e| Error::InvalidInput(format!("cygv fundamental period failed: {e}")))?;
+
+    let inst_data = cygv::instanton::compute_instanton_data(
+        fp,
+        &poly_props,
+        &intnum_idxpairs,
+        n_indices,
+        &intnum_dict,
+        true,
+        &mut all_pools,
+    )
+    .map_err(|e| Error::InvalidInput(format!("cygv instanton data failed: {e}")))?;
+
+    let gv = cygv::series_inversion::invert_series::<RugRational, true, true>(
+        inst_data,
+        &poly_props,
+        &mut all_pools,
+    )
+    .map_err(|e| Error::InvalidInput(format!("cygv series inversion failed: {e}")))?;
+
+    let mut gv_sorted: Vec<_> = gv.into_iter().collect();
+    gv_sorted
+        .sort_unstable_by_key(|((element_idx, insertion_idx), _)| (*element_idx, *insertion_idx));
+    let mut out = Vec::with_capacity(gv_sorted.len());
+    for ((element_idx, _), gv_value) in gv_sorted {
+        let (numer, denom) = gv_value.into_numer_denom();
+        if denom != rug::Integer::from(1) {
+            return Err(Error::InvalidInput(format!(
+                "explicit GV semigroup produced non-integral invariant at element index {element_idx}: denominator {denom}"
+            )));
+        }
+        let gv_int = numer
+            .to_string()
+            .parse::<Integer>()
+            .map_err(|()| Error::InvalidInput("GV integer conversion failed".into()))?;
+        out.push((
+            semigroup.elements.column(element_idx).as_slice().to_vec(),
+            gv_int,
+        ));
+    }
+    Ok(out)
+}
+
 fn compute_gv_invariants_inner(
     rays: &[Vec<i64>],
     grading_vector: &[i64],
@@ -1451,33 +1603,7 @@ fn compute_gv_invariants_inner(
         hasher.finish()
     };
 
-    // q matrix (curve basis), rows = h11, cols = n_pts
-    let q_rows = q_matrix.len();
-    if q_rows == 0 {
-        return Err(Error::InvalidInput("q_matrix is empty".into()));
-    }
-    if q_rows != dim {
-        return Err(Error::InvalidInput(
-            "q_matrix row count must match generator dimension".into(),
-        ));
-    }
-    let q_cols = q_matrix[0].len();
-    let mut q_data: Vec<i32> = Vec::with_capacity(q_rows * q_cols);
-    for row in q_matrix {
-        if row.len() != q_cols {
-            return Err(Error::InvalidInput(
-                "q_matrix rows have inconsistent length".into(),
-            ));
-        }
-        for &v in row {
-            let v_i32 = i32::try_from(v)
-                .map_err(|_| Error::InvalidInput("q_matrix entry does not fit in i32".into()))?;
-            q_data.push(v_i32);
-        }
-    }
-    let q = DMatrix::from_row_slice(q_rows, q_cols, &q_data);
-    // cygv expects q with shape (n_divisors, h11), i.e. transpose of curve basis.
-    let q = q.transpose();
+    let q = cygv_q_matrix(q_matrix, dim)?;
     eprintln!(
         "[DEBUG] gv q shape: {}x{}, elapsed={:.2?}",
         q.nrows(),
@@ -1485,23 +1611,7 @@ fn compute_gv_invariants_inner(
         t0.elapsed()
     );
 
-    // Intersection numbers (dok format)
-    let mut intnums_map: HashMap<(usize, usize, usize), i32> = HashMap::new();
-    for (&(i, j, k), val) in intnums.iter() {
-        if val.get().denominator_ref() != &1u32 {
-            return Err(Error::InvalidInput(
-                "intersection number is not integral".into(),
-            ));
-        }
-        let signed = Integer::try_from(val.get().clone())
-            .map_err(|_| Error::InvalidInput("intersection number is not integral".into()))?;
-        let v_i64: i64 = i64::try_from(&signed)
-            .map_err(|_| Error::InvalidInput("intersection number does not fit in i64".into()))?;
-        let v_i32: i32 = v_i64
-            .try_into()
-            .map_err(|_| Error::InvalidInput("intersection number does not fit in i32".into()))?;
-        intnums_map.insert((i, j, k), v_i32);
-    }
+    let intnums_map = cygv_intnums_map(intnums)?;
 
     if let Ok(path) = env::var("CYRUS_GV_DUMP_INPUTS") {
         dump_gv_inputs(
@@ -1637,6 +1747,55 @@ fn compute_gv_invariants_inner(
     }
 
     Ok(out)
+}
+
+fn cygv_q_matrix(q_matrix: &[Vec<i64>], dim: usize) -> Result<DMatrix<i32>> {
+    let q_rows = q_matrix.len();
+    if q_rows == 0 {
+        return Err(Error::InvalidInput("q_matrix is empty".into()));
+    }
+    if q_rows != dim {
+        return Err(Error::InvalidInput(
+            "q_matrix row count must match generator dimension".into(),
+        ));
+    }
+    let q_cols = q_matrix[0].len();
+    let mut q_data: Vec<i32> = Vec::with_capacity(q_rows * q_cols);
+    for row in q_matrix {
+        if row.len() != q_cols {
+            return Err(Error::InvalidInput(
+                "q_matrix rows have inconsistent length".into(),
+            ));
+        }
+        for &v in row {
+            let v_i32 = i32::try_from(v)
+                .map_err(|_| Error::InvalidInput("q_matrix entry does not fit in i32".into()))?;
+            q_data.push(v_i32);
+        }
+    }
+    let q = DMatrix::from_row_slice(q_rows, q_cols, &q_data);
+    // cygv expects q with shape (n_divisors, h11), i.e. transpose of curve basis.
+    Ok(q.transpose())
+}
+
+fn cygv_intnums_map(intnums: &Intersection) -> Result<HashMap<(usize, usize, usize), i32>> {
+    let mut intnums_map: HashMap<(usize, usize, usize), i32> = HashMap::new();
+    for (&(i, j, k), val) in intnums.iter() {
+        if val.get().denominator_ref() != &1u32 {
+            return Err(Error::InvalidInput(
+                "intersection number is not integral".into(),
+            ));
+        }
+        let signed = Integer::try_from(val.get().clone())
+            .map_err(|_| Error::InvalidInput("intersection number is not integral".into()))?;
+        let v_i64: i64 = i64::try_from(&signed)
+            .map_err(|_| Error::InvalidInput("intersection number does not fit in i64".into()))?;
+        let v_i32: i32 = v_i64
+            .try_into()
+            .map_err(|_| Error::InvalidInput("intersection number does not fit in i32".into()))?;
+        intnums_map.insert((i, j, k), v_i32);
+    }
+    Ok(intnums_map)
 }
 
 /// Map GV invariants from Kähler-basis curve coordinates to ambient divisor coordinates.
@@ -2207,6 +2366,7 @@ mod tests {
 
     use super::{
         BoundedCurveDecompositionIndex, ToricCurveCandidate, compute_grading_vector,
+        compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_provided_generators, curve_volume_in_divisor_basis,
         dump_mori_rays_cdd, find_pair_decomposition, gv_lattice_search_request, load_grading_cache,
         map_basis_gv_invariants_to_ambient, origin_circuit_diagnostic_from_class,
@@ -2247,6 +2407,19 @@ mod tests {
             &Intersection::new(1),
             None,
             Some(1),
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("q_matrix is empty"));
+    }
+
+    #[test]
+    fn explicit_semigroup_gv_path_accepts_exact_truncation_without_degree_bound() {
+        let err = compute_gv_invariants_with_explicit_semigroup(
+            &[vec![1]],
+            &[1],
+            &[],
+            &Intersection::new(1),
         )
         .unwrap_err();
 
