@@ -28,6 +28,7 @@ expression: roadmap
     "mcallister_first_principles now uses the height-projected KKLT initializer by default when no explicit branch search is requested, so the standard no-replay command no longer needs branch flags to reach the McAllister branch",
     "mcallister_first_principles derives the BBHL Hodge inputs from the computed primal and dual bases instead of hard-coding the 4-214-647 values",
     "mcallister_first_principles validates the no-replay corrected volume against corrected_cy_vol.dat when McAllister comparison data is available",
+    "mcallister_first_principles logs the McAllister volume split into classical, BBHL, pre-GV, and direct GV volume terms for residual attribution",
     "first-principles binaries do not load small_curves.dat or small_curves_gv.dat",
     "basis-coordinate GV invariants can be mapped back to ambient divisor-intersection curve classes for primal volume corrections",
     "mcallister_first_principles can explicitly attempt general primal GV fallback for missing small-curve toric formula coverage via --primal-gv-max-deg or --primal-gv-min-points",
@@ -46,6 +47,7 @@ expression: roadmap
   ],
   "remaining_gaps": [
     "Generated branch candidates without the height_projected initializer still did not find the 4-214-647 paper branch in a deterministic 48-candidate diagnostic: the lowest sampled phase-1 volume was about 20611 rather than 17901, and even coverage-aware selection still had at least 412 small curves missing toric GV coverage",
+    "The current no-replay 4-214-647 corrected-volume residual is about 0.072 after direct toric small-curve GV volume correction; the component split is V_classical=4712.269883, BBHL=0.508832, pre-GV V=4711.761051, GV volume correction=-0.256385, so the remaining discrepancy is in the instanton-correction layer rather than classical geometry",
     "The current production small-curve pruning only removes pair-decomposable curves; the new decomposition-depth report is bounded to three terms and is not a full faithful implementation of the paper's sums-of-others/Hilbert-basis reduction",
     "The explicit general primal GV fallback still reaches full 214-dimensional Mori-cone dualization for any max_deg high enough to cover the selected missing curves, or for min_points-driven runs; in the latest 4-candidate generated-branch diagnostic the min-required-gv-degree branch still requires degrees 4..2334",
     "A PPL/cdd diagnostic on the dumped 561658-ray, 214-dimensional V-representation also exceeded a 300-second cap without producing an H-representation",
