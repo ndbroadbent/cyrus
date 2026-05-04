@@ -4785,7 +4785,7 @@ fn diagnose_chamber_gv_volume_correction(
                     |count| format!("{count} rays have degree <= requested max_deg"),
                 );
             return Err(format!(
-                "corrected-chamber general GV direct fallback would dualize {} Mori generators, exceeding limit {direct_ray_limit}; {bounded_note}. Current backend computes cone hyperplanes by DDM before bounded lattice enumeration. Need a reduced corrected-chamber cone/lattice formulation, or set CYRUS_CORRECTED_CHAMBER_GENERAL_GV_DIRECT_RAY_LIMIT to force the direct attempt.",
+                "corrected-chamber general GV direct fallback would dualize {} Mori generators, exceeding limit {direct_ray_limit}; {bounded_note}. Current backend computes cone hyperplanes by DDM before bounded lattice enumeration. Filtering to degree-bounded rays before dualization is not exact in general because higher-degree rays can still affect the low-degree lattice slice. Need a reduced corrected-chamber cone/lattice formulation, or set CYRUS_CORRECTED_CHAMBER_GENERAL_GV_DIRECT_RAY_LIMIT to force the direct attempt.",
                 basis_rays.len(),
             ));
         }
@@ -6535,6 +6535,33 @@ mod tests {
             degree_filtered_basis_rays(&[vec![1, 0], vec![2, 1], vec![0, 5]], &[2, 3], 7).unwrap();
 
         assert_eq!(filtered, vec![vec![1, 0], vec![2, 1]]);
+    }
+
+    #[test]
+    fn degree_filtering_rays_is_not_exact_for_cone_lattice_slice() {
+        let rays = [vec![1, 0], vec![1, 100]];
+        let grading = [1, 1];
+        let filtered = degree_filtered_basis_rays(&rays, &grading, 2).unwrap();
+
+        assert_eq!(filtered, vec![vec![1, 0]]);
+
+        let low_degree_lattice_point = [1, 1];
+        let degree = low_degree_lattice_point
+            .iter()
+            .zip(grading)
+            .map(|(&coefficient, weight)| coefficient * weight)
+            .sum::<i64>();
+        assert_eq!(degree, 2);
+
+        // The point is in cone((1,0),(1,100)):
+        // (1,1) = 99/100 * (1,0) + 1/100 * (1,100).
+        let full_cone_numerator = [99 * rays[0][0] + rays[1][0], 99 * rays[0][1] + rays[1][1]];
+        assert_eq!(full_cone_numerator, [100, 100]);
+
+        // But it is not in cone((1,0)), the degree-filtered cone. This is why
+        // the exact corrected-chamber GV path cannot simply drop high-degree
+        // Mori rays before computing the full cone inequalities.
+        assert_ne!(low_degree_lattice_point[1], 0);
     }
 
     #[test]
