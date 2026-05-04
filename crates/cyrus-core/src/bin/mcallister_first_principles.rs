@@ -12,6 +12,7 @@
 //!   Kähler point as the first branch-search candidate.
 //! - `--branch-report-jsonl path` to export positive phase-1 branch candidates
 //!   discovered by that search for GA/debug ranking.
+//! - `--branch-report-only` to stop after writing that report.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -419,6 +420,7 @@ struct PipelineArgs {
     branch_selection: BranchSelection,
     branch_height_init: bool,
     branch_report_path: Option<String>,
+    branch_report_only: bool,
     dual_basis_override: Option<BasisOverride>,
 }
 
@@ -481,6 +483,7 @@ fn parse_args() -> PipelineArgs {
         .unwrap_or(BranchSelection::MaxVolume);
     let branch_height_init = parse_flag("--branch-height-init");
     let branch_report_path = parse_arg_value::<String>("--branch-report-jsonl");
+    let branch_report_only = parse_flag("--branch-report-only");
     let dual_basis_override = parse_arg_value::<String>("--dual-basis")
         .map(|path| load_json::<BasisOverride>(&PathBuf::from(path)));
     PipelineArgs {
@@ -501,6 +504,7 @@ fn parse_args() -> PipelineArgs {
         branch_selection,
         branch_height_init,
         branch_report_path,
+        branch_report_only,
         dual_basis_override,
     }
 }
@@ -1289,6 +1293,7 @@ fn stage_volume(
     branch_selection: BranchSelection,
     branch_height_init: bool,
     branch_report_path: Option<&str>,
+    branch_report_only: bool,
     small_curve_cutoff: F64<Pos>,
     t0: &Instant,
 ) -> (f64, F64<Pos>) {
@@ -1300,6 +1305,10 @@ fn stage_volume(
     }
     if branch_report_path.is_some() && branch_candidates == 0 {
         eprintln!("[ERROR] --branch-report-jsonl requires --branch-candidates N with N > 0");
+        std::process::exit(2);
+    }
+    if branch_report_only && branch_report_path.is_none() {
+        eprintln!("[ERROR] --branch-report-only requires --branch-report-jsonl path");
         std::process::exit(2);
     }
     if branch_height_init && branch_candidates == 0 {
@@ -1515,6 +1524,10 @@ fn stage_volume(
                     std::process::exit(2);
                 });
                 eprintln!("[INFO] wrote KKLT branch report {}", report_path.display());
+                if branch_report_only {
+                    eprintln!("[INFO] stopping after branch report as requested");
+                    std::process::exit(0);
+                }
             }
             eprintln!(
                 "[INFO] KKLT branch search selected policy={} rank_by_volume={} init={} phase1_volume={} rel_err={} jacobian_rank={}/{} condition={:?}",
@@ -1866,6 +1879,7 @@ fn run_pipeline(args: PipelineArgs) {
         args.branch_selection,
         args.branch_height_init,
         args.branch_report_path.as_deref(),
+        args.branch_report_only,
         small_curve_cutoff,
         &t0,
     );
