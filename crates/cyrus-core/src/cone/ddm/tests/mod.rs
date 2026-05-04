@@ -207,6 +207,19 @@ fn test_compute_intersection_ray_handles_large_canceling_intermediates() {
 }
 
 #[test]
+fn test_compute_intersection_ray_handles_overflowing_dot_products() {
+    let big = i128::MAX / 2 + 1;
+    let pos = vec![big, big - 1, 1];
+    let neg = vec![-big, -(big - 1), 1];
+    let h = DdmHyperplane::new(vec![2, -2, 0]);
+
+    let ray = compute_intersection_ray(&pos, &neg, &h).unwrap();
+
+    assert_eq!(ray, vec![0, 0, 1]);
+    assert_eq!(h.dot(&ray), 0);
+}
+
+#[test]
 fn test_normalize_ray_preserves_direction() {
     assert_eq!(
         normalize_ray_preserving_direction(vec![2, 4, 6]),
@@ -230,6 +243,22 @@ fn test_sparse_hyperplane_dot_matches_dense_dot() {
 
     assert_eq!(hyperplane.sparse, vec![(1, 3), (3, -5), (5, 2)]);
     assert_eq!(hyperplane.dot(&ray), dot_product(&dense, &ray));
+}
+
+#[test]
+fn test_sparse_hyperplane_dot_sign_falls_back_after_i128_overflow() {
+    let big = i128::MAX / 2 + 1;
+    let hyperplane = DdmHyperplane::new(vec![2, -2]);
+
+    assert_eq!(
+        hyperplane.dot_sign(&[big, big - 1]),
+        std::cmp::Ordering::Greater
+    );
+    assert_eq!(hyperplane.dot_sign(&[big, big]), std::cmp::Ordering::Equal);
+    assert_eq!(
+        hyperplane.dot_sign(&[big - 1, big]),
+        std::cmp::Ordering::Less
+    );
 }
 
 #[test]

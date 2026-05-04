@@ -63,7 +63,7 @@ fn partition_rays(
     let mut negative = Vec::new();
 
     for ray in rays {
-        match h.dot(&ray.coeffs).cmp(&0) {
+        match h.dot_sign(&ray.coeffs) {
             std::cmp::Ordering::Greater => positive.push(ray.clone()),
             std::cmp::Ordering::Equal => {
                 let mut ray = ray.clone();
@@ -188,14 +188,12 @@ pub(super) fn compute_intersection_ray(
     neg: &[i128],
     h: &DdmHyperplane,
 ) -> Option<Vec<i128>> {
-    let dp = h.dot(pos); // > 0
-    let dn = h.dot(neg); // < 0
+    let dp = h.dot_integer(pos); // > 0
+    let dn = h.dot_integer(neg); // < 0
 
     // r = dp * neg - dn * pos. Use arbitrary precision for the intermediate
     // products; McAllister-sized cones can temporarily exceed i128 even when
     // the primitive intersection ray fits back into i128.
-    let dp = Integer::from(dp);
-    let dn = Integer::from(dn);
     let mut result: Vec<Integer> = pos
         .iter()
         .zip(neg.iter())

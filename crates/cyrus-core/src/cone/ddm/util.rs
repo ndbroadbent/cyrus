@@ -116,7 +116,13 @@ pub(super) fn normalize_ray_preserving_direction(mut ray: Vec<i128>) -> Vec<i128
 
 /// Dot product of two integer vectors.
 pub(super) fn dot_product(a: &[i128], b: &[i128]) -> i128 {
-    a.iter().zip(b.iter()).map(|(&x, &y)| x * y).sum()
+    a.iter()
+        .zip(b.iter())
+        .try_fold(0i128, |acc, (&x, &y)| {
+            x.checked_mul(y)
+                .and_then(|product| acc.checked_add(product))
+        })
+        .expect("integer dot product overflowed i128")
 }
 
 #[cfg(test)]

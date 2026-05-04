@@ -130,7 +130,7 @@ fn count_ray_signs(hyperplane: &DdmHyperplane, rays: &[DdmRay]) -> SignCounts {
     let mut positive = 0usize;
     let mut negative = 0usize;
     for ray in rays {
-        match hyperplane.dot(&ray.coeffs).cmp(&0) {
+        match hyperplane.dot_sign(&ray.coeffs) {
             std::cmp::Ordering::Greater => positive += 1,
             std::cmp::Ordering::Equal => {}
             std::cmp::Ordering::Less => negative += 1,
