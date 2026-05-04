@@ -97,7 +97,7 @@ pub use glsm::compute_glsm_linear_relations;
 pub use gv::{
     ToricCurveCandidate, ToricCurveGvInvariant, compute_grading_vector, compute_gv_invariants,
     compute_mori_cone_cap_rays, compute_toric_two_face_curve_gv_invariants,
-    curve_volume_in_divisor_basis, find_pair_decomposition,
+    curve_volume_in_divisor_basis, find_pair_decomposition, map_basis_gv_invariants_to_ambient,
     remove_pair_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
 };
 pub use height_kahler::{

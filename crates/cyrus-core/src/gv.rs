@@ -1298,6 +1298,71 @@ pub fn compute_gv_invariants(
     Ok(out)
 }
 
+/// Map GV invariants from Kähler-basis curve coordinates to ambient divisor coordinates.
+///
+/// `curve_basis_matrix` is the matrix returned by
+/// [`crate::compute_curve_basis_matrix`]. Its rows express each Kähler-basis
+/// curve coordinate as an ambient divisor-intersection row, including the
+/// origin column. The returned curve classes can therefore be compared against
+/// `compute_mori_cone_cap_rays(..., in_basis=false, exclude_origin=false, ...)`
+/// rows.
+pub fn map_basis_gv_invariants_to_ambient(
+    gv_invariants: &[(Vec<i32>, Integer)],
+    curve_basis_matrix: &[Vec<Integer>],
+) -> Result<Vec<(Vec<i64>, Integer)>> {
+    if curve_basis_matrix.is_empty() {
+        return Err(Error::InvalidInput("curve basis matrix is empty".into()));
+    }
+    let ambient_dim = curve_basis_matrix[0].len();
+    if ambient_dim == 0 {
+        return Err(Error::InvalidInput(
+            "curve basis matrix has empty ambient rows".into(),
+        ));
+    }
+    if curve_basis_matrix
+        .iter()
+        .any(|row| row.len() != ambient_dim)
+    {
+        return Err(Error::InvalidInput(
+            "curve basis matrix rows have inconsistent length".into(),
+        ));
+    }
+
+    let basis_dim = curve_basis_matrix.len();
+    let mut out = Vec::with_capacity(gv_invariants.len());
+    for (curve, gv) in gv_invariants {
+        if curve.len() != basis_dim {
+            return Err(Error::InvalidInput(format!(
+                "GV curve dimension {} does not match curve basis dimension {}",
+                curve.len(),
+                basis_dim
+            )));
+        }
+
+        let mut ambient = vec![Integer::from(0); ambient_dim];
+        for (&coeff, basis_row) in curve.iter().zip(curve_basis_matrix.iter()) {
+            if coeff == 0 {
+                continue;
+            }
+            let coeff = Integer::from(coeff);
+            for (entry, basis_coeff) in ambient.iter_mut().zip(basis_row.iter()) {
+                *entry += &coeff * basis_coeff;
+            }
+        }
+
+        let ambient = ambient
+            .iter()
+            .map(|entry| {
+                i64::try_from(entry).map_err(|_| {
+                    Error::InvalidInput("ambient GV curve coordinate does not fit in i64".into())
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        out.push((ambient, gv.clone()));
+    }
+    Ok(out)
+}
+
 fn dump_gv_inputs(
     path: &Path,
     generators: &[Vec<i64>],
@@ -1757,10 +1822,33 @@ mod tests {
 
     use super::{
         ToricCurveCandidate, compute_grading_vector, curve_volume_in_divisor_basis,
-        find_pair_decomposition, load_grading_cache, remove_pair_decomposable_curve_candidates,
-        subcutoff_toric_curve_candidates, write_grading_cache,
+        find_pair_decomposition, load_grading_cache, map_basis_gv_invariants_to_ambient,
+        remove_pair_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
+        write_grading_cache,
     };
     use crate::{f64_finite, f64_pos};
+    use malachite::Integer;
+
+    #[test]
+    fn basis_gv_invariants_map_to_ambient_curve_classes() {
+        let curve_basis = vec![
+            vec![Integer::from(0), Integer::from(1), Integer::from(-2)],
+            vec![Integer::from(0), Integer::from(3), Integer::from(4)],
+        ];
+        let invariants = vec![(vec![2, -1], Integer::from(7))];
+
+        let mapped = map_basis_gv_invariants_to_ambient(&invariants, &curve_basis).unwrap();
+
+        assert_eq!(mapped, vec![(vec![0, -1, -8], Integer::from(7))]);
+    }
+
+    #[test]
+    fn basis_gv_invariant_mapping_rejects_dimension_mismatch() {
+        let curve_basis = vec![vec![Integer::from(1), Integer::from(0)]];
+        let invariants = vec![(vec![1, 2], Integer::from(1))];
+
+        assert!(map_basis_gv_invariants_to_ambient(&invariants, &curve_basis).is_err());
+    }
 
     #[test]
     fn grading_cache_validates_candidate_against_rays() {

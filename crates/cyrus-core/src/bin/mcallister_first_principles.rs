@@ -15,6 +15,8 @@
 //! - `--branch-report-only` to stop after writing that report.
 //! - `--branch-report-skip-gv-coverage` to omit the expensive per-branch
 //!   small-curve/GV coverage enrichment.
+//! - `--primal-gv-max-deg N` or `--primal-gv-min-points N` to compute general
+//!   primal GV invariants if toric formulas do not cover selected small curves.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -35,7 +37,7 @@ use cyrus_core::{
     compute_regular_triangulation, compute_toric_two_face_curve_gv_invariants,
     compute_w0_from_terms, effective_prime_divisors_from_curve_basis,
     generate_scaled_kklt_branch_initializations, heights_to_kahler, intersection_in_basis,
-    is_unimodular, remove_pair_decomposable_curve_candidates,
+    is_unimodular, map_basis_gv_invariants_to_ambient, remove_pair_decomposable_curve_candidates,
     scale_mixed_basis_kklt_branch_initialization_to_target, solve_mixed_basis_path_following,
     solve_mixed_basis_path_following_branch_candidates, solve_racetrack,
     subcutoff_toric_curve_candidates,
@@ -424,6 +426,8 @@ struct PipelineArgs {
     branch_report_path: Option<String>,
     branch_report_only: bool,
     branch_report_skip_gv_coverage: bool,
+    primal_gv_max_deg: Option<u32>,
+    primal_gv_min_points: Option<u32>,
     dual_basis_override: Option<BasisOverride>,
 }
 
@@ -488,6 +492,12 @@ fn parse_args() -> PipelineArgs {
     let branch_report_path = parse_arg_value::<String>("--branch-report-jsonl");
     let branch_report_only = parse_flag("--branch-report-only");
     let branch_report_skip_gv_coverage = parse_flag("--branch-report-skip-gv-coverage");
+    let primal_gv_max_deg = parse_arg_value::<u32>("--primal-gv-max-deg");
+    let primal_gv_min_points = if primal_gv_max_deg.is_some() {
+        None
+    } else {
+        parse_arg_value::<u32>("--primal-gv-min-points")
+    };
     let dual_basis_override = parse_arg_value::<String>("--dual-basis")
         .map(|path| load_json::<BasisOverride>(&PathBuf::from(path)));
     PipelineArgs {
@@ -510,6 +520,8 @@ fn parse_args() -> PipelineArgs {
         branch_report_path,
         branch_report_only,
         branch_report_skip_gv_coverage,
+        primal_gv_max_deg,
+        primal_gv_min_points,
         dual_basis_override,
     }
 }
@@ -1140,6 +1152,75 @@ fn compute_branch_gv_coverages(
         .collect()
 }
 
+fn compute_primal_general_gv_by_ambient_class(
+    geom: &PrimalGeom,
+    intersection: &PrimalIntersection,
+    min_points: Option<u32>,
+    max_deg: Option<u32>,
+) -> Result<HashMap<Vec<i64>, malachite::Integer>, String> {
+    if min_points.is_none() && max_deg.is_none() {
+        return Err(
+            "primal general GV fallback requires --primal-gv-min-points or --primal-gv-max-deg"
+                .into(),
+        );
+    }
+
+    let rays = compute_mori_cone_cap_rays(
+        &geom.triangulation,
+        &geom.triangulation_points,
+        &geom.polytope,
+        true,
+        false,
+        Some(&intersection.basis),
+    )
+    .map_err(|e| format!("failed to compute primal basis Mori-cap rays: {e}"))?;
+    let grading = compute_grading_vector(&rays)
+        .ok_or_else(|| "failed to compute primal GV grading vector".to_string())?;
+    let curve_basis = compute_curve_basis_matrix(&intersection.linrels, &intersection.basis)
+        .map_err(|e| format!("failed to compute primal curve basis matrix: {e}"))?;
+    let q_matrix = curve_basis
+        .iter()
+        .map(|row| {
+            row.iter()
+                .skip(1)
+                .map(|value| {
+                    i64::try_from(value)
+                        .map_err(|_| "primal q-matrix entry does not fit in i64".to_string())
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let general_gvs = cyrus_core::compute_gv_invariants(
+        &rays,
+        &grading,
+        &q_matrix,
+        &intersection.kappa_basis,
+        min_points,
+        max_deg,
+    )
+    .map_err(|e| format!("failed to compute primal general GV invariants: {e}"))?;
+    let ambient_gvs = map_basis_gv_invariants_to_ambient(&general_gvs, &curve_basis)
+        .map_err(|e| format!("failed to map primal general GV invariants to ambient: {e}"))?;
+
+    let mut out = HashMap::with_capacity(ambient_gvs.len());
+    for (class, gv) in ambient_gvs {
+        match out.entry(class) {
+            std::collections::hash_map::Entry::Occupied(existing) => {
+                if existing.get() != &gv {
+                    return Err(format!(
+                        "conflicting general GV values for duplicate ambient curve: {} vs {gv}",
+                        existing.get()
+                    ));
+                }
+            }
+            std::collections::hash_map::Entry::Vacant(slot) => {
+                slot.insert(gv);
+            }
+        }
+    }
+    Ok(out)
+}
+
 fn write_branch_report_jsonl(
     path: &PathBuf,
     ctx: &BranchReportContext,
@@ -1300,6 +1381,8 @@ fn stage_volume(
     branch_report_path: Option<&str>,
     branch_report_only: bool,
     branch_report_skip_gv_coverage: bool,
+    primal_gv_min_points: Option<u32>,
+    primal_gv_max_deg: Option<u32>,
     small_curve_cutoff: F64<Pos>,
     t0: &Instant,
 ) -> (f64, F64<Pos>) {
@@ -1645,7 +1728,7 @@ fn stage_volume(
             eprintln!("[ERROR] failed to compute primal toric curve GV values: {e}");
             std::process::exit(2);
         });
-        let gv_by_class: HashMap<Vec<i64>, malachite::Integer> = toric_gvs
+        let mut gv_by_class: HashMap<Vec<i64>, malachite::Integer> = toric_gvs
             .into_iter()
             .map(|item| (item.class, item.gv))
             .collect();
@@ -1655,6 +1738,59 @@ fn stage_volume(
             match gv_by_class.get(&curve.class) {
                 Some(gv) => small_curve_gvs.push((curve.class.clone(), gv.clone())),
                 None => missing_gv_classes.push(curve.class.clone()),
+            }
+        }
+        if !missing_gv_classes.is_empty()
+            && (primal_gv_min_points.is_some() || primal_gv_max_deg.is_some())
+        {
+            eprintln!(
+                "[INFO] toric formulas missed {} selected primal small curves; computing primal general GV fallback with min_points={:?} max_deg={:?}",
+                missing_gv_classes.len(),
+                primal_gv_min_points,
+                primal_gv_max_deg
+            );
+            let general_gvs = compute_primal_general_gv_by_ambient_class(
+                geom,
+                intersection,
+                primal_gv_min_points,
+                primal_gv_max_deg,
+            )
+            .unwrap_or_else(|e| {
+                eprintln!("[ERROR] failed to compute primal general GV fallback: {e}");
+                std::process::exit(2);
+            });
+            let mut newly_covered = 0usize;
+            for (class, gv) in general_gvs {
+                match gv_by_class.entry(class) {
+                    std::collections::hash_map::Entry::Occupied(existing) => {
+                        if existing.get() != &gv {
+                            eprintln!(
+                                "[ERROR] toric/general GV conflict for selected primal curve: {} vs {gv}",
+                                existing.get()
+                            );
+                            std::process::exit(2);
+                        }
+                    }
+                    std::collections::hash_map::Entry::Vacant(slot) => {
+                        if missing_gv_classes
+                            .iter()
+                            .any(|missing| missing == slot.key())
+                        {
+                            newly_covered += 1;
+                        }
+                        slot.insert(gv);
+                    }
+                }
+            }
+            eprintln!("[INFO] primal general GV fallback covered {newly_covered} missing curves");
+
+            small_curve_gvs.clear();
+            missing_gv_classes.clear();
+            for curve in &small_curves {
+                match gv_by_class.get(&curve.class) {
+                    Some(gv) => small_curve_gvs.push((curve.class.clone(), gv.clone())),
+                    None => missing_gv_classes.push(curve.class.clone()),
+                }
             }
         }
         if !missing_gv_classes.is_empty() {
@@ -1914,6 +2050,8 @@ fn run_pipeline(args: PipelineArgs) {
         args.branch_report_path.as_deref(),
         args.branch_report_only,
         args.branch_report_skip_gv_coverage,
+        args.primal_gv_min_points,
+        args.primal_gv_max_deg,
         small_curve_cutoff,
         &t0,
     );
