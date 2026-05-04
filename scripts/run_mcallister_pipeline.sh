@@ -10,10 +10,9 @@ if ! command -v gtimeout >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ -z "${CYRUS_PYTHON:-}" ]]; then
-  echo "CYRUS_PYTHON is not set (needed for OR-Tools lattice points)." >&2
-  exit 1
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/resolve_cyrus_python.sh"
+resolve_cyrus_python
 
 export CYRUS_CACHE_DIR="$CACHE_DIR"
 export CYRUS_LATTICE_MAX_TIME_SEC="${CYRUS_LATTICE_MAX_TIME_SEC:-60}"

@@ -9,6 +9,10 @@ if ! command -v gtimeout >/dev/null 2>&1; then
   exit 1
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/resolve_cyrus_python.sh"
+resolve_cyrus_python
+
 if pgrep -f 'mcallister_e2e|mcallister_racetrack|mcallister_gv' >/dev/null 2>&1; then
   echo "Another McAllister job is already running. Refusing to start in parallel." >&2
   exit 1
