@@ -314,9 +314,11 @@ pub fn find_pair_decomposition(
 
 /// Remove curve candidates that are sums of two other selected candidates.
 ///
-/// This is the Hilbert-basis pruning step needed by the McAllister small-curve
-/// checkpoint: the paper first selects small toric curves, then removes curves
-/// that can be written as sums of others before computing GV invariants.
+/// The McAllister paper removes small toric curves that can be written as sums
+/// of others before computing GV invariants. This helper implements the
+/// currently verified pair-sum part of that pruning and matches the published
+/// 4-214-647 small-curve checkpoint. It is not a full Hilbert-basis or
+/// arbitrary-length semigroup reduction.
 pub fn remove_pair_decomposable_curve_candidates(
     candidates: &[ToricCurveCandidate],
 ) -> Result<Vec<ToricCurveCandidate>> {
@@ -2027,6 +2029,34 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn pair_pruning_does_not_claim_full_semigroup_reduction() {
+        let candidates = vec![
+            ToricCurveCandidate {
+                class: vec![1, 0, 0],
+                volume: f64_pos!(0.2),
+            },
+            ToricCurveCandidate {
+                class: vec![0, 1, 0],
+                volume: f64_pos!(0.3),
+            },
+            ToricCurveCandidate {
+                class: vec![0, 0, 1],
+                volume: f64_pos!(0.4),
+            },
+            ToricCurveCandidate {
+                class: vec![1, 1, 1],
+                volume: f64_pos!(0.9),
+            },
+        ];
+
+        let decomposition = find_pair_decomposition(&candidates[3], &candidates).unwrap();
+        assert_eq!(decomposition, None);
+
+        let filtered = remove_pair_decomposable_curve_candidates(&candidates).unwrap();
+        assert_eq!(filtered, candidates);
     }
 
     #[test]

@@ -1998,7 +1998,7 @@ fn stage_volume(
                 std::process::exit(2);
             });
         eprintln!(
-            "[INFO] primal small toric curves: ambient_rays={} subcutoff={} filtered_hilbert_candidates={} cutoff={}",
+            "[INFO] primal small toric curves: ambient_rays={} subcutoff={} pair_pruned={} cutoff={}",
             ambient_rays.len(),
             small_curve_candidates.len(),
             small_curves.len(),

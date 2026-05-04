@@ -290,7 +290,7 @@ fn stage5_mcallister_small_toric_curves_match_checkpoint() {
     let selected =
         subcutoff_toric_curve_candidates(&rays, &basis, &kahler, cutoff).expect("curve selection");
     let filtered =
-        remove_pair_decomposable_curve_candidates(&selected).expect("Hilbert-basis filter");
+        remove_pair_decomposable_curve_candidates(&selected).expect("pair-decomposable pruning");
 
     let mut actual: Vec<Vec<i64>> = filtered.into_iter().map(|curve| curve.class).collect();
     actual.sort();
@@ -521,7 +521,7 @@ fn stage5_gv_computation_roadmap() {
             "DDM quotient-rank checks run before full dense modular checks when a basis context exists, with their own modular true certificate and exact integer false path",
             "DDM preserves ray orientation when normalizing primitive integer rays; sign-flipping was a correctness bug and is now unit-tested",
             "compute_gv_invariants wraps cygv::compute_gv_rat_threefold",
-            "McAllister 4-214-647 small toric curve classes are computed from Cyrus Mori-cap rays and pair-decomposable pruning",
+            "McAllister 4-214-647 small toric curve classes are computed from Cyrus Mori-cap rays and verified pair-decomposable pruning",
             "McAllister 4-214-647 small toric curve GV values are computed from toric two-face/origin-circuit formulas and match small_curves_gv.dat as a checkpoint",
             "CYTools-style height projection from heights plus curve-basis effective-cone rows reproduces McAllister 4-214-647 kahler_param.dat exactly as an uncorrected-branch checkpoint",
             "The no-replay runner reaches GV-corrected KKLT volume and V0 using the height-projected branch initializer, computed B-field gamma, and computed toric GV values",
@@ -538,6 +538,7 @@ fn stage5_gv_computation_roadmap() {
         ],
         remaining_gaps: vec![
             "Generated branch candidates without the height_projected initializer still did not find the 4-214-647 paper branch in a deterministic 48-candidate diagnostic: the lowest sampled phase-1 volume was about 20611 rather than 17901, and even coverage-aware selection still had at least 412 small curves missing toric GV coverage",
+            "The current small-curve pruning only removes pair-decomposable curves; a full faithful implementation of the paper's sums-of-others/Hilbert-basis reduction still needs to be ported or derived from Normaliz/CYTools behavior",
             "The explicit general primal GV fallback still reaches full 214-dimensional Mori-cone dualization for any max_deg high enough to cover the selected missing curves, or for min_points-driven runs; bounded DDM diagnostics stop loudly at configured limits",
             "A PPL/cdd diagnostic on the dumped 561658-ray, 214-dimensional V-representation also exceeded a 300-second cap without producing an H-representation",
             "Finish a post-orientation-fix validation run of adjacency-filtered DDM on the full 214-dimensional McAllister Mori cone",
