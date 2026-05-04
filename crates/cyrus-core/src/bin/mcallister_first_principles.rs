@@ -722,7 +722,7 @@ fn transform_kahler_to_computed_basis(
 }
 
 fn compute_b_field_gamma_for_o7_divisors(
-    glsm: &[Vec<malachite::Integer>],
+    ambient_dim: usize,
     kklt_basis: &[usize],
     c_i: &[I64<Pos>],
 ) -> Vec<I64<Finite>> {
@@ -730,41 +730,21 @@ fn compute_b_field_gamma_for_o7_divisors(
         eprintln!("[ERROR] KKLT basis and c_i length mismatch when computing B-field gamma");
         std::process::exit(2);
     }
-    if glsm.is_empty() {
-        eprintln!("[ERROR] GLSM matrix is empty when computing B-field gamma");
-        std::process::exit(2);
-    }
-    let ambient_dim = glsm[0].len();
-    if glsm.iter().any(|row| row.len() != ambient_dim) {
-        eprintln!("[ERROR] GLSM matrix is ragged when computing B-field gamma");
-        std::process::exit(2);
-    }
 
-    let mut gamma = vec![malachite::Integer::from(0); glsm.len()];
+    let mut gamma = vec![0_i64; ambient_dim];
     for (&divisor_idx, ci) in kklt_basis.iter().zip(c_i.iter()) {
         if divisor_idx >= ambient_dim {
             eprintln!(
-                "[ERROR] KKLT divisor index {divisor_idx} exceeds GLSM ambient dimension {ambient_dim}"
+                "[ERROR] KKLT divisor index {divisor_idx} exceeds ambient dimension {ambient_dim}"
             );
             std::process::exit(2);
         }
         if ci.get() == 6 {
-            for (entry, row) in gamma.iter_mut().zip(glsm.iter()) {
-                *entry += &row[divisor_idx];
-            }
+            gamma[divisor_idx] += 1;
         }
     }
 
-    gamma
-        .into_iter()
-        .map(|value| {
-            let value = i64::try_from(&value).unwrap_or_else(|_| {
-                eprintln!("[ERROR] B-field gamma coordinate does not fit in i64");
-                std::process::exit(2);
-            });
-            I64::<Finite>::new(value)
-        })
-        .collect()
+    gamma.into_iter().map(I64::<Finite>::new).collect()
 }
 
 fn transform_i64_coordinates_transpose(
@@ -1834,7 +1814,8 @@ fn stage_volume(
             eprintln!("[ERROR] failed to compute KKLT divisor chi: {e}");
             std::process::exit(2);
         });
-        let gamma = compute_b_field_gamma_for_o7_divisors(&intersection.glsm, &kklt_basis, &c_i);
+        let gamma =
+            compute_b_field_gamma_for_o7_divisors(intersection.kappa_full.dim(), &kklt_basis, &c_i);
         let gamma_odd_count = gamma
             .iter()
             .filter(|value| value.get().rem_euclid(2) != 0)

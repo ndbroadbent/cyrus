@@ -385,12 +385,44 @@ pub fn compute_gv_target_correction_for_divisors(
         .collect()
 }
 
+fn ambient_curve_b_field_parity(
+    curve: &[i64],
+    basis: &[usize],
+    gamma: Option<&[I64<Finite>]>,
+) -> Option<i128> {
+    let Some(gamma) = gamma else {
+        return Some(0);
+    };
+    if gamma.len() == basis.len() {
+        return Some(
+            basis
+                .iter()
+                .zip(gamma.iter())
+                .map(|(&idx, gi)| i128::from(curve[idx]) * i128::from(gi.get()))
+                .sum::<i128>(),
+        );
+    }
+    if gamma.len() == curve.len() {
+        return Some(
+            curve
+                .iter()
+                .zip(gamma.iter())
+                .map(|(&qi, gi)| i128::from(qi) * i128::from(gi.get()))
+                .sum::<i128>(),
+        );
+    }
+    None
+}
+
 /// Compute divisor GV corrections from ambient-coordinate curve classes.
 ///
 /// This is useful for validation data such as McAllister's `small_curves.dat`,
 /// where curve classes are already expressed by their intersections with all
 /// ambient divisors. The Kähler parameters `t` are still coordinates in
-/// `basis`, and the output is ordered by `kklt_basis`.
+/// `basis`, and the output is ordered by `kklt_basis`. If `gamma` has length
+/// `basis.len()`, it is interpreted in Kähler-basis coordinates. If `gamma`
+/// has ambient curve dimension, it is contracted directly with each ambient
+/// curve class, matching `B_2 = 1/2 Σ[D_O7]`.
 #[must_use]
 pub fn compute_gv_target_correction_for_ambient_curves(
     gv_invariants: &[(Vec<i64>, Integer)],
@@ -400,11 +432,7 @@ pub fn compute_gv_target_correction_for_ambient_curves(
     gamma: Option<&[I64<Finite>]>,
 ) -> Option<Vec<F64<Finite>>> {
     let dim = t.len();
-    if dim == 0
-        || basis.len() != dim
-        || kklt_basis.is_empty()
-        || gamma.is_some_and(|g| g.len() != dim)
-    {
+    if dim == 0 || basis.len() != dim || kklt_basis.is_empty() {
         return None;
     }
 
@@ -412,6 +440,7 @@ pub fn compute_gv_target_correction_for_ambient_curves(
     if ambient_dim == 0
         || basis.iter().any(|&idx| idx >= ambient_dim)
         || kklt_basis.iter().any(|&idx| idx >= ambient_dim)
+        || gamma.is_some_and(|g| g.len() != dim && g.len() != ambient_dim)
     {
         return None;
     }
@@ -435,13 +464,7 @@ pub fn compute_gv_target_correction_for_ambient_curves(
             .map(|(&idx, ti)| curve[idx] as f64 * ti.get())
             .sum::<f64>();
 
-        let parity = gamma.map_or(0_i128, |g| {
-            basis
-                .iter()
-                .zip(g.iter())
-                .map(|(&idx, gi)| i128::from(curve[idx]) * i128::from(gi.get()))
-                .sum::<i128>()
-        });
+        let parity = ambient_curve_b_field_parity(curve, basis, gamma)?;
         let Some(dilog) = gv_dilog_from_curve_volume(q_dot_t, parity) else {
             if debug {
                 let sign = if parity.rem_euclid(2) == 0 { 1.0 } else { -1.0 };
@@ -476,8 +499,10 @@ pub fn compute_gv_target_correction_for_ambient_curves(
 /// Compute the GV instanton contribution to the corrected string-frame volume:
 /// `1/(2(2π)^3) Σ_q N_q (Li_3(arg) + 2π(q·t)Li_2(arg))`.
 ///
-/// Curve classes are ambient divisor intersections, while `t` and `gamma` are
-/// expressed in `basis` coordinates.
+/// Curve classes are ambient divisor intersections, while `t` is expressed in
+/// `basis` coordinates. If `gamma` has length `basis.len()`, it is interpreted
+/// in Kähler-basis coordinates. If `gamma` has ambient curve dimension, it is
+/// contracted directly with each ambient curve class.
 #[must_use]
 pub fn compute_gv_volume_correction_for_ambient_curves(
     gv_invariants: &[(Vec<i64>, Integer)],
@@ -486,12 +511,15 @@ pub fn compute_gv_volume_correction_for_ambient_curves(
     gamma: Option<&[I64<Finite>]>,
 ) -> Option<F64<Finite>> {
     let dim = t.len();
-    if dim == 0 || basis.len() != dim || gamma.is_some_and(|g| g.len() != dim) {
+    if dim == 0 || basis.len() != dim {
         return None;
     }
 
     let ambient_dim = gv_invariants.first()?.0.len();
-    if ambient_dim == 0 || basis.iter().any(|&idx| idx >= ambient_dim) {
+    if ambient_dim == 0
+        || basis.iter().any(|&idx| idx >= ambient_dim)
+        || gamma.is_some_and(|g| g.len() != dim && g.len() != ambient_dim)
+    {
         return None;
     }
 
@@ -506,13 +534,7 @@ pub fn compute_gv_volume_correction_for_ambient_curves(
             .zip(t.iter())
             .map(|(&idx, ti)| curve[idx] as f64 * ti.get())
             .sum::<f64>();
-        let parity = gamma.map_or(0_i128, |g| {
-            basis
-                .iter()
-                .zip(g.iter())
-                .map(|(&idx, gi)| i128::from(curve[idx]) * i128::from(gi.get()))
-                .sum::<i128>()
-        });
+        let parity = ambient_curve_b_field_parity(curve, basis, gamma)?;
         let arg = gv_polylog_argument(q_dot_t, parity)?;
         if arg.abs() < 1e-100 {
             continue;
@@ -1906,6 +1928,27 @@ mod tests {
     }
 
     #[test]
+    fn test_ambient_curve_gv_target_correction_uses_ambient_gamma() {
+        let t = vec![finite_f64(2.0_f64.ln() / (2.0 * PI))];
+        let basis = vec![0];
+        let kklt_basis = vec![0];
+        let invariants = vec![(vec![1, 1], Integer::from(1))];
+        let ambient_gamma = vec![finite_i64(0), finite_i64(1)];
+
+        let correction = compute_gv_target_correction_for_ambient_curves(
+            &invariants,
+            &basis,
+            &kklt_basis,
+            &t,
+            Some(&ambient_gamma),
+        )
+        .unwrap();
+
+        let expected = real_dilog_real_axis(-0.5).unwrap() / (4.0 * PI * PI);
+        assert!((correction[0].get() - expected).abs() < 1e-14);
+    }
+
+    #[test]
     fn test_compute_gv_volume_correction_for_ambient_curves() {
         let t = vec![finite_f64(2.0_f64.ln() / (2.0 * PI))];
         let basis = vec![0];
@@ -1917,6 +1960,27 @@ mod tests {
         let li2_half = PI * PI / 12.0 - 0.5 * 2.0_f64.ln().powi(2);
         let li3_half = 0.537_213_193_608_040_2;
         let expected = (li3_half + 2.0_f64.ln() * li2_half) / (2.0 * (2.0 * PI).powi(3));
+        assert!((correction.get() - expected).abs() < 1e-14);
+    }
+
+    #[test]
+    fn test_ambient_curve_gv_volume_correction_uses_ambient_gamma() {
+        let t = vec![finite_f64(2.0_f64.ln() / (2.0 * PI))];
+        let basis = vec![0];
+        let invariants = vec![(vec![1, 1], Integer::from(1))];
+        let ambient_gamma = vec![finite_i64(0), finite_i64(1)];
+
+        let correction = compute_gv_volume_correction_for_ambient_curves(
+            &invariants,
+            &basis,
+            &t,
+            Some(&ambient_gamma),
+        )
+        .unwrap();
+
+        let li2_neg_half = real_dilog_real_axis(-0.5).unwrap();
+        let li3_neg_half = real_trilog_real_axis(-0.5).unwrap();
+        let expected = (li3_neg_half + 2.0_f64.ln() * li2_neg_half) / (2.0 * (2.0 * PI).powi(3));
         assert!((correction.get() - expected).abs() < 1e-14);
     }
 
