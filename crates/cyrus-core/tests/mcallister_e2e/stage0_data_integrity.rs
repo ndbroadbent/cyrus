@@ -267,6 +267,18 @@ fn dat_tokens(source: &str) -> impl Iterator<Item = &str> {
         })
 }
 
+fn source_region_before_fn<'a>(source: &'a str, start_fn: &str, end_fn: &str) -> &'a str {
+    let start_marker = format!("fn {start_fn}(");
+    let end_marker = format!("\nfn {end_fn}(");
+    let start = source
+        .find(&start_marker)
+        .unwrap_or_else(|| panic!("missing function {start_fn}"));
+    let end = source[start..]
+        .find(&end_marker)
+        .unwrap_or_else(|| panic!("missing function {end_fn} after {start_fn}"));
+    &source[start..start + end]
+}
+
 #[test]
 fn stage0_artifact_policy_is_explicit_and_complete() {
     use std::collections::{BTreeMap, BTreeSet};
@@ -348,22 +360,48 @@ fn stage0_first_principles_runner_does_not_silently_replay_downstream_outputs() 
     let runner_path = manifest_dir.join("src/bin/mcallister_first_principles.rs");
     let runner = std::fs::read_to_string(&runner_path)
         .unwrap_or_else(|e| panic!("Failed to read {}: {e}", runner_path.display()));
-    let runner_tokens = dat_tokens(&runner).collect::<std::collections::BTreeSet<_>>();
+    let stage_volume = source_region_before_fn(&runner, "stage_volume", "compare_against_dat");
+    let stage_volume_tokens = dat_tokens(stage_volume).collect::<std::collections::BTreeSet<_>>();
 
     for forbidden in ["kahler_param.dat", "cy_vol.dat", "corrected_cy_vol.dat"] {
         assert!(
-            !runner_tokens.contains(forbidden),
-            "{forbidden} must not be read by the first-principles runner"
+            !stage_volume_tokens.contains(forbidden),
+            "{forbidden} must not be read by the first-principles volume computation"
         );
     }
 
     assert!(
-        runner.contains("corrected_kahler_param.dat"),
+        stage_volume.contains("corrected_kahler_param.dat"),
         "runner should name the currently unresolved corrected Kahler checkpoint"
     );
     assert!(
-        runner.contains("--allow-downstream-kahler"),
+        stage_volume.contains("--allow-downstream-kahler"),
         "corrected_kahler_param.dat replay must require an explicit validation-only flag"
+    );
+    assert!(
+        stage_volume.contains("if allow_downstream_kahler"),
+        "corrected_kahler_param.dat replay must be isolated behind allow_downstream_kahler"
+    );
+
+    let compare = source_region_before_fn(&runner, "compare_against_dat", "stage_vacuum");
+    let compare_tokens = dat_tokens(compare).collect::<std::collections::BTreeSet<_>>();
+    assert!(
+        compare_tokens.contains("corrected_cy_vol.dat"),
+        "corrected_cy_vol.dat should only be used as a validation comparison checkpoint"
+    );
+    assert!(
+        !compare_tokens.contains("corrected_kahler_param.dat"),
+        "validation comparison must not load corrected Kähler parameters"
+    );
+
+    let stage_vacuum = source_region_before_fn(&runner, "stage_vacuum", "run_pipeline");
+    assert!(
+        !stage_volume.contains("compare_against_dat("),
+        "volume computation must not invoke downstream checkpoint comparison"
+    );
+    assert!(
+        stage_vacuum.contains("compare_against_dat("),
+        "downstream checkpoint comparison belongs after V_string has been computed"
     );
 
     for gv_artifact in [
@@ -441,15 +479,27 @@ fn stage0_mcallister_binaries_do_not_use_validation_replay_artifacts() {
             if policy.usage != ArtifactUse::ValidationReplayOnly {
                 continue;
             }
-            assert_eq!(
-                (rel_path.as_str(), *token),
-                allowed_replay,
-                "{rel_path} reads validation-only artifact {token} without an explicit exception"
-            );
-            assert!(
-                source.contains("--allow-downstream-kahler"),
-                "{rel_path} must gate {token} behind --allow-downstream-kahler"
-            );
+            match (rel_path.as_str(), *token) {
+                path_token if path_token == allowed_replay => {
+                    assert!(
+                        source.contains("--allow-downstream-kahler"),
+                        "{rel_path} must gate {token} behind --allow-downstream-kahler"
+                    );
+                }
+                ("src/bin/mcallister_first_principles.rs", "corrected_cy_vol.dat") => {
+                    let compare =
+                        source_region_before_fn(&source, "compare_against_dat", "stage_vacuum");
+                    assert!(
+                        dat_tokens(compare).any(|compare_token| compare_token == *token),
+                        "{rel_path} may only read {token} inside compare_against_dat"
+                    );
+                }
+                _ => {
+                    panic!(
+                        "{rel_path} reads validation-only artifact {token} without an explicit exception"
+                    );
+                }
+            }
         }
     }
 }
