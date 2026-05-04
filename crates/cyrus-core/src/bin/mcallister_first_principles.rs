@@ -540,6 +540,15 @@ struct OriginCircuitWitnessSample {
     first_facet_size: usize,
     second_facet_size: usize,
     sparse_relation: Vec<(usize, i64)>,
+    relation_points: Vec<OriginCircuitRelationPointSample>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct OriginCircuitRelationPointSample {
+    point_index: usize,
+    coefficient: i64,
+    coordinates: Vec<i64>,
+    face_dimension: Option<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2217,6 +2226,16 @@ fn origin_circuit_witness_sample(
         first_facet_size: witness.first_facet.len(),
         second_facet_size: witness.second_facet.len(),
         sparse_relation: witness.sparse_relation.clone(),
+        relation_points: witness
+            .relation_points
+            .iter()
+            .map(|point| OriginCircuitRelationPointSample {
+                point_index: point.point_index,
+                coefficient: point.coefficient,
+                coordinates: point.coordinates.clone(),
+                face_dimension: point.face_dimension,
+            })
+            .collect(),
     }
 }
 

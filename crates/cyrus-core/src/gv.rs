@@ -282,6 +282,19 @@ pub struct ToricCurveGvInvariant {
     pub gv: Integer,
 }
 
+/// A nonzero point in an origin-circuit affine relation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OriginCircuitRelationPoint {
+    /// Index of the triangulation point.
+    pub point_index: usize,
+    /// Coefficient of the point in the affine relation.
+    pub coefficient: i64,
+    /// Lattice coordinates of the point.
+    pub coordinates: Vec<i64>,
+    /// Dimension of the smallest primal polytope face containing the point.
+    pub face_dimension: Option<usize>,
+}
+
 /// A triangulation witness for an origin-circuit Mori-cap curve class.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OriginCircuitCurveWitness {
@@ -299,6 +312,8 @@ pub struct OriginCircuitCurveWitness {
     pub second_facet: Vec<usize>,
     /// Sparse affine relation before normalization.
     pub sparse_relation: Vec<(usize, i64)>,
+    /// Nonzero relation points with coordinates and face dimensions.
+    pub relation_points: Vec<OriginCircuitRelationPoint>,
 }
 
 /// An origin-circuit Mori-cap curve class, with enough shape data to diagnose
@@ -635,9 +650,13 @@ pub fn compute_toric_two_face_curve_gv_invariants(
         }
     }
 
-    for witness in
-        compute_origin_circuit_curve_witnesses(&pts_ext, &facets, &simp_2d_all, origin_idx)
-    {
+    for witness in compute_origin_circuit_curve_witnesses(
+        &pts_ext,
+        &facets,
+        &simp_2d_all,
+        origin_idx,
+        Some(&point_face_dims),
+    ) {
         if let Some(gv) = resolved_conifold_origin_circuit_gv(&witness.class, origin_idx) {
             insert_toric_gv(&mut gv_by_class, witness.class, gv)?;
         }
@@ -676,6 +695,7 @@ pub fn compute_origin_circuit_curve_diagnostics(
         })
         .collect();
     let (facets, twofaces) = compute_faces_4d(points, polytope)?;
+    let point_face_dims = classify_primal_point_face_dimensions(points, polytope)?;
     let origin_idx = points
         .iter()
         .position(|p| p.coords().iter().all(|&x| x == 0))
@@ -707,9 +727,13 @@ pub fn compute_origin_circuit_curve_diagnostics(
 
     let mut witnesses_by_class: BTreeMap<Vec<i64>, Vec<OriginCircuitCurveWitness>> =
         BTreeMap::new();
-    for witness in
-        compute_origin_circuit_curve_witnesses(&pts_ext, &facets, &simp_2d_all, origin_idx)
-    {
+    for witness in compute_origin_circuit_curve_witnesses(
+        &pts_ext,
+        &facets,
+        &simp_2d_all,
+        origin_idx,
+        Some(&point_face_dims),
+    ) {
         witnesses_by_class
             .entry(witness.class.clone())
             .or_default()
@@ -844,6 +868,7 @@ fn compute_origin_circuit_curve_witnesses(
     facets: &[Vec<usize>],
     simp_2d_all: &HashSet<Vec<usize>>,
     origin_idx: usize,
+    point_face_dims: Option<&[usize]>,
 ) -> Vec<OriginCircuitCurveWitness> {
     let mut out = Vec::new();
     for s2d in simp_2d_all {
@@ -894,12 +919,43 @@ fn compute_origin_circuit_curve_witnesses(
                     shared_two_simplex: s2d.clone(),
                     first_facet: f1.clone(),
                     second_facet: f2.clone(),
+                    relation_points: origin_circuit_relation_points(
+                        pts_ext,
+                        point_face_dims,
+                        &full_v,
+                    ),
                     sparse_relation: full_v,
                 });
             }
         }
     }
     out
+}
+
+fn origin_circuit_relation_points(
+    pts_ext: &[Vec<i64>],
+    point_face_dims: Option<&[usize]>,
+    sparse_relation: &[(usize, i64)],
+) -> Vec<OriginCircuitRelationPoint> {
+    sparse_relation
+        .iter()
+        .filter_map(|&(point_index, coefficient)| {
+            if coefficient == 0 {
+                return None;
+            }
+            let point = pts_ext.get(point_index)?;
+            let coordinates = point
+                .get(..point.len().saturating_sub(1))
+                .unwrap_or(point)
+                .to_vec();
+            Some(OriginCircuitRelationPoint {
+                point_index,
+                coefficient,
+                coordinates,
+                face_dimension: point_face_dims.and_then(|dims| dims.get(point_index).copied()),
+            })
+        })
+        .collect()
 }
 
 fn resolved_conifold_origin_circuit_gv(class: &[i64], origin_idx: usize) -> Option<Integer> {
@@ -2421,8 +2477,8 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        BoundedCurveDecompositionIndex, OriginCircuitCurveWitness, ToricCurveCandidate,
-        compute_grading_vector, compute_gv_invariants_with_explicit_semigroup,
+        BoundedCurveDecompositionIndex, OriginCircuitCurveWitness, OriginCircuitRelationPoint,
+        ToricCurveCandidate, compute_grading_vector, compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_provided_generators, curve_volume_in_divisor_basis,
         dump_mori_rays_cdd, find_pair_decomposition, gv_lattice_search_request, load_grading_cache,
         map_basis_gv_invariants_to_ambient, origin_circuit_diagnostic_from_class_and_witnesses,
@@ -2533,6 +2589,12 @@ mod tests {
             first_facet: vec![2, 3, 4, 5],
             second_facet: vec![1, 2, 3, 4],
             sparse_relation: vec![(0, -1), (1, -1), (5, 1)],
+            relation_points: vec![OriginCircuitRelationPoint {
+                point_index: 0,
+                coefficient: -1,
+                coordinates: vec![0, 0, 0, 0],
+                face_dimension: Some(4),
+            }],
         };
         let second = OriginCircuitCurveWitness {
             class: vec![-1, -1, -1, 1, 1, 1],
@@ -2542,6 +2604,12 @@ mod tests {
             first_facet: vec![1, 2, 3, 5],
             second_facet: vec![1, 3, 4, 5],
             sparse_relation: vec![(0, -1), (2, 1), (4, -1)],
+            relation_points: vec![OriginCircuitRelationPoint {
+                point_index: 2,
+                coefficient: 1,
+                coordinates: vec![1, 0, 0, 0],
+                face_dimension: Some(0),
+            }],
         };
 
         let diagnostic = origin_circuit_diagnostic_from_class_and_witnesses(
