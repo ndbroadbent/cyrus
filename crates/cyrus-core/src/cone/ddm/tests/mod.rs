@@ -1,4 +1,5 @@
 use super::*;
+use std::time::{Duration, Instant};
 
 #[test]
 fn test_dualize_first_quadrant() {
@@ -14,6 +15,30 @@ fn test_dualize_first_quadrant() {
     assert_eq!(rays.len(), 2);
     assert!(rays.contains(&vec![1, 0]));
     assert!(rays.contains(&vec![0, 1]));
+}
+
+#[test]
+#[should_panic(expected = "DDM hyperplane limit exceeded")]
+fn test_ddm_hyperplane_limit_panics_with_progress() {
+    let limits = DdmLimits {
+        max_hyperplanes: Some(3),
+        max_time: None,
+        start: Instant::now(),
+    };
+
+    limits.check(3, 10, 42);
+}
+
+#[test]
+#[should_panic(expected = "DDM time limit exceeded")]
+fn test_ddm_time_limit_panics_with_progress() {
+    let limits = DdmLimits {
+        max_hyperplanes: None,
+        max_time: Some(Duration::ZERO),
+        start: Instant::now(),
+    };
+
+    limits.check(0, 10, 42);
 }
 
 #[test]

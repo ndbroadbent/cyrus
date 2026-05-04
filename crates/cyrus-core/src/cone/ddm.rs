@@ -5,6 +5,8 @@
 //! Reference: PPL (Parma Polyhedra Library), cddlib
 
 use std::collections::HashMap;
+use std::env;
+use std::time::{Duration, Instant};
 
 mod init;
 mod order;
@@ -76,6 +78,7 @@ pub fn dualize(matrix: &[Vec<i128>], ambient_dim: usize) -> Vec<Vec<i128>> {
 ///
 /// Start with the full space (identity rays), then add constraints one by one.
 fn ddm_incremental(hyperplanes: &[Vec<i128>], dim: usize) -> Vec<Vec<i128>> {
+    let limits = DdmLimits::from_env();
     let init = initialize_ddm(hyperplanes, dim).unwrap_or_else(|| {
         eprintln!("[WARN] ddm: full-rank initialization failed; starting from full space");
         full_space_initialization(hyperplanes, dim)
@@ -85,6 +88,7 @@ fn ddm_incremental(hyperplanes: &[Vec<i128>], dim: usize) -> Vec<Vec<i128>> {
 
     // Process each hyperplane
     for idx in start_idx..ordered_hyperplanes.len() {
+        limits.check(idx, ordered_hyperplanes.len(), rays.len());
         let best_idx = choose_next_hyperplane(&ordered_hyperplanes, idx, &rays);
         if best_idx != idx {
             ordered_hyperplanes.swap(idx, best_idx);
@@ -127,4 +131,47 @@ fn ddm_incremental(hyperplanes: &[Vec<i128>], dim: usize) -> Vec<Vec<i128>> {
         .into_iter()
         .map(|ray| ray.coeffs)
         .collect()
+}
+
+#[derive(Clone, Debug)]
+struct DdmLimits {
+    max_hyperplanes: Option<usize>,
+    max_time: Option<Duration>,
+    start: Instant,
+}
+
+impl DdmLimits {
+    fn from_env() -> Self {
+        let max_hyperplanes = env::var("CYRUS_DDM_MAX_HYPERPLANES")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok());
+        let max_time = env::var("CYRUS_DDM_MAX_TIME_SEC")
+            .ok()
+            .and_then(|value| value.parse::<f64>().ok())
+            .and_then(|seconds| (seconds >= 0.0).then(|| Duration::from_secs_f64(seconds)));
+        Self {
+            max_hyperplanes,
+            max_time,
+            start: Instant::now(),
+        }
+    }
+
+    fn check(&self, idx: usize, total: usize, rays: usize) {
+        if let Some(limit) = self.max_hyperplanes
+            && idx >= limit
+        {
+            panic!(
+                "DDM hyperplane limit exceeded: processed {idx}/{total} hyperplanes, rays={rays}, limit={limit}"
+            );
+        }
+        if let Some(limit) = self.max_time
+            && self.start.elapsed() >= limit
+        {
+            panic!(
+                "DDM time limit exceeded: processed {idx}/{total} hyperplanes, rays={rays}, elapsed={:.2?}, limit={:.2?}",
+                self.start.elapsed(),
+                limit
+            );
+        }
+    }
 }
