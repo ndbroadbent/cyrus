@@ -93,7 +93,11 @@ pub use flat_direction::{
 pub use glsm::compute_glsm_and_linrels;
 pub use glsm::compute_glsm_charge_matrix;
 pub use glsm::compute_glsm_linear_relations;
-pub use gv::{compute_grading_vector, compute_gv_invariants, compute_mori_cone_cap_rays};
+pub use gv::{
+    ToricCurveCandidate, compute_grading_vector, compute_gv_invariants, compute_mori_cone_cap_rays,
+    curve_volume_in_divisor_basis, find_pair_decomposition,
+    remove_pair_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
+};
 pub use integer_math::{compute_glsm_and_linear_relations, compute_linear_relations_no_origin};
 pub use intersection::compute_intersection_cytools;
 pub use intersection::{

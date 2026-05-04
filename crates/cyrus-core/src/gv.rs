@@ -24,6 +24,7 @@ use crate::intersection::Intersection;
 use crate::lattice::Point;
 use crate::polytope::Polytope;
 use crate::triangulation::Triangulation;
+use crate::types::{F64, Finite, I64, Pos};
 
 const GRADING_CACHE_VERSION: &str = "grading-vector-cytools-lp-v1";
 const LATTICE_CACHE_VERSION: &str = "lattice-points-v2";
@@ -215,6 +216,141 @@ pub fn compute_mori_cone_cap_rays(
 
     deduped.sort();
     Ok(deduped)
+}
+
+/// A toric curve candidate with its volume at a specific point in Kähler moduli space.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ToricCurveCandidate {
+    /// Curve class in ambient divisor-intersection coordinates.
+    pub class: Vec<i64>,
+    /// Positive curve volume at the selected Kähler point.
+    pub volume: F64<Pos>,
+}
+
+/// Compute the volume of an ambient curve class from Kähler parameters in a divisor basis.
+pub fn curve_volume_in_divisor_basis(
+    curve: &[i64],
+    basis: &[usize],
+    kahler_parameters: &[F64<Finite>],
+) -> Result<F64<Finite>> {
+    if basis.len() != kahler_parameters.len() {
+        return Err(Error::InvalidInput(format!(
+            "basis length {} does not match Kähler parameter length {}",
+            basis.len(),
+            kahler_parameters.len()
+        )));
+    }
+    let mut volume = F64::<Finite>::ZERO;
+    for (&idx, &ti) in basis.iter().zip(kahler_parameters.iter()) {
+        let Some(&coefficient) = curve.get(idx) else {
+            return Err(Error::InvalidInput(format!(
+                "basis index {idx} is out of bounds for curve dimension {}",
+                curve.len()
+            )));
+        };
+        volume = volume + I64::<Finite>::new(coefficient).to_f64() * ti;
+    }
+    Ok(volume)
+}
+
+/// Select toric curve candidates with positive volume below a cutoff.
+pub fn subcutoff_toric_curve_candidates(
+    rays: &[Vec<i64>],
+    basis: &[usize],
+    kahler_parameters: &[F64<Finite>],
+    cutoff: F64<Pos>,
+) -> Result<Vec<ToricCurveCandidate>> {
+    let mut out = Vec::new();
+    for ray in rays {
+        let volume = curve_volume_in_divisor_basis(ray, basis, kahler_parameters)?;
+        if let Some(volume) = volume.try_to_pos()
+            && volume < cutoff
+        {
+            out.push(ToricCurveCandidate {
+                class: ray.clone(),
+                volume,
+            });
+        }
+    }
+    Ok(out)
+}
+
+/// Find a decomposition of a curve as a sum of two selected toric curve candidates.
+pub fn find_pair_decomposition(
+    target: &ToricCurveCandidate,
+    candidates: &[ToricCurveCandidate],
+) -> Result<Option<(Vec<i64>, Vec<i64>)>> {
+    let dim = target.class.len();
+    let selected_set: HashSet<Vec<i64>> = candidates
+        .iter()
+        .map(|candidate| {
+            if candidate.class.len() != dim {
+                return Err(Error::InvalidInput(
+                    "candidate curve dimensions are inconsistent".into(),
+                ));
+            }
+            Ok(candidate.class.clone())
+        })
+        .collect::<Result<_>>()?;
+
+    Ok(find_pair_decomposition_with_set(
+        target,
+        candidates,
+        &selected_set,
+    ))
+}
+
+/// Remove curve candidates that are sums of two other selected candidates.
+///
+/// This is the Hilbert-basis pruning step needed by the McAllister small-curve
+/// checkpoint: the paper first selects small toric curves, then removes curves
+/// that can be written as sums of others before computing GV invariants.
+pub fn remove_pair_decomposable_curve_candidates(
+    candidates: &[ToricCurveCandidate],
+) -> Result<Vec<ToricCurveCandidate>> {
+    if candidates.is_empty() {
+        return Ok(Vec::new());
+    }
+    let dim = candidates[0].class.len();
+    let mut selected_set: HashSet<Vec<i64>> = HashSet::with_capacity(candidates.len());
+    for candidate in candidates {
+        if candidate.class.len() != dim {
+            return Err(Error::InvalidInput(
+                "candidate curve dimensions are inconsistent".into(),
+            ));
+        }
+        selected_set.insert(candidate.class.clone());
+    }
+
+    Ok(candidates
+        .iter()
+        .filter(|candidate| {
+            find_pair_decomposition_with_set(candidate, candidates, &selected_set).is_none()
+        })
+        .cloned()
+        .collect())
+}
+
+fn find_pair_decomposition_with_set(
+    target: &ToricCurveCandidate,
+    candidates: &[ToricCurveCandidate],
+    selected_set: &HashSet<Vec<i64>>,
+) -> Option<(Vec<i64>, Vec<i64>)> {
+    for summand in candidates {
+        if summand.volume >= target.volume {
+            continue;
+        }
+        let remainder = subtract_curve(&target.class, &summand.class);
+        if selected_set.contains(&remainder) {
+            return Some((summand.class.clone(), remainder));
+        }
+    }
+    None
+}
+
+fn subtract_curve(lhs: &[i64], rhs: &[i64]) -> Vec<i64> {
+    debug_assert_eq!(lhs.len(), rhs.len());
+    lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a - b).collect()
 }
 
 /// Compute a grading vector for the Mori cone cap.
@@ -1139,7 +1275,12 @@ mod tests {
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::{compute_grading_vector, load_grading_cache, write_grading_cache};
+    use super::{
+        ToricCurveCandidate, compute_grading_vector, curve_volume_in_divisor_basis,
+        find_pair_decomposition, load_grading_cache, remove_pair_decomposable_curve_candidates,
+        subcutoff_toric_curve_candidates, write_grading_cache,
+    };
+    use crate::{f64_finite, f64_pos};
 
     #[test]
     fn grading_cache_validates_candidate_against_rays() {
@@ -1181,5 +1322,82 @@ mod tests {
         ];
 
         assert_eq!(compute_grading_vector(&rays), Some(vec![1, 4, 5, 2]));
+    }
+
+    #[test]
+    fn curve_volume_in_divisor_basis_allows_mixed_basis_coordinates() {
+        let curve = vec![1, -2, 3];
+        let basis = vec![0, 1, 2];
+        let kahler = vec![f64_finite!(2.0), f64_finite!(-1.0), f64_finite!(0.5)];
+
+        let volume = curve_volume_in_divisor_basis(&curve, &basis, &kahler).unwrap();
+
+        assert_eq!(volume, f64_finite!(5.5));
+    }
+
+    #[test]
+    fn subcutoff_toric_curve_candidates_keeps_only_positive_below_cutoff() {
+        let rays = vec![vec![1, 0], vec![-1, 0], vec![3, 0], vec![0, 1]];
+        let basis = vec![0];
+        let kahler = vec![f64_finite!(0.4)];
+
+        let selected =
+            subcutoff_toric_curve_candidates(&rays, &basis, &kahler, f64_pos!(1.0)).unwrap();
+
+        assert_eq!(
+            selected,
+            vec![ToricCurveCandidate {
+                class: vec![1, 0],
+                volume: f64_pos!(0.4)
+            }]
+        );
+    }
+
+    #[test]
+    fn pair_decomposable_curve_candidates_are_removed() {
+        let candidates = vec![
+            ToricCurveCandidate {
+                class: vec![1, 0],
+                volume: f64_pos!(0.2),
+            },
+            ToricCurveCandidate {
+                class: vec![0, 1],
+                volume: f64_pos!(0.3),
+            },
+            ToricCurveCandidate {
+                class: vec![1, 1],
+                volume: f64_pos!(0.5),
+            },
+            ToricCurveCandidate {
+                class: vec![2, 0],
+                volume: f64_pos!(0.4),
+            },
+        ];
+
+        let decomposition = find_pair_decomposition(&candidates[2], &candidates).unwrap();
+        assert_eq!(decomposition, Some((vec![1, 0], vec![0, 1])));
+
+        let filtered = remove_pair_decomposable_curve_candidates(&candidates).unwrap();
+        assert_eq!(
+            filtered,
+            vec![
+                ToricCurveCandidate {
+                    class: vec![1, 0],
+                    volume: f64_pos!(0.2),
+                },
+                ToricCurveCandidate {
+                    class: vec![0, 1],
+                    volume: f64_pos!(0.3),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn curve_volume_rejects_basis_dimension_mismatch() {
+        let err = curve_volume_in_divisor_basis(&[1, 2], &[0, 1], &[f64_finite!(1.0)])
+            .expect_err("basis and Kähler coordinate lengths must match");
+
+        assert!(format!("{err}").contains("basis length"));
     }
 }

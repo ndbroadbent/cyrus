@@ -1,12 +1,13 @@
 #![allow(missing_docs)]
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use cyrus_core::{
-    F64, Finite, I64, Point, Polytope, Pos, compute_mori_cone_cap_rays,
-    compute_regular_triangulation,
+    F64, Finite, Point, Polytope, Pos, compute_mori_cone_cap_rays, compute_regular_triangulation,
+    find_pair_decomposition, remove_pair_decomposable_curve_candidates,
+    subcutoff_toric_curve_candidates,
 };
 
 fn read_points(path: &Path) -> Vec<Vec<i64>> {
@@ -71,38 +72,6 @@ fn read_csv_pos(path: &Path) -> Vec<F64<Pos>> {
         .collect()
 }
 
-fn curve_volume_in_basis(curve: &[i64], basis: &[usize], t: &[F64<Finite>]) -> F64<Finite> {
-    basis
-        .iter()
-        .zip(t.iter())
-        .fold(F64::<Finite>::ZERO, |acc, (&idx, &ti)| {
-            acc + I64::<Finite>::new(curve[idx]).to_f64() * ti
-        })
-}
-
-fn subtract_curve(lhs: &[i64], rhs: &[i64]) -> Vec<i64> {
-    assert_eq!(lhs.len(), rhs.len(), "curve dimensions must match");
-    lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a - b).collect()
-}
-
-fn find_pair_decomposition(
-    target: &[i64],
-    target_volume: F64<Pos>,
-    selected: &[(Vec<i64>, F64<Pos>)],
-    selected_set: &HashSet<Vec<i64>>,
-) -> Option<(Vec<i64>, Vec<i64>)> {
-    for (summand, summand_volume) in selected {
-        if *summand_volume >= target_volume {
-            continue;
-        }
-        let remainder = subtract_curve(target, summand);
-        if selected_set.contains(&remainder) {
-            return Some((summand.clone(), remainder));
-        }
-    }
-    None
-}
-
 fn main() {
     let data_dir = std::env::var("CYRUS_MCALLISTER_DATA_DIR")
         .map(PathBuf::from)
@@ -145,27 +114,26 @@ fn main() {
         rays.first().map_or(0, Vec::len)
     );
 
-    let selected: Vec<(Vec<i64>, F64<Pos>)> = rays
-        .iter()
-        .filter_map(|ray| {
-            let volume = curve_volume_in_basis(ray, &basis, &kahler).try_to_pos()?;
-            (volume < cutoff).then_some((ray.clone(), volume))
-        })
-        .collect();
+    let selected =
+        subcutoff_toric_curve_candidates(&rays, &basis, &kahler, cutoff).expect("subcutoff curves");
+    let filtered = remove_pair_decomposable_curve_candidates(&selected).expect("Hilbert filter");
 
-    let selected_set: HashSet<Vec<i64>> = selected.iter().map(|(ray, _)| ray.clone()).collect();
+    let selected_set: HashSet<Vec<i64>> =
+        selected.iter().map(|curve| curve.class.clone()).collect();
     let expected_set: HashSet<Vec<i64>> = expected_small.iter().cloned().collect();
     let overlap = selected_set.intersection(&expected_set).count();
     let missing = expected_set.difference(&selected_set).count();
     let extra = selected_set.difference(&expected_set).count();
+    let filtered_set: HashSet<Vec<i64>> =
+        filtered.iter().map(|curve| curve.class.clone()).collect();
 
     let min_volume = selected
         .iter()
-        .map(|(_, volume)| volume.get())
+        .map(|curve| curve.volume.get())
         .fold(f64::INFINITY, f64::min);
     let max_volume = selected
         .iter()
-        .map(|(_, volume)| volume.get())
+        .map(|curve| curve.volume.get())
         .fold(f64::NEG_INFINITY, f64::max);
 
     println!("cutoff={}", cutoff.get());
@@ -178,27 +146,36 @@ fn main() {
         extra
     );
     println!("selected_volume_range=[{min_volume}, {max_volume}]");
+    println!(
+        "filtered={} filtered_matches_expected={}",
+        filtered.len(),
+        filtered_set == expected_set
+    );
 
     let pair_decomposable = selected
         .iter()
-        .filter(|(ray, volume)| {
-            find_pair_decomposition(ray, *volume, &selected, &selected_set).is_some()
+        .filter(|curve| {
+            find_pair_decomposition(curve, &selected)
+                .expect("decomposition")
+                .is_some()
         })
         .count();
     let pair_decomposable_expected = selected
         .iter()
-        .filter(|(ray, volume)| {
-            expected_set.contains(ray) && {
-                find_pair_decomposition(ray, *volume, &selected, &selected_set).is_some()
-            }
+        .filter(|curve| {
+            expected_set.contains(&curve.class)
+                && find_pair_decomposition(curve, &selected)
+                    .expect("decomposition")
+                    .is_some()
         })
         .count();
     let pair_decomposable_extra = selected
         .iter()
-        .filter(|(ray, volume)| {
-            !expected_set.contains(ray) && {
-                find_pair_decomposition(ray, *volume, &selected, &selected_set).is_some()
-            }
+        .filter(|curve| {
+            !expected_set.contains(&curve.class)
+                && find_pair_decomposition(curve, &selected)
+                    .expect("decomposition")
+                    .is_some()
         })
         .count();
     println!(
@@ -206,10 +183,14 @@ fn main() {
         pair_decomposable, pair_decomposable_expected, pair_decomposable_extra
     );
 
-    let mut extra_with_volume: Vec<(Vec<i64>, f64)> = selected
+    let volume_by_class: HashMap<Vec<i64>, _> = selected
         .iter()
-        .filter(|(ray, _)| !expected_set.contains(ray))
-        .map(|(ray, volume)| (ray.clone(), volume.get()))
+        .map(|curve| (curve.class.clone(), curve.volume))
+        .collect();
+    let mut extra_with_volume: Vec<_> = selected
+        .iter()
+        .filter(|curve| !expected_set.contains(&curve.class))
+        .map(|curve| (curve.class.clone(), curve.volume.get()))
         .collect();
     extra_with_volume.sort_by(|a, b| a.1.total_cmp(&b.1));
     for (idx, (ray, volume)) in extra_with_volume.iter().take(10).enumerate() {
@@ -220,14 +201,11 @@ fn main() {
             .filter(|(_, value)| *value != 0)
             .collect();
         println!("extra[{idx}] volume={volume} nonzero={nonzero:?}");
-        if let Some((a, b)) = find_pair_decomposition(
-            ray,
-            F64::<Finite>::new(*volume)
-                .and_then(|volume| volume.try_to_pos())
-                .expect("printed extra volume is positive"),
-            &selected,
-            &selected_set,
-        ) {
+        let target = selected
+            .iter()
+            .find(|curve| curve.class == *ray)
+            .expect("extra curve exists in selected list");
+        if let Some((a, b)) = find_pair_decomposition(target, &selected).expect("decomposition") {
             let a_nonzero: Vec<(usize, i64)> = a
                 .iter()
                 .copied()
@@ -240,7 +218,17 @@ fn main() {
                 .enumerate()
                 .filter(|(_, value)| *value != 0)
                 .collect();
-            println!("  decomposition a={a_nonzero:?} b={b_nonzero:?}");
+            let a_volume = volume_by_class
+                .get(&a)
+                .expect("decomposition summand is selected")
+                .get();
+            let b_volume = volume_by_class
+                .get(&b)
+                .expect("decomposition summand is selected")
+                .get();
+            println!(
+                "  decomposition a={a_nonzero:?} volume={a_volume} b={b_nonzero:?} volume={b_volume}"
+            );
         }
     }
 }
