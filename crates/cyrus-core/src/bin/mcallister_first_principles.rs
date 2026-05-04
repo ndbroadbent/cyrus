@@ -34,7 +34,7 @@
 //!   explicitly without Mori-cone lattice augmentation.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -486,6 +486,7 @@ struct MissingGvTargetStats {
     targets_that_are_mori_generators: usize,
     min_generators_le_target_degree: usize,
     max_generators_le_target_degree: usize,
+    origin_coefficient_counts: BTreeMap<i64, usize>,
     sample: Vec<MissingGvTargetSample>,
 }
 
@@ -494,6 +495,7 @@ struct MissingGvTargetSample {
     degree: i128,
     generators_le_degree: usize,
     is_mori_generator: bool,
+    ambient_nonzero: Vec<(usize, i64)>,
     basis_nonzero: Vec<(usize, i64)>,
 }
 
@@ -1672,6 +1674,7 @@ fn missing_gv_target_stats(
     basis_rays: &[Vec<i64>],
     basis: &[usize],
     grading: &[i64],
+    origin_idx: usize,
     sample_limit: usize,
 ) -> Result<MissingGvTargetStats, String> {
     if basis.len() != grading.len() {
@@ -1687,6 +1690,7 @@ fn missing_gv_target_stats(
             targets_that_are_mori_generators: 0,
             min_generators_le_target_degree: 0,
             max_generators_le_target_degree: 0,
+            origin_coefficient_counts: BTreeMap::new(),
             sample: Vec::new(),
         });
     }
@@ -1715,8 +1719,18 @@ fn missing_gv_target_stats(
     let mut targets_that_are_mori_generators = 0usize;
     let mut min_generators = usize::MAX;
     let mut max_generators = 0usize;
+    let mut origin_coefficient_counts = BTreeMap::new();
     let mut sample = Vec::new();
     for ambient_class in ambient_classes {
+        let Some(&origin_coefficient) = ambient_class.get(origin_idx) else {
+            return Err(format!(
+                "origin index {origin_idx} is out of bounds for ambient curve dimension {}",
+                ambient_class.len()
+            ));
+        };
+        *origin_coefficient_counts
+            .entry(origin_coefficient)
+            .or_insert(0) += 1;
         let basis_class = project_ambient_curve_to_basis(ambient_class, basis)?;
         let degree = basis_class
             .iter()
@@ -1743,6 +1757,11 @@ fn missing_gv_target_stats(
                 degree,
                 generators_le_degree,
                 is_mori_generator,
+                ambient_nonzero: ambient_class
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(idx, &value)| (value != 0).then_some((idx, value)))
+                    .collect(),
                 basis_nonzero: basis_class
                     .iter()
                     .enumerate()
@@ -1757,6 +1776,7 @@ fn missing_gv_target_stats(
         targets_that_are_mori_generators,
         min_generators_le_target_degree: min_generators,
         max_generators_le_target_degree: max_generators,
+        origin_coefficient_counts,
         sample,
     })
 }
@@ -2089,6 +2109,11 @@ fn diagnose_chamber_gv_volume_correction(
     let mut degree_summary = None;
     let mut missing_target_stats = None;
     if !missing_gv_classes.is_empty() {
+        let origin_idx = geom
+            .triangulation_points
+            .iter()
+            .position(|point| point.coords().iter().all(|&coord| coord == 0))
+            .ok_or_else(|| "failed to find origin in corrected-chamber points".to_string())?;
         let basis_rays = project_mori_cone_cap_rays_to_basis(&ambient_rays, &intersection.basis)
             .map_err(|e| {
                 format!("failed to project corrected-chamber Mori-cap rays to basis: {e}")
@@ -2108,6 +2133,7 @@ fn diagnose_chamber_gv_volume_correction(
             &basis_rays,
             &intersection.basis,
             &grading,
+            origin_idx,
             10,
         )?;
         basis_rays_for_missing = Some(basis_rays);
@@ -3141,11 +3167,12 @@ fn stage_volume(
         }
         if let Some(stats) = diag.missing_target_stats.as_ref() {
             eprintln!(
-                "[INFO] corrected-chamber missing GV target reduction: targets={} targets_as_mori_generators={} generators_le_target_degree_range={}..{}",
+                "[INFO] corrected-chamber missing GV target reduction: targets={} targets_as_mori_generators={} generators_le_target_degree_range={}..{} origin_coefficients={:?}",
                 stats.target_count,
                 stats.targets_that_are_mori_generators,
                 stats.min_generators_le_target_degree,
-                stats.max_generators_le_target_degree
+                stats.max_generators_le_target_degree,
+                stats.origin_coefficient_counts
             );
             eprintln!(
                 "[INFO] corrected-chamber missing GV target sample: {:?}",
@@ -3723,12 +3750,13 @@ mod tests {
         let ambient_classes = vec![vec![0, 1, 1], vec![0, 2, 0]];
         let basis_rays = vec![vec![1, 0], vec![0, 1], vec![1, 1]];
         let stats =
-            missing_gv_target_stats(&ambient_classes, &basis_rays, &[1, 2], &[2, 3], 4).unwrap();
+            missing_gv_target_stats(&ambient_classes, &basis_rays, &[1, 2], &[2, 3], 0, 4).unwrap();
 
         assert_eq!(stats.target_count, 2);
         assert_eq!(stats.targets_that_are_mori_generators, 1);
         assert_eq!(stats.min_generators_le_target_degree, 2);
         assert_eq!(stats.max_generators_le_target_degree, 3);
+        assert_eq!(stats.origin_coefficient_counts, BTreeMap::from([(0, 2)]));
         assert_eq!(
             stats.sample,
             vec![
@@ -3736,12 +3764,14 @@ mod tests {
                     degree: 5,
                     generators_le_degree: 3,
                     is_mori_generator: true,
+                    ambient_nonzero: vec![(1, 1), (2, 1)],
                     basis_nonzero: vec![(0, 1), (1, 1)]
                 },
                 MissingGvTargetSample {
                     degree: 4,
                     generators_le_degree: 2,
                     is_mori_generator: false,
+                    ambient_nonzero: vec![(1, 2)],
                     basis_nonzero: vec![(0, 2)]
                 }
             ]
