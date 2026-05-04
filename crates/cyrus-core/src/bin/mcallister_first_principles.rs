@@ -496,6 +496,8 @@ struct ChamberGvDiagnostic {
     ray_gv_sample: Vec<RayGvDiagnosticSample>,
     lp_face_gv_covered_count: Option<usize>,
     lp_face_gv_failed_count: Option<usize>,
+    lp_face_gv_certified_count: Option<usize>,
+    lp_face_gv_uncertified_count: Option<usize>,
     lp_face_gv_volume_correction: Option<F64<Finite>>,
     lp_face_gv_sample: Vec<FaceGvDiagnosticSample>,
     combined_diagnostic_gv_covered_count: Option<usize>,
@@ -3059,13 +3061,16 @@ fn certify_supporting_mori_face_if_requested(
     face_generators: &[Vec<i64>],
     basis_rays: &[Vec<i64>],
 ) -> Result<Option<SupportingFaceCertificate>, String> {
-    if !std::env::var("CYRUS_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE")
-        .map(|value| value != "0")
-        .unwrap_or(false)
-    {
+    if !supporting_face_certificate_requested() {
         return Ok(None);
     }
     certify_supporting_mori_face(face_generators, basis_rays)
+}
+
+fn supporting_face_certificate_requested() -> bool {
+    std::env::var("CYRUS_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE")
+        .map(|value| value != "0")
+        .unwrap_or(false)
 }
 
 fn certify_supporting_mori_face(
@@ -4435,6 +4440,8 @@ fn diagnose_chamber_gv_volume_correction(
     let mut ray_gv_volume_correction = None;
     let mut lp_face_gv_covered_count = None;
     let mut lp_face_gv_failed_count = None;
+    let mut lp_face_gv_certified_count = None;
+    let mut lp_face_gv_uncertified_count = None;
     let mut lp_face_gv_sample = Vec::new();
     let mut lp_face_gv_volume_correction = None;
     let mut diagnostic_missing_gvs: HashMap<Vec<i64>, malachite::Integer> = HashMap::new();
@@ -4603,6 +4610,16 @@ fn diagnose_chamber_gv_volume_correction(
         )?;
         let covered_count = face_gvs.iter().filter(|result| result.gv.is_some()).count();
         let failed_count = face_gvs.len().saturating_sub(covered_count);
+        if supporting_face_certificate_requested() {
+            let certified_count = face_gvs
+                .iter()
+                .filter(|result| {
+                    result.gv.is_some() && result.supporting_face_certificate.is_some()
+                })
+                .count();
+            lp_face_gv_certified_count = Some(certified_count);
+            lp_face_gv_uncertified_count = Some(covered_count.saturating_sub(certified_count));
+        }
         for result in &face_gvs {
             if let Some(gv) = result.gv.as_ref() {
                 insert_missing_diagnostic_gv(
@@ -4904,6 +4921,8 @@ fn diagnose_chamber_gv_volume_correction(
         ray_gv_sample,
         lp_face_gv_covered_count,
         lp_face_gv_failed_count,
+        lp_face_gv_certified_count,
+        lp_face_gv_uncertified_count,
         lp_face_gv_volume_correction,
         lp_face_gv_sample,
         combined_diagnostic_gv_covered_count,
@@ -5764,6 +5783,12 @@ fn stage_volume(
                 "[INFO] corrected-chamber LP-witness face GV diagnostic covered {} decomposable missing curves; failed={:?}; sample={:?}",
                 face_covered, diag.lp_face_gv_failed_count, diag.lp_face_gv_sample
             );
+            if let Some(certified_count) = diag.lp_face_gv_certified_count {
+                eprintln!(
+                    "[INFO] corrected-chamber LP-witness face GV supporting-face certificates: certified={} uncertified={:?}",
+                    certified_count, diag.lp_face_gv_uncertified_count
+                );
+            }
             if let Some(face_correction) = diag.lp_face_gv_volume_correction.as_ref() {
                 eprintln!(
                     "[INFO] corrected-chamber LP-witness face GV partial volume correction (diagnostic) = {}",
