@@ -10,6 +10,8 @@
 //!   to run deterministic KKLT branch search without loading Kähler checkpoints.
 //! - `--branch-height-init` to include the CYTools-style height-projected
 //!   Kähler point as the first branch-search candidate.
+//!   With no branch search, this height-projected point is the default
+//!   first-principles KKLT initializer.
 //! - `--branch-report-jsonl path` to export positive phase-1 branch candidates
 //!   discovered by that search for GA/debug ranking.
 //! - `--branch-report-missing-limit N` to include up to N missing small-curve
@@ -1799,11 +1801,6 @@ fn stage_volume(
         );
         std::process::exit(2);
     }
-    if branch_height_init && branch_candidates == 0 {
-        eprintln!("[ERROR] --branch-height-init requires --branch-candidates N with N > 0");
-        std::process::exit(2);
-    }
-
     let (t, gv_volume_correction) = if allow_downstream_kahler {
         let Some(data_dir_path) = data_dir.map(PathBuf::from) else {
             eprintln!(
@@ -1856,19 +1853,59 @@ fn stage_volume(
             std::process::exit(2);
         };
         let (zeroth_order, small_curve_selection_t) = if branch_candidates == 0 {
-            let Some(result) = cyrus_core::kklt::solve_two_phase_mixed_basis_path_following(
+            let tau_phase1: Vec<F64<Pos>> = c_i.iter().map(|ci| ci.to_f64()).collect();
+            let height_init = height_projected_branch_initialization(
+                geom,
+                intersection,
+                &kklt_basis,
+                &tau_phase1,
+            )
+            .unwrap_or_else(|e| {
+                eprintln!(
+                    "[ERROR] failed to build height-projected KKLT branch initialization: {e}"
+                );
+                std::process::exit(2);
+            });
+            eprintln!("[INFO] using height-projected KKLT branch initialization");
+            let Some(phase1) = cyrus_core::kklt::solve_mixed_basis_path_following(
+                &intersection.kappa_basis,
+                &intersection.kappa_full,
+                &intersection.basis,
+                &kklt_basis,
+                &tau_phase1,
+                &height_init,
+                CheckedRange::new(0, kklt_steps),
+            ) else {
+                eprintln!("[ERROR] phase-1 mixed-basis KKLT path-following failed");
+                std::process::exit(2);
+            };
+            if !phase1.converged {
+                eprintln!(
+                    "[ERROR] phase-1 mixed-basis KKLT path-following did not converge: rel_err={}",
+                    phase1.relative_error.get()
+                );
+                std::process::exit(2);
+            }
+            let Some(result) = cyrus_core::kklt::solve_mixed_basis_path_following(
                 &intersection.kappa_basis,
                 &intersection.kappa_full,
                 &intersection.basis,
                 &kklt_basis,
                 &tau_target,
-                &c_i,
+                &phase1.t,
                 CheckedRange::new(0, kklt_steps),
             ) else {
                 eprintln!("[ERROR] zeroth-order mixed-basis KKLT path-following failed");
                 std::process::exit(2);
             };
-            let small_curve_selection_t = result.t.clone();
+            if !result.converged {
+                eprintln!(
+                    "[ERROR] zeroth-order mixed-basis KKLT path-following did not converge: rel_err={}",
+                    result.relative_error.get()
+                );
+                std::process::exit(2);
+            }
+            let small_curve_selection_t = phase1.t.clone();
             (result, small_curve_selection_t)
         } else {
             let tau_phase1: Vec<F64<Pos>> = c_i.iter().map(|ci| ci.to_f64()).collect();
