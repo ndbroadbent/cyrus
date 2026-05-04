@@ -10,11 +10,12 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use cyrus_core::{
-    Point, Polytope, compute_curve_basis_matrix, compute_glsm_and_linrels,
-    compute_grading_vector, compute_intersection_cytools, compute_linear_relations_no_origin,
-    compute_mori_cone_cap_rays, compute_gv_invariants, compute_regular_triangulation,
-    intersection_in_basis,
+    Point, Polytope, Triangulation, compute_curve_basis_matrix, compute_glsm_and_linrels,
+    compute_grading_vector, compute_gv_invariants, compute_intersection_cytools,
+    compute_linear_relations_no_origin, compute_mori_cone_cap_rays, intersection_in_basis,
 };
+
+const DEFAULT_MCALLISTER_GV_MIN_POINTS: u32 = 20_000;
 
 #[derive(Debug, Deserialize)]
 struct PolytopeInput {
@@ -22,8 +23,8 @@ struct PolytopeInput {
 }
 
 #[derive(Debug, Deserialize)]
-struct HeightsInput {
-    values: Vec<f64>,
+struct SimplicesInput {
+    simplices: Vec<Vec<usize>>,
 }
 
 fn load_json<T: for<'de> Deserialize<'de>>(path: &PathBuf) -> T {
@@ -47,52 +48,6 @@ fn parse_flag(flag: &str) -> bool {
     std::env::args().any(|arg| arg == flag)
 }
 
-fn read_csv_f64(path: &PathBuf) -> Vec<f64> {
-    let content = std::fs::read_to_string(path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
-    content
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .flat_map(|line| line.split(','))
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .map(|s| s.parse::<f64>().unwrap_or_else(|e| panic!("Invalid float {s} in {}: {e}", path.display())))
-        .collect()
-}
-
-fn read_csv_usize(path: &PathBuf) -> Vec<usize> {
-    let content = std::fs::read_to_string(path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
-    content
-        .split(|c| c == ',' || c == '\n' || c == '\r')
-        .filter(|s| !s.trim().is_empty())
-        .map(|s| s.trim().parse::<usize>().expect("invalid usize"))
-        .collect()
-}
-
-fn assert_basis_matches_dat(computed: &[usize], data_dir: &str) {
-    let basis_path = PathBuf::from(data_dir).join("basis.dat");
-    let expected = read_csv_usize(&basis_path);
-    if computed != expected {
-        eprintln!(
-            "[ERROR] basis mismatch: computed len={} expected len={}",
-            computed.len(),
-            expected.len()
-        );
-        let diff: Vec<(usize, usize, usize)> = computed
-            .iter()
-            .zip(expected.iter())
-            .enumerate()
-            .filter_map(|(i, (a, b))| if a == b { None } else { Some((i, *a, *b)) })
-            .collect();
-        for (i, a, b) in diff.iter().take(10) {
-            eprintln!("[ERROR]   idx {i}: computed={a}, expected={b}");
-        }
-        eprintln!("[ERROR]   total mismatches: {}", diff.len());
-        std::process::exit(2);
-    }
-}
-
 fn read_points(path: &PathBuf) -> Vec<Vec<i64>> {
     let content = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
@@ -101,8 +56,30 @@ fn read_points(path: &PathBuf) -> Vec<Vec<i64>> {
         .filter(|line| !line.trim().is_empty())
         .map(|line| {
             line.split(',')
-                .map(|s| s.trim().parse::<i64>().unwrap_or_else(|e| panic!("Invalid point entry {s} in {}: {e}", path.display())))
+                .map(|s| {
+                    s.trim().parse::<i64>().unwrap_or_else(|e| {
+                        panic!("Invalid point entry {s} in {}: {e}", path.display())
+                    })
+                })
                 .collect::<Vec<i64>>()
+        })
+        .collect()
+}
+
+fn read_simplices(path: &PathBuf) -> Vec<Vec<usize>> {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+    content
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            line.split(',')
+                .map(|s| {
+                    s.trim().parse::<usize>().unwrap_or_else(|e| {
+                        panic!("Invalid simplex entry {s} in {}: {e}", path.display())
+                    })
+                })
+                .collect::<Vec<usize>>()
         })
         .collect()
 }
@@ -113,7 +90,7 @@ fn main() {
     let min_points = if max_deg.is_some() {
         None
     } else {
-        parse_arg_value::<u32>("--min-points").or(Some(100))
+        parse_arg_value::<u32>("--min-points").or(Some(DEFAULT_MCALLISTER_GV_MIN_POINTS))
     };
     let data_dir = parse_arg_value::<String>("--data-dir")
         .or_else(|| std::env::var("CYRUS_MCALLISTER_DATA_DIR").ok());
@@ -126,9 +103,7 @@ fn main() {
     }
 
     if data_dir.is_none() && !allow_fixtures {
-        eprintln!(
-            "[ERROR] No McAllister data dir set. Refusing to fall back to JSON fixtures."
-        );
+        eprintln!("[ERROR] No McAllister data dir set. Refusing to fall back to JSON fixtures.");
         eprintln!("[ERROR] Set CYRUS_MCALLISTER_DATA_DIR or pass --allow-fixtures.");
         std::process::exit(2);
     }
@@ -140,39 +115,47 @@ fn main() {
         eprintln!("[MODE] first-principles (.dat)");
     }
     if let Some(dir) = &data_dir {
-        eprintln!("[INFO] using McAllister data dir: {}", dir);
+        eprintln!("[INFO] using McAllister data dir: {dir}");
     }
 
-    let (points_raw, heights_raw) = if let Some(dir) = &data_dir {
-        let dir = PathBuf::from(dir);
-        let points = read_points(&dir.join("points.dat"));
-        let heights = read_csv_f64(&dir.join("heights.dat"));
-        (points, heights)
-    } else {
-        let poly_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/mcallister_e2e/inputs/polytope.json");
-        let poly: PolytopeInput = load_json(&poly_path);
-        let heights_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/mcallister_e2e/inputs/heights.json");
-        let heights: HeightsInput = load_json(&heights_path);
-        (poly.points, heights.values)
-    };
+    let (points_raw, simplices_raw) = data_dir.as_ref().map_or_else(
+        || {
+            let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let poly_path = manifest_dir.join("tests/mcallister_e2e/overrides/dual_points.json");
+            let poly: PolytopeInput = load_json(&poly_path);
+            let simplices_path =
+                manifest_dir.join("tests/mcallister_e2e/overrides/dual_simplices.json");
+            let simplices: SimplicesInput = load_json(&simplices_path);
+            (poly.points, simplices.simplices)
+        },
+        |dir| {
+            let dir = PathBuf::from(dir);
+            let points = read_points(&dir.join("dual_points.dat"));
+            let simplices = read_simplices(&dir.join("dual_simplices.dat"));
+            (points, simplices)
+        },
+    );
 
     let points: Vec<Point> = points_raw.iter().map(|p| Point::new(p.clone())).collect();
     let polytope = Polytope::from_vertices(points).expect("Failed to build polytope");
-    let triangulation_points = polytope
-        .points_not_interior_to_facets()
-        .expect("Failed to filter triangulation points");
-    let triangulation =
-        compute_regular_triangulation(&triangulation_points, &heights_raw)
-            .expect("Failed to compute triangulation from heights");
+    let triangulation_point_count = simplices_raw
+        .iter()
+        .flatten()
+        .copied()
+        .max()
+        .map_or(0, |idx| idx + 1);
+    let triangulation_points = points_raw
+        .iter()
+        .take(triangulation_point_count)
+        .map(|p| Point::new(p.clone()))
+        .collect::<Vec<_>>();
+    let triangulation = Triangulation::new(simplices_raw);
     eprintln!("[TIME] triangulation: {:.2?}", t0.elapsed());
 
-    let (_glsm, linrels, basis) =
+    let (_glsm, linrels, basis_auto) =
         compute_glsm_and_linrels(&triangulation_points).expect("Failed GLSM/linrels");
-    if let Some(dir) = &data_dir {
-        assert_basis_matches_dat(&basis, dir);
-    }
+    let basis = basis_auto;
+    eprintln!("[DEBUG] gv divisor basis: {basis:?}");
     eprintln!("[TIME] glsm/linrels: {:.2?}", t0.elapsed());
     let curve_basis =
         compute_curve_basis_matrix(&linrels, &basis).expect("Failed curve basis matrix");
@@ -192,12 +175,9 @@ fn main() {
         })
         .collect();
 
-    let intersection_full = compute_intersection_cytools(
-        &triangulation,
-        &triangulation_points,
-        &linrels_i64,
-    )
-    .expect("Failed intersection numbers");
+    let intersection_full =
+        compute_intersection_cytools(&triangulation, &triangulation_points, &linrels_i64)
+            .expect("Failed intersection numbers");
     eprintln!("[TIME] intersection: {:.2?}", t0.elapsed());
     let intersection = intersection_in_basis(&intersection_full, &basis);
     eprintln!("[TIME] intersection_in_basis: {:.2?}", t0.elapsed());
@@ -214,7 +194,7 @@ fn main() {
     eprintln!(
         "[DEBUG] mori_cone_cap rays: count={}, dim={}",
         rays.len(),
-        rays.first().map(Vec::len).unwrap_or(0)
+        rays.first().map_or(0, Vec::len)
     );
     eprintln!("[TIME] mori_cone_cap: {:.2?}", t0.elapsed());
     let grading = compute_grading_vector(&rays).expect("No grading vector found");

@@ -9,8 +9,11 @@ mod extract;
 mod solver;
 mod variables;
 
+use std::env;
+use std::path::Path;
+
 use crate::Point;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::intersection::Intersection;
 use crate::triangulation::Triangulation;
 
@@ -70,6 +73,14 @@ pub fn compute_intersection_cytools(
 
     // Step 7: Solve the system
     let solution = solve_sparse_system(&m_triplets, &c_vec, variable_array.len())?;
+    if let Ok(path) = env::var("CYRUS_INTERSECTION_DUMP_SOLUTION") {
+        dump_intersection_solution(
+            Path::new(&path),
+            &variable_array,
+            &solution,
+            &distintnum_array,
+        )?;
+    }
 
     // Step 8: Extract intersection numbers
     // The variables are 4-form values kappa^V_{ijkl}
@@ -78,6 +89,59 @@ pub fn compute_intersection_cytools(
         extract_intersection_numbers(&variable_array, &solution, &distintnum_array, n_points);
 
     Ok(kappa)
+}
+
+fn dump_intersection_solution(
+    path: &Path,
+    variable_array: &[[usize; 4]],
+    solution: &[f64],
+    distinct: &[distinct::DistinctIntnum],
+) -> Result<()> {
+    #[derive(serde::Serialize)]
+    struct VariableDump {
+        indices: [usize; 4],
+        value: f64,
+    }
+
+    #[derive(serde::Serialize)]
+    struct DistinctDump {
+        indices: [usize; 4],
+        value: f64,
+    }
+
+    #[derive(serde::Serialize)]
+    struct Dump {
+        variables: Vec<VariableDump>,
+        distinct: Vec<DistinctDump>,
+    }
+
+    let variables = variable_array
+        .iter()
+        .zip(solution.iter().copied())
+        .map(|(&indices, value)| VariableDump { indices, value })
+        .collect();
+    let distinct = distinct
+        .iter()
+        .map(|row| DistinctDump {
+            indices: row.indices,
+            value: row.inv_det,
+        })
+        .collect();
+    let payload = Dump {
+        variables,
+        distinct,
+    };
+    let json = serde_json::to_string_pretty(&payload).map_err(|err| {
+        Error::InvalidInput(format!("intersection solution dump encode failed: {err}"))
+    })?;
+    std::fs::write(path, json).map_err(|err| {
+        Error::InvalidInput(format!("intersection solution dump write failed: {err}"))
+    })?;
+    eprintln!(
+        "[DEBUG] wrote intersection solution dump: {}",
+        path.display()
+    );
+    Ok(())
 }
 
 #[cfg(test)]

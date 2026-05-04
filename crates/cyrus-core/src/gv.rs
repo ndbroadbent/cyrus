@@ -8,10 +8,11 @@
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
-use std::io::BufWriter;
 use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
+use std::io::BufWriter;
+use std::path::{Path, PathBuf};
 
+use good_lp::{Expression, ProblemVariables, Solution, SolverModel, default_solver, variable};
 use malachite::Integer;
 use malachite::num::arithmetic::traits::Abs;
 use nalgebra::{DMatrix, DVector, RowDVector};
@@ -23,6 +24,9 @@ use crate::intersection::Intersection;
 use crate::lattice::Point;
 use crate::polytope::Polytope;
 use crate::triangulation::Triangulation;
+
+const GRADING_CACHE_VERSION: &str = "grading-vector-cytools-lp-v1";
+const LATTICE_CACHE_VERSION: &str = "lattice-points-v2";
 
 /// Compute the Mori cone cap generators (rays) using the CYTools algorithm.
 ///
@@ -105,7 +109,7 @@ pub fn compute_mori_cone_cap_rays(
                         continue;
                     }
 
-                    if let Some(v) = nullspace_vector(&pts_ext, &diff, &comm, false)? {
+                    if let Some(v) = nullspace_vector(&pts_ext, &diff, &comm, false) {
                         let full_v = build_full_v(&diff, &comm, &v);
                         mori_cap_rays.insert(full_v);
                     }
@@ -144,7 +148,7 @@ pub fn compute_mori_cone_cap_rays(
                 let diff = vec![*p1, *p2];
                 let mut comm = s2d.clone();
                 comm.push(origin_idx);
-                let Some(v) = nullspace_vector(&pts_ext, &diff, &comm, true)? else {
+                let Some(v) = nullspace_vector(&pts_ext, &diff, &comm, true) else {
                     continue;
                 };
                 let full_v = build_full_v(&diff, &comm, &v);
@@ -153,8 +157,7 @@ pub fn compute_mori_cone_cap_rays(
                 let origin_coeff = full_v
                     .iter()
                     .find(|(idx, _)| *idx == origin_idx)
-                    .map(|(_, coeff)| *coeff)
-                    .unwrap_or(0);
+                    .map_or(0, |(_, coeff)| *coeff);
                 if origin_coeff == 0 {
                     continue;
                 }
@@ -221,17 +224,14 @@ pub fn compute_grading_vector(rays: &[Vec<i64>]) -> Option<Vec<i64>> {
     if rays.is_empty() {
         return None;
     }
+    let (cache_dir, cache_path) = grading_cache_paths(rays);
+    if let Some(cached) = load_grading_cache(&cache_path, rays) {
+        eprintln!("[DEBUG] grading vector: cache hit");
+        return Some(cached);
+    }
 
-    let (zero_rays, opposite_pairs) = analyze_rays(rays);
-
-    // Grading vector is strictly interior to the dual cone.
-    // Avoid DDM by working directly with the dual hyperplanes (the rays).
-    let rays_i128: Vec<Vec<i128>> = rays
-        .iter()
-        .map(|row| row.iter().map(|&x| x as i128).collect())
-        .collect();
-    let mut dual = Cone::from_hyperplanes(rays_i128);
-    let interior = dual.find_interior_point().or_else(|| {
+    let interior = cytools_grading_lp_solution(rays).or_else(|| {
+        let (zero_rays, opposite_pairs) = analyze_rays(rays);
         eprintln!(
             "[WARN] grading vector search failed: rays={}, zero_rays={}, opposite_pairs={}",
             rays.len(),
@@ -241,22 +241,176 @@ pub fn compute_grading_vector(rays: &[Vec<i64>]) -> Option<Vec<i64>> {
         None
     })?;
 
-    // Scale and round until strictly interior in the dual
-    let scales = [1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0];
-    for scale in scales {
+    // Match CYTools Cone.find_interior_point(integral=True): scale the LP
+    // solution by successive positive integers and round until every defining
+    // ray has strictly positive pairing with the candidate.
+    for scale in 1..1000 {
         let candidate: Vec<i64> = interior
             .iter()
-            .map(|x| (x * scale).round() as i64)
+            .map(|x| (x * f64::from(scale)).round() as i64)
             .collect();
         if candidate.iter().all(|&x| x == 0) {
             continue;
         }
         if is_strictly_dual(rays, &candidate) {
+            write_grading_cache(&cache_dir, &cache_path, &candidate);
             return Some(candidate);
         }
     }
 
     None
+}
+
+fn cytools_grading_lp_solution(rays: &[Vec<i64>]) -> Option<Vec<f64>> {
+    let dim = rays.first()?.len();
+    if dim == 0 || rays.iter().any(|row| row.len() != dim) {
+        return None;
+    }
+
+    let mut vars = ProblemVariables::new();
+    let bound = 1.0e9;
+    let x: Vec<_> = (0..dim)
+        .map(|_| vars.add(variable().min(-bound).max(bound)))
+        .collect();
+
+    // CYTools feasibility(..., backend="glop") minimizes the average
+    // hyperplane normal while imposing H x >= 1.
+    let mut objective = Expression::from(0.0);
+    for i in 0..dim {
+        let coeff: f64 = rays.iter().map(|row| row[i] as f64).sum::<f64>() / rays.len() as f64;
+        objective.add_mul(coeff, x[i]);
+    }
+
+    let mut model = vars.minimise(objective).using(default_solver);
+    for row in rays {
+        let mut expr = Expression::from(0.0);
+        for (i, &coeff) in row.iter().enumerate() {
+            if coeff != 0 {
+                expr.add_mul(coeff as f64, x[i]);
+            }
+        }
+        model = model.with(expr.geq(1.0));
+    }
+
+    let solution = match model.solve() {
+        Ok(solution) => solution,
+        Err(err) => {
+            eprintln!("[WARN] grading vector LP failed: {err}");
+            return None;
+        }
+    };
+    let candidate: Vec<f64> = x.iter().map(|var| solution.value(*var)).collect();
+    if candidate.iter().all(|v| v.is_finite()) {
+        Some(candidate)
+    } else {
+        None
+    }
+}
+
+fn grading_cache_paths(rays: &[Vec<i64>]) -> (PathBuf, PathBuf) {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    GRADING_CACHE_VERSION.hash(&mut hasher);
+    let mut key_rays: Vec<&[i64]> = rays.iter().map(Vec::as_slice).collect();
+    key_rays.sort();
+    for row in &key_rays {
+        row.hash(&mut hasher);
+    }
+    let key = hasher.finish();
+    let cache_dir = env::var("CYRUS_CACHE_DIR")
+        .map_or_else(|_| PathBuf::from("target/cyrus-cache"), PathBuf::from);
+    let cache_path = cache_dir.join(format!("grading_vector_{key:x}.json"));
+    (cache_dir, cache_path)
+}
+
+fn load_grading_cache(path: &Path, rays: &[Vec<i64>]) -> Option<Vec<i64>> {
+    if !path.exists() {
+        return None;
+    }
+    let data = match fs::read_to_string(path) {
+        Ok(data) => data,
+        Err(err) => {
+            eprintln!(
+                "[WARN] failed to read grading cache {}: {err}",
+                path.display()
+            );
+            return None;
+        }
+    };
+    let candidate: Vec<i64> = match serde_json::from_str(&data) {
+        Ok(candidate) => candidate,
+        Err(err) => {
+            eprintln!(
+                "[WARN] failed to parse grading cache {}: {err}",
+                path.display()
+            );
+            return None;
+        }
+    };
+    let dim = rays.first()?.len();
+    if candidate.len() != dim || !is_strictly_dual(rays, &candidate) {
+        eprintln!("[WARN] ignoring invalid grading cache {}", path.display());
+        return None;
+    }
+    Some(candidate)
+}
+
+fn write_grading_cache(cache_dir: &Path, path: &Path, candidate: &[i64]) {
+    if let Err(err) = fs::create_dir_all(cache_dir) {
+        eprintln!(
+            "[WARN] failed to create grading cache dir {}: {err}",
+            cache_dir.display()
+        );
+        return;
+    }
+    match fs::File::create(path) {
+        Ok(file) => {
+            let writer = BufWriter::new(file);
+            if let Err(err) = serde_json::to_writer(writer, candidate) {
+                eprintln!(
+                    "[WARN] failed to serialize grading cache {}: {err}",
+                    path.display()
+                );
+            }
+        }
+        Err(err) => {
+            eprintln!(
+                "[WARN] failed to create grading cache {}: {err}",
+                path.display()
+            );
+        }
+    }
+}
+
+struct LatticeCacheControls {
+    max_coord: i64,
+    deg_window: i64,
+    cacheable: bool,
+}
+
+impl LatticeCacheControls {
+    fn from_env(default_max_coord: i64, default_deg_window: i64) -> Self {
+        let max_coord = env::var("CYRUS_LATTICE_MAX_COORD")
+            .ok()
+            .and_then(|value| value.parse::<i64>().ok())
+            .unwrap_or(default_max_coord);
+        let deg_window = env::var("CYRUS_LATTICE_DEG_WINDOW")
+            .ok()
+            .and_then(|value| value.parse::<i64>().ok())
+            .unwrap_or(default_deg_window);
+
+        let strict = env::var("CYRUS_LATTICE_STRICT")
+            .map(|value| value != "0")
+            .unwrap_or(true);
+        let has_bounded_search = env::var("CYRUS_LATTICE_MAX_TIME_SEC").is_ok()
+            || env::var("CYRUS_LATTICE_MAX_SOLUTIONS").is_ok()
+            || env::var("CYRUS_LATTICE_MAX_DEG").is_ok();
+
+        Self {
+            max_coord,
+            deg_window,
+            cacheable: strict && !has_bounded_search,
+        }
+    }
 }
 
 fn analyze_rays(rays: &[Vec<i64>]) -> (usize, usize) {
@@ -285,7 +439,11 @@ fn normalize_ray(r: &[i64]) -> Vec<i64> {
     for &x in r {
         g = gcd_i64(g, x.abs());
     }
-    let out: Vec<i64> = if g == 0 { r.to_vec() } else { r.iter().map(|&x| x / g).collect() };
+    let out: Vec<i64> = if g == 0 {
+        r.to_vec()
+    } else {
+        r.iter().map(|&x| x / g).collect()
+    };
     for &x in &out {
         if x > 0 {
             return out;
@@ -319,7 +477,7 @@ pub fn compute_gv_invariants(
     eprintln!(
         "[DEBUG] gv start: rays={}, dim={}, max_deg={:?}, min_points={:?}",
         rays.len(),
-        rays.first().map(|r| r.len()).unwrap_or(0),
+        rays.first().map_or(0, Vec::len),
         max_deg,
         min_points
     );
@@ -354,7 +512,7 @@ pub fn compute_gv_invariants(
     }
 
     let n_rays = rays.len();
-    eprintln!("[DEBUG] gv generators used: {}", n_rays);
+    eprintln!("[DEBUG] gv generators used: {n_rays}");
 
     let grading_vec_i32: Vec<i32> = grading_vector
         .iter()
@@ -374,11 +532,7 @@ pub fn compute_gv_invariants(
     }
     eprintln!(
         "[DEBUG] gv grading_vec abs max={}, min={}, max={}, neg_count={}, elapsed={:.2?}",
-        grading_vec_i32
-            .iter()
-            .map(|v| v.abs())
-            .max()
-            .unwrap_or(0),
+        grading_vec_i32.iter().map(|v| v.abs()).max().unwrap_or(0),
         min_g,
         max_g,
         neg_g,
@@ -392,26 +546,29 @@ pub fn compute_gv_invariants(
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(100);
     let gen_min_points = factor * dim;
-    eprintln!("[DEBUG] gv generator min_points: {}", gen_min_points);
+    eprintln!("[DEBUG] gv generator min_points: {gen_min_points}");
 
     let lattice_pts = {
+        let lattice_cache = LatticeCacheControls::from_env(1000, 0);
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        let mut key_rays = rays.to_vec();
+        LATTICE_CACHE_VERSION.hash(&mut hasher);
+        let mut key_rays: Vec<&[i64]> = rays.iter().map(Vec::as_slice).collect();
         key_rays.sort();
-        key_rays.hash(&mut hasher);
+        for row in &key_rays {
+            row.hash(&mut hasher);
+        }
         grading_vector.hash(&mut hasher);
         gen_min_points.hash(&mut hasher);
-        1000i64.hash(&mut hasher);
-        0i64.hash(&mut hasher);
+        lattice_cache.max_coord.hash(&mut hasher);
+        lattice_cache.deg_window.hash(&mut hasher);
         let key = hasher.finish();
 
         let cache_dir = env::var("CYRUS_CACHE_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("target/cyrus-cache"));
+            .map_or_else(|_| PathBuf::from("target/cyrus-cache"), PathBuf::from);
         let cache_path = cache_dir.join(format!("lattice_points_{key:x}.json"));
 
         eprintln!("[DEBUG] lattice cache path: {}", cache_path.display());
-        if cache_path.exists() {
+        if lattice_cache.cacheable && cache_path.exists() {
             let data = fs::read_to_string(&cache_path).map_err(|e| {
                 Error::InvalidInput(format!(
                     "Failed to read lattice point cache {}: {e}",
@@ -424,29 +581,25 @@ pub fn compute_gv_invariants(
                     cache_path.display()
                 ))
             })?;
-            eprintln!(
-                "[DEBUG] gv lattice points: {} (cache hit)",
-                pts.len()
-            );
+            eprintln!("[DEBUG] gv lattice points: {} (cache hit)", pts.len());
             pts
         } else {
             let rays_i128: Vec<Vec<i128>> = rays
                 .iter()
-                .map(|r| r.iter().map(|&x| x as i128).collect())
+                .map(|r| r.iter().map(|&x| i128::from(x)).collect())
                 .collect();
             let mut cone = Cone::from_rays(rays_i128);
             let pts = cone.find_lattice_points_ortools(
                 Some(gen_min_points),
                 None,
                 grading_vector,
-                1000,
-                0,
+                lattice_cache.max_coord,
+                lattice_cache.deg_window,
             )?;
-            eprintln!(
-                "[DEBUG] gv lattice points: {} (cache miss)",
-                pts.len()
-            );
-            if let Err(e) = fs::create_dir_all(&cache_dir) {
+            eprintln!("[DEBUG] gv lattice points: {} (cache miss)", pts.len());
+            if !lattice_cache.cacheable {
+                eprintln!("[DEBUG] gv lattice points: cache disabled by search overrides");
+            } else if let Err(e) = fs::create_dir_all(&cache_dir) {
                 eprintln!(
                     "[WARN] failed to create lattice cache dir {}: {}",
                     cache_dir.display(),
@@ -497,17 +650,14 @@ pub fn compute_gv_invariants(
     if let Some(d) = max_deg {
         let d_i128 = i128::from(d);
         let before = filtered_vecs.len();
-        filtered_vecs = filtered_vecs
-            .into_iter()
-            .filter(|v| {
-                let deg: i128 = v
-                    .iter()
-                    .zip(grading_vector.iter())
-                    .map(|(&x, &g)| i128::from(x) * i128::from(g))
-                    .sum();
-                deg <= d_i128
-            })
-            .collect();
+        filtered_vecs.retain(|v| {
+            let deg: i128 = v
+                .iter()
+                .zip(grading_vector.iter())
+                .map(|(&x, &g)| i128::from(x) * i128::from(g))
+                .sum();
+            deg <= d_i128
+        });
         eprintln!(
             "[DEBUG] gv generators filtered by max_deg: {} -> {}",
             before,
@@ -534,9 +684,11 @@ pub fn compute_gv_invariants(
 
     let generator_hash = {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        let mut key_vecs = filtered_vecs.clone();
+        let mut key_vecs: Vec<&[i64]> = filtered_vecs.iter().map(Vec::as_slice).collect();
         key_vecs.sort();
-        key_vecs.hash(&mut hasher);
+        for row in &key_vecs {
+            row.hash(&mut hasher);
+        }
         hasher.finish()
     };
 
@@ -554,7 +706,9 @@ pub fn compute_gv_invariants(
     let mut q_data: Vec<i32> = Vec::with_capacity(q_rows * q_cols);
     for row in q_matrix {
         if row.len() != q_cols {
-            return Err(Error::InvalidInput("q_matrix rows have inconsistent length".into()));
+            return Err(Error::InvalidInput(
+                "q_matrix rows have inconsistent length".into(),
+            ));
         }
         for &v in row {
             let v_i32 = i32::try_from(v)
@@ -575,19 +729,31 @@ pub fn compute_gv_invariants(
     // Intersection numbers (dok format)
     let mut intnums_map: HashMap<(usize, usize, usize), i32> = HashMap::new();
     for (&(i, j, k), val) in intnums.iter() {
-        let (num, den) = val.get().clone().into_numerator_and_denominator();
-        if den != 1u32 {
+        if val.get().denominator_ref() != &1u32 {
             return Err(Error::InvalidInput(
                 "intersection number is not integral".into(),
             ));
         }
-        let v_i64: i64 = i64::try_from(&num).map_err(|_| {
-            Error::InvalidInput("intersection number does not fit in i64".into())
-        })?;
+        let signed = Integer::try_from(val.get().clone())
+            .map_err(|_| Error::InvalidInput("intersection number is not integral".into()))?;
+        let v_i64: i64 = i64::try_from(&signed)
+            .map_err(|_| Error::InvalidInput("intersection number does not fit in i64".into()))?;
         let v_i32: i32 = v_i64
             .try_into()
             .map_err(|_| Error::InvalidInput("intersection number does not fit in i32".into()))?;
         intnums_map.insert((i, j, k), v_i32);
+    }
+
+    if let Ok(path) = env::var("CYRUS_GV_DUMP_INPUTS") {
+        dump_gv_inputs(
+            Path::new(&path),
+            &filtered_vecs,
+            &grading_vec_i32,
+            &q,
+            &intnums_map,
+            min_points,
+            max_deg,
+        )?;
     }
 
     let cache_key = {
@@ -597,15 +763,16 @@ pub fn compute_gv_invariants(
         min_points.hash(&mut hasher);
         generator_hash.hash(&mut hasher);
         q.iter().for_each(|v| v.hash(&mut hasher));
-        for (k, v) in &intnums_map {
+        let mut intnums_items: Vec<_> = intnums_map.iter().collect();
+        intnums_items.sort_unstable_by_key(|(k, _)| **k);
+        for (k, v) in intnums_items {
             k.hash(&mut hasher);
             v.hash(&mut hasher);
         }
         hasher.finish()
     };
     let cache_dir = env::var("CYRUS_CACHE_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("target/cyrus-cache"));
+        .map_or_else(|_| PathBuf::from("target/cyrus-cache"), PathBuf::from);
     let gv_cache_path = cache_dir.join(format!("gv_invariants_{cache_key:x}.json"));
     eprintln!("[DEBUG] gv cache path: {}", gv_cache_path.display());
     if gv_cache_path.exists() {
@@ -631,13 +798,10 @@ pub fn compute_gv_invariants(
             let gv_int = item
                 .value
                 .parse::<Integer>()
-                .map_err(|_| Error::InvalidInput("GV cache integer parse failed".into()))?;
+                .map_err(|()| Error::InvalidInput("GV cache integer parse failed".into()))?;
             out.push((item.charge, gv_int));
         }
-        eprintln!(
-            "[DEBUG] gv invariants: cache hit ({} entries)",
-            out.len()
-        );
+        eprintln!("[DEBUG] gv invariants: cache hit ({} entries)", out.len());
         return Ok(out);
     }
 
@@ -669,7 +833,7 @@ pub fn compute_gv_invariants(
         let gv_str = gv.to_string();
         let gv_int = gv_str
             .parse::<Integer>()
-            .map_err(|_| Error::InvalidInput("GV integer conversion failed".into()))?;
+            .map_err(|()| Error::InvalidInput("GV integer conversion failed".into()))?;
         out.push((v.as_slice().to_vec(), gv_int));
     }
 
@@ -714,6 +878,57 @@ pub fn compute_gv_invariants(
     }
 
     Ok(out)
+}
+
+fn dump_gv_inputs(
+    path: &Path,
+    generators: &[Vec<i64>],
+    grading_vector: &[i32],
+    q: &DMatrix<i32>,
+    intnums: &HashMap<(usize, usize, usize), i32>,
+    min_points: Option<u32>,
+    max_deg: Option<u32>,
+) -> Result<()> {
+    #[derive(serde::Serialize)]
+    struct IntNumDump {
+        i: usize,
+        j: usize,
+        k: usize,
+        value: i32,
+    }
+
+    #[derive(serde::Serialize)]
+    struct GvInputDump<'a> {
+        generators: &'a [Vec<i64>],
+        grading_vector: &'a [i32],
+        q: Vec<Vec<i32>>,
+        intnums: Vec<IntNumDump>,
+        min_points: Option<u32>,
+        max_deg: Option<u32>,
+    }
+
+    let q_rows = (0..q.nrows())
+        .map(|r| (0..q.ncols()).map(|c| q[(r, c)]).collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+    let mut intnum_rows = intnums
+        .iter()
+        .map(|(&(i, j, k), &value)| IntNumDump { i, j, k, value })
+        .collect::<Vec<_>>();
+    intnum_rows.sort_unstable_by_key(|row| (row.i, row.j, row.k));
+    let payload = GvInputDump {
+        generators,
+        grading_vector,
+        q: q_rows,
+        intnums: intnum_rows,
+        min_points,
+        max_deg,
+    };
+    let json = serde_json::to_string_pretty(&payload)
+        .map_err(|err| Error::InvalidInput(format!("GV input dump encode failed: {err}")))?;
+    fs::write(path, json)
+        .map_err(|err| Error::InvalidInput(format!("GV input dump write failed: {err}")))?;
+    eprintln!("[DEBUG] wrote GV input dump: {}", path.display());
+    Ok(())
 }
 
 fn compute_faces_4d(
@@ -811,7 +1026,7 @@ fn nullspace_vector(
     diff_pts: &[usize],
     comm_pts: &[usize],
     require_unique: bool,
-) -> Result<Option<Vec<Integer>>> {
+) -> Option<Vec<Integer>> {
     let rows = diff_pts.len() + comm_pts.len();
     let cols = pts_ext[0].len();
     let mut m: Vec<Vec<Integer>> = vec![vec![Integer::from(0); cols]; rows];
@@ -831,10 +1046,10 @@ fn nullspace_vector(
     let m_t = transpose(&m);
     let kernel = integer_kernel(&m_t);
     if kernel.is_empty() {
-        return Ok(None);
+        return None;
     }
     if require_unique && kernel.len() != 1 {
-        return Ok(None);
+        return None;
     }
 
     let mut v = kernel[0].clone();
@@ -851,7 +1066,7 @@ fn nullspace_vector(
         }
     }
 
-    Ok(Some(v))
+    Some(v)
 }
 
 fn build_full_v(diff_pts: &[usize], comm_pts: &[usize], v: &[Integer]) -> Vec<(usize, i64)> {
@@ -904,6 +1119,9 @@ fn gcd_list(vals: &[Integer]) -> Integer {
 
 fn is_strictly_dual(rays: &[Vec<i64>], v: &[i64]) -> bool {
     for r in rays {
+        if r.len() != v.len() {
+            return false;
+        }
         let dot: i128 = r
             .iter()
             .zip(v.iter())
@@ -914,4 +1132,54 @@ fn is_strictly_dual(rays: &[Vec<i64>], v: &[i64]) -> bool {
         }
     }
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use super::{compute_grading_vector, load_grading_cache, write_grading_cache};
+
+    #[test]
+    fn grading_cache_validates_candidate_against_rays() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time is after unix epoch")
+            .as_nanos();
+        let cache_dir = PathBuf::from("target/cyrus-test-cache")
+            .join(format!("grading-{}-{nonce}", std::process::id()));
+        let path = cache_dir.join("grading.json");
+        let rays = vec![vec![1, 0], vec![0, 1]];
+
+        write_grading_cache(&cache_dir, &path, &[2, 4]);
+        assert_eq!(load_grading_cache(&path, &rays), Some(vec![2, 4]));
+
+        write_grading_cache(&cache_dir, &path, &[1, 0]);
+        assert_eq!(load_grading_cache(&path, &rays), None);
+
+        write_grading_cache(&cache_dir, &path, &[1, 1, 1]);
+        assert_eq!(load_grading_cache(&path, &rays), None);
+
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir_all(&cache_dir);
+    }
+
+    #[test]
+    fn grading_vector_matches_cytools_mcallister_dual() {
+        let rays = vec![
+            vec![0, 0, 1, -2],
+            vec![0, 0, 0, 1],
+            vec![-1, 0, 0, 1],
+            vec![1, 1, 0, 0],
+            vec![1, 0, 0, 0],
+            vec![0, 1, 0, 0],
+            vec![0, 0, 1, 0],
+            vec![0, 1, 1, 0],
+            vec![1, 1, 0, -2],
+            vec![-1, 0, 1, 0],
+        ];
+
+        assert_eq!(compute_grading_vector(&rays), Some(vec![1, 4, 5, 2]));
+    }
 }

@@ -72,12 +72,28 @@ pub fn solve_sparse_system(
 
     let n_rows = c_vec.len();
 
-    // Build M^T M
+    let rows_data = group_triplets_by_row(m_triplets);
+    let mtm_triplets = build_mtm_triplets(&rows_data, n_vars);
+    let mtm_sparse = build_mtm_sparse(n_vars, &mtm_triplets)?;
+    let mtc = build_mtc(m_triplets, c_vec, n_vars);
+
+    let sol = solve_cholesky(&mtm_sparse, &mtc, n_vars)?;
+    log_sparse_residual(&rows_data, &sol, c_vec, n_rows, n_vars);
+    Ok(sol)
+}
+
+fn group_triplets_by_row(m_triplets: &[(usize, usize, f64)]) -> HashMap<usize, Vec<(usize, f64)>> {
     let mut rows_data: HashMap<usize, Vec<(usize, f64)>> = HashMap::new();
     for &(row, col, val) in m_triplets {
         rows_data.entry(row).or_default().push((col, val));
     }
+    rows_data
+}
 
+fn build_mtm_triplets(
+    rows_data: &HashMap<usize, Vec<(usize, f64)>>,
+    _n_vars: usize,
+) -> Vec<(usize, usize, f64)> {
     let mut mtm_map: HashMap<(usize, usize), f64> = HashMap::new();
     for entries in rows_data.values() {
         for &(col_i, val_i) in entries {
@@ -86,35 +102,44 @@ pub fn solve_sparse_system(
             }
         }
     }
+    mtm_map.into_iter().map(|((i, j), v)| (i, j, v)).collect()
+}
 
-    // Add regularization
-    for i in 0..n_vars {
-        *mtm_map.entry((i, i)).or_insert(0.0) += 1e-12;
-    }
+fn build_mtm_sparse(
+    n_vars: usize,
+    mtm_triplets: &[(usize, usize, f64)],
+) -> Result<SparseColMat<usize, f64>> {
+    SparseColMat::<usize, f64>::try_new_from_triplets(n_vars, n_vars, mtm_triplets)
+        .map_err(|e| Error::SingularMatrix(format!("Failed to build M^T M: {e:?}")))
+}
 
-    let mtm_triplets: Vec<(usize, usize, f64)> =
-        mtm_map.into_iter().map(|((i, j), v)| (i, j, v)).collect();
-
-    let mtm_sparse =
-        SparseColMat::<usize, f64>::try_new_from_triplets(n_vars, n_vars, &mtm_triplets)
-            .map_err(|e| Error::SingularMatrix(format!("Failed to build M^T M: {e:?}")))?;
-
-    // Build M^T * (-C)
+fn build_mtc(m_triplets: &[(usize, usize, f64)], c_vec: &[f64], n_vars: usize) -> faer::Mat<f64> {
     let mut mtc = faer::Mat::<f64>::zeros(n_vars, 1);
     for &(row, col, val) in m_triplets {
-        mtc[(col, 0)] -= val * c_vec[row]; // Note: -C because we solve M*x + C = 0
+        mtc[(col, 0)] -= val * c_vec[row];
     }
+    mtc
+}
 
-    // Solve
+fn solve_cholesky(
+    mtm_sparse: &SparseColMat<usize, f64>,
+    mtc: &faer::Mat<f64>,
+    n_vars: usize,
+) -> Result<Vec<f64>> {
     let chol = mtm_sparse
         .sp_cholesky(faer::Side::Lower)
         .map_err(|_| Error::SingularMatrix("Cholesky failed".into()))?;
-
     let solution = chol.solve(&mtc);
+    Ok((0..n_vars).map(|i| solution[(i, 0)]).collect())
+}
 
-    let sol: Vec<f64> = (0..n_vars).map(|i| solution[(i, 0)]).collect();
-
-    // Compute residual for debugging
+fn log_sparse_residual(
+    rows_data: &HashMap<usize, Vec<(usize, f64)>>,
+    sol: &[f64],
+    c_vec: &[f64],
+    n_rows: usize,
+    n_vars: usize,
+) {
     let mut residual_sq = 0.0;
     let mut rhs_sq = 0.0;
     for row in 0..n_rows {
@@ -124,7 +149,7 @@ pub fn solve_sparse_system(
                 mx_row += val * sol[col];
             }
         }
-        let diff = mx_row + c_vec[row]; // M*x + C should be 0
+        let diff = mx_row + c_vec[row];
         residual_sq += diff * diff;
         rhs_sq += c_vec[row] * c_vec[row];
     }
@@ -134,6 +159,4 @@ pub fn solve_sparse_system(
         residual_sq.sqrt()
     };
     eprintln!("[CYTools algo] Relative residual: {rel_residual:.6} ({n_vars} vars, {n_rows} eqns)");
-
-    Ok(sol)
 }

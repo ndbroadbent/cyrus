@@ -139,9 +139,7 @@ pub fn rational_matrix_to_integer(mat: &[Vec<Rational>]) -> Vec<Vec<Integer>> {
             .iter()
             .map(|val| {
                 let scaled = val * Rational::from(&lcm);
-                let (numer, denom) = scaled.into_numerator_and_denominator();
-                assert!(denom == 1u32, "Non-integer after scaling: {numer}/{denom}");
-                Integer::from(numer)
+                Integer::try_from(scaled).expect("Non-integer after scaling")
             })
             .collect();
 
@@ -149,4 +147,22 @@ pub fn rational_matrix_to_integer(mat: &[Vec<Rational>]) -> Vec<Vec<Integer>> {
     }
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rational_matrix_to_integer_preserves_negative_entries() {
+        let mat = vec![vec![
+            Rational::from(-1) / Rational::from(2),
+            Rational::from(3) / Rational::from(2),
+        ]];
+
+        assert_eq!(
+            rational_matrix_to_integer(&mat),
+            vec![vec![Integer::from(-1), Integer::from(3)]]
+        );
+    }
 }
