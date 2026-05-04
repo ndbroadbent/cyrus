@@ -24,7 +24,8 @@ use cyrus_core::{
     F64, Finite, Point, Polytope, compute_curve_basis_matrix, compute_glsm_and_linrels,
     compute_mori_cone_cap_rays, compute_regular_triangulation,
     compute_toric_two_face_curve_gv_invariants, effective_prime_divisors_from_curve_basis,
-    heights_to_kahler, remove_pair_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
+    heights_to_kahler, project_mori_cone_cap_rays_to_basis,
+    remove_pair_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
 };
 
 fn read_csv_rows_i64(path: &Path) -> Vec<Vec<i64>> {
@@ -313,6 +314,54 @@ fn stage5_mcallister_small_toric_curves_match_checkpoint() {
     );
 }
 
+#[test]
+fn stage5_mcallister_mori_basis_projection_matches_direct_basis_rays() {
+    if !require_first_principles() {
+        return;
+    }
+    let Some(data_dir) = crate::mcallister_data_dir() else {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    };
+
+    let points_raw = read_csv_rows_i64(&data_dir.join("points.dat"));
+    let heights = read_csv_f64(&data_dir.join("heights.dat"));
+    let basis = read_csv_usize(&data_dir.join("basis.dat"));
+
+    let all_points: Vec<Point> = points_raw.into_iter().map(Point::new).collect();
+    let polytope = Polytope::from_vertices(all_points).expect("failed to create polytope");
+    let triangulation_points = polytope
+        .points_not_interior_to_facets()
+        .expect("failed to filter points");
+    let triangulation = compute_regular_triangulation(&triangulation_points, &heights)
+        .expect("failed to compute triangulation");
+
+    let ambient_rays = compute_mori_cone_cap_rays(
+        &triangulation,
+        &triangulation_points,
+        &polytope,
+        false,
+        false,
+        None,
+    )
+    .expect("failed to compute ambient Mori-cap rays");
+    let projected = project_mori_cone_cap_rays_to_basis(&ambient_rays, &basis)
+        .expect("failed to project ambient Mori-cap rays to basis");
+    let direct = compute_mori_cone_cap_rays(
+        &triangulation,
+        &triangulation_points,
+        &polytope,
+        true,
+        false,
+        Some(&basis),
+    )
+    .expect("failed to compute basis Mori-cap rays directly");
+
+    assert_eq!(
+        projected, direct,
+        "basis projection of reused ambient Mori-cap rays must match direct in_basis=true computation"
+    );
+}
+
 /// Compute the GV values of the McAllister small toric curves from toric
 /// two-face curve formulas, using `small_curves_gv.dat` only as a checkpoint.
 #[test]
@@ -539,11 +588,12 @@ fn stage5_gv_computation_roadmap() {
             "branch-report JSONL can include bounded samples of missing small-curve classes via --branch-report-missing-limit for formula-classification diagnostics",
             "branch-report JSONL records required grading-degree ranges for missing small-curve classes, exposing the cost of general GV fallback per branch",
             "branch-report JSONL can diagnose missing small-curve classes that are exact sums of up to three raw sub-cutoff candidates via --branch-report-decomposition-depth",
+            "project_mori_cone_cap_rays_to_basis reuses ambient Mori-cap rays and is first-principles checked against direct in_basis=true Mori-cap generation on McAllister 4-214-647",
         ],
         remaining_gaps: vec![
             "Generated branch candidates without the height_projected initializer still did not find the 4-214-647 paper branch in a deterministic 48-candidate diagnostic: the lowest sampled phase-1 volume was about 20611 rather than 17901, and even coverage-aware selection still had at least 412 small curves missing toric GV coverage",
             "The current production small-curve pruning only removes pair-decomposable curves; the new decomposition-depth report is bounded to three terms and is not a full faithful implementation of the paper's sums-of-others/Hilbert-basis reduction",
-            "The explicit general primal GV fallback still reaches full 214-dimensional Mori-cone dualization for any max_deg high enough to cover the selected missing curves, or for min_points-driven runs; bounded DDM diagnostics stop loudly at configured limits",
+            "The explicit general primal GV fallback still reaches full 214-dimensional Mori-cone dualization for any max_deg high enough to cover the selected missing curves, or for min_points-driven runs; in the latest 4-candidate generated-branch diagnostic the min-required-gv-degree branch still requires degrees 4..2334",
             "A PPL/cdd diagnostic on the dumped 561658-ray, 214-dimensional V-representation also exceeded a 300-second cap without producing an H-representation",
             "Finish a post-orientation-fix validation run of adjacency-filtered DDM on the full 214-dimensional McAllister Mori cone",
             "Further optimize or replace hyperplane dualization; bounded diagnostics still need to prove the full 561658-ray McAllister dualization completes with the corrected ray orientation",

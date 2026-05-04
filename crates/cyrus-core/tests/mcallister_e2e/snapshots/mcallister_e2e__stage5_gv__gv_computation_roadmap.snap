@@ -38,12 +38,13 @@ expression: roadmap
     "mcallister_first_principles supports --branch-selection min-required-gv-degree to rank generated positive branches by the max required degree of missing small-curve general GV values",
     "branch-report JSONL can include bounded samples of missing small-curve classes via --branch-report-missing-limit for formula-classification diagnostics",
     "branch-report JSONL records required grading-degree ranges for missing small-curve classes, exposing the cost of general GV fallback per branch",
-    "branch-report JSONL can diagnose missing small-curve classes that are exact sums of up to three raw sub-cutoff candidates via --branch-report-decomposition-depth"
+    "branch-report JSONL can diagnose missing small-curve classes that are exact sums of up to three raw sub-cutoff candidates via --branch-report-decomposition-depth",
+    "project_mori_cone_cap_rays_to_basis reuses ambient Mori-cap rays and is first-principles checked against direct in_basis=true Mori-cap generation on McAllister 4-214-647"
   ],
   "remaining_gaps": [
     "Generated branch candidates without the height_projected initializer still did not find the 4-214-647 paper branch in a deterministic 48-candidate diagnostic: the lowest sampled phase-1 volume was about 20611 rather than 17901, and even coverage-aware selection still had at least 412 small curves missing toric GV coverage",
     "The current production small-curve pruning only removes pair-decomposable curves; the new decomposition-depth report is bounded to three terms and is not a full faithful implementation of the paper's sums-of-others/Hilbert-basis reduction",
-    "The explicit general primal GV fallback still reaches full 214-dimensional Mori-cone dualization for any max_deg high enough to cover the selected missing curves, or for min_points-driven runs; bounded DDM diagnostics stop loudly at configured limits",
+    "The explicit general primal GV fallback still reaches full 214-dimensional Mori-cone dualization for any max_deg high enough to cover the selected missing curves, or for min_points-driven runs; in the latest 4-candidate generated-branch diagnostic the min-required-gv-degree branch still requires degrees 4..2334",
     "A PPL/cdd diagnostic on the dumped 561658-ray, 214-dimensional V-representation also exceeded a 300-second cap without producing an H-representation",
     "Finish a post-orientation-fix validation run of adjacency-filtered DDM on the full 214-dimensional McAllister Mori cone",
     "Further optimize or replace hyperplane dualization; bounded diagnostics still need to prove the full 561658-ray McAllister dualization completes with the corrected ray orientation",
