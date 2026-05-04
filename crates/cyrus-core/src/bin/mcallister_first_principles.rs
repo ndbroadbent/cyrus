@@ -4193,6 +4193,21 @@ fn ambient_curve_b_field_parity_diagnostic(
     None
 }
 
+fn shifted_ambient_gamma(gamma: &[I64<Finite>], offset: isize) -> Option<Vec<I64<Finite>>> {
+    let mut shifted = vec![0_i64; gamma.len()];
+    for (idx, value) in gamma.iter().enumerate() {
+        let value = value.get();
+        if value == 0 {
+            continue;
+        }
+        let shifted_idx = isize::try_from(idx).ok()?.checked_add(offset)?;
+        let shifted_idx = usize::try_from(shifted_idx).ok()?;
+        let slot = shifted.get_mut(shifted_idx)?;
+        *slot = slot.checked_add(value)?;
+    }
+    Some(shifted.into_iter().map(I64::<Finite>::new).collect())
+}
+
 fn ambient_target_contribution_rows(
     gv_invariants: &[(Vec<i64>, malachite::Integer)],
     basis: &[usize],
@@ -5792,6 +5807,46 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
         selection.toric_gv_covered_count,
         selection.toric_gv_missing_count
     );
+    for (label, offset) in [
+        ("ambient_gamma_shift_minus_1", -1_isize),
+        ("ambient_gamma_shift_plus_1", 1_isize),
+    ] {
+        let Some(shifted_gamma) = shifted_ambient_gamma(gamma, offset) else {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber GV target correction delta ({label}) unavailable: shifted gamma would leave ambient range"
+            );
+            continue;
+        };
+        let Some(shifted_target) =
+            cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+                &selection.small_curve_gvs,
+                &intersection.basis,
+                kklt_basis,
+                checkpoint_t,
+                Some(&shifted_gamma),
+            )
+        else {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber GV target correction delta ({label}) unavailable: shifted correction is invalid"
+            );
+            continue;
+        };
+        let shifted_summary =
+            target_correction_delta_summary(&checkpoint_implied_gv, &shifted_target)
+                .unwrap_or_else(|e| {
+                    eprintln!(
+                        "[ERROR] failed to compare checkpoint-t corrected-chamber shifted GV target correction ({label}): {e}"
+                    );
+                    std::process::exit(2);
+                });
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber GV target correction delta ({label}): max_abs={} relative_l2={} max_abs_checkpoint_implied={} max_abs_shifted={}",
+            shifted_summary.max_abs_delta,
+            shifted_summary.relative_l2_delta,
+            shifted_summary.max_abs_reference,
+            shifted_summary.max_abs_candidate
+        );
+    }
     let mut gv_deltas = checkpoint_implied_gv
         .iter()
         .zip(covered_gv_target.iter())
