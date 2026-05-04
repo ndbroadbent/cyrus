@@ -252,6 +252,7 @@ struct PrimalGeom {
 }
 
 struct PrimalIntersection {
+    glsm: Vec<Vec<malachite::Integer>>,
     basis: Vec<usize>,
     kappa_full: cyrus_core::Intersection,
     kappa_basis: cyrus_core::Intersection,
@@ -431,6 +432,59 @@ fn transform_i64_coordinates(
         .collect()
 }
 
+fn transform_f64_coordinates(
+    transform: &[Vec<malachite::Integer>],
+    values: &[F64<Finite>],
+    label: &str,
+) -> Vec<F64<Finite>> {
+    if transform.len() != values.len() || transform.iter().any(|row| row.len() != values.len()) {
+        eprintln!("[ERROR] {label} basis transform shape does not match vector length");
+        std::process::exit(2);
+    }
+
+    transform
+        .iter()
+        .map(|row| {
+            let value = row
+                .iter()
+                .zip(values.iter())
+                .map(|(coeff, value)| {
+                    let coeff_f = coeff
+                        .to_string()
+                        .parse::<f64>()
+                        .expect("basis transform coefficient fits in f64");
+                    coeff_f * value.get()
+                })
+                .sum::<f64>();
+            F64::<Finite>::new(value).expect("transformed coordinate is finite")
+        })
+        .collect()
+}
+
+fn transform_kahler_to_computed_basis(
+    glsm: &[Vec<malachite::Integer>],
+    computed_basis: &[usize],
+    source_basis: &[usize],
+    values: &[F64<Finite>],
+) -> Vec<F64<Finite>> {
+    if computed_basis == source_basis {
+        return values.to_vec();
+    }
+    let transform = basis_change_matrix(glsm, computed_basis, source_basis).unwrap_or_else(|e| {
+        eprintln!("[ERROR] failed to compute Kähler basis transform: {e}");
+        std::process::exit(2);
+    });
+    if !is_unimodular(&transform) {
+        eprintln!("[ERROR] Kähler basis transform is not unimodular");
+        std::process::exit(2);
+    }
+    eprintln!(
+        "[INFO] transforming Kähler parameters from source basis {:?} to computed basis {:?}",
+        source_basis, computed_basis
+    );
+    transform_f64_coordinates(&transform, values, "Kähler")
+}
+
 fn transform_i64_coordinates_transpose(
     transform: &[Vec<malachite::Integer>],
     values: &[i64],
@@ -587,6 +641,7 @@ fn stage_intersection(
     let kappa_basis = intersection_in_basis(&kappa_full, &basis);
     eprintln!("[TIME] intersection: {:.2?}", t0.elapsed());
     PrimalIntersection {
+        glsm,
         basis,
         kappa_full,
         kappa_basis,
@@ -809,10 +864,17 @@ fn stage_volume(
             );
             std::process::exit(2);
         };
-        read_csv_f64(&data_dir_path.join("corrected_kahler_param.dat"))
+        let t_raw = read_csv_f64(&data_dir_path.join("corrected_kahler_param.dat"))
             .into_iter()
             .map(|v| F64::<Finite>::new(v).expect("corrected Kähler parameter must be finite"))
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>();
+        let source_basis = read_csv_usize(&data_dir_path.join("basis.dat"));
+        transform_kahler_to_computed_basis(
+            &intersection.glsm,
+            &intersection.basis,
+            &source_basis,
+            &t_raw,
+        )
     } else {
         let (c_i, kklt_basis) = load_kklt_inputs(data_dir, manifest_dir);
         let c_tau = cyrus_core::kklt::compute_c_tau(racetrack.rt_res.g_s, racetrack.w0);
