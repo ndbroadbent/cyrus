@@ -6,7 +6,7 @@
 //! Optional:
 //! - `--dual-basis path/to/dual_basis.json` to supply the flux coordinate basis.
 //! - `--allow-fixtures` to permit JSON fixture fallback when no data dir is set.
-//! - `--branch-candidates N --branch-selection <max-volume|min-volume|first-positive>`
+//! - `--branch-candidates N --branch-selection <max-volume|min-volume|first-positive|min-condition>`
 //!   to run deterministic KKLT branch search without loading Kähler checkpoints.
 //! - `--branch-report-jsonl path` to export positive phase-1 branch candidates
 //!   discovered by that search for GA/debug ranking.
@@ -52,6 +52,7 @@ enum BranchSelection {
     MaxVolume,
     MinVolume,
     FirstPositive,
+    MinCondition,
 }
 
 impl BranchSelection {
@@ -60,6 +61,7 @@ impl BranchSelection {
             Self::MaxVolume => "max-volume",
             Self::MinVolume => "min-volume",
             Self::FirstPositive => "first-positive",
+            Self::MinCondition => "min-condition",
         }
     }
 }
@@ -69,6 +71,7 @@ fn parse_branch_selection(name: &str) -> Option<BranchSelection> {
         "max-volume" => Some(BranchSelection::MaxVolume),
         "min-volume" => Some(BranchSelection::MinVolume),
         "first-positive" => Some(BranchSelection::FirstPositive),
+        "min-condition" => Some(BranchSelection::MinCondition),
         _ => None,
     }
 }
@@ -1188,6 +1191,23 @@ fn stage_volume(
                     .min_by_key(|(_, branch)| branch.init_index)
                     .map(|(rank, _)| rank)
                     .expect("positive branches are non-empty"),
+                BranchSelection::MinCondition => positive_branches
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(rank, branch)| {
+                        branch
+                            .jacobian_diagnostics
+                            .condition_number
+                            .map(|condition| (rank, condition.get()))
+                    })
+                    .min_by(|(_, a), (_, b)| a.total_cmp(b))
+                    .map(|(rank, _)| rank)
+                    .unwrap_or_else(|| {
+                        eprintln!(
+                            "[ERROR] KKLT branch search found no full-rank positive-volume phase-1 branch for min-condition selection"
+                        );
+                        std::process::exit(2);
+                    }),
             };
             let best_branch = positive_branches[selected_rank_by_volume].clone();
             if let Some(path) = branch_report_path {
