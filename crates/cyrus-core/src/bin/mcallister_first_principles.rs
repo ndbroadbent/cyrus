@@ -52,11 +52,11 @@ use cyrus_core::{
     Point, Polytope, Triangulation, basis_change_matrix, build_racetrack_terms,
     compute_curve_basis_matrix, compute_glsm_and_linrels, compute_grading_vector,
     compute_intersection_cytools, compute_linear_relations_no_origin, compute_mori_cone_cap_rays,
-    compute_regular_triangulation, compute_toric_two_face_curve_gv_invariants,
-    compute_w0_from_terms, effective_prime_divisors_from_curve_basis,
-    generate_scaled_kklt_branch_initializations, heights_to_kahler, intersection_in_basis,
-    is_unimodular, kahler_to_heights, map_basis_gv_invariants_to_ambient,
-    remove_pair_decomposable_curve_candidates,
+    compute_origin_circuit_curve_diagnostics, compute_regular_triangulation,
+    compute_toric_two_face_curve_gv_invariants, compute_w0_from_terms,
+    effective_prime_divisors_from_curve_basis, generate_scaled_kklt_branch_initializations,
+    heights_to_kahler, intersection_in_basis, is_unimodular, kahler_to_heights,
+    map_basis_gv_invariants_to_ambient, remove_pair_decomposable_curve_candidates,
     scale_mixed_basis_kklt_branch_initialization_to_target, solve_mixed_basis_path_following,
     solve_mixed_basis_path_following_branch_candidates, solve_racetrack,
     subcutoff_toric_curve_candidates,
@@ -489,9 +489,12 @@ struct ChamberGvDiagnostic {
 struct MissingGvTargetStats {
     target_count: usize,
     targets_that_are_mori_generators: usize,
+    targets_that_are_origin_circuits: usize,
+    origin_circuit_resolved_conifold_count: usize,
     min_generators_le_target_degree: usize,
     max_generators_le_target_degree: usize,
     origin_coefficient_counts: BTreeMap<i64, usize>,
+    origin_circuit_pattern_counts: BTreeMap<String, usize>,
     sample: Vec<MissingGvTargetSample>,
 }
 
@@ -500,6 +503,7 @@ struct MissingGvTargetSample {
     degree: i128,
     generators_le_degree: usize,
     is_mori_generator: bool,
+    origin_circuit_pattern: Option<String>,
     ambient_nonzero: Vec<(usize, i64)>,
     basis_nonzero: Vec<(usize, i64)>,
 }
@@ -1690,6 +1694,7 @@ fn missing_gv_target_stats(
     basis: &[usize],
     grading: &[i64],
     origin_idx: usize,
+    origin_circuits_by_class: &HashMap<Vec<i64>, cyrus_core::OriginCircuitCurveDiagnostic>,
     sample_limit: usize,
 ) -> Result<MissingGvTargetStats, String> {
     if basis.len() != grading.len() {
@@ -1703,9 +1708,12 @@ fn missing_gv_target_stats(
         return Ok(MissingGvTargetStats {
             target_count: 0,
             targets_that_are_mori_generators: 0,
+            targets_that_are_origin_circuits: 0,
+            origin_circuit_resolved_conifold_count: 0,
             min_generators_le_target_degree: 0,
             max_generators_le_target_degree: 0,
             origin_coefficient_counts: BTreeMap::new(),
+            origin_circuit_pattern_counts: BTreeMap::new(),
             sample: Vec::new(),
         });
     }
@@ -1732,9 +1740,12 @@ fn missing_gv_target_stats(
     sorted_basis_refs.sort_unstable();
 
     let mut targets_that_are_mori_generators = 0usize;
+    let mut targets_that_are_origin_circuits = 0usize;
+    let mut origin_circuit_resolved_conifold_count = 0usize;
     let mut min_generators = usize::MAX;
     let mut max_generators = 0usize;
     let mut origin_coefficient_counts = BTreeMap::new();
+    let mut origin_circuit_pattern_counts = BTreeMap::new();
     let mut sample = Vec::new();
     for ambient_class in ambient_classes {
         let Some(&origin_coefficient) = ambient_class.get(origin_idx) else {
@@ -1765,6 +1776,20 @@ fn missing_gv_target_stats(
         if is_mori_generator {
             targets_that_are_mori_generators += 1;
         }
+        let origin_circuit_pattern_label =
+            origin_circuits_by_class
+                .get(ambient_class)
+                .map(|diagnostic| {
+                    targets_that_are_origin_circuits += 1;
+                    if diagnostic.is_resolved_conifold_pattern {
+                        origin_circuit_resolved_conifold_count += 1;
+                    }
+                    let pattern = origin_circuit_pattern(diagnostic);
+                    *origin_circuit_pattern_counts
+                        .entry(pattern.clone())
+                        .or_insert(0) += 1;
+                    pattern
+                });
         min_generators = min_generators.min(generators_le_degree);
         max_generators = max_generators.max(generators_le_degree);
         if sample.len() < sample_limit {
@@ -1772,6 +1797,7 @@ fn missing_gv_target_stats(
                 degree,
                 generators_le_degree,
                 is_mori_generator,
+                origin_circuit_pattern: origin_circuit_pattern_label,
                 ambient_nonzero: ambient_class
                     .iter()
                     .enumerate()
@@ -1789,11 +1815,24 @@ fn missing_gv_target_stats(
     Ok(MissingGvTargetStats {
         target_count: ambient_classes.len(),
         targets_that_are_mori_generators,
+        targets_that_are_origin_circuits,
+        origin_circuit_resolved_conifold_count,
         min_generators_le_target_degree: min_generators,
         max_generators_le_target_degree: max_generators,
         origin_coefficient_counts,
+        origin_circuit_pattern_counts,
         sample,
     })
+}
+
+fn origin_circuit_pattern(diagnostic: &cyrus_core::OriginCircuitCurveDiagnostic) -> String {
+    format!(
+        "origin={};neg={:?};pos={:?};resolved_conifold={}",
+        diagnostic.origin_coefficient,
+        diagnostic.negative_coefficient_counts,
+        diagnostic.positive_coefficient_counts,
+        diagnostic.is_resolved_conifold_pattern
+    )
 }
 
 fn project_ambient_curve_to_basis(
@@ -2216,6 +2255,19 @@ fn diagnose_chamber_gv_volume_correction(
             .map_err(|e| {
                 format!("failed to project corrected-chamber Mori-cap rays to basis: {e}")
             })?;
+        let origin_circuits = compute_origin_circuit_curve_diagnostics(
+            tri,
+            &geom.triangulation_points,
+            &geom.polytope,
+        )
+        .map_err(|e| {
+            format!("failed to compute corrected-chamber origin-circuit diagnostics: {e}")
+        })?;
+        let origin_circuits_by_class: HashMap<Vec<i64>, cyrus_core::OriginCircuitCurveDiagnostic> =
+            origin_circuits
+                .into_iter()
+                .map(|diagnostic| (diagnostic.class.clone(), diagnostic))
+                .collect();
         let grading = compute_grading_vector(&basis_rays).ok_or_else(|| {
             "failed to compute corrected-chamber GV degree grading vector".to_string()
         })?;
@@ -2232,6 +2284,7 @@ fn diagnose_chamber_gv_volume_correction(
             &intersection.basis,
             &grading,
             origin_idx,
+            &origin_circuits_by_class,
             10,
         )?;
         basis_rays_for_missing = Some(basis_rays);
@@ -3388,12 +3441,18 @@ fn stage_volume(
         }
         if let Some(stats) = diag.missing_target_stats.as_ref() {
             eprintln!(
-                "[INFO] corrected-chamber missing GV target reduction: targets={} targets_as_mori_generators={} generators_le_target_degree_range={}..{} origin_coefficients={:?}",
+                "[INFO] corrected-chamber missing GV target reduction: targets={} targets_as_mori_generators={} targets_as_origin_circuits={} origin_circuit_resolved_conifold={} generators_le_target_degree_range={}..{} origin_coefficients={:?}",
                 stats.target_count,
                 stats.targets_that_are_mori_generators,
+                stats.targets_that_are_origin_circuits,
+                stats.origin_circuit_resolved_conifold_count,
                 stats.min_generators_le_target_degree,
                 stats.max_generators_le_target_degree,
                 stats.origin_coefficient_counts
+            );
+            eprintln!(
+                "[INFO] corrected-chamber missing GV origin-circuit patterns: {:?}",
+                stats.origin_circuit_pattern_counts
             );
             eprintln!(
                 "[INFO] corrected-chamber missing GV target sample: {:?}",
@@ -3971,14 +4030,25 @@ mod tests {
     fn missing_gv_target_stats_reports_generator_membership_and_degree_window() {
         let ambient_classes = vec![vec![0, 1, 1], vec![0, 2, 0]];
         let basis_rays = vec![vec![1, 0], vec![0, 1], vec![1, 1]];
-        let stats =
-            missing_gv_target_stats(&ambient_classes, &basis_rays, &[1, 2], &[2, 3], 0, 4).unwrap();
+        let stats = missing_gv_target_stats(
+            &ambient_classes,
+            &basis_rays,
+            &[1, 2],
+            &[2, 3],
+            0,
+            &HashMap::new(),
+            4,
+        )
+        .unwrap();
 
         assert_eq!(stats.target_count, 2);
         assert_eq!(stats.targets_that_are_mori_generators, 1);
+        assert_eq!(stats.targets_that_are_origin_circuits, 0);
+        assert_eq!(stats.origin_circuit_resolved_conifold_count, 0);
         assert_eq!(stats.min_generators_le_target_degree, 2);
         assert_eq!(stats.max_generators_le_target_degree, 3);
         assert_eq!(stats.origin_coefficient_counts, BTreeMap::from([(0, 2)]));
+        assert_eq!(stats.origin_circuit_pattern_counts, BTreeMap::new());
         assert_eq!(
             stats.sample,
             vec![
@@ -3986,6 +4056,7 @@ mod tests {
                     degree: 5,
                     generators_le_degree: 3,
                     is_mori_generator: true,
+                    origin_circuit_pattern: None,
                     ambient_nonzero: vec![(1, 1), (2, 1)],
                     basis_nonzero: vec![(0, 1), (1, 1)]
                 },
@@ -3993,6 +4064,7 @@ mod tests {
                     degree: 4,
                     generators_le_degree: 2,
                     is_mori_generator: false,
+                    origin_circuit_pattern: None,
                     ambient_nonzero: vec![(1, 2)],
                     basis_nonzero: vec![(0, 2)]
                 }

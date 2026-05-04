@@ -5,7 +5,7 @@
 //!
 //! Reference: CYTools `calabiyau.py` (mori_cone_cap) and `cone.py` (grading vector).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::hash::{Hash, Hasher};
@@ -279,6 +279,23 @@ pub struct ToricCurveGvInvariant {
     pub class: Vec<i64>,
     /// Genus-zero GV invariant for this toric curve class.
     pub gv: Integer,
+}
+
+/// An origin-circuit Mori-cap curve class, with enough shape data to diagnose
+/// whether a local toric GV formula is currently known.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OriginCircuitCurveDiagnostic {
+    /// Curve class in ambient divisor-intersection coordinates.
+    pub class: Vec<i64>,
+    /// Coefficient of the origin in `class`.
+    pub origin_coefficient: i64,
+    /// Counts of negative non-origin coefficients by coefficient value.
+    pub negative_coefficient_counts: BTreeMap<i64, usize>,
+    /// Counts of positive non-origin coefficients by coefficient value.
+    pub positive_coefficient_counts: BTreeMap<i64, usize>,
+    /// Whether this is the isolated resolved-conifold pattern currently covered
+    /// by [`compute_toric_two_face_curve_gv_invariants`].
+    pub is_resolved_conifold_pattern: bool,
 }
 
 /// Compute the volume of an ambient curve class from Kähler parameters in a divisor basis.
@@ -610,6 +627,70 @@ pub fn compute_toric_two_face_curve_gv_invariants(
     Ok(out)
 }
 
+/// Compute the origin-circuit Mori-cap curve classes separately from the GV
+/// formulas that currently support only the resolved-conifold subset.
+pub fn compute_origin_circuit_curve_diagnostics(
+    tri: &Triangulation,
+    points: &[Point],
+    polytope: &Polytope,
+) -> Result<Vec<OriginCircuitCurveDiagnostic>> {
+    if points.is_empty() {
+        return Err(Error::InvalidInput("No points provided".into()));
+    }
+    if polytope.dim() != 4 {
+        return Err(Error::InvalidInput(
+            "origin-circuit diagnostics are only implemented for 4D polytopes".into(),
+        ));
+    }
+
+    let pts_ext: Vec<Vec<i64>> = points
+        .iter()
+        .map(|p| {
+            let mut v = p.coords().to_vec();
+            v.push(1);
+            v
+        })
+        .collect();
+    let (facets, twofaces) = compute_faces_4d(points, polytope)?;
+    let origin_idx = points
+        .iter()
+        .position(|p| p.coords().iter().all(|&x| x == 0))
+        .ok_or_else(|| Error::InvalidInput("Origin not found in points".into()))?;
+
+    let mut simp_2d_all: HashSet<Vec<usize>> = HashSet::new();
+    for f in &twofaces {
+        if f.len() < 4 {
+            let mut f_sorted = f.clone();
+            f_sorted.sort_unstable();
+            simp_2d_all.insert(f_sorted);
+            continue;
+        }
+
+        let face_pts: HashSet<usize> = f.iter().copied().collect();
+        for simplex in tri.simplices() {
+            let inter: Vec<usize> = simplex
+                .iter()
+                .filter(|idx| face_pts.contains(idx))
+                .copied()
+                .collect();
+            if inter.len() == 3 {
+                let mut inter_sorted = inter;
+                inter_sorted.sort_unstable();
+                simp_2d_all.insert(inter_sorted);
+            }
+        }
+    }
+
+    let mut diagnostics_by_class = BTreeMap::new();
+    for class in compute_origin_circuit_curve_classes(&pts_ext, &facets, &simp_2d_all, origin_idx) {
+        diagnostics_by_class
+            .entry(class.clone())
+            .or_insert_with(|| origin_circuit_diagnostic_from_class(class, origin_idx));
+    }
+
+    Ok(diagnostics_by_class.into_values().collect())
+}
+
 fn insert_toric_gv(
     gv_by_class: &mut HashMap<Vec<i64>, Integer>,
     class: Vec<i64>,
@@ -802,6 +883,35 @@ fn resolved_conifold_origin_circuit_gv(class: &[i64], origin_idx: usize) -> Opti
         Some(Integer::from(1))
     } else {
         None
+    }
+}
+
+fn origin_circuit_diagnostic_from_class(
+    class: Vec<i64>,
+    origin_idx: usize,
+) -> OriginCircuitCurveDiagnostic {
+    let origin_coefficient = class.get(origin_idx).copied().unwrap_or(0);
+    let mut negative_coefficient_counts = BTreeMap::new();
+    let mut positive_coefficient_counts = BTreeMap::new();
+    for (idx, &coefficient) in class.iter().enumerate() {
+        if idx == origin_idx || coefficient == 0 {
+            continue;
+        }
+        if coefficient < 0 {
+            *negative_coefficient_counts.entry(coefficient).or_insert(0) += 1;
+        } else {
+            *positive_coefficient_counts.entry(coefficient).or_insert(0) += 1;
+        }
+    }
+    let is_resolved_conifold_pattern =
+        resolved_conifold_origin_circuit_gv(&class, origin_idx).is_some();
+
+    OriginCircuitCurveDiagnostic {
+        class,
+        origin_coefficient,
+        negative_coefficient_counts,
+        positive_coefficient_counts,
+        is_resolved_conifold_pattern,
     }
 }
 
@@ -2091,6 +2201,7 @@ fn is_strictly_dual(rays: &[Vec<i64>], v: &[i64]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -2098,9 +2209,9 @@ mod tests {
         BoundedCurveDecompositionIndex, ToricCurveCandidate, compute_grading_vector,
         compute_gv_invariants_with_provided_generators, curve_volume_in_divisor_basis,
         dump_mori_rays_cdd, find_pair_decomposition, gv_lattice_search_request, load_grading_cache,
-        map_basis_gv_invariants_to_ambient, project_mori_cone_cap_rays_to_basis,
-        remove_pair_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
-        write_grading_cache,
+        map_basis_gv_invariants_to_ambient, origin_circuit_diagnostic_from_class,
+        project_mori_cone_cap_rays_to_basis, remove_pair_decomposable_curve_candidates,
+        subcutoff_toric_curve_candidates, write_grading_cache,
     };
     use crate::Intersection;
     use crate::{f64_finite, f64_pos};
@@ -2140,6 +2251,38 @@ mod tests {
         .unwrap_err();
 
         assert!(err.to_string().contains("q_matrix is empty"));
+    }
+
+    #[test]
+    fn origin_circuit_diagnostic_marks_resolved_conifold_pattern() {
+        let diagnostic = origin_circuit_diagnostic_from_class(vec![-1, -1, -1, 1, 1, 1], 0);
+
+        assert_eq!(diagnostic.origin_coefficient, -1);
+        assert_eq!(
+            diagnostic.negative_coefficient_counts,
+            BTreeMap::from([(-1, 2)])
+        );
+        assert_eq!(
+            diagnostic.positive_coefficient_counts,
+            BTreeMap::from([(1, 3)])
+        );
+        assert!(diagnostic.is_resolved_conifold_pattern);
+    }
+
+    #[test]
+    fn origin_circuit_diagnostic_keeps_unsupported_patterns_explicit() {
+        let diagnostic = origin_circuit_diagnostic_from_class(vec![-2, -1, -2, 1, 2, 2], 0);
+
+        assert_eq!(diagnostic.origin_coefficient, -2);
+        assert_eq!(
+            diagnostic.negative_coefficient_counts,
+            BTreeMap::from([(-2, 1), (-1, 1)])
+        );
+        assert_eq!(
+            diagnostic.positive_coefficient_counts,
+            BTreeMap::from([(1, 1), (2, 2)])
+        );
+        assert!(!diagnostic.is_resolved_conifold_pattern);
     }
 
     #[test]
