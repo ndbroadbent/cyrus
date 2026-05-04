@@ -2411,14 +2411,13 @@ fn compute_covered_toric_gv_divisor_representation_baseline(
             }
         }
         if support_indices_with_solution.is_empty() {
-            first_without_support_divisor_solution
-                .get_or_insert_with(|| nonzero_entries_i64(ambient_class));
+            first_without_support_divisor_solution.get_or_insert_with(|| sparse_i64(ambient_class));
         } else {
             classes_with_support_divisor_solution += 1;
         }
         if sample.len() < 8 {
             sample.push(CoveredToricGvDivisorRepresentationSample {
-                ambient_nonzero: nonzero_entries_i64(ambient_class),
+                ambient_nonzero: sparse_i64(ambient_class),
                 support_indices_with_solution,
                 support_indices_without_solution,
             });
@@ -2591,14 +2590,6 @@ fn solve_rational_linear_system(
 
 fn rational_is_integer(value: &malachite::Rational) -> bool {
     value.denominator_ref() == &1u32
-}
-
-fn nonzero_entries_i64(values: &[i64]) -> Vec<(usize, i64)> {
-    values
-        .iter()
-        .enumerate()
-        .filter_map(|(idx, &value)| (value != 0).then_some((idx, value)))
-        .collect()
 }
 
 fn cms_general_divisor_shape_candidates_for_witness(
@@ -3127,11 +3118,18 @@ fn compute_integer_decomposition_face_target_gv(
             ambient_class,
         ) {
             Ok((gv, element_count)) => return Ok((gv, element_count, decomposition.len())),
-            Err(error) => errors.push(format!(
-                "{}-term decomposition with {} seed generators failed: {error}",
-                decomposition.len(),
-                seed_generators.len()
-            )),
+            Err(error) => {
+                let decomposition_sparse = decomposition
+                    .iter()
+                    .map(|ray| sparse_i64(ray))
+                    .collect::<Vec<_>>();
+                errors.push(format!(
+                    "{}-term decomposition {:?} with {} seed generators failed: {error}",
+                    decomposition.len(),
+                    decomposition_sparse,
+                    seed_generators.len()
+                ));
+            }
         }
     }
     Err(format!(
