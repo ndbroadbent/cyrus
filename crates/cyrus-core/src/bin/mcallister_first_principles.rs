@@ -46,7 +46,8 @@ use cyrus_core::{
     compute_regular_triangulation, compute_toric_two_face_curve_gv_invariants,
     compute_w0_from_terms, effective_prime_divisors_from_curve_basis,
     generate_scaled_kklt_branch_initializations, heights_to_kahler, intersection_in_basis,
-    is_unimodular, map_basis_gv_invariants_to_ambient, remove_pair_decomposable_curve_candidates,
+    is_unimodular, kahler_to_heights, map_basis_gv_invariants_to_ambient,
+    remove_pair_decomposable_curve_candidates,
     scale_mixed_basis_kklt_branch_initialization_to_target, solve_mixed_basis_path_following,
     solve_mixed_basis_path_following_branch_candidates, solve_racetrack,
     subcutoff_toric_curve_candidates,
@@ -1708,6 +1709,47 @@ fn height_projected_branch_initialization(
     .ok_or_else(|| "failed to scale height-projected Kähler point to phase-1 target".to_string())
 }
 
+fn triangulation_from_kahler_point(
+    geom: &PrimalGeom,
+    basis: &[usize],
+    kahler: &[F64<Finite>],
+) -> Result<Triangulation, String> {
+    let basis_non_origin = basis
+        .iter()
+        .map(|&idx| {
+            idx.checked_sub(1)
+                .ok_or_else(|| "Kähler basis unexpectedly contains origin".to_string())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let non_origin_count = geom
+        .triangulation_points
+        .len()
+        .checked_sub(1)
+        .ok_or_else(|| "triangulation point set is empty".to_string())?;
+    let heights = kahler_to_heights(kahler, &basis_non_origin, non_origin_count)
+        .ok_or_else(|| "failed to embed Kähler point into secondary-fan heights".to_string())?;
+    let raw_heights = heights
+        .iter()
+        .map(|height| height.get())
+        .collect::<Vec<_>>();
+    compute_regular_triangulation(&geom.triangulation_points, &raw_heights)
+        .map_err(|e| format!("failed to compute triangulation from corrected Kähler heights: {e}"))
+}
+
+fn triangulations_have_same_simplices(lhs: &Triangulation, rhs: &Triangulation) -> bool {
+    let mut lhs_simplices = lhs.simplices().to_vec();
+    let mut rhs_simplices = rhs.simplices().to_vec();
+    for simplex in &mut lhs_simplices {
+        simplex.sort_unstable();
+    }
+    for simplex in &mut rhs_simplices {
+        simplex.sort_unstable();
+    }
+    lhs_simplices.sort();
+    rhs_simplices.sort();
+    lhs_simplices == rhs_simplices
+}
+
 fn stage_volume(
     data_dir: Option<&str>,
     manifest_dir: &PathBuf,
@@ -2450,6 +2492,24 @@ fn stage_volume(
         );
         (corrected.t, Some(gv_volume_correction))
     };
+
+    let corrected_chamber = triangulation_from_kahler_point(geom, &intersection.basis, &t)
+        .unwrap_or_else(|e| {
+            eprintln!("[ERROR] failed to diagnose corrected Kähler chamber: {e}");
+            std::process::exit(2);
+        });
+    let corrected_chamber_changed =
+        !triangulations_have_same_simplices(&geom.triangulation, &corrected_chamber);
+    eprintln!(
+        "[INFO] corrected Kähler point induces FRST: simplices={} changed_from_input={}",
+        corrected_chamber.simplices().len(),
+        corrected_chamber_changed
+    );
+    if corrected_chamber_changed {
+        eprintln!(
+            "[WARN] corrected Kähler point lies in a different regular chamber; flop/chamber-updated GV evaluation remains an explicit instanton-layer gap."
+        );
+    }
 
     let classical_volume = classical_volume_from_t(&intersection.kappa_basis, &t);
     let h11_raw = i32::try_from(intersection.basis.len()).unwrap_or_else(|_| {
