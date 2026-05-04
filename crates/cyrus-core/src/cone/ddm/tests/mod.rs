@@ -533,6 +533,35 @@ fn test_initial_basis_prunes_redundant_remaining_hyperplanes() {
 }
 
 #[test]
+fn test_current_cone_pruning_removes_newly_redundant_tail_rows() {
+    let rays = vec![
+        DdmRay {
+            coeffs: vec![1, 0],
+            active: vec![0],
+        },
+        DdmRay {
+            coeffs: vec![0, 1],
+            active: vec![1],
+        },
+    ];
+    let mut hyperplanes = hyperplanes_from_dense(vec![
+        vec![1, 0],
+        vec![0, 1],
+        vec![1, 1],  // redundant against the current cone
+        vec![-1, 1], // still cuts the current cone
+        vec![2, 3],  // redundant against the current cone
+    ]);
+
+    let pruned = prune_current_redundant_hyperplanes(&mut hyperplanes, 2, &rays);
+
+    assert_eq!(pruned, 2);
+    assert_eq!(hyperplanes.len(), 3);
+    assert_eq!(hyperplanes[0].dense(), &[1, 0]);
+    assert_eq!(hyperplanes[1].dense(), &[0, 1]);
+    assert_eq!(hyperplanes[2].dense(), &[-1, 1]);
+}
+
+#[test]
 fn test_remaining_hyperplanes_order_cheapest_initial_cuts_first() {
     let initial_rays = vec![
         DdmRay {

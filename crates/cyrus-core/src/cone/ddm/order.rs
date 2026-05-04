@@ -3,6 +3,29 @@ use std::sync::OnceLock;
 
 use super::types::{DdmHyperplane, DdmRay};
 
+pub(super) fn prune_current_redundant_hyperplanes(
+    hyperplanes: &mut Vec<DdmHyperplane>,
+    start_idx: usize,
+    rays: &[DdmRay],
+) -> usize {
+    if start_idx >= hyperplanes.len() {
+        return 0;
+    }
+
+    let tail = hyperplanes.drain(start_idx..).collect::<Vec<_>>();
+    let before = tail.len();
+    hyperplanes.extend(
+        tail.into_iter()
+            .filter(|hyperplane| !is_redundant_for_current_rays(hyperplane, rays)),
+    );
+    before - (hyperplanes.len() - start_idx)
+}
+
+fn is_redundant_for_current_rays(hyperplane: &DdmHyperplane, rays: &[DdmRay]) -> bool {
+    rays.iter()
+        .all(|ray| hyperplane.dot_sign(&ray.coeffs) != std::cmp::Ordering::Less)
+}
+
 pub(super) fn order_remaining_hyperplanes(
     hyperplanes: &[Vec<i128>],
     selected: &[bool],
