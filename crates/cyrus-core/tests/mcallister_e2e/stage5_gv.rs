@@ -18,6 +18,62 @@
 #![allow(missing_docs)]
 #![allow(dead_code)]
 
+use std::path::Path;
+
+use cyrus_core::{
+    F64, Finite, Point, Polytope, compute_mori_cone_cap_rays, compute_regular_triangulation,
+    remove_pair_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
+};
+
+fn read_csv_rows_i64(path: &Path) -> Vec<Vec<i64>> {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+    content
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            line.split(',')
+                .map(|s| s.trim().parse::<i64>().expect("invalid integer"))
+                .collect()
+        })
+        .collect()
+}
+
+fn read_csv_usize(path: &Path) -> Vec<usize> {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+    content
+        .split([',', '\n', '\r'])
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.trim().parse::<usize>().expect("invalid usize"))
+        .collect()
+}
+
+fn read_csv_f64(path: &Path) -> Vec<f64> {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+    content
+        .split([',', '\n', '\r'])
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.trim().parse::<f64>().expect("invalid float"))
+        .collect()
+}
+
+fn read_csv_finite(path: &Path) -> Vec<F64<Finite>> {
+    read_csv_f64(path)
+        .into_iter()
+        .map(|value| F64::<Finite>::new(value).expect("value must be finite"))
+        .collect()
+}
+
+fn require_first_principles() -> bool {
+    if !crate::first_principles_enabled() {
+        eprintln!("Skipping first-principles test (set CYRUS_FIRST_PRINCIPLES=1)");
+        return false;
+    }
+    true
+}
+
 /// Test that cygv crate is properly linked and basic types work
 #[test]
 fn stage5_cygv_basic_import() {
@@ -179,6 +235,72 @@ fn stage5_mcallister_gv_data_available() {
     insta::assert_json_snapshot!("mcallister_gv_data_summary", summary);
 }
 
+/// Compute the McAllister small toric curve checkpoint from upstream geometry.
+///
+/// This test intentionally uses `kahler_param.dat`, `small_curves_cutoff.dat`,
+/// and `small_curves.dat` as validation artifacts. The reusable production
+/// functions take Kähler parameters from the caller and do not load these files.
+#[test]
+fn stage5_mcallister_small_toric_curves_match_checkpoint() {
+    if !require_first_principles() {
+        return;
+    }
+    let Some(data_dir) = crate::mcallister_data_dir() else {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    };
+
+    let points_raw = read_csv_rows_i64(&data_dir.join("points.dat"));
+    let heights = read_csv_f64(&data_dir.join("heights.dat"));
+    let basis = read_csv_usize(&data_dir.join("basis.dat"));
+    let kahler = read_csv_finite(&data_dir.join("kahler_param.dat"));
+    let cutoff = F64::<Finite>::new(read_csv_f64(&data_dir.join("small_curves_cutoff.dat"))[0])
+        .and_then(|value| value.try_to_pos())
+        .expect("small curve cutoff must be positive");
+    let expected_small = read_csv_rows_i64(&data_dir.join("small_curves.dat"));
+
+    let all_points: Vec<Point> = points_raw.into_iter().map(Point::new).collect();
+    let polytope = Polytope::from_vertices(all_points).expect("failed to create polytope");
+    let triangulation_points = polytope
+        .points_not_interior_to_facets()
+        .expect("failed to filter points");
+    let triangulation = compute_regular_triangulation(&triangulation_points, &heights)
+        .expect("failed to compute triangulation");
+    let rays = compute_mori_cone_cap_rays(
+        &triangulation,
+        &triangulation_points,
+        &polytope,
+        false,
+        false,
+        None,
+    )
+    .expect("failed to compute ambient Mori cap rays");
+
+    let selected =
+        subcutoff_toric_curve_candidates(&rays, &basis, &kahler, cutoff).expect("curve selection");
+    let filtered =
+        remove_pair_decomposable_curve_candidates(&selected).expect("Hilbert-basis filter");
+
+    let mut actual: Vec<Vec<i64>> = filtered.into_iter().map(|curve| curve.class).collect();
+    actual.sort();
+    let mut expected = expected_small;
+    expected.sort();
+
+    assert_eq!(
+        selected.len(),
+        419,
+        "raw sub-cutoff toric curve count changed"
+    );
+    assert_eq!(
+        actual.len(),
+        344,
+        "filtered small toric curve count changed"
+    );
+    assert_eq!(
+        actual, expected,
+        "Cyrus-computed filtered small toric curves must match McAllister checkpoint"
+    );
+}
+
 /// Document what's needed to compute GV invariants from scratch
 /// This test serves as a roadmap for the full implementation
 #[test]
@@ -186,15 +308,16 @@ fn stage5_gv_computation_roadmap() {
     #[derive(serde::Serialize)]
     struct GvComputationRoadmap {
         status: &'static str,
-        /// Bitmask of completed components: cygv=1, mori=2, grading=4, pipeline=8
+        /// Bitmask of completed components:
+        /// cygv=1, mori=2, grading=4, pipeline=8, small-toric-curves=16.
         completed_components: u8,
         verified_components: Vec<&'static str>,
         remaining_gaps: Vec<&'static str>,
     }
 
     // Components: cygv integrated (1), mori cap (2), grading vector (4),
-    // one-off pipeline wiring (8).
-    let completed = 1u8 | 2 | 4 | 8;
+    // one-off pipeline wiring (8), small toric curve checkpoint (16).
+    let completed = 1u8 | 2 | 4 | 8 | 16;
 
     let roadmap = GvComputationRoadmap {
         status: "In Progress - Cyrus computes GV inputs, McAllister-sized validation is expensive",
@@ -215,6 +338,7 @@ fn stage5_gv_computation_roadmap() {
             "DDM quotient-rank checks run before full dense modular checks when a basis context exists, with their own modular true certificate and exact integer false path",
             "DDM preserves ray orientation when normalizing primitive integer rays; sign-flipping was a correctness bug and is now unit-tested",
             "compute_gv_invariants wraps cygv::compute_gv_rat_threefold",
+            "McAllister 4-214-647 small toric curve classes are computed from Cyrus Mori-cap rays and pair-decomposable pruning",
             "first-principles binaries do not load small_curves.dat or small_curves_gv.dat",
         ],
         remaining_gaps: vec![
@@ -222,8 +346,8 @@ fn stage5_gv_computation_roadmap() {
             "Further optimize or replace hyperplane dualization; bounded diagnostics still need to prove the full 561658-ray McAllister dualization completes with the corrected ray orientation",
             "Reduce the 561658-ray Mori cap input before dualization, or add a CYTools/PPL-faithful constraint minimization path",
             "Run and validate lattice-point generation under a Python environment with OR-Tools after DDM returns the dual cone",
-            "Add an explicit expensive checkpoint test comparing computed small GV invariants to McAllister data",
-            "Validate the computed curve ordering and basis conversion against McAllister checkpoints",
+            "Compute the GV values for the 344 McAllister small toric curves from first principles instead of using small_curves_gv.dat",
+            "Add an explicit expensive checkpoint test comparing computed small GV values to McAllister data",
         ],
     };
 

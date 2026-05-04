@@ -4,7 +4,7 @@ expression: roadmap
 ---
 {
   "status": "In Progress - Cyrus computes GV inputs, McAllister-sized validation is expensive",
-  "completed_components": 15,
+  "completed_components": 31,
   "verified_components": [
     "compute_mori_cone_cap_rays is wired into mcallister_gv and mcallister_first_principles",
     "compute_grading_vector is wired into the GV pipeline",
@@ -21,6 +21,7 @@ expression: roadmap
     "DDM quotient-rank checks run before full dense modular checks when a basis context exists, with their own modular true certificate and exact integer false path",
     "DDM preserves ray orientation when normalizing primitive integer rays; sign-flipping was a correctness bug and is now unit-tested",
     "compute_gv_invariants wraps cygv::compute_gv_rat_threefold",
+    "McAllister 4-214-647 small toric curve classes are computed from Cyrus Mori-cap rays and pair-decomposable pruning",
     "first-principles binaries do not load small_curves.dat or small_curves_gv.dat"
   ],
   "remaining_gaps": [
@@ -28,7 +29,7 @@ expression: roadmap
     "Further optimize or replace hyperplane dualization; bounded diagnostics still need to prove the full 561658-ray McAllister dualization completes with the corrected ray orientation",
     "Reduce the 561658-ray Mori cap input before dualization, or add a CYTools/PPL-faithful constraint minimization path",
     "Run and validate lattice-point generation under a Python environment with OR-Tools after DDM returns the dual cone",
-    "Add an explicit expensive checkpoint test comparing computed small GV invariants to McAllister data",
-    "Validate the computed curve ordering and basis conversion against McAllister checkpoints"
+    "Compute the GV values for the 344 McAllister small toric curves from first principles instead of using small_curves_gv.dat",
+    "Add an explicit expensive checkpoint test comparing computed small GV values to McAllister data"
   ]
 }
