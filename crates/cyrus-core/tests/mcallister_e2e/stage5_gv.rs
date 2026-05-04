@@ -530,8 +530,10 @@ fn stage5_gv_computation_roadmap() {
             "mcallister_first_principles can explicitly attempt general primal GV fallback for missing small-curve toric formula coverage via --primal-gv-max-deg or --primal-gv-min-points",
             "compute_gv_invariants can dump the exact pre-lattice Mori-cap generator matrix as a CDD V-representation for PPL/cdd diagnostics",
             "mcallister_first_principles rejects insufficient primal --primal-gv-max-deg values before full GV enumeration; for the selected 4-214-647 missing small curves, degree 1 is impossible because the required grading degrees are 10..2386",
+            "branch-report JSONL records init_source so validation artifacts distinguish generated branch-search candidates from the computed height_projected secondary-fan initializer",
         ],
         remaining_gaps: vec![
+            "Generated branch candidates without the height_projected initializer did not find the 4-214-647 paper branch in a 48-candidate diagnostic: the lowest sampled phase-1 volume was about 22721 rather than 17901, and every sampled positive branch still had hundreds of small curves missing toric GV coverage",
             "The explicit general primal GV fallback still reaches full 214-dimensional Mori-cone dualization for any max_deg high enough to cover the selected missing curves, or for min_points-driven runs; bounded DDM diagnostics stop loudly at configured limits",
             "A PPL/cdd diagnostic on the dumped 561658-ray, 214-dimensional V-representation also exceeded a 300-second cap without producing an H-representation",
             "Finish a post-orientation-fix validation run of adjacency-filtered DDM on the full 214-dimensional McAllister Mori cone",
