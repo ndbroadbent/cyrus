@@ -62,8 +62,8 @@ struct FluxInput {
 }
 
 fn read_csv_f64(path: &str) -> Vec<f64> {
-    let content = std::fs::read_to_string(path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path));
+    let content =
+        std::fs::read_to_string(path).unwrap_or_else(|e| panic!("Failed to read {}: {e}", path));
     content
         .split(|c| c == ',' || c == '\n' || c == '\r')
         .filter(|s| !s.trim().is_empty())
@@ -72,8 +72,8 @@ fn read_csv_f64(path: &str) -> Vec<f64> {
 }
 
 fn read_csv_i64(path: &str) -> Vec<i64> {
-    let content = std::fs::read_to_string(path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path));
+    let content =
+        std::fs::read_to_string(path).unwrap_or_else(|e| panic!("Failed to read {}: {e}", path));
     content
         .split(|c| c == ',' || c == '\n' || c == '\r')
         .filter(|s| !s.trim().is_empty())
@@ -82,8 +82,8 @@ fn read_csv_i64(path: &str) -> Vec<i64> {
 }
 
 fn read_csv_rows_i64(path: &str) -> Vec<Vec<i64>> {
-    let content = std::fs::read_to_string(path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path));
+    let content =
+        std::fs::read_to_string(path).unwrap_or_else(|e| panic!("Failed to read {}: {e}", path));
     content
         .lines()
         .filter(|l| !l.trim().is_empty())
@@ -96,8 +96,8 @@ fn read_csv_rows_i64(path: &str) -> Vec<Vec<i64>> {
 }
 
 fn read_csv_rows_usize(path: &str) -> Vec<Vec<usize>> {
-    let content = std::fs::read_to_string(path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path));
+    let content =
+        std::fs::read_to_string(path).unwrap_or_else(|e| panic!("Failed to read {}: {e}", path));
     content
         .lines()
         .filter(|l| !l.trim().is_empty())
@@ -129,6 +129,311 @@ fn fixtures_enabled() -> bool {
         return false;
     }
     true
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ArtifactUse {
+    DeclaredInput,
+    ValidationCheckpoint,
+    ValidationReplayOnly,
+    TemporaryBridge,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ArtifactPolicy {
+    file: &'static str,
+    usage: ArtifactUse,
+    note: &'static str,
+}
+
+const ARTIFACT_POLICIES: &[ArtifactPolicy] = &[
+    ArtifactPolicy {
+        file: "points.dat",
+        usage: ArtifactUse::DeclaredInput,
+        note: "polytope vertices for the validation target",
+    },
+    ArtifactPolicy {
+        file: "heights.dat",
+        usage: ArtifactUse::DeclaredInput,
+        note: "selected regular triangulation heights",
+    },
+    ArtifactPolicy {
+        file: "K_vec.dat",
+        usage: ArtifactUse::DeclaredInput,
+        note: "integer K flux vector",
+    },
+    ArtifactPolicy {
+        file: "M_vec.dat",
+        usage: ArtifactUse::DeclaredInput,
+        note: "integer M flux vector",
+    },
+    ArtifactPolicy {
+        file: "kklt_basis.dat",
+        usage: ArtifactUse::DeclaredInput,
+        note: "declared KKLT/non-perturbative divisor set",
+    },
+    ArtifactPolicy {
+        file: "target_volumes.dat",
+        usage: ArtifactUse::DeclaredInput,
+        note: "declared c_i targets from the KKLT/orientifold choice",
+    },
+    ArtifactPolicy {
+        file: "dual_simplices.dat",
+        usage: ArtifactUse::ValidationCheckpoint,
+        note: "computed dual FRST checkpoint",
+    },
+    ArtifactPolicy {
+        file: "dual_points.dat",
+        usage: ArtifactUse::ValidationCheckpoint,
+        note: "dual polytope points must be computed by Cyrus and compared here",
+    },
+    ArtifactPolicy {
+        file: "basis.dat",
+        usage: ArtifactUse::ValidationCheckpoint,
+        note: "computed primal divisor basis checkpoint",
+    },
+    ArtifactPolicy {
+        file: "dual_curves.dat",
+        usage: ArtifactUse::ValidationCheckpoint,
+        note: "computed dual curve classes checkpoint",
+    },
+    ArtifactPolicy {
+        file: "dual_curves_gv.dat",
+        usage: ArtifactUse::ValidationCheckpoint,
+        note: "computed dual GV invariants checkpoint",
+    },
+    ArtifactPolicy {
+        file: "small_curves.dat",
+        usage: ArtifactUse::ValidationCheckpoint,
+        note: "computed racetrack curve subset checkpoint",
+    },
+    ArtifactPolicy {
+        file: "small_curves_cutoff.dat",
+        usage: ArtifactUse::ValidationCheckpoint,
+        note: "checkpoint for McAllister's small-curve cutoff; production runner takes an explicit cutoff parameter",
+    },
+    ArtifactPolicy {
+        file: "small_curves_gv.dat",
+        usage: ArtifactUse::ValidationCheckpoint,
+        note: "computed racetrack GV subset checkpoint",
+    },
+    ArtifactPolicy {
+        file: "g_s.dat",
+        usage: ArtifactUse::ValidationCheckpoint,
+        note: "computed racetrack string coupling checkpoint",
+    },
+    ArtifactPolicy {
+        file: "W_0.dat",
+        usage: ArtifactUse::ValidationCheckpoint,
+        note: "computed racetrack superpotential checkpoint",
+    },
+    ArtifactPolicy {
+        file: "kahler_param.dat",
+        usage: ArtifactUse::ValidationReplayOnly,
+        note: "downstream KKLT output; never a first-principles computation input",
+    },
+    ArtifactPolicy {
+        file: "corrected_kahler_param.dat",
+        usage: ArtifactUse::ValidationReplayOnly,
+        note: "downstream corrected KKLT output; gated for checkpoint replay only",
+    },
+    ArtifactPolicy {
+        file: "cy_vol.dat",
+        usage: ArtifactUse::ValidationReplayOnly,
+        note: "downstream volume output; compare only",
+    },
+    ArtifactPolicy {
+        file: "corrected_cy_vol.dat",
+        usage: ArtifactUse::ValidationReplayOnly,
+        note: "downstream corrected volume output; compare only",
+    },
+];
+
+fn artifact_policy(file: &str) -> Option<ArtifactPolicy> {
+    ARTIFACT_POLICIES
+        .iter()
+        .copied()
+        .find(|policy| policy.file == file)
+}
+
+fn dat_tokens(source: &str) -> impl Iterator<Item = &str> {
+    source
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.'))
+        .filter(|token| {
+            token.ends_with(".dat")
+                && token[..token.len() - 4]
+                    .bytes()
+                    .any(|b| b.is_ascii_alphanumeric())
+        })
+}
+
+#[test]
+fn stage0_artifact_policy_is_explicit_and_complete() {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    let mut policy_names = BTreeSet::new();
+    for policy in ARTIFACT_POLICIES {
+        assert!(
+            policy_names.insert(policy.file),
+            "duplicate artifact policy for {}",
+            policy.file
+        );
+        assert!(
+            !policy.note.is_empty(),
+            "{} needs a policy note",
+            policy.file
+        );
+    }
+
+    assert_eq!(
+        artifact_policy("points.dat").unwrap().usage,
+        ArtifactUse::DeclaredInput
+    );
+    assert_eq!(
+        artifact_policy("corrected_kahler_param.dat").unwrap().usage,
+        ArtifactUse::ValidationReplayOnly
+    );
+
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let source_roots = [
+        manifest_dir.join("tests/mcallister_e2e"),
+        manifest_dir.join("src/bin"),
+    ];
+
+    let mut referenced = BTreeMap::<String, BTreeSet<String>>::new();
+    let mut stack = source_roots.to_vec();
+    while let Some(path) = stack.pop() {
+        if path.is_dir() {
+            for entry in std::fs::read_dir(&path)
+                .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()))
+            {
+                stack.push(entry.expect("valid directory entry").path());
+            }
+            continue;
+        }
+        if path.extension().and_then(|ext| ext.to_str()) != Some("rs") {
+            continue;
+        }
+        let source = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+        for token in dat_tokens(&source) {
+            referenced.entry(token.to_string()).or_default().insert(
+                path.strip_prefix(&manifest_dir)
+                    .unwrap_or(&path)
+                    .display()
+                    .to_string(),
+            );
+        }
+    }
+
+    for file in referenced.keys() {
+        assert!(
+            artifact_policy(file).is_some(),
+            "{file} is referenced but missing from ARTIFACT_POLICIES"
+        );
+    }
+
+    for policy in ARTIFACT_POLICIES {
+        assert!(
+            referenced.contains_key(policy.file),
+            "{} has a policy but is not referenced by McAllister sources",
+            policy.file
+        );
+    }
+}
+
+#[test]
+fn stage0_first_principles_runner_does_not_silently_replay_downstream_outputs() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let runner_path = manifest_dir.join("src/bin/mcallister_first_principles.rs");
+    let runner = std::fs::read_to_string(&runner_path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", runner_path.display()));
+    let runner_tokens = dat_tokens(&runner).collect::<std::collections::BTreeSet<_>>();
+
+    for forbidden in ["kahler_param.dat", "cy_vol.dat", "corrected_cy_vol.dat"] {
+        assert!(
+            !runner_tokens.contains(forbidden),
+            "{forbidden} must not be read by the first-principles runner"
+        );
+    }
+
+    assert!(
+        runner.contains("corrected_kahler_param.dat"),
+        "runner should name the currently unresolved corrected Kahler checkpoint"
+    );
+    assert!(
+        runner.contains("--allow-downstream-kahler"),
+        "corrected_kahler_param.dat replay must require an explicit validation-only flag"
+    );
+
+    for gv_artifact in [
+        "dual_curves.dat",
+        "dual_curves_gv.dat",
+        "small_curves.dat",
+        "small_curves_gv.dat",
+    ] {
+        assert!(
+            !runner.contains(gv_artifact),
+            "{gv_artifact} must be computed by the runner, not loaded"
+        );
+    }
+}
+
+#[test]
+fn stage0_mcallister_binaries_do_not_use_validation_replay_artifacts() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let bin_dir = manifest_dir.join("src/bin");
+    let allowed_replay = (
+        "src/bin/mcallister_first_principles.rs",
+        "corrected_kahler_param.dat",
+    );
+    let forbidden_computed_artifacts = [
+        "dual_curves.dat",
+        "dual_curves_gv.dat",
+        "small_curves.dat",
+        "small_curves_gv.dat",
+    ];
+
+    for entry in std::fs::read_dir(&bin_dir)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", bin_dir.display()))
+    {
+        let path = entry.expect("valid directory entry").path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("rs") {
+            continue;
+        }
+        let rel_path = path
+            .strip_prefix(&manifest_dir)
+            .unwrap_or(&path)
+            .display()
+            .to_string();
+        let source = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+        let tokens = dat_tokens(&source).collect::<std::collections::BTreeSet<_>>();
+
+        for artifact in forbidden_computed_artifacts {
+            assert!(
+                !tokens.contains(artifact),
+                "{rel_path} must compute {artifact}; it may only be read by validation tests"
+            );
+        }
+
+        for token in &tokens {
+            let policy =
+                artifact_policy(token).unwrap_or_else(|| panic!("{token} has no artifact policy"));
+            if policy.usage != ArtifactUse::ValidationReplayOnly {
+                continue;
+            }
+            assert_eq!(
+                (rel_path.as_str(), *token),
+                allowed_replay,
+                "{rel_path} reads validation-only artifact {token} without an explicit exception"
+            );
+            assert!(
+                source.contains("--allow-downstream-kahler"),
+                "{rel_path} must gate {token} behind --allow-downstream-kahler"
+            );
+        }
+    }
 }
 
 #[test]
@@ -225,7 +530,11 @@ fn stage0_dual_simplices_fixture_matches_dat() {
     let dat_path = data_dir.join("dual_simplices.dat");
     let dat = read_csv_rows_usize(dat_path.to_str().expect("valid dual_simplices.dat path"));
 
-    assert_eq!(json.simplices.len(), dat.len(), "dual simplices length mismatch");
+    assert_eq!(
+        json.simplices.len(),
+        dat.len(),
+        "dual simplices length mismatch"
+    );
     for (i, (a, b)) in json.simplices.iter().zip(dat.iter()).enumerate() {
         assert_eq!(a, b, "dual simplex row {i} mismatch");
     }
@@ -282,17 +591,20 @@ fn stage0_dual_basis_matches_expected() {
     let Some(data_dir) = require_data_dir() else {
         return;
     };
-    let dual_points =
-        read_csv_rows_i64(data_dir.join("dual_points.dat").to_str().expect("valid dual_points.dat path"));
+    let dual_points = read_csv_rows_i64(
+        data_dir
+            .join("dual_points.dat")
+            .to_str()
+            .expect("valid dual_points.dat path"),
+    );
     let dual_points_vec: Vec<cyrus_core::Point> = dual_points
         .into_iter()
         .take(9)
         .map(cyrus_core::Point::new)
         .collect();
 
-    let (glsm, _linrel, basis) =
-        cyrus_core::compute_glsm_and_linrels(&dual_points_vec)
-            .expect("Failed to compute dual GLSM/basis");
+    let (glsm, _linrel, basis) = cyrus_core::compute_glsm_and_linrels(&dual_points_vec)
+        .expect("Failed to compute dual GLSM/basis");
 
     let expected = vec![3, 4, 5, 8];
     if basis == expected {
@@ -301,8 +613,7 @@ fn stage0_dual_basis_matches_expected() {
 
     if std::env::var_os("CYRUS_STRICT_BASIS").is_some() {
         assert_eq!(
-            basis,
-            expected,
+            basis, expected,
             "Computed dual basis must match McAllister [3,4,5,8]"
         );
     }
@@ -408,7 +719,11 @@ fn stage0_small_curves_fixture_matches_dat() {
     let gv_path = data_dir.join("small_curves_gv.dat");
     let gv = read_csv_i64(gv_path.to_str().expect("valid small_curves_gv.dat path"));
 
-    assert_eq!(json.curve_classes.len(), curves.len(), "curve count mismatch");
+    assert_eq!(
+        json.curve_classes.len(),
+        curves.len(),
+        "curve count mismatch"
+    );
     assert_eq!(json.gv_invariants.len(), gv.len(), "gv count mismatch");
     assert_eq!(json.curve_classes, curves, "curve classes mismatch");
     assert_eq!(json.gv_invariants, gv, "gv invariants mismatch");
