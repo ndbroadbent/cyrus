@@ -92,7 +92,9 @@ impl Intersection {
     /// Iterator over all non-zero entries.
     /// Returns ((i, j, k), val) where i ≤ j ≤ k.
     pub fn iter(&self) -> impl Iterator<Item = (&(usize, usize, usize), &TypedRational<Finite>)> {
-        self.entries.iter()
+        let mut entries: Vec<_> = self.entries.iter().collect();
+        entries.sort_unstable_by_key(|(key, _)| **key);
+        entries.into_iter()
     }
 
     /// Parallel iterator over non-zero entries.
@@ -127,7 +129,7 @@ impl Intersection {
         // Accumulate as Finite (sum of terms could be any sign)
         // Type algebra: Pos * Finite = Finite, Finite + Finite = Finite
         let mut sum = F64::<Finite>::ZERO;
-        for (&(i, j, k), val) in &self.entries {
+        for (&(i, j, k), val) in self.iter() {
             let mult = symmetry_multiplicity(i, j, k);
             let kappa = val.to_f64();
             // mult: Pos, kappa: Finite, t[i]: Pos → Pos * Finite * Pos * Pos * Pos = Finite
@@ -150,7 +152,7 @@ impl Intersection {
 
         // Type algebra: Pos * Finite = Finite, Finite * Finite = Finite
         let mut sum = F64::<Finite>::ZERO;
-        for (&(i, j, k), val) in &self.entries {
+        for (&(i, j, k), val) in self.iter() {
             let mult = symmetry_multiplicity(i, j, k);
             let kappa = val.to_f64();
             // mult: Pos, kappa: Finite, t[i]: Finite → all Finite
@@ -198,7 +200,7 @@ impl NonEmptyIntersection {
     pub fn contract_triple(&self, t: &crate::types::branded::Moduli<'_>) -> F64<Pos> {
         // Type algebra: accumulate as Finite, narrow at boundary
         let mut sum = F64::<Finite>::ZERO;
-        for (&(i, j, k), val) in &self.0.entries {
+        for (&(i, j, k), val) in self.0.iter() {
             let mult = symmetry_multiplicity(i, j, k);
             let kappa = val.to_f64();
             let term = mult * kappa * t[i] * t[j] * t[k];

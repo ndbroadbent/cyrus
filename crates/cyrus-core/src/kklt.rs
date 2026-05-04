@@ -1067,12 +1067,12 @@ pub fn solve_mixed_basis_path_following_branch_candidates(
 
 /// Generate deterministic KKLT branch initializations from a random seed.
 ///
-/// The patterns mirror the Python branch-search experiments: scaled uniform
-/// starts, positive random starts, sparse large directions, log-uniform starts,
-/// and contiguous cluster starts. Each candidate is rescaled, when possible,
-/// so the mean absolute initial divisor volume is comparable to the target
-/// divisor-volume scale. The caller still evaluates every candidate explicitly;
-/// this function does not choose or discard a branch.
+/// The patterns mirror the Python branch-search experiments: one scaled
+/// uniform start, positive random starts, sparse large directions, log-uniform
+/// starts, and contiguous cluster starts. Each candidate is rescaled, when
+/// possible, so the mean absolute initial divisor volume is comparable to the
+/// target divisor-volume scale. The caller still evaluates every candidate
+/// explicitly; this function does not choose or discard a branch.
 #[must_use]
 pub fn generate_scaled_kklt_branch_initializations(
     kappa_basis: &Intersection,
@@ -1094,9 +1094,8 @@ pub fn generate_scaled_kklt_branch_initializations(
 
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
     let mut out = Vec::with_capacity(count);
-    let uniform_scales = [0.1, 0.5, 1.0, 2.0, 5.0, 10.0];
-    for scale in uniform_scales.into_iter().take(count) {
-        let raw = vec![F64::<Finite>::new(scale).expect("finite scale"); dim];
+    if count > 0 {
+        let raw = vec![F64::<Finite>::new(1.0).expect("finite scale"); dim];
         out.push(scale_branch_initialization_to_target(
             kappa_basis,
             kappa_all,
@@ -1108,19 +1107,15 @@ pub fn generate_scaled_kklt_branch_initializations(
     }
 
     while out.len() < count {
-        let pattern = rng.gen_range(0..5);
+        let pattern = rng.gen_range(0..4);
         let raw = match pattern {
             0 => {
-                let scale = 10.0_f64.powf(rng.gen_range(-0.5..1.5));
-                vec![F64::<Finite>::new(scale)?; dim]
-            }
-            1 => {
                 let scale = 10.0_f64.powf(rng.gen_range(-0.5..1.5));
                 (0..dim)
                     .map(|_| F64::<Finite>::new(standard_normal(&mut rng).abs() * scale + 0.1))
                     .collect::<Option<Vec<_>>>()?
             }
-            2 => {
+            1 => {
                 let mut t = vec![F64::<Finite>::new(0.1).expect("finite"); dim];
                 let n_large = rng.gen_range(1..=usize::max(1, dim / 10));
                 for _ in 0..n_large {
@@ -1129,7 +1124,7 @@ pub fn generate_scaled_kklt_branch_initializations(
                 }
                 t
             }
-            3 => (0..dim)
+            2 => (0..dim)
                 .map(|_| F64::<Finite>::new(10.0_f64.powf(rng.gen_range(-0.5..1.5))))
                 .collect::<Option<Vec<_>>>()?,
             _ => {
@@ -2310,6 +2305,52 @@ mod tests {
                 tau[0].get()
             );
         }
+    }
+
+    #[test]
+    fn test_branch_initialization_generation_does_not_repeat_uniform_prefix() {
+        let mut kappa_basis = Intersection::new(2);
+        kappa_basis.set(
+            0,
+            0,
+            0,
+            TypedRational::<Finite>::from_raw(Rational::from(6)),
+        );
+        kappa_basis.set(
+            1,
+            1,
+            1,
+            TypedRational::<Finite>::from_raw(Rational::from(6)),
+        );
+
+        let basis = vec![0, 1];
+        let kklt_basis = vec![0, 1];
+        let tau_target = vec![f64_pos!(12.0), f64_pos!(18.0)];
+        let candidates = generate_scaled_kklt_branch_initializations(
+            &kappa_basis,
+            &kappa_basis,
+            &basis,
+            &kklt_basis,
+            &tau_target,
+            6,
+            123,
+        )
+        .unwrap();
+
+        assert_eq!(candidates.len(), 6);
+        let unique_candidates: std::collections::HashSet<Vec<String>> = candidates
+            .iter()
+            .map(|candidate| {
+                candidate
+                    .iter()
+                    .map(|entry| format!("{:.12}", entry.get()))
+                    .collect()
+            })
+            .collect();
+        assert!(
+            unique_candidates.len() > 3,
+            "branch generator should not waste the prefix on repeated scaled-uniform starts"
+        );
     }
 
     #[test]
