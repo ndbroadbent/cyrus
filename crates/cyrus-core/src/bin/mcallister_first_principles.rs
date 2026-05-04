@@ -524,10 +524,22 @@ struct MissingGvTargetSample {
     generators_le_degree: usize,
     is_mori_generator: bool,
     origin_circuit_pattern: Option<String>,
+    origin_circuit_witness_count: Option<usize>,
+    origin_circuit_first_witness: Option<OriginCircuitWitnessSample>,
     real_cone_decomposable_by_other_generators: bool,
     real_cone_decomposition_active_generators: Option<usize>,
     ambient_nonzero: Vec<(usize, i64)>,
     basis_nonzero: Vec<(usize, i64)>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct OriginCircuitWitnessSample {
+    first_facet_exclusive_point: usize,
+    second_facet_exclusive_point: usize,
+    shared_two_simplex: Vec<usize>,
+    first_facet_size: usize,
+    second_facet_size: usize,
+    sparse_relation: Vec<(usize, i64)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1894,20 +1906,23 @@ fn missing_gv_target_stats(
         if is_mori_generator && !real_cone_decomposable {
             targets_that_are_lp_extremal_mori_generators += 1;
         }
-        let origin_circuit_pattern_label =
-            origin_circuits_by_class
-                .get(ambient_class)
-                .map(|diagnostic| {
-                    targets_that_are_origin_circuits += 1;
-                    if diagnostic.is_resolved_conifold_pattern {
-                        origin_circuit_resolved_conifold_count += 1;
-                    }
-                    let pattern = origin_circuit_pattern(diagnostic);
-                    *origin_circuit_pattern_counts
-                        .entry(pattern.clone())
-                        .or_insert(0) += 1;
-                    pattern
-                });
+        let origin_circuit_diagnostic = origin_circuits_by_class.get(ambient_class);
+        let origin_circuit_pattern_label = origin_circuit_diagnostic.map(|diagnostic| {
+            targets_that_are_origin_circuits += 1;
+            if diagnostic.is_resolved_conifold_pattern {
+                origin_circuit_resolved_conifold_count += 1;
+            }
+            let pattern = origin_circuit_pattern(diagnostic);
+            *origin_circuit_pattern_counts
+                .entry(pattern.clone())
+                .or_insert(0) += 1;
+            pattern
+        });
+        let origin_circuit_witness_count =
+            origin_circuit_diagnostic.map(|diagnostic| diagnostic.witnesses.len());
+        let origin_circuit_first_witness = origin_circuit_diagnostic
+            .and_then(|diagnostic| diagnostic.witnesses.first())
+            .map(origin_circuit_witness_sample);
         min_generators = min_generators.min(generators_le_degree);
         max_generators = max_generators.max(generators_le_degree);
         if sample.len() < sample_limit {
@@ -1916,6 +1931,8 @@ fn missing_gv_target_stats(
                 generators_le_degree,
                 is_mori_generator,
                 origin_circuit_pattern: origin_circuit_pattern_label,
+                origin_circuit_witness_count,
+                origin_circuit_first_witness,
                 real_cone_decomposable_by_other_generators: real_cone_decomposable,
                 real_cone_decomposition_active_generators,
                 ambient_nonzero: ambient_class
@@ -2188,6 +2205,19 @@ fn origin_circuit_pattern(diagnostic: &cyrus_core::OriginCircuitCurveDiagnostic)
         diagnostic.positive_coefficient_counts,
         diagnostic.is_resolved_conifold_pattern
     )
+}
+
+fn origin_circuit_witness_sample(
+    witness: &cyrus_core::OriginCircuitCurveWitness,
+) -> OriginCircuitWitnessSample {
+    OriginCircuitWitnessSample {
+        first_facet_exclusive_point: witness.first_facet_exclusive_point,
+        second_facet_exclusive_point: witness.second_facet_exclusive_point,
+        shared_two_simplex: witness.shared_two_simplex.clone(),
+        first_facet_size: witness.first_facet.len(),
+        second_facet_size: witness.second_facet.len(),
+        sparse_relation: witness.sparse_relation.clone(),
+    }
 }
 
 fn project_ambient_curve_to_basis(
@@ -5234,6 +5264,8 @@ mod tests {
                     generators_le_degree: 3,
                     is_mori_generator: true,
                     origin_circuit_pattern: None,
+                    origin_circuit_witness_count: None,
+                    origin_circuit_first_witness: None,
                     real_cone_decomposable_by_other_generators: true,
                     real_cone_decomposition_active_generators: Some(2),
                     ambient_nonzero: vec![(1, 1), (2, 1)],
@@ -5244,6 +5276,8 @@ mod tests {
                     generators_le_degree: 2,
                     is_mori_generator: false,
                     origin_circuit_pattern: None,
+                    origin_circuit_witness_count: None,
+                    origin_circuit_first_witness: None,
                     real_cone_decomposable_by_other_generators: true,
                     real_cone_decomposition_active_generators: Some(1),
                     ambient_nonzero: vec![(1, 2)],

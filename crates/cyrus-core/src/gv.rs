@@ -282,6 +282,25 @@ pub struct ToricCurveGvInvariant {
     pub gv: Integer,
 }
 
+/// A triangulation witness for an origin-circuit Mori-cap curve class.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OriginCircuitCurveWitness {
+    /// Curve class in ambient divisor-intersection coordinates.
+    pub class: Vec<i64>,
+    /// First point outside the shared facet intersection used in the circuit.
+    pub first_facet_exclusive_point: usize,
+    /// Second point outside the shared facet intersection used in the circuit.
+    pub second_facet_exclusive_point: usize,
+    /// Two-dimensional simplex shared by the two facets.
+    pub shared_two_simplex: Vec<usize>,
+    /// First facet containing `shared_two_simplex`.
+    pub first_facet: Vec<usize>,
+    /// Second facet containing `shared_two_simplex`.
+    pub second_facet: Vec<usize>,
+    /// Sparse affine relation before normalization.
+    pub sparse_relation: Vec<(usize, i64)>,
+}
+
 /// An origin-circuit Mori-cap curve class, with enough shape data to diagnose
 /// whether a local toric GV formula is currently known.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -297,6 +316,8 @@ pub struct OriginCircuitCurveDiagnostic {
     /// Whether this is the isolated resolved-conifold pattern currently covered
     /// by [`compute_toric_two_face_curve_gv_invariants`].
     pub is_resolved_conifold_pattern: bool,
+    /// Triangulation witnesses that produce this origin-circuit class.
+    pub witnesses: Vec<OriginCircuitCurveWitness>,
 }
 
 /// Compute the volume of an ambient curve class from Kähler parameters in a divisor basis.
@@ -614,9 +635,11 @@ pub fn compute_toric_two_face_curve_gv_invariants(
         }
     }
 
-    for class in compute_origin_circuit_curve_classes(&pts_ext, &facets, &simp_2d_all, origin_idx) {
-        if let Some(gv) = resolved_conifold_origin_circuit_gv(&class, origin_idx) {
-            insert_toric_gv(&mut gv_by_class, class, gv)?;
+    for witness in
+        compute_origin_circuit_curve_witnesses(&pts_ext, &facets, &simp_2d_all, origin_idx)
+    {
+        if let Some(gv) = resolved_conifold_origin_circuit_gv(&witness.class, origin_idx) {
+            insert_toric_gv(&mut gv_by_class, witness.class, gv)?;
         }
     }
 
@@ -682,14 +705,23 @@ pub fn compute_origin_circuit_curve_diagnostics(
         }
     }
 
-    let mut diagnostics_by_class = BTreeMap::new();
-    for class in compute_origin_circuit_curve_classes(&pts_ext, &facets, &simp_2d_all, origin_idx) {
-        diagnostics_by_class
-            .entry(class.clone())
-            .or_insert_with(|| origin_circuit_diagnostic_from_class(class, origin_idx));
+    let mut witnesses_by_class: BTreeMap<Vec<i64>, Vec<OriginCircuitCurveWitness>> =
+        BTreeMap::new();
+    for witness in
+        compute_origin_circuit_curve_witnesses(&pts_ext, &facets, &simp_2d_all, origin_idx)
+    {
+        witnesses_by_class
+            .entry(witness.class.clone())
+            .or_default()
+            .push(witness);
     }
 
-    Ok(diagnostics_by_class.into_values().collect())
+    Ok(witnesses_by_class
+        .into_iter()
+        .map(|(class, witnesses)| {
+            origin_circuit_diagnostic_from_class_and_witnesses(class, origin_idx, witnesses)
+        })
+        .collect())
 }
 
 fn insert_toric_gv(
@@ -807,12 +839,12 @@ fn toric_two_face_curve_gv(
     Ok(Integer::from(two_face_genus as i64 + 1))
 }
 
-fn compute_origin_circuit_curve_classes(
+fn compute_origin_circuit_curve_witnesses(
     pts_ext: &[Vec<i64>],
     facets: &[Vec<usize>],
     simp_2d_all: &HashSet<Vec<usize>>,
     origin_idx: usize,
-) -> Vec<Vec<i64>> {
+) -> Vec<OriginCircuitCurveWitness> {
     let mut out = Vec::new();
     for s2d in simp_2d_all {
         let s2d_set: HashSet<usize> = s2d.iter().copied().collect();
@@ -854,7 +886,16 @@ fn compute_origin_circuit_curve_classes(
                 if origin_coeff >= 0 {
                     continue;
                 }
-                out.push(normalized_row_from_sparse_relation(pts_ext.len(), full_v));
+                let class = normalized_row_from_sparse_relation(pts_ext.len(), full_v.clone());
+                out.push(OriginCircuitCurveWitness {
+                    class,
+                    first_facet_exclusive_point: *p1,
+                    second_facet_exclusive_point: *p2,
+                    shared_two_simplex: s2d.clone(),
+                    first_facet: f1.clone(),
+                    second_facet: f2.clone(),
+                    sparse_relation: full_v,
+                });
             }
         }
     }
@@ -887,9 +928,10 @@ fn resolved_conifold_origin_circuit_gv(class: &[i64], origin_idx: usize) -> Opti
     }
 }
 
-fn origin_circuit_diagnostic_from_class(
+fn origin_circuit_diagnostic_from_class_and_witnesses(
     class: Vec<i64>,
     origin_idx: usize,
+    mut witnesses: Vec<OriginCircuitCurveWitness>,
 ) -> OriginCircuitCurveDiagnostic {
     let origin_coefficient = class.get(origin_idx).copied().unwrap_or(0);
     let mut negative_coefficient_counts = BTreeMap::new();
@@ -906,6 +948,19 @@ fn origin_circuit_diagnostic_from_class(
     }
     let is_resolved_conifold_pattern =
         resolved_conifold_origin_circuit_gv(&class, origin_idx).is_some();
+    witnesses.sort_by(|left, right| {
+        left.shared_two_simplex
+            .cmp(&right.shared_two_simplex)
+            .then_with(|| {
+                left.first_facet_exclusive_point
+                    .cmp(&right.first_facet_exclusive_point)
+            })
+            .then_with(|| {
+                left.second_facet_exclusive_point
+                    .cmp(&right.second_facet_exclusive_point)
+            })
+            .then_with(|| left.sparse_relation.cmp(&right.sparse_relation))
+    });
 
     OriginCircuitCurveDiagnostic {
         class,
@@ -913,6 +968,7 @@ fn origin_circuit_diagnostic_from_class(
         negative_coefficient_counts,
         positive_coefficient_counts,
         is_resolved_conifold_pattern,
+        witnesses,
     }
 }
 
@@ -2365,11 +2421,11 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        BoundedCurveDecompositionIndex, ToricCurveCandidate, compute_grading_vector,
-        compute_gv_invariants_with_explicit_semigroup,
+        BoundedCurveDecompositionIndex, OriginCircuitCurveWitness, ToricCurveCandidate,
+        compute_grading_vector, compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_provided_generators, curve_volume_in_divisor_basis,
         dump_mori_rays_cdd, find_pair_decomposition, gv_lattice_search_request, load_grading_cache,
-        map_basis_gv_invariants_to_ambient, origin_circuit_diagnostic_from_class,
+        map_basis_gv_invariants_to_ambient, origin_circuit_diagnostic_from_class_and_witnesses,
         project_mori_cone_cap_rays_to_basis, remove_pair_decomposable_curve_candidates,
         subcutoff_toric_curve_candidates, write_grading_cache,
     };
@@ -2428,7 +2484,11 @@ mod tests {
 
     #[test]
     fn origin_circuit_diagnostic_marks_resolved_conifold_pattern() {
-        let diagnostic = origin_circuit_diagnostic_from_class(vec![-1, -1, -1, 1, 1, 1], 0);
+        let diagnostic = origin_circuit_diagnostic_from_class_and_witnesses(
+            vec![-1, -1, -1, 1, 1, 1],
+            0,
+            Vec::new(),
+        );
 
         assert_eq!(diagnostic.origin_coefficient, -1);
         assert_eq!(
@@ -2440,11 +2500,16 @@ mod tests {
             BTreeMap::from([(1, 3)])
         );
         assert!(diagnostic.is_resolved_conifold_pattern);
+        assert!(diagnostic.witnesses.is_empty());
     }
 
     #[test]
     fn origin_circuit_diagnostic_keeps_unsupported_patterns_explicit() {
-        let diagnostic = origin_circuit_diagnostic_from_class(vec![-2, -1, -2, 1, 2, 2], 0);
+        let diagnostic = origin_circuit_diagnostic_from_class_and_witnesses(
+            vec![-2, -1, -2, 1, 2, 2],
+            0,
+            Vec::new(),
+        );
 
         assert_eq!(diagnostic.origin_coefficient, -2);
         assert_eq!(
@@ -2456,6 +2521,36 @@ mod tests {
             BTreeMap::from([(1, 1), (2, 2)])
         );
         assert!(!diagnostic.is_resolved_conifold_pattern);
+    }
+
+    #[test]
+    fn origin_circuit_diagnostic_keeps_sorted_witnesses() {
+        let first = OriginCircuitCurveWitness {
+            class: vec![-1, -1, -1, 1, 1, 1],
+            first_facet_exclusive_point: 5,
+            second_facet_exclusive_point: 1,
+            shared_two_simplex: vec![2, 3, 4],
+            first_facet: vec![2, 3, 4, 5],
+            second_facet: vec![1, 2, 3, 4],
+            sparse_relation: vec![(0, -1), (1, -1), (5, 1)],
+        };
+        let second = OriginCircuitCurveWitness {
+            class: vec![-1, -1, -1, 1, 1, 1],
+            first_facet_exclusive_point: 2,
+            second_facet_exclusive_point: 4,
+            shared_two_simplex: vec![1, 3, 5],
+            first_facet: vec![1, 2, 3, 5],
+            second_facet: vec![1, 3, 4, 5],
+            sparse_relation: vec![(0, -1), (2, 1), (4, -1)],
+        };
+
+        let diagnostic = origin_circuit_diagnostic_from_class_and_witnesses(
+            vec![-1, -1, -1, 1, 1, 1],
+            0,
+            vec![first.clone(), second.clone()],
+        );
+
+        assert_eq!(diagnostic.witnesses, vec![second, first]);
     }
 
     #[test]
