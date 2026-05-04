@@ -331,6 +331,83 @@ pub fn compute_gv_target_correction_for_divisors(
         .collect()
 }
 
+/// Compute divisor GV corrections from ambient-coordinate curve classes.
+///
+/// This is useful for validation data such as McAllister's `small_curves.dat`,
+/// where curve classes are already expressed by their intersections with all
+/// ambient divisors. The Kähler parameters `t` are still coordinates in
+/// `basis`, and the output is ordered by `kklt_basis`.
+#[must_use]
+pub fn compute_gv_target_correction_for_ambient_curves(
+    gv_invariants: &[(Vec<i64>, Integer)],
+    basis: &[usize],
+    kklt_basis: &[usize],
+    t: &[F64<Finite>],
+    gamma: Option<&[I64<Finite>]>,
+) -> Option<Vec<F64<Finite>>> {
+    let dim = t.len();
+    if dim == 0
+        || basis.len() != dim
+        || kklt_basis.is_empty()
+        || gamma.is_some_and(|g| g.len() != dim)
+    {
+        return None;
+    }
+
+    let ambient_dim = gv_invariants.first()?.0.len();
+    if ambient_dim == 0
+        || basis.iter().any(|&idx| idx >= ambient_dim)
+        || kklt_basis.iter().any(|&idx| idx >= ambient_dim)
+    {
+        return None;
+    }
+
+    let mut correction = vec![0.0f64; kklt_basis.len()];
+    for (curve, invariant) in gv_invariants {
+        if curve.len() != ambient_dim {
+            return None;
+        }
+
+        let q_dot_t = basis
+            .iter()
+            .zip(t.iter())
+            .map(|(&idx, ti)| curve[idx] as f64 * ti.get())
+            .sum::<f64>();
+        if !q_dot_t.is_finite() || q_dot_t <= 0.0 {
+            return None;
+        }
+
+        let parity = gamma.map_or(0_i128, |g| {
+            basis
+                .iter()
+                .zip(g.iter())
+                .map(|(&idx, gi)| i128::from(curve[idx]) * i128::from(gi.get()))
+                .sum::<i128>()
+        });
+        let sign = if parity.rem_euclid(2) == 0 { 1.0 } else { -1.0 };
+        let arg = sign * (-TWO_PI.get() * q_dot_t).exp();
+        if arg.abs() < 1e-100 {
+            continue;
+        }
+
+        let dilog = real_dilog_unit_disk(arg)?;
+        let invariant_f = invariant.to_string().parse::<f64>().ok()?;
+        if !invariant_f.is_finite() {
+            return None;
+        }
+
+        for (entry, &divisor_idx) in correction.iter_mut().zip(kklt_basis.iter()) {
+            *entry += curve[divisor_idx] as f64 * invariant_f * dilog;
+        }
+    }
+
+    let prefactor = 1.0 / (4.0 * PI * PI);
+    correction
+        .into_iter()
+        .map(|value| F64::<Finite>::new(prefactor * value))
+        .collect()
+}
+
 /// Compute `c_τ` = 2π / (`g_s` × ln(W₀⁻¹)).
 ///
 /// This relates the string coupling to the flux superpotential.
@@ -1291,6 +1368,42 @@ mod tests {
         let prefactor = 1.0 / (4.0 * PI * PI);
         assert!((correction[0].get() - 2.0 * prefactor * li2_half).abs() < 1e-14);
         assert!((correction[1].get() - 5.0 * prefactor * li2_half).abs() < 1e-14);
+    }
+
+    #[test]
+    fn test_compute_gv_target_correction_for_ambient_curves_matches_basis_mapping() {
+        let t_entry = 2.0_f64.ln() / (10.0 * PI);
+        let t = vec![finite_f64(t_entry), finite_f64(t_entry)];
+        let basis_invariants = vec![(vec![2, 3], Integer::from(1))];
+        let ambient_invariants = vec![(vec![2, 3, 5], Integer::from(1))];
+        let curve_basis = vec![
+            vec![Integer::from(1), Integer::from(0), Integer::from(4)],
+            vec![Integer::from(0), Integer::from(1), Integer::from(-1)],
+        ];
+        let basis = vec![0, 1];
+        let kklt_basis = vec![0, 2];
+
+        let from_basis = compute_gv_target_correction_for_divisors(
+            &basis_invariants,
+            &curve_basis,
+            &kklt_basis,
+            &t,
+            None,
+        )
+        .unwrap();
+        let from_ambient = compute_gv_target_correction_for_ambient_curves(
+            &ambient_invariants,
+            &basis,
+            &kklt_basis,
+            &t,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(from_ambient.len(), from_basis.len());
+        for (ambient, basis) in from_ambient.iter().zip(from_basis.iter()) {
+            assert!((ambient.get() - basis.get()).abs() < 1e-14);
+        }
     }
 
     #[test]

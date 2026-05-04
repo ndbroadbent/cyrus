@@ -108,9 +108,9 @@ pub mod kklt;
 
 pub use kklt::{
     KkltResult, compute_c_tau as kklt_compute_c_tau, compute_corrected_target_tau,
-    compute_divisor_volumes as kklt_compute_tau, compute_jacobian as kklt_compute_jacobian,
-    compute_kklt_divisor_volumes, compute_kklt_jacobian, compute_target_tau,
-    solve_mixed_basis_path_following, solve_path_following,
+    compute_divisor_volumes as kklt_compute_tau, compute_gv_target_correction_for_ambient_curves,
+    compute_jacobian as kklt_compute_jacobian, compute_kklt_divisor_volumes, compute_kklt_jacobian,
+    compute_target_tau, solve_mixed_basis_path_following, solve_path_following,
     solve_two_phase_mixed_basis_path_following, solve_two_phase_path_following,
 };
 pub use lattice::Point;
