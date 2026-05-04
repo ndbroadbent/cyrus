@@ -194,6 +194,19 @@ fn test_compute_intersection_ray() {
 }
 
 #[test]
+fn test_compute_intersection_ray_handles_large_canceling_intermediates() {
+    let big = i128::MAX / 2;
+    let pos = vec![big, 1];
+    let neg = vec![-big, 1];
+    let h = DdmHyperplane::new(vec![1, 0]);
+
+    let ray = compute_intersection_ray(&pos, &neg, &h).unwrap();
+
+    assert_eq!(ray, vec![0, 1]);
+    assert_eq!(h.dot(&ray), 0);
+}
+
+#[test]
 fn test_normalize_ray_preserves_direction() {
     assert_eq!(
         normalize_ray_preserving_direction(vec![2, 4, 6]),

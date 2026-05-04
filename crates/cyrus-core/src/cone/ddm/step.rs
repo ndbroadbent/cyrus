@@ -2,11 +2,14 @@ use std::collections::HashMap;
 use std::env;
 use std::sync::OnceLock;
 
+use malachite::Integer;
+
+use crate::integer_math::gcd_integer;
+
 use super::rank::{RankContext, are_adjacent_cached};
 use super::types::{DdmHyperplane, DdmRay, RankStats, StepStats};
 use super::util::{
-    active_set_for_intersection, gcd_vec, insert_active, merge_active,
-    normalize_ray_preserving_direction,
+    active_set_for_intersection, insert_active, merge_active, normalize_ray_preserving_direction,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -188,24 +191,37 @@ pub(super) fn compute_intersection_ray(
     let dp = h.dot(pos); // > 0
     let dn = h.dot(neg); // < 0
 
-    // r = dp * neg - dn * pos
-    let mut result: Vec<i128> = pos
+    // r = dp * neg - dn * pos. Use arbitrary precision for the intermediate
+    // products; McAllister-sized cones can temporarily exceed i128 even when
+    // the primitive intersection ray fits back into i128.
+    let dp = Integer::from(dp);
+    let dn = Integer::from(dn);
+    let mut result: Vec<Integer> = pos
         .iter()
         .zip(neg.iter())
-        .map(|(&p, &n)| dp * n - dn * p)
+        .map(|(&p, &n)| &dp * Integer::from(n) - &dn * Integer::from(p))
         .collect();
 
     // Normalize by GCD
-    let g = gcd_vec(&result);
-    if g == 0 {
+    let g = gcd_integer_vec(&result);
+    if g == 0u32 {
         return None;
     }
 
     for x in &mut result {
-        *x /= g;
+        *x /= &g;
     }
 
-    Some(result)
+    result
+        .iter()
+        .map(i128::try_from)
+        .collect::<Result<_, _>>()
+        .ok()
+}
+
+fn gcd_integer_vec(v: &[Integer]) -> Integer {
+    v.iter()
+        .fold(Integer::from(0), |acc, x| gcd_integer(&acc, x))
 }
 
 /// Remove duplicate rays (after normalization).
