@@ -377,6 +377,24 @@ fn stage0_first_principles_runner_does_not_silently_replay_downstream_outputs() 
             "{gv_artifact} must be computed by the runner, not loaded"
         );
     }
+
+    assert!(
+        runner.contains(".compute_dual()"),
+        "runner must compute the dual polytope instead of loading dual_points.dat as an input"
+    );
+    assert!(
+        runner.contains("compute_frst_heights"),
+        "runner must compute the dual FRST instead of loading dual_simplices.dat as an input"
+    );
+    assert!(
+        !runner.contains("load_dual_inputs"),
+        "runner must not keep the old dual_points/dual_simplices loader"
+    );
+    assert!(
+        !runner.contains("overrides/dual_points.json")
+            && !runner.contains("overrides/dual_simplices.json"),
+        "runner must not fall back to legacy dual fixture overrides"
+    );
 }
 
 #[test]
