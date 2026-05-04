@@ -5323,33 +5323,9 @@ fn compare_corrected_kahler_checkpoint(
     intersection: &PrimalIntersection,
     kahler: &[F64<Finite>],
 ) {
-    let Some(dir) = data_dir.map(PathBuf::from) else {
+    let Some(checkpoint) = load_corrected_kahler_checkpoint(data_dir, intersection) else {
         return;
     };
-    let corrected_path = dir.join("corrected_kahler_param.dat");
-    if !corrected_path.exists() {
-        eprintln!(
-            "[COMPARE] corrected_kahler_param.dat checkpoint not found; skipping corrected Kähler comparison"
-        );
-        return;
-    }
-    let basis_path = dir.join("basis.dat");
-    if !basis_path.exists() {
-        eprintln!("[COMPARE] basis.dat checkpoint not found; skipping corrected Kähler comparison");
-        return;
-    }
-    let checkpoint_raw = read_csv_f64(&corrected_path)
-        .into_iter()
-        .map(|value| F64::<Finite>::new(value).expect("corrected Kähler checkpoint is finite"))
-        .collect::<Vec<_>>();
-    let source_basis = read_csv_usize(&basis_path);
-    let checkpoint = transform_kahler_to_computed_basis_with_logging(
-        &intersection.glsm,
-        &intersection.basis,
-        &source_basis,
-        &checkpoint_raw,
-        false,
-    );
     if checkpoint.len() != kahler.len() {
         eprintln!(
             "[COMPARE] corrected Kähler checkpoint length mismatch: checkpoint={} computed={}",
@@ -5377,6 +5353,39 @@ fn compare_corrected_kahler_checkpoint(
         computed_classical,
         computed_classical - checkpoint_classical
     );
+}
+
+fn load_corrected_kahler_checkpoint(
+    data_dir: Option<&str>,
+    intersection: &PrimalIntersection,
+) -> Option<Vec<F64<Finite>>> {
+    let Some(dir) = data_dir.map(PathBuf::from) else {
+        return None;
+    };
+    let corrected_path = dir.join("corrected_kahler_param.dat");
+    if !corrected_path.exists() {
+        eprintln!(
+            "[COMPARE] corrected_kahler_param.dat checkpoint not found; skipping corrected Kähler comparison"
+        );
+        return None;
+    }
+    let basis_path = dir.join("basis.dat");
+    if !basis_path.exists() {
+        eprintln!("[COMPARE] basis.dat checkpoint not found; skipping corrected Kähler comparison");
+        return None;
+    }
+    let checkpoint_raw = read_csv_f64(&corrected_path)
+        .into_iter()
+        .map(|value| F64::<Finite>::new(value).expect("corrected Kähler checkpoint is finite"))
+        .collect::<Vec<_>>();
+    let source_basis = read_csv_usize(&basis_path);
+    Some(transform_kahler_to_computed_basis_with_logging(
+        &intersection.glsm,
+        &intersection.basis,
+        &source_basis,
+        &checkpoint_raw,
+        false,
+    ))
 }
 
 fn compare_corrected_target_volume_checkpoint(
@@ -5547,6 +5556,60 @@ fn compare_corrected_target_volume_checkpoint(
             computed_target_tau[idx].get()
         );
     }
+}
+
+fn compare_corrected_chamber_target_volume_checkpoint(
+    label: &str,
+    data_dir: Option<&str>,
+    basis: &[usize],
+    kklt_basis: &[usize],
+    kappa_full: &cyrus_core::Intersection,
+    kappa_basis: &cyrus_core::Intersection,
+    kahler: &[F64<Finite>],
+) {
+    let Some(dir) = data_dir.map(PathBuf::from) else {
+        return;
+    };
+    let target_path = dir.join("corrected_target_volumes.dat");
+    if !target_path.exists() {
+        return;
+    }
+    let checkpoint = read_csv_f64(&target_path)
+        .into_iter()
+        .map(|value| {
+            F64::<Finite>::new(value).expect("corrected target-volume checkpoint is finite")
+        })
+        .collect::<Vec<_>>();
+    let Some(classical_tau) = cyrus_core::kklt::compute_kklt_divisor_volumes(
+        kappa_basis,
+        kappa_full,
+        basis,
+        kklt_basis,
+        kahler,
+    ) else {
+        eprintln!("[ERROR] failed to compute corrected-chamber classical KKLT divisor volumes");
+        std::process::exit(2);
+    };
+    if checkpoint.len() != classical_tau.len() {
+        eprintln!(
+            "[COMPARE] corrected-chamber target-volume length mismatch: checkpoint={} computed={}",
+            checkpoint.len(),
+            classical_tau.len()
+        );
+        return;
+    }
+    let summary =
+        target_correction_delta_summary(&checkpoint, &classical_tau).unwrap_or_else(|e| {
+            eprintln!("[ERROR] failed to compare corrected-chamber target volumes: {e}");
+            std::process::exit(2);
+        });
+    eprintln!(
+        "[COMPARE] corrected target-volume {label} classical delta: max_abs={} relative_l2={} max_abs_checkpoint={} max_abs_computed={}",
+        summary.max_abs_delta,
+        summary.relative_l2_delta,
+        summary.max_abs_reference,
+        summary.max_abs_candidate
+    );
 }
 
 fn stage_volume(
@@ -6457,6 +6520,58 @@ fn stage_volume(
         eprintln!(
             "[WARN] corrected Kähler point lies in a different regular chamber; flop/chamber-updated GV evaluation remains an explicit instanton-layer gap."
         );
+    }
+    if let Some(kklt_basis) = kklt_basis_for_chamber_gv.as_deref() {
+        let corrected_chamber_kappa_full = chamber_intersection_full(
+            &corrected_chamber,
+            &geom.triangulation_points,
+        )
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "[ERROR] failed to compute corrected-chamber target-volume intersection: {e}"
+            );
+            std::process::exit(2);
+        });
+        let corrected_chamber_kappa_basis =
+            intersection_in_basis(&corrected_chamber_kappa_full, &intersection.basis);
+        compare_corrected_chamber_target_volume_checkpoint(
+            "computed-t corrected-chamber",
+            data_dir,
+            &intersection.basis,
+            kklt_basis,
+            &corrected_chamber_kappa_full,
+            &corrected_chamber_kappa_basis,
+            &t,
+        );
+        if let Some(checkpoint_t) = load_corrected_kahler_checkpoint(data_dir, intersection) {
+            let checkpoint_chamber =
+                triangulation_from_kahler_point(geom, &intersection.basis, &checkpoint_t)
+                    .unwrap_or_else(|e| {
+                        eprintln!(
+                            "[ERROR] failed to diagnose corrected Kähler checkpoint chamber: {e}"
+                        );
+                        std::process::exit(2);
+                    });
+            let checkpoint_chamber_kappa_full =
+                chamber_intersection_full(&checkpoint_chamber, &geom.triangulation_points)
+                    .unwrap_or_else(|e| {
+                        eprintln!(
+                            "[ERROR] failed to compute corrected Kähler checkpoint chamber intersection: {e}"
+                        );
+                        std::process::exit(2);
+                    });
+            let checkpoint_chamber_kappa_basis =
+                intersection_in_basis(&checkpoint_chamber_kappa_full, &intersection.basis);
+            compare_corrected_chamber_target_volume_checkpoint(
+                "checkpoint-t corrected-chamber",
+                data_dir,
+                &intersection.basis,
+                kklt_basis,
+                &checkpoint_chamber_kappa_full,
+                &checkpoint_chamber_kappa_basis,
+                &checkpoint_t,
+            );
+        }
     }
     if diagnose_corrected_chamber_gv
         || diagnose_corrected_chamber_provided_generators_gv
