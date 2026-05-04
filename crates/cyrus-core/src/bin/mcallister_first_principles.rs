@@ -41,6 +41,9 @@
 //! - `--diagnose-corrected-chamber-lp-face-gv` to try small HKTY face
 //!   diagnostics generated from LP decomposition witnesses of missing
 //!   corrected-chamber primitive Mori generators.
+//! - `--diagnose-chamber-updated-kklt` to run a diagnostic-only KKLT
+//!   fixed-point loop that recomputes the FRST chamber, intersections, divisor
+//!   χ, and toric-covered small-curve GV target correction at each iteration.
 
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
@@ -570,6 +573,26 @@ struct ChamberGvDiagnostic {
     gv_volume_correction: Option<F64<Finite>>,
 }
 
+struct ChamberToricGvSelection {
+    ambient_rays: usize,
+    subcutoff_count: usize,
+    filtered_count: usize,
+    toric_gv_covered_count: usize,
+    toric_gv_missing_count: usize,
+    first_missing_class: Option<Vec<i64>>,
+    small_curve_gvs: Vec<(Vec<i64>, malachite::Integer)>,
+}
+
+struct ChamberUpdatedKkltDiagnostic {
+    iterations: usize,
+    converged: bool,
+    final_t: Vec<F64<Finite>>,
+    final_classical_volume: f64,
+    final_gv_volume_correction: F64<Finite>,
+    final_toric_missing_count: usize,
+    final_first_missing_class: Option<Vec<i64>>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 struct TargetCorrectionDeltaSummary {
     dimension: usize,
@@ -802,6 +825,8 @@ struct PipelineArgs {
     diagnose_corrected_chamber_provided_generators_gv: bool,
     diagnose_corrected_chamber_ray_gv: bool,
     diagnose_corrected_chamber_lp_face_gv: bool,
+    diagnose_chamber_updated_kklt: bool,
+    diagnose_chamber_updated_kklt_iterations: usize,
     dual_basis_override: Option<BasisOverride>,
 }
 
@@ -883,6 +908,9 @@ fn parse_args() -> PipelineArgs {
     let diagnose_corrected_chamber_ray_gv = parse_flag("--diagnose-corrected-chamber-ray-gv");
     let diagnose_corrected_chamber_lp_face_gv =
         parse_flag("--diagnose-corrected-chamber-lp-face-gv");
+    let diagnose_chamber_updated_kklt = parse_flag("--diagnose-chamber-updated-kklt");
+    let diagnose_chamber_updated_kklt_iterations =
+        parse_arg_value::<usize>("--diagnose-chamber-updated-kklt-iterations").unwrap_or(6);
     let dual_basis_override = parse_arg_value::<String>("--dual-basis")
         .map(|path| load_json::<BasisOverride>(&PathBuf::from(path)));
     PipelineArgs {
@@ -914,6 +942,8 @@ fn parse_args() -> PipelineArgs {
         diagnose_corrected_chamber_provided_generators_gv,
         diagnose_corrected_chamber_ray_gv,
         diagnose_corrected_chamber_lp_face_gv,
+        diagnose_chamber_updated_kklt,
+        diagnose_chamber_updated_kklt_iterations,
         dual_basis_override,
     }
 }
@@ -5062,6 +5092,214 @@ fn diagnose_chamber_gv_volume_correction(
     })
 }
 
+fn compute_chamber_toric_gv_selection(
+    tri: &Triangulation,
+    geom: &PrimalGeom,
+    intersection: &PrimalIntersection,
+    kahler: &[F64<Finite>],
+    cutoff: F64<Pos>,
+) -> Result<ChamberToricGvSelection, String> {
+    let ambient_rays = compute_mori_cone_cap_rays(
+        tri,
+        &geom.triangulation_points,
+        &geom.polytope,
+        false,
+        false,
+        None,
+    )
+    .map_err(|e| format!("failed to compute chamber ambient Mori-cap rays: {e}"))?;
+    let small_curve_candidates =
+        subcutoff_toric_curve_candidates(&ambient_rays, &intersection.basis, kahler, cutoff)
+            .map_err(|e| format!("failed to select chamber small curves: {e}"))?;
+    let small_curves = remove_pair_decomposable_curve_candidates(&small_curve_candidates)
+        .map_err(|e| format!("failed to prune chamber small curves: {e}"))?;
+    let toric_gvs =
+        compute_toric_two_face_curve_gv_invariants(tri, &geom.triangulation_points, &geom.polytope)
+            .map_err(|e| format!("failed to compute chamber toric GV values: {e}"))?;
+    let gv_by_class: HashMap<Vec<i64>, malachite::Integer> = toric_gvs
+        .into_iter()
+        .map(|item| (item.class, item.gv))
+        .collect();
+
+    let mut small_curve_gvs = Vec::with_capacity(small_curves.len());
+    let mut missing_gv_classes = Vec::new();
+    for curve in &small_curves {
+        match gv_by_class.get(&curve.class) {
+            Some(gv) => small_curve_gvs.push((curve.class.clone(), gv.clone())),
+            None => missing_gv_classes.push(curve.class.clone()),
+        }
+    }
+
+    Ok(ChamberToricGvSelection {
+        ambient_rays: ambient_rays.len(),
+        subcutoff_count: small_curve_candidates.len(),
+        filtered_count: small_curves.len(),
+        toric_gv_covered_count: small_curve_gvs.len(),
+        toric_gv_missing_count: missing_gv_classes.len(),
+        first_missing_class: missing_gv_classes.first().cloned(),
+        small_curve_gvs,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn diagnose_chamber_updated_kklt_toric_only(
+    geom: &PrimalGeom,
+    intersection: &PrimalIntersection,
+    kklt_basis: &[usize],
+    c_i: &[I64<Pos>],
+    c_tau: cyrus_core::types::physics::CTau,
+    gamma: &[I64<Finite>],
+    start_t: &[F64<Finite>],
+    cutoff: F64<Pos>,
+    kklt_steps: usize,
+    max_iterations: usize,
+) -> Result<ChamberUpdatedKkltDiagnostic, String> {
+    if max_iterations == 0 {
+        return Err("chamber-updated KKLT diagnostic iterations must be positive".to_string());
+    }
+    let mut current_t = start_t.to_vec();
+    let mut final_classical_volume = None;
+    let mut final_gv_volume_correction = None;
+    let mut final_toric_missing_count = 0usize;
+    let mut final_first_missing_class = None;
+    let mut converged = false;
+    let gv_tolerance = 1e-10f64;
+    let mut completed_iterations = 0usize;
+
+    for iter in 0..max_iterations {
+        let tri = triangulation_from_kahler_point(geom, &intersection.basis, &current_t)?;
+        let chamber_changed_from_input =
+            !triangulations_have_same_simplices(&geom.triangulation, &tri);
+        let kappa_full = chamber_intersection_full(&tri, &geom.triangulation_points)?;
+        let kappa_basis = intersection_in_basis(&kappa_full, &intersection.basis);
+        let chi_divisor = cyrus_core::compute_kklt_divisor_chi(
+            &geom.polytope,
+            &geom.triangulation_points,
+            &kappa_full,
+            kklt_basis,
+        )
+        .map_err(|e| format!("failed to compute chamber-updated divisor chi: {e}"))?;
+        let selection =
+            compute_chamber_toric_gv_selection(&tri, geom, intersection, &current_t, cutoff)?;
+        if selection.small_curve_gvs.is_empty() {
+            return Err(
+                "chamber-updated KKLT diagnostic found no toric-covered small-curve GV values"
+                    .to_string(),
+            );
+        }
+        if selection.toric_gv_missing_count > 0 {
+            let first_missing_sparse = selection
+                .first_missing_class
+                .as_deref()
+                .map(sparse_i64)
+                .unwrap_or_default();
+            eprintln!(
+                "[WARN] chamber-updated KKLT diagnostic iteration {iter} uses toric-covered GV values only; missing={} first_missing_sparse={:?}",
+                selection.toric_gv_missing_count, first_missing_sparse
+            );
+        }
+        let Some(gv_correction) = cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+            &selection.small_curve_gvs,
+            &intersection.basis,
+            kklt_basis,
+            &current_t,
+            Some(gamma),
+        ) else {
+            return Err(format!(
+                "failed to compute chamber-updated GV target correction at iteration {iter}"
+            ));
+        };
+        let Some(tau_target) = cyrus_core::kklt::compute_gv_corrected_target_tau(
+            c_i,
+            &chi_divisor,
+            c_tau,
+            &gv_correction,
+        ) else {
+            return Err(format!(
+                "failed to build chamber-updated GV target tau at iteration {iter}"
+            ));
+        };
+        let Some(next) = solve_mixed_basis_path_following(
+            &kappa_basis,
+            &kappa_full,
+            &intersection.basis,
+            kklt_basis,
+            &tau_target,
+            &current_t,
+            CheckedRange::new(0, kklt_steps),
+        ) else {
+            return Err(format!(
+                "chamber-updated mixed-basis KKLT solve failed at iteration {iter}"
+            ));
+        };
+        if !next.converged {
+            return Err(format!(
+                "chamber-updated mixed-basis KKLT solve did not converge at iteration {iter}: rel_err={}",
+                next.relative_error.get()
+            ));
+        }
+        let max_relative_step = next
+            .t
+            .iter()
+            .zip(current_t.iter())
+            .map(|(new, old)| (new.get() - old.get()).abs() / (old.get().abs() + 1e-12))
+            .fold(0.0f64, f64::max);
+        let Some(gv_volume_correction) =
+            cyrus_core::kklt::compute_gv_volume_correction_for_ambient_curves(
+                &selection.small_curve_gvs,
+                &intersection.basis,
+                &next.t,
+                Some(gamma),
+            )
+        else {
+            return Err(format!(
+                "failed to compute chamber-updated GV volume correction at iteration {iter}"
+            ));
+        };
+        let classical_volume = classical_volume_from_t(&kappa_basis, &next.t);
+        eprintln!(
+            "[INFO] chamber-updated KKLT diagnostic iteration {iter}: changed_from_input={} ambient_rays={} subcutoff={} pair_pruned={} toric_covered={} toric_missing={} max_relative_step={} rel_err={} V_classical={} GV_volume_correction={}",
+            chamber_changed_from_input,
+            selection.ambient_rays,
+            selection.subcutoff_count,
+            selection.filtered_count,
+            selection.toric_gv_covered_count,
+            selection.toric_gv_missing_count,
+            max_relative_step,
+            next.relative_error.get(),
+            classical_volume,
+            gv_volume_correction.get()
+        );
+
+        final_classical_volume = Some(classical_volume);
+        final_gv_volume_correction = Some(gv_volume_correction);
+        final_toric_missing_count = selection.toric_gv_missing_count;
+        final_first_missing_class = selection.first_missing_class;
+        completed_iterations = iter + 1;
+        current_t = next.t;
+        if max_relative_step <= gv_tolerance {
+            converged = true;
+            break;
+        }
+    }
+
+    let final_classical_volume = final_classical_volume.ok_or_else(|| {
+        "chamber-updated KKLT diagnostic did not complete any iterations".to_string()
+    })?;
+    let final_gv_volume_correction = final_gv_volume_correction.ok_or_else(|| {
+        "chamber-updated KKLT diagnostic did not compute a GV volume correction".to_string()
+    })?;
+    Ok(ChamberUpdatedKkltDiagnostic {
+        iterations: completed_iterations,
+        converged,
+        final_t: current_t,
+        final_classical_volume,
+        final_gv_volume_correction,
+        final_toric_missing_count,
+        final_first_missing_class,
+    })
+}
+
 fn stage_volume(
     data_dir: Option<&str>,
     manifest_dir: &PathBuf,
@@ -5085,6 +5323,8 @@ fn stage_volume(
     diagnose_corrected_chamber_provided_generators_gv: bool,
     diagnose_corrected_chamber_ray_gv: bool,
     diagnose_corrected_chamber_lp_face_gv: bool,
+    diagnose_chamber_updated_kklt: bool,
+    diagnose_chamber_updated_kklt_iterations: usize,
     small_curve_cutoff: F64<Pos>,
     h21: usize,
     t0: &Instant,
@@ -5143,11 +5383,18 @@ fn stage_volume(
     if (diagnose_corrected_chamber_gv
         || diagnose_corrected_chamber_provided_generators_gv
         || diagnose_corrected_chamber_ray_gv
-        || diagnose_corrected_chamber_lp_face_gv)
+        || diagnose_corrected_chamber_lp_face_gv
+        || diagnose_chamber_updated_kklt)
         && allow_downstream_kahler
     {
         eprintln!(
-            "[ERROR] --diagnose-corrected-chamber-gv is only valid for first-principles runs, not downstream Kähler replay"
+            "[ERROR] corrected-chamber/chamber-updated diagnostics are only valid for first-principles runs, not downstream Kähler replay"
+        );
+        std::process::exit(2);
+    }
+    if diagnose_chamber_updated_kklt && diagnose_chamber_updated_kklt_iterations == 0 {
+        eprintln!(
+            "[ERROR] --diagnose-chamber-updated-kklt-iterations must be positive when --diagnose-chamber-updated-kklt is set"
         );
         std::process::exit(2);
     }
@@ -5835,6 +6082,68 @@ fn stage_volume(
             eprintln!("[ERROR] failed to compute input-chamber GV target correction at solved t");
             std::process::exit(2);
         };
+        if diagnose_chamber_updated_kklt {
+            eprintln!(
+                "[WARN] chamber-updated KKLT diagnostic is toric-covered-only when a chamber has missing toric GV values; it is not promoted to the production volume."
+            );
+            let diagnostic = diagnose_chamber_updated_kklt_toric_only(
+                geom,
+                intersection,
+                &kklt_basis,
+                &c_i,
+                c_tau,
+                &gamma,
+                &corrected.t,
+                small_curve_cutoff,
+                kklt_steps,
+                diagnose_chamber_updated_kklt_iterations,
+            )
+            .unwrap_or_else(|e| {
+                eprintln!("[ERROR] chamber-updated KKLT diagnostic failed: {e}");
+                std::process::exit(2);
+            });
+            let max_relative_t_delta = diagnostic
+                .final_t
+                .iter()
+                .zip(corrected.t.iter())
+                .map(|(new, old)| (new.get() - old.get()).abs() / (old.get().abs() + 1e-12))
+                .fold(0.0f64, f64::max);
+            let h11_raw = i32::try_from(intersection.basis.len()).unwrap_or_else(|_| {
+                eprintln!("[ERROR] h11 does not fit in i32");
+                std::process::exit(2);
+            });
+            let h21_raw = i32::try_from(h21).unwrap_or_else(|_| {
+                eprintln!("[ERROR] h21 does not fit in i32");
+                std::process::exit(2);
+            });
+            let h11 = cyrus_core::types::i32::I32::<cyrus_core::types::tags::GTEOne>::new(h11_raw)
+                .expect("computed h11 must be >= 1");
+            let h21 = cyrus_core::types::i32::I32::<cyrus_core::types::tags::NonNeg>::new(h21_raw)
+                .expect("computed h21 must be non-negative");
+            let bbhl = bbhl_correction(h11, h21);
+            let diagnostic_v_string = diagnostic.final_classical_volume - bbhl.get()
+                + diagnostic.final_gv_volume_correction.get();
+            let production_v_string =
+                classical_volume_from_t(&intersection.kappa_basis, &corrected.t) - bbhl.get()
+                    + gv_volume_correction.get();
+            let final_first_missing_sparse = diagnostic
+                .final_first_missing_class
+                .as_deref()
+                .map(sparse_i64)
+                .unwrap_or_default();
+            eprintln!(
+                "[INFO] chamber-updated KKLT diagnostic final: iterations={} converged={} max_relative_t_delta_vs_production={} toric_missing={} first_missing_sparse={:?} V_classical={} GV_volume_correction={} V_string_partial={} delta_vs_production_partial={}",
+                diagnostic.iterations,
+                diagnostic.converged,
+                max_relative_t_delta,
+                diagnostic.final_toric_missing_count,
+                final_first_missing_sparse,
+                diagnostic.final_classical_volume,
+                diagnostic.final_gv_volume_correction.get(),
+                diagnostic_v_string,
+                diagnostic_v_string - production_v_string
+            );
+        }
         (
             corrected.t,
             Some(gv_volume_correction),
@@ -6383,6 +6692,8 @@ fn run_pipeline(args: PipelineArgs) {
         args.diagnose_corrected_chamber_provided_generators_gv,
         args.diagnose_corrected_chamber_ray_gv,
         args.diagnose_corrected_chamber_lp_face_gv,
+        args.diagnose_chamber_updated_kklt,
+        args.diagnose_chamber_updated_kklt_iterations,
         small_curve_cutoff,
         flat.dual_basis.len(),
         &t0,
