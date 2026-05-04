@@ -2496,6 +2496,7 @@ fn compare_against_dat(
     data_dir: Option<String>,
     g_s: F64<Pos>,
     w0: F64<Pos>,
+    v_string: f64,
 ) {
     let compare_dir = compare_dir.or(data_dir);
     if let Some(dir) = compare_dir {
@@ -2514,6 +2515,22 @@ fn compare_against_dat(
         let rel_w0 = ((w0.get() - w0_expected) / w0_expected).abs();
         eprintln!("[COMPARE] g_s rel_err = {rel_gs}");
         eprintln!("[COMPARE] W0 rel_err = {rel_w0}");
+        let corrected_volume_path = dir.join("corrected_cy_vol.dat");
+        if corrected_volume_path.exists() {
+            let corrected_v_expected: f64 = std::fs::read_to_string(&corrected_volume_path)
+                .expect("Failed to read corrected_cy_vol.dat")
+                .trim()
+                .parse()
+                .expect("Invalid corrected_cy_vol.dat");
+            let abs_v = (v_string - corrected_v_expected).abs();
+            eprintln!("[COMPARE] corrected V_string abs_err = {abs_v}");
+            if abs_v > 0.1 {
+                eprintln!(
+                    "[ERROR] corrected V_string mismatch: got {v_string}, expected {corrected_v_expected}"
+                );
+                std::process::exit(2);
+            }
+        }
     }
 }
 
@@ -2533,7 +2550,7 @@ fn stage_vacuum(
     let g_s = racetrack.rt_res.g_s;
     let vac = compute_vacuum(ek0, g_s, v_string_pos, racetrack.w0);
     let v0_log10_abs = vac.v0.get().abs().log10();
-    compare_against_dat(compare_dir, data_dir, g_s, racetrack.w0);
+    compare_against_dat(compare_dir, data_dir, g_s, racetrack.w0, v_string);
     let assertion_path = manifest_dir.join("tests/mcallister_e2e/assertions/racetrack.json");
     let assertion: RacetrackAssertion = load_json(&assertion_path);
     let summary = PipelineSummary {
