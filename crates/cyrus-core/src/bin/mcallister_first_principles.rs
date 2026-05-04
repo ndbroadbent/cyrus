@@ -76,6 +76,7 @@ const DEFAULT_CORRECTED_CHAMBER_LP_FACE_SPAN_GENERATOR_LIMIT: usize = 64;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_LATTICE_GENERATOR_LIMIT: usize = 64;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_LATTICE_ELEMENT_LIMIT: usize = 50_000;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_INTEGER_DECOMPOSITION_MAX_TERMS: usize = 3;
+const DEFAULT_CORRECTED_CHAMBER_LP_FACE_INTEGER_DECOMPOSITION_MAX_WITNESSES: usize = 8;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Stage {
@@ -2484,6 +2485,14 @@ fn compute_lp_witness_face_attempt(
                             max_deg,
                             ambient_class,
                             exact_decomposition_max_terms,
+                            std::env::var(
+                                "CYRUS_CORRECTED_CHAMBER_LP_FACE_INTEGER_DECOMPOSITION_MAX_WITNESSES",
+                            )
+                            .ok()
+                            .and_then(|value| value.parse::<usize>().ok())
+                            .unwrap_or(
+                                DEFAULT_CORRECTED_CHAMBER_LP_FACE_INTEGER_DECOMPOSITION_MAX_WITNESSES,
+                            ),
                         ) {
                             Ok((gv, element_count, term_count)) => {
                                 used_lattice_saturation = true;
@@ -2643,40 +2652,57 @@ fn compute_integer_decomposition_face_target_gv(
     max_deg: u32,
     ambient_class: &[i64],
     max_terms: usize,
+    max_witnesses: usize,
 ) -> Result<(malachite::Integer, usize, usize), String> {
-    let decomposition = exact_generator_decomposition(
+    let decompositions = exact_generator_decompositions(
         target_class,
         basis_rays,
         grading,
         i128::from(max_deg),
         max_terms,
+        max_witnesses,
     )?
     .ok_or_else(|| {
         format!("no exact integer generator decomposition found with up to {max_terms} terms")
     })?;
-    let mut seed_generators = decomposition.clone();
-    seed_generators.push(target_class.to_vec());
-    seed_generators.sort();
-    seed_generators.dedup();
-    let (gv, element_count) = compute_lattice_saturated_face_target_gv(
-        &seed_generators,
-        target_class,
-        grading,
-        q_matrix,
-        intnums,
-        max_deg,
-        ambient_class,
-    )?;
-    Ok((gv, element_count, decomposition.len()))
+    let mut errors = Vec::new();
+    for decomposition in &decompositions {
+        let mut seed_generators = decomposition.clone();
+        seed_generators.push(target_class.to_vec());
+        seed_generators.sort();
+        seed_generators.dedup();
+        match compute_lattice_saturated_face_target_gv(
+            &seed_generators,
+            target_class,
+            grading,
+            q_matrix,
+            intnums,
+            max_deg,
+            ambient_class,
+        ) {
+            Ok((gv, element_count)) => return Ok((gv, element_count, decomposition.len())),
+            Err(error) => errors.push(format!(
+                "{}-term decomposition with {} seed generators failed: {error}",
+                decomposition.len(),
+                seed_generators.len()
+            )),
+        }
+    }
+    Err(format!(
+        "{} exact integer decomposition witnesses failed: {}",
+        decompositions.len(),
+        errors.join(" | ")
+    ))
 }
 
-fn exact_generator_decomposition(
+fn exact_generator_decompositions(
     target: &[i64],
     basis_rays: &[Vec<i64>],
     grading: &[i64],
     target_degree: i128,
     max_terms: usize,
-) -> Result<Option<Vec<Vec<i64>>>, String> {
+    max_witnesses: usize,
+) -> Result<Option<Vec<Vec<Vec<i64>>>>, String> {
     if max_terms < 2 {
         return Ok(None);
     }
@@ -2715,15 +2741,24 @@ fn exact_generator_decomposition(
         return Ok(None);
     }
 
+    let mut decompositions = Vec::new();
+    let mut seen_decompositions = HashSet::new();
     let mut remainder = vec![0i64; target.len()];
     for first in &candidates {
         subtract_two_into(target, first, &mut remainder)?;
         if let Some(second) = candidate_set.get(remainder.as_slice()) {
-            return Ok(Some(vec![first.clone(), second.clone()]));
+            let mut decomposition = vec![first.clone(), second.clone()];
+            decomposition.sort();
+            if seen_decompositions.insert(decomposition.clone()) {
+                decompositions.push(decomposition);
+                if decompositions.len() >= max_witnesses {
+                    return Ok(Some(decompositions));
+                }
+            }
         }
     }
-    if max_terms < 3 {
-        return Ok(None);
+    if max_terms < 3 || decompositions.len() >= max_witnesses {
+        return Ok((!decompositions.is_empty()).then_some(decompositions));
     }
 
     for (i, first) in candidates.iter().enumerate() {
@@ -2732,11 +2767,16 @@ fn exact_generator_decomposition(
             if let Some(third) = candidate_set.get(remainder.as_slice()) {
                 let mut decomposition = vec![first.clone(), second.clone(), third.clone()];
                 decomposition.sort();
-                return Ok(Some(decomposition));
+                if seen_decompositions.insert(decomposition.clone()) {
+                    decompositions.push(decomposition);
+                    if decompositions.len() >= max_witnesses {
+                        return Ok(Some(decompositions));
+                    }
+                }
             }
         }
     }
-    Ok(None)
+    Ok((!decompositions.is_empty()).then_some(decompositions))
 }
 
 fn subtract_two_into(target: &[i64], first: &[i64], out: &mut [i64]) -> Result<(), String> {
@@ -5259,15 +5299,17 @@ mod tests {
 
     #[test]
     fn exact_generator_decomposition_finds_integer_sums() {
-        let decomposition = exact_generator_decomposition(
+        let mut decompositions = exact_generator_decompositions(
             &[2, 1],
             &[vec![1, 0], vec![1, 1], vec![0, 1], vec![2, 1]],
             &[1, 1],
             3,
             2,
+            1,
         )
         .unwrap()
         .unwrap();
+        let decomposition = decompositions.pop().unwrap();
 
         assert_eq!(decomposition, vec![vec![1, 0], vec![1, 1]]);
     }
