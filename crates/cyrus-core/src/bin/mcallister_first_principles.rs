@@ -557,6 +557,7 @@ struct ChamberGvDiagnostic {
     combined_diagnostic_gv_zero_count: Option<usize>,
     combined_diagnostic_gv_nonzero_count: Option<usize>,
     combined_diagnostic_gv_volume_correction: Option<F64<Finite>>,
+    combined_diagnostic_gv_target_correction: Option<Vec<F64<Finite>>>,
     remaining_gv_missing_count: usize,
     first_missing_class: Option<Vec<i64>>,
     missing_required_degree_min: Option<i128>,
@@ -564,8 +565,18 @@ struct ChamberGvDiagnostic {
     missing_target_stats: Option<MissingGvTargetStats>,
     covered_toric_gv_divisor_representation_baseline:
         Option<CoveredToricGvDivisorRepresentationBaseline>,
+    covered_gv_target_correction: Option<Vec<F64<Finite>>>,
     covered_gv_volume_correction: Option<F64<Finite>>,
     gv_volume_correction: Option<F64<Finite>>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct TargetCorrectionDeltaSummary {
+    dimension: usize,
+    max_abs_delta: f64,
+    relative_l2_delta: f64,
+    max_abs_reference: f64,
+    max_abs_candidate: f64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -4389,6 +4400,7 @@ fn diagnose_chamber_gv_volume_correction(
     tri: &Triangulation,
     geom: &PrimalGeom,
     intersection: &PrimalIntersection,
+    kklt_basis: &[usize],
     kahler: &[F64<Finite>],
     gamma: &[I64<Finite>],
     cutoff: F64<Pos>,
@@ -4912,6 +4924,7 @@ fn diagnose_chamber_gv_volume_correction(
     let mut combined_diagnostic_gv_zero_count = None;
     let mut combined_diagnostic_gv_nonzero_count = None;
     let mut combined_diagnostic_gv_volume_correction = None;
+    let mut combined_diagnostic_gv_target_correction = None;
     if !diagnostic_missing_gvs.is_empty() {
         if let Some(unexpected) = diagnostic_missing_gvs.keys().find(|class| {
             !toric_missing_gv_classes
@@ -4950,8 +4963,38 @@ fn diagnose_chamber_gv_volume_correction(
                         .to_string()
                 })?,
             );
+            combined_diagnostic_gv_target_correction = Some(
+                cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+                    &combined_small_curve_gvs,
+                    &intersection.basis,
+                    kklt_basis,
+                    kahler,
+                    Some(gamma),
+                )
+                .ok_or_else(|| {
+                    "failed to compute combined diagnostic corrected-chamber GV target correction"
+                        .to_string()
+                })?,
+            );
         }
     }
+
+    let covered_gv_target_correction = if small_curve_gvs.is_empty() {
+        None
+    } else {
+        Some(
+            cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+                &small_curve_gvs,
+                &intersection.basis,
+                kklt_basis,
+                kahler,
+                Some(gamma),
+            )
+            .ok_or_else(|| {
+                "failed to compute corrected-chamber ambient GV target correction".to_string()
+            })?,
+        )
+    };
 
     let covered_gv_volume_correction = if small_curve_gvs.is_empty() {
         None
@@ -5006,12 +5049,14 @@ fn diagnose_chamber_gv_volume_correction(
         combined_diagnostic_gv_zero_count,
         combined_diagnostic_gv_nonzero_count,
         combined_diagnostic_gv_volume_correction,
+        combined_diagnostic_gv_target_correction,
         remaining_gv_missing_count: missing_gv_classes.len(),
         first_missing_class: missing_gv_classes.first().cloned(),
         missing_required_degree_min,
         missing_required_degree_max,
         missing_target_stats,
         covered_toric_gv_divisor_representation_baseline,
+        covered_gv_target_correction,
         covered_gv_volume_correction,
         gv_volume_correction,
     })
@@ -5106,7 +5151,13 @@ fn stage_volume(
         );
         std::process::exit(2);
     }
-    let (t, gv_volume_correction, gamma_for_chamber_gv) = if allow_downstream_kahler {
+    let (
+        t,
+        gv_volume_correction,
+        gamma_for_chamber_gv,
+        kklt_basis_for_chamber_gv,
+        input_chamber_gv_target_correction,
+    ) = if allow_downstream_kahler {
         let Some(data_dir_path) = data_dir.map(PathBuf::from) else {
             eprintln!(
                 "[ERROR] Volume replay requires McAllister data dir for corrected_kahler_param.dat"
@@ -5124,7 +5175,7 @@ fn stage_volume(
             &source_basis,
             &t_raw,
         );
-        (t, None, None)
+        (t, None, None, None, None)
     } else {
         let (c_i, kklt_basis) = load_kklt_inputs(data_dir, manifest_dir);
         let c_tau = cyrus_core::kklt::compute_c_tau(racetrack.rt_res.g_s, racetrack.w0);
@@ -5772,7 +5823,25 @@ fn stage_volume(
             "[INFO] GV volume correction = {}",
             gv_volume_correction.get()
         );
-        (corrected.t, Some(gv_volume_correction), Some(gamma))
+        let Some(input_chamber_gv_target_correction) =
+            cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+                &small_curve_gvs,
+                &intersection.basis,
+                &kklt_basis,
+                &corrected.t,
+                Some(&gamma),
+            )
+        else {
+            eprintln!("[ERROR] failed to compute input-chamber GV target correction at solved t");
+            std::process::exit(2);
+        };
+        (
+            corrected.t,
+            Some(gv_volume_correction),
+            Some(gamma),
+            Some(kklt_basis),
+            Some(input_chamber_gv_target_correction),
+        )
     };
 
     let corrected_chamber = triangulation_from_kahler_point(geom, &intersection.basis, &t)
@@ -5801,10 +5870,17 @@ fn stage_volume(
             eprintln!("[ERROR] corrected-chamber GV diagnostic requires first-principles gamma");
             std::process::exit(2);
         });
+        let kklt_basis = kklt_basis_for_chamber_gv.as_deref().unwrap_or_else(|| {
+            eprintln!(
+                "[ERROR] corrected-chamber GV diagnostic requires first-principles KKLT basis"
+            );
+            std::process::exit(2);
+        });
         let diag = diagnose_chamber_gv_volume_correction(
             &corrected_chamber,
             geom,
             intersection,
+            kklt_basis,
             &t,
             gamma,
             small_curve_cutoff,
@@ -5919,6 +5995,25 @@ fn stage_volume(
                         combined_correction.get() - covered_correction.get()
                     );
                 }
+                if let (Some(input_target_correction), Some(combined_target_correction)) = (
+                    input_chamber_gv_target_correction.as_ref(),
+                    diag.combined_diagnostic_gv_target_correction.as_ref(),
+                ) {
+                    let summary = target_correction_delta_summary(
+                        input_target_correction,
+                        combined_target_correction,
+                    )
+                    .unwrap_or_else(|e| {
+                        eprintln!(
+                            "[ERROR] failed to compare combined diagnostic GV target correction: {e}"
+                        );
+                        std::process::exit(2);
+                    });
+                    eprintln!(
+                        "[INFO] corrected-chamber combined diagnostic GV target correction delta_vs_input_chamber (diagnostic, not promoted) = {:?}",
+                        summary
+                    );
+                }
             }
         }
         if let Some(ray_count) = diag.basis_mori_ray_count {
@@ -6003,6 +6098,23 @@ fn stage_volume(
                         chamber_correction.get() - input_chamber_correction.get()
                     );
                 }
+            }
+            if let (Some(input_target_correction), Some(covered_target_correction)) = (
+                input_chamber_gv_target_correction.as_ref(),
+                diag.covered_gv_target_correction.as_ref(),
+            ) {
+                let summary = target_correction_delta_summary(
+                    input_target_correction,
+                    covered_target_correction,
+                )
+                .unwrap_or_else(|e| {
+                    eprintln!("[ERROR] failed to compare covered GV target correction: {e}");
+                    std::process::exit(2);
+                });
+                eprintln!(
+                    "[INFO] corrected-chamber covered GV target correction delta_vs_input_chamber (partial) = {:?}",
+                    summary
+                );
             }
             eprintln!(
                 "[WARN] corrected-chamber GV volume correction unavailable: missing GV values, first_missing={first_missing:?}"
@@ -6097,6 +6209,48 @@ fn diagnostic_gv_value_counts(
     let zero_count = diagnostic_gvs.values().filter(|gv| *gv == &zero).count();
     let nonzero_count = diagnostic_gvs.len().saturating_sub(zero_count);
     (zero_count, nonzero_count)
+}
+
+fn target_correction_delta_summary(
+    reference: &[F64<Finite>],
+    candidate: &[F64<Finite>],
+) -> Result<TargetCorrectionDeltaSummary, String> {
+    if reference.len() != candidate.len() {
+        return Err(format!(
+            "target correction dimensions differ: reference={} candidate={}",
+            reference.len(),
+            candidate.len()
+        ));
+    }
+    let mut delta_sq = 0.0f64;
+    let mut reference_sq = 0.0f64;
+    let mut max_abs_delta = 0.0f64;
+    let mut max_abs_reference = 0.0f64;
+    let mut max_abs_candidate = 0.0f64;
+    for (reference_entry, candidate_entry) in reference.iter().zip(candidate.iter()) {
+        let reference_value = reference_entry.get();
+        let candidate_value = candidate_entry.get();
+        let delta = candidate_value - reference_value;
+        delta_sq += delta * delta;
+        reference_sq += reference_value * reference_value;
+        max_abs_delta = max_abs_delta.max(delta.abs());
+        max_abs_reference = max_abs_reference.max(reference_value.abs());
+        max_abs_candidate = max_abs_candidate.max(candidate_value.abs());
+    }
+    let relative_l2_delta = if reference_sq > 0.0 {
+        (delta_sq / reference_sq).sqrt()
+    } else if delta_sq == 0.0 {
+        0.0
+    } else {
+        f64::INFINITY
+    };
+    Ok(TargetCorrectionDeltaSummary {
+        dimension: reference.len(),
+        max_abs_delta,
+        relative_l2_delta,
+        max_abs_reference,
+        max_abs_candidate,
+    })
 }
 
 fn stage_vacuum(
@@ -6993,6 +7147,26 @@ mod tests {
         ]);
 
         assert_eq!(diagnostic_gv_value_counts(&diagnostic_gvs), (1, 2));
+    }
+
+    #[test]
+    fn target_correction_delta_summary_reports_relative_change() {
+        let reference = vec![
+            F64::<Finite>::new(3.0).unwrap(),
+            F64::<Finite>::new(4.0).unwrap(),
+        ];
+        let candidate = vec![
+            F64::<Finite>::new(6.0).unwrap(),
+            F64::<Finite>::new(8.0).unwrap(),
+        ];
+
+        let summary = target_correction_delta_summary(&reference, &candidate).unwrap();
+
+        assert_eq!(summary.dimension, 2);
+        assert_eq!(summary.max_abs_delta, 4.0);
+        assert_eq!(summary.relative_l2_delta, 1.0);
+        assert_eq!(summary.max_abs_reference, 4.0);
+        assert_eq!(summary.max_abs_candidate, 8.0);
     }
 
     #[test]
