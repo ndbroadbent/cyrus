@@ -46,7 +46,9 @@ expression: roadmap
     "branch-report JSONL can diagnose missing small-curve classes that are exact sums of up to three raw sub-cutoff candidates via --branch-report-decomposition-depth",
     "project_mori_cone_cap_rays_to_basis reuses ambient Mori-cap rays and is first-principles checked against direct in_basis=true Mori-cap generation on McAllister 4-214-647",
     "corrected-chamber ray and LP-witness GV diagnostics now report a combined diagnostic-only coverage and volume correction without promoting those values into the production volume",
-    "optional supporting-face certificate diagnostics report certified and uncertified LP-witness face GV counts; the latest 4-214-647 sample certified 0/9 LP-witness faces"
+    "optional supporting-face certificate diagnostics report certified and uncertified LP-witness face GV counts; the latest 4-214-647 sample certified 0/9 LP-witness faces",
+    "mcallister_first_principles runs from declared inputs only with validation checkpoints absent, and can skip McAllister final assertions for generic candidate evaluation",
+    "generic no-assertion runs default K/M flux vectors to Cyrus' computed dual basis instead of the McAllister [3,4,5,8] source basis; --dual-basis remains available for validation-source flux files"
   ],
   "remaining_gaps": [
     "Generated branch candidates without the height_projected initializer still did not find the 4-214-647 paper branch in a deterministic 48-candidate diagnostic: the lowest sampled phase-1 volume was about 20611 rather than 17901, and even coverage-aware selection still had at least 412 small curves missing toric GV coverage",
