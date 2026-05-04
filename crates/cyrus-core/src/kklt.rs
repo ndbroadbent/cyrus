@@ -590,6 +590,63 @@ pub fn compute_kklt_jacobian(
     Some(jacobian)
 }
 
+/// Compute numerical rank and conditioning diagnostics for a KKLT Jacobian.
+///
+/// The rank threshold follows the usual SVD scale-dependent convention
+/// `eps * max(rows, cols) * sigma_max`. The condition number is reported only
+/// when the matrix is full numerical rank; otherwise the branch is explicitly
+/// rank deficient and the full-rank condition number is undefined.
+#[must_use]
+pub fn compute_jacobian_diagnostics(
+    jacobian: &[Vec<F64<Finite>>],
+) -> Option<KkltJacobianDiagnostics> {
+    let rows = jacobian.len();
+    if rows == 0 {
+        return None;
+    }
+    let cols = jacobian[0].len();
+    if cols == 0 || jacobian.iter().any(|row| row.len() != cols) {
+        return None;
+    }
+
+    let data: Vec<f64> = jacobian
+        .iter()
+        .flat_map(|row| row.iter().map(|entry| entry.get()))
+        .collect();
+    let matrix = nalgebra::DMatrix::<f64>::from_row_slice(rows, cols, &data);
+    let svd = matrix.svd(false, false);
+    if svd.singular_values.iter().any(|value| !value.is_finite()) {
+        return None;
+    }
+
+    let max_sv = svd.singular_values.iter().copied().fold(0.0f64, f64::max);
+    let max_singular_value = F64::<Pos>::new(max_sv)?;
+    let tolerance = f64::EPSILON * usize::max(rows, cols) as f64 * max_sv;
+    let nonzero: Vec<f64> = svd
+        .singular_values
+        .iter()
+        .copied()
+        .filter(|value| *value > tolerance)
+        .collect();
+    let rank = nonzero.len();
+    let min_sv = nonzero.iter().copied().fold(f64::INFINITY, f64::min);
+    let min_nonzero_singular_value = F64::<Pos>::new(min_sv)?;
+    let max_rank = usize::min(rows, cols);
+    let condition_number = if rank == max_rank {
+        F64::<Pos>::new(max_sv / min_sv)
+    } else {
+        None
+    };
+
+    Some(KkltJacobianDiagnostics {
+        rank,
+        max_rank,
+        max_singular_value,
+        min_nonzero_singular_value,
+        condition_number,
+    })
+}
+
 /// Generate all unique permutations of three indices.
 fn unique_permutations(
     i: usize,
@@ -646,6 +703,23 @@ pub struct KkltBranchSolution {
     pub result: KkltResult,
     /// Classical Calabi-Yau volume `(1/6) κ_ijk t^i t^j t^k`.
     pub classical_volume: F64<Pos>,
+    /// Numerical conditioning diagnostics for the final KKLT Jacobian.
+    pub jacobian_diagnostics: KkltJacobianDiagnostics,
+}
+
+/// Numerical rank/conditioning diagnostics for a KKLT Jacobian.
+#[derive(Debug, Clone)]
+pub struct KkltJacobianDiagnostics {
+    /// Numerical rank from SVD singular values.
+    pub rank: usize,
+    /// Maximum possible rank, `min(rows, columns)`.
+    pub max_rank: usize,
+    /// Largest singular value.
+    pub max_singular_value: F64<Pos>,
+    /// Smallest singular value counted as numerically nonzero.
+    pub min_nonzero_singular_value: F64<Pos>,
+    /// Full-rank condition number. `None` means the matrix is rank deficient.
+    pub condition_number: Option<F64<Pos>>,
 }
 
 /// Summary of an explicit KKLT branch-candidate search.
@@ -829,10 +903,15 @@ pub fn solve_mixed_basis_path_following_branch_candidates(
             out.non_positive_volume += 1;
             continue;
         };
+        let jacobian = compute_kklt_jacobian(kappa_basis, kappa_all, basis, kklt_basis, &result.t)
+            .expect("converged mixed-basis KKLT branch has a valid final Jacobian");
+        let jacobian_diagnostics = compute_jacobian_diagnostics(&jacobian)
+            .expect("converged mixed-basis KKLT branch has finite Jacobian diagnostics");
         out.positive_volume.push(KkltBranchSolution {
             init_index,
             result,
             classical_volume,
+            jacobian_diagnostics,
         });
     }
 
@@ -1711,6 +1790,36 @@ mod tests {
     }
 
     #[test]
+    fn test_jacobian_diagnostics_detect_full_rank_conditioning() {
+        let jacobian = vec![
+            vec![finite_f64(2.0), finite_f64(0.0)],
+            vec![finite_f64(0.0), finite_f64(0.5)],
+        ];
+
+        let diagnostics = compute_jacobian_diagnostics(&jacobian).unwrap();
+
+        assert_eq!(diagnostics.rank, 2);
+        assert_eq!(diagnostics.max_rank, 2);
+        assert!((diagnostics.max_singular_value.get() - 2.0).abs() < 1e-12);
+        assert!((diagnostics.min_nonzero_singular_value.get() - 0.5).abs() < 1e-12);
+        assert!((diagnostics.condition_number.unwrap().get() - 4.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_jacobian_diagnostics_reports_rank_deficiency() {
+        let jacobian = vec![
+            vec![finite_f64(1.0), finite_f64(1.0)],
+            vec![finite_f64(2.0), finite_f64(2.0)],
+        ];
+
+        let diagnostics = compute_jacobian_diagnostics(&jacobian).unwrap();
+
+        assert_eq!(diagnostics.rank, 1);
+        assert_eq!(diagnostics.max_rank, 2);
+        assert!(diagnostics.condition_number.is_none());
+    }
+
+    #[test]
     fn test_compute_kklt_mixed_basis_tau_and_jacobian() {
         // Kähler coordinates use basis divisors [0, 1].
         // KKLT targets are ordered by [0, 2], so divisor 2 must be evaluated
@@ -1926,6 +2035,14 @@ mod tests {
         assert_eq!(search.positive_volume[0].init_index, 0);
         assert!((search.positive_volume[0].result.t[0].get() - 2.0).abs() < 1e-4);
         assert!((search.positive_volume[0].classical_volume.get() - 8.0).abs() < 1e-4);
+        assert_eq!(search.positive_volume[0].jacobian_diagnostics.rank, 1);
+        assert_eq!(search.positive_volume[0].jacobian_diagnostics.max_rank, 1);
+        assert!(
+            search.positive_volume[0]
+                .jacobian_diagnostics
+                .condition_number
+                .is_some()
+        );
     }
 
     #[test]

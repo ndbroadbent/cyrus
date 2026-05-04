@@ -280,6 +280,9 @@ struct BranchReportSummary {
     selected_init_index: usize,
     selected_phase1_volume: f64,
     selected_phase1_rel_err: f64,
+    selected_jacobian_rank: usize,
+    selected_jacobian_max_rank: usize,
+    selected_jacobian_condition_number: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -293,6 +296,11 @@ struct BranchReportBranch {
     init_index: usize,
     phase1_volume: f64,
     phase1_rel_err: f64,
+    jacobian_rank: usize,
+    jacobian_max_rank: usize,
+    jacobian_max_singular_value: f64,
+    jacobian_min_nonzero_singular_value: f64,
+    jacobian_condition_number: Option<f64>,
     t_init: Vec<f64>,
     t_phase1: Vec<f64>,
     tau_phase1: Vec<f64>,
@@ -981,6 +989,12 @@ fn write_branch_report_jsonl(
         selected_init_index: selected.init_index,
         selected_phase1_volume: selected.classical_volume.get(),
         selected_phase1_rel_err: selected.result.relative_error.get(),
+        selected_jacobian_rank: selected.jacobian_diagnostics.rank,
+        selected_jacobian_max_rank: selected.jacobian_diagnostics.max_rank,
+        selected_jacobian_condition_number: selected
+            .jacobian_diagnostics
+            .condition_number
+            .map(|value| value.get()),
     };
     lines.push_str(&serde_json::to_string(&summary).map_err(|e| e.to_string())?);
     lines.push('\n');
@@ -1002,6 +1016,17 @@ fn write_branch_report_jsonl(
             init_index: branch.init_index,
             phase1_volume: branch.classical_volume.get(),
             phase1_rel_err: branch.result.relative_error.get(),
+            jacobian_rank: branch.jacobian_diagnostics.rank,
+            jacobian_max_rank: branch.jacobian_diagnostics.max_rank,
+            jacobian_max_singular_value: branch.jacobian_diagnostics.max_singular_value.get(),
+            jacobian_min_nonzero_singular_value: branch
+                .jacobian_diagnostics
+                .min_nonzero_singular_value
+                .get(),
+            jacobian_condition_number: branch
+                .jacobian_diagnostics
+                .condition_number
+                .map(|value| value.get()),
             t_init: finite_values(t_init),
             t_phase1: finite_values(&branch.result.t),
             tau_phase1: finite_values(&branch.result.tau),
@@ -1137,11 +1162,17 @@ fn stage_volume(
             });
             for (rank, branch) in positive_branches.iter().take(5).enumerate() {
                 eprintln!(
-                    "[INFO] KKLT branch candidate rank={} init={} phase1_volume={} rel_err={}",
+                    "[INFO] KKLT branch candidate rank={} init={} phase1_volume={} rel_err={} jacobian_rank={}/{} condition={:?}",
                     rank,
                     branch.init_index,
                     branch.classical_volume.get(),
-                    branch.result.relative_error.get()
+                    branch.result.relative_error.get(),
+                    branch.jacobian_diagnostics.rank,
+                    branch.jacobian_diagnostics.max_rank,
+                    branch
+                        .jacobian_diagnostics
+                        .condition_number
+                        .map(|value| value.get())
                 );
             }
             if positive_branches.is_empty() {
@@ -1187,12 +1218,18 @@ fn stage_volume(
                 eprintln!("[INFO] wrote KKLT branch report {}", report_path.display());
             }
             eprintln!(
-                "[INFO] KKLT branch search selected policy={} rank_by_volume={} init={} phase1_volume={} rel_err={}",
+                "[INFO] KKLT branch search selected policy={} rank_by_volume={} init={} phase1_volume={} rel_err={} jacobian_rank={}/{} condition={:?}",
                 branch_selection.as_str(),
                 selected_rank_by_volume,
                 best_branch.init_index,
                 best_branch.classical_volume.get(),
-                best_branch.result.relative_error.get()
+                best_branch.result.relative_error.get(),
+                best_branch.jacobian_diagnostics.rank,
+                best_branch.jacobian_diagnostics.max_rank,
+                best_branch
+                    .jacobian_diagnostics
+                    .condition_number
+                    .map(|value| value.get())
             );
             let Some(result) = solve_mixed_basis_path_following(
                 &intersection.kappa_basis,
