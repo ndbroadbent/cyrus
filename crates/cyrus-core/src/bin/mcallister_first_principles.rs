@@ -8,6 +8,8 @@
 //! - `--allow-fixtures` to permit JSON fixture fallback when no data dir is set.
 //! - `--branch-candidates N --branch-selection <max-volume|min-volume|first-positive>`
 //!   to run deterministic KKLT branch search without loading Kähler checkpoints.
+//! - `--branch-report-jsonl path` to export positive phase-1 branch candidates
+//!   discovered by that search for GA/debug ranking.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -262,6 +264,52 @@ struct PipelineSummary {
     ek0: f64,
 }
 
+#[derive(Debug, Serialize)]
+struct BranchReportSummary {
+    #[serde(rename = "type")]
+    record_type: &'static str,
+    branch_seed: u64,
+    branch_selection: &'static str,
+    kklt_steps: usize,
+    attempted: usize,
+    solved: usize,
+    non_converged: usize,
+    non_positive_volume: usize,
+    positive_volume: usize,
+    selected_rank_by_volume: usize,
+    selected_init_index: usize,
+    selected_phase1_volume: f64,
+    selected_phase1_rel_err: f64,
+}
+
+#[derive(Debug, Serialize)]
+struct BranchReportBranch {
+    #[serde(rename = "type")]
+    record_type: &'static str,
+    branch_seed: u64,
+    branch_selection: &'static str,
+    rank_by_volume: usize,
+    selected: bool,
+    init_index: usize,
+    phase1_volume: f64,
+    phase1_rel_err: f64,
+    t_init: Vec<f64>,
+    t_phase1: Vec<f64>,
+    tau_phase1: Vec<f64>,
+    tau_phase1_target: Vec<f64>,
+}
+
+struct BranchReportContext {
+    branch_seed: u64,
+    branch_selection: BranchSelection,
+    kklt_steps: usize,
+    attempted: usize,
+    solved: usize,
+    non_converged: usize,
+    non_positive_volume: usize,
+    selected_rank_by_volume: usize,
+}
+
 struct PipelineArgs {
     stop_after: Stage,
     max_deg: Option<u32>,
@@ -278,6 +326,7 @@ struct PipelineArgs {
     branch_candidates: usize,
     branch_seed: u64,
     branch_selection: BranchSelection,
+    branch_report_path: Option<String>,
     dual_basis_override: Option<BasisOverride>,
 }
 
@@ -336,6 +385,7 @@ fn parse_args() -> PipelineArgs {
     let branch_selection = parse_arg_value::<String>("--branch-selection")
         .and_then(|s| parse_branch_selection(&s))
         .unwrap_or(BranchSelection::MaxVolume);
+    let branch_report_path = parse_arg_value::<String>("--branch-report-jsonl");
     let dual_basis_override = parse_arg_value::<String>("--dual-basis")
         .map(|path| load_json::<BasisOverride>(&PathBuf::from(path)));
     PipelineArgs {
@@ -354,6 +404,7 @@ fn parse_args() -> PipelineArgs {
         branch_candidates,
         branch_seed,
         branch_selection,
+        branch_report_path,
         dual_basis_override,
     }
 }
@@ -892,6 +943,77 @@ fn classical_volume_from_t(kappa_primal: &cyrus_core::Intersection, t: &[F64<Fin
     volume_sum / 6.0
 }
 
+fn finite_values(values: &[F64<Finite>]) -> Vec<f64> {
+    values.iter().map(|value| value.get()).collect()
+}
+
+fn pos_values(values: &[F64<Pos>]) -> Vec<f64> {
+    values.iter().map(|value| value.get()).collect()
+}
+
+fn write_branch_report_jsonl(
+    path: &PathBuf,
+    ctx: &BranchReportContext,
+    branches_by_volume: &[cyrus_core::KkltBranchSolution],
+    t_initializations: &[Vec<F64<Finite>>],
+) -> Result<(), String> {
+    let Some(selected) = branches_by_volume.get(ctx.selected_rank_by_volume) else {
+        return Err(format!(
+            "selected branch rank {} is outside {} branch rows",
+            ctx.selected_rank_by_volume,
+            branches_by_volume.len()
+        ));
+    };
+
+    let positive_volume = branches_by_volume.len();
+    let mut lines = String::new();
+    let summary = BranchReportSummary {
+        record_type: "summary",
+        branch_seed: ctx.branch_seed,
+        branch_selection: ctx.branch_selection.as_str(),
+        kklt_steps: ctx.kklt_steps,
+        attempted: ctx.attempted,
+        solved: ctx.solved,
+        non_converged: ctx.non_converged,
+        non_positive_volume: ctx.non_positive_volume,
+        positive_volume,
+        selected_rank_by_volume: ctx.selected_rank_by_volume,
+        selected_init_index: selected.init_index,
+        selected_phase1_volume: selected.classical_volume.get(),
+        selected_phase1_rel_err: selected.result.relative_error.get(),
+    };
+    lines.push_str(&serde_json::to_string(&summary).map_err(|e| e.to_string())?);
+    lines.push('\n');
+
+    for (rank_by_volume, branch) in branches_by_volume.iter().enumerate() {
+        let Some(t_init) = t_initializations.get(branch.init_index) else {
+            return Err(format!(
+                "branch init index {} is outside {} initialization rows",
+                branch.init_index,
+                t_initializations.len()
+            ));
+        };
+        let row = BranchReportBranch {
+            record_type: "positive_branch",
+            branch_seed: ctx.branch_seed,
+            branch_selection: ctx.branch_selection.as_str(),
+            rank_by_volume,
+            selected: rank_by_volume == ctx.selected_rank_by_volume,
+            init_index: branch.init_index,
+            phase1_volume: branch.classical_volume.get(),
+            phase1_rel_err: branch.result.relative_error.get(),
+            t_init: finite_values(t_init),
+            t_phase1: finite_values(&branch.result.t),
+            tau_phase1: finite_values(&branch.result.tau),
+            tau_phase1_target: pos_values(&branch.result.tau_target),
+        };
+        lines.push_str(&serde_json::to_string(&row).map_err(|e| e.to_string())?);
+        lines.push('\n');
+    }
+
+    std::fs::write(path, lines).map_err(|e| e.to_string())
+}
+
 fn stage_volume(
     data_dir: Option<&str>,
     manifest_dir: &PathBuf,
@@ -903,9 +1025,21 @@ fn stage_volume(
     branch_candidates: usize,
     branch_seed: u64,
     branch_selection: BranchSelection,
+    branch_report_path: Option<&str>,
     small_curve_cutoff: F64<Pos>,
     t0: &Instant,
 ) -> (f64, F64<Pos>) {
+    if branch_report_path.is_some() && allow_downstream_kahler {
+        eprintln!(
+            "[ERROR] --branch-report-jsonl is only valid for first-principles branch search, not downstream Kähler replay"
+        );
+        std::process::exit(2);
+    }
+    if branch_report_path.is_some() && branch_candidates == 0 {
+        eprintln!("[ERROR] --branch-report-jsonl requires --branch-candidates N with N > 0");
+        std::process::exit(2);
+    }
+
     let t = if allow_downstream_kahler {
         let Some(data_dir_path) = data_dir.map(PathBuf::from) else {
             eprintln!(
@@ -991,6 +1125,10 @@ fn stage_volume(
                 branch_search.non_positive_volume,
                 branch_search.positive_volume.len()
             );
+            let attempted = branch_search.attempted;
+            let solved = branch_search.solved;
+            let non_converged = branch_search.non_converged;
+            let non_positive_volume = branch_search.non_positive_volume;
             let mut positive_branches = branch_search.positive_volume;
             positive_branches.sort_by(|a, b| {
                 a.classical_volume
@@ -1006,20 +1144,52 @@ fn stage_volume(
                     branch.result.relative_error.get()
                 );
             }
-            let best_branch = match branch_selection {
-                BranchSelection::MinVolume => positive_branches.into_iter().next(),
-                BranchSelection::MaxVolume => positive_branches.into_iter().next_back(),
-                BranchSelection::FirstPositive => positive_branches
-                    .into_iter()
-                    .min_by_key(|branch| branch.init_index),
-            };
-            let Some(best_branch) = best_branch else {
+            if positive_branches.is_empty() {
                 eprintln!("[ERROR] KKLT branch search found no positive-volume phase-1 branch");
                 std::process::exit(2);
+            }
+            let selected_rank_by_volume = match branch_selection {
+                BranchSelection::MinVolume => 0,
+                BranchSelection::MaxVolume => positive_branches.len() - 1,
+                BranchSelection::FirstPositive => positive_branches
+                    .iter()
+                    .enumerate()
+                    .min_by_key(|(_, branch)| branch.init_index)
+                    .map(|(rank, _)| rank)
+                    .expect("positive branches are non-empty"),
             };
+            let best_branch = positive_branches[selected_rank_by_volume].clone();
+            if let Some(path) = branch_report_path {
+                let report_path = PathBuf::from(path);
+                let ctx = BranchReportContext {
+                    branch_seed,
+                    branch_selection,
+                    kklt_steps,
+                    attempted,
+                    solved,
+                    non_converged,
+                    non_positive_volume,
+                    selected_rank_by_volume,
+                };
+                write_branch_report_jsonl(
+                    &report_path,
+                    &ctx,
+                    &positive_branches,
+                    &t_initializations,
+                )
+                .unwrap_or_else(|e| {
+                    eprintln!(
+                        "[ERROR] failed to write KKLT branch report {}: {e}",
+                        report_path.display()
+                    );
+                    std::process::exit(2);
+                });
+                eprintln!("[INFO] wrote KKLT branch report {}", report_path.display());
+            }
             eprintln!(
-                "[INFO] KKLT branch search selected policy={} init={} phase1_volume={} rel_err={}",
+                "[INFO] KKLT branch search selected policy={} rank_by_volume={} init={} phase1_volume={} rel_err={}",
                 branch_selection.as_str(),
+                selected_rank_by_volume,
                 best_branch.init_index,
                 best_branch.classical_volume.get(),
                 best_branch.result.relative_error.get()
@@ -1339,6 +1509,7 @@ fn run_pipeline(args: PipelineArgs) {
         args.branch_candidates,
         args.branch_seed,
         args.branch_selection,
+        args.branch_report_path.as_deref(),
         small_curve_cutoff,
         &t0,
     );
