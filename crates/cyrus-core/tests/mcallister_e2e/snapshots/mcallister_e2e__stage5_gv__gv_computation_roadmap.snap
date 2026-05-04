@@ -4,7 +4,7 @@ expression: roadmap
 ---
 {
   "status": "In Progress - Cyrus computes GV inputs, McAllister-sized validation is expensive",
-  "completed_components": 63,
+  "completed_components": 127,
   "verified_components": [
     "compute_mori_cone_cap_rays is wired into mcallister_gv and mcallister_first_principles",
     "compute_grading_vector is wired into the GV pipeline",
@@ -25,9 +25,12 @@ expression: roadmap
     "McAllister 4-214-647 small toric curve GV values are computed from toric two-face/origin-circuit formulas and match small_curves_gv.dat as a checkpoint",
     "CYTools-style height projection from heights plus curve-basis effective-cone rows reproduces McAllister 4-214-647 kahler_param.dat exactly as an uncorrected-branch checkpoint",
     "The no-replay runner reaches GV-corrected KKLT volume and V0 using the height-projected branch initializer, computed B-field gamma, and computed toric GV values",
-    "first-principles binaries do not load small_curves.dat or small_curves_gv.dat"
+    "first-principles binaries do not load small_curves.dat or small_curves_gv.dat",
+    "basis-coordinate GV invariants can be mapped back to ambient divisor-intersection curve classes for primal volume corrections",
+    "mcallister_first_principles can explicitly attempt general primal GV fallback for missing small-curve toric formula coverage via --primal-gv-max-deg or --primal-gv-min-points"
   ],
   "remaining_gaps": [
+    "The explicit general primal GV fallback currently reaches full 214-dimensional Mori-cone dualization and timed out on McAllister 4-214-647 after hyperplane 664/561658 with --primal-gv-max-deg 1",
     "Finish a post-orientation-fix validation run of adjacency-filtered DDM on the full 214-dimensional McAllister Mori cone",
     "Further optimize or replace hyperplane dualization; bounded diagnostics still need to prove the full 561658-ray McAllister dualization completes with the corrected ray orientation",
     "Reduce the 561658-ray Mori cap input before dualization, or add a CYTools/PPL-faithful constraint minimization path",

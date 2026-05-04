@@ -490,7 +490,7 @@ fn stage5_gv_computation_roadmap() {
         status: &'static str,
         /// Bitmask of completed components:
         /// cygv=1, mori=2, grading=4, pipeline=8, small-toric-curves=16,
-        /// small-toric-gvs=32.
+        /// small-toric-gvs=32, primal-general-gv-fallback-wiring=64.
         completed_components: u8,
         verified_components: Vec<&'static str>,
         remaining_gaps: Vec<&'static str>,
@@ -498,8 +498,9 @@ fn stage5_gv_computation_roadmap() {
 
     // Components: cygv integrated (1), mori cap (2), grading vector (4),
     // one-off pipeline wiring (8), small toric curve checkpoint (16),
-    // small toric curve GV checkpoint (32).
-    let completed = 1u8 | 2 | 4 | 8 | 16 | 32;
+    // small toric curve GV checkpoint (32), and general primal GV fallback
+    // wiring from basis-coordinate cygv output to ambient curve classes (64).
+    let completed = 1u8 | 2 | 4 | 8 | 16 | 32 | 64;
 
     let roadmap = GvComputationRoadmap {
         status: "In Progress - Cyrus computes GV inputs, McAllister-sized validation is expensive",
@@ -525,8 +526,11 @@ fn stage5_gv_computation_roadmap() {
             "CYTools-style height projection from heights plus curve-basis effective-cone rows reproduces McAllister 4-214-647 kahler_param.dat exactly as an uncorrected-branch checkpoint",
             "The no-replay runner reaches GV-corrected KKLT volume and V0 using the height-projected branch initializer, computed B-field gamma, and computed toric GV values",
             "first-principles binaries do not load small_curves.dat or small_curves_gv.dat",
+            "basis-coordinate GV invariants can be mapped back to ambient divisor-intersection curve classes for primal volume corrections",
+            "mcallister_first_principles can explicitly attempt general primal GV fallback for missing small-curve toric formula coverage via --primal-gv-max-deg or --primal-gv-min-points",
         ],
         remaining_gaps: vec![
+            "The explicit general primal GV fallback currently reaches full 214-dimensional Mori-cone dualization and timed out on McAllister 4-214-647 after hyperplane 664/561658 with --primal-gv-max-deg 1",
             "Finish a post-orientation-fix validation run of adjacency-filtered DDM on the full 214-dimensional McAllister Mori cone",
             "Further optimize or replace hyperplane dualization; bounded diagnostics still need to prove the full 561658-ray McAllister dualization completes with the corrected ray orientation",
             "Reduce the 561658-ray Mori cap input before dualization, or add a CYTools/PPL-faithful constraint minimization path",
