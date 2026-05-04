@@ -71,6 +71,5 @@ else
   exit 1
 fi
 
-gtimeout --foreground "$TIMEOUT" \
-  --kill-after=10s \
+gtimeout --foreground --kill-after=10s "$TIMEOUT" \
   cargo run -p cyrus-core --bin mcallister_racetrack --release -- "${EXTRA_ARGS[@]}" "$@"

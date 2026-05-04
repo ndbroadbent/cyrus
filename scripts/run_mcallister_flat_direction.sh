@@ -55,6 +55,5 @@ else
   exit 1
 fi
 
-exec gtimeout --foreground "$TIMEOUT" \
-  --kill-after=10s \
+exec gtimeout --foreground --kill-after=10s "$TIMEOUT" \
   cargo run -p cyrus-core --bin mcallister_flat_direction --release -- "${EXTRA_ARGS[@]}" "$@"

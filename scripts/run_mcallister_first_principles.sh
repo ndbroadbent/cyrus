@@ -58,6 +58,5 @@ if [[ -z "${CYRUS_MCALLISTER_DATA_DIR:-}" ]]; then
   exit 1
 fi
 
-gtimeout --foreground "$TIMEOUT" \
-  --kill-after=10s \
+gtimeout --foreground --kill-after=10s "$TIMEOUT" \
   cargo test -p cyrus-core mcallister_e2e -- --test-threads=1 "$@"
