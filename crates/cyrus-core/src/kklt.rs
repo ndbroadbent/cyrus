@@ -40,6 +40,7 @@ use crate::types::tags::{Finite, NonNeg, Pos};
 const TWO_PI: F64<Pos> = f64_pos!(2.0 * PI);
 const DILOG_TOL: f64 = 1e-16;
 const DILOG_MAX_TERMS: usize = 100_000;
+const ZETA_3: f64 = 1.202_056_903_159_594;
 
 fn kklt_debug_enabled() -> bool {
     env::var_os("CYRUS_KKLT_DEBUG").is_some()
@@ -164,7 +165,46 @@ fn real_dilog_real_axis(x: f64) -> Option<f64> {
     }
 }
 
-fn gv_dilog_from_curve_volume(q_dot_t: f64, parity: i128) -> Option<f64> {
+fn real_trilog_series(x: f64) -> Option<f64> {
+    if !x.is_finite() || x.abs() > 1.0 {
+        return None;
+    }
+
+    let mut sum = 0.0;
+    let mut power = x;
+    for n in 1..=DILOG_MAX_TERMS {
+        let n_f = n as f64;
+        let term = power / (n_f * n_f * n_f);
+        sum += term;
+        if term.abs() < DILOG_TOL {
+            return Some(sum);
+        }
+        power *= x;
+    }
+
+    None
+}
+
+fn real_trilog_real_axis(x: f64) -> Option<f64> {
+    if !x.is_finite() || x > 1.0 {
+        return None;
+    }
+    if (x - 1.0).abs() <= f64::EPSILON {
+        return Some(ZETA_3);
+    }
+    if x.abs() < 1e-100 {
+        return Some(0.0);
+    }
+    if x < -1.0 {
+        let log_neg_x = (-x).ln();
+        let reduced = real_trilog_series(1.0 / x)?;
+        Some(reduced - log_neg_x.powi(3) / 6.0 - PI * PI * log_neg_x / 6.0)
+    } else {
+        real_trilog_series(x)
+    }
+}
+
+fn gv_polylog_argument(q_dot_t: f64, parity: i128) -> Option<f64> {
     if !q_dot_t.is_finite() || q_dot_t == 0.0 {
         return None;
     }
@@ -173,6 +213,11 @@ fn gv_dilog_from_curve_volume(q_dot_t: f64, parity: i128) -> Option<f64> {
     if !arg.is_finite() || arg > 1.0 {
         return None;
     }
+    Some(arg)
+}
+
+fn gv_dilog_from_curve_volume(q_dot_t: f64, parity: i128) -> Option<f64> {
+    let arg = gv_polylog_argument(q_dot_t, parity)?;
     if arg.abs() < 1e-100 {
         return Some(0.0);
     }
@@ -425,6 +470,63 @@ pub fn compute_gv_target_correction_for_ambient_curves(
         .into_iter()
         .map(|value| F64::<Finite>::new(prefactor * value))
         .collect()
+}
+
+/// Compute the GV instanton contribution to the corrected string-frame volume:
+/// `1/(2(2π)^3) Σ_q N_q (Li_3(arg) + 2π(q·t)Li_2(arg))`.
+///
+/// Curve classes are ambient divisor intersections, while `t` and `gamma` are
+/// expressed in `basis` coordinates.
+#[must_use]
+pub fn compute_gv_volume_correction_for_ambient_curves(
+    gv_invariants: &[(Vec<i64>, Integer)],
+    basis: &[usize],
+    t: &[F64<Finite>],
+    gamma: Option<&[I64<Finite>]>,
+) -> Option<F64<Finite>> {
+    let dim = t.len();
+    if dim == 0 || basis.len() != dim || gamma.is_some_and(|g| g.len() != dim) {
+        return None;
+    }
+
+    let ambient_dim = gv_invariants.first()?.0.len();
+    if ambient_dim == 0 || basis.iter().any(|&idx| idx >= ambient_dim) {
+        return None;
+    }
+
+    let mut correction = 0.0f64;
+    for (curve, invariant) in gv_invariants {
+        if curve.len() != ambient_dim {
+            return None;
+        }
+
+        let q_dot_t = basis
+            .iter()
+            .zip(t.iter())
+            .map(|(&idx, ti)| curve[idx] as f64 * ti.get())
+            .sum::<f64>();
+        let parity = gamma.map_or(0_i128, |g| {
+            basis
+                .iter()
+                .zip(g.iter())
+                .map(|(&idx, gi)| i128::from(curve[idx]) * i128::from(gi.get()))
+                .sum::<i128>()
+        });
+        let arg = gv_polylog_argument(q_dot_t, parity)?;
+        if arg.abs() < 1e-100 {
+            continue;
+        }
+
+        let dilog = real_dilog_real_axis(arg)?;
+        let trilog = real_trilog_real_axis(arg)?;
+        let invariant_f = invariant.to_string().parse::<f64>().ok()?;
+        if !invariant_f.is_finite() {
+            return None;
+        }
+        correction += invariant_f * (trilog + TWO_PI.get() * q_dot_t * dilog);
+    }
+
+    F64::<Finite>::new(correction / (2.0 * TWO_PI.get().powi(3)))
 }
 
 /// Compute `c_τ` = 2π / (`g_s` × ln(W₀⁻¹)).
@@ -1778,6 +1880,21 @@ mod tests {
         for (ambient, basis) in from_ambient.iter().zip(from_basis.iter()) {
             assert!((ambient.get() - basis.get()).abs() < 1e-14);
         }
+    }
+
+    #[test]
+    fn test_compute_gv_volume_correction_for_ambient_curves() {
+        let t = vec![finite_f64(2.0_f64.ln() / (2.0 * PI))];
+        let basis = vec![0];
+        let invariants = vec![(vec![1], Integer::from(1))];
+
+        let correction =
+            compute_gv_volume_correction_for_ambient_curves(&invariants, &basis, &t, None).unwrap();
+
+        let li2_half = PI * PI / 12.0 - 0.5 * 2.0_f64.ln().powi(2);
+        let li3_half = 0.537_213_193_608_040_2;
+        let expected = (li3_half + 2.0_f64.ln() * li2_half) / (2.0 * (2.0 * PI).powi(3));
+        assert!((correction.get() - expected).abs() < 1e-14);
     }
 
     #[test]

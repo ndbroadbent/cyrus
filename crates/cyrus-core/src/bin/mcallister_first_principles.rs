@@ -1166,7 +1166,7 @@ fn stage_volume(
         std::process::exit(2);
     }
 
-    let t = if allow_downstream_kahler {
+    let (t, gv_volume_correction) = if allow_downstream_kahler {
         let Some(data_dir_path) = data_dir.map(PathBuf::from) else {
             eprintln!(
                 "[ERROR] Volume replay requires McAllister data dir for corrected_kahler_param.dat"
@@ -1178,12 +1178,13 @@ fn stage_volume(
             .map(|v| F64::<Finite>::new(v).expect("corrected Kähler parameter must be finite"))
             .collect::<Vec<_>>();
         let source_basis = read_csv_usize(&data_dir_path.join("basis.dat"));
-        transform_kahler_to_computed_basis(
+        let t = transform_kahler_to_computed_basis(
             &intersection.glsm,
             &intersection.basis,
             &source_basis,
             &t_raw,
-        )
+        );
+        (t, None)
     } else {
         let (c_i, kklt_basis) = load_kklt_inputs(data_dir, manifest_dir);
         let c_tau = cyrus_core::kklt::compute_c_tau(racetrack.rt_res.g_s, racetrack.w0);
@@ -1546,14 +1547,30 @@ fn stage_volume(
             );
             std::process::exit(2);
         }
-        corrected.t
+        let Some(gv_volume_correction) =
+            cyrus_core::kklt::compute_gv_volume_correction_for_ambient_curves(
+                &small_curve_gvs,
+                &intersection.basis,
+                &corrected.t,
+                Some(&gamma),
+            )
+        else {
+            eprintln!("[ERROR] failed to compute primal ambient GV volume correction");
+            std::process::exit(2);
+        };
+        eprintln!(
+            "[INFO] GV volume correction = {}",
+            gv_volume_correction.get()
+        );
+        (corrected.t, Some(gv_volume_correction))
     };
 
     let classical_volume = classical_volume_from_t(&intersection.kappa_basis, &t);
     let h11 = cyrus_core::types::i32::I32::<cyrus_core::types::tags::GTEOne>::new(214).unwrap();
     let h21 = cyrus_core::types::i32::I32::<cyrus_core::types::tags::NonNeg>::new(4).unwrap();
     let bbhl = bbhl_correction(h11, h21);
-    let v_string = classical_volume - bbhl.get();
+    let v_string =
+        classical_volume - bbhl.get() + gv_volume_correction.map_or(0.0, |value| value.get());
     let v_string_pos = F64::<Pos>::new(v_string).expect("V_string must be positive");
     eprintln!("[TIME] volume: {:.2?}", t0.elapsed());
     (v_string, v_string_pos)
