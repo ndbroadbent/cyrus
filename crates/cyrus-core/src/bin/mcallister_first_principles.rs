@@ -34,6 +34,9 @@
 //!   explicitly without Mori-cone lattice augmentation.
 //! - `--diagnose-corrected-chamber-ray-gv` to try one-dimensional HKTY ray
 //!   diagnostics for missing corrected-chamber primitive Mori generators.
+//! - `--diagnose-corrected-chamber-lp-face-gv` to try small HKTY face
+//!   diagnostics generated from LP decomposition witnesses of missing
+//!   corrected-chamber primitive Mori generators.
 
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -480,6 +483,10 @@ struct ChamberGvDiagnostic {
     ray_gv_covered_count: Option<usize>,
     ray_gv_volume_correction: Option<F64<Finite>>,
     ray_gv_sample: Vec<RayGvDiagnosticSample>,
+    lp_face_gv_covered_count: Option<usize>,
+    lp_face_gv_failed_count: Option<usize>,
+    lp_face_gv_volume_correction: Option<F64<Finite>>,
+    lp_face_gv_sample: Vec<FaceGvDiagnosticSample>,
     remaining_gv_missing_count: usize,
     first_missing_class: Option<Vec<i64>>,
     missing_required_degree_min: Option<i128>,
@@ -537,6 +544,26 @@ struct RayGvDiagnosticSample {
     ambient_nonzero: Vec<(usize, i64)>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct FaceGvDiagnosticSample {
+    degree: i128,
+    generator_count: usize,
+    active_generator_count: usize,
+    gv: Option<malachite::Integer>,
+    error: Option<String>,
+    ambient_nonzero: Vec<(usize, i64)>,
+}
+
+#[derive(Clone, Debug)]
+struct FaceGvDiagnosticResult {
+    ambient_class: Vec<i64>,
+    degree: i128,
+    generator_count: usize,
+    active_generator_count: usize,
+    gv: Option<malachite::Integer>,
+    error: Option<String>,
+}
+
 struct BranchReportContext {
     branch_seed: u64,
     branch_selection: BranchSelection,
@@ -575,6 +602,7 @@ struct PipelineArgs {
     diagnose_corrected_chamber_gv: bool,
     diagnose_corrected_chamber_provided_generators_gv: bool,
     diagnose_corrected_chamber_ray_gv: bool,
+    diagnose_corrected_chamber_lp_face_gv: bool,
     dual_basis_override: Option<BasisOverride>,
 }
 
@@ -653,6 +681,8 @@ fn parse_args() -> PipelineArgs {
     let diagnose_corrected_chamber_provided_generators_gv =
         parse_flag("--diagnose-corrected-chamber-provided-generators-gv");
     let diagnose_corrected_chamber_ray_gv = parse_flag("--diagnose-corrected-chamber-ray-gv");
+    let diagnose_corrected_chamber_lp_face_gv =
+        parse_flag("--diagnose-corrected-chamber-lp-face-gv");
     let dual_basis_override = parse_arg_value::<String>("--dual-basis")
         .map(|path| load_json::<BasisOverride>(&PathBuf::from(path)));
     PipelineArgs {
@@ -682,6 +712,7 @@ fn parse_args() -> PipelineArgs {
         diagnose_corrected_chamber_gv,
         diagnose_corrected_chamber_provided_generators_gv,
         diagnose_corrected_chamber_ray_gv,
+        diagnose_corrected_chamber_lp_face_gv,
         dual_basis_override,
     }
 }
@@ -2142,6 +2173,104 @@ fn compute_missing_one_dimensional_ray_gvs(
     Ok(out)
 }
 
+fn compute_missing_lp_witness_face_gvs(
+    ambient_classes: &[Vec<i64>],
+    basis_rays: &[Vec<i64>],
+    basis: &[usize],
+    grading: &[i64],
+    q_matrix: &[Vec<i64>],
+    intnums: &cyrus_core::Intersection,
+) -> Result<Vec<FaceGvDiagnosticResult>, String> {
+    let mut out = Vec::new();
+    for ambient_class in ambient_classes {
+        let basis_class = project_ambient_curve_to_basis(ambient_class, basis)?;
+        let degree = basis_class
+            .iter()
+            .zip(grading.iter())
+            .map(|(&coefficient, &weight)| i128::from(coefficient) * i128::from(weight))
+            .sum::<i128>();
+        if degree <= 0 {
+            return Err(format!(
+                "LP-witness face GV target has non-positive grading degree {degree}: {ambient_class:?}"
+            ));
+        }
+        let Some(witness) = real_cone_decomposition_by_other_degree_bounded_generators(
+            &basis_class,
+            basis_rays,
+            grading,
+            degree,
+        )?
+        else {
+            continue;
+        };
+        let max_deg = u32::try_from(degree).map_err(|_| {
+            format!("LP-witness face GV target degree {degree} does not fit in u32")
+        })?;
+        let mut provided_generators: Vec<Vec<i64>> = witness
+            .active_generator_indices
+            .iter()
+            .map(|&idx| basis_rays[idx].clone())
+            .collect();
+        provided_generators.push(basis_class.clone());
+        provided_generators.sort();
+        provided_generators.dedup();
+
+        let previous_panic_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let gvs_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            cyrus_core::compute_gv_invariants_with_provided_generators(
+                &provided_generators,
+                grading,
+                q_matrix,
+                intnums,
+                None,
+                Some(max_deg),
+            )
+        }));
+        std::panic::set_hook(previous_panic_hook);
+
+        let (gv, error) = match gvs_result {
+            Ok(Ok(gvs)) => {
+                let target_i32 = basis_class
+                    .iter()
+                    .map(|&value| {
+                        i32::try_from(value).map_err(|_| {
+                            "LP-witness face GV target coordinate does not fit in i32".to_string()
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let gv = gvs
+                    .into_iter()
+                    .find_map(|(curve, gv)| (curve == target_i32).then_some(gv))
+                    .unwrap_or_else(|| malachite::Integer::from(0));
+                (Some(gv), None)
+            }
+            Ok(Err(e)) => (
+                None,
+                Some(format!("failed LP-witness face GV computation: {e}")),
+            ),
+            Err(payload) => (
+                None,
+                Some(format!(
+                    "LP-witness face GV computation panicked for target degree {degree}, ambient_nonzero={:?}: {}",
+                    sparse_i64(ambient_class),
+                    panic_payload_message(payload.as_ref())
+                )),
+            ),
+        };
+
+        out.push(FaceGvDiagnosticResult {
+            ambient_class: ambient_class.clone(),
+            degree,
+            generator_count: provided_generators.len(),
+            active_generator_count: witness.active_generator_indices.len(),
+            gv,
+            error,
+        });
+    }
+    Ok(out)
+}
+
 fn panic_payload_message(payload: &(dyn std::any::Any + Send)) -> String {
     if let Some(message) = payload.downcast_ref::<String>() {
         message.clone()
@@ -2432,6 +2561,7 @@ fn diagnose_chamber_gv_volume_correction(
     general_max_deg: Option<u32>,
     provided_generators_only: bool,
     ray_gv_requested: bool,
+    lp_face_gv_requested: bool,
 ) -> Result<ChamberGvDiagnostic, String> {
     let ambient_rays = compute_mori_cone_cap_rays(
         tri,
@@ -2525,6 +2655,10 @@ fn diagnose_chamber_gv_volume_correction(
     let mut ray_gv_covered_count = None;
     let mut ray_gv_sample = Vec::new();
     let mut ray_gv_volume_correction = None;
+    let mut lp_face_gv_covered_count = None;
+    let mut lp_face_gv_failed_count = None;
+    let mut lp_face_gv_sample = Vec::new();
+    let mut lp_face_gv_volume_correction = None;
     if !missing_gv_classes.is_empty() && ray_gv_requested {
         if cfg!(panic = "abort") {
             return Err(
@@ -2630,6 +2764,97 @@ fn diagnose_chamber_gv_volume_correction(
                 "failed to compute one-dimensional ray GV volume correction".to_string()
             })?,
         );
+    }
+    if !missing_gv_classes.is_empty() && lp_face_gv_requested {
+        if cfg!(panic = "abort") {
+            return Err(
+                "LP-witness face GV diagnostic is disabled in panic=abort builds because cygv reports inconsistent face truncations by panicking; run with RUSTFLAGS='-C panic=unwind' or port cygv errors to Result before using this diagnostic"
+                    .to_string(),
+            );
+        }
+        let basis_rays = basis_rays_for_missing
+            .as_ref()
+            .expect("basis rays computed for corrected-chamber missing curves");
+        let grading = grading_for_missing
+            .as_ref()
+            .expect("grading computed for corrected-chamber missing curves");
+        let (non_positive_count, first_non_positive) =
+            non_positive_basis_generator_degrees(basis_rays, grading)?;
+        if let Some((idx, degree, ray)) = first_non_positive {
+            return Err(format!(
+                "LP-witness face GV diagnostic requires a grading positive on all Mori generators; found {non_positive_count}/{} non-positive generator degrees, first index={idx} degree={degree} ray={ray:?}",
+                basis_rays.len()
+            ));
+        }
+        let curve_basis = compute_curve_basis_matrix(&intersection.linrels, &intersection.basis)
+            .map_err(|e| format!("failed to compute corrected-chamber curve basis matrix: {e}"))?;
+        let q_matrix = curve_basis
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .skip(1)
+                    .map(|value| {
+                        i64::try_from(value).map_err(|_| {
+                            "corrected-chamber q-matrix entry does not fit in i64".to_string()
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let corrected_kappa_basis =
+            chamber_intersection_in_basis(tri, &geom.triangulation_points, &intersection.basis)?;
+        eprintln!(
+            "[WARN] corrected-chamber LP-witness face GV diagnostic uses small provided-generator cones from floating LP witnesses; this is not yet promoted to the exact corrected-chamber GV fallback."
+        );
+        let face_gvs = compute_missing_lp_witness_face_gvs(
+            &missing_gv_classes,
+            basis_rays,
+            &intersection.basis,
+            grading,
+            &q_matrix,
+            &corrected_kappa_basis,
+        )?;
+        let covered_count = face_gvs.iter().filter(|result| result.gv.is_some()).count();
+        let failed_count = face_gvs.len().saturating_sub(covered_count);
+        lp_face_gv_covered_count = Some(covered_count);
+        lp_face_gv_failed_count = Some(failed_count);
+        lp_face_gv_sample = face_gvs
+            .iter()
+            .take(10)
+            .map(|result| FaceGvDiagnosticSample {
+                degree: result.degree,
+                generator_count: result.generator_count,
+                active_generator_count: result.active_generator_count,
+                gv: result.gv.clone(),
+                error: result.error.clone(),
+                ambient_nonzero: result
+                    .ambient_class
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(idx, &value)| (value != 0).then_some((idx, value)))
+                    .collect(),
+            })
+            .collect();
+        if covered_count > 0 {
+            let mut face_small_curve_gvs = small_curve_gvs.clone();
+            face_small_curve_gvs.extend(face_gvs.iter().filter_map(|result| {
+                result
+                    .gv
+                    .as_ref()
+                    .map(|gv| (result.ambient_class.clone(), gv.clone()))
+            }));
+            lp_face_gv_volume_correction = Some(
+                cyrus_core::kklt::compute_gv_volume_correction_for_ambient_curves(
+                    &face_small_curve_gvs,
+                    &intersection.basis,
+                    kahler,
+                    Some(gamma),
+                )
+                .ok_or_else(|| {
+                    "failed to compute LP-witness face GV volume correction".to_string()
+                })?,
+            );
+        }
     }
     if !missing_gv_classes.is_empty() && general_gv_requested {
         let summary = degree_summary
@@ -2824,6 +3049,10 @@ fn diagnose_chamber_gv_volume_correction(
         ray_gv_covered_count,
         ray_gv_volume_correction,
         ray_gv_sample,
+        lp_face_gv_covered_count,
+        lp_face_gv_failed_count,
+        lp_face_gv_volume_correction,
+        lp_face_gv_sample,
         remaining_gv_missing_count: missing_gv_classes.len(),
         first_missing_class: missing_gv_classes.first().cloned(),
         missing_required_degree_min,
@@ -2856,6 +3085,7 @@ fn stage_volume(
     diagnose_corrected_chamber_gv: bool,
     diagnose_corrected_chamber_provided_generators_gv: bool,
     diagnose_corrected_chamber_ray_gv: bool,
+    diagnose_corrected_chamber_lp_face_gv: bool,
     small_curve_cutoff: F64<Pos>,
     h21: usize,
     t0: &Instant,
@@ -2913,7 +3143,8 @@ fn stage_volume(
     }
     if (diagnose_corrected_chamber_gv
         || diagnose_corrected_chamber_provided_generators_gv
-        || diagnose_corrected_chamber_ray_gv)
+        || diagnose_corrected_chamber_ray_gv
+        || diagnose_corrected_chamber_lp_face_gv)
         && allow_downstream_kahler
     {
         eprintln!(
@@ -3610,6 +3841,7 @@ fn stage_volume(
     if diagnose_corrected_chamber_gv
         || diagnose_corrected_chamber_provided_generators_gv
         || diagnose_corrected_chamber_ray_gv
+        || diagnose_corrected_chamber_lp_face_gv
     {
         let gamma = gamma_for_chamber_gv.as_deref().unwrap_or_else(|| {
             eprintln!("[ERROR] corrected-chamber GV diagnostic requires first-principles gamma");
@@ -3626,6 +3858,7 @@ fn stage_volume(
             primal_gv_max_deg,
             diagnose_corrected_chamber_provided_generators_gv,
             diagnose_corrected_chamber_ray_gv,
+            diagnose_corrected_chamber_lp_face_gv,
         )
         .unwrap_or_else(|e| {
             eprintln!("[ERROR] corrected-chamber GV diagnostic failed: {e}");
@@ -3665,6 +3898,24 @@ fn stage_volume(
                     eprintln!(
                         "[INFO] corrected-chamber one-dimensional ray GV volume correction delta_vs_input_chamber (diagnostic) = {}",
                         ray_correction.get() - input_chamber_correction.get()
+                    );
+                }
+            }
+        }
+        if let Some(face_covered) = diag.lp_face_gv_covered_count {
+            eprintln!(
+                "[INFO] corrected-chamber LP-witness face GV diagnostic covered {} decomposable missing curves; failed={:?}; sample={:?}",
+                face_covered, diag.lp_face_gv_failed_count, diag.lp_face_gv_sample
+            );
+            if let Some(face_correction) = diag.lp_face_gv_volume_correction.as_ref() {
+                eprintln!(
+                    "[INFO] corrected-chamber LP-witness face GV partial volume correction (diagnostic) = {}",
+                    face_correction.get()
+                );
+                if let Some(input_chamber_correction) = gv_volume_correction.as_ref() {
+                    eprintln!(
+                        "[INFO] corrected-chamber LP-witness face GV volume correction delta_vs_input_chamber (diagnostic) = {}",
+                        face_correction.get() - input_chamber_correction.get()
                     );
                 }
             }
@@ -3943,6 +4194,7 @@ fn run_pipeline(args: PipelineArgs) {
         args.diagnose_corrected_chamber_gv,
         args.diagnose_corrected_chamber_provided_generators_gv,
         args.diagnose_corrected_chamber_ray_gv,
+        args.diagnose_corrected_chamber_lp_face_gv,
         small_curve_cutoff,
         flat.dual_basis.len(),
         &t0,
