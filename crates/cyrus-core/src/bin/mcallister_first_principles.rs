@@ -627,6 +627,7 @@ struct FaceGvDiagnosticSample {
     used_span_expansion: bool,
     used_lattice_saturation: bool,
     used_integer_decomposition: bool,
+    used_decomposition_diamond: bool,
     integer_decomposition_term_count: Option<usize>,
     lattice_semigroup_element_count: Option<usize>,
     gv: Option<malachite::Integer>,
@@ -644,6 +645,7 @@ struct FaceGvDiagnosticResult {
     used_span_expansion: bool,
     used_lattice_saturation: bool,
     used_integer_decomposition: bool,
+    used_decomposition_diamond: bool,
     integer_decomposition_term_count: Option<usize>,
     lattice_semigroup_element_count: Option<usize>,
     gv: Option<malachite::Integer>,
@@ -658,6 +660,7 @@ struct FaceGvAttempt {
     used_span_expansion: bool,
     used_lattice_saturation: bool,
     used_integer_decomposition: bool,
+    used_decomposition_diamond: bool,
     integer_decomposition_term_count: Option<usize>,
     lattice_semigroup_element_count: Option<usize>,
     gv: Option<malachite::Integer>,
@@ -2785,6 +2788,7 @@ fn compute_missing_lp_witness_face_gvs(
             used_span_expansion: attempt.used_span_expansion,
             used_lattice_saturation: attempt.used_lattice_saturation,
             used_integer_decomposition: attempt.used_integer_decomposition,
+            used_decomposition_diamond: attempt.used_decomposition_diamond,
             integer_decomposition_term_count: attempt.integer_decomposition_term_count,
             lattice_semigroup_element_count: attempt.lattice_semigroup_element_count,
             gv: attempt.gv,
@@ -2820,6 +2824,7 @@ fn compute_lp_witness_face_attempt(
     let mut used_span_expansion = false;
     let mut used_lattice_saturation = false;
     let mut used_integer_decomposition = false;
+    let mut used_decomposition_diamond = false;
     let mut integer_decomposition_term_count = None;
     let mut lattice_semigroup_element_count = None;
     let (gv, error) = match compute_provided_generator_target_gv(
@@ -2861,6 +2866,7 @@ fn compute_lp_witness_face_attempt(
                             used_span_expansion,
                             used_lattice_saturation,
                             used_integer_decomposition,
+                            used_decomposition_diamond,
                             integer_decomposition_term_count,
                             lattice_semigroup_element_count,
                             gv: Some(gv),
@@ -2931,9 +2937,10 @@ fn compute_lp_witness_face_attempt(
                                 DEFAULT_CORRECTED_CHAMBER_LP_FACE_INTEGER_DECOMPOSITION_MAX_WITNESSES,
                             ),
                         ) {
-                            Ok((gv, element_count, term_count)) => {
-                                used_lattice_saturation = true;
+                            Ok((gv, element_count, term_count, used_diamond)) => {
+                                used_lattice_saturation = !used_diamond;
                                 used_integer_decomposition = true;
+                                used_decomposition_diamond = used_diamond;
                                 integer_decomposition_term_count = Some(term_count);
                                 lattice_semigroup_element_count = Some(element_count);
                                 (Some(gv), None)
@@ -2966,6 +2973,7 @@ fn compute_lp_witness_face_attempt(
         used_span_expansion,
         used_lattice_saturation,
         used_integer_decomposition,
+        used_decomposition_diamond,
         integer_decomposition_term_count,
         lattice_semigroup_element_count,
         gv,
@@ -3029,14 +3037,6 @@ fn compute_lattice_saturated_face_target_gv(
     max_deg: u32,
     ambient_class: &[i64],
 ) -> Result<(malachite::Integer, usize), String> {
-    let target_i32 = target_class
-        .iter()
-        .map(|&value| {
-            i32::try_from(value).map_err(|_| {
-                "lattice-saturated face GV target coordinate does not fit in i32".to_string()
-            })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
     let semigroup_elements = degree_bounded_face_lattice_points(seed_generators, grading, max_deg)?;
     if !semigroup_elements
         .iter()
@@ -3059,15 +3059,44 @@ fn compute_lattice_saturated_face_target_gv(
         ));
     }
 
-    let gvs = cyrus_core::compute_gv_invariants_with_explicit_semigroup(
+    let gv = compute_explicit_semigroup_target_gv(
         &semigroup_elements,
+        target_class,
+        grading,
+        q_matrix,
+        intnums,
+        "lattice-saturated face",
+        ambient_class,
+    )?;
+    Ok((gv, semigroup_elements.len()))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn compute_explicit_semigroup_target_gv(
+    semigroup_elements: &[Vec<i64>],
+    target_class: &[i64],
+    grading: &[i64],
+    q_matrix: &[Vec<i64>],
+    intnums: &cyrus_core::Intersection,
+    label: &str,
+    ambient_class: &[i64],
+) -> Result<malachite::Integer, String> {
+    let target_i32 = target_class
+        .iter()
+        .map(|&value| {
+            i32::try_from(value)
+                .map_err(|_| format!("{label} GV target coordinate does not fit in i32"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let gvs = cyrus_core::compute_gv_invariants_with_explicit_semigroup(
+        semigroup_elements,
         grading,
         q_matrix,
         intnums,
     )
     .map_err(|e| {
         format!(
-            "failed lattice-saturated face GV computation with {} explicit semigroup elements for ambient_nonzero={:?}: {e}",
+            "failed {label} GV computation with {} explicit semigroup elements for ambient_nonzero={:?}: {e}",
             semigroup_elements.len(),
             sparse_i64(ambient_class),
         )
@@ -3076,7 +3105,7 @@ fn compute_lattice_saturated_face_target_gv(
         .into_iter()
         .find_map(|(curve, gv)| (curve == target_i32).then_some(gv))
         .unwrap_or_else(|| malachite::Integer::from(0));
-    Ok((gv, semigroup_elements.len()))
+    Ok(gv)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3090,7 +3119,7 @@ fn compute_integer_decomposition_face_target_gv(
     ambient_class: &[i64],
     max_terms: usize,
     max_witnesses: usize,
-) -> Result<(malachite::Integer, usize, usize), String> {
+) -> Result<(malachite::Integer, usize, usize, bool), String> {
     let decompositions = exact_generator_decompositions(
         target_class,
         basis_rays,
@@ -3104,6 +3133,31 @@ fn compute_integer_decomposition_face_target_gv(
     })?;
     let mut errors = Vec::new();
     for decomposition in &decompositions {
+        let diamond_elements = decomposition_diamond_elements(decomposition, target_class)?;
+        match compute_explicit_semigroup_target_gv(
+            &diamond_elements,
+            target_class,
+            grading,
+            q_matrix,
+            intnums,
+            "decomposition-diamond face",
+            ambient_class,
+        ) {
+            Ok(gv) => return Ok((gv, diamond_elements.len(), decomposition.len(), true)),
+            Err(error) => {
+                let decomposition_sparse = decomposition
+                    .iter()
+                    .map(|ray| sparse_i64(ray))
+                    .collect::<Vec<_>>();
+                errors.push(format!(
+                    "{}-term decomposition diamond {:?} with {} elements failed: {error}",
+                    decomposition.len(),
+                    decomposition_sparse,
+                    diamond_elements.len()
+                ));
+            }
+        }
+
         let mut seed_generators = decomposition.clone();
         seed_generators.push(target_class.to_vec());
         seed_generators.sort();
@@ -3117,7 +3171,7 @@ fn compute_integer_decomposition_face_target_gv(
             max_deg,
             ambient_class,
         ) {
-            Ok((gv, element_count)) => return Ok((gv, element_count, decomposition.len())),
+            Ok((gv, element_count)) => return Ok((gv, element_count, decomposition.len(), false)),
             Err(error) => {
                 let decomposition_sparse = decomposition
                     .iter()
@@ -3137,6 +3191,44 @@ fn compute_integer_decomposition_face_target_gv(
         decompositions.len(),
         errors.join(" | ")
     ))
+}
+
+fn decomposition_diamond_elements(
+    decomposition: &[Vec<i64>],
+    target: &[i64],
+) -> Result<Vec<Vec<i64>>, String> {
+    let dim = target.len();
+    let zero = vec![0i64; dim];
+    let mut elements = vec![zero.clone()];
+    let mut seen = HashSet::from([zero]);
+    for term in decomposition {
+        if term.len() != dim {
+            return Err(format!(
+                "decomposition term dimension {} does not match target dimension {dim}",
+                term.len()
+            ));
+        }
+        let existing = elements.clone();
+        for element in existing {
+            let mut sum = Vec::with_capacity(dim);
+            for (&lhs, &rhs) in element.iter().zip(term.iter()) {
+                sum.push(lhs.checked_add(rhs).ok_or_else(|| {
+                    "decomposition diamond element coordinate overflowed i64".to_string()
+                })?);
+            }
+            if seen.insert(sum.clone()) {
+                elements.push(sum);
+            }
+        }
+    }
+    if !seen.contains(target) {
+        return Err(format!(
+            "decomposition diamond does not contain target {:?}",
+            sparse_i64(target)
+        ));
+    }
+    elements.sort();
+    Ok(elements)
 }
 
 fn exact_generator_decompositions(
@@ -3956,6 +4048,7 @@ fn diagnose_chamber_gv_volume_correction(
                 used_span_expansion: result.used_span_expansion,
                 used_lattice_saturation: result.used_lattice_saturation,
                 used_integer_decomposition: result.used_integer_decomposition,
+                used_decomposition_diamond: result.used_decomposition_diamond,
                 integer_decomposition_term_count: result.integer_decomposition_term_count,
                 lattice_semigroup_element_count: result.lattice_semigroup_element_count,
                 gv: result.gv.clone(),
@@ -5995,6 +6088,24 @@ mod tests {
         let decomposition = decompositions.pop().unwrap();
 
         assert_eq!(decomposition, vec![vec![1, 0], vec![1, 1]]);
+    }
+
+    #[test]
+    fn decomposition_diamond_elements_are_sub_sums_of_exact_decomposition() {
+        let elements =
+            decomposition_diamond_elements(&[vec![1, 0], vec![1, 0], vec![0, 1]], &[2, 1]).unwrap();
+
+        assert_eq!(
+            elements,
+            vec![
+                vec![0, 0],
+                vec![0, 1],
+                vec![1, 0],
+                vec![1, 1],
+                vec![2, 0],
+                vec![2, 1],
+            ]
+        );
     }
 }
 
