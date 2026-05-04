@@ -44,7 +44,8 @@ fn remaining_hyperplane_order(
     initial_rays: &[DdmRay],
     original_idx: usize,
 ) -> Option<RemainingHyperplaneOrder> {
-    let SignCounts { positive, negative } = count_ray_signs(hyperplane, initial_rays);
+    let SignCounts { positive, negative } = count_ray_signs(hyperplane, initial_rays, None)
+        .expect("unbounded sign scan always returns exact counts");
 
     if negative == 0 {
         return None;
@@ -109,15 +110,19 @@ fn best_hyperplane_in_window(
     end: usize,
     rays: &[DdmRay],
 ) -> (usize, CurrentHyperplaneOrder) {
-    (start_idx..end)
-        .map(|idx| {
-            (
-                idx,
-                current_hyperplane_order(&hyperplanes[idx], rays, idx - start_idx),
-            )
-        })
-        .min_by(|(_, left), (_, right)| left.cmp(right))
-        .expect("window always includes start_idx")
+    let mut best_idx = start_idx;
+    let mut best_order = current_hyperplane_order(&hyperplanes[start_idx], rays, 0, None);
+
+    for idx in (start_idx + 1)..end {
+        let order =
+            current_hyperplane_order(&hyperplanes[idx], rays, idx - start_idx, Some(&best_order));
+        if order < best_order {
+            best_idx = idx;
+            best_order = order;
+        }
+    }
+
+    (best_idx, best_order)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -126,7 +131,11 @@ struct SignCounts {
     negative: usize,
 }
 
-fn count_ray_signs(hyperplane: &DdmHyperplane, rays: &[DdmRay]) -> SignCounts {
+fn count_ray_signs(
+    hyperplane: &DdmHyperplane,
+    rays: &[DdmRay],
+    best: Option<&CurrentHyperplaneOrder>,
+) -> Option<SignCounts> {
     let mut positive = 0usize;
     let mut negative = 0usize;
     for ray in rays {
@@ -135,8 +144,32 @@ fn count_ray_signs(hyperplane: &DdmHyperplane, rays: &[DdmRay]) -> SignCounts {
             std::cmp::Ordering::Equal => {}
             std::cmp::Ordering::Less => negative += 1,
         }
+        if let Some(best) = best
+            && cannot_beat_current_best(positive, negative, best)
+        {
+            return None;
+        }
     }
-    SignCounts { positive, negative }
+    Some(SignCounts { positive, negative })
+}
+
+const fn cannot_beat_current_best(
+    positive: usize,
+    negative: usize,
+    best: &CurrentHyperplaneOrder,
+) -> bool {
+    match best.category {
+        // A category-0 row has no positive rays. Once this row has a positive
+        // ray it can no longer beat the current best category.
+        0 => positive > 0,
+        // For a cutting row, positive and negative counts only increase as we
+        // scan rays, so the pair count is a monotone lower bound.
+        1 => {
+            (positive > 0 && negative > 0 && positive.saturating_mul(negative) > best.pair_count)
+                || (positive > best.pair_count && negative == 0)
+        }
+        _ => false,
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -151,8 +184,11 @@ fn current_hyperplane_order(
     hyperplane: &DdmHyperplane,
     rays: &[DdmRay],
     offset: usize,
+    best: Option<&CurrentHyperplaneOrder>,
 ) -> CurrentHyperplaneOrder {
-    let SignCounts { positive, negative } = count_ray_signs(hyperplane, rays);
+    let Some(SignCounts { positive, negative }) = count_ray_signs(hyperplane, rays, best) else {
+        return non_improving_order(best.expect("bounded scan has a best order"), offset);
+    };
     let category = match (positive, negative) {
         (_, 0) => 2,
         (0, _) => 0,
@@ -166,13 +202,25 @@ fn current_hyperplane_order(
     }
 }
 
+const fn non_improving_order(
+    best: &CurrentHyperplaneOrder,
+    offset: usize,
+) -> CurrentHyperplaneOrder {
+    CurrentHyperplaneOrder {
+        category: best.category,
+        pair_count: best.pair_count,
+        sparse_len: best.sparse_len,
+        offset,
+    }
+}
+
 fn ddm_order_window() -> usize {
     static WINDOW: OnceLock<usize> = OnceLock::new();
     *WINDOW.get_or_init(|| {
         env::var("CYRUS_DDM_ORDER_WINDOW")
             .ok()
             .and_then(|value| value.parse::<usize>().ok())
-            .unwrap_or(256)
+            .unwrap_or(2048)
     })
 }
 
@@ -182,7 +230,7 @@ fn ddm_order_max_window() -> usize {
         env::var("CYRUS_DDM_ORDER_MAX_WINDOW")
             .ok()
             .and_then(|value| value.parse::<usize>().ok())
-            .unwrap_or(8192)
+            .unwrap_or(65_536)
     })
 }
 
@@ -192,6 +240,6 @@ fn ddm_order_expand_pair_threshold() -> usize {
         env::var("CYRUS_DDM_ORDER_EXPAND_PAIR_THRESHOLD")
             .ok()
             .and_then(|value| value.parse::<usize>().ok())
-            .unwrap_or(100_000)
+            .unwrap_or(1_000)
     })
 }
