@@ -223,6 +223,114 @@ pub fn compute_gv_target_correction(
         .collect()
 }
 
+/// Compute divisor GV corrections for an explicit ambient divisor list.
+///
+/// `gv_invariants` are curve classes in Kähler-coordinate basis coordinates.
+/// `curve_basis_matrix` maps those basis-coordinate curves back to ambient
+/// divisor coordinates, matching CYTools' `curve_basis(..., as_matrix=True)`
+/// convention: `q_ambient = q_basis * curve_basis_matrix`.
+///
+/// This is needed for McAllister's mixed-basis KKLT setup, where Kähler
+/// coordinates are in `basis` but target divisor volumes are ordered by
+/// `kklt_basis`.
+#[must_use]
+pub fn compute_gv_target_correction_for_divisors(
+    gv_invariants: &[(Vec<i32>, Integer)],
+    curve_basis_matrix: &[Vec<Integer>],
+    kklt_basis: &[usize],
+    t: &[F64<Finite>],
+    gamma: Option<&[I64<Finite>]>,
+) -> Option<Vec<F64<Finite>>> {
+    let dim = t.len();
+    if dim == 0
+        || curve_basis_matrix.len() != dim
+        || kklt_basis.is_empty()
+        || gamma.is_some_and(|g| g.len() != dim)
+    {
+        return None;
+    }
+
+    let ambient_dim = curve_basis_matrix.first()?.len();
+    if ambient_dim == 0
+        || curve_basis_matrix
+            .iter()
+            .any(|row| row.len() != ambient_dim)
+        || kklt_basis.iter().any(|&idx| idx >= ambient_dim)
+    {
+        return None;
+    }
+
+    let selected_curve_basis: Vec<Vec<f64>> = curve_basis_matrix
+        .iter()
+        .map(|row| {
+            kklt_basis
+                .iter()
+                .map(|&idx| row[idx].to_string().parse::<f64>().ok())
+                .collect::<Option<Vec<_>>>()
+        })
+        .collect::<Option<Vec<_>>>()?;
+    if selected_curve_basis
+        .iter()
+        .flatten()
+        .any(|value| !value.is_finite())
+    {
+        return None;
+    }
+
+    let mut correction = vec![0.0f64; kklt_basis.len()];
+    for (curve, invariant) in gv_invariants {
+        if curve.len() != dim {
+            return None;
+        }
+
+        let q_dot_t = curve
+            .iter()
+            .zip(t.iter())
+            .map(|(&qi, ti)| f64::from(qi) * ti.get())
+            .sum::<f64>();
+        if !q_dot_t.is_finite() || q_dot_t <= 0.0 {
+            return None;
+        }
+
+        let parity = gamma.map_or(0_i128, |g| {
+            curve
+                .iter()
+                .zip(g.iter())
+                .map(|(&qi, gi)| i128::from(qi) * i128::from(gi.get()))
+                .sum::<i128>()
+        });
+        let sign = if parity.rem_euclid(2) == 0 { 1.0 } else { -1.0 };
+        let arg = sign * (-TWO_PI.get() * q_dot_t).exp();
+        if arg.abs() < 1e-100 {
+            continue;
+        }
+
+        let dilog = real_dilog_unit_disk(arg)?;
+        let invariant_f = invariant.to_string().parse::<f64>().ok()?;
+        if !invariant_f.is_finite() {
+            return None;
+        }
+
+        for (div_idx, entry) in correction.iter_mut().enumerate() {
+            let q_ambient = curve
+                .iter()
+                .zip(selected_curve_basis.iter())
+                .map(|(&qi, basis_row)| f64::from(qi) * basis_row[div_idx])
+                .sum::<f64>();
+            if !q_ambient.is_finite() {
+                return None;
+            }
+            *entry += q_ambient * invariant_f * dilog;
+        }
+    }
+
+    let prefactor = 1.0 / (4.0 * PI * PI);
+    correction
+        .into_iter()
+        .map(|value| F64::<Finite>::new(prefactor * value))
+        .collect()
+}
+
 /// Compute `c_τ` = 2π / (`g_s` × ln(W₀⁻¹)).
 ///
 /// This relates the string coupling to the flux superpotential.
@@ -1023,6 +1131,32 @@ mod tests {
         assert!(
             compute_gv_target_correction(&[(vec![1, 0], Integer::from(1))], &t, None).is_none()
         );
+    }
+
+    #[test]
+    fn test_compute_gv_target_correction_for_divisors_uses_curve_basis_matrix() {
+        let t_entry = 2.0_f64.ln() / (10.0 * PI);
+        let t = vec![finite_f64(t_entry), finite_f64(t_entry)];
+        let invariants = vec![(vec![2, 3], Integer::from(1))];
+        let curve_basis = vec![
+            vec![Integer::from(1), Integer::from(0), Integer::from(4)],
+            vec![Integer::from(0), Integer::from(1), Integer::from(-1)],
+        ];
+        let kklt_basis = vec![0, 2];
+
+        let correction = compute_gv_target_correction_for_divisors(
+            &invariants,
+            &curve_basis,
+            &kklt_basis,
+            &t,
+            None,
+        )
+        .unwrap();
+
+        let li2_half = PI * PI / 12.0 - 0.5 * 2.0_f64.ln().powi(2);
+        let prefactor = 1.0 / (4.0 * PI * PI);
+        assert!((correction[0].get() - 2.0 * prefactor * li2_half).abs() < 1e-14);
+        assert!((correction[1].get() - 5.0 * prefactor * li2_half).abs() < 1e-14);
     }
 
     #[test]
