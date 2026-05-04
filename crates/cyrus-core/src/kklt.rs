@@ -734,12 +734,17 @@ pub fn solve_path_following(
     })
 }
 
-/// Solve KKLT with the two-phase branch selection used in the McAllister
-/// reproduction.
+/// Solve KKLT with a simple two-phase path-following branch heuristic.
 ///
 /// Phase 1 follows from a scaled uniform initial point to the uncorrected
-/// integer target `τ_i = c_i`, which selects the branch used by the reference
-/// computation. Phase 2 follows from that branch to the corrected target.
+/// integer target `τ_i = c_i`. Phase 2 follows from that branch to the
+/// corrected target.
+///
+/// This is not guaranteed to select the exact McAllister branch. The
+/// reproduction notes show that `τ(t)=c_i` has multiple branches, and uniform
+/// starts can converge to valid but different Kähler points. Exact paper
+/// reproduction still needs a first-principles branch-selection strategy
+/// rather than assuming this heuristic is canonical.
 ///
 /// Returns `None` if either phase fails or does not converge.
 pub fn solve_two_phase_path_following(
@@ -866,7 +871,7 @@ pub fn solve_mixed_basis_path_following(
     })
 }
 
-/// Solve KKLT with two-phase branch selection for mixed `basis`/`kklt_basis`
+/// Solve KKLT with a two-phase branch heuristic for mixed `basis`/`kklt_basis`
 /// divisor sets.
 pub fn solve_two_phase_mixed_basis_path_following(
     kappa_basis: &Intersection,
