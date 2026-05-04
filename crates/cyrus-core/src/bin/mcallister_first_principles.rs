@@ -23,7 +23,7 @@ use cyrus_core::{
     compute_curve_basis_matrix, compute_glsm_and_linrels, compute_grading_vector,
     compute_intersection_cytools, compute_linear_relations_no_origin, compute_mori_cone_cap_rays,
     compute_regular_triangulation, compute_w0_from_terms, intersection_in_basis, is_unimodular,
-    solve_racetrack,
+    remove_pair_decomposable_curve_candidates, solve_racetrack, subcutoff_toric_curve_candidates,
 };
 
 const DEFAULT_MCALLISTER_GV_MIN_POINTS: u32 = 20_000;
@@ -235,6 +235,7 @@ struct PipelineArgs {
     max_deg: Option<u32>,
     min_points: Option<u32>,
     cutoff: f64,
+    small_curve_cutoff: f64,
     out_path: Option<String>,
     compare_dir: Option<String>,
     data_dir: Option<String>,
@@ -286,6 +287,7 @@ fn parse_args() -> PipelineArgs {
         parse_arg_value::<u32>("--min-points").or(Some(DEFAULT_MCALLISTER_GV_MIN_POINTS))
     };
     let cutoff = parse_arg_value::<f64>("--cutoff").unwrap_or(1.0);
+    let small_curve_cutoff = parse_arg_value::<f64>("--small-curve-cutoff").unwrap_or(1.0);
     let out_path = parse_arg_value::<String>("--out");
     let compare_dir = parse_arg_value::<String>("--compare-dir");
     let data_dir = parse_arg_value::<String>("--data-dir")
@@ -301,6 +303,7 @@ fn parse_args() -> PipelineArgs {
         max_deg,
         min_points,
         cutoff,
+        small_curve_cutoff,
         out_path,
         compare_dir,
         data_dir,
@@ -854,6 +857,7 @@ fn stage_volume(
     racetrack: &RacetrackData,
     allow_downstream_kahler: bool,
     kklt_steps: usize,
+    small_curve_cutoff: F64<Pos>,
     t0: &Instant,
 ) -> (f64, F64<Pos>) {
     let t = if allow_downstream_kahler {
@@ -913,8 +917,42 @@ fn stage_volume(
             zeroth_order.converged,
             zeroth_order.relative_error.get()
         );
+        let ambient_rays = compute_mori_cone_cap_rays(
+            &geom.triangulation,
+            &geom.triangulation_points,
+            &geom.polytope,
+            false,
+            false,
+            None,
+        )
+        .unwrap_or_else(|e| {
+            eprintln!("[ERROR] failed to compute primal ambient Mori-cap rays: {e}");
+            std::process::exit(2);
+        });
+        let small_curve_candidates = subcutoff_toric_curve_candidates(
+            &ambient_rays,
+            &intersection.basis,
+            &zeroth_order.t,
+            small_curve_cutoff,
+        )
+        .unwrap_or_else(|e| {
+            eprintln!("[ERROR] failed to select small toric curve candidates: {e}");
+            std::process::exit(2);
+        });
+        let small_curves = remove_pair_decomposable_curve_candidates(&small_curve_candidates)
+            .unwrap_or_else(|e| {
+                eprintln!("[ERROR] failed to prune pair-decomposable small curves: {e}");
+                std::process::exit(2);
+            });
         eprintln!(
-            "[ERROR] full primal KKLT GV corrections are not available in this runner yet; refusing to reuse dual racetrack GV data"
+            "[INFO] primal small toric curves: ambient_rays={} subcutoff={} filtered_hilbert_candidates={} cutoff={}",
+            ambient_rays.len(),
+            small_curve_candidates.len(),
+            small_curves.len(),
+            small_curve_cutoff.get()
+        );
+        eprintln!(
+            "[ERROR] primal small toric curve classes are computed, but their GV values are not yet computed by Cyrus; refusing to reuse downstream GV artifacts"
         );
         std::process::exit(2);
     };
@@ -1025,6 +1063,8 @@ fn run_pipeline(args: PipelineArgs) {
     let data_dir = args.data_dir.as_deref();
     enforce_modes(data_dir, args.allow_fixtures);
     let cutoff = F64::<Pos>::new(args.cutoff).expect("cutoff must be positive");
+    let small_curve_cutoff =
+        F64::<Pos>::new(args.small_curve_cutoff).expect("small curve cutoff must be positive");
     let geom = stage_triangulation(data_dir, &manifest_dir, &t0);
     if !stage_enabled(Stage::Intersection, args.stop_after) {
         return;
@@ -1059,6 +1099,7 @@ fn run_pipeline(args: PipelineArgs) {
         &racetrack,
         args.allow_downstream_kahler,
         args.kklt_steps,
+        small_curve_cutoff,
         &t0,
     );
     if !stage_enabled(Stage::Vacuum, args.stop_after) {
