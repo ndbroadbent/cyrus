@@ -38,6 +38,7 @@ use crate::lattice::Point;
 use crate::polytope::Polytope;
 use crate::triangulation::Triangulation;
 use crate::types::{F64, Finite, I64, Pos};
+use crate::utils::lll_reduce;
 
 const GRADING_CACHE_VERSION: &str = "grading-vector-cytools-lp-v1";
 const LATTICE_CACHE_VERSION: &str = "lattice-points-v2";
@@ -496,6 +497,43 @@ pub struct NilpotentRaySliceComparisonPoint {
     pub slice_point: Vec<i64>,
     /// `slice_point - slice_origin`.
     pub offset_from_origin: Vec<i64>,
+}
+
+/// LLL-reduced distance from a nilpotent ray to comparison rays on one degree
+/// slice.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NilpotentRaySliceDistance {
+    /// Degree slice used for the comparison.
+    pub slice: NilpotentRayDegreeSlice,
+    /// Deduplicated nonzero offsets `C' - slice_origin` used to define the
+    /// affine slice lattice before LLL reduction.
+    pub lattice_offsets: Vec<Vec<i64>>,
+    /// Unimodular transform `A` returned by the CYTools-style LLL convention:
+    /// `reduced_offsets.T = A * lattice_offsets.T`.
+    pub lll_transform: Vec<Vec<i64>>,
+    /// LLL-reduced lattice offsets, in the same row order as
+    /// `lattice_offsets`.
+    pub reduced_lattice_offsets: Vec<Vec<i64>>,
+    /// Comparison-ray intersections with the slice.
+    pub comparison_points: Vec<NilpotentRaySliceComparisonPoint>,
+    /// Each comparison offset transformed by `lll_transform`.
+    pub transformed_comparison_offsets: Vec<Vec<i64>>,
+    /// Smallest infinity norm among transformed comparison offsets, or `None`
+    /// if no comparison ray intersects the slice at an integer point.
+    pub minimum_infinity_norm: Option<i64>,
+}
+
+/// Half/full cutoff comparison for the finite-cutoff nop divergence test.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NilpotentRayDivergenceCheck {
+    /// Distance on the half-cutoff slice.
+    pub half_cutoff: NilpotentRaySliceDistance,
+    /// Distance on the full-cutoff slice.
+    pub full_cutoff: NilpotentRaySliceDistance,
+    /// `Some(true)` exactly when the full-cutoff distance is strictly larger
+    /// than the half-cutoff distance. `None` means one of the slices had no
+    /// comparison point, so the finite test is inconclusive at this layer.
+    pub appears_divergent: Option<bool>,
 }
 
 /// Exact certificate that an integer normal cuts out a supporting Mori face.
@@ -4316,6 +4354,81 @@ fn checked_i64_vector_difference(lhs: &[i64], rhs: &[i64], context: &str) -> Res
         .collect()
 }
 
+fn validate_nilpotent_slice_against_grading(
+    slice: &NilpotentRayDegreeSlice,
+    grading_vector: &[i64],
+) -> Result<()> {
+    if grading_vector.is_empty() {
+        return Err(Error::InvalidInput(
+            "nilpotent-ray slice distance requires a nonempty grading vector".into(),
+        ));
+    }
+    if slice.primitive_ray.len() != grading_vector.len()
+        || slice.slice_origin.len() != grading_vector.len()
+    {
+        return Err(Error::InvalidInput(
+            "nilpotent-ray slice dimension does not match grading dimension".into(),
+        ));
+    }
+    if slice.slice_degree <= 0 {
+        return Err(Error::InvalidInput(
+            "nilpotent-ray slice degree must be positive".into(),
+        ));
+    }
+    let origin_degree = checked_i128_dot(
+        &slice.slice_origin,
+        grading_vector,
+        "nilpotent-ray slice-origin grading",
+    )?;
+    if origin_degree != slice.slice_degree {
+        return Err(Error::InvalidInput(format!(
+            "nilpotent-ray slice origin has degree {origin_degree}, expected {}",
+            slice.slice_degree
+        )));
+    }
+    Ok(())
+}
+
+fn apply_i64_matrix_to_vector(
+    matrix: &[Vec<i64>],
+    vector: &[i64],
+    context: &str,
+) -> Result<Vec<i64>> {
+    let mut output = Vec::with_capacity(matrix.len());
+    for row in matrix {
+        if row.len() != vector.len() {
+            return Err(Error::InvalidInput(format!(
+                "{context} matrix/vector dimensions do not match"
+            )));
+        }
+        let value = row.iter().zip(vector.iter()).try_fold(
+            0i128,
+            |acc, (&matrix_entry, &vector_entry)| {
+                let term = i128::from(matrix_entry)
+                    .checked_mul(i128::from(vector_entry))
+                    .ok_or_else(|| Error::InvalidInput(format!("{context} overflow")))?;
+                acc.checked_add(term)
+                    .ok_or_else(|| Error::InvalidInput(format!("{context} overflow")))
+            },
+        )?;
+        output.push(
+            i64::try_from(value).map_err(|_| {
+                Error::InvalidInput(format!("{context} result does not fit in i64"))
+            })?,
+        );
+    }
+    Ok(output)
+}
+
+fn checked_i64_infinity_norm(vector: &[i64], context: &str) -> Result<i64> {
+    vector.iter().try_fold(0i64, |current, &entry| {
+        let abs = entry
+            .checked_abs()
+            .ok_or_else(|| Error::InvalidInput(format!("{context} contains i64::MIN")))?;
+        Ok(current.max(abs))
+    })
+}
+
 fn primitive_i64_gcd(ray: &[i64], context: &str) -> Result<i64> {
     let mut gcd = 0i64;
     for &entry in ray {
@@ -4714,6 +4827,128 @@ pub fn nilpotent_ray_slice_comparison_points(
     }
 
     Ok(by_point.into_values().collect())
+}
+
+/// Compute the LLL-reduced integer distance from a candidate nilpotent ray to
+/// comparison rays on one finite-cutoff degree slice.
+///
+/// The caller must provide the same-degree curve classes that define the
+/// affine slice lattice. This keeps the function source-bounded: it implements
+/// the paper's LLL/norm calculation once a lattice slice is known, but it does
+/// not guess whether that slice came from a compact GV semigroup, a chamber
+/// continuation, or another certified source.
+pub fn nilpotent_ray_lll_reduced_slice_distance(
+    slice: &NilpotentRayDegreeSlice,
+    slice_lattice_points: &[Vec<i64>],
+    comparison_charges: &[Vec<i64>],
+    grading_vector: &[i64],
+) -> Result<NilpotentRaySliceDistance> {
+    validate_nilpotent_slice_against_grading(slice, grading_vector)?;
+
+    let mut lattice_offsets = BTreeSet::new();
+    for point in slice_lattice_points {
+        if point.len() != grading_vector.len() {
+            return Err(Error::InvalidInput(
+                "nilpotent-ray slice lattice point dimension does not match grading dimension"
+                    .into(),
+            ));
+        }
+        let degree = checked_i128_dot(
+            point,
+            grading_vector,
+            "nilpotent-ray slice lattice point grading",
+        )?;
+        if degree != slice.slice_degree {
+            return Err(Error::InvalidInput(format!(
+                "nilpotent-ray slice lattice point has degree {degree}, expected {}",
+                slice.slice_degree
+            )));
+        }
+        let offset = checked_i64_vector_difference(
+            point,
+            &slice.slice_origin,
+            "nilpotent-ray slice lattice offset",
+        )?;
+        if offset.iter().any(|&value| value != 0) {
+            lattice_offsets.insert(offset);
+        }
+    }
+
+    let lattice_offsets: Vec<Vec<i64>> = lattice_offsets.into_iter().collect();
+    if lattice_offsets.is_empty() {
+        return Err(Error::InvalidInput(
+            "nilpotent-ray slice lattice requires at least one nonzero offset".into(),
+        ));
+    }
+
+    let lll = lll_reduce(&lattice_offsets, true);
+    let lll_transform = lll.transform.ok_or_else(|| {
+        Error::InvalidInput("nilpotent-ray LLL reduction did not return a transform".into())
+    })?;
+    let reduced_lattice_offsets = lll.reduced;
+
+    for (input, reduced) in lattice_offsets.iter().zip(reduced_lattice_offsets.iter()) {
+        let transformed =
+            apply_i64_matrix_to_vector(&lll_transform, input, "nilpotent-ray LLL transform")?;
+        if transformed != *reduced {
+            return Err(Error::InvalidInput(
+                "nilpotent-ray LLL transform does not reproduce reduced offsets".into(),
+            ));
+        }
+    }
+
+    let comparison_points =
+        nilpotent_ray_slice_comparison_points(slice, comparison_charges, grading_vector)?;
+    let mut transformed_comparison_offsets = Vec::with_capacity(comparison_points.len());
+    let mut minimum_infinity_norm: Option<i64> = None;
+    for point in &comparison_points {
+        let transformed = apply_i64_matrix_to_vector(
+            &lll_transform,
+            &point.offset_from_origin,
+            "nilpotent-ray comparison LLL transform",
+        )?;
+        let norm =
+            checked_i64_infinity_norm(&transformed, "nilpotent-ray transformed comparison offset")?;
+        minimum_infinity_norm =
+            Some(minimum_infinity_norm.map_or(norm, |current| current.min(norm)));
+        transformed_comparison_offsets.push(transformed);
+    }
+
+    Ok(NilpotentRaySliceDistance {
+        slice: slice.clone(),
+        lattice_offsets,
+        lll_transform,
+        reduced_lattice_offsets,
+        comparison_points,
+        transformed_comparison_offsets,
+        minimum_infinity_norm,
+    })
+}
+
+/// Compare the paper's half-cutoff and full-cutoff distances for one candidate
+/// nilpotent ray.
+pub fn nilpotent_ray_divergence_check_from_slice_distances(
+    half_cutoff: NilpotentRaySliceDistance,
+    full_cutoff: NilpotentRaySliceDistance,
+) -> Result<NilpotentRayDivergenceCheck> {
+    if half_cutoff.slice.primitive_ray != full_cutoff.slice.primitive_ray {
+        return Err(Error::InvalidInput(
+            "nilpotent-ray divergence check requires distances for the same primitive ray".into(),
+        ));
+    }
+    let appears_divergent = match (
+        half_cutoff.minimum_infinity_norm,
+        full_cutoff.minimum_infinity_norm,
+    ) {
+        (Some(half_distance), Some(full_distance)) => Some(full_distance > half_distance),
+        _ => None,
+    };
+
+    Ok(NilpotentRayDivergenceCheck {
+        half_cutoff,
+        full_cutoff,
+        appears_divergent,
+    })
 }
 
 /// Compute the paper's potent-ray convergence terms.
@@ -8093,12 +8328,13 @@ mod tests {
         BoundedCurveDecompositionIndex, CkyzLocalIntersectionTerm, CkyzLocalSurfaceIdentification,
         CkyzLocalSurfaceKind, CkyzMonomialDomain, CurveDecompositionTerm, CurvePruningStrategy,
         GvLatticeAugmentation, LocalToricCircuitKind, LocalToricCoordinate2D,
-        OriginCircuitCurveWitness, OriginCircuitRelationPoint, ToricCurveCandidate,
-        certify_supporting_mori_face_by_exact_kernel, check_supporting_mori_face_normal,
-        ckyz_cover_closed_target_degrees, ckyz_local_surface_causal_domain_spec,
-        ckyz_local_surface_cover_weight_coefficients, ckyz_local_surface_target_degrees,
-        ckyz_observed_support_domain_for_degrees, ckyz_predicted_support_domain_for_degrees,
-        ckyz_series_mul_domain, compute_ambient_one_dimensional_ray_gv_series,
+        NilpotentRaySliceDistance, OriginCircuitCurveWitness, OriginCircuitRelationPoint,
+        ToricCurveCandidate, certify_supporting_mori_face_by_exact_kernel,
+        check_supporting_mori_face_normal, ckyz_cover_closed_target_degrees,
+        ckyz_local_surface_causal_domain_spec, ckyz_local_surface_cover_weight_coefficients,
+        ckyz_local_surface_target_degrees, ckyz_observed_support_domain_for_degrees,
+        ckyz_predicted_support_domain_for_degrees, ckyz_series_mul_domain,
+        compute_ambient_one_dimensional_ray_gv_series,
         compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
         compute_ckyz_local_gv_invariants, compute_ckyz_local_gv_invariants_for_degrees,
         compute_ckyz_local_gv_invariants_for_degrees_with_causal_domain,
@@ -8120,7 +8356,9 @@ mod tests {
         find_semigroup_decomposition, gv_divisor_basis_data, gv_lattice_search_request,
         load_grading_cache, local_p2_inverse_mirror_map, local_p2_mirror_correction,
         map_basis_gv_invariants_to_ambient, nilpotent_ray_degree_slice_for_cutoff_fraction,
-        nilpotent_ray_slice_comparison_points, origin_circuit_diagnostic_from_class_and_witnesses,
+        nilpotent_ray_divergence_check_from_slice_distances,
+        nilpotent_ray_lll_reduced_slice_distance, nilpotent_ray_slice_comparison_points,
+        origin_circuit_diagnostic_from_class_and_witnesses,
         partition_finite_cutoff_gv_charges_by_nilpotence, potent_ray_convergence,
         potent_ray_log_xi_terms, project_ambient_curve_to_basis,
         project_ambient_curve_to_basis_matrix, project_mori_cone_cap_rays_for_divisor_basis,
@@ -10177,6 +10415,118 @@ mod tests {
         let bad_degree =
             nilpotent_ray_slice_comparison_points(&slice, &[vec![1, 0]], &[0, 1]).unwrap_err();
         assert!(bad_degree.to_string().contains("non-positive grading"));
+    }
+
+    #[test]
+    fn nilpotent_ray_lll_slice_distance_transforms_comparison_offsets() {
+        let slice = nilpotent_ray_degree_slice_for_cutoff_fraction(&[1, 0, 0], &[1, 1, 1], 4, 1, 1)
+            .unwrap()
+            .unwrap();
+
+        let distance = nilpotent_ray_lll_reduced_slice_distance(
+            &slice,
+            &[
+                vec![4, 0, 0],
+                vec![3, 1, 0],
+                vec![3, 0, 1],
+                vec![2, 1, 1],
+                vec![0, 4, 0],
+            ],
+            &[vec![0, 1, 0], vec![0, 0, 1], vec![1, 1, 0]],
+            &[1, 1, 1],
+        )
+        .unwrap();
+
+        assert_eq!(distance.slice.slice_origin, vec![4, 0, 0]);
+        assert_eq!(
+            distance.lattice_offsets,
+            vec![
+                vec![-4, 4, 0],
+                vec![-2, 1, 1],
+                vec![-1, 0, 1],
+                vec![-1, 1, 0],
+            ]
+        );
+        assert_eq!(
+            distance.reduced_lattice_offsets.len(),
+            distance.lattice_offsets.len()
+        );
+        assert_eq!(distance.comparison_points.len(), 3);
+        assert_eq!(
+            distance.minimum_infinity_norm,
+            distance
+                .transformed_comparison_offsets
+                .iter()
+                .map(|offset| offset.iter().map(|value| value.abs()).max().unwrap())
+                .min()
+        );
+    }
+
+    #[test]
+    fn nilpotent_ray_lll_slice_distance_reports_no_comparison_hit() {
+        let slice = nilpotent_ray_degree_slice_for_cutoff_fraction(&[1, 0], &[3, 1], 3, 1, 1)
+            .unwrap()
+            .unwrap();
+
+        let distance = nilpotent_ray_lll_reduced_slice_distance(
+            &slice,
+            &[vec![1, 0], vec![0, 3]],
+            &[vec![1, 1]],
+            &[3, 1],
+        )
+        .unwrap();
+
+        assert!(distance.comparison_points.is_empty());
+        assert_eq!(distance.minimum_infinity_norm, None);
+    }
+
+    #[test]
+    fn nilpotent_ray_lll_slice_distance_rejects_bad_lattice_points() {
+        let slice = nilpotent_ray_degree_slice_for_cutoff_fraction(&[1, 0], &[1, 1], 4, 1, 1)
+            .unwrap()
+            .unwrap();
+
+        let only_origin =
+            nilpotent_ray_lll_reduced_slice_distance(&slice, &[vec![4, 0]], &[], &[1, 1])
+                .unwrap_err();
+        assert!(only_origin.to_string().contains("nonzero offset"));
+
+        let wrong_degree =
+            nilpotent_ray_lll_reduced_slice_distance(&slice, &[vec![3, 0]], &[], &[1, 1])
+                .unwrap_err();
+        assert!(wrong_degree.to_string().contains("degree"));
+    }
+
+    #[test]
+    fn nilpotent_ray_divergence_check_compares_half_and_full_distances() {
+        let half_slice = nilpotent_ray_degree_slice_for_cutoff_fraction(&[1, 0], &[1, 1], 4, 1, 2)
+            .unwrap()
+            .unwrap();
+        let full_slice = nilpotent_ray_degree_slice_for_cutoff_fraction(&[1, 0], &[1, 1], 4, 1, 1)
+            .unwrap()
+            .unwrap();
+
+        let half = NilpotentRaySliceDistance {
+            slice: half_slice,
+            lattice_offsets: Vec::new(),
+            lll_transform: Vec::new(),
+            reduced_lattice_offsets: Vec::new(),
+            comparison_points: Vec::new(),
+            transformed_comparison_offsets: Vec::new(),
+            minimum_infinity_norm: Some(2),
+        };
+        let full = NilpotentRaySliceDistance {
+            slice: full_slice,
+            lattice_offsets: Vec::new(),
+            lll_transform: Vec::new(),
+            reduced_lattice_offsets: Vec::new(),
+            comparison_points: Vec::new(),
+            transformed_comparison_offsets: Vec::new(),
+            minimum_infinity_norm: Some(3),
+        };
+
+        let check = nilpotent_ray_divergence_check_from_slice_distances(half, full).unwrap();
+        assert_eq!(check.appears_divergent, Some(true));
     }
 
     #[test]
