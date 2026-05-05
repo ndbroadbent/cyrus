@@ -129,10 +129,12 @@ current local CKYZ path still materializes the full rational inverse mirror map
 repeated fixed-point support recomputation when all alpha support closures are
 identical and caches duplicate alpha-product support multiplications. On the
 focused polygon-5 `[4,3,2]`, `N=10` domain profile this changes the
-support-domain run from timing out earlier, then 81.7 seconds, to 26.2 seconds
-(`z` support about 117 ms, contracted support about 22.9 seconds). The actual
-all-ten rational GV reconstruction was stopped after about six minutes; a stack
-sample was in `compute_ckyz_inverse_mirror_map_domain ->
+support-domain run from timing out earlier, then 81.7 seconds, to 26.2 seconds.
+Adding a dense bounding-box degree index for explicit domains whose full
+addition table is too large brings the same support-domain diagnostic to 12.0
+seconds (`z` support about 98 ms, contracted support about 8.7 seconds). The
+actual all-ten rational GV reconstruction was still stopped after a few
+minutes; stack samples remained in `compute_ckyz_inverse_mirror_map_domain ->
 ckyz_series_exp_domain -> ckyz_series_mul_domain`. That confirms the next
 builder needs cygv-style coefficient/path-history domains, not just narrower
-support sets.
+support sets or faster monomial lookup.

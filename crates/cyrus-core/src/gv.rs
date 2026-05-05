@@ -44,6 +44,8 @@ const GRADING_CACHE_VERSION: &str = "grading-vector-cytools-lp-v1";
 const LATTICE_CACHE_VERSION: &str = "lattice-points-v2";
 const CKYZ_ADDITION_TABLE_MAX_ENTRIES: usize = 5_000_000;
 const CKYZ_ABSENT_ADDITION_INDEX: usize = usize::MAX;
+const CKYZ_DENSE_DEGREE_INDEX_MAX_ENTRIES: usize = 5_000_000;
+const CKYZ_ABSENT_DEGREE_INDEX: usize = usize::MAX;
 
 /// Compute the Mori cone cap generators (rays) using the CYTools algorithm.
 ///
@@ -2472,6 +2474,9 @@ struct CkyzMonomialDomain {
     rank: usize,
     degrees: Vec<Vec<usize>>,
     degree_indices: HashMap<Vec<usize>, usize>,
+    max_coordinate_degrees: Vec<usize>,
+    dense_degree_strides: Option<Vec<usize>>,
+    dense_degree_indices: Option<Vec<usize>>,
     addition_indices: Option<Vec<usize>>,
     addition_pairs_by_lhs: Option<Vec<Vec<(usize, usize)>>>,
     max_total_degree: usize,
@@ -2526,6 +2531,38 @@ impl CkyzMonomialDomain {
             .enumerate()
             .map(|(index, degree)| (degree, index))
             .collect::<HashMap<_, _>>();
+        let mut max_coordinate_degrees = vec![0; rank];
+        for degree in &degrees {
+            for (coordinate, &entry) in degree.iter().enumerate() {
+                max_coordinate_degrees[coordinate] = max_coordinate_degrees[coordinate].max(entry);
+            }
+        }
+        let mut dense_entries = Some(1usize);
+        for &max_degree in &max_coordinate_degrees {
+            dense_entries =
+                dense_entries.and_then(|entries| entries.checked_mul(max_degree.checked_add(1)?));
+        }
+        let (dense_degree_strides, dense_degree_indices) = dense_entries
+            .filter(|&entries| entries <= CKYZ_DENSE_DEGREE_INDEX_MAX_ENTRIES)
+            .map_or((None, None), |entries| {
+                let mut strides = Vec::with_capacity(rank);
+                let mut stride = 1usize;
+                for &max_degree in &max_coordinate_degrees {
+                    strides.push(stride);
+                    stride = stride
+                        .checked_mul(max_degree + 1)
+                        .expect("dense entries were checked above");
+                }
+                let mut dense_indices = vec![CKYZ_ABSENT_DEGREE_INDEX; entries];
+                for (index, degree) in degrees.iter().enumerate() {
+                    let dense_index =
+                        ckyz_dense_degree_index(degree, rank, &max_coordinate_degrees, &strides)
+                            .expect("domain degree is inside its own dense index bounds")
+                            .expect("domain degree has a dense index");
+                    dense_indices[dense_index] = index;
+                }
+                (Some(strides), Some(dense_indices))
+            });
         let addition_entries = degrees.len().saturating_mul(degrees.len());
         let addition_indices = if addition_entries <= CKYZ_ADDITION_TABLE_MAX_ENTRIES {
             let mut addition_indices = vec![CKYZ_ABSENT_ADDITION_INDEX; addition_entries];
@@ -2554,6 +2591,9 @@ impl CkyzMonomialDomain {
             rank,
             degrees,
             degree_indices,
+            max_coordinate_degrees,
+            dense_degree_strides,
+            dense_degree_indices,
             addition_indices,
             addition_pairs_by_lhs,
             max_total_degree,
@@ -2561,7 +2601,7 @@ impl CkyzMonomialDomain {
     }
 
     fn contains(&self, degree: &[usize]) -> bool {
-        self.degree_indices.contains_key(degree)
+        self.index_of(degree).is_some()
     }
 
     fn nonzero_degrees(&self) -> impl Iterator<Item = &Vec<usize>> {
@@ -2571,6 +2611,19 @@ impl CkyzMonomialDomain {
     }
 
     fn index_of(&self, degree: &[usize]) -> Option<usize> {
+        if let (Some(strides), Some(dense_indices)) =
+            (&self.dense_degree_strides, &self.dense_degree_indices)
+        {
+            let Some(dense_index) =
+                ckyz_dense_degree_index(degree, self.rank, &self.max_coordinate_degrees, strides)
+                    .ok()
+                    .flatten()
+            else {
+                return None;
+            };
+            let index = dense_indices[dense_index];
+            return (index != CKYZ_ABSENT_DEGREE_INDEX).then_some(index);
+        }
         self.degree_indices.get(degree).copied()
     }
 
@@ -2587,6 +2640,21 @@ impl CkyzMonomialDomain {
         }
         let lhs_degree = &self.degrees[lhs_index];
         let rhs_degree = &self.degrees[rhs_index];
+        if let (Some(strides), Some(dense_indices)) =
+            (&self.dense_degree_strides, &self.dense_degree_indices)
+        {
+            let Some(dense_index) = ckyz_dense_domain_degree_sum_index(
+                lhs_degree,
+                rhs_degree,
+                self.rank,
+                &self.max_coordinate_degrees,
+                strides,
+            ) else {
+                return Ok(None);
+            };
+            let sum_index = dense_indices[dense_index];
+            return Ok((sum_index != CKYZ_ABSENT_DEGREE_INDEX).then_some(sum_index));
+        }
         ckyz_sum_degree_index(lhs_degree, rhs_degree, self.rank, &self.degree_indices)
     }
 }
@@ -3348,6 +3416,107 @@ fn ckyz_sum_degree_index(
         })?);
     }
     Ok(degree_indices.get(&degree).copied())
+}
+
+fn ckyz_dense_degree_index(
+    degree: &[usize],
+    rank: usize,
+    max_coordinate_degrees: &[usize],
+    strides: &[usize],
+) -> Result<Option<usize>> {
+    if degree.len() != rank || max_coordinate_degrees.len() != rank || strides.len() != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ dense degree index rank mismatch".into(),
+        ));
+    }
+    let mut index = 0usize;
+    for ((&entry, &max_degree), &stride) in degree
+        .iter()
+        .zip(max_coordinate_degrees.iter())
+        .zip(strides.iter())
+    {
+        if entry > max_degree {
+            return Ok(None);
+        }
+        index = index
+            .checked_add(entry.checked_mul(stride).ok_or_else(|| {
+                Error::InvalidInput("CKYZ dense degree index overflowed usize".into())
+            })?)
+            .ok_or_else(|| {
+                Error::InvalidInput("CKYZ dense degree index overflowed usize".into())
+            })?;
+    }
+    Ok(Some(index))
+}
+
+fn ckyz_dense_domain_degree_sum_index(
+    lhs_degree: &[usize],
+    rhs_degree: &[usize],
+    rank: usize,
+    max_coordinate_degrees: &[usize],
+    strides: &[usize],
+) -> Option<usize> {
+    debug_assert_eq!(lhs_degree.len(), rank);
+    debug_assert_eq!(rhs_degree.len(), rank);
+    debug_assert_eq!(max_coordinate_degrees.len(), rank);
+    debug_assert_eq!(strides.len(), rank);
+    match rank {
+        1 => {
+            let degree0 = lhs_degree[0] + rhs_degree[0];
+            (degree0 <= max_coordinate_degrees[0]).then_some(degree0 * strides[0])
+        }
+        2 => {
+            let degree0 = lhs_degree[0] + rhs_degree[0];
+            if degree0 > max_coordinate_degrees[0] {
+                return None;
+            }
+            let degree1 = lhs_degree[1] + rhs_degree[1];
+            if degree1 > max_coordinate_degrees[1] {
+                return None;
+            }
+            Some(degree0 * strides[0] + degree1 * strides[1])
+        }
+        3 => {
+            let degree0 = lhs_degree[0] + rhs_degree[0];
+            if degree0 > max_coordinate_degrees[0] {
+                return None;
+            }
+            let degree1 = lhs_degree[1] + rhs_degree[1];
+            if degree1 > max_coordinate_degrees[1] {
+                return None;
+            }
+            let degree2 = lhs_degree[2] + rhs_degree[2];
+            if degree2 > max_coordinate_degrees[2] {
+                return None;
+            }
+            Some(degree0 * strides[0] + degree1 * strides[1] + degree2 * strides[2])
+        }
+        _ => ckyz_dense_domain_degree_sum_index_general(
+            lhs_degree,
+            rhs_degree,
+            rank,
+            max_coordinate_degrees,
+            strides,
+        ),
+    }
+}
+
+fn ckyz_dense_domain_degree_sum_index_general(
+    lhs_degree: &[usize],
+    rhs_degree: &[usize],
+    rank: usize,
+    max_coordinate_degrees: &[usize],
+    strides: &[usize],
+) -> Option<usize> {
+    let mut index = 0usize;
+    for coordinate in 0..rank {
+        let entry = lhs_degree[coordinate] + rhs_degree[coordinate];
+        if entry > max_coordinate_degrees[coordinate] {
+            return None;
+        }
+        index += entry * strides[coordinate];
+    }
+    Some(index)
 }
 
 fn ckyz_add_degrees_unbounded(
@@ -10559,6 +10728,22 @@ mod tests {
         let by_powers = ckyz_support_exp_domain_by_powers(&support, &domain).unwrap();
 
         assert_eq!(by_closure, by_powers);
+    }
+
+    #[test]
+    fn ckyz_large_domain_uses_dense_degree_index_without_addition_table() {
+        let domain = CkyzMonomialDomain::componentwise_box(&[49, 49]).unwrap();
+        assert!(domain.addition_indices.is_none());
+        assert!(domain.dense_degree_indices.is_some());
+
+        let lhs = BTreeMap::from([
+            (vec![20, 20], Rational::from(2)),
+            (vec![30, 30], Rational::from(5)),
+        ]);
+        let rhs = BTreeMap::from([(vec![25, 25], Rational::from(3))]);
+
+        let product = ckyz_series_mul_domain(&lhs, &rhs, &domain).unwrap();
+        assert_eq!(product, BTreeMap::from([(vec![45, 45], Rational::from(6))]));
     }
 
     #[test]
