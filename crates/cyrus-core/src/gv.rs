@@ -396,6 +396,8 @@ pub enum LocalToricCircuitKind {
 pub struct AffineToricCircuitDiagnostic {
     /// Nonzero relation points in ambient index order.
     pub relation_points: Vec<AffineCircuitRelationPoint>,
+    /// Affine rank of the support points.
+    pub affine_rank: usize,
     /// Counts of nonzero coefficients in the affine relation.
     pub coefficient_counts: BTreeMap<i64, usize>,
     /// Sum of the relation coefficients. This is zero for an affine relation.
@@ -556,9 +558,11 @@ pub fn diagnose_affine_toric_circuit(
         return Ok(None);
     }
 
-    let kind = classify_local_toric_circuit(&relation_points);
+    let affine_rank = affine_relation_rank(&relation_points);
+    let kind = classify_local_toric_circuit(&relation_points, affine_rank);
     Ok(Some(AffineToricCircuitDiagnostic {
         relation_points,
+        affine_rank,
         coefficient_counts,
         coefficient_sum,
         coordinate_sum,
@@ -566,9 +570,33 @@ pub fn diagnose_affine_toric_circuit(
     }))
 }
 
+fn affine_relation_rank(relation_points: &[AffineCircuitRelationPoint]) -> usize {
+    let Some(base) = relation_points.first() else {
+        return 0;
+    };
+    let rows: Vec<Vec<i64>> = relation_points
+        .iter()
+        .skip(1)
+        .map(|point| {
+            point
+                .coordinates
+                .iter()
+                .zip(base.coordinates.iter())
+                .map(|(&coord, &base_coord)| coord - base_coord)
+                .collect()
+        })
+        .collect();
+    integer_matrix_rank(&rows)
+}
+
 fn classify_local_toric_circuit(
     relation_points: &[AffineCircuitRelationPoint],
+    affine_rank: usize,
 ) -> Option<LocalToricCircuitKind> {
+    if affine_rank != 2 {
+        return None;
+    }
+
     for vertex_coefficient in [1, -1] {
         let interior_coefficient = -3 * vertex_coefficient;
         let mut vertices: Vec<&AffineCircuitRelationPoint> = relation_points
@@ -3838,6 +3866,7 @@ mod tests {
 
         assert_eq!(diagnostic.coefficient_sum, 0);
         assert_eq!(diagnostic.coordinate_sum, vec![0, 0, 0, 0]);
+        assert_eq!(diagnostic.affine_rank, 2);
         assert_eq!(
             diagnostic.coefficient_counts,
             BTreeMap::from([(-3, 1), (1, 3)])
@@ -3870,6 +3899,7 @@ mod tests {
             diagnostic.coefficient_counts,
             BTreeMap::from([(-1, 3), (3, 1)])
         );
+        assert_eq!(diagnostic.affine_rank, 2);
         assert_eq!(
             diagnostic.kind,
             Some(LocalToricCircuitKind::LocalP2Triangle {
@@ -3893,6 +3923,23 @@ mod tests {
         let diagnostic = diagnose_affine_toric_circuit(&[1, 1, -2, 1], &points).unwrap();
 
         assert_eq!(diagnostic, None);
+    }
+
+    #[test]
+    fn affine_toric_circuit_requires_rank_two_for_local_p2() {
+        let points = vec![
+            Point::new(vec![0, 0]),
+            Point::new(vec![2, 0]),
+            Point::new(vec![3, 0]),
+            Point::new(vec![7, 0]),
+        ];
+
+        let diagnostic = diagnose_affine_toric_circuit(&[1, 1, -3, 1], &points)
+            .unwrap()
+            .expect("collinear barycenter row is still an affine circuit");
+
+        assert_eq!(diagnostic.affine_rank, 1);
+        assert_eq!(diagnostic.kind, None);
     }
 
     #[test]
