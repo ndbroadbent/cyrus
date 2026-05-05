@@ -189,8 +189,17 @@ to make the remaining GV layer more first-principles:
    and an unguarded cygv semigroup closure measurement did not finish within
    `120s`. The missing object is therefore the source-derived generated
    semigroup/chamber history, not a small visible-generator subset.
-   The next step is therefore to reconstruct the broader source-derived finite
-   semigroup/path history for the missing origin circuits, not to promote LP
-   active-generator diamonds.
+   The context report now preserves origin-circuit provenance from the export:
+   the nine misses are affine-rank-three/four origin circuits with local charge
+   rows `[2,1,2,-1,-2,-2]`, `[1,2,1,-2,-1,-1]`,
+   `[1,1,-2,-1,-1,2]`, `[1,-2,-1,-1,3]`,
+   `[1,-2,-1,-1,2,1]`, `[1,-1,-1,1,-3,3]`,
+   `[1,-1,-1,-2,3]`, `[1,-2,-1,3,-1]`, and
+   `[1,-2,3,-1,-1]`. These are not rank-two CKYZ local-surface supports, and
+   the CMS-general divisor checks still fail exact divisor-intersection
+   verification. The next step is therefore to reconstruct the broader
+   source-derived finite semigroup/path history for these higher-rank
+   origin circuits, not to promote LP active-generator diamonds or reuse the
+   rank-two local-surface machinery.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.
