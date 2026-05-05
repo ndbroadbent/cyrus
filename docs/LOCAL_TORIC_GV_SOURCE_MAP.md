@@ -234,9 +234,17 @@ pairings are handled separately, with harmonic and order-two harmonic terms
 matching the compact HKTY derivative formulas after dropping the compact
 hypersurface numerator. The result is still a B-model `z`-series.
 
-The remaining missing steps are not optional bookkeeping: Cyrus still needs
-multi-variable mirror-map inversion/substitution and multiple-cover inversion
-before any non-`P^2` CKYZ period coefficient can be called a GV invariant.
+Cyrus now has the first mirror-map composition step for these CKYZ sources:
+`compute_ckyz_inverse_mirror_map` solves
+`z_i(q) = q_i exp(-alpha_i(z(q)))` as a truncated multivariable formal series,
+and `compute_ckyz_flat_prepotential_period_corrections` composes the
+double-log/prepotential-period series into flat `q` coordinates. Unit tests
+check that this reduces to the existing local `P^2` inverse mirror map and that
+the coupled `F0` source terms transform consistently through degree two.
+
+The remaining missing step is not optional bookkeeping: Cyrus still needs
+multiple-cover inversion before any non-`P^2` CKYZ flat-coordinate period
+coefficient can be called a GV invariant.
 
 ## Rank-Four Boundary
 

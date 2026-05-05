@@ -104,6 +104,7 @@ pub use gv::{
     SupportingMoriFaceCertificate, ToricCurveCandidate, ToricCurveGvDiagnostic,
     ToricCurveGvInvariant, ToricCurveGvSource, check_supporting_mori_face_normal,
     compute_ambient_one_dimensional_ray_gv_series,
+    compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
     compute_ckyz_local_prepotential_period_corrections, compute_ckyz_log_period_corrections,
     compute_grading_vector, compute_gv_invariants,
     compute_gv_invariants_with_degree_bounded_lattice,
@@ -119,8 +120,8 @@ pub use gv::{
     project_mori_cone_cap_rays_to_basis, prune_decomposable_curve_candidates,
     rank_two_local_charge_model, rank_two_local_support_signature,
     remove_pair_decomposable_curve_candidates, remove_semigroup_decomposable_curve_candidates,
-    subcutoff_toric_curve_candidates, supporting_mori_face_for_curve_from_normal,
-    supporting_mori_face_from_normal,
+    subcutoff_toric_curve_candidates, substitute_ckyz_series_in_flat_coordinates,
+    supporting_mori_face_for_curve_from_normal, supporting_mori_face_from_normal,
 };
 pub use height_kahler::{
     effective_prime_divisors_from_curve_basis, heights_to_kahler, kahler_to_heights,

@@ -143,6 +143,12 @@ by `c0_inv`, do not build alpha/beta/F polynomials, and do not run
 `series_inversion`. A nonzero double-log coefficient in this layer is therefore
 not yet a GV invariant.
 
+The CKYZ flat-coordinate helper extends that local path by solving the formal
+inverse mirror map `z_i(q) = q_i exp(-alpha_i(z(q)))` and substituting the
+double-log/prepotential-period `z`-series into the resulting `q`-series. This
+matches the mirror-map composition step but still stops before the
+multiple-cover subtraction that cygv performs in `series_inversion`.
+
 This means local face/ray HKTY checks can be correct for isolated classes while
 still not reproducing the global CYTools/cygv output. The global result depends
 on the full semigroup truncation and the degree-ordered subtraction history.
