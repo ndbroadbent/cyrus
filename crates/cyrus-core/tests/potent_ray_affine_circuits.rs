@@ -7,9 +7,9 @@ use std::path::Path;
 use cyrus_core::{
     AffineToricCircuitDiagnostic, CkyzLocalSurfaceKind, LocalToricCircuitKind,
     LocalToricCoordinate2D, Point, Polytope, RankTwoLocalChargeModel, RankTwoLocalSupportSignature,
-    compute_local_toric_circuit_gv_series, curve_in_rational_row_span,
-    diagnose_affine_toric_circuit, identify_ckyz_local_surface, rank_two_local_charge_model,
-    rank_two_local_support_signature,
+    compute_ckyz_local_gv_invariants, compute_local_toric_circuit_gv_series,
+    curve_in_rational_row_span, diagnose_affine_toric_circuit, identify_ckyz_local_surface,
+    rank_two_local_charge_model, rank_two_local_support_signature,
 };
 use malachite::Integer;
 
@@ -155,6 +155,31 @@ fn rank_two_signature_coefficient_pattern(signature: &RankTwoLocalSupportSignatu
         .collect::<Vec<_>>();
     coefficients.sort_unstable();
     coefficients
+}
+
+fn ckyz_kind_index(kind: &CkyzLocalSurfaceKind) -> usize {
+    match kind {
+        CkyzLocalSurfaceKind::LocalP2 => 0,
+        CkyzLocalSurfaceKind::HirzebruchF0 => 1,
+        CkyzLocalSurfaceKind::HirzebruchF1 => 2,
+        CkyzLocalSurfaceKind::Polygon5 => 3,
+    }
+}
+
+fn ckyz_cover_weights(kind: &CkyzLocalSurfaceKind) -> Option<Vec<i64>> {
+    match kind {
+        CkyzLocalSurfaceKind::LocalP2 => Some(vec![3]),
+        CkyzLocalSurfaceKind::HirzebruchF0 => Some(vec![2, 2]),
+        CkyzLocalSurfaceKind::HirzebruchF1 => Some(vec![2, 1]),
+        CkyzLocalSurfaceKind::Polygon5 => None,
+    }
+}
+
+fn scale_ckyz_degree(direction: &[usize], multiple: usize) -> Vec<usize> {
+    direction
+        .iter()
+        .map(|entry| entry * multiple)
+        .collect::<Vec<_>>()
 }
 
 fn gcd_abs(mut a: i64, mut b: i64) -> i64 {
@@ -805,6 +830,90 @@ fn first_mcallister_local_p2_potent_ray_gvs_are_reconstructed() {
     assert_eq!(
         computed, *first_expected_gvs,
         "first saved potent-ray GV row must be reproduced from the reconstructed local P2 model"
+    );
+}
+
+#[test]
+fn mcallister_rank_two_ckyz_p2_f0_f1_potent_ray_gvs_are_reconstructed() {
+    if !first_principles_enabled() {
+        return;
+    }
+    let Some(data_dir) = mcallister_data_dir() else {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    };
+
+    let points_raw = read_csv_rows_i64(&data_dir.join("points.dat"));
+    let potent_rays = read_csv_rows_i64(&data_dir.join("potent_rays.dat"));
+    let expected_gv_rows = read_csv_rows_integer(&data_dir.join("potent_rays_gv.dat"));
+    let all_points: Vec<Point> = points_raw.into_iter().map(Point::new).collect();
+    let polytope = Polytope::from_vertices(all_points).expect("failed to create polytope");
+    let triangulation_points = polytope
+        .points_not_interior_to_facets()
+        .expect("failed to filter triangulation points");
+
+    let mut gv_cache: BTreeMap<(usize, Vec<usize>, usize), BTreeMap<Vec<usize>, Integer>> =
+        BTreeMap::new();
+    let mut checked_rows = 0usize;
+    for (row_index, (ray, expected_gvs)) in
+        potent_rays.iter().zip(expected_gv_rows.iter()).enumerate()
+    {
+        let diagnostic = diagnose_affine_toric_circuit(ray, &triangulation_points)
+            .expect("potent-ray diagnostic should accept McAllister dimensions")
+            .expect("saved potent ray should be an affine toric circuit");
+        if diagnostic.affine_rank != 2 {
+            continue;
+        }
+        let signature = rank_two_local_support_signature(&diagnostic)
+            .expect("rank-two diagnostic should have a local signature");
+        let model = rank_two_local_charge_model(&signature)
+            .expect("rank-two signature should produce a local charge model");
+        let identification = identify_ckyz_local_surface(&model)
+            .expect("CKYZ identification should run exactly")
+            .expect("rank-two McAllister model should match a CKYZ source");
+        let Some(cover_weights) = ckyz_cover_weights(&identification.kind) else {
+            continue;
+        };
+        let source_target_direction = identification
+            .source_target_direction
+            .iter()
+            .map(|&entry| {
+                usize::try_from(entry).expect("CKYZ source target direction should be nonnegative")
+            })
+            .collect::<Vec<_>>();
+        let multiples_to_check = 1;
+        let max_total_degree = source_target_direction.iter().sum::<usize>() * multiples_to_check;
+        let cache_key = (
+            ckyz_kind_index(&identification.kind),
+            source_target_direction.clone(),
+            max_total_degree,
+        );
+        let source_gvs = gv_cache.entry(cache_key).or_insert_with(|| {
+            compute_ckyz_local_gv_invariants(
+                &identification.source_relations,
+                &identification.local_intersection_terms,
+                &cover_weights,
+                max_total_degree,
+            )
+            .expect("source-derived CKYZ local GV extraction should succeed")
+        });
+
+        for (multiple, expected_gv) in (1..=multiples_to_check).zip(expected_gvs.iter()) {
+            let degree = scale_ckyz_degree(&source_target_direction, multiple);
+            let actual = source_gvs
+                .get(&degree)
+                .cloned()
+                .unwrap_or_else(|| Integer::from(0));
+            assert_eq!(
+                &actual, expected_gv,
+                "CKYZ source GV mismatch for potent-ray row {row_index}, multiple {multiple}, degree {degree:?}"
+            );
+        }
+        checked_rows += 1;
+    }
+
+    assert_eq!(
+        checked_rows, 393,
+        "all rank-two P2/F0/F1 potent-ray rows should now have CKYZ-reconstructed leading GV checks; polygon-5 rows remain separate"
     );
 }
 
