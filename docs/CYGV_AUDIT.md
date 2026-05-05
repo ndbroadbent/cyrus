@@ -60,6 +60,22 @@ This means local face/ray HKTY checks can be correct for isolated classes while
 still not reproducing the global CYTools/cygv output. The global result depends
 on the full semigroup truncation and the degree-ordered subtraction history.
 
+## Two Distinct GV Regimes
+
+The McAllister pipeline uses GV data in two different regimes:
+
+1. Mirror/racetrack GV data on the low-dimensional mirror side. For 4-214-647
+   this is the `dual_curves.dat` / `dual_curves_gv.dat` data, and the Python
+   reproduction notes validate it with `cy.compute_gvs(min_points=20000)`.
+2. Kähler-coordinate corrections on the high-`h11` primal side. This is the
+   `small_curves.dat` / `small_curves_gv.dat` data. The paper explicitly says
+   systematic high-degree GV computation at large `h11` is infeasible, and that
+   the method starts from toric ambient curves, removes decomposable curves, and
+   computes selected toric/nilpotent curves plus low-dimensional face/ray data.
+
+The current Stage 5 residual is in the second regime. Treating it as a plain
+full-cone `cy.compute_gvs()` mismatch is therefore misleading.
+
 ## Current Cyrus Situation
 
 Cyrus already has wrappers around the same Rust `cygv` crate:
@@ -73,24 +89,31 @@ toric two-face/origin-circuit formula values for selected small curves, then use
 local one-dimensional ray or LP-witness face HKTY diagnostics only for misses.
 That is not equivalent to CYTools' full `cy.compute_gvs(min_points=N)` call.
 
-The latest Stage 5 residual is therefore best interpreted as an exact global GV
-coverage/convention problem, not as a dilog aggregation problem and not as a
-problem in the already-checked local toric formulas.
+For the high-`h11` Kähler-correction side, however, exact equivalence to a full
+global `compute_gvs()` call is not the McAllister method either. The relevant
+comparison is the selected toric-curve/face method described in the paper and
+represented by `small_curves.dat` and `small_curves_gv.dat`.
+
+The latest Stage 5 residual is therefore best interpreted as a selected-curve
+coverage/chamber/continuation problem, not as a dilog aggregation problem and
+not as a problem in the already-checked local toric formulas.
 
 ## Next Productive Step
 
-Stop expanding local per-curve diagnostics. The next useful comparison is a
-faithful CYTools-style global GV input/output audit:
+Stop expanding top-contributor local checks. The next useful comparison is a
+faithful selected-small-curve method audit:
 
-1. Dump Cyrus' corrected-chamber global GV inputs:
-   Mori-cap basis rays, CYTools-style lattice augmentation rows, grading vector,
-   `q` matrix, and intersection-number dictionary.
-2. Generate the same dump from CYTools for the same corrected-chamber
-   triangulation.
-3. Compare those inputs before running `cygv`.
-4. Only after the inputs match, compare the `cygv` outputs by basis charge and
-   mapped ambient charge.
+1. Reconstruct, from code/paper, the exact rule that produced
+   `small_curves.dat` and `small_curves_gv.dat`: chamber, volume cutoff,
+   toric-curve enumeration, pair-decomposable pruning, and face/ray GV method.
+2. Compare Cyrus against that rule in the approximate chamber first, where the
+   ancillary files are direct checkpoints.
+3. Then apply the same rule to the corrected chamber or, if the intended
+   McAllister operation is analytic continuation through flops, port that
+   transformation explicitly using the paper's polylog identities.
+4. Use `cygv` full-semigroup input dumps only for low-dimensional face/ray
+   subproblems where that is the method actually being used.
 
-If the full corrected chamber is too large, the reduced test should still use
-the same global semigroup construction rule, not an isolated face-local
-semigroup, so that the HKTY subtraction order remains comparable.
+The open question is now sharper: is the residual caused by using the wrong
+small-curve chamber/continuation convention, or by an incomplete port of the
+toric/face GV method that generated the selected `small_curves_gv` values?
