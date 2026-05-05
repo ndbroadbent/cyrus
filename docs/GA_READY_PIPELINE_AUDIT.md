@@ -173,6 +173,10 @@ to make the remaining GV layer more first-principles:
    filtering degree-bounded Mori rows to the union of target and LP-active
    supports gives `4..13` generators per target, but still returns only zeros
    or `NonIntegerGVError` panics in cygv.
+   The context report also measures larger support-overlap/closure windows:
+   one-hop overlap already gives `48..227` rows, and four closure layers reach
+   `366..2814` rows, so naive support closure returns to the intractable broad
+   domain.
    The next step is therefore to reconstruct the broader source-derived finite
    semigroup/path history for the missing origin circuits, not to promote LP
    active-generator diamonds.

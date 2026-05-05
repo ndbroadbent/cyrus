@@ -92,6 +92,22 @@ struct TargetReport {
     active_support_status: Option<String>,
     active_support_gv: Option<String>,
     active_support_error: Option<String>,
+    degree_bounded_candidate_count: usize,
+    support_overlap_generator_counts: Vec<SupportOverlapCount>,
+    support_closure_layer_counts: Vec<SupportClosureLayerCount>,
+}
+
+#[derive(Debug, Serialize)]
+struct SupportOverlapCount {
+    min_overlap: usize,
+    generator_count: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct SupportClosureLayerCount {
+    layer: usize,
+    generator_count: usize,
+    support_size: usize,
 }
 
 fn parse_arg_value<T: std::str::FromStr>(flag: &str) -> Option<T> {
@@ -247,6 +263,90 @@ fn reconstruct_intersection(
     Ok(intersection)
 }
 
+fn target_active_support(
+    sample: &MissingGvTargetSample,
+    dimension: usize,
+) -> Result<HashSet<usize>, String> {
+    let target = dense_from_sparse(&sample.basis_nonzero, dimension)?;
+    let mut support = target
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, &value)| (value != 0).then_some(idx))
+        .collect::<HashSet<_>>();
+    if let Some(active_generators) = sample
+        .real_cone_decomposition_active_generator_basis_nonzero
+        .as_ref()
+    {
+        for generator in active_generators {
+            for &(idx, value) in generator {
+                if idx >= dimension {
+                    return Err(format!(
+                        "active generator coordinate {idx} is out of bounds for dimension {dimension}"
+                    ));
+                }
+                if value != 0 {
+                    support.insert(idx);
+                }
+            }
+        }
+    }
+    Ok(support)
+}
+
+fn support_window_stats(
+    sample: &MissingGvTargetSample,
+    context: &ValidatedContext<'_>,
+) -> Result<
+    (
+        usize,
+        Vec<SupportOverlapCount>,
+        Vec<SupportClosureLayerCount>,
+    ),
+    String,
+> {
+    let seed_support = target_active_support(sample, context.dimension)?;
+    let mut eligible_supports = Vec::new();
+    for ray in context.degree_bounded_rays {
+        let degree = curve_degree(ray, context.grading)?;
+        if degree <= 0 || degree > sample.degree {
+            continue;
+        }
+        let support = ray
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, &value)| (value != 0).then_some(idx))
+            .collect::<HashSet<_>>();
+        eligible_supports.push(support);
+    }
+    let overlap_counts = (1..=4)
+        .map(|min_overlap| SupportOverlapCount {
+            min_overlap,
+            generator_count: eligible_supports
+                .iter()
+                .filter(|support| support.intersection(&seed_support).count() >= min_overlap)
+                .count(),
+        })
+        .collect::<Vec<_>>();
+
+    let mut closure_support = seed_support;
+    let mut closure_counts = Vec::new();
+    for layer in 1..=4 {
+        let selected = eligible_supports
+            .iter()
+            .filter(|support| !support.is_disjoint(&closure_support))
+            .collect::<Vec<_>>();
+        for support in &selected {
+            closure_support.extend(support.iter().copied());
+        }
+        closure_counts.push(SupportClosureLayerCount {
+            layer,
+            generator_count: selected.len(),
+            support_size: closure_support.len(),
+        });
+    }
+    Ok((eligible_supports.len(), overlap_counts, closure_counts))
+}
+
 fn validate_context<'a>(
     context: &'a CorrectedChamberGvContext,
 ) -> Result<ValidatedContext<'a>, String> {
@@ -363,6 +463,23 @@ fn report_target(
         active_support_status: None,
         active_support_gv: None,
         active_support_error: None,
+        degree_bounded_candidate_count: 0,
+        support_overlap_generator_counts: Vec::new(),
+        support_closure_layer_counts: Vec::new(),
+    };
+    let (
+        degree_bounded_candidate_count,
+        support_overlap_generator_counts,
+        support_closure_layer_counts,
+    ) = match support_window_stats(sample, context) {
+        Ok(stats) => stats,
+        Err(error) => {
+            return TargetReport {
+                status: "error".to_string(),
+                error: Some(error),
+                ..base
+            };
+        }
     };
 
     let (
@@ -390,6 +507,9 @@ fn report_target(
             active_support_status,
             active_support_gv,
             active_support_error,
+            degree_bounded_candidate_count,
+            support_overlap_generator_counts,
+            support_closure_layer_counts,
             ..base
         },
         Err(error) => TargetReport {
@@ -399,6 +519,9 @@ fn report_target(
             active_support_status,
             active_support_gv,
             active_support_error,
+            degree_bounded_candidate_count,
+            support_overlap_generator_counts,
+            support_closure_layer_counts,
             ..base
         },
     }
@@ -542,23 +665,7 @@ fn active_support_generator_gv(
         ));
     }
     let target = dense_from_sparse(&sample.basis_nonzero, context.dimension)?;
-    let mut support = target
-        .iter()
-        .enumerate()
-        .filter_map(|(idx, &value)| (value != 0).then_some(idx))
-        .collect::<HashSet<_>>();
-    if let Some(active_generators) = sample
-        .real_cone_decomposition_active_generator_basis_nonzero
-        .as_ref()
-    {
-        for generator in active_generators {
-            for &(idx, value) in generator {
-                if value != 0 {
-                    support.insert(idx);
-                }
-            }
-        }
-    }
+    let support = target_active_support(sample, context.dimension)?;
     if support.is_empty() {
         return Err("active-support generator window is empty".to_string());
     }
@@ -796,5 +903,23 @@ mod tests {
     fn curve_degree_rejects_dimension_mismatch() {
         assert_eq!(curve_degree(&[2, -1], &[3, 5]).unwrap(), 1);
         assert!(curve_degree(&[1], &[1, 2]).is_err());
+    }
+
+    #[test]
+    fn target_active_support_merges_target_and_active_generator_supports() {
+        let sample = MissingGvTargetSample {
+            degree: 3,
+            real_cone_decomposition_active_generator_basis_nonzero: Some(vec![
+                vec![(0, 1), (2, -1)],
+                vec![(3, 0), (4, 2)],
+            ]),
+            real_cone_decomposition_exact_coefficients: None,
+            real_cone_decomposition_exact_kind: None,
+            ambient_nonzero: Vec::new(),
+            basis_nonzero: vec![(1, -2), (2, 1)],
+        };
+        let support = target_active_support(&sample, 5).unwrap();
+        assert_eq!(support, HashSet::from([0, 1, 2, 4]));
+        assert!(target_active_support(&sample, 4).is_err());
     }
 }

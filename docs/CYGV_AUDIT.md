@@ -1410,4 +1410,9 @@ generator support. This gives small `mcap_generators` windows of `4..13` rows
 per missing target. On the 4-214-647 context, six windows return `GV=0`; the
 other three panic inside the provided-generator cygv path with
 `NonIntegerGVError`. This shows that support-local generator closure is still
-too small or otherwise not the correct CYTools/cygv source domain.
+too small or otherwise not the correct CYTools/cygv source domain. The context
+report now records support-overlap and iterative support-closure counts as
+well: one-hop overlap windows are already `48..227` rows, and four support
+closure layers reach `366..2814` generators with support sizes up to the full
+`214` coordinates. A naive support closure therefore explodes back toward the
+large corrected-chamber domain.
