@@ -1952,7 +1952,8 @@ pub fn compute_ckyz_local_gv_invariants_for_degrees_with_predicted_support_domai
         local_intersection_terms,
         &domain,
     )?;
-    let path_history_degrees = domain.nonzero_degrees().cloned().collect::<Vec<_>>();
+    let path_history_degrees =
+        ckyz_z_residual_dependency_degrees(&alpha, &extraction_degrees, &domain)?;
     let mut invariants = extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
         &potential_z,
         &alpha,
@@ -2826,7 +2827,6 @@ fn ckyz_observed_support_domain_for_degrees(
     CkyzMonomialDomain::from_degrees(rank, degree_set)
 }
 
-#[cfg(test)]
 fn ckyz_series_support_indices(
     series: &BTreeMap<Vec<usize>, Rational>,
     domain: &CkyzMonomialDomain,
@@ -4311,6 +4311,39 @@ fn ckyz_q_degree_series_in_z_domain(
     ckyz_series_mul_domain(&monomial, &exp_exponent, domain)
 }
 
+fn ckyz_q_degree_nonzero_coordinate_key(degree: &[usize]) -> Vec<usize> {
+    degree
+        .iter()
+        .enumerate()
+        .filter_map(|(coordinate, &power)| (power != 0).then_some(coordinate))
+        .collect()
+}
+
+fn ckyz_q_degree_exp_support_for_coordinate_key(
+    coordinate_key: &[usize],
+    degree: &[usize],
+    alpha_supports: &[BTreeSet<usize>],
+    domain: &CkyzMonomialDomain,
+) -> Result<BTreeSet<usize>> {
+    let rank = alpha_supports.len();
+    if rank == 0 || degree.len() != rank || domain.rank != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ q-degree exponent-support rank mismatch".into(),
+        ));
+    }
+    if coordinate_key.iter().any(|&coordinate| coordinate >= rank) {
+        return Err(Error::InvalidInput(
+            "CKYZ q-degree exponent-support coordinate is outside the relation rank".into(),
+        ));
+    }
+
+    let mut exponent_support = BTreeSet::new();
+    for &coordinate in coordinate_key {
+        exponent_support.extend(alpha_supports[coordinate].iter().copied());
+    }
+    ckyz_support_exp_domain(&exponent_support, domain)
+}
+
 fn ckyz_series_li2_domain(
     series: &BTreeMap<Vec<usize>, Rational>,
     domain: &CkyzMonomialDomain,
@@ -4341,6 +4374,163 @@ fn ckyz_series_li2_domain(
                     Error::InvalidInput("CKYZ Li2 exponent does not fit i64".into())
                 })?,
             ),
+        );
+    }
+    Ok(out)
+}
+
+fn ckyz_componentwise_le(lhs: &[usize], rhs: &[usize]) -> bool {
+    lhs.len() == rhs.len()
+        && lhs
+            .iter()
+            .zip(rhs.iter())
+            .all(|(&lhs_entry, &rhs_entry)| lhs_entry <= rhs_entry)
+}
+
+fn ckyz_subtract_degree_multiple(
+    target: &[usize],
+    degree: &[usize],
+    multiple: usize,
+) -> Option<Vec<usize>> {
+    target
+        .iter()
+        .zip(degree.iter())
+        .map(|(&target_entry, &degree_entry)| {
+            degree_entry
+                .checked_mul(multiple)
+                .and_then(|scaled| target_entry.checked_sub(scaled))
+        })
+        .collect()
+}
+
+fn ckyz_q_degree_li2_support_intersects_indices_in_z_domain(
+    degree: &[usize],
+    alpha_supports: &[BTreeSet<usize>],
+    target_indices: &[usize],
+    exp_support_cache: &mut HashMap<Vec<usize>, BTreeSet<usize>>,
+    domain: &CkyzMonomialDomain,
+) -> Result<bool> {
+    let coordinate_key = ckyz_q_degree_nonzero_coordinate_key(degree);
+    if !exp_support_cache.contains_key(&coordinate_key) {
+        let exp_support = ckyz_q_degree_exp_support_for_coordinate_key(
+            &coordinate_key,
+            degree,
+            alpha_supports,
+            domain,
+        )?;
+        exp_support_cache.insert(coordinate_key.clone(), exp_support);
+    }
+    let exp_support = exp_support_cache
+        .get(&coordinate_key)
+        .expect("exponential support was inserted above");
+
+    for &target_index in target_indices {
+        let target = &domain.degrees[target_index];
+        if !ckyz_componentwise_le(degree, target) {
+            continue;
+        }
+        let max_multiple = degree
+            .iter()
+            .zip(target.iter())
+            .filter_map(|(&degree_entry, &target_entry)| {
+                (degree_entry != 0).then(|| target_entry / degree_entry)
+            })
+            .min()
+            .expect("candidate degree is nonzero");
+        for multiple in 1..=max_multiple {
+            let Some(delta) = ckyz_subtract_degree_multiple(target, degree, multiple) else {
+                continue;
+            };
+            let Some(delta_index) = domain.index_of(&delta) else {
+                continue;
+            };
+            if exp_support.contains(&delta_index) {
+                return Ok(true);
+            }
+        }
+    }
+
+    Ok(false)
+}
+
+fn ckyz_z_residual_dependency_degrees(
+    alpha: &[BTreeMap<Vec<usize>, Rational>],
+    terminal_degrees: &[Vec<usize>],
+    domain: &CkyzMonomialDomain,
+) -> Result<Vec<Vec<usize>>> {
+    let rank = alpha.len();
+    if rank == 0 || domain.rank != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ z-residual dependency rank mismatch".into(),
+        ));
+    }
+    validate_ckyz_target_degrees(terminal_degrees, rank)?;
+
+    let trace_timing = env::var_os("CYRUS_TRACE_CKYZ_Z_HISTORY").is_some();
+    let trace_start = trace_timing.then(std::time::Instant::now);
+    let mut needed = BTreeSet::new();
+    for degree in terminal_degrees {
+        let Some(index) = domain.index_of(degree) else {
+            return Err(Error::InvalidInput(format!(
+                "CKYZ z-residual terminal degree {degree:?} is outside the monomial domain"
+            )));
+        };
+        needed.insert(index);
+    }
+
+    let candidate_indices = domain
+        .nonzero_degrees()
+        .filter_map(|degree| domain.index_of(degree))
+        .collect::<Vec<_>>();
+    let mut exp_support_cache = HashMap::<Vec<usize>, BTreeSet<usize>>::new();
+    let mut candidate_evaluations = 0usize;
+    let alpha_supports = alpha
+        .iter()
+        .map(|series| ckyz_series_support_indices(series, domain))
+        .collect::<Vec<_>>();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        let needed_snapshot = needed.iter().copied().collect::<Vec<_>>();
+        for &candidate_index in &candidate_indices {
+            if needed.contains(&candidate_index) {
+                continue;
+            }
+            let candidate_degree = &domain.degrees[candidate_index];
+            if !needed_snapshot.iter().any(|&needed_index| {
+                ckyz_componentwise_le(candidate_degree, &domain.degrees[needed_index])
+            }) {
+                continue;
+            }
+
+            candidate_evaluations += 1;
+            if ckyz_q_degree_li2_support_intersects_indices_in_z_domain(
+                candidate_degree,
+                &alpha_supports,
+                &needed_snapshot,
+                &mut exp_support_cache,
+                domain,
+            )? {
+                needed.insert(candidate_index);
+                changed = true;
+            }
+        }
+    }
+
+    let mut out = needed
+        .into_iter()
+        .map(|index| domain.degrees[index].clone())
+        .collect::<Vec<_>>();
+    ckyz_sort_degrees_for_extraction(&mut out);
+    if let Some(start) = trace_start {
+        eprintln!(
+            "[CKYZ_Z_HISTORY] domain={} terminals={} selected={} candidate_evaluations={} exp_support_classes={} elapsed={:?}",
+            domain.degrees.len(),
+            terminal_degrees.len(),
+            out.len(),
+            candidate_evaluations,
+            exp_support_cache.len(),
+            start.elapsed(),
         );
     }
     Ok(out)
@@ -9886,6 +10076,7 @@ mod tests {
         ckyz_predicted_support_domain_for_degrees, ckyz_second_log_period_series_for_pair_domain,
         ckyz_second_log_period_support_indices_for_pair_domain, ckyz_series_mul_domain,
         ckyz_series_support_indices, ckyz_support_exp_domain, ckyz_support_exp_domain_by_powers,
+        ckyz_z_residual_dependency_degrees,
         classify_nilpotent_rays_from_two_pass_divergence_checks,
         classify_nop_rays_from_finite_gv_table, compute_ambient_one_dimensional_ray_gv_series,
         compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
@@ -10891,13 +11082,14 @@ mod tests {
             let extraction_degrees = ckyz_cover_closed_target_degrees(&target_degrees).unwrap();
             let domain =
                 CkyzMonomialDomain::target_downset(&extraction_degrees, relations.len()).unwrap();
-            let path_history_degrees = domain.nonzero_degrees().cloned().collect::<Vec<_>>();
             let (alpha, potential_z) = compute_ckyz_local_instanton_potential_z_domain(
                 &relations,
                 &local_intersection_terms,
                 &domain,
             )
             .unwrap();
+            let path_history_degrees =
+                ckyz_z_residual_dependency_degrees(&alpha, &extraction_degrees, &domain).unwrap();
             let mut actual = extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
                 &potential_z,
                 &alpha,
@@ -10910,6 +11102,36 @@ mod tests {
 
             assert_eq!(actual, expected);
         }
+    }
+
+    #[test]
+    fn ckyz_z_residual_dependency_keeps_off_ray_f0_history() {
+        let relations = vec![vec![-2, 1, 0, 1, 0], vec![-2, 0, 1, 0, 1]];
+        let local_intersection_terms = [CkyzLocalIntersectionTerm {
+            first: 0,
+            second: 1,
+            coefficient: 1,
+        }];
+        let target_degrees = [vec![1, 1]];
+        let domain = CkyzMonomialDomain::target_downset(&target_degrees, 2).unwrap();
+        let (alpha, _) = compute_ckyz_local_instanton_potential_z_domain(
+            &relations,
+            &local_intersection_terms,
+            &domain,
+        )
+        .unwrap();
+
+        let history = ckyz_z_residual_dependency_degrees(&alpha, &target_degrees, &domain).unwrap();
+
+        assert!(
+            history.contains(&vec![1, 0]),
+            "F0 [1,1] extraction needs the lower off-ray [1,0] subtraction"
+        );
+        assert!(
+            history.contains(&vec![0, 1]),
+            "F0 [1,1] extraction needs the lower off-ray [0,1] subtraction"
+        );
+        assert!(history.contains(&vec![1, 1]));
     }
 
     #[test]
@@ -10955,13 +11177,14 @@ mod tests {
             .unwrap();
             expected.retain(|degree, _| target_degrees.iter().any(|target| target == degree));
 
-            let path_history_degrees = domain.nonzero_degrees().cloned().collect::<Vec<_>>();
             let (alpha, potential_z) = compute_ckyz_local_instanton_potential_z_domain(
                 &relations,
                 &local_intersection_terms,
                 &domain,
             )
             .unwrap();
+            let path_history_degrees =
+                ckyz_z_residual_dependency_degrees(&alpha, &extraction_degrees, &domain).unwrap();
             let mut actual = extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
                 &potential_z,
                 &alpha,

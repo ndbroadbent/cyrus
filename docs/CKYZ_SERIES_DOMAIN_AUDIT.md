@@ -165,3 +165,40 @@ important respect and still incomplete in another:
   minutes with stack samples in z-series residual extraction, specifically
   repeated `q^d exp(d.alpha)` and `Li2` products over the 21k-element predicted
   domain. The earlier global inverse-map bottleneck has moved, not disappeared.
+
+The latest source read also confirmed that CYTools' `CalabiYau.compute_gvs`
+does not hide another Python-side GV algorithm. It builds CYTools inputs
+(`curve_basis`, intersection numbers, Mori cap generators, and a grading
+vector) and delegates to `cygv.compute_gv`; the `Invariants` basis option is
+only an output charge re-expression. The implementation target remains cygv's
+HKTY path, not an extra CYTools wrapper formula.
+
+Cyrus now has a conservative z-residual dependency builder that walks backward
+from the requested target degrees and keeps lower-degree subtraction history
+when a `Li2(q^d)` contribution can affect a needed coefficient in `z`. The F0
+regression `target=[1,1]` explicitly checks that `[1,0]` and `[0,1]` remain in
+the path history. The support test
+`ckyz_predicted_support_domain_api_matches_target_downset_for_polygon5_ray`
+now reports:
+
+```text
+[CKYZ_Z_HISTORY] domain=265 terminals=2 selected=79 candidate_evaluations=447 exp_support_classes=6 elapsed=5.749584ms
+```
+
+For the McAllister-style `[4,3,2]` target through ten multiples, support
+prediction still builds the same 21,721-monomial domain, but z-history pruning
+now completes instead of stalling:
+
+```text
+[CKYZ_Z_HISTORY] domain=21721 terminals=10 selected=5235 candidate_evaluations=38195 exp_support_classes=6 elapsed=16.800214875s
+```
+
+The full N=10 filtered McAllister gate was stopped after about three minutes.
+Sampling showed the remaining hot path in
+`extract_ckyz_local_gv_invariants_from_z_potential_for_degrees ->
+ckyz_q_degree_series_in_z_domain -> ckyz_series_exp_domain ->
+ckyz_series_mul_domain`, with most leaf time in Malachite rational arithmetic.
+This is now the source-aligned next target: mirror cygv's `InstantonData`
+structure more closely by precomputing `exp(alpha_i)`/`exp(-alpha_i)` once and
+building each `q_N` via monomial shifts and previous `q_N` cache entries,
+instead of recomputing `exp(d.alpha)` from scratch for every history degree.
