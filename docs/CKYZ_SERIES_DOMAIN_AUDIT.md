@@ -202,3 +202,36 @@ This is now the source-aligned next target: mirror cygv's `InstantonData`
 structure more closely by precomputing `exp(alpha_i)`/`exp(-alpha_i)` once and
 building each `q_N` via monomial shifts and previous `q_N` cache entries,
 instead of recomputing `exp(d.alpha)` from scratch for every history degree.
+
+An attempted full-coordinate `exp(alpha_i)` power cache was correct on the
+polygon-5 regression but too broad for McAllister: the N=10 run stalled while
+computing `exp(alpha_i)` over the full 21,721-monomial predicted domain before
+any residual subtraction began. Cyrus therefore now uses the other cygv idea in
+production: when a previous nonzero `q_N` is available, it computes
+`q_degree = q_previous * q_delta` for the smallest componentwise nonnegative
+delta it can find, and caches those `q_delta` series. This keeps the cache
+attached to actual subtraction history rather than eagerly materializing full
+coordinate exponentials.
+
+On the small polygon-5 trace this gives:
+
+```text
+[CKYZ_Z_EXTRACT] degrees=79 nonzero_gvs=43 previous_qns=43 delta_q_cache=4 elapsed=31.225459ms
+```
+
+The McAllister `[4,3,2]`, N=10 gate still did not complete. It reached the
+same pruned history (`selected=5235`) and sampling showed the remaining hot
+path inside the previous-`q_N` helper while computing a direct `q_delta`
+exponential:
+
+```text
+ckyz_q_degree_series_with_previous_cache_in_z_domain
+  -> ckyz_q_degree_series_in_z_domain
+  -> ckyz_series_exp_domain
+  -> ckyz_series_mul_domain
+```
+
+So the next target is not another whole-domain cache. The coefficient work must
+be restricted to the degrees that can actually be read or subtracted in the
+selected residual history, so that even the first `q_delta` exponential is not
+computed over the full predicted monomial domain.
