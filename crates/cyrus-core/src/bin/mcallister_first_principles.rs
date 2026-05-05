@@ -4705,6 +4705,49 @@ fn gamma_with_toggled_index(gamma: &[I64<Finite>], index: usize) -> Option<Vec<I
     Some(toggled)
 }
 
+fn project_ambient_gamma_to_curve_basis(
+    curve_basis_matrix: &[Vec<malachite::Integer>],
+    ambient_gamma: &[I64<Finite>],
+) -> Option<Vec<I64<Finite>>> {
+    let ambient_dim = curve_basis_matrix.first()?.len();
+    if ambient_dim == 0
+        || ambient_gamma.len() != ambient_dim
+        || curve_basis_matrix
+            .iter()
+            .any(|row| row.len() != ambient_dim)
+    {
+        return None;
+    }
+
+    curve_basis_matrix
+        .iter()
+        .map(|row| {
+            let mut acc = malachite::Integer::from(0);
+            for (coefficient, gamma_entry) in row.iter().zip(ambient_gamma.iter()) {
+                acc += coefficient * malachite::Integer::from(gamma_entry.get());
+            }
+            i64::try_from(&acc).ok().map(I64::<Finite>::new)
+        })
+        .collect()
+}
+
+fn count_gamma_parity_mismatches(
+    gv_invariants: &[(Vec<i64>, malachite::Integer)],
+    basis: &[usize],
+    ambient_gamma: &[I64<Finite>],
+    basis_gamma: &[I64<Finite>],
+) -> Option<usize> {
+    let mut mismatches = 0usize;
+    for (curve, _invariant) in gv_invariants {
+        let ambient_parity = ambient_curve_b_field_parity_diagnostic(curve, basis, ambient_gamma)?;
+        let basis_parity = ambient_curve_b_field_parity_diagnostic(curve, basis, basis_gamma)?;
+        if ambient_parity.rem_euclid(2) != basis_parity.rem_euclid(2) {
+            mismatches += 1;
+        }
+    }
+    Some(mismatches)
+}
+
 fn ambient_target_contribution_rows(
     gv_invariants: &[(Vec<i64>, malachite::Integer)],
     basis: &[usize],
@@ -7244,6 +7287,79 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
     } else {
         eprintln!(
             "[COMPARE] checkpoint-t corrected-chamber no-gamma GV target correction is invalid"
+        );
+    }
+    let curve_basis_matrix = compute_curve_basis_matrix(&intersection.linrels, &intersection.basis)
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "[ERROR] failed to compute curve-basis matrix for B-field gamma projection: {e}"
+            );
+            std::process::exit(2);
+        });
+    if let Some(basis_projected_gamma) =
+        project_ambient_gamma_to_curve_basis(&curve_basis_matrix, gamma)
+    {
+        let parity_mismatches = count_gamma_parity_mismatches(
+            &selection.small_curve_gvs,
+            &intersection.basis,
+            gamma,
+            &basis_projected_gamma,
+        )
+        .unwrap_or_else(|| {
+            eprintln!("[ERROR] failed to compare ambient and basis-projected gamma parities");
+            std::process::exit(2);
+        });
+        let basis_projected_odd_count = basis_projected_gamma
+            .iter()
+            .filter(|entry| entry.get().rem_euclid(2) != 0)
+            .count();
+        let Some(basis_projected_target) =
+            cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+                &selection.small_curve_gvs,
+                &intersection.basis,
+                kklt_basis,
+                checkpoint_t,
+                Some(&basis_projected_gamma),
+            )
+        else {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber GV target correction delta (basis_projected_gamma) unavailable: correction is invalid"
+            );
+            return;
+        };
+        let basis_projected_summary =
+            target_correction_delta_summary(&checkpoint_implied_gv, &basis_projected_target)
+                .unwrap_or_else(|e| {
+                    eprintln!(
+                        "[ERROR] failed to compare checkpoint-t corrected-chamber basis-projected gamma correction: {e}"
+                    );
+                    std::process::exit(2);
+                });
+        let basis_projected_vs_ambient_summary = target_correction_delta_summary(
+            &covered_gv_target,
+            &basis_projected_target,
+        )
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "[ERROR] failed to compare ambient vs basis-projected gamma corrections: {e}"
+            );
+            std::process::exit(2);
+        });
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber GV target correction delta (basis_projected_gamma): gamma_len={} odd_entries={} parity_mismatches_vs_ambient={} max_abs={} relative_l2={} max_abs_checkpoint_implied={} max_abs_basis_projected={} vs_ambient_max_abs={} vs_ambient_relative_l2={}",
+            basis_projected_gamma.len(),
+            basis_projected_odd_count,
+            parity_mismatches,
+            basis_projected_summary.max_abs_delta,
+            basis_projected_summary.relative_l2_delta,
+            basis_projected_summary.max_abs_reference,
+            basis_projected_summary.max_abs_candidate,
+            basis_projected_vs_ambient_summary.max_abs_delta,
+            basis_projected_vs_ambient_summary.relative_l2_delta
+        );
+    } else {
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber GV target correction delta (basis_projected_gamma) unavailable: failed to project ambient gamma"
         );
     }
     report_corrected_chamber_gv_branch_buckets(
@@ -9911,6 +10027,43 @@ mod tests {
         let inconsistent_rows = vec![vec![1, 0], vec![1, 0]];
         let inconsistent_rhs = vec![0, 1];
         assert!(solve_gf2_system(&inconsistent_rows, &inconsistent_rhs, 2).is_none());
+    }
+
+    #[test]
+    fn projected_ambient_gamma_preserves_curve_parity() {
+        let curve_basis = vec![
+            vec![
+                malachite::Integer::from(1),
+                malachite::Integer::from(0),
+                malachite::Integer::from(4),
+            ],
+            vec![
+                malachite::Integer::from(0),
+                malachite::Integer::from(1),
+                malachite::Integer::from(-1),
+            ],
+        ];
+        let ambient_gamma = vec![
+            I64::<Finite>::new(1),
+            I64::<Finite>::new(0),
+            I64::<Finite>::new(1),
+        ];
+
+        let basis_gamma =
+            project_ambient_gamma_to_curve_basis(&curve_basis, &ambient_gamma).unwrap();
+
+        assert_eq!(
+            basis_gamma
+                .iter()
+                .map(|entry| entry.get())
+                .collect::<Vec<_>>(),
+            vec![5, -1]
+        );
+        let gv_invariants = vec![(vec![2, 3, 5], malachite::Integer::from(1))];
+        assert_eq!(
+            count_gamma_parity_mismatches(&gv_invariants, &[0, 1], &ambient_gamma, &basis_gamma),
+            Some(0)
+        );
     }
 
     #[test]
