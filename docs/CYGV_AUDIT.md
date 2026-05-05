@@ -1039,9 +1039,12 @@ columns. Cyrus now has explicit helpers for that projection:
 `project_mori_cone_cap_rays_to_basis_matrix`. Cyrus also has a source-derived
 matrix divisor-basis to dual curve-basis constructor,
 `compute_curve_basis_matrix_from_divisor_basis_matrix`, for the CYTools matrix
-branch. The remaining gap is call-site wiring, plus loud rejection at APIs that
-still only accept vector basis indices. Silently treating every basis as a
-vector of indices is not GA-ready.
+branch. The `curve_basis_matrix_without_origin_i64` helper also centralizes the
+`curve_basis(include_origin=False, as_matrix=True)` q-matrix boundary for direct
+cygv calls, so the origin column is not hand-dropped at each GV call site. The
+remaining gap is higher-level basis typing: APIs that still only accept vector
+basis indices need to either accept a matrix basis end-to-end or reject it
+loudly. Silently treating every basis as a vector of indices is not GA-ready.
 
 Second, cygv's final GV values are history-dependent. In
 `series_inversion.rs`, the threefold path chooses a candidate value from the
@@ -1069,8 +1072,8 @@ wrong finite-domain question.
 
 This makes the next source-derived implementation boundary precise:
 
-1. wire the CYTools generic matrix-basis construction path through the remaining
-   call sites, or reject unsupported matrix bases loudly at APIs that still
+1. wire the CYTools generic matrix-basis construction path through higher-level
+   GA-facing APIs, or reject unsupported matrix bases loudly at APIs that still
    accept only index bases;
 2. for one non-`P^2` rank-two support signature, construct the local toric/HKTY
    input from local coordinates and charge lattice without using saved GV rows;

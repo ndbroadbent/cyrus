@@ -21,7 +21,7 @@ run pass. Any remaining mismatch must be explicit and localizable.
 | First-principles mode rejects fixture replay | `crates/cyrus-core/tests/mcallister_e2e.rs` rejects `CYRUS_ALLOW_FIXTURES` with `CYRUS_FIRST_PRINCIPLES`; runner `enforce_modes` rejects `--allow-fixtures` in first-principles mode | Implemented guard |
 | Runner can operate with declared inputs only | `stage0_first_principles_runner_accepts_declared_inputs_only_data_dir` copies only declared `.dat` inputs and checks the current no-replay result; this is heavy and opt-in via `CYRUS_MCALLISTER_RUNNER_HEAVY=1` | Implemented, opt-in verified path |
 | Polytope, dual polytope, triangulation, basis, intersections, Mori cap | `mcallister_first_principles` computes these and validates against checkpoints; Stage 2/3/5 tests cover component behavior | Largely implemented |
-| CYTools/cygv generic GV wrapper contract | `compute_gv_invariants` now uses CYTools-style `min_points=100*h11` lattice augmentation even when `max_deg` is supplied; bounded `max_deg` lattice enumeration is isolated in `compute_gv_invariants_with_degree_bounded_lattice`; CYTools-style matrix-basis projection helpers now match `mori_cap_matrix.dot(basis.T)`; matrix divisor-basis to dual curve-basis construction is available through `compute_curve_basis_matrix_from_divisor_basis_matrix` | Contract clarified; matrix-basis call-site wiring or rejection still needed |
+| CYTools/cygv generic GV wrapper contract | `compute_gv_invariants` now uses CYTools-style `min_points=100*h11` lattice augmentation even when `max_deg` is supplied; bounded `max_deg` lattice enumeration is isolated in `compute_gv_invariants_with_degree_bounded_lattice`; CYTools-style matrix-basis projection helpers now match `mori_cap_matrix.dot(basis.T)`; matrix divisor-basis to dual curve-basis construction is available through `compute_curve_basis_matrix_from_divisor_basis_matrix`; `curve_basis_matrix_without_origin_i64` centralizes the `curve_basis(include_origin=False, as_matrix=True)` q-matrix boundary used by cygv call sites | Contract clarified; full generic matrix-basis API wiring or loud rejection still needed |
 | Mirror-side racetrack GV data | `dual_curves*.dat` are classified as low-dimensional validation checkpoints; generic GV path maps basis curves back to ambient classes | Implemented path exists; full large check remains expensive |
 | High-dimensional selected small toric curves | Cyrus computes Mori-cap rays, applies the input-chamber volume cutoff, and matches the 4-214-647 `small_curves.dat` checkpoint with pair pruning | Implemented for checkpoint rule |
 | Small-curve pruning semantics | `CurvePruningStrategy::{PairDecomposable, FiniteSemigroup}` exposes the checkpoint rule and stricter finite-set semigroup diagnostic separately | Implemented, with documented mismatch |
@@ -96,9 +96,10 @@ to make the remaining GV layer more first-principles:
    domain rather than returning to a componentwise formal box. After that,
    handle the rank-four affine supports.
 2. Close the remaining CYTools basis contract gap for GA use: matrix-basis
-   projection and dual curve-basis construction now exist, but generic
-   matrix-basis call-site wiring still needs to be ported or rejected loudly
-   until ported.
+   projection, dual curve-basis construction, and no-origin q-matrix
+   construction now exist, but higher-level APIs still need to either accept a
+   generic matrix basis end-to-end or reject it loudly until that path is
+   ported.
 3. Compare broader corrected-chamber per-curve cygv/general-GV values against
    toric formula values and missing non-toric contributions.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
