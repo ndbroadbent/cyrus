@@ -1105,15 +1105,18 @@ fn mcallister_rank_two_ckyz_domain_profiles_are_inventoried() {
     if print_coefficient_work {
         for ((kind, direction), profile) in &coefficient_profiles_by_source {
             eprintln!(
-                "[CKYZ_COEFFICIENT_WORK] kind={kind} direction={direction:?} multiples={multiples_to_profile} domain={} history={} residual_pairs={} componentwise_pairs={} li2_terms={} unique_scales={} unique_deltas={} unique_exp_states={}",
+                "[CKYZ_COEFFICIENT_WORK] kind={kind} direction={direction:?} multiples={multiples_to_profile} domain={} history={} residual_pairs={} componentwise_pairs={} li2_terms={} support_pairs={} support_li2_terms={} unique_scales={} unique_deltas={} unique_exp_states={} support_unique_exp_states={}",
                 profile.domain_degree_count,
                 profile.path_history_degree_count,
                 profile.residual_pair_count,
                 profile.componentwise_pair_count,
                 profile.li2_delta_term_count,
+                profile.support_pair_count,
+                profile.support_li2_delta_term_count,
                 profile.unique_scale_count,
                 profile.unique_delta_count,
                 profile.unique_exp_state_count,
+                profile.support_unique_exp_state_count,
             );
         }
     }

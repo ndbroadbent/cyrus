@@ -829,12 +829,18 @@ pub struct CkyzZResidualCoefficientWorkProfile {
     pub componentwise_pair_count: usize,
     /// Number of multiple-cover delta terms considered across those pairs.
     pub li2_delta_term_count: usize,
+    /// Number of residual pairs whose Li2 support can affect the target.
+    pub support_pair_count: usize,
+    /// Number of multiple-cover delta terms that survive Li2 support pruning.
+    pub support_li2_delta_term_count: usize,
     /// Number of distinct scale degrees `m*d` appearing in those terms.
     pub unique_scale_count: usize,
     /// Number of distinct delta degrees `target - m*d` appearing in those terms.
     pub unique_delta_count: usize,
     /// Number of distinct `(scale, delta)` exponential coefficient states.
     pub unique_exp_state_count: usize,
+    /// Number of distinct `(scale, delta)` states that survive support pruning.
+    pub support_unique_exp_state_count: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1500,20 +1506,34 @@ pub fn ckyz_z_residual_coefficient_work_profile_for_degrees(
     let alpha = compute_ckyz_log_period_corrections_domain(relations, &domain)?;
     let path_history_degrees =
         ckyz_z_residual_dependency_degrees(&alpha, &extraction_degrees, &domain)?;
-    ckyz_z_residual_coefficient_work_profile(&path_history_degrees, &domain)
+    ckyz_z_residual_coefficient_work_profile(&path_history_degrees, &alpha, &domain)
 }
 
 fn ckyz_z_residual_coefficient_work_profile(
     extraction_degrees: &[Vec<usize>],
+    alpha: &[BTreeMap<Vec<usize>, Rational>],
     domain: &CkyzMonomialDomain,
 ) -> Result<CkyzZResidualCoefficientWorkProfile> {
     validate_ckyz_target_degrees(extraction_degrees, domain.rank)?;
+    if alpha.len() != domain.rank {
+        return Err(Error::InvalidInput(
+            "CKYZ residual coefficient profile alpha rank mismatch".into(),
+        ));
+    }
     let mut residual_pair_count = 0usize;
     let mut componentwise_pair_count = 0usize;
     let mut li2_delta_term_count = 0usize;
+    let mut support_pair_count = 0usize;
+    let mut support_li2_delta_term_count = 0usize;
     let mut unique_scales = BTreeSet::<Vec<usize>>::new();
     let mut unique_deltas = BTreeSet::<Vec<usize>>::new();
     let mut unique_exp_states = BTreeSet::<(Vec<usize>, Vec<usize>)>::new();
+    let mut support_unique_exp_states = BTreeSet::<(Vec<usize>, Vec<usize>)>::new();
+    let alpha_supports = alpha
+        .iter()
+        .map(|series| ckyz_series_support_indices(series, domain))
+        .collect::<Vec<_>>();
+    let mut exp_support_cache = HashMap::<Vec<usize>, BTreeSet<usize>>::new();
 
     for (degree_index, degree) in extraction_degrees.iter().enumerate() {
         for target in extraction_degrees.iter().skip(degree_index + 1) {
@@ -1537,13 +1557,27 @@ fn ckyz_z_residual_coefficient_work_profile(
                 .ok_or_else(|| {
                     Error::InvalidInput("CKYZ residual profile degree must be nonzero".into())
                 })?;
+            let coordinate_key = ckyz_q_degree_nonzero_coordinate_key(degree);
+            if !exp_support_cache.contains_key(&coordinate_key) {
+                let exp_support = ckyz_q_degree_exp_support_for_coordinate_key(
+                    &coordinate_key,
+                    degree,
+                    &alpha_supports,
+                    domain,
+                )?;
+                exp_support_cache.insert(coordinate_key.clone(), exp_support);
+            }
+            let exp_support = exp_support_cache
+                .get(&coordinate_key)
+                .expect("exponential support was inserted above");
+            let mut pair_has_support = false;
             for multiple in 1..=max_multiple {
                 let Some(delta) = ckyz_subtract_degree_multiple(target, degree, multiple) else {
                     continue;
                 };
-                if !domain.contains(&delta) {
+                let Some(delta_index) = domain.index_of(&delta) else {
                     continue;
-                }
+                };
                 let scale = degree
                     .iter()
                     .map(|entry| {
@@ -1559,7 +1593,22 @@ fn ckyz_z_residual_coefficient_work_profile(
                 })?;
                 unique_scales.insert(scale.clone());
                 unique_deltas.insert(delta.clone());
+                if exp_support.contains(&delta_index) {
+                    support_li2_delta_term_count =
+                        support_li2_delta_term_count.checked_add(1).ok_or_else(|| {
+                            Error::InvalidInput(
+                                "CKYZ support Li2 delta term count overflowed".into(),
+                            )
+                        })?;
+                    support_unique_exp_states.insert((scale.clone(), delta.clone()));
+                    pair_has_support = true;
+                }
                 unique_exp_states.insert((scale, delta));
+            }
+            if pair_has_support {
+                support_pair_count = support_pair_count.checked_add(1).ok_or_else(|| {
+                    Error::InvalidInput("CKYZ support pair count overflowed".into())
+                })?;
             }
         }
     }
@@ -1571,9 +1620,12 @@ fn ckyz_z_residual_coefficient_work_profile(
         residual_pair_count,
         componentwise_pair_count,
         li2_delta_term_count,
+        support_pair_count,
+        support_li2_delta_term_count,
         unique_scale_count: unique_scales.len(),
         unique_delta_count: unique_deltas.len(),
         unique_exp_state_count: unique_exp_states.len(),
+        support_unique_exp_state_count: support_unique_exp_states.len(),
     })
 }
 
@@ -4678,6 +4730,42 @@ fn ckyz_q_degree_li2_support_intersects_indices_in_z_domain(
     Ok(false)
 }
 
+fn ckyz_q_degree_li2_support_intersects_target_in_z_domain(
+    degree: &[usize],
+    target: &[usize],
+    exp_support: &BTreeSet<usize>,
+    domain: &CkyzMonomialDomain,
+) -> Result<bool> {
+    if degree.len() != domain.rank || target.len() != domain.rank {
+        return Err(Error::InvalidInput(
+            "CKYZ coefficient-level Li2 support rank mismatch".into(),
+        ));
+    }
+    if !ckyz_componentwise_le(degree, target) {
+        return Ok(false);
+    }
+    let max_multiple = degree
+        .iter()
+        .zip(target.iter())
+        .filter_map(|(&degree_entry, &target_entry)| {
+            (degree_entry != 0).then(|| target_entry / degree_entry)
+        })
+        .min()
+        .ok_or_else(|| Error::InvalidInput("CKYZ Li2 support degree must be nonzero".into()))?;
+    for multiple in 1..=max_multiple {
+        let Some(delta) = ckyz_subtract_degree_multiple(target, degree, multiple) else {
+            continue;
+        };
+        let Some(delta_index) = domain.index_of(&delta) else {
+            continue;
+        };
+        if exp_support.contains(&delta_index) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 #[derive(Clone, Debug)]
 struct CkyzScaledAlphaTerm {
     degree: Vec<usize>,
@@ -5094,7 +5182,13 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
     let extraction_start = trace_timing.then(std::time::Instant::now);
     let mut nonzero_gv_count = 0usize;
     let mut li2_coefficient_evaluations = 0usize;
+    let mut li2_support_skips = 0usize;
     let alpha_terms = ckyz_scaled_alpha_terms(alpha, domain)?;
+    let alpha_supports = alpha
+        .iter()
+        .map(|series| ckyz_series_support_indices(series, domain))
+        .collect::<Vec<_>>();
+    let mut exp_support_cache = HashMap::<Vec<usize>, BTreeSet<usize>>::new();
     let mut exp_coefficient_cache = CkyzExpCoefficientCache::default();
     for (degree_index, degree) in extraction_degrees.iter().enumerate() {
         let coefficient = residual
@@ -5129,7 +5223,31 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
         nonzero_gv_count += 1;
 
         let subtraction_scale = -Rational::from(weight) * Rational::from(gv);
+        let coordinate_key = ckyz_q_degree_nonzero_coordinate_key(degree);
+        if !exp_support_cache.contains_key(&coordinate_key) {
+            let exp_support = ckyz_q_degree_exp_support_for_coordinate_key(
+                &coordinate_key,
+                degree,
+                &alpha_supports,
+                domain,
+            )?;
+            exp_support_cache.insert(coordinate_key.clone(), exp_support);
+        }
+        let exp_support = exp_support_cache
+            .get(&coordinate_key)
+            .expect("exponential support was inserted above");
         for target in extraction_degrees.iter().skip(degree_index + 1) {
+            if !ckyz_q_degree_li2_support_intersects_target_in_z_domain(
+                degree,
+                target,
+                exp_support,
+                domain,
+            )? {
+                li2_support_skips = li2_support_skips.checked_add(1).ok_or_else(|| {
+                    Error::InvalidInput("CKYZ Li2 support skip count overflowed".into())
+                })?;
+                continue;
+            }
             let li2_coefficient = ckyz_q_degree_li2_coefficient_in_z_domain(
                 degree,
                 target,
@@ -5149,10 +5267,12 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
     }
     if let Some(start) = extraction_start {
         eprintln!(
-            "[CKYZ_Z_EXTRACT] degrees={} nonzero_gvs={} li2_coefficients={} exp_coeff_cache={} scaled_alpha_cache={} predecessor_deltas={} elapsed={:?}",
+            "[CKYZ_Z_EXTRACT] degrees={} nonzero_gvs={} li2_coefficients={} li2_support_skips={} li2_support_classes={} exp_coeff_cache={} scaled_alpha_cache={} predecessor_deltas={} elapsed={:?}",
             extraction_degrees.len(),
             nonzero_gv_count,
             li2_coefficient_evaluations,
+            li2_support_skips,
+            exp_support_cache.len(),
             exp_coefficient_cache.coefficient_count(),
             exp_coefficient_cache.scaled_alpha_coefficient_count(),
             exp_coefficient_cache.alpha_predecessor_delta_count(),
@@ -11714,9 +11834,12 @@ mod tests {
         assert_eq!(profile.path_history_degree_count, 79);
         assert_eq!(profile.residual_pair_count, 3_081);
         assert!(profile.componentwise_pair_count < profile.residual_pair_count);
+        assert!(profile.support_pair_count <= profile.componentwise_pair_count);
+        assert!(profile.support_li2_delta_term_count <= profile.li2_delta_term_count);
         assert!(profile.unique_delta_count <= profile.domain_degree_count);
         assert!(profile.unique_scale_count <= profile.li2_delta_term_count);
         assert!(profile.unique_exp_state_count <= profile.li2_delta_term_count);
+        assert!(profile.support_unique_exp_state_count <= profile.unique_exp_state_count);
     }
 
     #[test]

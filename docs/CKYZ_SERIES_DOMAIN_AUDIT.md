@@ -325,7 +325,7 @@ env CYRUS_FIRST_PRINCIPLES=1 \
     mcallister_rank_two_ckyz_domain_profiles_are_inventoried -- --nocapture
 ```
 
-finished in 112.7 seconds and reported:
+originally finished in 112.7 seconds and reported:
 
 ```text
 [CKYZ_PROFILE] kind=3 direction=[4, 3, 2] multiples=10 target_downset=26691 predicted=21721 causal=Some(129766)
@@ -339,3 +339,28 @@ states. The next source-aligned optimization should build a coefficient-demand
 graph for the selected residual history, so Cyrus computes only the exponential
 coefficients actually read by the subtraction step rather than recursively
 probing the full predicted domain for each `(scale, delta)` state.
+
+The profiler now also counts source-level Li2 support pruning. Re-running the
+same McAllister audit finished in 139.2 seconds and reported:
+
+```text
+[CKYZ_PROFILE] kind=3 direction=[4, 3, 2] multiples=10 target_downset=26691 predicted=21721 causal=Some(129766)
+[CKYZ_COEFFICIENT_WORK] kind=3 direction=[4, 3, 2] multiples=10 domain=21721 history=5235 residual_pairs=13699995 componentwise_pairs=7154291 li2_terms=9042668 support_pairs=2620565 support_li2_terms=3219472 unique_scales=7065 unique_deltas=16750 unique_exp_states=7166981 support_unique_exp_states=2587631
+```
+
+That support profile is actionable: it reduces direct coefficient states from
+7.16 million to 2.59 million, so Cyrus now applies the same support gate before
+rational coefficient extraction. On the filtered McAllister `[4,3,2]`, N=4
+validation this changes extraction from about 1.26 seconds in the rejected
+batched-demand experiment to:
+
+```text
+[CKYZ_Z_EXTRACT] degrees=434 nonzero_gvs=217 li2_coefficients=9443 li2_support_skips=24090 li2_support_classes=6 exp_coeff_cache=25892 scaled_alpha_cache=25826 predecessor_deltas=1291 elapsed=859.49275ms
+```
+
+The `[4,3,2]`, N=10 filtered gate still timed out after 240 seconds without an
+extraction trace, even after reaching the same 5,235-degree history in 16.8
+seconds. Support pruning is therefore a real reduction, but not the final
+coefficient-demand solution. The remaining target is to shrink the selected
+history or compute the surviving 2.59 million supported states with a
+source-aligned dynamic program instead of recursive per-coefficient lookup.
