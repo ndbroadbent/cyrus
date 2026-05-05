@@ -5,9 +5,10 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use cyrus_core::{
-    AffineToricCircuitDiagnostic, CkyzLocalSurfaceKind, LocalToricCircuitKind,
-    LocalToricCoordinate2D, Point, Polytope, RankTwoLocalChargeModel, RankTwoLocalSupportSignature,
-    ckyz_local_surface_cover_weight_coefficients,
+    AffineToricCircuitDiagnostic, CkyzLocalDomainProfile, CkyzLocalSurfaceKind,
+    LocalToricCircuitKind, LocalToricCoordinate2D, Point, Polytope, RankTwoLocalChargeModel,
+    RankTwoLocalSupportSignature, ckyz_local_surface_cover_weight_coefficients,
+    ckyz_local_surface_domain_profile_for_multiples,
     compute_ckyz_local_gv_invariants_for_degrees_with_predicted_support_domain,
     compute_local_toric_circuit_gv_series, curve_in_rational_row_span,
     diagnose_affine_toric_circuit, identify_ckyz_local_surface, rank_two_local_charge_model,
@@ -995,6 +996,95 @@ fn assert_mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed(
             );
         }
     }
+}
+
+#[test]
+fn mcallister_rank_two_ckyz_domain_profiles_are_inventoried() {
+    if !first_principles_enabled() {
+        return;
+    }
+    let Some(data_dir) = mcallister_data_dir() else {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    };
+
+    let multiples_to_profile = ckyz_multiples_to_check(4);
+    let print_profiles = std::env::var_os("CYRUS_PRINT_CKYZ_DOMAIN_PROFILES").is_some();
+    let points_raw = read_csv_rows_i64(&data_dir.join("points.dat"));
+    let potent_rays = read_csv_rows_i64(&data_dir.join("potent_rays.dat"));
+    let all_points: Vec<Point> = points_raw.into_iter().map(Point::new).collect();
+    let polytope = Polytope::from_vertices(all_points).expect("failed to create polytope");
+    let triangulation_points = polytope
+        .points_not_interior_to_facets()
+        .expect("failed to filter triangulation points");
+
+    let mut profiles_by_source = BTreeMap::<(usize, Vec<i64>), CkyzLocalDomainProfile>::new();
+    let mut profiled_rows = 0usize;
+    for ray in &potent_rays {
+        let diagnostic = diagnose_affine_toric_circuit(ray, &triangulation_points)
+            .expect("potent-ray diagnostic should accept McAllister dimensions")
+            .expect("saved potent ray should be an affine toric circuit");
+        if diagnostic.affine_rank != 2 {
+            continue;
+        }
+        let signature = rank_two_local_support_signature(&diagnostic)
+            .expect("rank-two diagnostic should have a local signature");
+        let model = rank_two_local_charge_model(&signature)
+            .expect("rank-two signature should produce a local charge model");
+        let identification = identify_ckyz_local_surface(&model)
+            .expect("CKYZ identification should run exactly")
+            .expect("rank-two McAllister model should match a CKYZ source");
+        let key = (
+            ckyz_kind_index(&identification.kind),
+            identification.source_target_direction.clone(),
+        );
+        let profile = if let Some(profile) = profiles_by_source.get(&key) {
+            profile.clone()
+        } else {
+            let profile = ckyz_local_surface_domain_profile_for_multiples(
+                &identification,
+                multiples_to_profile,
+            )
+            .expect("CKYZ local source should produce a domain profile");
+            profiles_by_source.insert(key, profile.clone());
+            profile
+        };
+
+        assert_eq!(profile.rank, identification.source_relations.len());
+        assert!(
+            profile.predicted_support_degree_count <= profile.target_downset_degree_count,
+            "support-predicted history domain should remain inside the broad downset"
+        );
+        assert!(
+            profile.causal_semigroup_degree_count.is_some(),
+            "matched CKYZ local surface should have a generated causal semigroup profile"
+        );
+        profiled_rows += 1;
+    }
+
+    if print_profiles {
+        for ((kind, direction), profile) in &profiles_by_source {
+            eprintln!(
+                "[CKYZ_PROFILE] kind={kind} direction={direction:?} multiples={multiples_to_profile} target_downset={} predicted={} causal={:?}",
+                profile.target_downset_degree_count,
+                profile.predicted_support_degree_count,
+                profile.causal_semigroup_degree_count,
+            );
+        }
+    }
+
+    assert_eq!(profiled_rows, 395);
+    assert_eq!(
+        profiles_by_source.len(),
+        16,
+        "rank-two CKYZ domain profiles should follow the audited source inventory"
+    );
+    assert!(
+        profiles_by_source
+            .values()
+            .any(|profile| profile.predicted_support_degree_count
+                < profile.target_downset_degree_count),
+        "at least one nontrivial CKYZ family should reduce the broad downset"
+    );
 }
 
 #[test]
