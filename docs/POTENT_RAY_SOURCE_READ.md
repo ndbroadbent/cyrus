@@ -64,11 +64,11 @@ This is now validated for local `P^2`, `F0`, `F1`, and polygon 5. The gated
 McAllister rank-two CKYZ test checks the first three saved GV entries for all
 395 rank-two CKYZ potent-ray rows from source relation data, and a focused
 first-principles regression checks all ten saved entries for the canonical F0
-source direction `[1,1]` and F1 source direction `[2,1]`. The saved
-`potent_rays_gv.dat` values remain validation targets only. The full ten-entry
-rows across all families still need a sharper coefficient-targeted extractor;
-the current cover-closed past-downset domain is source-derived but still too
-broad for the largest target directions.
+source directions `[1,1]` and `[1,2]`, plus F1 source directions `[2,1]` and
+`[3,1]`. The saved `potent_rays_gv.dat` values remain validation targets only.
+The full ten-entry rows across all families still need a sharper
+coefficient-targeted extractor; the current cover-closed past-downset domain is
+source-derived but still too broad for the largest target directions.
 
 The computational-mirror paper explains the implementation boundary that this
 source code implies. Finite HKTY computations need a causally closed truncation:
@@ -349,15 +349,15 @@ finished, `F1` direction `[2,1]` finished, but `F0` direction `[1,2]` already
 took roughly 90 seconds and the run timed out shortly after starting `F1`
 direction `[3,1]`. The committed all-row gate must therefore remain at
 first-three checks until the finite monomial-domain extractor exists, with
-F0 `[1,1]` and F1 `[2,1]` kept as focused all-ten non-`P^2` regressions. A
-later indexed-domain multiplication refactor removed much of the per-product
-lookup overhead but still did not make all-ten validation finish under a 600
-second timeout, so the remaining blocker is the monomial set being too broad,
-not only the arithmetic representation. A 240 second instrumented run after
-indexing progressed through `P2` `[1]`, `F0` `[1,1]`, `F1` `[2,1]`, `F0`
-`[1,2]`, and `F1` `[3,1]`, then timed out after starting `F0` `[1,3]`. That
-profile is better than the pre-indexed run but still not acceptable as an
-all-ten validation path.
+F0 `[1,1]`/`[1,2]` and F1 `[2,1]`/`[3,1]` kept as focused all-ten non-`P^2`
+regressions. A later indexed-domain multiplication refactor removed much of the
+per-product lookup overhead but still did not make all-ten validation finish
+under a 600 second timeout, so the remaining blocker is the monomial set being
+too broad, not only the arithmetic representation. After the fixed-point
+mirror-map stop, focused all-ten diagnostics complete for `F0` `[1,2]` in about
+29 seconds and `F1` `[3,1]` in about 50 seconds. `F0` `[1,3]` also completes
+under a 240 second cap, but at roughly 128 seconds it remains evidence for the
+domain-shape blocker rather than a default committed regression.
 
 Flattening the indexed addition table from nested `Option` rows into a sentinel
 array removes enough debug-build lookup overhead for the first hard polygon-5
@@ -404,18 +404,24 @@ Executable evidence is now split by layer:
 - `mcallister_f0_1_1_ckyz_potent_ray_all_ten_gvs_are_reconstructed` checks all
   ten saved entries for the canonical F0 source direction `[1,1]` without using
   the saved GV row as input;
+- `mcallister_f0_1_2_ckyz_potent_ray_all_ten_gvs_are_reconstructed` checks all
+  ten saved entries for the canonical F0 source direction `[1,2]` without using
+  the saved GV row as input;
 - `mcallister_f1_2_1_ckyz_potent_ray_all_ten_gvs_are_reconstructed` checks all
   ten saved entries for the canonical F1 source direction `[2,1]` without using
+  the saved GV row as input;
+- `mcallister_f1_3_1_ckyz_potent_ray_all_ten_gvs_are_reconstructed` checks all
+  ten saved entries for the canonical F1 source direction `[3,1]` without using
   the saved GV row as input.
 
 This is not yet a general potent-ray GV engine. The rank-two CKYZ local-surface
 path is source-derived, and its current targeted extractor uses the
 cover-closed union of componentwise past downsets for the requested degrees.
 That is sufficient for first-three validation, small local tables, and the full
-F0 `[1,1]` and F1 `[2,1]` saved rows, but it is not the right performance model
-for all ten saved entries across larger target directions. The next
-source-derived object is a coefficient/path-history local-series extractor, not
-a one-dimensional coefficient-pattern rule.
+F0 `[1,1]`/`[1,2]` and F1 `[2,1]`/`[3,1]` saved rows, but it is not the right
+performance model for all ten saved entries across larger target directions.
+The next source-derived object is a coefficient/path-history local-series
+extractor, not a one-dimensional coefficient-pattern rule.
 
 The rank-four checkpoint is deliberately separate from the CKYZ local-surface
 path. For 4-214-647, those 16 rows collapse to one seven-point affine-rank-four
@@ -468,8 +474,8 @@ Item 2 now includes logarithmic periods, second-derivative/local-prepotential
 periods, inverse mirror-map substitution, local `beta - alpha alpha`
 conversion, and multiple-cover extraction. The remaining rank-two CKYZ work is
 coefficient-targeted extraction for larger requested degrees, plus broader
-validation beyond the all-row first-three gate and the focused F0 `[1,1]` and
-F1 `[2,1]` all-ten rows.
+validation beyond the all-row first-three gate and the focused F0
+`[1,1]`/`[1,2]` and F1 `[2,1]`/`[3,1]` all-ten rows.
 
 ## Source-Derived Implementation Checklist
 
