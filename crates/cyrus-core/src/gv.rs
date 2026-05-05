@@ -8289,6 +8289,8 @@ mod tests {
             &target_degrees,
         )
         .unwrap();
+        assert_eq!(observed_domain.degrees.len(), 70);
+        assert_eq!(predicted_domain.degrees, observed_domain.degrees);
         assert!(
             observed_domain
                 .degrees
@@ -8357,6 +8359,7 @@ mod tests {
         let cover_weights = [1, 1, 1];
         let target_degrees = [vec![4, 3, 2], vec![8, 6, 4]];
         let extraction_degrees = ckyz_cover_closed_target_degrees(&target_degrees).unwrap();
+        let broad_domain = CkyzMonomialDomain::target_downset(&extraction_degrees, 3).unwrap();
 
         let observed_domain = ckyz_observed_support_domain_for_degrees(
             &relations,
@@ -8370,6 +8373,9 @@ mod tests {
             &target_degrees,
         )
         .unwrap();
+        assert_eq!(broad_domain.degrees.len(), 315);
+        assert_eq!(observed_domain.degrees.len(), 265);
+        assert_eq!(predicted_domain.degrees, observed_domain.degrees);
         assert!(
             observed_domain
                 .degrees

@@ -124,5 +124,8 @@ breakthrough.
 This is still not the completed coefficient-domain solution. It enumerates
 alpha/beta supports on the broad downset, and a focused polygon-5
 `[4,3,2]`, `N=5` McAllister diagnostic still exceeded a 300 second timeout.
-A production builder should derive the needed alpha/beta supports directly
+An isolated domain-size diagnostic that only tried to construct the
+support-predicted domain for the same target also exceeded a 300 second
+timeout, before final rational potential extraction. A production builder
+should derive the needed alpha/beta and inverse-mirror-map supports directly
 enough to avoid that `N=5` boundary before the potent-ray gate is raised.

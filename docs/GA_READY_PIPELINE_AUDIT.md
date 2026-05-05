@@ -61,7 +61,10 @@ run pass. Any remaining mismatch must be explicit and localizable.
    A focused polygon-5 `[4,3,2]`, `N=5` diagnostic still exceeded a 300 second
    timeout, and an earlier unfiltered `N=5` run exceeded a 600 second timeout,
    so the next step is direct coefficient/path-history support generation rather
-   than pushing the existing all-row gate higher.
+   than pushing the existing all-row gate higher. A domain-only diagnostic for
+   the same polygon-5 `[4,3,2]`, `N=5` target also exceeded 300 seconds, which
+   places the bottleneck inside support-domain prediction before final GV
+   extraction.
 3. Pair-pruned selected curves match McAllister's `small_curves.dat`, while a
    stricter finite-semigroup diagnostic removes five additional curves. This is
    exposed as a policy choice, not hidden.
