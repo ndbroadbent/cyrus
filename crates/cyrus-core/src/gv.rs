@@ -6496,10 +6496,11 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        BoundedCurveDecompositionIndex, CkyzLocalIntersectionTerm, CurveDecompositionTerm,
-        CurvePruningStrategy, GvLatticeAugmentation, LocalToricCircuitKind, LocalToricCoordinate2D,
-        OriginCircuitCurveWitness, OriginCircuitRelationPoint, ToricCurveCandidate,
-        check_supporting_mori_face_normal, compute_ambient_one_dimensional_ray_gv_series,
+        BoundedCurveDecompositionIndex, CkyzLocalIntersectionTerm, CkyzMonomialDomain,
+        CurveDecompositionTerm, CurvePruningStrategy, GvLatticeAugmentation, LocalToricCircuitKind,
+        LocalToricCoordinate2D, OriginCircuitCurveWitness, OriginCircuitRelationPoint,
+        ToricCurveCandidate, check_supporting_mori_face_normal, ckyz_series_mul_domain,
+        compute_ambient_one_dimensional_ray_gv_series,
         compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
         compute_ckyz_local_gv_invariants, compute_ckyz_local_gv_invariants_for_degrees,
         compute_ckyz_local_instanton_potential_corrections,
@@ -6573,6 +6574,36 @@ mod tests {
         .unwrap_err();
 
         assert!(err.to_string().contains("q_matrix is empty"));
+    }
+
+    #[test]
+    fn ckyz_small_monomial_domain_precomputes_addition_table() {
+        let domain = CkyzMonomialDomain::componentwise_box(&[2, 2]).unwrap();
+        assert!(
+            domain.addition_indices.is_some(),
+            "small CKYZ domains should precompute product indices"
+        );
+
+        let lhs = BTreeMap::from([(vec![1, 0], Rational::from(2))]);
+        let rhs = BTreeMap::from([(vec![0, 2], Rational::from(3))]);
+        let product = ckyz_series_mul_domain(&lhs, &rhs, &domain).unwrap();
+
+        assert_eq!(product, BTreeMap::from([(vec![1, 2], Rational::from(6))]));
+    }
+
+    #[test]
+    fn ckyz_large_monomial_domain_uses_checked_addition_fallback() {
+        let domain = CkyzMonomialDomain::componentwise_box(&[500]).unwrap();
+        assert!(
+            domain.addition_indices.is_none(),
+            "large CKYZ domains should avoid quadratic addition tables"
+        );
+
+        let lhs = BTreeMap::from([(vec![125], Rational::from(2))]);
+        let rhs = BTreeMap::from([(vec![175], Rational::from(3))]);
+        let product = ckyz_series_mul_domain(&lhs, &rhs, &domain).unwrap();
+
+        assert_eq!(product, BTreeMap::from([(vec![300], Rational::from(6))]));
     }
 
     #[test]
