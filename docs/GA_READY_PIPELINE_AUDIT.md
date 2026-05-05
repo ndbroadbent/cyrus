@@ -50,7 +50,13 @@ run pass. Any remaining mismatch must be explicit and localizable.
    reusing the CKYZ rank-two potent-ray extractor. Earlier LP-witness face
    diagnostics reduced the target-correction delta but exact supporting-face
    certification remained zero for those LP contexts, so those values are still
-   diagnostic evidence, not a reusable GV fallback.
+   diagnostic evidence, not a reusable GV fallback. A fresh read of the
+   McAllister GV section reinforces that boundary: the paper's toric-curve
+   method is a selection-and-pruning strategy for important nilpotent curves,
+   while `cygv` computes through a finite semigroup and degree-ordered
+   subtraction history. The next implementation target must reconstruct the
+   missing origin-circuit face/chamber semigroup or explicit flop continuation
+   rule, not infer a GV value directly from the sparse coefficient pattern.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for
@@ -132,10 +138,11 @@ to make the remaining GV layer more first-principles:
    construction now exist, and the current vector-basis runner GV paths use the
    bundled handoff. Higher-level APIs still need to either accept a generic
    matrix basis end-to-end or reject it loudly until that path is ported.
-3. Compare broader corrected-chamber per-curve cygv/general-GV values against
-   toric formula values and missing non-toric contributions. The LP-witness
-   face diagnostic is useful but currently uncertified, so the next step should
-   reconstruct the actual supporting face or origin-circuit semigroup context
-   rather than promote floating decomposition witnesses.
+3. Reconstruct the actual corrected-chamber context for the nine remaining
+   origin-circuit misses. This means either an exact supporting face/chamber
+   semigroup that can be fed through the cygv/HKTY path, or source-derived
+   flop-continuation semantics for the relevant `B_2` branch. The LP-witness
+   face diagnostic is useful but currently uncertified, so it must remain a
+   diagnostic rather than a fallback.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.

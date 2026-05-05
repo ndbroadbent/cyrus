@@ -230,6 +230,33 @@ nilpotent origin circuits. The next source-derived object has to be the
 higher-rank local semigroup or flop/chamber context for these origin-circuit
 supports.
 
+## McAllister Paper Boundary
+
+The source paper itself gives a useful constraint on what may count as a
+first-principles reproduction.  The corrected string-frame volume and Kähler
+coordinates are defined by the classical intersection form, BBHL term, divisor
+Euler corrections, and genus-zero GV sums.  The iterative KKLT equation then
+solves the quadratic classical target with the GV `Li2` correction evaluated at
+the previous Kähler point.
+
+The paper's high-dimensional GV strategy is not "assign a local formula to
+every small ray." It distinguishes potent rays, nilpotent curves, and toric
+curves inherited from the ambient toric variety.  The selected toric curves are
+chosen by a volume cutoff and pruned when they are sums of other selected
+curves; the paper motivates this because in small-`h11` checks such toric
+curves contain the Hilbert-basis-sized contributions.  That is evidence for a
+selection algorithm, not a closed GV formula for arbitrary origin-circuit
+coefficient patterns.
+
+The paper also constrains corrected-chamber continuation.  If a shrinking curve
+has zero `B_2` period, the real `Li2/Li3` expressions hit logarithmic branch
+cuts and the simple string-tree formula is not valid through the transition. If
+the `B_2` period is `1/2`, the `-e^{-2*pi*t}` polylog branch can be continued
+and the result should match the flopped phase with transformed geometric data.
+Therefore a corrected-chamber implementation needs explicit branch/flop
+semantics; silently evaluating a real continuation or choosing a toric GV value
+by coefficient pattern would be another hidden assumption.
+
 ## Computational Mirror Symmetry Source Read
 
 The later paper *Computational Mirror Symmetry* (arXiv:2303.00757) is the
