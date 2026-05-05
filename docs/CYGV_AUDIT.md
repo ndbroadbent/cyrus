@@ -559,6 +559,31 @@ work is to reconstruct the local toric charge/face contexts for the other
 rank-two patterns and to handle the 16 rank-four affine supports without
 collapsing them into a local `P^2` special case.
 
+The source-read checkpoint after inspecting CYTools and the installed
+`cygv-0.1.2` Rust crate is:
+
+- CYTools does not contain the GV algorithm itself; it normalizes the geometry
+  into `mcap_generators`, a grading vector, the CYTools curve-basis matrix, and
+  intersection numbers, then delegates to cygv.
+- cygv's actual boundary is HKTY on a semigroup. The sparse charge vector of a
+  potent ray is only one relation in that local toric support; it is not, by
+  itself, the semigroup context used by the degree-ordered subtraction in
+  `series_inversion`.
+- Cyrus now reconstructs the integer affine charge lattice of each saved potent
+  ray support from upstream point coordinates, by taking the integer kernel of
+  the matrix with rows `[1; lattice coordinates]`.
+- A gated 4-214-647 test verifies that every saved potent-ray sparse relation
+  lies in the rational row span of that reconstructed local charge basis. This
+  uses `potent_rays.dat` as an assertion only; the charge basis itself is
+  computed from `points.dat` and the filtered triangulation-point set.
+
+This is the right intermediate object for the next implementation step. It is
+not a coefficient-pattern lookup table, and it is not yet a GV computation for
+the non-`P^2` families. The missing step is to convert each reconstructed local
+charge basis plus local support into the exact local toric/HKTY input expected
+by cygv: local semigroup generators, grading vector, local `q` matrix, and the
+intersection/Yukawa data relevant for the local model.
+
 ### Corrected-Chamber Continuation
 
 The selected-small-curve checkpoint is an input-chamber construction. The
