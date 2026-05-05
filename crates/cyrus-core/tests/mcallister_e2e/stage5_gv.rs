@@ -314,6 +314,75 @@ fn stage5_mcallister_small_toric_curves_match_checkpoint() {
     );
 }
 
+/// Verify the semantics of McAllister's saved small-curve volume checkpoint.
+///
+/// `small_curves_vols.dat` is not an independent production input. It is the
+/// validation-only contraction of `small_curves.dat` with the downstream
+/// `corrected_kahler_param.dat` in the saved `basis.dat` coordinates. The
+/// negative entries are the warning sign that the input-chamber small-curve set
+/// crosses flops at the corrected checkpoint.
+#[test]
+fn stage5_mcallister_small_curve_volumes_are_corrected_kahler_projection() {
+    if !require_first_principles() {
+        return;
+    }
+    let Some(data_dir) = crate::mcallister_data_dir() else {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    };
+
+    let curves = read_csv_rows_i64(&data_dir.join("small_curves.dat"));
+    let basis = read_csv_usize(&data_dir.join("basis.dat"));
+    let corrected_kahler = read_csv_f64(&data_dir.join("corrected_kahler_param.dat"));
+    let expected_volumes = read_csv_f64(&data_dir.join("small_curves_vols.dat"));
+
+    assert_eq!(
+        basis.len(),
+        corrected_kahler.len(),
+        "basis/corrected Kähler checkpoint length mismatch"
+    );
+    assert_eq!(
+        curves.len(),
+        expected_volumes.len(),
+        "small curve volume checkpoint length mismatch"
+    );
+
+    let actual_volumes = curves
+        .iter()
+        .map(|curve| {
+            basis
+                .iter()
+                .zip(corrected_kahler.iter())
+                .map(|(&idx, &ti)| {
+                    assert!(
+                        idx < curve.len(),
+                        "basis index {idx} out of curve dimension {}",
+                        curve.len()
+                    );
+                    curve[idx] as f64 * ti
+                })
+                .sum::<f64>()
+        })
+        .collect::<Vec<_>>();
+    let max_abs_delta = actual_volumes
+        .iter()
+        .zip(expected_volumes.iter())
+        .map(|(actual, expected)| (actual - expected).abs())
+        .fold(0.0_f64, f64::max);
+    let negative_count = actual_volumes
+        .iter()
+        .filter(|&&volume| volume < 0.0)
+        .count();
+
+    assert!(
+        max_abs_delta < 1e-12,
+        "small_curves_vols.dat must equal small_curves[:, basis.dat] dot corrected_kahler_param.dat; max_abs_delta={max_abs_delta}"
+    );
+    assert_eq!(
+        negative_count, 10,
+        "corrected checkpoint should expose the known 10 flopped input-chamber small curves"
+    );
+}
+
 #[test]
 fn stage5_mcallister_mori_basis_projection_matches_direct_basis_rays() {
     if !require_first_principles() {
@@ -601,6 +670,7 @@ fn stage5_gv_computation_roadmap() {
             "mcallister_first_principles reports validation-only corrected_target_volumes.dat deltas, including the implied divisor-χ shift; for 4-214-647 the computed GV-corrected KKLT target vector differs by relative_l2=0.022036578712025 and max_abs=0.09773695104398727, equivalent to an implied χ(D) delta with relative_l2=0.09790035863637207 and max_abs=2.3456868250556946",
             "mcallister_first_principles reports the largest corrected_target_volumes.dat implied-χ deltas by KKLT index and ambient point; the top 4-214-647 deltas are spread across ordinary KKLT divisors rather than the four basis-mismatch divisors, and the no-gamma GV target-correction variant is invalid at the solved point",
             "McAllister checkpoint-t input-chamber GV target correction is invalid for 4-214-647, matching the ancillary warning that some approximate-chamber small curves flop and become negative at corrected_kahler_param.dat",
+            "small_curves_vols.dat is now pinned as small_curves.dat contracted with corrected_kahler_param.dat in basis.dat coordinates; for 4-214-647 it matches exactly and contains the known 10 negative input-chamber curve volumes",
             "McAllister checkpoint-t corrected-chamber toric-covered GV target correction is now compared against corrected_target_volumes.dat-implied GV corrections; for 4-214-647 it has ambient_rays=561575, subcutoff=556, pair_pruned=420, toric_covered=410, toric_missing=10, max_abs_delta=0.1154398144342352, and relative_l2_delta=1.2720321759981263",
             "corrected_heights.dat induces the same 1003-simplex chamber as McAllister corrected_kahler_param.dat transformed into the Cyrus computed basis, so the checkpoint-t corrected-chamber GV mismatch is not caused by reconstructing a different corrected chamber from t",
             "a direct CYTools source trace on corrected_heights.dat matches the Cyrus corrected-chamber small-curve selection counts for 4-214-647: mori_shape=(561575,219), subcutoff=556, pair_pruned=420, and the leading tiny-volume offender classes are present",
@@ -621,6 +691,7 @@ fn stage5_gv_computation_roadmap() {
             "The corrected-volume residual is now mostly attributable to the solved Kähler vector: corrected_kahler_param.dat gives input-chamber V_classical=4712.3385075726355 while Cyrus computes 4712.269883496959, a delta of -0.0686240756767802 out of the 0.07216733782297524 V_string residual",
             "The Kähler-vector residual is now traceable further upstream to the corrected-chamber GV target-correction layer: corrected_target_volumes.dat is understood as corrected-chamber classical KKLT divisor volumes and matches McAllister corrected_kahler_param.dat at relative_l2=0.00010542596827921091, but the checkpoint-t corrected-chamber toric-covered GV target correction still differs from the checkpoint-implied correction by relative_l2=1.2720321759981263 and max_abs=0.1154398144342352; the next audit should focus on exact corrected-chamber GV coverage/conventions, not divisor χ, checkpoint-file semantics, or the approximate-chamber small-curve set",
             "The leading checkpoint-t corrected-chamber GV target offenders are not explained by pair-vs-three-term pruning, by a uniform ±1 ambient gamma index shift, by a mismatch between corrected_heights.dat and the checkpoint-t-induced chamber, or by a Rust/CYTools Mori-cap selection divergence; next diagnostics should compare per-curve GV values and sign conventions against a direct CYTools/Python correction trace",
+            "Saved input-chamber small-curve variants do not explain corrected_target_volumes.dat either: using small_curves.dat at corrected_kahler_param.dat with signed or absolute q.t, with or without the O7 gamma sign, still misses the checkpoint-implied GV correction; the best obvious variant was absolute q.t plus gamma with max_abs_delta~0.11539193539577981 and relative_l2_delta~1.1964221418662775",
             "A direct CYTools/cygv provided-generator diagnostic using the 420 corrected-chamber pair-pruned curves reached grading construction but exceeded a 240-second timeout before returning GV values, so per-curve cygv comparison for the leading offenders remains unresolved",
             "A production chamber-updated KKLT solve still needs certified or general GV values for the 10 corrected-chamber toric-missing classes at every fixed-point chamber before it can replace the input-chamber small-curve/GV set",
             "The current production small-curve pruning only removes pair-decomposable curves; the new decomposition-depth report is bounded to three terms and is not a full faithful implementation of the paper's sums-of-others/Hilbert-basis reduction",
