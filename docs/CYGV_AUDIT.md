@@ -211,6 +211,12 @@ Their boundaries are different:
 - `compute_gv_invariants_with_explicit_semigroup` bypasses cygv closure with
   `Semigroup::from_data`. This is a diagnostic-only shape for hand-constructed
   local semigroups, not a replacement for CYTools' public `compute_gvs()`.
+- `compute_ray_gv_series_with_provided_generators` extracts
+  `N_q, N_2q, ...` for a target ray from a caller-supplied local
+  face/semigroup generator context. The older one-generator helper is now just
+  this function with `[q]` as the supplied context, so the API boundary no
+  longer conflates "ray series extraction" with "the one-generator semigroup is
+  the correct physics context."
 
 But the McAllister corrected-chamber diagnostic path currently relies first on
 toric two-face/origin-circuit formula values for selected small curves, then uses
@@ -224,10 +230,10 @@ opaque, but it is still not the full paper method: Cyrus does not yet sample
 low-dimensional faces of `M_infinity(X)` or compute the `N_{nq}` sequence along
 those rays from cygv.
 
-The one-dimensional ray series computation has now been promoted out of the
+The ray series computation has now been promoted out of the
 `mcallister_first_principles` diagnostic into `cyrus-core`. That gives the GA
-pipeline a reusable way to ask for `N_{nq}` once it has a candidate ray and
-local/global cygv inputs. It is not yet validated against the saved
+pipeline a reusable way to ask for `N_{nq}` once it has a candidate ray and the
+local/global cygv generator context. It is not yet validated against the saved
 `potent_rays_gv.dat` values for 4-214-647, because the upstream face/ray
 sampling and exact local input construction still need to be ported.
 

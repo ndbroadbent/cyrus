@@ -26,7 +26,7 @@ run pass. Any remaining mismatch must be explicit and localizable.
 | High-dimensional selected small toric curves | Cyrus computes Mori-cap rays, applies the input-chamber volume cutoff, and matches the 4-214-647 `small_curves.dat` checkpoint with pair pruning | Implemented for checkpoint rule |
 | Small-curve pruning semantics | `CurvePruningStrategy::{PairDecomposable, FiniteSemigroup}` exposes the checkpoint rule and stricter finite-set semigroup diagnostic separately | Implemented, with documented mismatch |
 | Small toric GV values | Toric two-face/origin-circuit formulas match `small_curves_gv.dat` for 4-214-647 | Implemented for covered selected-toric formulas |
-| Potent-ray convergence data | `curve_row_span_rank`, `potent_ray_convergence`, `compute_one_dimensional_ray_gv_series`, and `stage5_mcallister_potent_ray_checkpoint_quantities_are_computed` compute rank, corrected-Kähler volumes, `log xi_n` slopes, and expose a reusable cygv one-ray series entry point | Partially implemented; ray sampling and 4-214-647 ray-series regeneration still missing |
+| Potent-ray convergence data | `curve_row_span_rank`, `potent_ray_convergence`, `compute_ray_gv_series_with_provided_generators`, `compute_one_dimensional_ray_gv_series`, and `stage5_mcallister_potent_ray_checkpoint_quantities_are_computed` compute rank, corrected-Kähler volumes, `log xi_n` slopes, and expose reusable cygv ray-series entry points | Partially implemented; ray sampling and 4-214-647 face-context ray-series regeneration still missing |
 | Flop/corrected-chamber continuation | Negative small-curve volumes and real-axis dilog branch behavior are classified; even-parity branch-cut failures are explicit via `GvDilogFailure` | Diagnosed, not resolved |
 | KKLT corrected Kähler solve | Runner reaches a no-replay corrected Kähler vector and corrected volume without loading `corrected_kahler_param.dat` by default | Implemented but not exact |
 | Corrected target-volume / GV correction agreement | Diagnostics localize the residual to corrected-chamber GV target corrections, not classical geometry or file semantics | Open blocker |
@@ -55,8 +55,12 @@ The latest GV contract split was checked with:
 
 ```bash
 cargo test -p cyrus-core gv::tests:: -- --nocapture
+cargo test -p cyrus-core gv::tests::provided_generator_ray_gv_series -- --nocapture
+cargo test -p cyrus-core gv::tests::one_dimensional_ray_gv_series -- --nocapture
 cargo test -p cyrus-core --test mcallister_e2e stage5_gv_computation_roadmap -- --nocapture
 CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 cargo test -p cyrus-core --test mcallister_e2e stage5_mcallister_potent_ray_checkpoint_quantities_are_computed -- --nocapture
+CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 cargo test -p cyrus-core --test mcallister_e2e stage5_mcallister_small_toric_curves_match_checkpoint -- --nocapture
+CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 cargo test -p cyrus-core --test mcallister_e2e stage5_mcallister_small_toric_curve_gvs_match_checkpoint -- --nocapture
 cargo check -p cyrus-core --bin mcallister_first_principles
 cargo fmt --check
 git diff --check -- crates/cyrus-core/src/gv.rs crates/cyrus-core/src/lib.rs docs/CYGV_AUDIT.md crates/cyrus-core/tests/mcallister_e2e/stage5_gv.rs crates/cyrus-core/tests/mcallister_e2e/snapshots/mcallister_e2e__stage5_gv__gv_computation_roadmap.snap

@@ -758,19 +758,22 @@ pub fn supporting_mori_face_for_curve_from_normal(
     }
 }
 
-/// Compute genus-zero GV invariants along a one-dimensional ray.
+/// Compute genus-zero GV invariants along a ray inside a supplied generator context.
 ///
-/// The ray is expressed in Kähler-basis curve coordinates. The function calls
-/// the CYTools-style `mcap_generators` path with this single generator and
-/// extracts the values for `q, 2q, ..., max_multiple*q`. Missing multiples are
-/// returned as zero.
+/// The ray and `provided_generators` are expressed in Kähler-basis curve
+/// coordinates. The generators are passed to the CYTools-style
+/// `mcap_generators` path as the caller-supplied local face/semigroup context,
+/// and the values for `q, 2q, ..., max_multiple*q` are extracted from the cygv
+/// output. Missing multiples are returned as zero.
 ///
 /// # Errors
-/// Returns an error for invalid dimensions, non-positive grading degree,
-/// integer overflow, or any cygv failure. In panic-unwind builds, cygv panics
-/// are converted into errors rather than being hidden.
-pub fn compute_one_dimensional_ray_gv_series(
+/// Returns an error for invalid dimensions, empty generator context,
+/// non-positive grading degree, integer overflow, or any cygv failure. In
+/// panic-unwind builds, cygv panics are converted into errors rather than being
+/// hidden.
+pub fn compute_ray_gv_series_with_provided_generators(
     ray: &[i64],
+    provided_generators: &[Vec<i64>],
     grading_vector: &[i64],
     q_matrix: &[Vec<i64>],
     intnums: &Intersection,
@@ -788,13 +791,25 @@ pub fn compute_one_dimensional_ray_gv_series(
     }
     if ray.is_empty() {
         return Err(Error::InvalidInput(
-            "one-dimensional ray GV series ray is empty".into(),
+            "provided-generator ray GV series ray is empty".into(),
+        ));
+    }
+    if provided_generators.is_empty() {
+        return Err(Error::InvalidInput(
+            "provided-generator ray GV series requires at least one generator".into(),
         ));
     }
     if grading_vector.len() != ray.len() {
         return Err(Error::InvalidInput(
-            "one-dimensional ray GV grading dimension does not match ray dimension".into(),
+            "provided-generator ray GV grading dimension does not match ray dimension".into(),
         ));
+    }
+    for generator in provided_generators {
+        if generator.len() != ray.len() {
+            return Err(Error::InvalidInput(
+                "provided-generator ray GV generator dimension does not match ray dimension".into(),
+            ));
+        }
     }
 
     let degree = ray
@@ -804,7 +819,7 @@ pub fn compute_one_dimensional_ray_gv_series(
         .sum::<i128>();
     if degree <= 0 {
         return Err(Error::InvalidInput(format!(
-            "one-dimensional ray GV target has non-positive grading degree {degree}"
+            "provided-generator ray GV target has non-positive grading degree {degree}"
         )));
     }
     let max_degree = degree
@@ -814,12 +829,11 @@ pub fn compute_one_dimensional_ray_gv_series(
         Error::InvalidInput("one-dimensional ray GV max degree does not fit in u32".into())
     })?;
 
-    let generator = ray.to_vec();
     let previous_panic_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
     let gvs_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         compute_gv_invariants_with_provided_generators(
-            std::slice::from_ref(&generator),
+            provided_generators,
             grading_vector,
             q_matrix,
             intnums,
@@ -858,10 +872,38 @@ pub fn compute_one_dimensional_ray_gv_series(
     }
 
     Ok(OneDimensionalRayGvSeries {
-        ray: generator,
+        ray: ray.to_vec(),
         degree,
         values,
     })
+}
+
+/// Compute genus-zero GV invariants along a one-dimensional ray.
+///
+/// The ray is expressed in Kähler-basis curve coordinates. The function calls
+/// the CYTools-style `mcap_generators` path with this single generator and
+/// extracts the values for `q, 2q, ..., max_multiple*q`. Missing multiples are
+/// returned as zero.
+///
+/// # Errors
+/// Returns an error for invalid dimensions, non-positive grading degree,
+/// integer overflow, or any cygv failure. In panic-unwind builds, cygv panics
+/// are converted into errors rather than being hidden.
+pub fn compute_one_dimensional_ray_gv_series(
+    ray: &[i64],
+    grading_vector: &[i64],
+    q_matrix: &[Vec<i64>],
+    intnums: &Intersection,
+    max_multiple: u32,
+) -> Result<OneDimensionalRayGvSeries> {
+    compute_ray_gv_series_with_provided_generators(
+        ray,
+        &[ray.to_vec()],
+        grading_vector,
+        q_matrix,
+        intnums,
+        max_multiple,
+    )
 }
 
 /// Compute genus-zero GV invariants along an ambient one-dimensional ray.
@@ -3551,9 +3593,10 @@ mod tests {
         compute_ambient_one_dimensional_ray_gv_series, compute_grading_vector,
         compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_provided_generators, compute_one_dimensional_ray_gv_series,
-        curve_in_rational_row_span, curve_row_span_rank, curve_volume_in_divisor_basis,
-        dump_mori_rays_cdd, find_pair_decomposition, find_semigroup_decomposition,
-        gv_lattice_search_request, load_grading_cache, map_basis_gv_invariants_to_ambient,
+        compute_ray_gv_series_with_provided_generators, curve_in_rational_row_span,
+        curve_row_span_rank, curve_volume_in_divisor_basis, dump_mori_rays_cdd,
+        find_pair_decomposition, find_semigroup_decomposition, gv_lattice_search_request,
+        load_grading_cache, map_basis_gv_invariants_to_ambient,
         origin_circuit_diagnostic_from_class_and_witnesses, potent_ray_convergence,
         potent_ray_log_xi_terms, project_ambient_curve_to_basis,
         project_mori_cone_cap_rays_to_basis, prune_decomposable_curve_candidates,
@@ -4011,6 +4054,52 @@ mod tests {
                 .to_string()
                 .contains("grading dimension")
         );
+    }
+
+    #[test]
+    fn provided_generator_ray_gv_series_rejects_invalid_face_context() {
+        assert!(
+            compute_ray_gv_series_with_provided_generators(
+                &[1],
+                &[],
+                &[1],
+                &[],
+                &Intersection::new(1),
+                1,
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("at least one generator")
+        );
+
+        assert!(
+            compute_ray_gv_series_with_provided_generators(
+                &[1, 0],
+                &[vec![1]],
+                &[1, 1],
+                &[],
+                &Intersection::new(2),
+                1,
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("generator dimension")
+        );
+    }
+
+    #[test]
+    fn provided_generator_ray_gv_series_uses_supplied_context_boundary() {
+        let err = compute_ray_gv_series_with_provided_generators(
+            &[1],
+            &[vec![1], vec![2]],
+            &[1],
+            &[],
+            &Intersection::new(1),
+            1,
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("q_matrix is empty"));
     }
 
     #[test]
