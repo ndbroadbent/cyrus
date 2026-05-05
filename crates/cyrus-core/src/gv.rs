@@ -533,6 +533,16 @@ pub struct CkyzLocalSurfaceIdentification {
     pub local_intersection_terms: Vec<CkyzLocalIntersectionTerm>,
 }
 
+/// Finite local semigroup context used by CKYZ causal-domain extraction.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CkyzLocalCausalDomainSpec {
+    /// Effective generators in CKYZ source relation coordinates.
+    pub generators: Vec<Vec<usize>>,
+    /// Positive grading vector used to order and truncate the generated
+    /// semigroup.
+    pub grading_vector: Vec<usize>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct CkyzLocalSurfaceSource {
     kind: CkyzLocalSurfaceKind,
@@ -919,6 +929,141 @@ pub fn ckyz_local_surface_cover_weight_coefficients(kind: &CkyzLocalSurfaceKind)
         CkyzLocalSurfaceKind::HirzebruchF1 => &[2, 1],
         CkyzLocalSurfaceKind::Polygon5 => &[1, 1, 1],
     }
+}
+
+/// Build the CKYZ source-coordinate semigroup context for a matched local
+/// surface.
+///
+/// The generators are the CKYZ Mori-coordinate unit classes for the matched
+/// relation basis. The grading uses the same finite-limit cover weights as GV
+/// extraction, so the causal-domain truncation is tied to the source formula
+/// rather than to a caller-invented total-degree box.
+///
+/// # Errors
+/// Returns an error if the matched source has inconsistent rank data or if a
+/// finite-limit cover weight is not strictly positive.
+pub fn ckyz_local_surface_causal_domain_spec(
+    identification: &CkyzLocalSurfaceIdentification,
+) -> Result<CkyzLocalCausalDomainSpec> {
+    let rank = identification.source_relations.len();
+    if rank == 0 {
+        return Err(Error::InvalidInput(
+            "CKYZ local causal domain requires at least one source relation".into(),
+        ));
+    }
+
+    let cover_weights = ckyz_local_surface_cover_weight_coefficients(&identification.kind);
+    if cover_weights.len() != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ local causal-domain cover-weight rank does not match source rank".into(),
+        ));
+    }
+
+    let mut grading_vector = Vec::with_capacity(rank);
+    for &weight in cover_weights {
+        if weight <= 0 {
+            return Err(Error::InvalidInput(
+                "CKYZ local causal-domain grading weights must be positive".into(),
+            ));
+        }
+        grading_vector.push(usize::try_from(weight).map_err(|_| {
+            Error::InvalidInput("CKYZ local causal-domain grading weight does not fit usize".into())
+        })?);
+    }
+
+    let generators = (0..rank)
+        .map(|index| {
+            let mut generator = vec![0; rank];
+            generator[index] = 1;
+            generator
+        })
+        .collect();
+
+    Ok(CkyzLocalCausalDomainSpec {
+        generators,
+        grading_vector,
+    })
+}
+
+/// Return the positive multiples of a matched CKYZ potent-ray target direction.
+///
+/// The target direction is expressed in the CKYZ source relation basis by
+/// [`identify_ckyz_local_surface`].
+///
+/// # Errors
+/// Returns an error if `multiples` is zero, if the target direction has the
+/// wrong rank, if any coordinate is negative, or if scaling overflows.
+pub fn ckyz_local_surface_target_degrees(
+    identification: &CkyzLocalSurfaceIdentification,
+    multiples: usize,
+) -> Result<Vec<Vec<usize>>> {
+    if multiples == 0 {
+        return Err(Error::InvalidInput(
+            "CKYZ local target-degree multiple count must be positive".into(),
+        ));
+    }
+    let rank = identification.source_relations.len();
+    if identification.source_target_direction.len() != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ local target direction rank does not match source rank".into(),
+        ));
+    }
+
+    let direction = identification
+        .source_target_direction
+        .iter()
+        .map(|&entry| {
+            if entry < 0 {
+                return Err(Error::InvalidInput(
+                    "CKYZ local target direction must be nonnegative".into(),
+                ));
+            }
+            usize::try_from(entry).map_err(|_| {
+                Error::InvalidInput("CKYZ local target direction entry does not fit usize".into())
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    if direction.iter().all(|&entry| entry == 0) {
+        return Err(Error::InvalidInput(
+            "CKYZ local target direction must be nonzero".into(),
+        ));
+    }
+
+    (1..=multiples)
+        .map(|multiple| {
+            direction
+                .iter()
+                .map(|&entry| {
+                    entry.checked_mul(multiple).ok_or_else(|| {
+                        Error::InvalidInput("CKYZ local target-degree scaling overflowed".into())
+                    })
+                })
+                .collect::<Result<Vec<_>>>()
+        })
+        .collect()
+}
+
+/// Compute CKYZ local GV invariants for multiples of the matched target
+/// direction using the source-derived causal semigroup context.
+///
+/// # Errors
+/// Returns an error for invalid matched source data, invalid target multiples,
+/// causal-domain construction failures, or non-integral GV extraction.
+pub fn compute_ckyz_local_surface_gv_invariants_for_multiples_with_causal_domain(
+    identification: &CkyzLocalSurfaceIdentification,
+    multiples: usize,
+) -> Result<BTreeMap<Vec<usize>, Integer>> {
+    let target_degrees = ckyz_local_surface_target_degrees(identification, multiples)?;
+    let cover_weights = ckyz_local_surface_cover_weight_coefficients(&identification.kind);
+    let domain_spec = ckyz_local_surface_causal_domain_spec(identification)?;
+    compute_ckyz_local_gv_invariants_for_degrees_with_causal_domain(
+        &identification.source_relations,
+        &identification.local_intersection_terms,
+        cover_weights,
+        &target_degrees,
+        &domain_spec.generators,
+        &domain_spec.grading_vector,
+    )
 }
 
 /// Compute CKYZ logarithmic-period corrections from local relation rows.
@@ -6758,17 +6903,21 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        BoundedCurveDecompositionIndex, CkyzLocalIntersectionTerm, CkyzMonomialDomain,
-        CurveDecompositionTerm, CurvePruningStrategy, GvLatticeAugmentation, LocalToricCircuitKind,
-        LocalToricCoordinate2D, OriginCircuitCurveWitness, OriginCircuitRelationPoint,
-        ToricCurveCandidate, check_supporting_mori_face_normal, ckyz_series_mul_domain,
-        compute_ambient_one_dimensional_ray_gv_series,
+        BoundedCurveDecompositionIndex, CkyzLocalIntersectionTerm, CkyzLocalSurfaceIdentification,
+        CkyzLocalSurfaceKind, CkyzMonomialDomain, CurveDecompositionTerm, CurvePruningStrategy,
+        GvLatticeAugmentation, LocalToricCircuitKind, LocalToricCoordinate2D,
+        OriginCircuitCurveWitness, OriginCircuitRelationPoint, ToricCurveCandidate,
+        check_supporting_mori_face_normal, ckyz_local_surface_causal_domain_spec,
+        ckyz_local_surface_cover_weight_coefficients, ckyz_local_surface_target_degrees,
+        ckyz_series_mul_domain, compute_ambient_one_dimensional_ray_gv_series,
         compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
         compute_ckyz_local_gv_invariants, compute_ckyz_local_gv_invariants_for_degrees,
         compute_ckyz_local_gv_invariants_for_degrees_with_causal_domain,
         compute_ckyz_local_instanton_potential_corrections,
-        compute_ckyz_local_prepotential_period_corrections, compute_ckyz_log_period_corrections,
-        compute_grading_vector, compute_gv_invariants_with_explicit_semigroup,
+        compute_ckyz_local_prepotential_period_corrections,
+        compute_ckyz_local_surface_gv_invariants_for_multiples_with_causal_domain,
+        compute_ckyz_log_period_corrections, compute_grading_vector,
+        compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_provided_generators, compute_local_p2_genus_zero_gv_series,
         compute_local_toric_circuit_gv_series, compute_one_dimensional_ray_gv_series,
         compute_ray_gv_series_with_provided_generators, curve_in_rational_row_span,
@@ -7335,6 +7484,77 @@ mod tests {
             &target_degrees,
             &[vec![1, 0], vec![0, 1]],
             &[1, 1],
+        )
+        .unwrap();
+
+        assert_eq!(causal, targeted);
+    }
+
+    #[test]
+    fn ckyz_local_surface_causal_domain_spec_uses_source_weights() {
+        let identification = CkyzLocalSurfaceIdentification {
+            kind: CkyzLocalSurfaceKind::HirzebruchF1,
+            point_permutation: vec![0, 1, 2, 3, 4],
+            row_transform: vec![vec![1, 0], vec![0, 1]],
+            source_relations: vec![vec![-2, 1, 0, 1, 0], vec![-1, 0, 1, -1, 1]],
+            source_target_direction: vec![5, 4],
+            c1_coefficients: vec![3, 2],
+            local_intersection_terms: vec![
+                CkyzLocalIntersectionTerm {
+                    first: 0,
+                    second: 1,
+                    coefficient: 1,
+                },
+                CkyzLocalIntersectionTerm {
+                    first: 0,
+                    second: 0,
+                    coefficient: 1,
+                },
+            ],
+        };
+
+        let spec = ckyz_local_surface_causal_domain_spec(&identification).unwrap();
+        assert_eq!(spec.generators, vec![vec![1, 0], vec![0, 1]]);
+        assert_eq!(spec.grading_vector, vec![2, 1]);
+        assert_eq!(
+            ckyz_local_surface_target_degrees(&identification, 3).unwrap(),
+            vec![vec![5, 4], vec![10, 8], vec![15, 12]]
+        );
+    }
+
+    #[test]
+    fn ckyz_local_surface_causal_helper_matches_targeted_f1_ray() {
+        let identification = CkyzLocalSurfaceIdentification {
+            kind: CkyzLocalSurfaceKind::HirzebruchF1,
+            point_permutation: vec![0, 1, 2, 3, 4],
+            row_transform: vec![vec![1, 0], vec![0, 1]],
+            source_relations: vec![vec![-2, 1, 0, 1, 0], vec![-1, 0, 1, -1, 1]],
+            source_target_direction: vec![2, 1],
+            c1_coefficients: vec![3, 2],
+            local_intersection_terms: vec![
+                CkyzLocalIntersectionTerm {
+                    first: 0,
+                    second: 1,
+                    coefficient: 1,
+                },
+                CkyzLocalIntersectionTerm {
+                    first: 0,
+                    second: 0,
+                    coefficient: 1,
+                },
+            ],
+        };
+        let target_degrees = ckyz_local_surface_target_degrees(&identification, 3).unwrap();
+        let targeted = compute_ckyz_local_gv_invariants_for_degrees(
+            &identification.source_relations,
+            &identification.local_intersection_terms,
+            ckyz_local_surface_cover_weight_coefficients(&identification.kind),
+            &target_degrees,
+        )
+        .unwrap();
+        let causal = compute_ckyz_local_surface_gv_invariants_for_multiples_with_causal_domain(
+            &identification,
+            3,
         )
         .unwrap();
 
