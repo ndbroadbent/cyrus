@@ -217,7 +217,9 @@ to make the remaining GV layer more first-principles:
    The exact classical-data transform is now available as
    `flop_transform_intersection_numbers` and `flop_transform_c2_vector`, using
    `kappa'_{abc}=kappa_{abc}-n_C^0 C_a C_b C_c` and
-   `c'_a=c_a+2 n_C^0 C_a`. The remaining work is the certification layer:
-   Cyrus still needs to identify the shrinking curve, certify its `n_C^0`, and
-   perform the GV reassignment from `C` to `-C` before this can drive a
-   corrected-chamber instanton sum.
+   `c'_a=c_a+2 n_C^0 C_a`. The exact table transform
+   `flop_reassign_gv_invariants` also applies `n'^0_{-C}=n^0_C` and
+   `n'^0_C=0` while rejecting conflicting duplicate data. The remaining work is
+   the certification layer: Cyrus still needs to identify the shrinking curve
+   and certify its `n_C^0` before these transforms can drive a corrected-chamber
+   instanton sum.

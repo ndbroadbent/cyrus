@@ -158,6 +158,62 @@ pub fn flop_transform_c2_vector(
     )
 }
 
+/// Reassign genus-zero GV data across a certified flop or stable Weyl
+/// continuation.
+///
+/// This applies only the source formula
+///
+/// ```text
+/// n'^0_{-C} = n^0_C
+/// n'^0_C    = 0
+/// ```
+///
+/// to an already-computed invariant table. It rejects malformed dimensions,
+/// duplicate classes with conflicting values, and incompatible pre-existing
+/// values for `-C`. It does not certify that `curve_class` is a floppable
+/// curve or that `gv_invariant` is the correct invariant.
+#[must_use]
+pub fn flop_reassign_gv_invariants(
+    invariants: &[(Vec<i64>, Integer)],
+    curve_class: &[i64],
+    gv_invariant: &Integer,
+) -> Option<Vec<(Vec<i64>, Integer)>> {
+    if curve_class.is_empty() {
+        return None;
+    }
+    let negative_curve_class: Vec<i64> = curve_class
+        .iter()
+        .map(|entry| entry.checked_neg())
+        .collect::<Option<_>>()?;
+
+    let mut reassigned: HashMap<Vec<i64>, Integer> = HashMap::with_capacity(invariants.len() + 1);
+    for (class, value) in invariants {
+        if class.len() != curve_class.len() {
+            return None;
+        }
+        if class.as_slice() == curve_class {
+            continue;
+        }
+        if class == &negative_curve_class && value != gv_invariant {
+            return None;
+        }
+        match reassigned.insert(class.clone(), value.clone()) {
+            Some(previous) if previous != *value => return None,
+            _ => {}
+        }
+    }
+    if *gv_invariant != 0 {
+        match reassigned.insert(negative_curve_class, gv_invariant.clone()) {
+            Some(previous) if previous != *gv_invariant => return None,
+            _ => {}
+        }
+    }
+
+    let mut out: Vec<_> = reassigned.into_iter().collect();
+    out.sort_unstable_by(|(lhs, _), (rhs, _)| lhs.cmp(rhs));
+    Some(out)
+}
+
 fn kklt_debug_enabled() -> bool {
     env::var_os("CYRUS_KKLT_DEBUG").is_some()
 }
@@ -1950,12 +2006,65 @@ mod tests {
     }
 
     #[test]
+    fn test_flop_reassign_gv_invariants_moves_curve_to_negative_class() {
+        let invariants = vec![
+            (vec![1, 0], Integer::from(5)),
+            (vec![0, 1], Integer::from(-2)),
+        ];
+
+        let reassigned =
+            flop_reassign_gv_invariants(&invariants, &[1, 0], &Integer::from(5)).unwrap();
+
+        assert_eq!(
+            reassigned,
+            vec![
+                (vec![-1, 0], Integer::from(5)),
+                (vec![0, 1], Integer::from(-2)),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_flop_reassign_gv_invariants_removes_zero_reassignment() {
+        let invariants = vec![(vec![1], Integer::from(0)), (vec![2], Integer::from(7))];
+
+        let reassigned = flop_reassign_gv_invariants(&invariants, &[1], &Integer::from(0)).unwrap();
+
+        assert_eq!(reassigned, vec![(vec![2], Integer::from(7))]);
+    }
+
+    #[test]
+    fn test_flop_reassign_gv_invariants_rejects_conflicting_data() {
+        let conflicting_negative = vec![
+            (vec![1, 0], Integer::from(5)),
+            (vec![-1, 0], Integer::from(4)),
+        ];
+        assert!(
+            flop_reassign_gv_invariants(&conflicting_negative, &[1, 0], &Integer::from(5))
+                .is_none()
+        );
+
+        let conflicting_duplicate = vec![
+            (vec![0, 1], Integer::from(2)),
+            (vec![0, 1], Integer::from(3)),
+        ];
+        assert!(
+            flop_reassign_gv_invariants(&conflicting_duplicate, &[1, 0], &Integer::from(5))
+                .is_none()
+        );
+    }
+
+    #[test]
     fn test_flop_transform_rejects_dimension_mismatch() {
         let kappa = Intersection::new(2);
         let c2 = vec![Integer::from(1), Integer::from(2)];
 
         assert!(flop_transform_intersection_numbers(&kappa, &[1], &Integer::from(1)).is_none());
         assert!(flop_transform_c2_vector(&c2, &[1], &Integer::from(1)).is_none());
+        assert!(
+            flop_reassign_gv_invariants(&[(vec![1, 0], Integer::from(1))], &[1], &Integer::from(1))
+                .is_none()
+        );
     }
 
     #[test]
