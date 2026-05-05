@@ -5,6 +5,9 @@ Current local notes:
 - [CYGV_AUDIT.md](CYGV_AUDIT.md): CYTools and `cygv` source audit for the
   McAllister GV pipeline, including the split between low-dimensional generic
   `compute_gvs()` and high-dimensional selected toric curves.
+- [CKYZ_SERIES_DOMAIN_AUDIT.md](CKYZ_SERIES_DOMAIN_AUDIT.md): focused source
+  audit for the finite monomial/coefficient domain needed by local CKYZ
+  potent-ray rows.
 - [GA_READY_PIPELINE_AUDIT.md](GA_READY_PIPELINE_AUDIT.md): checklist mapping
   the GA-ready objective to current code/test evidence and unresolved blockers.
 - [MCALLISTER_DATA_POLICY.md](MCALLISTER_DATA_POLICY.md): allowed ancillary
