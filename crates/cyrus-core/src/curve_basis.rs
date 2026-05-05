@@ -16,11 +16,12 @@ pub fn compute_curve_basis_matrix(
     basis: &[usize],
 ) -> Result<Vec<Vec<Integer>>> {
     let n_cols = validate_linrels(linrels)?;
+    let h11 = n_cols.saturating_sub(linrels.len());
+    validate_standard_basis(basis, h11, n_cols)?;
     let nobasis = compute_nobasis(n_cols, basis);
     let linrels_tmp = reorder_linrels(linrels, &nobasis, basis, n_cols);
     let linrels_hnf = hermite_normal_form(&linrels_tmp);
     let linrels_new = restore_linrels(&linrels_hnf, &nobasis, basis, n_cols, linrels.len());
-    let h11 = n_cols.saturating_sub(linrels.len());
     let mut curve_basis = initial_curve_basis(n_cols, h11, basis);
     let sublat_ind = sublattice_index_snf(linrels);
     apply_nobasis_constraints(
@@ -357,6 +358,36 @@ mod tests {
         rows.iter()
             .map(|row| row.iter().map(|&entry| Integer::from(entry)).collect())
             .collect()
+    }
+
+    #[test]
+    fn vector_divisor_basis_rejects_wrong_length() {
+        let linrels = int_matrix(&[&[1, 0, -1, -1], &[0, 1, -2, -3]]);
+
+        let err =
+            compute_curve_basis_matrix(&linrels, &[2]).expect_err("basis length must equal h11");
+
+        assert!(err.to_string().contains("standard basis length"));
+    }
+
+    #[test]
+    fn vector_divisor_basis_rejects_duplicate_indices() {
+        let linrels = int_matrix(&[&[1, 0, -1, -1], &[0, 1, -2, -3]]);
+
+        let err = compute_curve_basis_matrix(&linrels, &[2, 2])
+            .expect_err("basis indices must be unique");
+
+        assert!(err.to_string().contains("duplicate indices"));
+    }
+
+    #[test]
+    fn vector_divisor_basis_rejects_out_of_bounds_index() {
+        let linrels = int_matrix(&[&[1, 0, -1, -1], &[0, 1, -2, -3]]);
+
+        let err = compute_curve_basis_matrix(&linrels, &[2, 4])
+            .expect_err("basis index must be in range");
+
+        assert!(err.to_string().contains("out of bounds"));
     }
 
     #[test]
