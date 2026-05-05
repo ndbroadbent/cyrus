@@ -1012,18 +1012,20 @@ is coefficient-level extraction rather than a new physics shortcut.
 The deeper source read identifies three concrete gaps that should guide the
 next code, and none of them are fixed by broadening the existing Rust shortcut.
 
-First, the CYTools basis contract has two paths. Cyrus currently mirrors the
-ordinary vector divisor-basis path well enough for the 4-214 checkpoint:
+First, the CYTools basis contract has two paths. Cyrus mirrors the ordinary
+vector divisor-basis path well enough for the 4-214 checkpoint:
 `set_divisor_basis([indices])` builds the dual curve-basis matrix by putting an
 identity block on the chosen GLSM columns and solving non-basis columns from
 HNF-normalized linear relations. But CYTools also has an experimental matrix
 basis path. In that path `curve_basis(as_matrix=True)` always returns the
 stored row matrix, and `mori_cone_cap(in_basis=True)` projects ambient Mori-cap
 rows with `mori_cap_matrix.dot(basis.T)` rather than by selecting basis
-columns. Cyrus' `compute_mori_cone_cap_rays(..., in_basis=true, basis=...)`
-should either implement that matrix projection and the corresponding dual
-curve-basis construction or explicitly reject generic matrix bases. Silently
-treating every basis as a vector of indices is not GA-ready.
+columns. Cyrus now has explicit helpers for that projection:
+`project_ambient_curve_to_basis_matrix` and
+`project_mori_cone_cap_rays_to_basis_matrix`. The remaining gap is full matrix
+divisor-basis construction/wiring, or a loud rejection at APIs that still only
+accept vector basis indices. Silently treating every basis as a vector of
+indices is not GA-ready.
 
 Second, cygv's final GV values are history-dependent. In
 `series_inversion.rs`, the threefold path chooses a candidate value from the
@@ -1048,8 +1050,8 @@ finite-domain question.
 
 This makes the next source-derived implementation boundary precise:
 
-1. finish the CYTools basis projection gap, or reject unsupported matrix bases
-   loudly;
+1. finish the CYTools generic matrix-basis construction/wiring gap, or reject
+   unsupported matrix bases loudly at APIs that still accept only index bases;
 2. for one non-`P^2` rank-two support signature, construct the local toric/HKTY
    input from local coordinates and charge lattice without using saved GV rows;
 3. drive the extraction with a past-closed coefficient domain that contains the

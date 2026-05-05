@@ -269,6 +269,57 @@ pub fn project_mori_cone_cap_rays_to_basis(
     Ok(deduped)
 }
 
+/// Project ambient Mori-cap rays to a matrix divisor basis.
+///
+/// This matches CYTools' generic-basis path in `mori_cone_cap(in_basis=True)`:
+/// if `basis` is a matrix, CYTools computes `mori_cap_matrix.dot(basis.T)`.
+/// Rows of `basis_matrix` are divisor-basis vectors in ambient divisor
+/// coordinates, including the origin column when the ambient rays include it.
+pub fn project_mori_cone_cap_rays_to_basis_matrix(
+    ambient_rays: &[Vec<i64>],
+    basis_matrix: &[Vec<i64>],
+) -> Result<Vec<Vec<i64>>> {
+    let ambient_dim = ambient_rays.first().map_or_else(
+        || {
+            basis_matrix.first().map_or_else(
+                || Err(Error::InvalidInput("basis matrix is empty".into())),
+                |row| Ok(row.len()),
+            )
+        },
+        |ray| Ok(ray.len()),
+    )?;
+    validate_basis_matrix(basis_matrix, ambient_dim)?;
+
+    let mut projected: Vec<Vec<i64>> = Vec::with_capacity(ambient_rays.len());
+    for ray in ambient_rays {
+        if ray.len() != ambient_dim {
+            return Err(Error::InvalidInput(
+                "ambient Mori rays have inconsistent dimensions".into(),
+            ));
+        }
+        let row = project_ambient_curve_to_basis_matrix(ray, basis_matrix)?;
+
+        let mut g = 0i64;
+        for &x in &row {
+            g = gcd_i64(g, x.abs());
+        }
+        if g == 0 {
+            continue;
+        }
+        projected.push(row.into_iter().map(|x| x / g).collect());
+    }
+
+    let mut uniq: HashSet<Vec<i64>> = HashSet::new();
+    let mut deduped = Vec::with_capacity(projected.len());
+    for row in projected {
+        if uniq.insert(row.clone()) {
+            deduped.push(row);
+        }
+    }
+    deduped.sort();
+    Ok(deduped)
+}
+
 /// A toric curve candidate with its volume at a specific point in Kähler moduli space.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ToricCurveCandidate {
@@ -3322,6 +3373,54 @@ pub fn project_ambient_curve_to_basis(ambient_class: &[i64], basis: &[usize]) ->
             })
         })
         .collect()
+}
+
+/// Project an ambient curve class to coordinates in a matrix divisor basis.
+///
+/// This is the single-row analogue of CYTools'
+/// `mori_cap_matrix.dot(basis.T)` generic-basis projection. Rows of
+/// `basis_matrix` are divisor-basis vectors in ambient coordinates.
+pub fn project_ambient_curve_to_basis_matrix(
+    ambient_class: &[i64],
+    basis_matrix: &[Vec<i64>],
+) -> Result<Vec<i64>> {
+    validate_basis_matrix(basis_matrix, ambient_class.len())?;
+    basis_matrix
+        .iter()
+        .map(|basis_row| checked_i64_dot(ambient_class, basis_row))
+        .collect()
+}
+
+fn validate_basis_matrix(basis_matrix: &[Vec<i64>], ambient_dim: usize) -> Result<()> {
+    if basis_matrix.is_empty() {
+        return Err(Error::InvalidInput("basis matrix is empty".into()));
+    }
+    if ambient_dim == 0 {
+        return Err(Error::InvalidInput(
+            "ambient curve dimension is empty".into(),
+        ));
+    }
+    for row in basis_matrix {
+        if row.len() != ambient_dim {
+            return Err(Error::InvalidInput(format!(
+                "basis matrix row dimension {} does not match ambient curve dimension {ambient_dim}",
+                row.len()
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn checked_i64_dot(left: &[i64], right: &[i64]) -> Result<i64> {
+    let mut acc = 0i128;
+    for (&a, &b) in left.iter().zip(right.iter()) {
+        let term = i128::from(a) * i128::from(b);
+        acc = acc
+            .checked_add(term)
+            .ok_or_else(|| Error::InvalidInput("matrix-basis projection overflowed i128".into()))?;
+    }
+    i64::try_from(acc)
+        .map_err(|_| Error::InvalidInput("matrix-basis projection does not fit in i64".into()))
 }
 
 /// Check an integer normal as an exact supporting-face certificate.
@@ -6515,7 +6614,8 @@ mod tests {
         load_grading_cache, local_p2_inverse_mirror_map, local_p2_mirror_correction,
         map_basis_gv_invariants_to_ambient, origin_circuit_diagnostic_from_class_and_witnesses,
         potent_ray_convergence, potent_ray_log_xi_terms, project_ambient_curve_to_basis,
-        project_mori_cone_cap_rays_to_basis, prune_decomposable_curve_candidates,
+        project_ambient_curve_to_basis_matrix, project_mori_cone_cap_rays_to_basis,
+        project_mori_cone_cap_rays_to_basis_matrix, prune_decomposable_curve_candidates,
         rank_two_local_charge_model, rank_two_local_support_signature,
         remove_pair_decomposable_curve_candidates, remove_semigroup_decomposable_curve_candidates,
         subcutoff_toric_curve_candidates, supporting_mori_face_for_curve_from_normal,
@@ -7518,6 +7618,27 @@ mod tests {
     }
 
     #[test]
+    fn ambient_curve_projection_matrix_matches_cytools_dot_basis_transpose() {
+        let ambient = vec![2, -3, 5, 7];
+        let basis_matrix = vec![vec![1, 0, 0, 0], vec![0, 2, -1, 1]];
+
+        let projected = project_ambient_curve_to_basis_matrix(&ambient, &basis_matrix).unwrap();
+
+        assert_eq!(projected, vec![2, -4]);
+    }
+
+    #[test]
+    fn ambient_curve_projection_matrix_rejects_bad_width() {
+        let err = project_ambient_curve_to_basis_matrix(&[1, 2], &[vec![1, 0, 0]])
+            .expect_err("matrix basis row width must match ambient dimension");
+
+        assert!(
+            err.to_string()
+                .contains("does not match ambient curve dimension")
+        );
+    }
+
+    #[test]
     fn supporting_mori_face_normal_certifies_exact_face() {
         let certificate = check_supporting_mori_face_normal(
             &[0, 1],
@@ -8101,6 +8222,26 @@ mod tests {
             .expect_err("basis index must be in range");
 
         assert!(format!("{err}").contains("out of bounds"));
+    }
+
+    #[test]
+    fn project_mori_rays_to_basis_matrix_normalizes_and_deduplicates() {
+        let ambient = vec![vec![2, -3, 5, 7], vec![4, -6, 10, 14], vec![0, 1, 0, 1]];
+        let basis_matrix = vec![vec![1, 0, 0, 0], vec![0, 2, -1, 1]];
+
+        let projected =
+            project_mori_cone_cap_rays_to_basis_matrix(&ambient, &basis_matrix).unwrap();
+
+        assert_eq!(projected, vec![vec![0, 1], vec![1, -2]]);
+    }
+
+    #[test]
+    fn project_mori_rays_to_basis_matrix_rejects_inconsistent_rays() {
+        let err =
+            project_mori_cone_cap_rays_to_basis_matrix(&[vec![1, 2], vec![1, 2, 3]], &[vec![1, 0]])
+                .expect_err("ambient Mori rays must have consistent dimensions");
+
+        assert!(err.to_string().contains("inconsistent dimensions"));
     }
 
     #[test]
