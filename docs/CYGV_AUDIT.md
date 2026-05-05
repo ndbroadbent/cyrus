@@ -230,6 +230,14 @@ small toric/nilpotent curves. The direct `cy.compute_gvs(min_points=20000)`
 validation applies cleanly to the low-dimensional mirror/racetrack
 `dual_curves` data, not to the high-dimensional `small_curves` data.
 
+Concretely, `string_theory/mcallister_2107/REPRODUCTION_OUTLINE.md` still says
+Step 8 is `cy.compute_gvs(max_deg=N)` and points to `small_curves.dat` as its
+verification file. Treat that line as a stale Python-era simplification. It is
+not the contract Cyrus should port for the high-dimensional Kähler correction.
+The better statement is: `dual_curves*.dat` validate generic low-dimensional
+`compute_gvs`, while `small_curves*.dat` validate the selected toric-curve
+pipeline.
+
 ## Flop Continuation
 
 The paper warns that continuing the Kähler-coordinate formula through a flop is
