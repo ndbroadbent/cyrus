@@ -1957,38 +1957,38 @@ fn ckyz_add_degrees_box(
     Ok(Some(degree))
 }
 
-fn ckyz_series_pow(
+fn ckyz_series_power_cache(
     series: &BTreeMap<Vec<usize>, Rational>,
-    exponent: usize,
+    max_exponent: usize,
     rank: usize,
     max_total_degree: usize,
-) -> Result<BTreeMap<Vec<usize>, Rational>> {
-    let mut out = BTreeMap::new();
-    out.insert(vec![0; rank], Rational::from(1));
-    for _ in 0..exponent {
-        out = ckyz_series_mul(&out, series, rank, max_total_degree)?;
-        if out.is_empty() {
-            break;
-        }
+) -> Result<Vec<BTreeMap<Vec<usize>, Rational>>> {
+    let mut powers = Vec::with_capacity(max_exponent + 1);
+    let mut identity = BTreeMap::new();
+    identity.insert(vec![0; rank], Rational::from(1));
+    powers.push(identity);
+    for exponent in 1..=max_exponent {
+        let next = ckyz_series_mul(&powers[exponent - 1], series, rank, max_total_degree)?;
+        powers.push(next);
     }
-    Ok(out)
+    Ok(powers)
 }
 
-fn ckyz_series_pow_box(
+fn ckyz_series_power_cache_box(
     series: &BTreeMap<Vec<usize>, Rational>,
-    exponent: usize,
+    max_exponent: usize,
     rank: usize,
     max_degrees: &[usize],
-) -> Result<BTreeMap<Vec<usize>, Rational>> {
-    let mut out = BTreeMap::new();
-    out.insert(vec![0; rank], Rational::from(1));
-    for _ in 0..exponent {
-        out = ckyz_series_mul_box(&out, series, rank, max_degrees)?;
-        if out.is_empty() {
-            break;
-        }
+) -> Result<Vec<BTreeMap<Vec<usize>, Rational>>> {
+    let mut powers = Vec::with_capacity(max_exponent + 1);
+    let mut identity = BTreeMap::new();
+    identity.insert(vec![0; rank], Rational::from(1));
+    powers.push(identity);
+    for exponent in 1..=max_exponent {
+        let next = ckyz_series_mul_box(&powers[exponent - 1], series, rank, max_degrees)?;
+        powers.push(next);
     }
-    Ok(out)
+    Ok(powers)
 }
 
 fn ckyz_series_exp(
@@ -2050,6 +2050,28 @@ fn ckyz_series_compose(
     max_total_degree: usize,
 ) -> Result<BTreeMap<Vec<usize>, Rational>> {
     let rank = arguments.len();
+    let mut max_exponents = vec![0usize; rank];
+    for (degree, coefficient) in series {
+        if *coefficient == 0 || ckyz_total_degree(degree)? > max_total_degree {
+            continue;
+        }
+        if degree.len() != rank {
+            return Err(Error::InvalidInput(
+                "CKYZ series composition rank mismatch".into(),
+            ));
+        }
+        for (coordinate, &exponent) in degree.iter().enumerate() {
+            max_exponents[coordinate] = max_exponents[coordinate].max(exponent);
+        }
+    }
+    let power_caches = arguments
+        .iter()
+        .zip(max_exponents.iter())
+        .map(|(argument, &max_exponent)| {
+            ckyz_series_power_cache(argument, max_exponent, rank, max_total_degree)
+        })
+        .collect::<Result<Vec<_>>>()?;
+
     let mut out = BTreeMap::new();
     for (degree, coefficient) in series {
         if *coefficient == 0 || ckyz_total_degree(degree)? > max_total_degree {
@@ -2066,9 +2088,12 @@ fn ckyz_series_compose(
             if exponent == 0 {
                 continue;
             }
-            let argument_power =
-                ckyz_series_pow(&arguments[coordinate], exponent, rank, max_total_degree)?;
-            monomial = ckyz_series_mul(&monomial, &argument_power, rank, max_total_degree)?;
+            monomial = ckyz_series_mul(
+                &monomial,
+                &power_caches[coordinate][exponent],
+                rank,
+                max_total_degree,
+            )?;
             if monomial.is_empty() {
                 break;
             }
@@ -2084,6 +2109,28 @@ fn ckyz_series_compose_box(
     max_degrees: &[usize],
 ) -> Result<BTreeMap<Vec<usize>, Rational>> {
     let rank = arguments.len();
+    let mut max_exponents = vec![0usize; rank];
+    for (degree, coefficient) in series {
+        if *coefficient == 0 || !ckyz_degree_within_box(degree, max_degrees) {
+            continue;
+        }
+        if degree.len() != rank {
+            return Err(Error::InvalidInput(
+                "CKYZ series composition rank mismatch".into(),
+            ));
+        }
+        for (coordinate, &exponent) in degree.iter().enumerate() {
+            max_exponents[coordinate] = max_exponents[coordinate].max(exponent);
+        }
+    }
+    let power_caches = arguments
+        .iter()
+        .zip(max_exponents.iter())
+        .map(|(argument, &max_exponent)| {
+            ckyz_series_power_cache_box(argument, max_exponent, rank, max_degrees)
+        })
+        .collect::<Result<Vec<_>>>()?;
+
     let mut out = BTreeMap::new();
     for (degree, coefficient) in series {
         if *coefficient == 0 || !ckyz_degree_within_box(degree, max_degrees) {
@@ -2100,9 +2147,12 @@ fn ckyz_series_compose_box(
             if exponent == 0 {
                 continue;
             }
-            let argument_power =
-                ckyz_series_pow_box(&arguments[coordinate], exponent, rank, max_degrees)?;
-            monomial = ckyz_series_mul_box(&monomial, &argument_power, rank, max_degrees)?;
+            monomial = ckyz_series_mul_box(
+                &monomial,
+                &power_caches[coordinate][exponent],
+                rank,
+                max_degrees,
+            )?;
             if monomial.is_empty() {
                 break;
             }
