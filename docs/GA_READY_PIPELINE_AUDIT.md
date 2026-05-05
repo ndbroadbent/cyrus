@@ -43,6 +43,11 @@ run pass. Any remaining mismatch must be explicit and localizable.
    supplied ray/GV samples, and Cyrus has a reusable one-dimensional cygv series
    entry point. Cyrus still does not generate the sampled low-dimensional-face
    rays or validate regenerated `N_{nq}` values against `potent_rays_gv.dat`.
+   A source/data audit of the 4-214-647 checkpoint shows the first saved potent
+   ray has the sparse local charge pattern `(1, 1, -3, 1)` and the standard
+   local `P^2` GV sequence, so the next implementation target is reconstructing
+   local toric face/surface contexts, not adding more one-generator ray
+   diagnostics.
 3. Pair-pruned selected curves match McAllister's `small_curves.dat`, while a
    stricter finite-semigroup diagnostic removes five additional curves. This is
    exposed as a policy choice, not hidden.
@@ -73,7 +78,9 @@ to make the remaining GV layer more first-principles:
 
 1. Generate potent-ray samples from low-dimensional faces of
    `M_infinity(X)` and compute the ray `N_{nq}` series rather than reading
-   `potent_rays*.dat`.
+   `potent_rays*.dat`. Start with the first 4-214-647 saved ray by recovering
+   its local toric face/surface charge data and reproducing the local `P^2`
+   sequence from that reconstructed context.
 2. Compare broader corrected-chamber per-curve cygv/general-GV values against
    toric formula values and missing non-toric contributions.
 3. Implement explicit chamber/flop continuation rules for the Kähler-coordinate

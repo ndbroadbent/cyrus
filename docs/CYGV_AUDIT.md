@@ -431,6 +431,26 @@ returns `[4, -11, 60, -478, 4588, -49368, 575896, -7131274, 92429484,
 potent-ray GV sequence is not the one-generator `cygv` semigroup; Cyrus must
 reconstruct the local face/semigroup context.
 
+The 4-214-647 checkpoint also gives a more specific hint about that missing
+context. The ancillary readme says `potent_rays.dat` uses the same `h11+5`
+ambient coordinate convention as `dual_curves.dat`: intersections with the
+canonical and prime toric divisors. In those coordinates, the first saved
+potent ray has sparse support
+`[(43, 1), (155, 1), (168, -3), (169, 1)]`, and its first GV values are
+`[3, -6, 27, -192, 1695, ...]`. That is the standard genus-zero local
+`P^2` (`O(-3) -> P^2`) sequence, and the sparse relation has the expected
+`(1, 1, -3, 1)` local charge pattern up to ordering.
+
+This is not a proof that every saved potent ray is local `P^2`, but it is a
+strong source-derived clue about the right implementation shape. The 411 saved
+potent rays collapse to only 24 unique GV sequences; 337 of the rays have 5
+nonzero ambient entries and 56 have 4. The next Cyrus test should therefore
+identify the low-dimensional toric face or local surface model behind one saved
+ray, construct the full local charge/semigroup context, and reproduce the saved
+`N_q, ..., N_10q` values without reading `potent_rays_gv.dat` except as the
+assertion. Hardcoding the recognized local sequence would be another replay
+shortcut; reconstructing the local toric geometry is the actual missing step.
+
 ### Corrected-Chamber Continuation
 
 The selected-small-curve checkpoint is an input-chamber construction. The
