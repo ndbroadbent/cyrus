@@ -1,4 +1,5 @@
 //! First-principles validation of McAllister potent-ray affine circuit structure.
+#![allow(missing_docs, clippy::too_many_lines)]
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -393,5 +394,184 @@ fn first_mcallister_local_p2_potent_ray_gvs_are_reconstructed() {
     assert_eq!(
         computed, *first_expected_gvs,
         "first saved potent-ray GV row must be reproduced from the reconstructed local P2 model"
+    );
+}
+
+#[test]
+fn mcallister_rank_two_local_charge_models_are_inventoried() {
+    if !first_principles_enabled() {
+        return;
+    }
+    let Some(data_dir) = mcallister_data_dir() else {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    };
+
+    let points_raw = read_csv_rows_i64(&data_dir.join("points.dat"));
+    let potent_rays = read_csv_rows_i64(&data_dir.join("potent_rays.dat"));
+    let all_points: Vec<Point> = points_raw.into_iter().map(Point::new).collect();
+    let polytope = Polytope::from_vertices(all_points).expect("failed to create polytope");
+    let triangulation_points = polytope
+        .points_not_interior_to_facets()
+        .expect("failed to filter triangulation points");
+
+    let mut inventory = BTreeMap::new();
+    for ray in &potent_rays {
+        let diagnostic = diagnose_affine_toric_circuit(ray, &triangulation_points)
+            .expect("affine circuit diagnostic should accept McAllister dimensions")
+            .expect("saved potent ray should be an affine toric circuit");
+        if diagnostic.affine_rank != 2 {
+            continue;
+        }
+        let signature = rank_two_local_support_signature(&diagnostic)
+            .expect("rank-two diagnostic should have a local signature");
+        let coefficient_pattern = rank_two_signature_coefficient_pattern(&signature);
+        let model =
+            rank_two_local_charge_model(&signature).expect("rank-two support should have a model");
+        *inventory
+            .entry((
+                coefficient_pattern,
+                model.charge_basis,
+                model.target_relation_in_charge_basis,
+            ))
+            .or_insert(0usize) += 1;
+    }
+
+    assert_eq!(
+        inventory,
+        BTreeMap::from([
+            (
+                (
+                    vec![-14, 1, 4, 4, 5],
+                    vec![vec![1, 1, -1, -1, 0], vec![2, -1, 0, 0, -1]],
+                    vec![-4, -5],
+                ),
+                7,
+            ),
+            (
+                (
+                    vec![-12, 1, 1, 5, 5],
+                    vec![vec![2, -1, -1, 0, 0], vec![2, 0, 0, -1, -1]],
+                    vec![-1, -5],
+                ),
+                31,
+            ),
+            (
+                (
+                    vec![-11, 1, 1, 4, 5],
+                    vec![vec![1, -1, -1, 1, 0], vec![3, -1, -1, 0, -1]],
+                    vec![4, -5],
+                ),
+                19,
+            ),
+            (
+                (
+                    vec![-11, 1, 3, 3, 4],
+                    vec![vec![1, 1, -1, -1, 0], vec![2, -1, 0, 0, -1]],
+                    vec![-3, -4],
+                ),
+                9,
+            ),
+            (
+                (
+                    vec![-10, 1, 1, 4, 4],
+                    vec![vec![2, -1, -1, 0, 0], vec![2, 0, 0, -1, -1]],
+                    vec![-1, -4],
+                ),
+                32,
+            ),
+            (
+                (
+                    vec![-10, 2, 2, 3, 3],
+                    vec![vec![2, -1, -1, 0, 0], vec![2, 0, 0, -1, -1]],
+                    vec![-2, -3],
+                ),
+                34,
+            ),
+            (
+                (
+                    vec![-9, 1, 1, 2, 2, 3],
+                    vec![
+                        vec![1, -1, 1, 0, -1, 0],
+                        vec![1, 1, -1, 0, 0, -1],
+                        vec![2, -1, 0, -1, 0, 0],
+                    ],
+                    vec![-2, -3, -2],
+                ),
+                1,
+            ),
+            (
+                (
+                    vec![-9, 1, 1, 3, 4],
+                    vec![vec![1, -1, -1, 1, 0], vec![3, -1, -1, 0, -1]],
+                    vec![3, -4],
+                ),
+                25,
+            ),
+            (
+                (
+                    vec![-8, 1, 1, 3, 3],
+                    vec![vec![2, -1, -1, 0, 0], vec![2, 0, 0, -1, -1]],
+                    vec![-1, -3],
+                ),
+                34,
+            ),
+            (
+                (
+                    vec![-8, 1, 2, 2, 3],
+                    vec![vec![1, 1, -1, -1, 0], vec![2, -1, 0, 0, -1]],
+                    vec![-2, -3],
+                ),
+                32,
+            ),
+            (
+                (
+                    vec![-7, 1, 1, 1, 2, 2],
+                    vec![
+                        vec![1, -1, -1, 1, 0, 0],
+                        vec![2, -1, 0, 0, 0, -1],
+                        vec![2, 0, -1, 0, -1, 0],
+                    ],
+                    vec![1, -2, -2],
+                ),
+                1,
+            ),
+            (
+                (
+                    vec![-7, 1, 1, 2, 3],
+                    vec![vec![1, -1, -1, 1, 0], vec![3, -1, -1, 0, -1]],
+                    vec![2, -3],
+                ),
+                32,
+            ),
+            (
+                (
+                    vec![-6, 1, 1, 2, 2],
+                    vec![vec![2, -1, -1, 0, 0], vec![2, 0, 0, -1, -1]],
+                    vec![-1, -2],
+                ),
+                31,
+            ),
+            (
+                (
+                    vec![-5, 1, 1, 1, 2],
+                    vec![vec![1, -1, 1, -1, 0], vec![2, 0, -1, 0, -1]],
+                    vec![-1, -2],
+                ),
+                34,
+            ),
+            (
+                (
+                    vec![-4, 1, 1, 1, 1],
+                    vec![vec![2, -1, 0, 0, -1], vec![2, 0, -1, -1, 0]],
+                    vec![-1, -1],
+                ),
+                17,
+            ),
+            (
+                (vec![-3, 1, 1, 1], vec![vec![3, -1, -1, -1]], vec![-1],),
+                56,
+            ),
+        ]),
+        "rank-two local charge models should be derived from supports before GV assignment"
     );
 }

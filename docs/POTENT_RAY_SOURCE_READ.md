@@ -285,6 +285,18 @@ source reading:
 - it can compute the first local `P^2` GV row from the one-parameter local
   mirror map, without reading the saved GV row as input.
 
+Executable evidence is now split by layer:
+
+- `mcallister_potent_rays_are_affine_toric_circuits` verifies the affine support
+  inventory;
+- `mcallister_potent_rays_have_local_affine_charge_contexts` verifies that each
+  saved relation lies in the reconstructed local affine charge lattice;
+- `mcallister_rank_two_local_charge_models_are_inventoried` pins the canonical
+  charge bases and target charge-lattice directions for all 16 rank-two support
+  families;
+- `first_mcallister_local_p2_potent_ray_gvs_are_reconstructed` is the only test
+  that reaches GV values, and only for the already-derived local `P^2` model.
+
 This is not yet a general potent-ray GV engine. For non-`P^2` rank-two supports,
 the reconstructed charge basis is usually multi-parameter. The saved potent ray
 is one direction inside that charge lattice, so the next source-derived object

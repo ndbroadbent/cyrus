@@ -860,6 +860,12 @@ intersection/Yukawa data. After HKTY has produced local GV data in that context,
 Cyrus can restrict to the multiples of the target charge direction and compare
 with `potent_rays_gv.dat`.
 
+The gated test `mcallister_rank_two_local_charge_models_are_inventoried` now
+pins the exact pre-GV inventory behind this statement: all 395 rank-two saved
+supports collapse to 16 canonical charge models, each with a fixed target
+direction in its local charge basis. This remains upstream input construction.
+It deliberately does not attach GV sequences to the non-`P^2` models.
+
 This keeps the ancillary GV rows as assertions. It also explains why simply
 calling cygv on one ray, or adding a coefficient-pattern-to-GV dispatch table,
 would be the wrong abstraction: both would skip the semigroup and lower-degree
