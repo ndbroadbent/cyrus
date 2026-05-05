@@ -458,6 +458,9 @@ snapshot or the McAllister `heights.dat` triangulation snapshot: none of
 triangulation triple. So the local `P^2` context is not recovered by simply
 looking for the current-phase two-face circuit in `heights.dat`; it is part of
 the missing low-dimensional face/phase reconstruction described by the paper.
+Equivalently, `p168 = (p43 + p155 + p169)/3`, so this is the local picture of an
+interior point of a toric triangle rather than an ordinary four-vertex
+quadrilateral flip.
 
 This is not a proof that every saved potent ray is local `P^2`, but it is a
 strong source-derived clue about the right implementation shape. The 411 saved
