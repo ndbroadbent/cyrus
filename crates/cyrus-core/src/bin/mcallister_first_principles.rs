@@ -595,6 +595,14 @@ struct AmbientTargetContributionRow {
     contribution: f64,
 }
 
+#[derive(Clone, Debug)]
+struct TopToricLocalGvTarget {
+    kklt_idx: usize,
+    point_idx: usize,
+    class: Vec<i64>,
+    toric_gv: malachite::Integer,
+}
+
 struct GvBranchBucketAccumulator {
     count: usize,
     q_dot_min: f64,
@@ -3025,6 +3033,361 @@ fn compute_missing_lp_witness_face_gvs(
         });
     }
     Ok(out)
+}
+
+fn corrected_chamber_top_toric_local_gv_requested() -> bool {
+    std::env::var("CYRUS_CORRECTED_CHAMBER_TOP_TORIC_LOCAL_GV")
+        .map(|value| value != "0")
+        .unwrap_or(false)
+}
+
+fn corrected_chamber_top_toric_local_gv_limit() -> usize {
+    std::env::var("CYRUS_CORRECTED_CHAMBER_TOP_TORIC_LOCAL_GV_LIMIT")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(8)
+}
+
+fn corrected_chamber_top_toric_local_gv_witness_limit() -> usize {
+    std::env::var("CYRUS_CORRECTED_CHAMBER_TOP_TORIC_LOCAL_GV_WITNESS_LIMIT")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(4)
+}
+
+fn report_corrected_chamber_top_toric_local_gv_diagnostics(
+    tri: &Triangulation,
+    geom: &PrimalGeom,
+    intersection: &PrimalIntersection,
+    targets: &[TopToricLocalGvTarget],
+) {
+    if targets.is_empty() {
+        return;
+    }
+    if cfg!(panic = "abort") {
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber top-toric local GV diagnostic skipped: panic=abort build cannot contain cygv truncation panics"
+        );
+        return;
+    }
+
+    let limit = corrected_chamber_top_toric_local_gv_limit();
+    let witness_limit = corrected_chamber_top_toric_local_gv_witness_limit();
+    let ambient_rays = match compute_mori_cone_cap_rays(
+        tri,
+        &geom.triangulation_points,
+        &geom.polytope,
+        false,
+        false,
+        None,
+    ) {
+        Ok(rays) => rays,
+        Err(e) => {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber top-toric local GV diagnostic failed to compute Mori-cap rays: {e}"
+            );
+            return;
+        }
+    };
+    let basis_rays = match project_mori_cone_cap_rays_to_basis(&ambient_rays, &intersection.basis) {
+        Ok(rays) => rays,
+        Err(e) => {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber top-toric local GV diagnostic failed to project Mori-cap rays: {e}"
+            );
+            return;
+        }
+    };
+    let Some(grading) = compute_grading_vector(&basis_rays) else {
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber top-toric local GV diagnostic failed to compute grading vector"
+        );
+        return;
+    };
+    match non_positive_basis_generator_degrees(&basis_rays, &grading) {
+        Ok((non_positive_count, Some((idx, degree, ray)))) => {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber top-toric local GV diagnostic skipped: grading has {non_positive_count}/{} non-positive Mori generator degrees; first index={idx} degree={degree} ray={ray:?}",
+                basis_rays.len()
+            );
+            return;
+        }
+        Ok((_non_positive_count, None)) => {}
+        Err(e) => {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber top-toric local GV diagnostic failed to inspect grading degrees: {e}"
+            );
+            return;
+        }
+    }
+    let curve_basis = match compute_curve_basis_matrix(&intersection.linrels, &intersection.basis) {
+        Ok(curve_basis) => curve_basis,
+        Err(e) => {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber top-toric local GV diagnostic failed to compute curve basis matrix: {e}"
+            );
+            return;
+        }
+    };
+    let q_matrix = match curve_basis
+        .iter()
+        .map(|row| {
+            row.iter()
+                .skip(1)
+                .map(|value| {
+                    i64::try_from(value).map_err(|_| {
+                        "corrected-chamber q-matrix entry does not fit in i64".to_string()
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .collect::<Result<Vec<_>, _>>()
+    {
+        Ok(q_matrix) => q_matrix,
+        Err(e) => {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber top-toric local GV diagnostic failed to build q-matrix: {e}"
+            );
+            return;
+        }
+    };
+    let corrected_kappa_basis = match chamber_intersection_in_basis(
+        tri,
+        &geom.triangulation_points,
+        &intersection.basis,
+    ) {
+        Ok(kappa) => kappa,
+        Err(e) => {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber top-toric local GV diagnostic failed to compute basis intersections: {e}"
+            );
+            return;
+        }
+    };
+
+    let mut seen = HashSet::new();
+    let mut attempted = 0usize;
+    for target in targets {
+        if attempted >= limit {
+            break;
+        }
+        if !seen.insert(target.class.clone()) {
+            continue;
+        }
+        attempted += 1;
+        report_single_top_toric_local_gv_diagnostic(
+            target,
+            &basis_rays,
+            &intersection.basis,
+            &grading,
+            &q_matrix,
+            &corrected_kappa_basis,
+            witness_limit,
+        );
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn report_single_top_toric_local_gv_diagnostic(
+    target: &TopToricLocalGvTarget,
+    basis_rays: &[Vec<i64>],
+    basis: &[usize],
+    grading: &[i64],
+    q_matrix: &[Vec<i64>],
+    intnums: &cyrus_core::Intersection,
+    witness_limit: usize,
+) {
+    let basis_class = match project_ambient_curve_to_basis(&target.class, basis) {
+        Ok(class) => class,
+        Err(e) => {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber top-toric local GV kklt_idx={} point_idx={} toric_gv={} error=projection_failed:{e} class={:?}",
+                target.kklt_idx,
+                target.point_idx,
+                target.toric_gv,
+                sparse_i64(&target.class)
+            );
+            return;
+        }
+    };
+    let degree = basis_class
+        .iter()
+        .zip(grading.iter())
+        .map(|(&coefficient, &weight)| i128::from(coefficient) * i128::from(weight))
+        .sum::<i128>();
+    if degree <= 0 {
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber top-toric local GV kklt_idx={} point_idx={} toric_gv={} degree={} error=non_positive_degree class={:?}",
+            target.kklt_idx,
+            target.point_idx,
+            target.toric_gv,
+            degree,
+            sparse_i64(&target.class)
+        );
+        return;
+    }
+    let Ok(max_deg) = u32::try_from(degree) else {
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber top-toric local GV kklt_idx={} point_idx={} toric_gv={} degree={} error=degree_too_large class={:?}",
+            target.kklt_idx,
+            target.point_idx,
+            target.toric_gv,
+            degree,
+            sparse_i64(&target.class)
+        );
+        return;
+    };
+
+    let witnesses = match real_cone_decomposition_witnesses_by_other_degree_bounded_generators(
+        &basis_class,
+        basis_rays,
+        grading,
+        degree,
+        witness_limit,
+    ) {
+        Ok(witnesses) => witnesses,
+        Err(e) => {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber top-toric local GV kklt_idx={} point_idx={} toric_gv={} degree={} error=witness_failed:{e} class={:?}",
+                target.kklt_idx,
+                target.point_idx,
+                target.toric_gv,
+                degree,
+                sparse_i64(&target.class)
+            );
+            return;
+        }
+    };
+    for witness in &witnesses {
+        match compute_lp_witness_face_attempt(
+            witness,
+            &basis_class,
+            basis_rays,
+            grading,
+            q_matrix,
+            intnums,
+            degree,
+            max_deg,
+            &target.class,
+        ) {
+            Ok(attempt) => {
+                if let Some(local_gv) = attempt.gv.as_ref() {
+                    eprintln!(
+                        "[COMPARE] checkpoint-t corrected-chamber top-toric local GV kklt_idx={} point_idx={} method=lp_witness degree={} toric_gv={} local_gv={} matches={} generator_count={} active_generator_count={} span_generator_count={} used_span_expansion={} used_lattice_saturation={} used_integer_decomposition={} used_decomposition_diamond={} used_decomposition_closure={} integer_decomposition_terms={:?} lattice_elements={:?} error={:?} class={:?}",
+                        target.kklt_idx,
+                        target.point_idx,
+                        degree,
+                        target.toric_gv,
+                        local_gv,
+                        local_gv == &target.toric_gv,
+                        attempt.generator_count,
+                        attempt.active_generator_count,
+                        attempt.span_generator_count,
+                        attempt.used_span_expansion,
+                        attempt.used_lattice_saturation,
+                        attempt.used_integer_decomposition,
+                        attempt.used_decomposition_diamond,
+                        attempt.used_decomposition_closure,
+                        attempt.integer_decomposition_term_count,
+                        attempt.lattice_semigroup_element_count,
+                        attempt.error,
+                        sparse_i64(&target.class)
+                    );
+                    return;
+                }
+                if let Some(error) = attempt.error {
+                    eprintln!(
+                        "[COMPARE] checkpoint-t corrected-chamber top-toric local GV kklt_idx={} point_idx={} method=lp_witness degree={} toric_gv={} local_gv=None error={} class={:?}",
+                        target.kklt_idx,
+                        target.point_idx,
+                        degree,
+                        target.toric_gv,
+                        error,
+                        sparse_i64(&target.class)
+                    );
+                }
+            }
+            Err(e) => {
+                eprintln!(
+                    "[COMPARE] checkpoint-t corrected-chamber top-toric local GV kklt_idx={} point_idx={} method=lp_witness degree={} toric_gv={} local_gv=None error={} class={:?}",
+                    target.kklt_idx,
+                    target.point_idx,
+                    degree,
+                    target.toric_gv,
+                    e,
+                    sparse_i64(&target.class)
+                );
+            }
+        }
+    }
+
+    match one_dimensional_ray_gv_targets(
+        std::slice::from_ref(&target.class),
+        basis_rays,
+        basis,
+        grading,
+    ) {
+        Ok(ray_targets) if !ray_targets.candidates.is_empty() => {
+            match compute_missing_one_dimensional_ray_gvs(
+                &ray_targets.candidates,
+                basis,
+                grading,
+                q_matrix,
+                intnums,
+            ) {
+                Ok(ray_gvs) => {
+                    for (ambient_class, local_gv, ray_degree) in ray_gvs {
+                        eprintln!(
+                            "[COMPARE] checkpoint-t corrected-chamber top-toric local GV kklt_idx={} point_idx={} method=one_dimensional_ray degree={} toric_gv={} local_gv={} matches={} class={:?}",
+                            target.kklt_idx,
+                            target.point_idx,
+                            ray_degree,
+                            target.toric_gv,
+                            local_gv,
+                            local_gv == target.toric_gv,
+                            sparse_i64(&ambient_class)
+                        );
+                    }
+                }
+                Err(e) => {
+                    eprintln!(
+                        "[COMPARE] checkpoint-t corrected-chamber top-toric local GV kklt_idx={} point_idx={} method=one_dimensional_ray degree={} toric_gv={} local_gv=None error={} class={:?}",
+                        target.kklt_idx,
+                        target.point_idx,
+                        degree,
+                        target.toric_gv,
+                        e,
+                        sparse_i64(&target.class)
+                    );
+                }
+            }
+        }
+        Ok(ray_targets) => {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber top-toric local GV kklt_idx={} point_idx={} method=none degree={} toric_gv={} witness_count={} skipped_non_generators={} skipped_decomposable_generators={} class={:?}",
+                target.kklt_idx,
+                target.point_idx,
+                degree,
+                target.toric_gv,
+                witnesses.len(),
+                ray_targets.skipped_non_generators,
+                ray_targets.skipped_decomposable_generators,
+                sparse_i64(&target.class)
+            );
+        }
+        Err(e) => {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber top-toric local GV kklt_idx={} point_idx={} method=none degree={} toric_gv={} witness_count={} error={} class={:?}",
+                target.kklt_idx,
+                target.point_idx,
+                degree,
+                target.toric_gv,
+                witnesses.len(),
+                e,
+                sparse_i64(&target.class)
+            );
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -6418,6 +6781,9 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
     .into_iter()
     .map(|diagnostic| (diagnostic.class.clone(), diagnostic))
     .collect::<HashMap<_, _>>();
+    let collect_top_toric_local_gv = corrected_chamber_top_toric_local_gv_requested();
+    let mut top_toric_local_gv_targets = Vec::new();
+    let mut top_toric_local_gv_seen = HashSet::new();
     for &(idx, _abs_delta, _delta, _checkpoint_implied, _toric_covered) in gv_deltas.iter().take(4)
     {
         let divisor_idx = kklt_basis[idx];
@@ -6446,8 +6812,15 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
                 .map(|decomposition| decomposition.len());
             let gv_source = toric_gv_diagnostic_by_class
                 .get(&row.class)
-                .map(toric_curve_gv_diagnostic_summary)
-                .unwrap_or_else(|| "missing".to_string());
+                .map_or_else(|| "missing".to_string(), toric_curve_gv_diagnostic_summary);
+            if collect_top_toric_local_gv && top_toric_local_gv_seen.insert(row.class.clone()) {
+                top_toric_local_gv_targets.push(TopToricLocalGvTarget {
+                    kklt_idx: idx,
+                    point_idx: divisor_idx,
+                    class: row.class.clone(),
+                    toric_gv: row.gv.clone(),
+                });
+            }
             eprintln!(
                 "[COMPARE] checkpoint-t corrected-chamber GV target contribution kklt_idx={} point_idx={} contribution={} q_i={} q_dot_t={} parity_mod2={} gv={} decomp_terms_le4={:?} gv_source={} class={:?}",
                 idx,
@@ -6462,6 +6835,14 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
                 sparse_i64(&row.class)
             );
         }
+    }
+    if collect_top_toric_local_gv {
+        report_corrected_chamber_top_toric_local_gv_diagnostics(
+            &checkpoint_chamber,
+            geom,
+            intersection,
+            &top_toric_local_gv_targets,
+        );
     }
 }
 
