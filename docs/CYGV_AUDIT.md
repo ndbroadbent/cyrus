@@ -1009,11 +1009,12 @@ coefficient-level extraction rather than a new physics shortcut.
 
 The gated McAllister CKYZ test defaults to the first three multiples. Setting
 `CYRUS_CKYZ_MULTIPLES_TO_CHECK=N` raises that assertion count explicitly for
-diagnostics. Before the bounded addition-table threshold was raised,
-unfiltered `N=3` and polygon-5 direction `[4,3,2]` were the first clear
-performance blockers. With the new threshold, the full rank-two `N=3` gate
-passes in about 50 seconds, but higher `N` remains a finite-domain construction
-problem rather than a known coefficient mismatch.
+diagnostics. Before dense monomial indexing, guarded addition tables, and the
+target-downset domain, unfiltered `N=3` and polygon-5 direction `[4,3,2]` were
+the first clear performance blockers. With those source-preserving domain
+improvements, the full rank-two `N=3` gate passes in about 50 seconds, but
+higher `N` remains a finite-domain construction problem rather than a known
+coefficient mismatch.
 The same test can be narrowed with `CYRUS_CKYZ_TARGET_DIRECTION=a,b,...`. With
 `N=3`, the F0 direction `[1,1]` passes quickly and the F1 direction `[5,4]`
 passes in seconds; polygon-5 direction `[4,3,2]` now passes but remains the
@@ -1052,7 +1053,7 @@ degree classes and on the order in which they are subtracted.
 
 Third, the current all-ten CKYZ blocker is domain shape, not arithmetic alone.
 Dense indexing and guarded addition tables fixed the obvious multiplication
-overhead, and the first-two checks now run quickly for all 395 rank-two CKYZ
+overhead, and the first-three checks now run for all 395 rank-two CKYZ
 rows. Cyrus' targeted extractor now uses the union of componentwise past
 downsets of the requested degrees instead of the single box of coordinate
 maxima, so incomparable target degrees no longer force irrelevant mixed

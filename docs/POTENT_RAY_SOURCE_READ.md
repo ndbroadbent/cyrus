@@ -61,12 +61,12 @@ conversion and applies the CKYZ `instbase` multiple-cover inversion for
 source-derived finite-limit weights.
 
 This is now validated for local `P^2`, `F0`, `F1`, and polygon 5. The gated
-McAllister rank-two CKYZ test checks the first two saved GV entries for all 395
-rank-two CKYZ potent-ray rows from source relation data. The saved
+McAllister rank-two CKYZ test checks the first three saved GV entries for all
+395 rank-two CKYZ potent-ray rows from source relation data. The saved
 `potent_rays_gv.dat` values remain validation targets only. The full ten-entry
-rows still need a sharper coefficient-targeted extractor; componentwise box
-truncation is mathematically direct but too slow for the largest target
-directions.
+rows still need a sharper coefficient-targeted extractor; the current
+cover-closed past-downset domain is source-derived but still too broad for the
+largest target directions.
 
 The computational-mirror paper explains the implementation boundary that this
 source code implies. Finite HKTY computations need a causally closed truncation:
@@ -202,7 +202,7 @@ The gated test is
 `mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed` in
 `crates/cyrus-core/tests/potent_ray_affine_circuits.rs`.
 
-The remaining potent-ray target is to extend this from first-two rank-two
+The remaining potent-ray target is to extend this from first-three rank-two
 checks to the complete saved rows where feasible, keep the rank-four cases
 explicit, and then generate the full 411-ray sample without treating
 `potent_rays*.dat` as production input.
@@ -345,8 +345,8 @@ it under a 600 second timeout still timed out. A shorter instrumented run showed
 that this is not only a polygon-5 problem: local `P2` and `F0` direction `[1,1]`
 finished, `F1` direction `[2,1]` finished, but `F0` direction `[1,2]` already
 took roughly 90 seconds and the run timed out shortly after starting `F1`
-direction `[3,1]`. The committed test must therefore remain at first-two checks
-until the finite monomial-domain extractor exists. A later indexed-domain
+direction `[3,1]`. The committed test must therefore remain at first-three
+checks until the finite monomial-domain extractor exists. A later indexed-domain
 multiplication refactor removed much of the per-product lookup overhead but
 still did not make all-ten validation finish under a 600 second timeout, so the
 remaining blocker is the monomial set being too broad, not only the arithmetic
@@ -385,16 +385,16 @@ Executable evidence is now split by layer:
   affine-rank-four rows explicit instead of projecting them into fake rank-two
   local coordinates;
 - `mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed` reaches GV values
-  for all 395 rank-two CKYZ rows, currently checking the first two saved
+  for all 395 rank-two CKYZ rows, currently checking the first three saved
   entries from source-derived local mirror data.
 
 This is not yet a general potent-ray GV engine. The rank-two CKYZ local-surface
-path is source-derived, but its current targeted extractor still expands a
-componentwise formal box. That is sufficient for first-two validation and small
-local tables, but it is not the right performance model for all ten saved
-entries across large target directions. The next source-derived object is a
-coefficient-targeted local-series extractor, not a one-dimensional
-coefficient-pattern rule.
+path is source-derived, and its current targeted extractor uses the
+cover-closed union of componentwise past downsets for the requested degrees.
+That is sufficient for first-three validation and small local tables, but it is
+not the right performance model for all ten saved entries across large target
+directions. The next source-derived object is a coefficient/path-history
+local-series extractor, not a one-dimensional coefficient-pattern rule.
 
 The rank-four checkpoint is deliberately separate from the CKYZ local-surface
 path. For 4-214-647, those 16 rows collapse to one seven-point affine-rank-four
@@ -447,4 +447,26 @@ Item 2 now includes logarithmic periods, second-derivative/local-prepotential
 periods, inverse mirror-map substitution, local `beta - alpha alpha`
 conversion, and multiple-cover extraction. The remaining rank-two CKYZ work is
 coefficient-targeted extraction for larger requested degrees, plus broader
-validation beyond the first two saved entries.
+validation beyond the first three saved entries.
+
+## Source-Derived Implementation Checklist
+
+The next implementation should be allowed to start only after these inputs are
+available from geometry or source formulas, not from `potent_rays_gv.dat`:
+
+1. canonical local support coordinates and integral charge basis for the chosen
+   normalized rank-two family;
+2. source relations, local intersection expression, and finite-limit cover
+   weights for the matching CKYZ model;
+3. target charge direction derived by reconstructing the saved potent-ray
+   relation in the local charge lattice;
+4. a finite monomial domain containing the target multiples, their cover
+   divisors, and every lower-degree monomial that can change the
+   `series_inversion.rs` Li2 subtraction history for those targets;
+5. an assertion-only comparison against the corresponding saved GV row.
+
+The fourth item is the current missing object. A componentwise box or ordinary
+past downset is easy to construct, but cygv's final GV values are produced after
+degree-ordered subtraction of previously discovered classes. The finite domain
+therefore has to be closed for the coefficient history that can reach the
+target coefficients, not just for monomial multiplication syntax.
