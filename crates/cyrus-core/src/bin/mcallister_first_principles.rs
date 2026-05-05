@@ -90,7 +90,7 @@ const DEFAULT_CORRECTED_CHAMBER_PROVIDED_GV_GENERATOR_LIMIT: usize = 2_000;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_SPAN_GENERATOR_LIMIT: usize = 64;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_LATTICE_GENERATOR_LIMIT: usize = 64;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_LATTICE_ELEMENT_LIMIT: usize = 50_000;
-const DEFAULT_CORRECTED_CHAMBER_LP_FACE_INTEGER_DECOMPOSITION_MAX_TERMS: usize = 3;
+const DEFAULT_CORRECTED_CHAMBER_LP_FACE_INTEGER_DECOMPOSITION_MAX_TERMS: usize = 4;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_INTEGER_DECOMPOSITION_MAX_WITNESSES: usize = 8;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_DECOMPOSITION_CLOSURE_ELEMENT_LIMIT: usize = 20_000;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE_RAY_LIMIT: usize = 1_000_000;
@@ -4409,65 +4409,129 @@ fn exact_generator_decompositions(
 
     let mut decompositions = Vec::new();
     let mut seen_decompositions = HashSet::new();
-    let mut remainder = vec![0i64; target.len()];
-    for first in &candidates {
-        subtract_two_into(target, first, &mut remainder)?;
-        if let Some(second) = candidate_set.get(remainder.as_slice()) {
-            let mut decomposition = vec![first.clone(), second.clone()];
-            decomposition.sort();
-            if seen_decompositions.insert(decomposition.clone()) {
-                decompositions.push(decomposition);
-                if decompositions.len() >= max_witnesses {
-                    return Ok(Some(decompositions));
-                }
-            }
-        }
-    }
-    if max_terms < 3 || decompositions.len() >= max_witnesses {
-        return Ok((!decompositions.is_empty()).then_some(decompositions));
-    }
-
-    for (i, first) in candidates.iter().enumerate() {
-        for second in candidates.iter().skip(i) {
-            subtract_three_into(target, first, second, &mut remainder)?;
-            if let Some(third) = candidate_set.get(remainder.as_slice()) {
-                let mut decomposition = vec![first.clone(), second.clone(), third.clone()];
-                decomposition.sort();
-                if seen_decompositions.insert(decomposition.clone()) {
-                    decompositions.push(decomposition);
-                    if decompositions.len() >= max_witnesses {
-                        return Ok(Some(decompositions));
-                    }
-                }
-            }
+    let candidates = candidates
+        .into_iter()
+        .map(|ray| {
+            let degree = ray
+                .iter()
+                .zip(grading.iter())
+                .map(|(&coefficient, &weight)| i128::from(coefficient) * i128::from(weight))
+                .sum::<i128>();
+            DecompositionCandidate { ray, degree }
+        })
+        .collect::<Vec<_>>();
+    let mut partial = Vec::new();
+    let mut partial_sum = vec![0i64; target.len()];
+    for term_count in 2..=max_terms {
+        search_generator_decompositions(
+            target,
+            &candidates,
+            &candidate_set,
+            target_degree,
+            term_count,
+            0,
+            0,
+            &mut partial,
+            &mut partial_sum,
+            &mut seen_decompositions,
+            &mut decompositions,
+            max_witnesses,
+        )?;
+        if decompositions.len() >= max_witnesses {
+            return Ok(Some(decompositions));
         }
     }
     Ok((!decompositions.is_empty()).then_some(decompositions))
 }
 
-fn subtract_two_into(target: &[i64], first: &[i64], out: &mut [i64]) -> Result<(), String> {
-    if target.len() != first.len() || target.len() != out.len() {
-        return Err("subtract_two_into dimensions are inconsistent".to_string());
-    }
-    for ((slot, &target_value), &first_value) in out.iter_mut().zip(target).zip(first) {
-        *slot = target_value - first_value;
-    }
-    Ok(())
+struct DecompositionCandidate {
+    ray: Vec<i64>,
+    degree: i128,
 }
 
-fn subtract_three_into(
+#[allow(clippy::too_many_arguments)]
+fn search_generator_decompositions(
     target: &[i64],
-    first: &[i64],
-    second: &[i64],
-    out: &mut [i64],
+    candidates: &[DecompositionCandidate],
+    candidate_set: &HashSet<Vec<i64>>,
+    target_degree: i128,
+    desired_terms: usize,
+    start_index: usize,
+    partial_degree: i128,
+    partial: &mut Vec<Vec<i64>>,
+    partial_sum: &mut [i64],
+    seen_decompositions: &mut HashSet<Vec<Vec<i64>>>,
+    decompositions: &mut Vec<Vec<Vec<i64>>>,
+    max_witnesses: usize,
 ) -> Result<(), String> {
-    if target.len() != first.len() || target.len() != second.len() || target.len() != out.len() {
-        return Err("subtract_three_into dimensions are inconsistent".to_string());
+    if decompositions.len() >= max_witnesses {
+        return Ok(());
     }
-    for (((slot, &target_value), &first_value), &second_value) in
-        out.iter_mut().zip(target).zip(first).zip(second)
-    {
-        *slot = target_value - first_value - second_value;
+    if partial.len() + 1 == desired_terms {
+        let remaining_degree = target_degree - partial_degree;
+        if remaining_degree <= 0 {
+            return Ok(());
+        }
+        let mut remainder = Vec::with_capacity(target.len());
+        for (&target_value, &partial_value) in target.iter().zip(partial_sum.iter()) {
+            remainder.push(target_value.checked_sub(partial_value).ok_or_else(|| {
+                "generator decomposition remainder coordinate overflowed i64".to_string()
+            })?);
+        }
+        if !candidate_set.contains(&remainder) {
+            return Ok(());
+        }
+        let Some(candidate) = candidates
+            .iter()
+            .skip(start_index)
+            .find(|candidate| candidate.degree == remaining_degree && candidate.ray == remainder)
+        else {
+            return Ok(());
+        };
+        partial.push(candidate.ray.clone());
+        let mut decomposition = partial.clone();
+        decomposition.sort();
+        if seen_decompositions.insert(decomposition.clone()) {
+            decompositions.push(decomposition);
+        }
+        partial.pop();
+        return Ok(());
+    }
+
+    for (idx, candidate) in candidates.iter().enumerate().skip(start_index) {
+        let next_degree = partial_degree + candidate.degree;
+        if next_degree >= target_degree {
+            continue;
+        }
+        for (slot, &value) in partial_sum.iter_mut().zip(candidate.ray.iter()) {
+            *slot = slot.checked_add(value).ok_or_else(|| {
+                "generator decomposition partial sum coordinate overflowed i64".to_string()
+            })?;
+        }
+        partial.push(candidate.ray.clone());
+        search_generator_decompositions(
+            target,
+            candidates,
+            candidate_set,
+            target_degree,
+            desired_terms,
+            idx,
+            next_degree,
+            partial,
+            partial_sum,
+            seen_decompositions,
+            decompositions,
+            max_witnesses,
+        )?;
+        partial.pop();
+        for (slot, &value) in partial_sum.iter_mut().zip(candidate.ray.iter()) {
+            *slot = slot.checked_sub(value).ok_or_else(|| {
+                "generator decomposition partial sum coordinate underflowed i64".to_string()
+            })?;
+        }
+        if decompositions.len() >= max_witnesses {
+            return Ok(());
+        }
     }
     Ok(())
 }
@@ -10337,6 +10401,23 @@ mod tests {
         let decomposition = decompositions.pop().unwrap();
 
         assert_eq!(decomposition, vec![vec![1, 0], vec![1, 1]]);
+    }
+
+    #[test]
+    fn exact_generator_decomposition_honors_four_term_limit() {
+        assert!(
+            exact_generator_decompositions(&[4], &[vec![1], vec![4]], &[1], 4, 3, 4)
+                .unwrap()
+                .is_none()
+        );
+
+        let mut decompositions =
+            exact_generator_decompositions(&[4], &[vec![1], vec![4]], &[1], 4, 4, 4)
+                .unwrap()
+                .unwrap();
+        let decomposition = decompositions.pop().unwrap();
+
+        assert_eq!(decomposition, vec![vec![1], vec![1], vec![1], vec![1]]);
     }
 
     #[test]
