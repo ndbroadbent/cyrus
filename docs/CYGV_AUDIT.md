@@ -230,6 +230,15 @@ nilpotent origin circuits. The next source-derived object has to be the
 higher-rank local semigroup or flop/chamber context for these origin-circuit
 supports.
 
+The missing-target diagnostic now also records the B-field parity and real-axis
+polylog branch status for these unresolved classes. For the current solved-t
+4-214-647 corrected chamber, all nine missing targets are `real_ok`, all have
+`q.t >= 0.1`, and the parity split is seven even classes and two odd classes.
+So these specific misses are not caused by the `Li2/Li3` real branch cut. The
+open implementation target is their higher-rank origin-circuit GV source or
+supporting semigroup context, not a hidden branch-continuation choice for a
+near-wall curve.
+
 ## McAllister Paper Boundary
 
 The source paper itself gives a useful constraint on what may count as a

@@ -47,16 +47,19 @@ run pass. Any remaining mismatch must be explicit and localizable.
    nonstandard origin-circuit patterns. The latest affine-support diagnostic
    shows those nine remaining misses have ranks `{3: 4, 4: 5}`, so they are
    not rank-two local toric surface supports and cannot be handled by simply
-   reusing the CKYZ rank-two potent-ray extractor. Earlier LP-witness face
-   diagnostics reduced the target-correction delta but exact supporting-face
-   certification remained zero for those LP contexts, so those values are still
-   diagnostic evidence, not a reusable GV fallback. A fresh read of the
+   reusing the CKYZ rank-two potent-ray extractor. The branch-status diagnostic
+   now shows the same nine misses are all real-axis evaluable, with `q.t >= 0.1`
+   and parity buckets seven even / two odd, so this specific residual is not a
+   near-wall `Li2/Li3` branch-cut failure. Earlier LP-witness face diagnostics
+   reduced the target-correction delta but exact supporting-face certification
+   remained zero for those LP contexts, so those values are still diagnostic
+   evidence, not a reusable GV fallback. A fresh read of the
    McAllister GV section reinforces that boundary: the paper's toric-curve
    method is a selection-and-pruning strategy for important nilpotent curves,
    while `cygv` computes through a finite semigroup and degree-ordered
    subtraction history. The next implementation target must reconstruct the
-   missing origin-circuit face/chamber semigroup or explicit flop continuation
-   rule, not infer a GV value directly from the sparse coefficient pattern.
+   missing origin-circuit face/chamber semigroup, not infer a GV value directly
+   from the sparse coefficient pattern.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for

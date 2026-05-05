@@ -758,6 +758,8 @@ struct MissingGvTargetStats {
     origin_coefficient_counts: BTreeMap<i64, usize>,
     origin_circuit_pattern_counts: BTreeMap<String, usize>,
     origin_circuit_affine_rank_counts: BTreeMap<usize, usize>,
+    branch_status_counts: BTreeMap<String, usize>,
+    branch_bucket_counts: BTreeMap<String, usize>,
     sample: Vec<MissingGvTargetSample>,
 }
 
@@ -772,10 +774,20 @@ struct MissingGvTargetSample {
     origin_circuit_affine_support: Option<OriginCircuitAffineSupportSample>,
     cms_general_divisor_shape_candidates: Option<Vec<CmsGeneralDivisorShapeCandidate>>,
     cms_general_divisor_intersection_checks: Option<Vec<CmsGeneralDivisorIntersectionCheck>>,
+    branch_diagnostic: Option<MissingGvBranchDiagnostic>,
     real_cone_decomposable_by_other_generators: bool,
     real_cone_decomposition_active_generators: Option<usize>,
     ambient_nonzero: Vec<(usize, i64)>,
     basis_nonzero: Vec<(usize, i64)>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct MissingGvBranchDiagnostic {
+    q_dot_t: String,
+    parity: i128,
+    parity_mod2: i128,
+    q_dot_bucket: &'static str,
+    dilog_status: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2194,6 +2206,8 @@ fn missing_gv_target_stats(
     basis_rays: &[Vec<i64>],
     basis: &[usize],
     grading: &[i64],
+    kahler: Option<&[F64<Finite>]>,
+    gamma: Option<&[I64<Finite>]>,
     origin_idx: usize,
     origin_circuits_by_class: &HashMap<Vec<i64>, cyrus_core::OriginCircuitCurveDiagnostic>,
     cms_intersection_checks_by_class: &HashMap<Vec<i64>, Vec<CmsGeneralDivisorIntersectionCheck>>,
@@ -2221,8 +2235,19 @@ fn missing_gv_target_stats(
             origin_coefficient_counts: BTreeMap::new(),
             origin_circuit_pattern_counts: BTreeMap::new(),
             origin_circuit_affine_rank_counts: BTreeMap::new(),
+            branch_status_counts: BTreeMap::new(),
+            branch_bucket_counts: BTreeMap::new(),
             sample: Vec::new(),
         });
+    }
+    if let Some(kahler) = kahler
+        && kahler.len() != basis.len()
+    {
+        return Err(format!(
+            "Kähler vector length {} does not match basis length {}",
+            kahler.len(),
+            basis.len()
+        ));
     }
 
     let mut sorted_degrees = Vec::with_capacity(basis_rays.len());
@@ -2258,6 +2283,8 @@ fn missing_gv_target_stats(
     let mut origin_coefficient_counts = BTreeMap::new();
     let mut origin_circuit_pattern_counts = BTreeMap::new();
     let mut origin_circuit_affine_rank_counts = BTreeMap::new();
+    let mut branch_status_counts = BTreeMap::new();
+    let mut branch_bucket_counts = BTreeMap::new();
     let mut sample = Vec::new();
     for ambient_class in ambient_classes {
         let Some(&origin_coefficient) = ambient_class.get(origin_idx) else {
@@ -2361,6 +2388,20 @@ fn missing_gv_target_stats(
             .get(ambient_class)
             .filter(|checks| !checks.is_empty())
             .cloned();
+        let branch_diagnostic = match (kahler, gamma) {
+            (Some(kahler), Some(gamma)) => {
+                let diagnostic = missing_gv_branch_diagnostic(ambient_class, basis, kahler, gamma)?;
+                let status_label = diagnostic.dilog_status.clone();
+                let bucket_label = format!(
+                    "parity_mod2={};qdot_bin={};status={}",
+                    diagnostic.parity_mod2, diagnostic.q_dot_bucket, diagnostic.dilog_status
+                );
+                *branch_status_counts.entry(status_label).or_insert(0) += 1;
+                *branch_bucket_counts.entry(bucket_label).or_insert(0) += 1;
+                Some(diagnostic)
+            }
+            _ => None,
+        };
         min_generators = min_generators.min(generators_le_degree);
         max_generators = max_generators.max(generators_le_degree);
         if sample.len() < sample_limit {
@@ -2374,6 +2415,7 @@ fn missing_gv_target_stats(
                 origin_circuit_affine_support,
                 cms_general_divisor_shape_candidates,
                 cms_general_divisor_intersection_checks,
+                branch_diagnostic,
                 real_cone_decomposable_by_other_generators: real_cone_decomposable,
                 real_cone_decomposition_active_generators,
                 ambient_nonzero: ambient_class
@@ -2404,7 +2446,49 @@ fn missing_gv_target_stats(
         origin_coefficient_counts,
         origin_circuit_pattern_counts,
         origin_circuit_affine_rank_counts,
+        branch_status_counts,
+        branch_bucket_counts,
         sample,
+    })
+}
+
+fn missing_gv_branch_diagnostic(
+    ambient_class: &[i64],
+    basis: &[usize],
+    kahler: &[F64<Finite>],
+    gamma: &[I64<Finite>],
+) -> Result<MissingGvBranchDiagnostic, String> {
+    if basis.len() != kahler.len() {
+        return Err(format!(
+            "Kähler vector length {} does not match basis length {}",
+            kahler.len(),
+            basis.len()
+        ));
+    }
+    if basis.iter().any(|&idx| idx >= ambient_class.len()) {
+        return Err(format!(
+            "basis index out of bounds for missing GV class of dimension {}",
+            ambient_class.len()
+        ));
+    }
+    let q_dot_t = basis
+        .iter()
+        .zip(kahler.iter())
+        .map(|(&idx, ti)| ambient_class[idx] as f64 * ti.get())
+        .sum::<f64>();
+    let parity = ambient_curve_b_field_parity_diagnostic(ambient_class, basis, gamma)
+        .ok_or_else(|| "failed to compute missing GV B-field parity".to_string())?;
+    let parity_mod2 = parity.rem_euclid(2);
+    let dilog_status = match cyrus_core::kklt::gv_dilog_from_curve_volume_checked(q_dot_t, parity) {
+        Ok(_) => "real_ok".to_string(),
+        Err(failure) => format!("{failure:?}"),
+    };
+    Ok(MissingGvBranchDiagnostic {
+        q_dot_t: format!("{q_dot_t:.17}"),
+        parity,
+        parity_mod2,
+        q_dot_bucket: gv_branch_q_dot_bucket(q_dot_t),
+        dilog_status,
     })
 }
 
@@ -6274,6 +6358,8 @@ fn diagnose_chamber_gv_volume_correction(
             &basis_rays,
             &intersection.basis,
             &grading,
+            Some(kahler),
+            Some(gamma),
             origin_idx,
             &origin_circuits_by_class,
             &cms_intersection_checks_by_class,
@@ -9491,6 +9577,14 @@ fn stage_volume(
                 stats.origin_circuit_pattern_counts
             );
             eprintln!(
+                "[INFO] corrected-chamber missing GV branch statuses: {:?}",
+                stats.branch_status_counts
+            );
+            eprintln!(
+                "[INFO] corrected-chamber missing GV branch buckets: {:?}",
+                stats.branch_bucket_counts
+            );
+            eprintln!(
                 "[INFO] corrected-chamber missing GV target sample: {:?}",
                 stats.sample
             );
@@ -10349,6 +10443,8 @@ mod tests {
             &basis_rays,
             &[1, 2],
             &[2, 3],
+            None,
+            None,
             0,
             &HashMap::new(),
             &HashMap::new(),
@@ -10369,6 +10465,8 @@ mod tests {
         assert_eq!(stats.origin_coefficient_counts, BTreeMap::from([(0, 2)]));
         assert_eq!(stats.origin_circuit_pattern_counts, BTreeMap::new());
         assert_eq!(stats.origin_circuit_affine_rank_counts, BTreeMap::new());
+        assert_eq!(stats.branch_status_counts, BTreeMap::new());
+        assert_eq!(stats.branch_bucket_counts, BTreeMap::new());
         assert_eq!(
             stats.sample,
             vec![
@@ -10382,6 +10480,7 @@ mod tests {
                     origin_circuit_affine_support: None,
                     cms_general_divisor_shape_candidates: None,
                     cms_general_divisor_intersection_checks: None,
+                    branch_diagnostic: None,
                     real_cone_decomposable_by_other_generators: true,
                     real_cone_decomposition_active_generators: Some(2),
                     ambient_nonzero: vec![(1, 1), (2, 1)],
@@ -10397,12 +10496,55 @@ mod tests {
                     origin_circuit_affine_support: None,
                     cms_general_divisor_shape_candidates: None,
                     cms_general_divisor_intersection_checks: None,
+                    branch_diagnostic: None,
                     real_cone_decomposable_by_other_generators: true,
                     real_cone_decomposition_active_generators: Some(1),
                     ambient_nonzero: vec![(1, 2)],
                     basis_nonzero: vec![(0, 2)]
                 }
             ]
+        );
+    }
+
+    #[test]
+    fn missing_gv_target_stats_records_branch_cut_status() {
+        let kahler = vec![F64::<Finite>::new(-0.1).expect("finite")];
+        let gamma = vec![I64::<Finite>::new(0)];
+        let stats = missing_gv_target_stats(
+            &[vec![1, 0]],
+            &[],
+            &[vec![1]],
+            &[0],
+            &[1],
+            Some(&kahler),
+            Some(&gamma),
+            1,
+            &HashMap::new(),
+            &HashMap::new(),
+            1,
+        )
+        .unwrap();
+
+        assert_eq!(
+            stats.branch_status_counts,
+            BTreeMap::from([("RealBranchCut".to_string(), 1)])
+        );
+        assert_eq!(
+            stats.branch_bucket_counts,
+            BTreeMap::from([(
+                "parity_mod2=0;qdot_bin=nonpositive;status=RealBranchCut".to_string(),
+                1
+            )])
+        );
+        assert_eq!(
+            stats.sample[0].branch_diagnostic,
+            Some(MissingGvBranchDiagnostic {
+                q_dot_t: "-0.10000000000000001".to_string(),
+                parity: 0,
+                parity_mod2: 0,
+                q_dot_bucket: "nonpositive",
+                dilog_status: "RealBranchCut".to_string(),
+            })
         );
     }
 
@@ -10434,6 +10576,8 @@ mod tests {
             &[vec![-1, 1, 1]],
             &[1, 2, 3],
             &[3, 2, 2],
+            None,
+            None,
             0,
             &origin_circuits_by_class,
             &HashMap::new(),
