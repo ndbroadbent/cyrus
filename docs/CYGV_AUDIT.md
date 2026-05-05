@@ -1007,6 +1007,12 @@ is not yet enough for all ten entries: the box-truncated multivariable series
 still becomes too slow on the largest source directions, so the remaining work
 is coefficient-level extraction rather than a new physics shortcut.
 
+The gated McAllister CKYZ test defaults to the first two multiples. Setting
+`CYRUS_CKYZ_MULTIPLES_TO_CHECK=N` raises that assertion count explicitly for
+diagnostics. A trial with `N=3` was stopped after more than 90 seconds without
+reaching an assertion, which reinforces that the next blocker is finite-domain
+construction/performance, not a known third-coefficient mismatch.
+
 ## May 2026 CYTools/cygv Porting Gaps
 
 The deeper source read identifies three concrete gaps that should guide the

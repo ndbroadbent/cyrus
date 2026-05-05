@@ -22,6 +22,14 @@ fn mcallister_data_dir() -> Option<std::path::PathBuf> {
     std::env::var_os("CYRUS_MCALLISTER_DATA_DIR").map(std::path::PathBuf::from)
 }
 
+fn ckyz_multiples_to_check(default: usize) -> usize {
+    std::env::var("CYRUS_CKYZ_MULTIPLES_TO_CHECK").map_or(default, |raw| {
+        raw.parse::<usize>().unwrap_or_else(|err| {
+            panic!("CYRUS_CKYZ_MULTIPLES_TO_CHECK must be a positive integer: {err}")
+        })
+    })
+}
+
 fn read_csv_rows_i64(path: &Path) -> Vec<Vec<i64>> {
     std::fs::read_to_string(path)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()))
@@ -870,7 +878,11 @@ fn mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed() {
                 usize::try_from(entry).expect("CKYZ source target direction should be nonnegative")
             })
             .collect::<Vec<_>>();
-        let multiples_to_check = expected_gvs.len().min(2);
+        let multiples_to_check = expected_gvs.len().min(ckyz_multiples_to_check(2));
+        assert!(
+            multiples_to_check > 0,
+            "CYRUS_CKYZ_MULTIPLES_TO_CHECK must be positive"
+        );
         let target_degrees = (1..=multiples_to_check)
             .map(|multiple| scale_ckyz_degree(&source_target_direction, multiple))
             .collect::<Vec<_>>();
