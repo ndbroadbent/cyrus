@@ -58,7 +58,10 @@ use good_lp::{
 };
 
 use cyrus_core::flat_direction::{compute_flat_direction, compute_flat_direction_full};
-use cyrus_core::gv::{BoundedCurveDecompositionIndex, check_supporting_mori_face_normal};
+use cyrus_core::gv::{
+    BoundedCurveDecompositionIndex, certify_supporting_mori_face_by_exact_kernel,
+    check_supporting_mori_face_normal,
+};
 use cyrus_core::types::f64::F64;
 use cyrus_core::types::i64::I64;
 use cyrus_core::types::range::CheckedRange;
@@ -3768,6 +3771,17 @@ fn certify_supporting_mori_face(
         || basis_rays.iter().any(|row| row.len() != dim)
     {
         return Err("supporting-face certificate row dimensions are inconsistent".to_string());
+    }
+
+    if let Some(certificate) =
+        certify_supporting_mori_face_by_exact_kernel(face_generators, basis_rays)
+            .map_err(|err| err.to_string())?
+    {
+        return Ok(Some(SupportingFaceCertificate {
+            zero_generator_count: certificate.zero_generator_count,
+            positive_generator_count: certificate.positive_generator_count,
+            normal: certificate.normal,
+        }));
     }
 
     let ray_limit = std::env::var("CYRUS_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE_RAY_LIMIT")
