@@ -54,8 +54,9 @@ run pass. Any remaining mismatch must be explicit and localizable.
    `CYRUS_CKYZ_MULTIPLES_TO_CHECK` and narrowed with
    `CYRUS_CKYZ_TARGET_DIRECTION`; `N=3` now passes as the default first-principles
    gate. The narrowed polygon-5 `[4,3,2]` direction now also completes at `N=4`
-   after flattening the CKYZ addition table, but it remains the first slow family
-   for higher `N` and for all-row/default validation.
+   after flattening the CKYZ addition table and using sparse valid product pairs,
+   but it remains the first slow family for higher `N` and for all-row/default
+   validation.
 3. Pair-pruned selected curves match McAllister's `small_curves.dat`, while a
    stricter finite-semigroup diagnostic removes five additional curves. This is
    exposed as a policy choice, not hidden.

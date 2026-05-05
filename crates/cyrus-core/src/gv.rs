@@ -2026,6 +2026,7 @@ struct CkyzMonomialDomain {
     degrees: Vec<Vec<usize>>,
     degree_indices: HashMap<Vec<usize>, usize>,
     addition_indices: Option<Vec<usize>>,
+    addition_pairs_by_lhs: Option<Vec<Vec<(usize, usize)>>>,
     max_total_degree: usize,
 }
 
@@ -2081,6 +2082,7 @@ impl CkyzMonomialDomain {
         let addition_entries = degrees.len().saturating_mul(degrees.len());
         let addition_indices = if addition_entries <= CKYZ_ADDITION_TABLE_MAX_ENTRIES {
             let mut addition_indices = vec![CKYZ_ABSENT_ADDITION_INDEX; addition_entries];
+            let mut addition_pairs_by_lhs = vec![Vec::new(); degrees.len()];
             let addition_stride = degrees.len();
             for (lhs_index, lhs_degree) in degrees.iter().enumerate() {
                 for (rhs_index, rhs_degree) in degrees.iter().enumerate() {
@@ -2088,17 +2090,25 @@ impl CkyzMonomialDomain {
                         ckyz_sum_degree_index(lhs_degree, rhs_degree, rank, &degree_indices)?;
                     addition_indices[lhs_index * addition_stride + rhs_index] =
                         sum_index.unwrap_or(CKYZ_ABSENT_ADDITION_INDEX);
+                    if let Some(sum_index) = sum_index {
+                        addition_pairs_by_lhs[lhs_index].push((rhs_index, sum_index));
+                    }
                 }
             }
-            Some(addition_indices)
+            Some((addition_indices, addition_pairs_by_lhs))
         } else {
             None
         };
+        let (addition_indices, addition_pairs_by_lhs) = addition_indices
+            .map_or((None, None), |(indices, pairs)| {
+                (Some(indices), Some(pairs))
+            });
         Ok(Self {
             rank,
             degrees,
             degree_indices,
             addition_indices,
+            addition_pairs_by_lhs,
             max_total_degree,
         })
     }
@@ -2378,6 +2388,22 @@ fn ckyz_series_mul_domain(
     let lhs_terms = ckyz_indexed_domain_terms(lhs, domain)?;
     let rhs_terms = ckyz_indexed_domain_terms(rhs, domain)?;
     let mut out_by_index = vec![None::<Rational>; domain.degrees.len()];
+    if let Some(addition_pairs_by_lhs) = &domain.addition_pairs_by_lhs {
+        let mut rhs_by_index = vec![None; domain.degrees.len()];
+        for (rhs_index, rhs_coefficient) in rhs_terms {
+            rhs_by_index[rhs_index] = Some(rhs_coefficient);
+        }
+        for (lhs_index, lhs_coefficient) in lhs_terms {
+            for &(rhs_index, product_index) in &addition_pairs_by_lhs[lhs_index] {
+                let Some(rhs_coefficient) = rhs_by_index[rhs_index] else {
+                    continue;
+                };
+                let entry = out_by_index[product_index].get_or_insert_with(|| Rational::from(0));
+                *entry += lhs_coefficient.clone() * rhs_coefficient.clone();
+            }
+        }
+        return Ok(ckyz_series_from_domain_coefficients(out_by_index, domain));
+    }
     for (lhs_index, lhs_coefficient) in lhs_terms.iter().copied() {
         for (rhs_index, rhs_coefficient) in rhs_terms.iter().copied() {
             if let Some(product_index) = domain.sum_index(lhs_index, rhs_index)? {
@@ -2386,7 +2412,14 @@ fn ckyz_series_mul_domain(
             }
         }
     }
-    let mut out = out_by_index
+    Ok(ckyz_series_from_domain_coefficients(out_by_index, domain))
+}
+
+fn ckyz_series_from_domain_coefficients(
+    coefficients: Vec<Option<Rational>>,
+    domain: &CkyzMonomialDomain,
+) -> BTreeMap<Vec<usize>, Rational> {
+    let mut out = coefficients
         .into_iter()
         .enumerate()
         .filter_map(|(index, coefficient)| {
@@ -2396,7 +2429,7 @@ fn ckyz_series_mul_domain(
         })
         .collect::<BTreeMap<_, _>>();
     out.retain(|_, coefficient| *coefficient != 0);
-    Ok(out)
+    out
 }
 
 fn ckyz_indexed_domain_terms<'a>(
@@ -7003,6 +7036,10 @@ mod tests {
             domain.addition_indices.is_some(),
             "small CKYZ domains should precompute product indices"
         );
+        assert!(
+            domain.addition_pairs_by_lhs.is_some(),
+            "small CKYZ domains should precompute sparse valid product pairs"
+        );
 
         let lhs = BTreeMap::from([(vec![1, 0], Rational::from(2))]);
         let rhs = BTreeMap::from([(vec![0, 2], Rational::from(3))]);
@@ -7017,6 +7054,10 @@ mod tests {
         assert!(
             domain.addition_indices.is_none(),
             "large CKYZ domains should avoid quadratic addition tables"
+        );
+        assert!(
+            domain.addition_pairs_by_lhs.is_none(),
+            "large CKYZ domains should avoid quadratic addition-pair tables"
         );
 
         let lhs = BTreeMap::from([(vec![125], Rational::from(2))]);
@@ -7041,6 +7082,17 @@ mod tests {
         assert!(
             domain.addition_indices.is_some(),
             "polygon-5 N=4 target-downset domains should keep indexed products"
+        );
+        let pair_count = domain
+            .addition_pairs_by_lhs
+            .as_ref()
+            .expect("indexed products should have sparse pairs")
+            .iter()
+            .map(Vec::len)
+            .sum::<usize>();
+        assert!(
+            pair_count < domain.degrees.len() * domain.degrees.len(),
+            "polygon-5 N=4 target-downset products should be sparse"
         );
     }
 
