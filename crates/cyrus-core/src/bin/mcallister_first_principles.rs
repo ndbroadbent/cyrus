@@ -642,6 +642,23 @@ struct GvSourceBucketReport {
     correction: Vec<f64>,
 }
 
+struct GvWeightLpReport {
+    label: &'static str,
+    lower_bound: f64,
+    upper_bound: f64,
+    objective_epsilon: f64,
+    max_abs_delta: f64,
+    relative_l2_delta: f64,
+    weight_min: f64,
+    weight_max: f64,
+    weight_mean: f64,
+    near_lower_count: usize,
+    near_upper_count: usize,
+    interior_count: usize,
+    max_abs_delta_from_one: f64,
+    weights: Vec<f64>,
+}
+
 struct ChamberUpdatedKkltDiagnostic {
     iterations: usize,
     converged: bool,
@@ -3090,6 +3107,12 @@ fn corrected_chamber_top_toric_local_gv_requested() -> bool {
         .unwrap_or(false)
 }
 
+fn corrected_chamber_gv_weight_lp_requested() -> bool {
+    std::env::var("CYRUS_CORRECTED_CHAMBER_GV_WEIGHT_LP")
+        .map(|value| value != "0")
+        .unwrap_or(false)
+}
+
 fn corrected_chamber_top_toric_local_gv_limit() -> usize {
     std::env::var("CYRUS_CORRECTED_CHAMBER_TOP_TORIC_LOCAL_GV_LIMIT")
         .ok()
@@ -4675,6 +4698,13 @@ fn shifted_ambient_gamma(gamma: &[I64<Finite>], offset: isize) -> Option<Vec<I64
     Some(shifted.into_iter().map(I64::<Finite>::new).collect())
 }
 
+fn gamma_with_toggled_index(gamma: &[I64<Finite>], index: usize) -> Option<Vec<I64<Finite>>> {
+    let mut toggled = gamma.to_vec();
+    let entry = toggled.get_mut(index)?;
+    *entry = I64::<Finite>::new(entry.get().checked_add(1)?);
+    Some(toggled)
+}
+
 fn ambient_target_contribution_rows(
     gv_invariants: &[(Vec<i64>, malachite::Integer)],
     basis: &[usize],
@@ -5111,6 +5141,250 @@ fn report_corrected_chamber_toric_gv_source_buckets(
             corrected_flip_summary.max_abs_delta,
             corrected_flip_summary.relative_l2_delta
         );
+    }
+}
+
+fn ambient_target_contribution_vectors(
+    gv_invariants: &[(Vec<i64>, malachite::Integer)],
+    basis: &[usize],
+    kklt_basis: &[usize],
+    t: &[F64<Finite>],
+    gamma: &[I64<Finite>],
+) -> Result<Vec<Vec<f64>>, String> {
+    let mut contributions = Vec::with_capacity(gv_invariants.len());
+    for (curve_index, (curve, invariant)) in gv_invariants.iter().enumerate() {
+        let single = [(curve.clone(), invariant.clone())];
+        let Some(contribution) = cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+            &single,
+            basis,
+            kklt_basis,
+            t,
+            Some(gamma),
+        ) else {
+            return Err(format!(
+                "failed to compute single-curve contribution vector for curve_index={curve_index} class={:?}",
+                sparse_i64(curve)
+            ));
+        };
+        contributions.push(contribution.iter().map(|value| value.get()).collect());
+    }
+    Ok(contributions)
+}
+
+fn solve_gv_weight_lp(
+    label: &'static str,
+    contributions: &[Vec<f64>],
+    target: &[F64<Finite>],
+    lower_bound: f64,
+    upper_bound: f64,
+) -> Result<GvWeightLpReport, String> {
+    if contributions.is_empty() {
+        return Err("GV weight LP requires at least one contribution vector".to_string());
+    }
+    if !(lower_bound.is_finite() && upper_bound.is_finite() && lower_bound <= upper_bound) {
+        return Err(format!(
+            "invalid GV weight LP bounds: lower={lower_bound} upper={upper_bound}"
+        ));
+    }
+    let dim = target.len();
+    if dim == 0 || contributions.iter().any(|row| row.len() != dim) {
+        return Err(format!(
+            "GV weight LP dimension mismatch: target_dim={} contribution_dims={:?}",
+            dim,
+            contributions
+                .iter()
+                .take(8)
+                .map(Vec::len)
+                .collect::<Vec<_>>()
+        ));
+    }
+
+    let mut vars = ProblemVariables::new();
+    let weights = contributions
+        .iter()
+        .map(|_| vars.add(variable().min(lower_bound).max(upper_bound)))
+        .collect::<Vec<_>>();
+    let epsilon = vars.add(variable().min(0.0));
+    let mut objective = Expression::from(0.0);
+    objective.add_mul(1.0, epsilon);
+    let mut model = vars.minimise(objective).using(default_solver);
+
+    for coord in 0..dim {
+        let target_value = target[coord].get();
+
+        let mut upper = Expression::from(-target_value);
+        for (weight, contribution) in weights.iter().zip(contributions.iter()) {
+            let coefficient = contribution[coord];
+            if coefficient != 0.0 {
+                upper.add_mul(coefficient, *weight);
+            }
+        }
+        upper.add_mul(-1.0, epsilon);
+        model = model.with(upper.leq(0.0));
+
+        let mut lower = Expression::from(target_value);
+        for (weight, contribution) in weights.iter().zip(contributions.iter()) {
+            let coefficient = contribution[coord];
+            if coefficient != 0.0 {
+                lower.add_mul(-coefficient, *weight);
+            }
+        }
+        lower.add_mul(-1.0, epsilon);
+        model = model.with(lower.leq(0.0));
+    }
+
+    let solution = match model.solve() {
+        Ok(solution) => solution,
+        Err(ResolutionError::Infeasible) => {
+            return Err("GV weight LP is unexpectedly infeasible".to_string());
+        }
+        Err(err) => return Err(format!("GV weight LP solve failed for {label}: {err}")),
+    };
+
+    let weights = weights
+        .iter()
+        .map(|weight| solution.value(*weight))
+        .collect::<Vec<_>>();
+    if weights.iter().any(|value| !value.is_finite()) {
+        return Err("GV weight LP produced a non-finite weight".to_string());
+    }
+
+    let mut fitted = vec![0.0f64; dim];
+    for (weight, contribution) in weights.iter().zip(contributions.iter()) {
+        for (entry, value) in fitted.iter_mut().zip(contribution.iter()) {
+            *entry += *weight * *value;
+        }
+    }
+
+    let residuals = target
+        .iter()
+        .zip(fitted.iter())
+        .map(|(reference, candidate)| candidate - reference.get())
+        .collect::<Vec<_>>();
+    let (max_abs_delta, residual_l2) = max_abs_and_l2(&residuals);
+    let (_, target_l2) =
+        max_abs_and_l2(&target.iter().map(|value| value.get()).collect::<Vec<_>>());
+    let relative_l2_delta = if target_l2 == 0.0 {
+        residual_l2
+    } else {
+        residual_l2 / target_l2
+    };
+
+    let weight_min = weights.iter().copied().fold(f64::INFINITY, f64::min);
+    let weight_max = weights.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let weight_mean = weights.iter().sum::<f64>() / weights.len() as f64;
+    let tolerance = 1e-7;
+    let near_lower_count = weights
+        .iter()
+        .filter(|&&weight| weight <= lower_bound + tolerance)
+        .count();
+    let near_upper_count = weights
+        .iter()
+        .filter(|&&weight| weight >= upper_bound - tolerance)
+        .count();
+    let interior_count = weights
+        .len()
+        .saturating_sub(near_lower_count + near_upper_count);
+    let max_abs_delta_from_one = weights
+        .iter()
+        .map(|weight| (weight - 1.0).abs())
+        .fold(0.0f64, f64::max);
+
+    Ok(GvWeightLpReport {
+        label,
+        lower_bound,
+        upper_bound,
+        objective_epsilon: solution.value(epsilon),
+        max_abs_delta,
+        relative_l2_delta,
+        weight_min,
+        weight_max,
+        weight_mean,
+        near_lower_count,
+        near_upper_count,
+        interior_count,
+        max_abs_delta_from_one,
+        weights,
+    })
+}
+
+fn report_corrected_chamber_gv_weight_lp(
+    gv_invariants: &[(Vec<i64>, malachite::Integer)],
+    basis: &[usize],
+    kklt_basis: &[usize],
+    t: &[F64<Finite>],
+    gamma: &[I64<Finite>],
+    checkpoint_implied_gv: &[F64<Finite>],
+) {
+    let contributions =
+        match ambient_target_contribution_vectors(gv_invariants, basis, kklt_basis, t, gamma) {
+            Ok(contributions) => contributions,
+            Err(err) => {
+                eprintln!(
+                    "[COMPARE] checkpoint-t corrected-chamber GV weight LP unavailable: {err}"
+                );
+                return;
+            }
+        };
+    for (label, lower_bound, upper_bound) in
+        [("continuous_drop", 0.0, 1.0), ("bounded_sign", -1.0, 1.0)]
+    {
+        let report = solve_gv_weight_lp(
+            label,
+            &contributions,
+            checkpoint_implied_gv,
+            lower_bound,
+            upper_bound,
+        )
+        .unwrap_or_else(|e| {
+            eprintln!("[ERROR] failed corrected-chamber GV weight LP diagnostic: {e}");
+            std::process::exit(2);
+        });
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber GV weight LP label={} bounds=[{},{}] eps={} max_abs={} relative_l2={} weight_min={} weight_max={} weight_mean={} near_lower={} near_upper={} interior={} max_abs_delta_from_one={}",
+            report.label,
+            report.lower_bound,
+            report.upper_bound,
+            report.objective_epsilon,
+            report.max_abs_delta,
+            report.relative_l2_delta,
+            report.weight_min,
+            report.weight_max,
+            report.weight_mean,
+            report.near_lower_count,
+            report.near_upper_count,
+            report.interior_count,
+            report.max_abs_delta_from_one
+        );
+
+        let mut weight_deltas = report
+            .weights
+            .iter()
+            .enumerate()
+            .map(|(idx, &weight)| (idx, (weight - 1.0).abs(), weight))
+            .collect::<Vec<_>>();
+        weight_deltas.sort_unstable_by(|lhs, rhs| rhs.1.total_cmp(&lhs.1));
+        for (curve_index, _delta, weight) in weight_deltas.into_iter().take(6) {
+            let (curve, invariant) = &gv_invariants[curve_index];
+            let q_dot_t = basis
+                .iter()
+                .zip(t.iter())
+                .map(|(&idx, ti)| curve[idx] as f64 * ti.get())
+                .sum::<f64>();
+            let parity = ambient_curve_b_field_parity_diagnostic(curve, basis, gamma)
+                .map(|value| value.rem_euclid(2))
+                .unwrap_or(-1);
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber GV weight LP top_weight label={} curve_index={} weight={} q_dot_t={} parity_mod2={} gv={} class={:?}",
+                report.label,
+                curve_index,
+                weight,
+                q_dot_t,
+                parity,
+                invariant,
+                sparse_i64(curve)
+            );
+        }
     }
 }
 
@@ -6962,6 +7236,44 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
             shifted_summary.max_abs_candidate
         );
     }
+    let origin_idx = geom
+        .triangulation_points
+        .iter()
+        .position(|point| point.coords().iter().all(|&coord| coord == 0));
+    if let Some(origin_idx) = origin_idx {
+        if let Some(origin_toggled_gamma) = gamma_with_toggled_index(gamma, origin_idx) {
+            let Some(origin_toggled_target) =
+                cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+                    &selection.small_curve_gvs,
+                    &intersection.basis,
+                    kklt_basis,
+                    checkpoint_t,
+                    Some(&origin_toggled_gamma),
+                )
+            else {
+                eprintln!(
+                    "[COMPARE] checkpoint-t corrected-chamber GV target correction delta (ambient_gamma_toggle_origin) unavailable: toggled correction is invalid"
+                );
+                return;
+            };
+            let origin_toggled_summary =
+                target_correction_delta_summary(&checkpoint_implied_gv, &origin_toggled_target)
+                    .unwrap_or_else(|e| {
+                        eprintln!(
+                            "[ERROR] failed to compare checkpoint-t corrected-chamber origin-toggled GV target correction: {e}"
+                        );
+                        std::process::exit(2);
+                    });
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber GV target correction delta (ambient_gamma_toggle_origin): origin_idx={} max_abs={} relative_l2={} max_abs_checkpoint_implied={} max_abs_toggled={}",
+                origin_idx,
+                origin_toggled_summary.max_abs_delta,
+                origin_toggled_summary.relative_l2_delta,
+                origin_toggled_summary.max_abs_reference,
+                origin_toggled_summary.max_abs_candidate
+            );
+        }
+    }
     let mut gv_deltas = checkpoint_implied_gv
         .iter()
         .zip(covered_gv_target.iter())
@@ -7029,6 +7341,16 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
         &checkpoint_chamber_implied_gv,
         &covered_gv_target,
     );
+    if corrected_chamber_gv_weight_lp_requested() {
+        report_corrected_chamber_gv_weight_lp(
+            &selection.small_curve_gvs,
+            &intersection.basis,
+            kklt_basis,
+            checkpoint_t,
+            gamma,
+            &checkpoint_implied_gv,
+        );
+    }
     let collect_top_toric_local_gv = corrected_chamber_top_toric_local_gv_requested();
     let mut top_toric_local_gv_targets = Vec::new();
     let mut top_toric_local_gv_seen = HashSet::new();
@@ -9398,6 +9720,22 @@ mod tests {
         assert_eq!(summary.relative_l2_delta, 1.0);
         assert_eq!(summary.max_abs_reference, 4.0);
         assert_eq!(summary.max_abs_candidate, 8.0);
+    }
+
+    #[test]
+    fn gv_weight_lp_recovers_continuous_drop_solution() {
+        let contributions = vec![vec![1.0, 0.0], vec![0.0, 1.0]];
+        let target = vec![
+            F64::<Finite>::new(0.25).unwrap(),
+            F64::<Finite>::new(1.0).unwrap(),
+        ];
+
+        let report = solve_gv_weight_lp("test", &contributions, &target, 0.0, 1.0).unwrap();
+
+        assert!(report.max_abs_delta < 1e-8);
+        assert!(report.relative_l2_delta < 1e-8);
+        assert!((report.weights[0] - 0.25).abs() < 1e-8);
+        assert!((report.weights[1] - 1.0).abs() < 1e-8);
     }
 
     #[test]
