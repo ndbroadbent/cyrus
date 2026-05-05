@@ -8278,6 +8278,58 @@ mod tests {
     }
 
     #[test]
+    fn ckyz_predicted_support_domain_covers_observed_polygon5_ray_support() {
+        let relations = ckyz_polygon5_relations();
+        let local_intersection_terms = ckyz_polygon5_intersection_terms();
+        let cover_weights = [1, 1, 1];
+        let target_degrees = [vec![4, 3, 2], vec![8, 6, 4]];
+        let extraction_degrees = ckyz_cover_closed_target_degrees(&target_degrees).unwrap();
+
+        let observed_domain = ckyz_observed_support_domain_for_degrees(
+            &relations,
+            &local_intersection_terms,
+            &target_degrees,
+        )
+        .unwrap();
+        let predicted_domain = ckyz_predicted_support_domain_for_degrees(
+            &relations,
+            &local_intersection_terms,
+            &target_degrees,
+        )
+        .unwrap();
+        assert!(
+            observed_domain
+                .degrees
+                .iter()
+                .all(|degree| predicted_domain.contains(degree)),
+            "support-predicted polygon-5 domain must cover the observed broad-computation support"
+        );
+
+        let potential = compute_ckyz_local_instanton_potential_corrections_domain(
+            &relations,
+            &local_intersection_terms,
+            &predicted_domain,
+        )
+        .unwrap();
+        let mut predicted = extract_ckyz_local_gv_invariants_from_potential_for_degrees(
+            &potential,
+            &cover_weights,
+            &extraction_degrees,
+        )
+        .unwrap();
+        predicted.retain(|degree, _| target_degrees.iter().any(|target| target == degree));
+
+        let broad = compute_ckyz_local_gv_invariants_for_degrees(
+            &relations,
+            &local_intersection_terms,
+            &cover_weights,
+            &target_degrees,
+        )
+        .unwrap();
+        assert_eq!(predicted, broad);
+    }
+
+    #[test]
     fn ckyz_local_surface_causal_domain_spec_uses_source_weights() {
         let identification = CkyzLocalSurfaceIdentification {
             kind: CkyzLocalSurfaceKind::HirzebruchF1,

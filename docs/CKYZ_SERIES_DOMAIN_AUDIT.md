@@ -106,6 +106,9 @@ full rational coefficient series. The test
 `ckyz_predicted_support_domain_covers_observed_f0_ray_support` verifies that
 this support-predicted domain covers the observed support and reproduces the
 same targeted F0 skew-ray GV values.
+`ckyz_predicted_support_domain_covers_observed_polygon5_ray_support` applies
+the same check to the rank-three polygon-5 local model for the first two
+multiples of the McAllister-style `[4,3,2]` source direction.
 
 This is not the production dependency-domain builder yet. It still enumerates
 alpha/beta supports on the broad downset, so it is a guardrail and staging
