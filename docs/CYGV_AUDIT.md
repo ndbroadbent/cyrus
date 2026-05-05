@@ -441,6 +441,24 @@ potent ray has sparse support
 `P^2` (`O(-3) -> P^2`) sequence, and the sparse relation has the expected
 `(1, 1, -3, 1)` local charge pattern up to ordering.
 
+The lattice points themselves confirm that this is an affine circuit, not just
+a numerical coincidence. In triangulation-point coordinates:
+
+```text
+43  = ( 0,  1, -3, 6)
+155 = (-2, -1, -4, 5)
+168 = (-1,  0, -3, 5)
+169 = (-1,  0, -2, 4)
+```
+
+and `p43 + p155 - 3*p168 + p169 = 0`, with coefficient sum zero. The same four
+indices do not form adjacent two-face simplices in either Cyrus' default FRST
+snapshot or the McAllister `heights.dat` triangulation snapshot: none of
+`(43,168,169)`, `(155,168,169)`, `(43,155,168)`, or `(43,155,169)` appears as a
+triangulation triple. So the local `P^2` context is not recovered by simply
+looking for the current-phase two-face circuit in `heights.dat`; it is part of
+the missing low-dimensional face/phase reconstruction described by the paper.
+
 This is not a proof that every saved potent ray is local `P^2`, but it is a
 strong source-derived clue about the right implementation shape. The 411 saved
 potent rays collapse to only 24 unique GV sequences; 337 of the rays have 5
