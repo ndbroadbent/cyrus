@@ -533,6 +533,10 @@ fn stage0_first_principles_runner_does_not_silently_replay_downstream_outputs() 
         "dual_curves_gv.dat",
         "small_curves.dat",
         "small_curves_gv.dat",
+        "potent_rays.dat",
+        "potent_rays_gv.dat",
+        "potent_rays_rank.dat",
+        "potent_rays_vols.dat",
     ] {
         assert!(
             !runner.contains(gv_artifact),
@@ -572,6 +576,10 @@ fn stage0_mcallister_binaries_do_not_use_validation_replay_artifacts() {
         "dual_curves_gv.dat",
         "small_curves.dat",
         "small_curves_gv.dat",
+        "potent_rays.dat",
+        "potent_rays_gv.dat",
+        "potent_rays_rank.dat",
+        "potent_rays_vols.dat",
     ];
 
     for entry in std::fs::read_dir(&bin_dir)
