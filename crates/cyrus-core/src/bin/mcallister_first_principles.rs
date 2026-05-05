@@ -3132,6 +3132,20 @@ fn corrected_chamber_top_toric_local_gv_witness_limit() -> usize {
         .unwrap_or(4)
 }
 
+fn corrected_chamber_top_toric_local_gv_delta_limit() -> usize {
+    std::env::var("CYRUS_CORRECTED_CHAMBER_TOP_TORIC_LOCAL_GV_DELTA_LIMIT")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(4)
+}
+
+fn corrected_chamber_top_toric_local_gv_contribution_limit() -> usize {
+    std::env::var("CYRUS_CORRECTED_CHAMBER_TOP_TORIC_LOCAL_GV_CONTRIBUTION_LIMIT")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(6)
+}
+
 fn report_corrected_chamber_top_toric_local_gv_diagnostics(
     tri: &Triangulation,
     geom: &PrimalGeom,
@@ -7968,7 +7982,10 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
     let collect_top_toric_local_gv = corrected_chamber_top_toric_local_gv_requested();
     let mut top_toric_local_gv_targets = Vec::new();
     let mut top_toric_local_gv_seen = HashSet::new();
-    for &(idx, _abs_delta, _delta, _checkpoint_implied, _toric_covered) in gv_deltas.iter().take(4)
+    let top_delta_limit = corrected_chamber_top_toric_local_gv_delta_limit();
+    let top_contribution_limit = corrected_chamber_top_toric_local_gv_contribution_limit();
+    for &(idx, _abs_delta, _delta, _checkpoint_implied, _toric_covered) in
+        gv_deltas.iter().take(top_delta_limit)
     {
         let divisor_idx = kklt_basis[idx];
         let Some(mut rows) = ambient_target_contribution_rows(
@@ -7984,7 +8001,7 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
             continue;
         };
         rows.sort_unstable_by(|lhs, rhs| rhs.contribution.abs().total_cmp(&lhs.contribution.abs()));
-        for row in rows.into_iter().take(6) {
+        for row in rows.into_iter().take(top_contribution_limit) {
             let decomp_terms = small_curve_by_class
                 .get(&row.class)
                 .and_then(|candidate| {
