@@ -5902,6 +5902,60 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
         corrected_chi_summary.max_abs_reference,
         corrected_chi_summary.max_abs_candidate
     );
+    for threshold in [0.005_f64, 0.01, 0.02, 0.05, 0.1] {
+        let thresholded_gvs = selection
+            .small_curve_gvs
+            .iter()
+            .filter(|(curve, _invariant)| {
+                intersection
+                    .basis
+                    .iter()
+                    .zip(checkpoint_t.iter())
+                    .map(|(&idx, ti)| curve[idx] as f64 * ti.get())
+                    .sum::<f64>()
+                    >= threshold
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let Some(thresholded_target) =
+            cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+                &thresholded_gvs,
+                &intersection.basis,
+                kklt_basis,
+                checkpoint_t,
+                Some(gamma),
+            )
+        else {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber GV target correction delta (drop_qdot_lt_{threshold}) unavailable: thresholded correction is invalid"
+            );
+            continue;
+        };
+        let input_chi_threshold_summary =
+            target_correction_delta_summary(&checkpoint_implied_gv, &thresholded_target)
+                .unwrap_or_else(|e| {
+                    eprintln!(
+                        "[ERROR] failed to compare input-chi thresholded corrected-chamber GV target correction: {e}"
+                    );
+                    std::process::exit(2);
+                });
+        let corrected_chi_threshold_summary =
+            target_correction_delta_summary(&checkpoint_chamber_implied_gv, &thresholded_target)
+                .unwrap_or_else(|e| {
+                    eprintln!(
+                        "[ERROR] failed to compare corrected-chi thresholded corrected-chamber GV target correction: {e}"
+                    );
+                    std::process::exit(2);
+                });
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber GV target correction delta (drop_qdot_lt_{threshold}): kept={} input_chi_max_abs={} input_chi_relative_l2={} corrected_chi_max_abs={} corrected_chi_relative_l2={}",
+            thresholded_gvs.len(),
+            input_chi_threshold_summary.max_abs_delta,
+            input_chi_threshold_summary.relative_l2_delta,
+            corrected_chi_threshold_summary.max_abs_delta,
+            corrected_chi_threshold_summary.relative_l2_delta
+        );
+    }
     if let Some(height_chamber) = corrected_heights_chamber.as_ref() {
         let height_selection = compute_chamber_toric_gv_selection(
             height_chamber,
