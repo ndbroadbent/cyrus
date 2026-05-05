@@ -1402,3 +1402,12 @@ non-integral GV output. The four rational-cone-only targets are skipped. This
 rules out promoting the LP active-generator diamond as the missing GV fallback;
 the HKTY domain still needs the broader source-derived finite semigroup/path
 history.
+
+The next wider diagnostic window is also negative. `mcallister_gv_context
+--run-active-support-generators` filters the degree-bounded projected Mori rows
+to those supported on the union of the missing target support and its LP active
+generator support. This gives small `mcap_generators` windows of `4..13` rows
+per missing target. On the 4-214-647 context, six windows return `GV=0`; the
+other three panic inside the provided-generator cygv path with
+`NonIntegerGVError`. This shows that support-local generator closure is still
+too small or otherwise not the correct CYTools/cygv source domain.

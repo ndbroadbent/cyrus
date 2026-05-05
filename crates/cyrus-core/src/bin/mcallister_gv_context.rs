@@ -14,7 +14,10 @@ use std::path::PathBuf;
 
 use cyrus_core::types::rational::Rational;
 use cyrus_core::types::tags::Finite;
-use cyrus_core::{Intersection, compute_gv_invariants_with_explicit_semigroup};
+use cyrus_core::{
+    Intersection, compute_gv_invariants_with_explicit_semigroup,
+    compute_gv_invariants_with_provided_generators,
+};
 
 #[derive(Debug, Deserialize)]
 struct CorrectedChamberGvContext {
@@ -85,6 +88,10 @@ struct TargetReport {
     status: String,
     gv: Option<String>,
     error: Option<String>,
+    active_support_generator_count: Option<usize>,
+    active_support_status: Option<String>,
+    active_support_gv: Option<String>,
+    active_support_error: Option<String>,
 }
 
 fn parse_arg_value<T: std::str::FromStr>(flag: &str) -> Option<T> {
@@ -99,6 +106,16 @@ fn parse_arg_value<T: std::str::FromStr>(flag: &str) -> Option<T> {
 
 fn parse_flag(flag: &str) -> bool {
     std::env::args().any(|arg| arg == flag)
+}
+
+fn panic_payload_message(payload: &(dyn std::any::Any + Send)) -> String {
+    if let Some(message) = payload.downcast_ref::<String>() {
+        message.clone()
+    } else if let Some(message) = payload.downcast_ref::<&str>() {
+        (*message).to_string()
+    } else {
+        "non-string panic payload".to_string()
+    }
 }
 
 fn load_json<T: for<'de> Deserialize<'de>>(path: &PathBuf) -> Result<T, String> {
@@ -322,6 +339,7 @@ fn report_target(
     sample: &MissingGvTargetSample,
     context: &ValidatedContext<'_>,
     run_integer_diamonds: bool,
+    run_active_support_generators: bool,
     element_limit: usize,
 ) -> TargetReport {
     let exact_kind = sample.real_cone_decomposition_exact_kind.clone();
@@ -341,6 +359,24 @@ fn report_target(
         status: String::new(),
         gv: None,
         error: None,
+        active_support_generator_count: None,
+        active_support_status: None,
+        active_support_gv: None,
+        active_support_error: None,
+    };
+
+    let (
+        active_support_generator_count,
+        active_support_status,
+        active_support_gv,
+        active_support_error,
+    ) = if run_active_support_generators {
+        match active_support_generator_gv(sample, context) {
+            Ok((count, status, gv, error)) => (Some(count), Some(status), gv, error),
+            Err(error) => (None, Some("error".to_string()), None, Some(error)),
+        }
+    } else {
+        (None, None, None, None)
     };
 
     match report_target_inner(sample, context, run_integer_diamonds, element_limit) {
@@ -350,11 +386,19 @@ fn report_target(
             diamond_element_count: element_count,
             gv,
             error,
+            active_support_generator_count,
+            active_support_status,
+            active_support_gv,
+            active_support_error,
             ..base
         },
         Err(error) => TargetReport {
             status: "error".to_string(),
             error: Some(error),
+            active_support_generator_count,
+            active_support_status,
+            active_support_gv,
+            active_support_error,
             ..base
         },
     }
@@ -459,13 +503,16 @@ fn report_target_inner(
                 Some(format!("explicit-semigroup HKTY failed: {error}")),
             ));
         }
-        Err(_) => {
+        Err(payload) => {
             return Ok((
                 "hkty_panic".to_string(),
                 Some(terms.len()),
                 Some(elements.len()),
                 None,
-                Some("explicit-semigroup HKTY panicked".to_string()),
+                Some(format!(
+                    "explicit-semigroup HKTY panicked: {}",
+                    panic_payload_message(payload.as_ref())
+                )),
             ));
         }
     };
@@ -482,10 +529,143 @@ fn report_target_inner(
     ))
 }
 
+fn active_support_generator_gv(
+    sample: &MissingGvTargetSample,
+    context: &ValidatedContext<'_>,
+) -> Result<(usize, String, Option<String>, Option<String>), String> {
+    if cfg!(panic = "abort") {
+        return Ok((
+            0,
+            "skipped_panic_abort".to_string(),
+            None,
+            Some("cygv diagnostic requires a panic=unwind build".to_string()),
+        ));
+    }
+    let target = dense_from_sparse(&sample.basis_nonzero, context.dimension)?;
+    let mut support = target
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, &value)| (value != 0).then_some(idx))
+        .collect::<HashSet<_>>();
+    if let Some(active_generators) = sample
+        .real_cone_decomposition_active_generator_basis_nonzero
+        .as_ref()
+    {
+        for generator in active_generators {
+            for &(idx, value) in generator {
+                if value != 0 {
+                    support.insert(idx);
+                }
+            }
+        }
+    }
+    if support.is_empty() {
+        return Err("active-support generator window is empty".to_string());
+    }
+
+    let mut generators = Vec::new();
+    let mut seen = HashSet::new();
+    for ray in context.degree_bounded_rays {
+        let degree = curve_degree(ray, context.grading)?;
+        if degree <= 0 || degree > sample.degree {
+            continue;
+        }
+        if ray
+            .iter()
+            .enumerate()
+            .all(|(idx, &value)| value == 0 || support.contains(&idx))
+            && seen.insert(ray.clone())
+        {
+            generators.push(ray.clone());
+        }
+    }
+    if !generators
+        .iter()
+        .any(|ray| ray.as_slice() == target.as_slice())
+    {
+        generators.push(target.clone());
+    }
+    generators.sort();
+    generators.dedup();
+
+    let max_deg = u32::try_from(sample.degree)
+        .map_err(|_| format!("target degree {} does not fit in u32", sample.degree))?;
+    let target_i32 = target
+        .iter()
+        .map(|&value| {
+            i32::try_from(value).map_err(|_| "target coordinate does not fit in i32".to_string())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let previous_panic_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let gvs_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        compute_gv_invariants_with_provided_generators(
+            &generators,
+            context.grading,
+            context.q_matrix,
+            &context.intersection,
+            None,
+            Some(max_deg),
+        )
+    }));
+    std::panic::set_hook(previous_panic_hook);
+
+    let gvs = match gvs_result {
+        Ok(Ok(gvs)) => gvs,
+        Ok(Err(error)) => {
+            return Ok((
+                generators.len(),
+                "hkty_error".to_string(),
+                None,
+                Some(format!(
+                    "active-support provided-generator HKTY failed: {error}"
+                )),
+            ));
+        }
+        Err(payload) => {
+            return Ok((
+                generators.len(),
+                "hkty_panic".to_string(),
+                None,
+                Some(format!(
+                    "active-support provided-generator HKTY panicked: {}",
+                    panic_payload_message(payload.as_ref())
+                )),
+            ));
+        }
+    };
+    let gv = gvs
+        .into_iter()
+        .find_map(|(curve, value)| (curve == target_i32).then(|| value.to_string()))
+        .unwrap_or_else(|| "0".to_string());
+    Ok((
+        generators.len(),
+        "computed_active_support_generators".to_string(),
+        Some(gv),
+        None,
+    ))
+}
+
+fn curve_degree(curve: &[i64], grading: &[i64]) -> Result<i128, String> {
+    if curve.len() != grading.len() {
+        return Err(format!(
+            "curve dimension {} does not match grading dimension {}",
+            curve.len(),
+            grading.len()
+        ));
+    }
+    Ok(curve
+        .iter()
+        .zip(grading.iter())
+        .map(|(&coefficient, &weight)| i128::from(coefficient) * i128::from(weight))
+        .sum())
+}
+
 fn build_report(
     context: &CorrectedChamberGvContext,
     validated: &ValidatedContext<'_>,
     run_integer_diamonds: bool,
+    run_active_support_generators: bool,
     element_limit: usize,
 ) -> ContextReport {
     let targets = validated
@@ -494,7 +674,14 @@ fn build_report(
         .iter()
         .enumerate()
         .map(|(idx, sample)| {
-            report_target(idx, sample, validated, run_integer_diamonds, element_limit)
+            report_target(
+                idx,
+                sample,
+                validated,
+                run_integer_diamonds,
+                run_active_support_generators,
+                element_limit,
+            )
         })
         .collect();
     ContextReport {
@@ -521,11 +708,12 @@ fn build_report(
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--run-integer-diamonds] [--element-limit N] [--out path]"
+            "[ERROR] usage: mcallister_gv_context --context path [--run-integer-diamonds] [--run-active-support-generators] [--element-limit N] [--out path]"
         );
         std::process::exit(2);
     };
     let run_integer_diamonds = parse_flag("--run-integer-diamonds");
+    let run_active_support_generators = parse_flag("--run-active-support-generators");
     let element_limit = parse_arg_value::<usize>("--element-limit").unwrap_or(256);
     let out_path = parse_arg_value::<PathBuf>("--out");
 
@@ -537,7 +725,13 @@ fn main() {
         eprintln!("[ERROR] invalid corrected-chamber GV context: {e}");
         std::process::exit(2);
     });
-    let report = build_report(&context, &validated, run_integer_diamonds, element_limit);
+    let report = build_report(
+        &context,
+        &validated,
+        run_integer_diamonds,
+        run_active_support_generators,
+        element_limit,
+    );
     let content = serde_json::to_string_pretty(&report).unwrap_or_else(|e| {
         eprintln!("[ERROR] failed to serialize context report: {e}");
         std::process::exit(2);
@@ -596,5 +790,11 @@ mod tests {
                 vec![2, 1],
             ]
         );
+    }
+
+    #[test]
+    fn curve_degree_rejects_dimension_mismatch() {
+        assert_eq!(curve_degree(&[2, -1], &[3, 5]).unwrap(), 1);
+        assert!(curve_degree(&[1], &[1, 2]).is_err());
     }
 }

@@ -169,6 +169,10 @@ to make the remaining GV layer more first-principles:
    that artifact and verifies the five integer-semigroup active-generator
    diamonds, but those tiny domains are not valid fallback contexts: three
    return `GV=0` and two produce non-integral cygv series-inversion output.
+   A slightly broader active-support generator window has also been checked:
+   filtering degree-bounded Mori rows to the union of target and LP-active
+   supports gives `4..13` generators per target, but still returns only zeros
+   or `NonIntegerGVError` panics in cygv.
    The next step is therefore to reconstruct the broader source-derived finite
    semigroup/path history for the missing origin circuits, not to promote LP
    active-generator diamonds.
