@@ -138,3 +138,12 @@ minutes; stack samples remained in `compute_ckyz_inverse_mirror_map_domain ->
 ckyz_series_exp_domain -> ckyz_series_mul_domain`. That confirms the next
 builder needs cygv-style coefficient/path-history domains, not just narrower
 support sets or faster monomial lookup.
+
+A test-only z-series inversion prototype now mirrors cygv's residual
+subtraction more directly: it builds the contracted instanton potential in
+`z`, walks the finite downset in degree order, subtracts `Li2(q^d)` expressed in
+`z`, and only then reads the target GV values. The local P2, F0, and polygon-5
+tests match the existing flat-coordinate extractor when the full lower-degree
+path history is included. A failed ray-only attempt was instructive: F0
+`[1,1]` is wrong unless `[1,0]` and `[0,1]` are processed first, exactly the
+same lower-degree history requirement seen in cygv's `series_inversion`.

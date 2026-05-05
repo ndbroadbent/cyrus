@@ -4229,6 +4229,193 @@ fn compute_ckyz_local_instanton_potential_corrections_domain(
     substitute_ckyz_series_in_flat_coordinates_domain(&contracted, &z_of_q, domain)
 }
 
+#[cfg(test)]
+fn compute_ckyz_local_instanton_potential_z_domain(
+    relations: &[Vec<i64>],
+    local_intersection_terms: &[CkyzLocalIntersectionTerm],
+    domain: &CkyzMonomialDomain,
+) -> Result<(
+    Vec<BTreeMap<Vec<usize>, Rational>>,
+    BTreeMap<Vec<usize>, Rational>,
+)> {
+    validate_ckyz_relations(relations)?;
+    let rank = relations.len();
+    if domain.rank != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ componentwise cutoff rank does not match relation rank".into(),
+        ));
+    }
+    for term in local_intersection_terms {
+        if term.first >= rank || term.second >= rank {
+            return Err(Error::InvalidInput(
+                "CKYZ local intersection term index is outside the relation rank".into(),
+            ));
+        }
+    }
+
+    let alpha = compute_ckyz_log_period_corrections_domain(relations, domain)?;
+    let mut contracted = BTreeMap::new();
+
+    for term in local_intersection_terms {
+        let beta = ckyz_second_log_period_series_for_pair_domain(
+            relations,
+            term.first,
+            term.second,
+            domain,
+        )?;
+        let alpha_product =
+            ckyz_series_mul_domain(&alpha[term.first], &alpha[term.second], domain)?;
+        let mut f_pair = beta;
+        ckyz_series_add_scaled_assign(&mut f_pair, &alpha_product, Rational::from(-1));
+
+        let mut term_coefficient = Rational::from(term.coefficient);
+        if term.first == term.second {
+            term_coefficient /= Rational::from(2);
+        }
+        ckyz_series_add_scaled_assign(&mut contracted, &f_pair, term_coefficient);
+    }
+
+    Ok((alpha, contracted))
+}
+
+#[cfg(test)]
+fn ckyz_q_degree_series_in_z_domain(
+    degree: &[usize],
+    alpha: &[BTreeMap<Vec<usize>, Rational>],
+    domain: &CkyzMonomialDomain,
+) -> Result<BTreeMap<Vec<usize>, Rational>> {
+    let rank = alpha.len();
+    if rank == 0 || degree.len() != rank || domain.rank != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ q-degree series rank mismatch".into(),
+        ));
+    }
+    if !domain.contains(degree) {
+        return Ok(BTreeMap::new());
+    }
+
+    let mut exponent = BTreeMap::new();
+    for (coordinate, &power) in degree.iter().enumerate() {
+        if power == 0 {
+            continue;
+        }
+        ckyz_series_add_scaled_assign(
+            &mut exponent,
+            &alpha[coordinate],
+            Rational::from(Integer::from(power)),
+        );
+    }
+    let exp_exponent = ckyz_series_exp_domain(&exponent, domain)?;
+    let monomial = BTreeMap::from([(degree.to_vec(), Rational::from(1))]);
+    ckyz_series_mul_domain(&monomial, &exp_exponent, domain)
+}
+
+#[cfg(test)]
+fn ckyz_series_li2_domain(
+    series: &BTreeMap<Vec<usize>, Rational>,
+    domain: &CkyzMonomialDomain,
+) -> Result<BTreeMap<Vec<usize>, Rational>> {
+    validate_ckyz_series_has_zero_constant(series, domain.rank, "CKYZ Li2 input")?;
+    let max_exponent = ckyz_series_min_total_degree(series, domain.rank, "CKYZ Li2 input")?
+        .map_or(0, |min_degree| domain.max_total_degree / min_degree);
+    if max_exponent == 0 {
+        return Ok(BTreeMap::new());
+    }
+
+    let mut out = series.clone();
+    let mut power = series.clone();
+    for exponent in 2..=max_exponent {
+        power = ckyz_series_mul_domain(&power, series, domain)?;
+        if power.is_empty() {
+            break;
+        }
+        let exponent_squared = exponent
+            .checked_mul(exponent)
+            .ok_or_else(|| Error::InvalidInput("CKYZ Li2 exponent overflowed usize".into()))?;
+        ckyz_series_add_scaled_assign(
+            &mut out,
+            &power,
+            Rational::from_signeds(
+                1i64,
+                i64::try_from(exponent_squared).map_err(|_| {
+                    Error::InvalidInput("CKYZ Li2 exponent does not fit i64".into())
+                })?,
+            ),
+        );
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
+    potential_z_coefficients: &BTreeMap<Vec<usize>, Rational>,
+    alpha: &[BTreeMap<Vec<usize>, Rational>],
+    cover_weight_coefficients: &[i64],
+    target_degrees: &[Vec<usize>],
+    domain: &CkyzMonomialDomain,
+) -> Result<BTreeMap<Vec<usize>, Integer>> {
+    let rank = cover_weight_coefficients.len();
+    if rank == 0 || alpha.len() != rank || domain.rank != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ local GV z-series extraction rank mismatch".into(),
+        ));
+    }
+    validate_ckyz_series(
+        potential_z_coefficients,
+        rank,
+        "CKYZ local instanton potential",
+    )?;
+    validate_ckyz_target_degrees(target_degrees, rank)?;
+
+    let mut extraction_degrees = target_degrees.to_vec();
+    ckyz_sort_degrees_for_extraction(&mut extraction_degrees);
+    extraction_degrees.dedup();
+
+    let mut residual = potential_z_coefficients.clone();
+    let mut invariants = BTreeMap::new();
+    for degree in &extraction_degrees {
+        let coefficient = residual
+            .get(degree)
+            .cloned()
+            .unwrap_or_else(|| Rational::from(0));
+        if coefficient == 0 {
+            continue;
+        }
+        let weight = ckyz_cover_weight(cover_weight_coefficients, degree)?;
+        if weight == 0 {
+            return Err(Error::InvalidInput(
+                "CKYZ local GV extraction encountered a nonzero coefficient with zero cover weight"
+                    .into(),
+            ));
+        }
+        let gv_rational = coefficient / Rational::from(weight);
+        if gv_rational.denominator_ref() != &1u32 {
+            return Err(Error::InvalidInput(format!(
+                "CKYZ local GV invariant at degree {degree:?} is not integral: {gv_rational}"
+            )));
+        }
+        let gv = Integer::try_from(gv_rational).map_err(|_| {
+            Error::InvalidInput(format!(
+                "CKYZ local GV invariant at degree {degree:?} is not integral"
+            ))
+        })?;
+        if gv == 0 {
+            continue;
+        }
+        invariants.insert(degree.clone(), gv.clone());
+
+        let q_degree = ckyz_q_degree_series_in_z_domain(degree, alpha, domain)?;
+        let li2 = ckyz_series_li2_domain(&q_degree, domain)?;
+        ckyz_series_add_scaled_assign(
+            &mut residual,
+            &li2,
+            -Rational::from(weight) * Rational::from(gv),
+        );
+    }
+
+    Ok(invariants)
+}
+
 fn extract_ckyz_local_gv_invariants_from_potential_for_degrees(
     potential_coefficients: &BTreeMap<Vec<usize>, Rational>,
     cover_weight_coefficients: &[i64],
@@ -9708,6 +9895,7 @@ mod tests {
         compute_ckyz_local_gv_invariants_for_degrees_with_predicted_support_domain,
         compute_ckyz_local_instanton_potential_corrections,
         compute_ckyz_local_instanton_potential_corrections_domain,
+        compute_ckyz_local_instanton_potential_z_domain,
         compute_ckyz_local_prepotential_period_corrections,
         compute_ckyz_local_surface_gv_invariants_for_multiples_with_causal_domain,
         compute_ckyz_log_period_corrections, compute_ckyz_log_period_corrections_domain,
@@ -9720,6 +9908,7 @@ mod tests {
         detect_apparent_nilpotent_rays_from_gv_table, diagnose_affine_toric_circuit,
         dump_mori_rays_cdd, extract_ckyz_local_gv_invariants_from_potential,
         extract_ckyz_local_gv_invariants_from_potential_for_degrees,
+        extract_ckyz_local_gv_invariants_from_z_potential_for_degrees,
         find_extremal_mori_ray_separator, find_pair_decomposition, find_semigroup_decomposition,
         finite_cutoff_gv_charges_excluding_primitive_rays, finite_gv_nonzero_degree_slice_points,
         gv_divisor_basis_data, gv_lattice_search_request, load_grading_cache,
@@ -10659,6 +10848,69 @@ mod tests {
         .unwrap();
 
         assert_eq!(predicted, broad);
+    }
+
+    #[test]
+    fn ckyz_z_series_inversion_matches_flat_coordinate_extraction_for_local_models() {
+        let cases = [
+            (
+                vec![vec![-3, 1, 1, 1]],
+                vec![CkyzLocalIntersectionTerm {
+                    first: 0,
+                    second: 0,
+                    coefficient: 1,
+                }],
+                vec![3],
+                (1..=6).map(|degree| vec![degree]).collect::<Vec<_>>(),
+            ),
+            (
+                vec![vec![-2, 1, 0, 1, 0], vec![-2, 0, 1, 0, 1]],
+                vec![CkyzLocalIntersectionTerm {
+                    first: 0,
+                    second: 1,
+                    coefficient: 1,
+                }],
+                vec![2, 2],
+                vec![vec![1, 1], vec![2, 2], vec![3, 3]],
+            ),
+            (
+                ckyz_polygon5_relations(),
+                ckyz_polygon5_intersection_terms(),
+                vec![1, 1, 1],
+                vec![vec![4, 3, 2], vec![8, 6, 4]],
+            ),
+        ];
+
+        for (relations, local_intersection_terms, cover_weights, target_degrees) in cases {
+            let expected = compute_ckyz_local_gv_invariants_for_degrees(
+                &relations,
+                &local_intersection_terms,
+                &cover_weights,
+                &target_degrees,
+            )
+            .unwrap();
+            let extraction_degrees = ckyz_cover_closed_target_degrees(&target_degrees).unwrap();
+            let domain =
+                CkyzMonomialDomain::target_downset(&extraction_degrees, relations.len()).unwrap();
+            let path_history_degrees = domain.nonzero_degrees().cloned().collect::<Vec<_>>();
+            let (alpha, potential_z) = compute_ckyz_local_instanton_potential_z_domain(
+                &relations,
+                &local_intersection_terms,
+                &domain,
+            )
+            .unwrap();
+            let mut actual = extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
+                &potential_z,
+                &alpha,
+                &cover_weights,
+                &path_history_degrees,
+                &domain,
+            )
+            .unwrap();
+            actual.retain(|degree, _| target_degrees.iter().any(|target| target == degree));
+
+            assert_eq!(actual, expected);
+        }
     }
 
     #[test]
