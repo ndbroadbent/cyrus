@@ -43,6 +43,21 @@ const DILOG_TOL: f64 = 1e-16;
 const DILOG_MAX_TERMS: usize = 100_000;
 const ZETA_3: f64 = 1.202_056_903_159_594;
 
+/// Why a real-axis GV dilogarithm evaluation failed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GvDilogFailure {
+    /// `q.t` was NaN or infinite.
+    NonFiniteCurveVolume,
+    /// The curve lies exactly on the wall where `q.t = 0`.
+    ZeroCurveVolume,
+    /// The signed polylogarithm argument overflowed or became non-finite.
+    NonFiniteArgument,
+    /// The signed argument is on the real branch cut `Li_2(x > 1)`.
+    RealBranchCut,
+    /// The reduction/series evaluation did not converge.
+    EvaluationFailed,
+}
+
 fn kklt_debug_enabled() -> bool {
     env::var_os("CYRUS_KKLT_DEBUG").is_some()
 }
@@ -206,24 +221,47 @@ fn real_trilog_real_axis(x: f64) -> Option<f64> {
 }
 
 fn gv_polylog_argument(q_dot_t: f64, parity: i128) -> Option<f64> {
-    if !q_dot_t.is_finite() || q_dot_t == 0.0 {
-        return None;
+    gv_polylog_argument_checked(q_dot_t, parity).ok()
+}
+
+fn gv_polylog_argument_checked(q_dot_t: f64, parity: i128) -> Result<f64, GvDilogFailure> {
+    if !q_dot_t.is_finite() {
+        return Err(GvDilogFailure::NonFiniteCurveVolume);
+    }
+    if q_dot_t == 0.0 {
+        return Err(GvDilogFailure::ZeroCurveVolume);
     }
     let sign = if parity.rem_euclid(2) == 0 { 1.0 } else { -1.0 };
     let arg = sign * (-TWO_PI.get() * q_dot_t).exp();
-    if !arg.is_finite() || arg > 1.0 {
-        return None;
+    if !arg.is_finite() {
+        return Err(GvDilogFailure::NonFiniteArgument);
     }
-    Some(arg)
+    if arg > 1.0 {
+        return Err(GvDilogFailure::RealBranchCut);
+    }
+    Ok(arg)
 }
 
 fn gv_dilog_from_curve_volume(q_dot_t: f64, parity: i128) -> Option<f64> {
-    let arg = gv_polylog_argument(q_dot_t, parity)?;
+    gv_dilog_from_curve_volume_checked(q_dot_t, parity).ok()
+}
+
+/// Evaluate `Li_2((-1)^parity exp(-2π q.t))` on the real axis.
+///
+/// This returns a typed failure when the curve volume is invalid or the
+/// even-parity negative-volume continuation hits the real `Li_2(x > 1)` branch
+/// cut. Odd-parity negative volumes remain real and are evaluated by the
+/// standard flop identity.
+pub fn gv_dilog_from_curve_volume_checked(
+    q_dot_t: f64,
+    parity: i128,
+) -> Result<f64, GvDilogFailure> {
+    let arg = gv_polylog_argument_checked(q_dot_t, parity)?;
     if arg.abs() < 1e-100 {
-        return Some(0.0);
+        return Ok(0.0);
     }
 
-    real_dilog_real_axis(arg)
+    real_dilog_real_axis(arg).ok_or(GvDilogFailure::EvaluationFailed)
 }
 
 /// Compute the divisor GV correction
@@ -465,16 +503,19 @@ pub fn compute_gv_target_correction_for_ambient_curves(
             .sum::<f64>();
 
         let parity = ambient_curve_b_field_parity(curve, basis, gamma)?;
-        let Some(dilog) = gv_dilog_from_curve_volume(q_dot_t, parity) else {
-            if debug {
-                let sign = if parity.rem_euclid(2) == 0 { 1.0 } else { -1.0 };
-                let arg = sign * (-TWO_PI.get() * q_dot_t).exp();
-                eprintln!(
-                    "[KKLT] ambient GV curve {curve_index} has invalid q.t={q_dot_t} parity={parity} arg={arg}; first coefficients={:?}",
-                    curve.iter().take(16).collect::<Vec<_>>()
-                );
+        let dilog = match gv_dilog_from_curve_volume_checked(q_dot_t, parity) {
+            Ok(value) => value,
+            Err(failure) => {
+                if debug {
+                    let sign = if parity.rem_euclid(2) == 0 { 1.0 } else { -1.0 };
+                    let arg = sign * (-TWO_PI.get() * q_dot_t).exp();
+                    eprintln!(
+                        "[KKLT] ambient GV curve {curve_index} has invalid q.t={q_dot_t} parity={parity} arg={arg} failure={failure:?}; first coefficients={:?}",
+                        curve.iter().take(16).collect::<Vec<_>>()
+                    );
+                }
+                return None;
             }
-            return None;
         };
         if dilog == 0.0 {
             continue;
@@ -1908,6 +1949,24 @@ mod tests {
         let correction = compute_gv_target_correction(&invariants, &t, Some(&gamma)).unwrap();
         let expected = -1.436_746_366_883_680_8 / (4.0 * PI * PI);
         assert!((correction[0].get() - expected).abs() < 1e-14);
+    }
+
+    #[test]
+    fn test_gv_dilog_checked_classifies_flop_failures() {
+        assert_eq!(
+            gv_dilog_from_curve_volume_checked(f64::NAN, 0).unwrap_err(),
+            GvDilogFailure::NonFiniteCurveVolume
+        );
+        assert_eq!(
+            gv_dilog_from_curve_volume_checked(0.0, 0).unwrap_err(),
+            GvDilogFailure::ZeroCurveVolume
+        );
+        assert_eq!(
+            gv_dilog_from_curve_volume_checked(-0.01, 0).unwrap_err(),
+            GvDilogFailure::RealBranchCut
+        );
+        assert!(gv_dilog_from_curve_volume_checked(-0.01, 1).is_ok());
+        assert!(gv_dilog_from_curve_volume_checked(0.01, 0).is_ok());
     }
 
     #[test]
