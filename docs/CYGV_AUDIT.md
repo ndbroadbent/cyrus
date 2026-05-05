@@ -98,6 +98,68 @@ The latest Stage 5 residual is therefore best interpreted as a selected-curve
 coverage/chamber/continuation problem, not as a dilog aggregation problem and
 not as a problem in the already-checked local toric formulas.
 
+## Ancillary Data Semantics
+
+The paper-data `readme.txt` is explicit about the high-dimensional Kähler-side
+files for `4-214-647`:
+
+- `small_curves.dat` contains curves found using toric information below a
+  cutoff in the approximate KKLT vacuum.
+- `small_curves_cutoff.dat` is `1.0`; the cut is applied before instanton
+  corrections.
+- `small_curves_gv.dat` contains GV invariants for those selected curves.
+- `small_curves_vols.dat` contains their volumes in the KKLT vacuum after the
+  instanton-corrected move; negative entries mark curves flopped when moving
+  from `kahler_param.dat` to `corrected_kahler_param.dat`.
+
+Direct inspection of the `4-214-647` files gives:
+
+- `small_curves.dat`: `344 x 219`
+- `small_curves_gv.dat`: 344 values, with 315 entries equal to `1` and 29
+  entries equal to `-2`
+- `small_curves_vols.dat`: exactly
+  `small_curves[:, basis.dat] * corrected_kahler_param.dat`
+- approximate-chamber volumes
+  `small_curves[:, basis.dat] * kahler_param.dat` are all positive and below
+  the cutoff
+- corrected-chamber stored volumes include 10 negative/flopped curves
+
+So the selection chamber and the evaluation chamber are not the same thing. The
+paper selected small toric curves in the approximate chamber, then evaluated the
+instanton-corrected solution where some of those selected classes have crossed a
+flop wall.
+
+## Python Reproduction Boundary
+
+The older Python reproduction contains two different styles of GV use:
+
+- the mirror/racetrack side computes or validates `dual_curves.dat` using
+  CYTools `compute_gvs(min_points=20000)`;
+- the primal KKLT correction side often accepts a `gv_invariants` dictionary as
+  an upstream input, and some latest-CYTools experiments call
+  `cy.compute_gvs(min_points=100)` generically.
+
+That generic `compute_gvs` call is not the paper's high-`h11` selected
+small-curve method. It can be useful as a small validation experiment, but it is
+not an implementation strategy for the 214-dimensional Kähler correction.
+
+## Flop Continuation
+
+The paper warns that continuing the Kähler-coordinate formula through a flop is
+subtle. For curves with half-integral `B_2` field (`gamma dot q` odd), the
+polylog identity used in the paper is:
+
+```text
+Li2(-exp(-2*pi*t))/(2*pi)^2
+  = -Li2(-exp(-2*pi*(-t)))/(2*pi)^2 + 1/2*t^2 - 1/24
+```
+
+This polynomial correction is tied to the transformations of `chi(D_i)` and
+`kappa_ijk` across the flop. Therefore simply evaluating the original chamber's
+finite GV list at negative `q.t` is not a first-principles corrected-chamber
+implementation unless the associated chamber/topology transformation is handled
+explicitly.
+
 ## Next Productive Step
 
 Stop expanding top-contributor local checks. The next useful comparison is a
@@ -117,3 +179,14 @@ faithful selected-small-curve method audit:
 The open question is now sharper: is the residual caused by using the wrong
 small-curve chamber/continuation convention, or by an incomplete port of the
 toric/face GV method that generated the selected `small_curves_gv` values?
+
+The next code change should be one of these two narrow audits, not another broad
+GV fallback:
+
+1. Add a selected-small-curve checkpoint for the approximate chamber that must
+   reproduce the published 344 selected classes and their `1/-2` GV values
+   without reading `small_curves*.dat` except as assertions.
+2. Add an explicit corrected-chamber/flop-continuation diagnostic for the 10
+   selected classes whose corrected volumes are negative, verifying the
+   required `gamma dot q` parity and the polynomial terms before promoting any
+   continuation into the production KKLT correction.
