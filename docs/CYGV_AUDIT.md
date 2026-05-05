@@ -877,3 +877,39 @@ This keeps the ancillary GV rows as assertions. It also explains why simply
 calling cygv on one ray, or adding a coefficient-pattern-to-GV dispatch table,
 would be the wrong abstraction: both would skip the semigroup and lower-degree
 subtraction history that cygv's `series_inversion` actually uses.
+
+## May 2026 cygv Source Addendum
+
+A fresh read of the installed `cygv-0.1.2` source keeps the same conclusion but
+adds a few implementation details that should constrain the next port:
+
+- `run_hkty` is a pipeline wrapper, not an error-safe public contract. It builds a
+  `Semigroup`, calls `compute_omega`, calls `compute_instanton_data`, and calls
+  `invert_series`, but it still unwraps each internal `Result`. Cyrus'
+  production paths should keep using lower-level calls when custom local inputs
+  are being assembled.
+- `Semigroup::with_min_elements` does not keep the caller-supplied rows as the
+  truncation domain. It reduces the supplied rows to generators, starts from the
+  identity, and closes under addition until enough elements exist.
+- `Semigroup::with_max_degree` first trims caller-supplied rows by grading degree,
+  then uses both the trimmed rows and their reduced generator set before closure.
+  That makes the caller's local generator context part of the mathematical input.
+- `fundamental_period::compute_omega` infers the CY dimension from the `q` matrix
+  shape and nef partition, and rejects `cy_dim < 3`. This is the concrete code
+  reason compact cygv cannot be treated as a local toric-surface engine.
+- `compute_omega` groups semigroup elements by the number of negative GLSM
+  intersections and only computes coefficient formulas for the 0-, 1-, and
+  2-negative cases. Classes outside those groups are not independent local
+  outputs.
+- Threefold `series_inversion` extracts a candidate GV for a class by choosing the
+  first nonzero curve-coordinate component, dividing the corresponding instanton
+  coefficient by that component, checking integrality, then subtracting
+  `GV * component * Li2(q_N)` from every affected instanton polynomial.
+- The subtraction uses a rolling cache of previously computed `q_N` polynomials
+  whose depth depends on `h11`. This reinforces that the answer for a ray is a
+  function of the surrounding semigroup history, not just the sparse ray vector.
+
+For Cyrus, the actionable consequence is unchanged: a local non-`P^2` potent-ray
+implementation needs source-derived local semigroup generators, a grading vector,
+a local `q`/charge matrix, and the correct local Yukawa/intersection object before
+any comparison to `potent_rays_gv.dat` is meaningful.
