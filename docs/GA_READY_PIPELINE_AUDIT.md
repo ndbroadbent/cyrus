@@ -202,8 +202,19 @@ to make the remaining GV layer more first-principles:
    fourfold-shaped (`cy_dim=4`), while the four five-point affine-rank-three
    rows are threefold-shaped (`cy_dim=3`) but still lack a source-derived
    semigroup, grading, intersection tensor, and chamber interpretation. The
-   next step is therefore to reconstruct the broader source-derived finite
-   semigroup/path history for these higher-rank origin circuits, not to promote
-   LP active-generator diamonds or reuse the rank-two local-surface machinery.
+   direct source read reinforces this: `cygv` obtains GV values from the full
+   finite semigroup, HKTY alpha/beta construction, and degree-ordered
+   `Li2(q_N)` subtraction history, while the McAllister paper's small-curve
+   discussion is a selected-toric-curve control argument rather than a closed
+   formula for every origin-circuit coefficient pattern. The next step is
+   therefore to reconstruct the broader source-derived finite semigroup/path
+   history for these higher-rank origin circuits, or to certify a
+   flop/Weyl-continuation chain that supplies the data from another chamber,
+   not to promote LP active-generator diamonds or reuse the rank-two
+   local-surface machinery.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.
+   The source formula to port is
+   `kappa'_{abc}=kappa_{abc}-n_C^0 C_a C_b C_c` and
+   `c'_a=c_a+2 n_C^0 C_a`, with GV reassignment from `C` to `-C`, but only
+   after Cyrus has certified the shrinking curve and its `n_C^0`.

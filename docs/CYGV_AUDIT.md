@@ -1505,3 +1505,64 @@ one-parameter, affine-rank-three/four origin circuits, or an explicit
 flop/chamber-continuation rule that explains why these source domains should be
 continued from another chamber. Until that source is identified, these rows
 remain research gaps rather than GV values Cyrus can promote.
+
+## Source Dive Checkpoint
+
+The current source read supports slowing down before adding more Rust code.
+Three boundaries are now explicit.
+
+First, `cygv` is not a per-curve local formula engine. Its HKTY path builds a
+positive-graded affine semigroup, computes the fundamental period on that
+entire finite semigroup, contracts the resulting alpha/beta polynomials with
+the intersection tensor, and only then performs degree-ordered series
+inversion. In particular, `series_inversion::invert_series` subtracts
+lower-degree `Li2(q_N)` history before later GV values are read off. This is
+why small active-generator diamonds, support-overlap windows, or a one-row
+origin-circuit charge pattern can be useful diagnostics but cannot certify a
+missing GV value.
+
+Second, `fundamental_period::compute_omega` imposes a compact hypersurface
+shape and sign structure before it computes coefficients. For hypersurfaces it
+derives `q0` by summing GLSM charge rows, computes
+`cy_dim = q_rows - q_cols - 1`, rejects dimensions below three, and only
+dispatches semigroup elements with zero, one, or two negative GLSM
+intersections. A reduced local input must therefore preserve this HKTY
+coordinate interpretation. Passing the right target vector through a smaller
+matrix with plausible dimensions is not enough.
+
+Third, the McAllister paper's high-dimensional Kähler-side control argument is
+not a complete closed formula for every small curve. It says that selected
+toric complete-intersection curves below a volume cutoff were incorporated, and
+that random potent rays in low-dimensional faces of `M_infinity(X)` were used
+to test convergence. It also says the authors could not compute all GV
+invariants along all rays systematically. Therefore, reproducing the paper in a
+GA-ready way requires Cyrus either to compute the same selected toric GV values
+from a source-derived toric/local/HKTY context, or to implement the explicit
+chamber/flop continuation rules that move those values between chambers. It
+does not justify fitting the corrected target-volume residual from the saved
+`.dat` files.
+
+The moduli-space reconstruction source gives the chamber-continuation primitive
+that should be ported when we reach that layer. Across a flop or stable Weyl
+reflection with shrinking class `C` and genus-zero invariant `n_C^0`, the
+classical data transforms as
+
+```text
+kappa'_{abc} = kappa_{abc} - n_C^0 C_a C_b C_c
+c'_a         = c_a + 2 n_C^0 C_a
+```
+
+and the GV invariant is reassigned from `C` to `-C` in the adjacent chamber.
+That rule is source-derived and belongs in Cyrus, but it is not by itself the
+missing origin-circuit GV source: it needs the shrinking curve to be identified
+as a certified flop/Weyl curve with a certified `n_C^0`.
+
+The immediate implementation standard from this checkpoint is:
+
+- do not promote LP active-generator diamonds, support-overlap windows, or
+  shape-compatible one-row charges to GV values;
+- do not extend the rank-two CKYZ local-surface machinery to these nine
+  corrected-chamber misses by analogy;
+- do reconstruct either the correct finite semigroup/path history for the
+  affine-rank-three/four origin circuits, or the certified chamber-continuation
+  chain that supplies their GV data from another chamber.
