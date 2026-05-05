@@ -117,7 +117,7 @@ This policy is not a completion certificate. The remaining known gaps are:
   remains unresolved, especially for even-parity branch-cut cases;
 - corrected-chamber GV coverage still has a checkpoint-implied target residual;
 - potent-ray checkpoints are now validated for rank, volumes, convergence
-  slopes, and first-two source-derived CKYZ GV entries for the 395 rank-two
+  slopes, and first-three source-derived CKYZ GV entries for the 395 rank-two
   CKYZ rows, but Cyrus does not yet generate the low-dimensional-face ray
   sample, reproduce all ten saved entries efficiently, or handle the rank-four
   local charge contexts;
