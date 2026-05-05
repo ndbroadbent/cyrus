@@ -737,6 +737,27 @@ pub fn supporting_mori_face_from_normal(
     }))
 }
 
+/// Extract a supporting Mori face only if it contains `target_curve` rationally.
+///
+/// This is the exact validation boundary needed before using a low-dimensional
+/// face as the HKTY context for a target ray. The normal must be supporting, and
+/// `target_curve` must lie in the rational row span of the zero-pairing Mori
+/// generators.
+pub fn supporting_mori_face_for_curve_from_normal(
+    normal: &[i64],
+    target_curve: &[i64],
+    mori_generators: &[Vec<i64>],
+) -> Result<Option<SupportingMoriFace>> {
+    let Some(face) = supporting_mori_face_from_normal(normal, mori_generators)? else {
+        return Ok(None);
+    };
+    if curve_in_rational_row_span(target_curve, &face.generators)? {
+        Ok(Some(face))
+    } else {
+        Ok(None)
+    }
+}
+
 /// Compute genus-zero GV invariants along a one-dimensional ray.
 ///
 /// The ray is expressed in Kähler-basis curve coordinates. The function calls
@@ -3537,7 +3558,8 @@ mod tests {
         potent_ray_log_xi_terms, project_ambient_curve_to_basis,
         project_mori_cone_cap_rays_to_basis, prune_decomposable_curve_candidates,
         remove_pair_decomposable_curve_candidates, remove_semigroup_decomposable_curve_candidates,
-        subcutoff_toric_curve_candidates, supporting_mori_face_from_normal, write_grading_cache,
+        subcutoff_toric_curve_candidates, supporting_mori_face_for_curve_from_normal,
+        supporting_mori_face_from_normal, write_grading_cache,
     };
     use crate::Intersection;
     use crate::{f64_finite, f64_pos};
@@ -3877,6 +3899,32 @@ mod tests {
     #[test]
     fn supporting_mori_face_from_normal_rejects_non_supporting_normal() {
         let face = supporting_mori_face_from_normal(&[0, 1], &[vec![1, 0], vec![0, -1]]).unwrap();
+
+        assert!(face.is_none());
+    }
+
+    #[test]
+    fn supporting_mori_face_for_curve_requires_curve_in_face_span() {
+        let mori_generators = vec![vec![1, 0], vec![0, 1], vec![1, 1]];
+
+        let face = supporting_mori_face_for_curve_from_normal(&[0, 1], &[2, 0], &mori_generators)
+            .unwrap()
+            .unwrap();
+        assert_eq!(face.generators, vec![vec![1, 0]]);
+
+        let missing =
+            supporting_mori_face_for_curve_from_normal(&[0, 1], &[1, 1], &mori_generators).unwrap();
+        assert!(missing.is_none());
+    }
+
+    #[test]
+    fn supporting_mori_face_for_curve_rejects_non_supporting_normal() {
+        let face = supporting_mori_face_for_curve_from_normal(
+            &[0, 1],
+            &[1, 0],
+            &[vec![1, 0], vec![0, -1]],
+        )
+        .unwrap();
 
         assert!(face.is_none());
     }

@@ -111,7 +111,7 @@ pub use gv::{
     potent_ray_log_xi_terms, project_ambient_curve_to_basis, project_mori_cone_cap_rays_to_basis,
     prune_decomposable_curve_candidates, remove_pair_decomposable_curve_candidates,
     remove_semigroup_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
-    supporting_mori_face_from_normal,
+    supporting_mori_face_for_curve_from_normal, supporting_mori_face_from_normal,
 };
 pub use height_kahler::{
     effective_prime_divisors_from_curve_basis, heights_to_kahler, kahler_to_heights,
