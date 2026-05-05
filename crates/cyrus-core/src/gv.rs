@@ -6187,6 +6187,73 @@ mod tests {
     }
 
     #[test]
+    fn ckyz_local_gv_extraction_matches_f1_table_start() {
+        let relations = vec![vec![-2, 1, 0, 1, 0], vec![-1, 0, 1, -1, 1]];
+        let gvs = compute_ckyz_local_gv_invariants(
+            &relations,
+            &[
+                CkyzLocalIntersectionTerm {
+                    first: 0,
+                    second: 1,
+                    coefficient: 1,
+                },
+                CkyzLocalIntersectionTerm {
+                    first: 0,
+                    second: 0,
+                    coefficient: 1,
+                },
+            ],
+            &[2, 1],
+            4,
+        )
+        .unwrap();
+
+        let expected_nonzero = BTreeMap::from([
+            (vec![1, 0], Integer::from(-2)),
+            (vec![0, 1], Integer::from(1)),
+            (vec![1, 1], Integer::from(3)),
+            (vec![2, 1], Integer::from(5)),
+            (vec![3, 1], Integer::from(7)),
+            (vec![2, 2], Integer::from(-6)),
+        ]);
+
+        for (degree, expected) in expected_nonzero {
+            assert_eq!(gvs.get(&degree), Some(&expected));
+        }
+        for zero_degree in [vec![2, 0], vec![0, 2], vec![3, 0], vec![0, 3]] {
+            assert!(
+                !gvs.contains_key(&zero_degree),
+                "zero F1 invariant should be omitted at {zero_degree:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn ckyz_local_gv_extraction_rejects_wrong_f1_cover_weights() {
+        let relations = vec![vec![-2, 1, 0, 1, 0], vec![-1, 0, 1, -1, 1]];
+        let err = compute_ckyz_local_gv_invariants(
+            &relations,
+            &[
+                CkyzLocalIntersectionTerm {
+                    first: 0,
+                    second: 1,
+                    coefficient: 1,
+                },
+                CkyzLocalIntersectionTerm {
+                    first: 0,
+                    second: 0,
+                    coefficient: 1,
+                },
+            ],
+            &[3, 2],
+            2,
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("not integral"));
+    }
+
+    #[test]
     fn local_p2_circuit_dispatches_to_local_mirror_series() {
         let points = vec![
             Point::new(vec![0, 1, -3, 6]),

@@ -155,7 +155,7 @@ expression using the same diagonal `1/2` convention as cygv's symmetric
 intersection contraction, and then applies the CKYZ `instbase` cover relation
 `A_m = sum_{k d = m} w(d) N_d / k^2`. This is deliberately separate from the
 compact cygv semigroup inversion and is currently validated only for the source
-normalizations that are pinned by local `P^2` and `F0` tables.
+normalizations that are pinned by local `P^2`, `F0`, and `F1` tables.
 
 This means local face/ray HKTY checks can be correct for isolated classes while
 still not reproducing the global CYTools/cygv output. The global result depends

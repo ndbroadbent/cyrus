@@ -251,11 +251,13 @@ CKYZ `instbase` multiple-cover inversion
 `A_m = sum_{k d = m} w(d) N_d / k^2`, with
 `w(d) = -sum_i x_i d_i`.
 
-This is validated against the local `P^2` table and the start of the `F0`
-appendix table. It is not yet wired to all McAllister potent-ray families:
-`F1`/polygon-5 cover-weight normalization and the target-direction extraction
-still need explicit source-backed tests before the saved `potent_rays_gv.dat`
-rows can be reproduced without using them as inputs.
+This is validated against the local `P^2` table and the start of the `F0` and
+`F1` appendix tables. The `F1` check is important because the finite-limit cover
+weights are `[2, 1]` in CKYZ source coordinate order, not the printed
+`C1 = 3J1 + 2J2` coefficients. It is not yet wired to all McAllister potent-ray
+families: polygon-5 cover-weight normalization and the target-direction
+extraction still need explicit source-backed tests before the saved
+`potent_rays_gv.dat` rows can be reproduced without using them as inputs.
 
 ## Rank-Four Boundary
 

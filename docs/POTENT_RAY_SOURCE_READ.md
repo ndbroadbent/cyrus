@@ -58,8 +58,8 @@ mirror-map helper now composes those coefficients into flat `q` coordinates.
 The local instanton-potential helper now mirrors cygv's essential
 `beta - alpha alpha` conversion and applies the CKYZ `instbase`
 multiple-cover inversion for source weights supplied by the caller. This is
-validated for local `P^2` and `F0`, but not yet for every CKYZ surface family
-matched in the McAllister potent-ray inventory.
+validated for local `P^2`, `F0`, and `F1`, but not yet for every CKYZ surface
+family matched in the McAllister potent-ray inventory.
 
 The computational-mirror paper explains the implementation boundary that this
 source code implies. Finite HKTY computations need a causally closed truncation:
