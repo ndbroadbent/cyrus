@@ -230,6 +230,16 @@ struct CygvSemigroupMeasurement {
     element_count: Option<usize>,
 }
 
+struct CygvSemigroupDegreeMeasurement {
+    status: String,
+    seed_count: usize,
+    reduced_seed_count: usize,
+    seed_set: HashSet<Vec<i64>>,
+    reduced_seed_set: HashSet<Vec<i64>>,
+    max_degree: u32,
+    element_count: Option<usize>,
+}
+
 fn parse_arg_value<T: std::str::FromStr>(flag: &str) -> Option<T> {
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -625,6 +635,7 @@ fn report_target(
     measure_cygv_semigroups: bool,
     semigroup_measure_max_target_degree: Option<i128>,
     semigroup_measure_max_seed_count: Option<usize>,
+    semigroup_measurement_cache: &mut HashMap<i128, Result<CygvSemigroupDegreeMeasurement, String>>,
     element_limit: usize,
 ) -> TargetReport {
     let exact_kind = sample.real_cone_decomposition_exact_kind.clone();
@@ -798,7 +809,12 @@ fn report_target(
                 None,
             )
         } else {
-            match measure_cygv_semigroup(sample, context, semigroup_measure_max_seed_count) {
+            match measure_cygv_semigroup(
+                sample,
+                context,
+                semigroup_measure_max_seed_count,
+                semigroup_measurement_cache,
+            ) {
                 Ok(measurement) => (
                     Some(measurement.status),
                     Some(measurement.seed_count),
@@ -1009,43 +1025,68 @@ fn measure_cygv_semigroup(
     sample: &MissingGvTargetSample,
     context: &ValidatedContext<'_>,
     max_seed_count: Option<usize>,
+    cache: &mut HashMap<i128, Result<CygvSemigroupDegreeMeasurement, String>>,
 ) -> Result<CygvSemigroupMeasurement, String> {
-    let max_deg = u32::try_from(sample.degree)
-        .map_err(|_| format!("target degree {} does not fit in u32", sample.degree))?;
     let target = dense_from_sparse(&sample.basis_nonzero, context.dimension)?;
+    if !cache.contains_key(&sample.degree) {
+        let measurement = measure_cygv_semigroup_degree(sample.degree, context, max_seed_count);
+        cache.insert(sample.degree, measurement);
+    }
+    let degree_measurement = cache
+        .get(&sample.degree)
+        .expect("measurement was inserted above")
+        .as_ref()
+        .map_err(Clone::clone)?;
+    Ok(CygvSemigroupMeasurement {
+        status: degree_measurement.status.clone(),
+        seed_count: degree_measurement.seed_count,
+        reduced_seed_count: degree_measurement.reduced_seed_count,
+        target_is_seed: degree_measurement.seed_set.contains(&target),
+        target_is_reduced_seed: degree_measurement.reduced_seed_set.contains(&target),
+        max_degree: degree_measurement.max_degree,
+        element_count: degree_measurement.element_count,
+    })
+}
+
+fn measure_cygv_semigroup_degree(
+    target_degree: i128,
+    context: &ValidatedContext<'_>,
+    max_seed_count: Option<usize>,
+) -> Result<CygvSemigroupDegreeMeasurement, String> {
+    let max_deg = u32::try_from(target_degree)
+        .map_err(|_| format!("target degree {target_degree} does not fit in u32"))?;
     let mut seeds = Vec::new();
     let mut seen = HashSet::new();
     for ray in context.degree_bounded_rays {
         let degree = curve_degree(ray, context.grading)?;
-        if degree <= 0 || degree > sample.degree {
+        if degree <= 0 || degree > target_degree {
             continue;
         }
         if seen.insert(ray.clone()) {
             seeds.push(ray.clone());
         }
     }
-    let target_is_seed = seen.contains(&target);
     let reduced_seeds = cygv_pair_reduced_seed_generators(&seeds)
         .map_err(|error| format!("cygv seed reduction failed: {error}"))?;
-    let target_is_reduced_seed = reduced_seeds.iter().any(|row| row == &target);
+    let reduced_seed_set = reduced_seeds.into_iter().collect::<HashSet<_>>();
     if max_seed_count.is_some_and(|limit| seeds.len() > limit) {
-        return Ok(CygvSemigroupMeasurement {
+        return Ok(CygvSemigroupDegreeMeasurement {
             status: "skipped_seed_limit".to_string(),
             seed_count: seeds.len(),
-            reduced_seed_count: reduced_seeds.len(),
-            target_is_seed,
-            target_is_reduced_seed,
+            reduced_seed_count: reduced_seed_set.len(),
+            seed_set: seen,
+            reduced_seed_set,
             max_degree: max_deg,
             element_count: None,
         });
     }
     measure_cygv_semigroup_size(&seeds, context.grading, max_deg).map(|element_count| {
-        CygvSemigroupMeasurement {
+        CygvSemigroupDegreeMeasurement {
             status: "measured_cygv_semigroup".to_string(),
             seed_count: seeds.len(),
-            reduced_seed_count: reduced_seeds.len(),
-            target_is_seed,
-            target_is_reduced_seed,
+            reduced_seed_count: reduced_seed_set.len(),
+            seed_set: seen,
+            reduced_seed_set,
             max_degree: max_deg,
             element_count: Some(element_count),
         }
@@ -1331,26 +1372,23 @@ fn build_report(
     semigroup_measure_max_seed_count: Option<usize>,
     element_limit: usize,
 ) -> ContextReport {
-    let targets = validated
-        .stats
-        .sample
-        .iter()
-        .enumerate()
-        .map(|(idx, sample)| {
-            report_target(
-                idx,
-                sample,
-                validated,
-                run_integer_diamonds,
-                run_active_support_generators,
-                support_overlap_min_for_run,
-                measure_cygv_semigroups,
-                semigroup_measure_max_target_degree,
-                semigroup_measure_max_seed_count,
-                element_limit,
-            )
-        })
-        .collect();
+    let mut semigroup_measurement_cache = HashMap::new();
+    let mut targets = Vec::with_capacity(validated.stats.sample.len());
+    for (idx, sample) in validated.stats.sample.iter().enumerate() {
+        targets.push(report_target(
+            idx,
+            sample,
+            validated,
+            run_integer_diamonds,
+            run_active_support_generators,
+            support_overlap_min_for_run,
+            measure_cygv_semigroups,
+            semigroup_measure_max_target_degree,
+            semigroup_measure_max_seed_count,
+            &mut semigroup_measurement_cache,
+            element_limit,
+        ));
+    }
     ContextReport {
         schema_version: context.schema_version,
         dimension: validated.dimension,
@@ -1602,6 +1640,7 @@ mod tests {
             stats: &stats,
         };
 
+        let mut semigroup_measurement_cache = HashMap::new();
         let report = report_target(
             0,
             &stats.sample[0],
@@ -1612,6 +1651,7 @@ mod tests {
             false,
             None,
             None,
+            &mut semigroup_measurement_cache,
             256,
         );
 
