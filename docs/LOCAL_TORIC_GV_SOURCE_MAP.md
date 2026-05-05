@@ -68,6 +68,35 @@ This is a better source for Cyrus' next step than a coefficient-pattern table:
 the local charge model must first be identified with one of these polygon
 relation systems up to point permutation and `GL(r,Z)` basis change.
 
+The arXiv source for hep-th/9903053 fixes the implementation boundary more
+concretely:
+
+- local variables are `z_a = product_i a_i^(l_i^(a))`;
+- the local charge rows are integer relations among the lifted polygon points
+  `(1, nu_i)`;
+- Picard-Fuchs operators come from the positive and negative parts of those
+  relation rows;
+- the hypergeometric coefficient is
+  `1 / product_i Gamma(sum_a l_i^(a)(n_a + rho_a) + 1)`;
+- logarithmic and double-logarithmic periods are obtained by differentiating in
+  the `rho_a` variables;
+- local instanton numbers are extracted from the mirror map together with the
+  local base-intersection expression
+  `J_i J_j + (c1 J_i + c1 J_j)/2 + instanton sum`.
+
+The same source gives the relation rows and local intersection expression for
+the immediate McAllister families:
+
+| CKYZ case | Relation rows | Local intersection expression |
+|-----------|---------------|-------------------------------|
+| `F0` | `(-2,1,0,1,0)`, `(-2,0,1,0,1)` | `J1 J2` |
+| `F1` | `(-2,1,0,1,0)`, `(-1,0,1,-1,1)` | `J1 J2 + J1^2` |
+| polygon 5 | `(-1,1,-1,1,0,0)`, `(-1,-1,1,0,0,1)`, `(-1,0,1,-1,1,0)` | `J1^2 + J2 J1 + J1 J3 + J2 J3` |
+
+The appendix tables are useful validation data for `F0`, `F1`, and polygon 5,
+but they are not a replacement for implementing the period, mirror-map, and
+multiple-cover extraction.
+
 ### Topological Vertex
 
 Aganagic-Klemm-Marino-Vafa, "The Topological Vertex",
