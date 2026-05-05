@@ -26,7 +26,7 @@ run pass. Any remaining mismatch must be explicit and localizable.
 | High-dimensional selected small toric curves | Cyrus computes Mori-cap rays, applies the input-chamber volume cutoff, and matches the 4-214-647 `small_curves.dat` checkpoint with pair pruning | Implemented for checkpoint rule |
 | Small-curve pruning semantics | `CurvePruningStrategy::{PairDecomposable, FiniteSemigroup}` exposes the checkpoint rule and stricter finite-set semigroup diagnostic separately | Implemented, with documented mismatch |
 | Small toric GV values | Toric two-face/origin-circuit formulas match `small_curves_gv.dat` for 4-214-647 | Implemented for covered selected-toric formulas |
-| Potent-ray convergence data | `curve_row_span_rank`, `potent_ray_convergence`, `diagnose_affine_toric_circuit`, CKYZ local-surface identification, source-derived local CKYZ GV extraction, and the Stage 5 potent-ray diagnostics compute rank, corrected-Kähler volumes, affine local-circuit structure, `log xi_n` slopes, first-three GV checks for all 395 rank-two CKYZ rows, and all-ten checks for the canonical F1 `[2,1]` family; targeted CKYZ extraction now uses a past-downset domain for requested degrees; `compute_ckyz_local_gv_invariants_for_degrees_with_causal_domain` adds a cygv-style generated semigroup domain; `ckyz_local_surface_causal_domain_spec` derives coordinate generators and finite-limit grading from matched CKYZ source data for guardrail checks | Partially implemented; full ten-entry extraction across all families, rank-four contexts, coefficient-history causal domains for large McAllister supports, and generated low-dimensional-face ray sampling still missing |
+| Potent-ray convergence data | `curve_row_span_rank`, `potent_ray_convergence`, `diagnose_affine_toric_circuit`, CKYZ local-surface identification, source-derived local CKYZ GV extraction, and the Stage 5 potent-ray diagnostics compute rank, corrected-Kähler volumes, affine local-circuit structure, `log xi_n` slopes, first-three GV checks for all 395 rank-two CKYZ rows, and all-ten checks for the canonical F0 `[1,1]` and F1 `[2,1]` families; targeted CKYZ extraction now uses a past-downset domain for requested degrees; `compute_ckyz_local_gv_invariants_for_degrees_with_causal_domain` adds a cygv-style generated semigroup domain; `ckyz_local_surface_causal_domain_spec` derives coordinate generators and finite-limit grading from matched CKYZ source data for guardrail checks | Partially implemented; full ten-entry extraction across all families, rank-four contexts, coefficient-history causal domains for large McAllister supports, and generated low-dimensional-face ray sampling still missing |
 | Flop/corrected-chamber continuation | Negative small-curve volumes and real-axis dilog branch behavior are classified; even-parity branch-cut failures are explicit via `GvDilogFailure` | Diagnosed, not resolved |
 | KKLT corrected Kähler solve | Runner reaches a no-replay corrected Kähler vector and corrected volume without loading `corrected_kahler_param.dat` by default | Implemented but not exact |
 | Corrected target-volume / GV correction agreement | Diagnostics localize the residual to corrected-chamber GV target corrections, not classical geometry or file semantics | Open blocker |
@@ -42,9 +42,10 @@ run pass. Any remaining mismatch must be explicit and localizable.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first three saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for
-   the canonical F1 source direction `[2,1]`, from CKYZ relation rows, local
-   period coefficients, mirror-map substitution, and multiple-cover extraction,
-   with `potent_rays_gv.dat` used only as the assertion. Cyrus still
+   the canonical F0 source direction `[1,1]` and F1 source direction `[2,1]`,
+   from CKYZ relation rows, local period coefficients, mirror-map substitution,
+   and multiple-cover extraction, with `potent_rays_gv.dat` used only as the
+   assertion. Cyrus still
    does not generate the full sampled low-dimensional-face ray set, reproduce
    all ten entries efficiently, or handle the rank-four local charge contexts.
    The source-level reason is now explicit: cygv's series inversion subtracts
@@ -95,10 +96,10 @@ to make the remaining GV layer more first-principles:
 1. Generate potent-ray samples from low-dimensional faces of
    `M_infinity(X)` and compute the ray `N_{nq}` series rather than reading
    `potent_rays*.dat`. Rank-two CKYZ rows now have first-three checks, and the
-   F1 `[2,1]` family has an explicit all-ten first-principles regression; next
-   make the local extractor coefficient-targeted enough for complete rows across
-   the larger directions. A first causal-domain extraction API now exists and is
-   checked on local P2/F0 examples, and matched CKYZ sources can now derive their coordinate
+   F0 `[1,1]` and F1 `[2,1]` families have explicit all-ten first-principles
+   regressions; next make the local extractor coefficient-targeted enough for
+   complete rows across the larger directions. A first causal-domain extraction
+   API now exists and is checked on local P2/F0 examples, and matched CKYZ sources can now derive their coordinate
    generators and finite-limit grading for guardrail computations. That full
    source-weighted semigroup is still too broad for the default all-row gate, so
    the next step is the narrower coefficient/path-history domain needed to raise
