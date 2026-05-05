@@ -984,3 +984,23 @@ surface GV formula from the saved rows. The next non-documentation work should
 either port a specific CYTools pre-cygv input-construction step, or construct a
 single CKYZ/local-HKTY example all the way from source relations to GV extraction
 with `potent_rays_gv.dat` used only as the final assertion.
+
+## May 2026 Targeted CKYZ GV Checkpoint
+
+Cyrus now has a source-derived CKYZ local GV extraction path that mirrors the
+cygv instanton-data layer for the CKYZ local surface examples:
+
+- compute CKYZ log-period corrections from the source relation rows;
+- solve the inverse mirror map formally;
+- form the local `beta - alpha_i alpha_j` instanton potential;
+- contract with the CKYZ local intersection expression, including the diagonal
+  `1/2` factor;
+- apply the `instbase` multiple-cover inversion with finite-limit cover weights.
+
+The new targeted API truncates by requested source degrees instead of a single
+total degree. That is enough to validate the first two `potent_rays_gv.dat`
+entries for all 393 rank-two `P^2`/`F0`/`F1` McAllister potent-ray rows without
+using those GV rows as inputs. It is not yet enough for all ten entries: the
+box-truncated multivariable series still becomes too slow on the largest source
+directions, so the remaining work is coefficient-level extraction rather than a
+new physics shortcut.

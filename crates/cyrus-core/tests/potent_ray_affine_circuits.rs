@@ -7,7 +7,7 @@ use std::path::Path;
 use cyrus_core::{
     AffineToricCircuitDiagnostic, CkyzLocalSurfaceKind, LocalToricCircuitKind,
     LocalToricCoordinate2D, Point, Polytope, RankTwoLocalChargeModel, RankTwoLocalSupportSignature,
-    compute_ckyz_local_gv_invariants, compute_local_toric_circuit_gv_series,
+    compute_ckyz_local_gv_invariants_for_degrees, compute_local_toric_circuit_gv_series,
     curve_in_rational_row_span, diagnose_affine_toric_circuit, identify_ckyz_local_surface,
     rank_two_local_charge_model, rank_two_local_support_signature,
 };
@@ -880,19 +880,21 @@ fn mcallister_rank_two_ckyz_p2_f0_f1_potent_ray_gvs_are_reconstructed() {
                 usize::try_from(entry).expect("CKYZ source target direction should be nonnegative")
             })
             .collect::<Vec<_>>();
-        let multiples_to_check = 1;
-        let max_total_degree = source_target_direction.iter().sum::<usize>() * multiples_to_check;
+        let multiples_to_check = expected_gvs.len().min(2);
+        let target_degrees = (1..=multiples_to_check)
+            .map(|multiple| scale_ckyz_degree(&source_target_direction, multiple))
+            .collect::<Vec<_>>();
         let cache_key = (
             ckyz_kind_index(&identification.kind),
             source_target_direction.clone(),
-            max_total_degree,
+            multiples_to_check,
         );
         let source_gvs = gv_cache.entry(cache_key).or_insert_with(|| {
-            compute_ckyz_local_gv_invariants(
+            compute_ckyz_local_gv_invariants_for_degrees(
                 &identification.source_relations,
                 &identification.local_intersection_terms,
                 &cover_weights,
-                max_total_degree,
+                &target_degrees,
             )
             .expect("source-derived CKYZ local GV extraction should succeed")
         });
@@ -913,7 +915,7 @@ fn mcallister_rank_two_ckyz_p2_f0_f1_potent_ray_gvs_are_reconstructed() {
 
     assert_eq!(
         checked_rows, 393,
-        "all rank-two P2/F0/F1 potent-ray rows should now have CKYZ-reconstructed leading GV checks; polygon-5 rows remain separate"
+        "all rank-two P2/F0/F1 potent-ray rows should now have CKYZ-reconstructed first-two GV checks; polygon-5 rows remain separate"
     );
 }
 

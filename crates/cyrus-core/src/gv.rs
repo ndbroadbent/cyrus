@@ -5,7 +5,7 @@
 //!
 //! Reference: CYTools `calabiyau.py` (mori_cone_cap) and `cone.py` (grading vector).
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::env;
 use std::f64::consts::{LN_10, PI};
 use std::fs;
@@ -1206,6 +1206,52 @@ pub fn compute_ckyz_local_gv_invariants(
     )
 }
 
+/// Compute local CKYZ genus-zero GV invariants only for requested degrees.
+///
+/// This follows the same source-derived path as
+/// [`compute_ckyz_local_gv_invariants`], but truncates all formal series by the
+/// componentwise maximum of `target_degrees`. It is intended for ray checks
+/// such as McAllister potent-ray validation, where a total-degree cutoff would
+/// compute many irrelevant monomials.
+///
+/// Cover divisors of the requested degrees are included automatically because
+/// multiple-cover subtraction for a target degree depends on its primitive
+/// divisors.
+///
+/// # Errors
+/// Returns an error for invalid source data, invalid target degrees, or
+/// non-integral extracted invariants.
+pub fn compute_ckyz_local_gv_invariants_for_degrees(
+    relations: &[Vec<i64>],
+    local_intersection_terms: &[CkyzLocalIntersectionTerm],
+    cover_weight_coefficients: &[i64],
+    target_degrees: &[Vec<usize>],
+) -> Result<BTreeMap<Vec<usize>, Integer>> {
+    validate_ckyz_relations(relations)?;
+    let rank = relations.len();
+    validate_ckyz_target_degrees(target_degrees, rank)?;
+    if cover_weight_coefficients.len() != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ cover-weight rank does not match relation rank".into(),
+        ));
+    }
+
+    let extraction_degrees = ckyz_cover_closed_target_degrees(target_degrees)?;
+    let max_degrees = ckyz_componentwise_max_degrees(&extraction_degrees, rank)?;
+    let potential = compute_ckyz_local_instanton_potential_corrections_box(
+        relations,
+        local_intersection_terms,
+        &max_degrees,
+    )?;
+    let mut invariants = extract_ckyz_local_gv_invariants_from_potential_for_degrees(
+        &potential,
+        cover_weight_coefficients,
+        &extraction_degrees,
+    )?;
+    invariants.retain(|degree, _| target_degrees.iter().any(|target| target == degree));
+    Ok(invariants)
+}
+
 fn validate_ckyz_relations(relations: &[Vec<i64>]) -> Result<()> {
     let Some(first_relation) = relations.first() else {
         return Err(Error::InvalidInput(
@@ -1318,6 +1364,30 @@ fn ckyz_multi_degrees(rank: usize, max_total_degree: usize) -> Vec<Vec<usize>> {
     push_ckyz_multi_degrees(rank, max_total_degree, 0, &mut current, &mut out);
     out.retain(|degree| degree.iter().any(|&entry| entry != 0));
     out
+}
+
+fn ckyz_multi_degrees_box(max_degrees: &[usize]) -> Vec<Vec<usize>> {
+    let mut out = Vec::new();
+    let mut current = vec![0; max_degrees.len()];
+    push_ckyz_multi_degrees_box(max_degrees, 0, &mut current, &mut out);
+    out.retain(|degree| degree.iter().any(|&entry| entry != 0));
+    out
+}
+
+fn push_ckyz_multi_degrees_box(
+    max_degrees: &[usize],
+    coordinate_index: usize,
+    current: &mut [usize],
+    out: &mut Vec<Vec<usize>>,
+) {
+    if coordinate_index == max_degrees.len() {
+        out.push(current.to_vec());
+        return;
+    }
+    for value in 0..=max_degrees[coordinate_index] {
+        current[coordinate_index] = value;
+        push_ckyz_multi_degrees_box(max_degrees, coordinate_index + 1, current, out);
+    }
 }
 
 fn push_ckyz_multi_degrees(
@@ -1477,6 +1547,36 @@ fn ckyz_second_log_period_series_for_pair(
 
     let mut out = BTreeMap::new();
     for degree in ckyz_multi_degrees(rank, max_total_degree) {
+        let point_pairings = ckyz_point_pairings(relations, &degree)?;
+        let values = ckyz_second_log_period_coefficients_for_degree(relations, &point_pairings)?;
+        let value = values[first][second].clone();
+        if value != 0 {
+            out.insert(degree, value);
+        }
+    }
+    Ok(out)
+}
+
+fn ckyz_second_log_period_series_for_pair_box(
+    relations: &[Vec<i64>],
+    first: usize,
+    second: usize,
+    max_degrees: &[usize],
+) -> Result<BTreeMap<Vec<usize>, Rational>> {
+    let rank = relations.len();
+    if first >= rank || second >= rank {
+        return Err(Error::InvalidInput(
+            "CKYZ second-log period pair index is outside the relation rank".into(),
+        ));
+    }
+    if max_degrees.len() != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ componentwise cutoff rank does not match relation rank".into(),
+        ));
+    }
+
+    let mut out = BTreeMap::new();
+    for degree in ckyz_multi_degrees_box(max_degrees) {
         let point_pairings = ckyz_point_pairings(relations, &degree)?;
         let values = ckyz_second_log_period_coefficients_for_degree(relations, &point_pairings)?;
         let value = values[first][second].clone();
@@ -1660,6 +1760,14 @@ fn ckyz_total_degree(degree: &[usize]) -> Result<usize> {
     })
 }
 
+fn ckyz_degree_within_box(degree: &[usize], max_degrees: &[usize]) -> bool {
+    degree.len() == max_degrees.len()
+        && degree
+            .iter()
+            .zip(max_degrees.iter())
+            .all(|(&entry, &max_entry)| entry <= max_entry)
+}
+
 fn ckyz_coordinate_series(
     rank: usize,
     coordinate: usize,
@@ -1667,6 +1775,20 @@ fn ckyz_coordinate_series(
 ) -> BTreeMap<Vec<usize>, Rational> {
     let mut out = BTreeMap::new();
     if max_total_degree > 0 {
+        let mut degree = vec![0; rank];
+        degree[coordinate] = 1;
+        out.insert(degree, Rational::from(1));
+    }
+    out
+}
+
+fn ckyz_coordinate_series_box(
+    rank: usize,
+    coordinate: usize,
+    max_degrees: &[usize],
+) -> BTreeMap<Vec<usize>, Rational> {
+    let mut out = BTreeMap::new();
+    if coordinate < rank && max_degrees.get(coordinate).is_some_and(|&max| max > 0) {
         let mut degree = vec![0; rank];
         degree[coordinate] = 1;
         out.insert(degree, Rational::from(1));
@@ -1742,6 +1864,35 @@ fn ckyz_series_mul(
     Ok(out)
 }
 
+fn ckyz_series_mul_box(
+    lhs: &BTreeMap<Vec<usize>, Rational>,
+    rhs: &BTreeMap<Vec<usize>, Rational>,
+    rank: usize,
+    max_degrees: &[usize],
+) -> Result<BTreeMap<Vec<usize>, Rational>> {
+    let mut out = BTreeMap::new();
+    for (lhs_degree, lhs_coefficient) in lhs {
+        if *lhs_coefficient == 0 {
+            continue;
+        }
+        for (rhs_degree, rhs_coefficient) in rhs {
+            if *rhs_coefficient == 0 {
+                continue;
+            }
+            let product_degree = ckyz_add_degrees_box(lhs_degree, rhs_degree, rank, max_degrees)?;
+            let Some(product_degree) = product_degree else {
+                continue;
+            };
+            let entry = out
+                .entry(product_degree)
+                .or_insert_with(|| Rational::from(0));
+            *entry += lhs_coefficient.clone() * rhs_coefficient.clone();
+        }
+    }
+    out.retain(|_, coefficient| *coefficient != 0);
+    Ok(out)
+}
+
 fn ckyz_add_degrees(
     lhs: &[usize],
     rhs: &[usize],
@@ -1765,6 +1916,30 @@ fn ckyz_add_degrees(
     Ok(Some(degree))
 }
 
+fn ckyz_add_degrees_box(
+    lhs: &[usize],
+    rhs: &[usize],
+    rank: usize,
+    max_degrees: &[usize],
+) -> Result<Option<Vec<usize>>> {
+    if lhs.len() != rank || rhs.len() != rank || max_degrees.len() != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ series multiplication rank mismatch".into(),
+        ));
+    }
+    let mut degree = Vec::with_capacity(rank);
+    for ((&lhs_entry, &rhs_entry), &max_entry) in lhs.iter().zip(rhs.iter()).zip(max_degrees) {
+        let entry = lhs_entry.checked_add(rhs_entry).ok_or_else(|| {
+            Error::InvalidInput("CKYZ multidegree addition overflowed usize".into())
+        })?;
+        if entry > max_entry {
+            return Ok(None);
+        }
+        degree.push(entry);
+    }
+    Ok(Some(degree))
+}
+
 fn ckyz_series_pow(
     series: &BTreeMap<Vec<usize>, Rational>,
     exponent: usize,
@@ -1775,6 +1950,23 @@ fn ckyz_series_pow(
     out.insert(vec![0; rank], Rational::from(1));
     for _ in 0..exponent {
         out = ckyz_series_mul(&out, series, rank, max_total_degree)?;
+        if out.is_empty() {
+            break;
+        }
+    }
+    Ok(out)
+}
+
+fn ckyz_series_pow_box(
+    series: &BTreeMap<Vec<usize>, Rational>,
+    exponent: usize,
+    rank: usize,
+    max_degrees: &[usize],
+) -> Result<BTreeMap<Vec<usize>, Rational>> {
+    let mut out = BTreeMap::new();
+    out.insert(vec![0; rank], Rational::from(1));
+    for _ in 0..exponent {
+        out = ckyz_series_mul_box(&out, series, rank, max_degrees)?;
         if out.is_empty() {
             break;
         }
@@ -1795,6 +1987,33 @@ fn ckyz_series_exp(
     let mut factorial = Integer::from(1);
     for exponent in 1..=max_total_degree {
         power = ckyz_series_mul(&power, series, rank, max_total_degree)?;
+        if power.is_empty() {
+            break;
+        }
+        factorial *= Integer::from(exponent);
+        ckyz_series_add_scaled_assign(
+            &mut out,
+            &power,
+            Rational::from(1) / Rational::from(factorial.clone()),
+        );
+    }
+    Ok(out)
+}
+
+fn ckyz_series_exp_box(
+    series: &BTreeMap<Vec<usize>, Rational>,
+    rank: usize,
+    max_degrees: &[usize],
+) -> Result<BTreeMap<Vec<usize>, Rational>> {
+    validate_ckyz_series_has_zero_constant(series, rank, "CKYZ exponential input")?;
+
+    let max_total_degree = ckyz_total_degree(max_degrees)?;
+    let mut out = BTreeMap::new();
+    out.insert(vec![0; rank], Rational::from(1));
+    let mut power = out.clone();
+    let mut factorial = Integer::from(1);
+    for exponent in 1..=max_total_degree {
+        power = ckyz_series_mul_box(&power, series, rank, max_degrees)?;
         if power.is_empty() {
             break;
         }
@@ -1842,6 +2061,40 @@ fn ckyz_series_compose(
     Ok(out)
 }
 
+fn ckyz_series_compose_box(
+    series: &BTreeMap<Vec<usize>, Rational>,
+    arguments: &[BTreeMap<Vec<usize>, Rational>],
+    max_degrees: &[usize],
+) -> Result<BTreeMap<Vec<usize>, Rational>> {
+    let rank = arguments.len();
+    let mut out = BTreeMap::new();
+    for (degree, coefficient) in series {
+        if *coefficient == 0 || !ckyz_degree_within_box(degree, max_degrees) {
+            continue;
+        }
+        if degree.len() != rank {
+            return Err(Error::InvalidInput(
+                "CKYZ series composition rank mismatch".into(),
+            ));
+        }
+        let mut monomial = BTreeMap::new();
+        monomial.insert(vec![0; rank], Rational::from(1));
+        for (coordinate, &exponent) in degree.iter().enumerate() {
+            if exponent == 0 {
+                continue;
+            }
+            let argument_power =
+                ckyz_series_pow_box(&arguments[coordinate], exponent, rank, max_degrees)?;
+            monomial = ckyz_series_mul_box(&monomial, &argument_power, rank, max_degrees)?;
+            if monomial.is_empty() {
+                break;
+            }
+        }
+        ckyz_series_add_scaled_assign(&mut out, &monomial, coefficient.clone());
+    }
+    Ok(out)
+}
+
 fn ckyz_nontrivial_covers(degree: &[usize]) -> Vec<usize> {
     let max_cover = degree.iter().copied().max().unwrap_or(0);
     (2..=max_cover)
@@ -1878,6 +2131,279 @@ fn ckyz_cover_weight(coefficients: &[i64], degree: &[usize]) -> Result<i64> {
     }
     dot.checked_neg()
         .ok_or_else(|| Error::InvalidInput("CKYZ cover weight overflowed i64".into()))
+}
+
+fn validate_ckyz_target_degrees(target_degrees: &[Vec<usize>], rank: usize) -> Result<()> {
+    if target_degrees.is_empty() {
+        return Err(Error::InvalidInput(
+            "CKYZ targeted GV extraction requires at least one target degree".into(),
+        ));
+    }
+    for degree in target_degrees {
+        if degree.len() != rank {
+            return Err(Error::InvalidInput(
+                "CKYZ target degree rank does not match relation rank".into(),
+            ));
+        }
+        if degree.iter().all(|&entry| entry == 0) {
+            return Err(Error::InvalidInput(
+                "CKYZ target degree must be nonzero".into(),
+            ));
+        }
+        ckyz_total_degree(degree)?;
+    }
+    Ok(())
+}
+
+fn ckyz_cover_closed_target_degrees(target_degrees: &[Vec<usize>]) -> Result<Vec<Vec<usize>>> {
+    let mut out = BTreeSet::new();
+    for degree in target_degrees {
+        out.insert(degree.clone());
+        for cover in ckyz_nontrivial_covers(degree) {
+            out.insert(ckyz_divide_degree(degree, cover)?);
+        }
+    }
+    let mut degrees = out.into_iter().collect::<Vec<_>>();
+    degrees.sort_by(|lhs, rhs| {
+        ckyz_total_degree(lhs)
+            .expect("validated degree")
+            .cmp(&ckyz_total_degree(rhs).expect("validated degree"))
+            .then_with(|| lhs.cmp(rhs))
+    });
+    Ok(degrees)
+}
+
+fn ckyz_componentwise_max_degrees(degrees: &[Vec<usize>], rank: usize) -> Result<Vec<usize>> {
+    let mut max_degrees = vec![0usize; rank];
+    for degree in degrees {
+        if degree.len() != rank {
+            return Err(Error::InvalidInput(
+                "CKYZ target degree rank does not match relation rank".into(),
+            ));
+        }
+        for (max_entry, &entry) in max_degrees.iter_mut().zip(degree.iter()) {
+            *max_entry = (*max_entry).max(entry);
+        }
+    }
+    Ok(max_degrees)
+}
+
+fn compute_ckyz_log_period_corrections_box(
+    relations: &[Vec<i64>],
+    max_degrees: &[usize],
+) -> Result<Vec<BTreeMap<Vec<usize>, Rational>>> {
+    validate_ckyz_relations(relations)?;
+    let rank = relations.len();
+    if max_degrees.len() != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ componentwise cutoff rank does not match relation rank".into(),
+        ));
+    }
+
+    let mut corrections = vec![BTreeMap::new(); rank];
+    for degree in ckyz_multi_degrees_box(max_degrees) {
+        let point_pairings = ckyz_point_pairings(relations, &degree)?;
+        let values = ckyz_log_period_coefficients_for_degree(relations, &point_pairings)?;
+        for (coordinate_index, value) in values.into_iter().enumerate() {
+            if value != 0 {
+                corrections[coordinate_index].insert(degree.clone(), value);
+            }
+        }
+    }
+    Ok(corrections)
+}
+
+fn compute_ckyz_inverse_mirror_map_box(
+    log_period_corrections: &[BTreeMap<Vec<usize>, Rational>],
+    max_degrees: &[usize],
+) -> Result<Vec<BTreeMap<Vec<usize>, Rational>>> {
+    let rank = log_period_corrections.len();
+    if rank == 0 {
+        return Err(Error::InvalidInput(
+            "CKYZ inverse mirror map requires at least one coordinate".into(),
+        ));
+    }
+    if max_degrees.len() != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ componentwise cutoff rank does not match relation rank".into(),
+        ));
+    }
+    for correction in log_period_corrections {
+        validate_ckyz_series(correction, rank, "CKYZ log-period correction")?;
+        validate_ckyz_series_has_zero_constant(correction, rank, "CKYZ log-period correction")?;
+    }
+
+    let mut z_of_q = (0..rank)
+        .map(|coordinate| ckyz_coordinate_series_box(rank, coordinate, max_degrees))
+        .collect::<Vec<_>>();
+    for _ in 0..ckyz_total_degree(max_degrees)? {
+        let mut next = Vec::with_capacity(rank);
+        for (coordinate, correction) in log_period_corrections.iter().enumerate() {
+            let correction_at_z = ckyz_series_compose_box(correction, &z_of_q, max_degrees)?;
+            let negative_correction = ckyz_series_scale(&correction_at_z, Rational::from(-1));
+            let exp_negative_correction =
+                ckyz_series_exp_box(&negative_correction, rank, max_degrees)?;
+            let q_coordinate = ckyz_coordinate_series_box(rank, coordinate, max_degrees);
+            next.push(ckyz_series_mul_box(
+                &q_coordinate,
+                &exp_negative_correction,
+                rank,
+                max_degrees,
+            )?);
+        }
+        z_of_q = next;
+    }
+    Ok(z_of_q)
+}
+
+fn substitute_ckyz_series_in_flat_coordinates_box(
+    series_z: &BTreeMap<Vec<usize>, Rational>,
+    z_of_q: &[BTreeMap<Vec<usize>, Rational>],
+    max_degrees: &[usize],
+) -> Result<BTreeMap<Vec<usize>, Rational>> {
+    let rank = z_of_q.len();
+    if rank == 0 {
+        return Err(Error::InvalidInput(
+            "CKYZ flat-coordinate substitution requires at least one coordinate".into(),
+        ));
+    }
+    if max_degrees.len() != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ componentwise cutoff rank does not match relation rank".into(),
+        ));
+    }
+    validate_ckyz_series(series_z, rank, "CKYZ B-model series")?;
+    for argument in z_of_q {
+        validate_ckyz_series(argument, rank, "CKYZ inverse mirror-map coordinate")?;
+        validate_ckyz_series_has_zero_constant(
+            argument,
+            rank,
+            "CKYZ inverse mirror-map coordinate",
+        )?;
+    }
+    ckyz_series_compose_box(series_z, z_of_q, max_degrees)
+}
+
+fn compute_ckyz_local_instanton_potential_corrections_box(
+    relations: &[Vec<i64>],
+    local_intersection_terms: &[CkyzLocalIntersectionTerm],
+    max_degrees: &[usize],
+) -> Result<BTreeMap<Vec<usize>, Rational>> {
+    validate_ckyz_relations(relations)?;
+    let rank = relations.len();
+    if max_degrees.len() != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ componentwise cutoff rank does not match relation rank".into(),
+        ));
+    }
+    for term in local_intersection_terms {
+        if term.first >= rank || term.second >= rank {
+            return Err(Error::InvalidInput(
+                "CKYZ local intersection term index is outside the relation rank".into(),
+            ));
+        }
+    }
+
+    let alpha = compute_ckyz_log_period_corrections_box(relations, max_degrees)?;
+    let z_of_q = compute_ckyz_inverse_mirror_map_box(&alpha, max_degrees)?;
+    let mut contracted = BTreeMap::new();
+
+    for term in local_intersection_terms {
+        let beta = ckyz_second_log_period_series_for_pair_box(
+            relations,
+            term.first,
+            term.second,
+            max_degrees,
+        )?;
+        let alpha_product =
+            ckyz_series_mul_box(&alpha[term.first], &alpha[term.second], rank, max_degrees)?;
+        let mut f_pair = beta;
+        ckyz_series_add_scaled_assign(&mut f_pair, &alpha_product, Rational::from(-1));
+
+        let mut term_coefficient = Rational::from(term.coefficient);
+        if term.first == term.second {
+            term_coefficient /= Rational::from(2);
+        }
+        ckyz_series_add_scaled_assign(&mut contracted, &f_pair, term_coefficient);
+    }
+
+    substitute_ckyz_series_in_flat_coordinates_box(&contracted, &z_of_q, max_degrees)
+}
+
+fn extract_ckyz_local_gv_invariants_from_potential_for_degrees(
+    potential_coefficients: &BTreeMap<Vec<usize>, Rational>,
+    cover_weight_coefficients: &[i64],
+    target_degrees: &[Vec<usize>],
+) -> Result<BTreeMap<Vec<usize>, Integer>> {
+    let rank = cover_weight_coefficients.len();
+    if rank == 0 {
+        return Err(Error::InvalidInput(
+            "CKYZ local GV extraction requires at least one coordinate".into(),
+        ));
+    }
+    validate_ckyz_series(
+        potential_coefficients,
+        rank,
+        "CKYZ local instanton potential",
+    )?;
+    validate_ckyz_target_degrees(target_degrees, rank)?;
+
+    let mut invariants = BTreeMap::new();
+    for degree in target_degrees {
+        let mut residual = potential_coefficients
+            .get(degree)
+            .cloned()
+            .unwrap_or_else(|| Rational::from(0));
+        for cover in ckyz_nontrivial_covers(degree) {
+            let primitive = ckyz_divide_degree(degree, cover)?;
+            let Some(gv) = invariants.get(&primitive) else {
+                continue;
+            };
+            let weight = ckyz_cover_weight(cover_weight_coefficients, &primitive)?;
+            let cover_squared = cover.checked_mul(cover).ok_or_else(|| {
+                Error::InvalidInput("CKYZ cover multiplicity overflowed usize".into())
+            })?;
+            residual -= Rational::from(weight) * Rational::from(gv)
+                / Rational::from(Integer::from(cover_squared));
+        }
+
+        if let Some(gv) =
+            ckyz_integral_gv_from_residual(residual, cover_weight_coefficients, degree)?
+        {
+            invariants.insert(degree.clone(), gv);
+        }
+    }
+
+    Ok(invariants)
+}
+
+fn ckyz_integral_gv_from_residual(
+    residual: Rational,
+    cover_weight_coefficients: &[i64],
+    degree: &[usize],
+) -> Result<Option<Integer>> {
+    if residual == 0 {
+        return Ok(None);
+    }
+    let weight = ckyz_cover_weight(cover_weight_coefficients, degree)?;
+    if weight == 0 {
+        return Err(Error::InvalidInput(
+            "CKYZ local GV extraction encountered a nonzero coefficient with zero cover weight"
+                .into(),
+        ));
+    }
+    let gv_rational = residual / Rational::from(weight);
+    if gv_rational.denominator_ref() != &1u32 {
+        return Err(Error::InvalidInput(format!(
+            "CKYZ local GV invariant at degree {degree:?} is not integral: {gv_rational}"
+        )));
+    }
+    let gv = Integer::try_from(gv_rational).map_err(|_| {
+        Error::InvalidInput(format!(
+            "CKYZ local GV invariant at degree {degree:?} is not integral"
+        ))
+    })?;
+    Ok((gv != 0).then_some(gv))
 }
 
 fn integer_row_transform_between_bases(
@@ -5798,7 +6324,8 @@ mod tests {
         OriginCircuitCurveWitness, OriginCircuitRelationPoint, ToricCurveCandidate,
         check_supporting_mori_face_normal, compute_ambient_one_dimensional_ray_gv_series,
         compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
-        compute_ckyz_local_gv_invariants, compute_ckyz_local_instanton_potential_corrections,
+        compute_ckyz_local_gv_invariants, compute_ckyz_local_gv_invariants_for_degrees,
+        compute_ckyz_local_instanton_potential_corrections,
         compute_ckyz_local_prepotential_period_corrections, compute_ckyz_log_period_corrections,
         compute_grading_vector, compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_provided_generators, compute_local_p2_genus_zero_gv_series,
@@ -6142,6 +6669,37 @@ mod tests {
     }
 
     #[test]
+    fn ckyz_targeted_local_gv_extraction_matches_local_p2_table() {
+        let target_degrees = (1..=10).map(|degree| vec![degree]).collect::<Vec<_>>();
+        let gvs = compute_ckyz_local_gv_invariants_for_degrees(
+            &[vec![-3, 1, 1, 1]],
+            &[CkyzLocalIntersectionTerm {
+                first: 0,
+                second: 0,
+                coefficient: 1,
+            }],
+            &[3],
+            &target_degrees,
+        )
+        .unwrap();
+
+        let expected = BTreeMap::from([
+            (vec![1], Integer::from(3)),
+            (vec![2], Integer::from(-6)),
+            (vec![3], Integer::from(27)),
+            (vec![4], Integer::from(-192)),
+            (vec![5], Integer::from(1695)),
+            (vec![6], Integer::from(-17064)),
+            (vec![7], Integer::from(188454)),
+            (vec![8], Integer::from(-2228160)),
+            (vec![9], Integer::from(27748899)),
+            (vec![10], Integer::from(-360012150)),
+        ]);
+
+        assert_eq!(gvs, expected);
+    }
+
+    #[test]
     fn ckyz_local_gv_extraction_matches_f0_table_start() {
         let relations = vec![vec![-2, 1, 0, 1, 0], vec![-2, 0, 1, 0, 1]];
         let gvs = compute_ckyz_local_gv_invariants(
@@ -6174,6 +6732,42 @@ mod tests {
             assert!(
                 !gvs.contains_key(&zero_degree),
                 "zero F0 invariant should be omitted at {zero_degree:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn ckyz_targeted_local_gv_extraction_matches_full_f0_ray() {
+        let relations = vec![vec![-2, 1, 0, 1, 0], vec![-2, 0, 1, 0, 1]];
+        let target_degrees = [vec![1, 1], vec![2, 2], vec![3, 3]];
+        let targeted = compute_ckyz_local_gv_invariants_for_degrees(
+            &relations,
+            &[CkyzLocalIntersectionTerm {
+                first: 0,
+                second: 1,
+                coefficient: 1,
+            }],
+            &[2, 2],
+            &target_degrees,
+        )
+        .unwrap();
+        let full = compute_ckyz_local_gv_invariants(
+            &relations,
+            &[CkyzLocalIntersectionTerm {
+                first: 0,
+                second: 1,
+                coefficient: 1,
+            }],
+            &[2, 2],
+            6,
+        )
+        .unwrap();
+
+        for degree in target_degrees {
+            assert_eq!(
+                targeted.get(&degree),
+                full.get(&degree),
+                "targeted F0 extraction should match full extraction at {degree:?}"
             );
         }
     }
