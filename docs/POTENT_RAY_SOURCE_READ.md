@@ -382,7 +382,9 @@ source reading:
 - it can express the saved potent-ray relation as an integer direction in that
   local charge lattice;
 - it can compute the first local `P^2` GV row from the one-parameter local
-  mirror map, without reading the saved GV row as input.
+  mirror map, and the rank-two CKYZ local-surface rows now reach all 395
+  rank-two potent-ray supports for the first four multiples, without reading the
+  saved GV row as input.
 
 Executable evidence is now split by layer:
 
