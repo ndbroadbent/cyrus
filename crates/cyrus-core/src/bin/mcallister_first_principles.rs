@@ -757,6 +757,7 @@ struct MissingGvTargetStats {
     max_generators_le_target_degree: usize,
     origin_coefficient_counts: BTreeMap<i64, usize>,
     origin_circuit_pattern_counts: BTreeMap<String, usize>,
+    origin_circuit_affine_rank_counts: BTreeMap<usize, usize>,
     sample: Vec<MissingGvTargetSample>,
 }
 
@@ -768,12 +769,27 @@ struct MissingGvTargetSample {
     origin_circuit_pattern: Option<String>,
     origin_circuit_witness_count: Option<usize>,
     origin_circuit_first_witness: Option<OriginCircuitWitnessSample>,
+    origin_circuit_affine_support: Option<OriginCircuitAffineSupportSample>,
     cms_general_divisor_shape_candidates: Option<Vec<CmsGeneralDivisorShapeCandidate>>,
     cms_general_divisor_intersection_checks: Option<Vec<CmsGeneralDivisorIntersectionCheck>>,
     real_cone_decomposable_by_other_generators: bool,
     real_cone_decomposition_active_generators: Option<usize>,
     ambient_nonzero: Vec<(usize, i64)>,
     basis_nonzero: Vec<(usize, i64)>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct OriginCircuitAffineSupportSample {
+    affine_rank: usize,
+    coefficient_counts: BTreeMap<i64, usize>,
+    local_charge_basis: Vec<Vec<i64>>,
+    local_coordinates_2d: Option<Vec<OriginCircuitLocalCoordinate2DSample>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct OriginCircuitLocalCoordinate2DSample {
+    point_index: usize,
+    coordinates: [i64; 2],
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -2174,6 +2190,7 @@ fn degree_filtered_basis_rays(
 
 fn missing_gv_target_stats(
     ambient_classes: &[Vec<i64>],
+    triangulation_points: &[Point],
     basis_rays: &[Vec<i64>],
     basis: &[usize],
     grading: &[i64],
@@ -2203,6 +2220,7 @@ fn missing_gv_target_stats(
             max_generators_le_target_degree: 0,
             origin_coefficient_counts: BTreeMap::new(),
             origin_circuit_pattern_counts: BTreeMap::new(),
+            origin_circuit_affine_rank_counts: BTreeMap::new(),
             sample: Vec::new(),
         });
     }
@@ -2239,6 +2257,7 @@ fn missing_gv_target_stats(
     let mut max_generators = 0usize;
     let mut origin_coefficient_counts = BTreeMap::new();
     let mut origin_circuit_pattern_counts = BTreeMap::new();
+    let mut origin_circuit_affine_rank_counts = BTreeMap::new();
     let mut sample = Vec::new();
     for ambient_class in ambient_classes {
         let Some(&origin_coefficient) = ambient_class.get(origin_idx) else {
@@ -2313,6 +2332,28 @@ fn missing_gv_target_stats(
         let origin_circuit_first_witness = origin_circuit_diagnostic
             .and_then(|diagnostic| diagnostic.witnesses.first())
             .map(origin_circuit_witness_sample);
+        let origin_circuit_affine_support = if origin_circuit_diagnostic.is_some() {
+            let affine_diagnostic =
+                cyrus_core::diagnose_affine_toric_circuit(ambient_class, triangulation_points)
+                    .map_err(|e| {
+                        format!(
+                            "failed to diagnose origin-circuit affine support for {:?}: {e}",
+                            sparse_i64(ambient_class)
+                        )
+                    })?
+                    .ok_or_else(|| {
+                        format!(
+                            "origin-circuit class is not an affine toric circuit: {:?}",
+                            sparse_i64(ambient_class)
+                        )
+                    })?;
+            *origin_circuit_affine_rank_counts
+                .entry(affine_diagnostic.affine_rank)
+                .or_insert(0) += 1;
+            Some(origin_circuit_affine_support_sample(&affine_diagnostic))
+        } else {
+            None
+        };
         let cms_general_divisor_shape_candidates = origin_circuit_diagnostic
             .map(cms_general_divisor_shape_candidates)
             .filter(|candidates| !candidates.is_empty());
@@ -2330,6 +2371,7 @@ fn missing_gv_target_stats(
                 origin_circuit_pattern: origin_circuit_pattern_label,
                 origin_circuit_witness_count,
                 origin_circuit_first_witness,
+                origin_circuit_affine_support,
                 cms_general_divisor_shape_candidates,
                 cms_general_divisor_intersection_checks,
                 real_cone_decomposable_by_other_generators: real_cone_decomposable,
@@ -2361,6 +2403,7 @@ fn missing_gv_target_stats(
         max_generators_le_target_degree: max_generators,
         origin_coefficient_counts,
         origin_circuit_pattern_counts,
+        origin_circuit_affine_rank_counts,
         sample,
     })
 }
@@ -2627,6 +2670,29 @@ fn origin_circuit_witness_sample(
                 face_dimension: point.face_dimension,
             })
             .collect(),
+    }
+}
+
+fn origin_circuit_affine_support_sample(
+    diagnostic: &cyrus_core::AffineToricCircuitDiagnostic,
+) -> OriginCircuitAffineSupportSample {
+    let mut coefficient_counts = BTreeMap::new();
+    for point in &diagnostic.relation_points {
+        *coefficient_counts.entry(point.coefficient).or_insert(0) += 1;
+    }
+    OriginCircuitAffineSupportSample {
+        affine_rank: diagnostic.affine_rank,
+        coefficient_counts,
+        local_charge_basis: diagnostic.local_charge_basis.clone(),
+        local_coordinates_2d: diagnostic.local_coordinates_2d.as_ref().map(|coordinates| {
+            coordinates
+                .iter()
+                .map(|point| OriginCircuitLocalCoordinate2DSample {
+                    point_index: point.point_index,
+                    coordinates: point.coordinates,
+                })
+                .collect()
+        }),
     }
 }
 
@@ -6204,6 +6270,7 @@ fn diagnose_chamber_gv_volume_correction(
         let ray_stats = graded_ray_stats(&basis_rays, &grading, general_max_deg)?;
         let target_stats = missing_gv_target_stats(
             &missing_gv_classes,
+            &geom.triangulation_points,
             &basis_rays,
             &intersection.basis,
             &grading,
@@ -9406,7 +9473,7 @@ fn stage_volume(
                 _ => "none".to_string(),
             };
             eprintln!(
-                "[INFO] corrected-chamber missing GV target reduction: targets={} targets_as_mori_generators={} targets_as_origin_circuits={} real_cone_decomposable_by_other_generators={} lp_extremal_mori_generators={} real_cone_active_generator_range={} origin_circuit_resolved_conifold={} generators_le_target_degree_range={}..{} origin_coefficients={:?}",
+                "[INFO] corrected-chamber missing GV target reduction: targets={} targets_as_mori_generators={} targets_as_origin_circuits={} real_cone_decomposable_by_other_generators={} lp_extremal_mori_generators={} real_cone_active_generator_range={} origin_circuit_resolved_conifold={} origin_circuit_affine_ranks={:?} generators_le_target_degree_range={}..{} origin_coefficients={:?}",
                 stats.target_count,
                 stats.targets_that_are_mori_generators,
                 stats.targets_that_are_origin_circuits,
@@ -9414,6 +9481,7 @@ fn stage_volume(
                 stats.targets_that_are_lp_extremal_mori_generators,
                 active_generator_range,
                 stats.origin_circuit_resolved_conifold_count,
+                stats.origin_circuit_affine_rank_counts,
                 stats.min_generators_le_target_degree,
                 stats.max_generators_le_target_degree,
                 stats.origin_coefficient_counts
@@ -10277,6 +10345,7 @@ mod tests {
         let basis_rays = vec![vec![1, 0], vec![0, 1], vec![1, 1]];
         let stats = missing_gv_target_stats(
             &ambient_classes,
+            &[],
             &basis_rays,
             &[1, 2],
             &[2, 3],
@@ -10299,6 +10368,7 @@ mod tests {
         assert_eq!(stats.max_generators_le_target_degree, 3);
         assert_eq!(stats.origin_coefficient_counts, BTreeMap::from([(0, 2)]));
         assert_eq!(stats.origin_circuit_pattern_counts, BTreeMap::new());
+        assert_eq!(stats.origin_circuit_affine_rank_counts, BTreeMap::new());
         assert_eq!(
             stats.sample,
             vec![
@@ -10309,6 +10379,7 @@ mod tests {
                     origin_circuit_pattern: None,
                     origin_circuit_witness_count: None,
                     origin_circuit_first_witness: None,
+                    origin_circuit_affine_support: None,
                     cms_general_divisor_shape_candidates: None,
                     cms_general_divisor_intersection_checks: None,
                     real_cone_decomposable_by_other_generators: true,
@@ -10323,6 +10394,7 @@ mod tests {
                     origin_circuit_pattern: None,
                     origin_circuit_witness_count: None,
                     origin_circuit_first_witness: None,
+                    origin_circuit_affine_support: None,
                     cms_general_divisor_shape_candidates: None,
                     cms_general_divisor_intersection_checks: None,
                     real_cone_decomposable_by_other_generators: true,
@@ -10332,6 +10404,59 @@ mod tests {
                 }
             ]
         );
+    }
+
+    #[test]
+    fn missing_gv_target_stats_records_origin_circuit_affine_support() {
+        let points = vec![
+            Point::new(vec![0, 0]),
+            Point::new(vec![1, 1]),
+            Point::new(vec![1, 0]),
+            Point::new(vec![0, 1]),
+        ];
+        let class = vec![-1, -1, 1, 1];
+        let mut origin_circuits_by_class = HashMap::new();
+        origin_circuits_by_class.insert(
+            class.clone(),
+            cyrus_core::OriginCircuitCurveDiagnostic {
+                class: class.clone(),
+                origin_coefficient: -1,
+                negative_coefficient_counts: BTreeMap::from([(-1, 1)]),
+                positive_coefficient_counts: BTreeMap::from([(1, 2)]),
+                is_resolved_conifold_pattern: true,
+                witnesses: Vec::new(),
+            },
+        );
+
+        let stats = missing_gv_target_stats(
+            std::slice::from_ref(&class),
+            &points,
+            &[vec![-1, 1, 1]],
+            &[1, 2, 3],
+            &[3, 2, 2],
+            0,
+            &origin_circuits_by_class,
+            &HashMap::new(),
+            1,
+        )
+        .unwrap();
+
+        assert_eq!(stats.targets_that_are_origin_circuits, 1);
+        assert_eq!(
+            stats.origin_circuit_affine_rank_counts,
+            BTreeMap::from([(2, 1)])
+        );
+        let support = stats.sample[0]
+            .origin_circuit_affine_support
+            .as_ref()
+            .expect("origin circuit should include affine support diagnostics");
+        assert_eq!(support.affine_rank, 2);
+        assert_eq!(
+            support.coefficient_counts,
+            BTreeMap::from([(-1, 2), (1, 2)])
+        );
+        assert_eq!(support.local_charge_basis, vec![vec![1, 1, -1, -1]]);
+        assert!(support.local_coordinates_2d.is_some());
     }
 
     #[test]

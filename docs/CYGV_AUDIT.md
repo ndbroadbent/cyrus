@@ -219,6 +219,17 @@ and `toric_missing=8`, while the current solved-t diagnostic reports
 still nonstandard origin-circuit patterns and must stay explicit until their
 actual semigroup/local-toric context is reconstructed from source.
 
+A follow-up affine-support diagnostic makes this obstruction more precise. The
+nine current solved-t corrected-chamber misses are all Mori generators and all
+are origin circuits, but their affine supports are not rank-two local toric
+surface diagrams: the rank inventory is `{3: 4, 4: 5}`. Each has a one-row
+local affine charge basis because the sampled support has `points = affine_rank
++ 2`, but no rank-two local coordinate model is available. Therefore the
+rank-two CKYZ/potent-ray machinery cannot simply be reused for these missing
+nilpotent origin circuits. The next source-derived object has to be the
+higher-rank local semigroup or flop/chamber context for these origin-circuit
+supports.
+
 ## Computational Mirror Symmetry Source Read
 
 The later paper *Computational Mirror Symmetry* (arXiv:2303.00757) is the

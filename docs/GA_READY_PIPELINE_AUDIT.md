@@ -44,10 +44,13 @@ run pass. Any remaining mismatch must be explicit and localizable.
    corrected-chamber diagnostic reports checkpoint-t `toric_covered=412`,
    `toric_missing=8`, and current solved-t `toric_covered=410`,
    `toric_missing=9`; the remaining current missing targets are still
-   nonstandard origin-circuit patterns. Earlier LP-witness face diagnostics
-   reduced the target-correction delta but exact supporting-face certification
-   remained zero for those LP contexts, so those values are still diagnostic
-   evidence, not a reusable GV fallback.
+   nonstandard origin-circuit patterns. The latest affine-support diagnostic
+   shows those nine remaining misses have ranks `{3: 4, 4: 5}`, so they are
+   not rank-two local toric surface supports and cannot be handled by simply
+   reusing the CKYZ rank-two potent-ray extractor. Earlier LP-witness face
+   diagnostics reduced the target-correction delta but exact supporting-face
+   certification remained zero for those LP contexts, so those values are still
+   diagnostic evidence, not a reusable GV fallback.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for
