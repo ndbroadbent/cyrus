@@ -4546,11 +4546,19 @@ struct CkyzScaledAlphaTerm {
     coefficients: Vec<Rational>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CkyzAlphaPredecessor {
+    term_index: usize,
+    remainder_index: usize,
+    term_total_degree: usize,
+}
+
 #[derive(Clone, Debug, Default)]
 struct CkyzExpCoefficientCache {
     scale_ids: HashMap<Vec<usize>, usize>,
     coefficients_by_scale: Vec<HashMap<usize, Rational>>,
     scaled_alpha_coefficients_by_scale: Vec<HashMap<usize, Rational>>,
+    alpha_predecessors_by_delta: HashMap<usize, Vec<CkyzAlphaPredecessor>>,
 }
 
 impl CkyzExpCoefficientCache {
@@ -4607,6 +4615,49 @@ impl CkyzExpCoefficientCache {
             .iter()
             .map(HashMap::len)
             .sum()
+    }
+
+    fn alpha_predecessors(
+        &mut self,
+        delta_index: usize,
+        alpha_terms: &[CkyzScaledAlphaTerm],
+        domain: &CkyzMonomialDomain,
+    ) -> Result<Vec<CkyzAlphaPredecessor>> {
+        if let Some(predecessors) = self.alpha_predecessors_by_delta.get(&delta_index) {
+            return Ok(predecessors.clone());
+        }
+
+        let delta = domain.degrees.get(delta_index).ok_or_else(|| {
+            Error::InvalidInput("CKYZ alpha predecessor delta index is outside the domain".into())
+        })?;
+        let delta_total_degree = ckyz_total_degree(delta)?;
+        let mut predecessors = Vec::new();
+        for (term_index, term) in alpha_terms.iter().enumerate() {
+            if term.total_degree == 0 || term.total_degree > delta_total_degree {
+                continue;
+            }
+            if !ckyz_componentwise_le(&term.degree, delta) {
+                continue;
+            }
+            let Some(remainder) = ckyz_delta_degree(delta, &term.degree) else {
+                continue;
+            };
+            let Some(remainder_index) = domain.index_of(&remainder) else {
+                continue;
+            };
+            predecessors.push(CkyzAlphaPredecessor {
+                term_index,
+                remainder_index,
+                term_total_degree: term.total_degree,
+            });
+        }
+        self.alpha_predecessors_by_delta
+            .insert(delta_index, predecessors.clone());
+        Ok(predecessors)
+    }
+
+    fn alpha_predecessor_delta_count(&self) -> usize {
+        self.alpha_predecessors_by_delta.len()
     }
 }
 
@@ -4688,28 +4739,18 @@ fn ckyz_exp_scaled_alpha_coefficient_by_index_in_z_domain(
 
     let delta_total_degree = ckyz_total_degree(delta)?;
     let mut coefficient = Rational::from(0);
-    for (term_index, term) in alpha_terms.iter().enumerate() {
-        if term.total_degree == 0 || term.total_degree > delta_total_degree {
-            continue;
-        }
-        if !ckyz_componentwise_le(&term.degree, delta) {
-            continue;
-        }
-        let Some(remainder) = ckyz_delta_degree(delta, &term.degree) else {
-            continue;
-        };
-        let Some(remainder_index) = domain.index_of(&remainder) else {
-            continue;
-        };
+    let predecessors = cache.alpha_predecessors(delta_index, alpha_terms, domain)?;
+    for predecessor in predecessors {
+        let term = &alpha_terms[predecessor.term_index];
         let scaled_alpha_coefficient =
-            cache.scaled_alpha_coefficient(scale_id, scale_degree, term_index, term);
+            cache.scaled_alpha_coefficient(scale_id, scale_degree, predecessor.term_index, term);
         if scaled_alpha_coefficient == 0 {
             continue;
         }
         let remainder_coefficient = ckyz_exp_scaled_alpha_coefficient_by_index_in_z_domain(
             scale_id,
             scale_degree,
-            remainder_index,
+            predecessor.remainder_index,
             alpha_terms,
             domain,
             cache,
@@ -4717,7 +4758,7 @@ fn ckyz_exp_scaled_alpha_coefficient_by_index_in_z_domain(
         if remainder_coefficient == 0 {
             continue;
         }
-        coefficient += Rational::from(Integer::from(term.total_degree))
+        coefficient += Rational::from(Integer::from(predecessor.term_total_degree))
             * scaled_alpha_coefficient
             * remainder_coefficient;
     }
@@ -4969,12 +5010,13 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
     }
     if let Some(start) = extraction_start {
         eprintln!(
-            "[CKYZ_Z_EXTRACT] degrees={} nonzero_gvs={} li2_coefficients={} exp_coeff_cache={} scaled_alpha_cache={} elapsed={:?}",
+            "[CKYZ_Z_EXTRACT] degrees={} nonzero_gvs={} li2_coefficients={} exp_coeff_cache={} scaled_alpha_cache={} predecessor_deltas={} elapsed={:?}",
             extraction_degrees.len(),
             nonzero_gv_count,
             li2_coefficient_evaluations,
             exp_coefficient_cache.coefficient_count(),
             exp_coefficient_cache.scaled_alpha_coefficient_count(),
+            exp_coefficient_cache.alpha_predecessor_delta_count(),
             start.elapsed(),
         );
     }

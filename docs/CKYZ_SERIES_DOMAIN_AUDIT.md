@@ -283,6 +283,7 @@ trace improved monotonically:
 vector-pair coefficient cache: [CKYZ_Z_EXTRACT] ... exp_coeff_cache=1382 elapsed=35.5ms
 indexed coefficient cache:    [CKYZ_Z_EXTRACT] ... exp_coeff_cache=1382 elapsed=29.4ms
 per-scale alpha cache:        [CKYZ_Z_EXTRACT] ... exp_coeff_cache=1382 scaled_alpha_cache=1362 elapsed=26.1ms
+alpha predecessor cache:      [CKYZ_Z_EXTRACT] ... exp_coeff_cache=1382 scaled_alpha_cache=1362 predecessor_deltas=213 elapsed=20.7ms
 ```
 
 This did not make the McAllister `[4,3,2]`, N=10 gate finish. The gate still
@@ -293,10 +294,16 @@ reaches the same source-predicted domain and history:
 [CKYZ_Z_HISTORY] domain=21721 terminals=10 selected=5235 candidate_evaluations=38195 ...
 ```
 
-Sampling after the indexed-cache changes no longer shows cloned vector-pair
-keys as the top cost. The hot path is now recursive coefficient lookup over
-too many selected history targets: per-scale `HashMap<usize>` lookups, degree
-subtraction, componentwise checks, dense degree indexing, and Malachite rational
-multiply/GCD. The next substantive change should therefore reduce the
-coefficient-history/domain itself. More cache reshaping may help constants, but
-it will not change the core 5,235-history-degree workload.
+The alpha predecessor cache removes repeated source-degree scans inside the
+exponential coefficient recurrence. It is a source-preserving memoization of the
+same polynomial multiplication condition cygv uses: a term contributes only when
+the predecessor and remainder monomials both lie in the finite domain.
+
+Sampling after the cache changes no longer shows cloned vector-pair keys as the
+top cost. The remaining hot path is recursive coefficient lookup over too many
+selected history targets: per-scale `HashMap<usize>` lookups, cached coefficient
+returns and clones, and Malachite rational multiply/GCD. The sampled N=10 run was
+stopped after about 2.5 minutes without reaching the final extraction trace. The
+next substantive change should therefore reduce the coefficient-history/domain
+itself. More cache reshaping may help constants, but it will not change the core
+5,235-history-degree workload.
