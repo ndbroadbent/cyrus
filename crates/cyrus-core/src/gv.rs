@@ -2494,17 +2494,22 @@ fn ckyz_series_mul_domain(
     let rhs_terms = ckyz_indexed_domain_terms(rhs, domain)?;
     let mut out_by_index = vec![None::<Rational>; domain.degrees.len()];
     if let Some(addition_pairs_by_lhs) = &domain.addition_pairs_by_lhs {
-        let mut rhs_by_index = vec![None; domain.degrees.len()];
-        for (rhs_index, rhs_coefficient) in rhs_terms {
-            rhs_by_index[rhs_index] = Some(rhs_coefficient);
+        let (outer_terms, inner_terms) = if lhs_terms.len() <= rhs_terms.len() {
+            (lhs_terms, rhs_terms)
+        } else {
+            (rhs_terms, lhs_terms)
+        };
+        let mut inner_by_index = vec![None; domain.degrees.len()];
+        for (inner_index, inner_coefficient) in inner_terms {
+            inner_by_index[inner_index] = Some(inner_coefficient);
         }
-        for (lhs_index, lhs_coefficient) in lhs_terms {
-            for &(rhs_index, product_index) in &addition_pairs_by_lhs[lhs_index] {
-                let Some(rhs_coefficient) = rhs_by_index[rhs_index] else {
+        for (outer_index, outer_coefficient) in outer_terms {
+            for &(inner_index, product_index) in &addition_pairs_by_lhs[outer_index] {
+                let Some(inner_coefficient) = inner_by_index[inner_index] else {
                     continue;
                 };
                 let entry = out_by_index[product_index].get_or_insert_with(|| Rational::from(0));
-                *entry += lhs_coefficient.clone() * rhs_coefficient.clone();
+                *entry += outer_coefficient.clone() * inner_coefficient.clone();
             }
         }
         return Ok(ckyz_series_from_domain_coefficients(out_by_index, domain));
@@ -7159,6 +7164,28 @@ mod tests {
         let product = ckyz_series_mul_domain(&lhs, &rhs, &domain).unwrap();
 
         assert_eq!(product, BTreeMap::from([(vec![1, 2], Rational::from(6))]));
+    }
+
+    #[test]
+    fn ckyz_domain_multiplication_is_symmetric_with_indexed_sparse_terms() {
+        let domain = CkyzMonomialDomain::componentwise_box(&[2, 1]).unwrap();
+        let lhs = BTreeMap::from([
+            (vec![1, 0], Rational::from(2)),
+            (vec![0, 1], Rational::from(5)),
+        ]);
+        let rhs = BTreeMap::from([(vec![1, 0], Rational::from(3))]);
+
+        let lhs_rhs = ckyz_series_mul_domain(&lhs, &rhs, &domain).unwrap();
+        let rhs_lhs = ckyz_series_mul_domain(&rhs, &lhs, &domain).unwrap();
+
+        assert_eq!(lhs_rhs, rhs_lhs);
+        assert_eq!(
+            lhs_rhs,
+            BTreeMap::from([
+                (vec![2, 0], Rational::from(6)),
+                (vec![1, 1], Rational::from(15)),
+            ])
+        );
     }
 
     #[test]
