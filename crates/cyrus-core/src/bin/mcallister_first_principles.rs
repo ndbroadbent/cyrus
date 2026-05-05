@@ -422,6 +422,7 @@ struct TargetVolumesInput {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct BasisOverride {
     indices: Vec<usize>,
 }
@@ -9588,6 +9589,19 @@ mod tests {
             Some(CurvePruningStrategy::FiniteSemigroup)
         );
         assert!(parse_curve_pruning_strategy("hilbert").is_none());
+    }
+
+    #[test]
+    fn basis_override_rejects_matrix_basis_shape() {
+        let err = serde_json::from_str::<BasisOverride>(
+            r#"{"indices":[3,4],"matrix":[[1,0,0],[0,1,0]]}"#,
+        )
+        .expect_err("index-basis override must reject matrix-basis fields");
+
+        assert!(
+            err.to_string().contains("unknown field `matrix`"),
+            "unexpected serde error: {err}"
+        );
     }
 
     #[test]
