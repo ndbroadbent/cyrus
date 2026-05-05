@@ -267,6 +267,124 @@ pub fn weyl_reflection_matrix(
     Some(reflection)
 }
 
+/// Transform triple intersection numbers by an exact rational matrix.
+///
+/// This computes
+///
+/// ```text
+/// kappa'_{abc} = kappa_{mnl} M^m_a M^n_b M^l_c
+/// ```
+///
+/// with Einstein summation over `m,n,l`. The matrix is row-major with row
+/// index upstairs, matching [`weyl_reflection_matrix`]. This is a pure tensor
+/// transformation; it does not decide whether the matrix is a valid geometric
+/// continuation.
+#[must_use]
+pub fn transform_intersection_numbers_by_matrix(
+    kappa: &Intersection,
+    transform: &[Vec<Rational>],
+) -> Option<Intersection> {
+    let dim = kappa.dim();
+    if transform.len() != dim || transform.iter().any(|row| row.len() != dim) {
+        return None;
+    }
+
+    let row_supports = transform
+        .iter()
+        .map(|row| {
+            row.iter()
+                .enumerate()
+                .filter(|(_, value)| **value != 0)
+                .map(|(index, value)| (index, value.clone()))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+
+    let mut entries: HashMap<(usize, usize, usize), Rational> = HashMap::new();
+    for (&(i, j, k), value) in kappa.iter() {
+        for [m, n, ell] in unique_index_permutations(i, j, k) {
+            for (a, matrix_ma) in &row_supports[m] {
+                for (b, matrix_nb) in &row_supports[n] {
+                    for (c, matrix_lc) in &row_supports[ell] {
+                        if *a > *b || *b > *c {
+                            continue;
+                        }
+                        let mut term = value.get().clone();
+                        term *= matrix_ma;
+                        term *= matrix_nb;
+                        term *= matrix_lc;
+                        if term == 0 {
+                            continue;
+                        }
+                        *entries
+                            .entry((*a, *b, *c))
+                            .or_insert_with(|| Rational::from(0)) += term;
+                    }
+                }
+            }
+        }
+    }
+
+    let mut transformed = Intersection::new(dim);
+    for ((a, b, c), value) in entries {
+        if value != 0 {
+            transformed.set(
+                a,
+                b,
+                c,
+                crate::types::rational::Rational::<Finite>::from_raw(value),
+            );
+        }
+    }
+    Some(transformed)
+}
+
+/// Check the McAllister stable-Weyl redundancy tensor condition exactly.
+///
+/// This verifies only the algebraic condition from the source algorithm:
+///
+/// ```text
+/// kappa_{mnl} w^m_a w^n_b w^l_c == kappa_{abc} - n_C^0 C_a C_b C_c
+/// ```
+///
+/// The caller must separately prove that `shrinking_divisor` actually vanishes
+/// on the dual facet and that `gv_invariant` is the certified invariant of the
+/// shrinking curve.
+#[must_use]
+pub fn weyl_reflection_matches_flop_transform(
+    kappa: &Intersection,
+    shrinking_divisor: &[Integer],
+    curve_class: &[i64],
+    gv_invariant: &Integer,
+) -> Option<bool> {
+    let reflection = weyl_reflection_matrix(shrinking_divisor, curve_class)?;
+    let reflected = transform_intersection_numbers_by_matrix(kappa, &reflection)?;
+    let flopped = flop_transform_intersection_numbers(kappa, curve_class, gv_invariant)?;
+    Some(intersection_numbers_equal(&reflected, &flopped))
+}
+
+fn unique_index_permutations(i: usize, j: usize, k: usize) -> Vec<[usize; 3]> {
+    let mut permutations = vec![
+        [i, j, k],
+        [i, k, j],
+        [j, i, k],
+        [j, k, i],
+        [k, i, j],
+        [k, j, i],
+    ];
+    permutations.sort_unstable();
+    permutations.dedup();
+    permutations
+}
+
+fn intersection_numbers_equal(lhs: &Intersection, rhs: &Intersection) -> bool {
+    lhs.dim() == rhs.dim()
+        && lhs.num_nonzero() == rhs.num_nonzero()
+        && lhs
+            .iter()
+            .all(|(&(i, j, k), value)| rhs.get(i, j, k).get() == value.get())
+}
+
 fn kklt_debug_enabled() -> bool {
     env::var_os("CYRUS_KKLT_DEBUG").is_some()
 }
@@ -2145,6 +2263,57 @@ mod tests {
     }
 
     #[test]
+    fn test_transform_intersection_numbers_by_matrix_applies_exact_tensor_pullback() {
+        let mut kappa = Intersection::new(2);
+        kappa.set(0, 0, 0, finite_rational(10));
+        kappa.set(0, 0, 1, finite_rational(3));
+        kappa.set(0, 1, 1, finite_rational(5));
+        kappa.set(1, 1, 1, finite_rational(7));
+        let reflection = vec![
+            vec![Rational::from(-1), Rational::from(0)],
+            vec![Rational::from(0), Rational::from(1)],
+        ];
+
+        let transformed = transform_intersection_numbers_by_matrix(&kappa, &reflection).unwrap();
+
+        assert_eq!(transformed.get(0, 0, 0).get(), &Rational::from(-10));
+        assert_eq!(transformed.get(0, 0, 1).get(), &Rational::from(3));
+        assert_eq!(transformed.get(0, 1, 1).get(), &Rational::from(-5));
+        assert_eq!(transformed.get(1, 1, 1).get(), &Rational::from(7));
+    }
+
+    #[test]
+    fn test_weyl_reflection_matches_flop_transform_checks_tensor_condition() {
+        let mut matching_kappa = Intersection::new(2);
+        matching_kappa.set(0, 0, 0, finite_rational(1));
+        matching_kappa.set(0, 0, 1, finite_rational(3));
+        matching_kappa.set(1, 1, 1, finite_rational(7));
+        let divisor = vec![Integer::from(1), Integer::from(0)];
+        let curve = [1, 0];
+
+        assert_eq!(
+            weyl_reflection_matches_flop_transform(
+                &matching_kappa,
+                &divisor,
+                &curve,
+                &Integer::from(2)
+            ),
+            Some(true)
+        );
+
+        matching_kappa.set(0, 1, 1, finite_rational(5));
+        assert_eq!(
+            weyl_reflection_matches_flop_transform(
+                &matching_kappa,
+                &divisor,
+                &curve,
+                &Integer::from(2)
+            ),
+            Some(false)
+        );
+    }
+
+    #[test]
     fn test_flop_transform_rejects_dimension_mismatch() {
         let kappa = Intersection::new(2);
         let c2 = vec![Integer::from(1), Integer::from(2)];
@@ -2156,6 +2325,12 @@ mod tests {
                 .is_none()
         );
         assert!(weyl_reflection_matrix(&c2, &[1]).is_none());
+        assert!(
+            transform_intersection_numbers_by_matrix(&kappa, &[vec![Rational::from(1)]]).is_none()
+        );
+        assert!(
+            weyl_reflection_matches_flop_transform(&kappa, &c2, &[1], &Integer::from(1)).is_none()
+        );
     }
 
     #[test]
