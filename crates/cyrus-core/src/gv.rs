@@ -37,7 +37,7 @@ use crate::types::{F64, Finite, I64, Pos};
 
 const GRADING_CACHE_VERSION: &str = "grading-vector-cytools-lp-v1";
 const LATTICE_CACHE_VERSION: &str = "lattice-points-v2";
-const CKYZ_ADDITION_TABLE_MAX_ENTRIES: usize = 1_000_000;
+const CKYZ_ADDITION_TABLE_MAX_ENTRIES: usize = 5_000_000;
 
 /// Compute the Mori cone cap generators (rays) using the CYTools algorithm.
 ///
@@ -6910,9 +6910,10 @@ mod tests {
         CkyzLocalSurfaceKind, CkyzMonomialDomain, CurveDecompositionTerm, CurvePruningStrategy,
         GvLatticeAugmentation, LocalToricCircuitKind, LocalToricCoordinate2D,
         OriginCircuitCurveWitness, OriginCircuitRelationPoint, ToricCurveCandidate,
-        check_supporting_mori_face_normal, ckyz_local_surface_causal_domain_spec,
-        ckyz_local_surface_cover_weight_coefficients, ckyz_local_surface_target_degrees,
-        ckyz_series_mul_domain, compute_ambient_one_dimensional_ray_gv_series,
+        check_supporting_mori_face_normal, ckyz_cover_closed_target_degrees,
+        ckyz_local_surface_causal_domain_spec, ckyz_local_surface_cover_weight_coefficients,
+        ckyz_local_surface_target_degrees, ckyz_series_mul_domain,
+        compute_ambient_one_dimensional_ray_gv_series,
         compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
         compute_ckyz_local_gv_invariants, compute_ckyz_local_gv_invariants_for_degrees,
         compute_ckyz_local_gv_invariants_for_degrees_with_causal_domain,
@@ -7010,7 +7011,7 @@ mod tests {
 
     #[test]
     fn ckyz_large_monomial_domain_uses_checked_addition_fallback() {
-        let domain = CkyzMonomialDomain::componentwise_box(&[1_000]).unwrap();
+        let domain = CkyzMonomialDomain::componentwise_box(&[5_000]).unwrap();
         assert!(
             domain.addition_indices.is_none(),
             "large CKYZ domains should avoid quadratic addition tables"
@@ -7021,6 +7022,24 @@ mod tests {
         let product = ckyz_series_mul_domain(&lhs, &rhs, &domain).unwrap();
 
         assert_eq!(product, BTreeMap::from([(vec![300], Rational::from(6))]));
+    }
+
+    #[test]
+    fn ckyz_polygon5_four_multiple_target_downset_precomputes_addition_table() {
+        let target_degrees = [
+            vec![4, 3, 2],
+            vec![8, 6, 4],
+            vec![12, 9, 6],
+            vec![16, 12, 8],
+        ];
+        let extraction_degrees = ckyz_cover_closed_target_degrees(&target_degrees).unwrap();
+        let domain = CkyzMonomialDomain::target_downset(&extraction_degrees, 3).unwrap();
+
+        assert_eq!(domain.degrees.len(), 1_989);
+        assert!(
+            domain.addition_indices.is_some(),
+            "polygon-5 N=4 target-downset domains should keep indexed products"
+        );
     }
 
     #[test]
