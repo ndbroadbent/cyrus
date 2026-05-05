@@ -17,6 +17,11 @@ gap. It is deliberately narrow: the goal is to prevent another round of fitting
   - `fundamental_period.rs`
   - `instanton.rs`
   - `series_inversion.rs`
+- arXiv:2303.00757, *Computational Mirror Symmetry*
+  - consistent truncation / causality constraint
+  - degree and past-light-cone methods
+  - low-dimensional face/ray computations
+  - direct toric-curve GV formulas
 - `research/papers/small_cc_2107.09064_source/AdS4_v3.tex`
   - Sections on Gopakumar-Vafa invariants and radius of convergence
 - `research/papers/mcallister_moduli_space_reconstruction_2212.10573.tex`
@@ -46,6 +51,14 @@ sequence visible in the first potent ray cannot honestly be obtained by
 pretending the charge vector `(-3,1,1,1)` is just a compact CYTools/cygv
 hypersurface input.
 
+The computational-mirror paper explains the implementation boundary that this
+source code implies. Finite HKTY computations need a causally closed truncation:
+either a degree cutoff from an interior grading vector, or a past-light-cone
+set. At high `h11`, useful computations are often deliberately restricted to
+low-dimensional Mori faces. A one-dimensional ray computation is valid only if
+the ray is a genuine effective Mori generator; integrality of the HKTY output is
+used as evidence for that condition, not as a universal guarantee.
+
 ## What The Paper Says For Potent Rays
 
 The McAllister paper does not claim that the 214-dimensional Kähler-side
@@ -61,6 +74,12 @@ The ancillary files match this interpretation. `potent_rays.dat` stores saved
 ambient curve classes, `potent_rays_gv.dat` stores the first ten GV values on
 those saved rays, and `potent_rays_rank.dat` / `potent_rays_vols.dat` store
 validation summaries. They are checkpoints, not a reusable production input.
+
+This also corrects an older reproduction-script simplification: generic
+`cy.compute_gvs(min_points=...)` is appropriate for the low-dimensional mirror
+racetrack data and for smoke tests, but the high-dimensional Kähler-side potent
+rays require reconstructing the low-dimensional face/ray context used for the
+HKTY truncation.
 
 ## What The 4-214 Checkpoint Reveals
 

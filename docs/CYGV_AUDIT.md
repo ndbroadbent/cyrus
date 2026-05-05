@@ -150,6 +150,41 @@ other elements that affect the degree-ordered subtraction history. Feeding the
 single ray and its multiples to `cygv` is a valid diagnostic, but it asks a
 different mathematical question.
 
+## Computational Mirror Symmetry Source Read
+
+The later paper *Computational Mirror Symmetry* (arXiv:2303.00757) is the
+closest written source for the `cygv` implementation. It confirms the same
+contract visible in the code:
+
+- the master formula determines genus-zero GV invariants order by order from
+  the fundamental period, mirror map, and intersection form;
+- a finite truncation is consistent only when the selected set of curve classes
+  is closed under the relevant "past" additions, called the causality
+  constraint in the paper;
+- the two practical truncations are the degree method and the past-light-cone
+  method;
+- at high `h11`, full-dimensional degree truncations are exponentially large,
+  so useful computations are often done inside low-dimensional faces of the
+  Mori cone;
+- a one-dimensional ray computation is meaningful only when the ray is actually
+  an effective Mori generator, with integrality/nontriviality used as evidence
+  for that status;
+- after candidate one-dimensional generators are found, two-dimensional cones
+  spanned by pairs can be tested the same way, again using integrality as a
+  consistency signal.
+
+This is exactly the conceptual boundary Cyrus needs for potent rays. A saved
+ray in `potent_rays.dat` is not enough. A first-principles implementation must
+reconstruct the low-dimensional face/ray semigroup context, compute the HKTY
+data in that context, and use `potent_rays_gv.dat` only as an assertion.
+
+The paper also has a separate "GV invariants of toric curves" section. Those
+formulas explain the already-ported selected-small-curve checks: simple
+complete-intersection toric curves in two-faces have genus-zero GV values
+computed from their curve moduli spaces, with the local cases controlled by the
+normal bundle degrees. This direct toric-curve path is not the potent-ray
+infinite-family path.
+
 ## Two Distinct GV Regimes
 
 The McAllister pipeline uses GV data in two different regimes:
@@ -165,6 +200,13 @@ The McAllister pipeline uses GV data in two different regimes:
 
 The current Stage 5 residual is in the second regime. Treating it as a plain
 full-cone `cy.compute_gvs()` mismatch is therefore misleading.
+
+Older Python reproduction docs and scripts sometimes describe Step 8 as simply
+`cy.compute_gvs(max_deg=N)` or `cy.compute_gvs(min_points=N)`. That is accurate
+for the low-dimensional mirror/racetrack validation data (`dual_curves*.dat`)
+and useful as a CYTools/cygv smoke test, but it is not the production recipe
+for the high-dimensional Kähler-side selected curves and potent rays. The
+McAllister paper and the computational-mirror paper both separate those cases.
 
 The paper's selected-curve method is more precise than several older Python
 notes in `string_theory/mcallister_2107`:
