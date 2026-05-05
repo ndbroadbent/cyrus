@@ -5308,6 +5308,156 @@ fn solve_gv_weight_lp(
     })
 }
 
+fn solve_gf2_system(rows: &[Vec<u8>], rhs: &[u8], n_vars: usize) -> Option<Vec<u8>> {
+    if rows.len() != rhs.len() || rows.iter().any(|row| row.len() != n_vars) {
+        return None;
+    }
+
+    let mut augmented = rows
+        .iter()
+        .zip(rhs.iter())
+        .map(|(row, &rhs_value)| {
+            let mut augmented_row = row.clone();
+            augmented_row.push(rhs_value & 1);
+            augmented_row
+        })
+        .collect::<Vec<_>>();
+    let mut pivot_columns = Vec::new();
+    let mut pivot_row = 0usize;
+    for col in 0..n_vars {
+        let Some(found_row) = (pivot_row..augmented.len()).find(|&row| augmented[row][col] == 1)
+        else {
+            continue;
+        };
+        augmented.swap(pivot_row, found_row);
+        for row in 0..augmented.len() {
+            if row != pivot_row && augmented[row][col] == 1 {
+                for entry in col..=n_vars {
+                    augmented[row][entry] ^= augmented[pivot_row][entry];
+                }
+            }
+        }
+        pivot_columns.push(col);
+        pivot_row += 1;
+        if pivot_row == augmented.len() {
+            break;
+        }
+    }
+
+    if augmented[pivot_row..]
+        .iter()
+        .any(|row| row[..n_vars].iter().all(|&value| value == 0) && row[n_vars] == 1)
+    {
+        return None;
+    }
+
+    let mut solution = vec![0u8; n_vars];
+    for (row_idx, &col) in pivot_columns.iter().enumerate() {
+        solution[col] = augmented[row_idx][n_vars] & 1;
+    }
+    Some(solution)
+}
+
+fn report_bounded_sign_lp_parity_fit(
+    report: &GvWeightLpReport,
+    gv_invariants: &[(Vec<i64>, malachite::Integer)],
+    basis: &[usize],
+    kklt_basis: &[usize],
+    t: &[F64<Finite>],
+    gamma: &[I64<Finite>],
+    checkpoint_implied_gv: &[F64<Finite>],
+) {
+    let ambient_dim = gamma.len();
+    let tolerance = 1e-7;
+    let mut rows = Vec::new();
+    let mut rhs = Vec::new();
+    let mut negative_constraints = 0usize;
+    let mut positive_constraints = 0usize;
+    for ((curve, _invariant), &weight) in gv_invariants.iter().zip(report.weights.iter()) {
+        let desired_flip = if weight <= -1.0 + tolerance {
+            negative_constraints += 1;
+            Some(1u8)
+        } else if weight >= 1.0 - tolerance {
+            positive_constraints += 1;
+            Some(0u8)
+        } else {
+            None
+        };
+        let Some(desired_flip) = desired_flip else {
+            continue;
+        };
+        if curve.len() != ambient_dim {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber GV weight LP parity-fit unavailable: curve dimension {} != gamma dimension {}",
+                curve.len(),
+                ambient_dim
+            );
+            return;
+        }
+        rows.push(
+            curve
+                .iter()
+                .map(|coefficient| coefficient.rem_euclid(2) as u8)
+                .collect::<Vec<_>>(),
+        );
+        rhs.push(desired_flip);
+    }
+
+    let constraints = rows.len();
+    let Some(delta_gamma_mod2) = solve_gf2_system(&rows, &rhs, ambient_dim) else {
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber GV weight LP parity-fit label={} compatible=false constraints={} negative_constraints={} positive_constraints={}",
+            report.label, constraints, negative_constraints, positive_constraints
+        );
+        return;
+    };
+
+    let mut candidate_gamma = gamma.to_vec();
+    for (entry, &delta) in candidate_gamma.iter_mut().zip(delta_gamma_mod2.iter()) {
+        if delta == 1 {
+            let Some(new_value) = entry.get().checked_add(1) else {
+                eprintln!(
+                    "[COMPARE] checkpoint-t corrected-chamber GV weight LP parity-fit unavailable: gamma overflow"
+                );
+                return;
+            };
+            *entry = I64::<Finite>::new(new_value);
+        }
+    }
+    let support = delta_gamma_mod2.iter().filter(|&&value| value == 1).count();
+    let Some(candidate_target) = cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+        gv_invariants,
+        basis,
+        kklt_basis,
+        t,
+        Some(&candidate_gamma),
+    ) else {
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber GV weight LP parity-fit label={} compatible=true support={} but candidate target correction is invalid",
+            report.label, support
+        );
+        return;
+    };
+    let summary = target_correction_delta_summary(checkpoint_implied_gv, &candidate_target)
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "[ERROR] failed to compare bounded-sign LP parity-fit GV target correction: {e}"
+            );
+            std::process::exit(2);
+        });
+    eprintln!(
+        "[COMPARE] checkpoint-t corrected-chamber GV weight LP parity-fit label={} compatible=true constraints={} negative_constraints={} positive_constraints={} delta_gamma_support={} max_abs={} relative_l2={} max_abs_candidate={}",
+        report.label,
+        constraints,
+        negative_constraints,
+        positive_constraints,
+        support,
+        summary.max_abs_delta,
+        summary.relative_l2_delta,
+        summary.max_abs_candidate
+    );
+}
+
 fn report_corrected_chamber_gv_weight_lp(
     gv_invariants: &[(Vec<i64>, malachite::Integer)],
     basis: &[usize],
@@ -5383,6 +5533,17 @@ fn report_corrected_chamber_gv_weight_lp(
                 parity,
                 invariant,
                 sparse_i64(curve)
+            );
+        }
+        if report.label == "bounded_sign" {
+            report_bounded_sign_lp_parity_fit(
+                &report,
+                gv_invariants,
+                basis,
+                kklt_basis,
+                t,
+                gamma,
+                checkpoint_implied_gv,
             );
         }
     }
@@ -9736,6 +9897,20 @@ mod tests {
         assert!(report.relative_l2_delta < 1e-8);
         assert!((report.weights[0] - 0.25).abs() < 1e-8);
         assert!((report.weights[1] - 1.0).abs() < 1e-8);
+    }
+
+    #[test]
+    fn gf2_solver_finds_binary_solution_and_rejects_inconsistency() {
+        let rows = vec![vec![1, 0, 1], vec![0, 1, 1]];
+        let rhs = vec![1, 0];
+
+        let solution = solve_gf2_system(&rows, &rhs, 3).unwrap();
+        assert_eq!((solution[0] ^ solution[2]) & 1, 1);
+        assert_eq!((solution[1] ^ solution[2]) & 1, 0);
+
+        let inconsistent_rows = vec![vec![1, 0], vec![1, 0]];
+        let inconsistent_rhs = vec![0, 1];
+        assert!(solve_gf2_system(&inconsistent_rows, &inconsistent_rhs, 2).is_none());
     }
 
     #[test]
