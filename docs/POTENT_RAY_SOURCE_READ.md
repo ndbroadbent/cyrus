@@ -338,6 +338,16 @@ multiple-cover/primitive-divisor subtraction; for rank-four local affine
 supports, Cyrus still needs the actual local semigroup, `q` matrix, and
 intersection/Yukawa data before any ray comparison is meaningful.
 
+A post-cache benchmark confirms that broader componentwise-box expansion is
+still not an acceptable substitute for that targeted domain. Changing the
+rank-two CKYZ potent-ray test locally to check all ten saved entries and running
+it under a 600 second timeout still timed out. A shorter instrumented run showed
+that this is not only a polygon-5 problem: local `P2` and `F0` direction `[1,1]`
+finished, `F1` direction `[2,1]` finished, but `F0` direction `[1,2]` already
+took roughly 90 seconds and the run timed out shortly after starting `F1`
+direction `[3,1]`. The committed test must therefore remain at first-two checks
+until the finite monomial-domain extractor exists.
+
 ## Current Implementation Boundary
 
 The current Cyrus potent-ray code has reached a useful stopping point for
