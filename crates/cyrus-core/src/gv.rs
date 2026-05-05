@@ -289,6 +289,17 @@ pub struct PotentRayConvergence {
     pub log_xi_slope: Option<F64<Finite>>,
 }
 
+/// Genus-zero GV values along a one-dimensional ray.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OneDimensionalRayGvSeries {
+    /// Primitive ray in Kähler-basis curve coordinates.
+    pub ray: Vec<i64>,
+    /// Positive grading degree of `ray`.
+    pub degree: i128,
+    /// GV values for `ray`, `2*ray`, ..., `max_multiple*ray`.
+    pub values: Vec<Integer>,
+}
+
 /// One term in a finite semigroup decomposition of a curve class.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CurveDecompositionTerm {
@@ -565,6 +576,112 @@ pub fn potent_ray_convergence(
     })
 }
 
+/// Compute genus-zero GV invariants along a one-dimensional ray.
+///
+/// The ray is expressed in Kähler-basis curve coordinates. The function calls
+/// the CYTools-style `mcap_generators` path with this single generator and
+/// extracts the values for `q, 2q, ..., max_multiple*q`. Missing multiples are
+/// returned as zero.
+///
+/// # Errors
+/// Returns an error for invalid dimensions, non-positive grading degree,
+/// integer overflow, or any cygv failure. In panic-unwind builds, cygv panics
+/// are converted into errors rather than being hidden.
+pub fn compute_one_dimensional_ray_gv_series(
+    ray: &[i64],
+    grading_vector: &[i64],
+    q_matrix: &[Vec<i64>],
+    intnums: &Intersection,
+    max_multiple: u32,
+) -> Result<OneDimensionalRayGvSeries> {
+    if cfg!(panic = "abort") {
+        return Err(Error::InvalidInput(
+            "one-dimensional ray GV series requires a panic=unwind build until cygv panics are converted to Result".into(),
+        ));
+    }
+    if max_multiple == 0 {
+        return Err(Error::InvalidInput(
+            "one-dimensional ray GV series requires at least one multiple".into(),
+        ));
+    }
+    if ray.is_empty() {
+        return Err(Error::InvalidInput(
+            "one-dimensional ray GV series ray is empty".into(),
+        ));
+    }
+    if grading_vector.len() != ray.len() {
+        return Err(Error::InvalidInput(
+            "one-dimensional ray GV grading dimension does not match ray dimension".into(),
+        ));
+    }
+
+    let degree = ray
+        .iter()
+        .zip(grading_vector.iter())
+        .map(|(&coefficient, &weight)| i128::from(coefficient) * i128::from(weight))
+        .sum::<i128>();
+    if degree <= 0 {
+        return Err(Error::InvalidInput(format!(
+            "one-dimensional ray GV target has non-positive grading degree {degree}"
+        )));
+    }
+    let max_degree = degree
+        .checked_mul(i128::from(max_multiple))
+        .ok_or_else(|| Error::InvalidInput("one-dimensional ray GV degree overflow".into()))?;
+    let max_degree_u32 = u32::try_from(max_degree).map_err(|_| {
+        Error::InvalidInput("one-dimensional ray GV max degree does not fit in u32".into())
+    })?;
+
+    let generator = ray.to_vec();
+    let previous_panic_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let gvs_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        compute_gv_invariants_with_provided_generators(
+            std::slice::from_ref(&generator),
+            grading_vector,
+            q_matrix,
+            intnums,
+            None,
+            Some(max_degree_u32),
+        )
+    }));
+    std::panic::set_hook(previous_panic_hook);
+
+    let gvs = match gvs_result {
+        Ok(Ok(gvs)) => gvs,
+        Ok(Err(err)) => return Err(err),
+        Err(payload) => {
+            return Err(Error::InvalidInput(format!(
+                "one-dimensional ray GV computation panicked: {}",
+                panic_payload_message(payload.as_ref())
+            )));
+        }
+    };
+
+    let mut by_class: HashMap<Vec<i32>, Integer> = gvs.into_iter().collect();
+    let mut values = Vec::with_capacity(max_multiple as usize);
+    for multiple in 1..=max_multiple {
+        let target = ray
+            .iter()
+            .map(|&value| {
+                let scaled = i128::from(value) * i128::from(multiple);
+                i32::try_from(scaled).map_err(|_| {
+                    Error::InvalidInput(
+                        "one-dimensional ray GV target coordinate does not fit in i32".into(),
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        values.push(by_class.remove(&target).unwrap_or_else(|| Integer::from(0)));
+    }
+
+    Ok(OneDimensionalRayGvSeries {
+        ray: generator,
+        degree,
+        values,
+    })
+}
+
 fn integer_abs_ln(value: &Integer) -> Result<Option<f64>> {
     let magnitude = value.clone().abs();
     if magnitude == 0 {
@@ -588,6 +705,16 @@ fn integer_abs_ln(value: &Integer) -> Result<Option<f64>> {
     Ok(Some(
         leading.ln() + (decimal.len() - leading_len) as f64 * LN_10,
     ))
+}
+
+fn panic_payload_message(payload: &(dyn std::any::Any + Send)) -> String {
+    if let Some(message) = payload.downcast_ref::<&str>() {
+        (*message).to_string()
+    } else if let Some(message) = payload.downcast_ref::<String>() {
+        message.clone()
+    } else {
+        "non-string panic payload".to_string()
+    }
 }
 
 /// Find a decomposition of a curve as a sum of two selected toric curve candidates.
@@ -3194,11 +3321,12 @@ mod tests {
         BoundedCurveDecompositionIndex, CurveDecompositionTerm, CurvePruningStrategy,
         GvLatticeAugmentation, OriginCircuitCurveWitness, OriginCircuitRelationPoint,
         ToricCurveCandidate, compute_grading_vector, compute_gv_invariants_with_explicit_semigroup,
-        compute_gv_invariants_with_provided_generators, curve_row_span_rank,
-        curve_volume_in_divisor_basis, dump_mori_rays_cdd, find_pair_decomposition,
-        find_semigroup_decomposition, gv_lattice_search_request, load_grading_cache,
-        map_basis_gv_invariants_to_ambient, origin_circuit_diagnostic_from_class_and_witnesses,
-        potent_ray_convergence, potent_ray_log_xi_terms, project_mori_cone_cap_rays_to_basis,
+        compute_gv_invariants_with_provided_generators, compute_one_dimensional_ray_gv_series,
+        curve_row_span_rank, curve_volume_in_divisor_basis, dump_mori_rays_cdd,
+        find_pair_decomposition, find_semigroup_decomposition, gv_lattice_search_request,
+        load_grading_cache, map_basis_gv_invariants_to_ambient,
+        origin_circuit_diagnostic_from_class_and_witnesses, potent_ray_convergence,
+        potent_ray_log_xi_terms, project_mori_cone_cap_rays_to_basis,
         prune_decomposable_curve_candidates, remove_pair_decomposable_curve_candidates,
         remove_semigroup_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
         write_grading_cache,
@@ -3469,6 +3597,38 @@ mod tests {
             report.log_xi_slope.unwrap().get() < 0.0,
             "potent-ray log-xi terms should decay at this volume"
         );
+    }
+
+    #[test]
+    fn one_dimensional_ray_gv_series_rejects_invalid_inputs() {
+        assert!(
+            compute_one_dimensional_ray_gv_series(&[1], &[1], &[], &Intersection::new(1), 0,)
+                .unwrap_err()
+                .to_string()
+                .contains("at least one multiple")
+        );
+
+        assert!(
+            compute_one_dimensional_ray_gv_series(&[1], &[0], &[], &Intersection::new(1), 1,)
+                .unwrap_err()
+                .to_string()
+                .contains("non-positive grading degree")
+        );
+
+        assert!(
+            compute_one_dimensional_ray_gv_series(&[1], &[1, 2], &[], &Intersection::new(1), 1,)
+                .unwrap_err()
+                .to_string()
+                .contains("grading dimension")
+        );
+    }
+
+    #[test]
+    fn one_dimensional_ray_gv_series_propagates_cygv_input_errors() {
+        let err = compute_one_dimensional_ray_gv_series(&[1], &[1], &[], &Intersection::new(1), 1)
+            .unwrap_err();
+
+        assert!(err.to_string().contains("q_matrix is empty"));
     }
 
     #[test]

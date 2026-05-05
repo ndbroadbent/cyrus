@@ -175,6 +175,8 @@ Cyrus already has wrappers around the same Rust `cygv` crate:
 - `compute_gv_invariants_with_explicit_semigroup`
 - `potent_ray_convergence` for the paper's low-dimensional-face convergence
   diagnostic once a ray and its `N_{nq}` values are available.
+- `compute_one_dimensional_ray_gv_series` for extracting `N_q, N_{2q}, ...`
+  along a supplied Kähler-basis ray via the cygv provided-generator path.
 
 Their boundaries are different:
 
@@ -203,6 +205,13 @@ supplied ray/GV sample. This makes `potent_rays*.dat` checkable rather than
 opaque, but it is still not the full paper method: Cyrus does not yet sample
 low-dimensional faces of `M_infinity(X)` or compute the `N_{nq}` sequence along
 those rays from cygv.
+
+The one-dimensional ray series computation has now been promoted out of the
+`mcallister_first_principles` diagnostic into `cyrus-core`. That gives the GA
+pipeline a reusable way to ask for `N_{nq}` once it has a candidate ray and
+local/global cygv inputs. It is not yet validated against the saved
+`potent_rays_gv.dat` values for 4-214-647, because the upstream face/ray
+sampling and exact local input construction still need to be ported.
 
 For the high-`h11` Kähler-correction side, however, exact equivalence to a full
 global `compute_gvs()` call is not the McAllister method either. The relevant

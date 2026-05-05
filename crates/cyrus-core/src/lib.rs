@@ -95,19 +95,20 @@ pub use glsm::compute_glsm_and_linrels;
 pub use glsm::compute_glsm_charge_matrix;
 pub use glsm::compute_glsm_linear_relations;
 pub use gv::{
-    CurveDecompositionTerm, CurvePruningStrategy, OriginCircuitCurveDiagnostic,
-    OriginCircuitCurveWitness, OriginCircuitRelationPoint, PotentRayConvergence,
-    ToricCurveCandidate, ToricCurveGvDiagnostic, ToricCurveGvInvariant, ToricCurveGvSource,
-    compute_grading_vector, compute_gv_invariants,
+    CurveDecompositionTerm, CurvePruningStrategy, OneDimensionalRayGvSeries,
+    OriginCircuitCurveDiagnostic, OriginCircuitCurveWitness, OriginCircuitRelationPoint,
+    PotentRayConvergence, ToricCurveCandidate, ToricCurveGvDiagnostic, ToricCurveGvInvariant,
+    ToricCurveGvSource, compute_grading_vector, compute_gv_invariants,
     compute_gv_invariants_with_degree_bounded_lattice,
     compute_gv_invariants_with_explicit_semigroup, compute_gv_invariants_with_provided_generators,
-    compute_mori_cone_cap_rays, compute_origin_circuit_curve_diagnostics,
-    compute_toric_curve_gv_diagnostics, compute_toric_two_face_curve_gv_invariants,
-    curve_row_span_rank, curve_volume_in_divisor_basis, find_pair_decomposition,
-    find_semigroup_decomposition, map_basis_gv_invariants_to_ambient, potent_ray_convergence,
-    potent_ray_log_xi_slope, potent_ray_log_xi_terms, project_mori_cone_cap_rays_to_basis,
-    prune_decomposable_curve_candidates, remove_pair_decomposable_curve_candidates,
-    remove_semigroup_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
+    compute_mori_cone_cap_rays, compute_one_dimensional_ray_gv_series,
+    compute_origin_circuit_curve_diagnostics, compute_toric_curve_gv_diagnostics,
+    compute_toric_two_face_curve_gv_invariants, curve_row_span_rank, curve_volume_in_divisor_basis,
+    find_pair_decomposition, find_semigroup_decomposition, map_basis_gv_invariants_to_ambient,
+    potent_ray_convergence, potent_ray_log_xi_slope, potent_ray_log_xi_terms,
+    project_mori_cone_cap_rays_to_basis, prune_decomposable_curve_candidates,
+    remove_pair_decomposable_curve_candidates, remove_semigroup_decomposable_curve_candidates,
+    subcutoff_toric_curve_candidates,
 };
 pub use height_kahler::{
     effective_prime_divisors_from_curve_basis, heights_to_kahler, kahler_to_heights,

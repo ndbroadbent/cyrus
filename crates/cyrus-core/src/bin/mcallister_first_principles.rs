@@ -3018,45 +3018,24 @@ fn compute_missing_one_dimensional_ray_gvs(
                 "one-dimensional ray GV target has non-positive grading degree {degree}: {ambient_class:?}"
             ));
         }
-        let max_deg = u32::try_from(degree).map_err(|_| {
-            format!("one-dimensional ray GV target degree {degree} does not fit in u32")
-        })?;
-        let target_i32 = basis_class
-            .iter()
-            .map(|&value| {
-                i32::try_from(value).map_err(|_| {
-                    "one-dimensional ray GV target coordinate does not fit in i32".to_string()
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let previous_panic_hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(|_| {}));
-        let gvs_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            cyrus_core::compute_gv_invariants_with_provided_generators(
-                std::slice::from_ref(&basis_class),
-                grading,
-                q_matrix,
-                intnums,
-                None,
-                Some(max_deg),
+        let series = cyrus_core::compute_one_dimensional_ray_gv_series(
+            &basis_class,
+            grading,
+            q_matrix,
+            intnums,
+            1,
+        )
+        .map_err(|e| {
+            format!(
+                "failed one-dimensional ray GV computation for target degree {degree}, ambient_nonzero={:?}: {e}",
+                sparse_i64(ambient_class)
             )
-        }));
-        std::panic::set_hook(previous_panic_hook);
-        let gvs = match gvs_result {
-            Ok(Ok(gvs)) => gvs,
-            Ok(Err(e)) => return Err(format!("failed one-dimensional ray GV computation: {e}")),
-            Err(payload) => {
-                return Err(format!(
-                    "one-dimensional ray GV computation panicked for target degree {degree}, ambient_nonzero={:?}; this indicates the single-ray truncation is inconsistent for this target ({})",
-                    sparse_i64(ambient_class),
-                    panic_payload_message(payload.as_ref())
-                ));
-            }
-        };
-        let gv = gvs
+        })?;
+        let gv = series
+            .values
             .into_iter()
-            .find_map(|(curve, gv)| (curve == target_i32).then_some(gv))
-            .unwrap_or_else(|| malachite::Integer::from(0));
+            .next()
+            .expect("max_multiple=1 returns one GV value");
         out.push((ambient_class.clone(), gv, degree));
     }
     Ok(out)

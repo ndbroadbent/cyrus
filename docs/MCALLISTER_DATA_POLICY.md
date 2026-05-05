@@ -117,8 +117,9 @@ This policy is not a completion certificate. The remaining known gaps are:
   remains unresolved, especially for even-parity branch-cut cases;
 - corrected-chamber GV coverage still has a checkpoint-implied target residual;
 - potent-ray checkpoints are now validated for rank, volumes, and convergence
-  slopes, but Cyrus does not yet generate the low-dimensional-face ray sample or
-  compute the ray GV series from upstream geometry;
+  slopes, and Cyrus has a reusable one-dimensional ray GV series entry point,
+  but Cyrus does not yet generate the low-dimensional-face ray sample or
+  validate regenerated ray GV series against the checkpoints;
 - the final McAllister corrected volume is close but not reproduced exactly by
   the no-replay path.
 

@@ -927,7 +927,7 @@ fn stage5_gv_computation_roadmap() {
         /// Bitmask of completed components:
         /// cygv=1, mori=2, grading=4, pipeline=8, small-toric-curves=16,
         /// small-toric-gvs=32, primal-general-gv-fallback-wiring=64,
-        /// potent-ray-convergence-checks=128.
+        /// potent-ray-convergence-checks=128, one-dimensional-ray-gv-series=256.
         completed_components: u16,
         verified_components: Vec<&'static str>,
         remaining_gaps: Vec<&'static str>,
@@ -937,8 +937,9 @@ fn stage5_gv_computation_roadmap() {
     // one-off pipeline wiring (8), small toric curve checkpoint (16),
     // small toric curve GV checkpoint (32), and general primal GV fallback
     // wiring from basis-coordinate cygv output to ambient curve classes (64),
-    // plus potent-ray convergence checks over supplied samples (128).
-    let completed = 1u16 | 2 | 4 | 8 | 16 | 32 | 64 | 128;
+    // potent-ray convergence checks over supplied samples (128), and reusable
+    // one-dimensional ray GV series computation (256).
+    let completed = 1u16 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256;
 
     let roadmap = GvComputationRoadmap {
         status: "In Progress - Cyrus computes GV inputs, McAllister-sized validation is expensive",
@@ -971,6 +972,7 @@ fn stage5_gv_computation_roadmap() {
             "first-principles runner policy distinguishes downstream Kähler replay from post-computation corrected_cy_vol.dat validation comparison",
             "basis-coordinate GV invariants can be mapped back to ambient divisor-intersection curve classes for primal volume corrections",
             "McAllister 4-214-647 potent-ray checkpoint samples have exact rank, corrected-Kähler volumes, and log-xi convergence slopes computed by Cyrus; all supplied slopes decay at corrected t",
+            "one-dimensional ray GV series computation is available in cyrus-core via compute_one_dimensional_ray_gv_series, and mcallister_first_principles uses it for the corrected-chamber ray diagnostic instead of carrying a private cygv wrapper",
             "mcallister_first_principles can explicitly attempt general primal GV fallback for missing small-curve toric formula coverage via --primal-gv-max-deg or --primal-gv-min-points",
             "compute_gv_invariants can dump the exact pre-lattice Mori-cap generator matrix as a CDD V-representation for PPL/cdd diagnostics",
             "compute_gv_invariants now uses CYTools-style min_points lattice augmentation even when max_deg is specified; degree-bounded lattice enumeration is isolated behind compute_gv_invariants_with_degree_bounded_lattice for diagnostics",
@@ -1032,7 +1034,7 @@ fn stage5_gv_computation_roadmap() {
             "A direct CYTools/cygv provided-generator diagnostic using the 420 corrected-chamber pair-pruned curves reached grading construction but exceeded a 240-second timeout before returning GV values, so per-curve cygv comparison for the leading offenders remains unresolved",
             "A production chamber-updated KKLT solve still needs certified or general GV values for the 10 corrected-chamber toric-missing classes at every fixed-point chamber before it can replace the input-chamber small-curve/GV set",
             "The current production small-curve pruning only removes pair-decomposable curves; the new decomposition-depth report is bounded to four terms and is not a full faithful implementation of the paper's sums-of-others/Hilbert-basis reduction",
-            "Potent-ray rays and their N_{nq} GV series are still validation-supplied for 4-214-647; Cyrus computes rank/volumes/convergence from the sample but does not yet generate low-dimensional Mori-infinity face rays or compute their ray GV series from cygv",
+            "Potent-ray rays and their N_{nq} GV series are still validation-supplied for 4-214-647; Cyrus computes rank/volumes/convergence from the sample and has a reusable one-dimensional ray GV series helper, but does not yet generate low-dimensional Mori-infinity face rays or validate regenerated potent_rays_gv.dat values",
             "The explicit general primal GV fallback still reaches full 214-dimensional Mori-cone dualization for any max_deg high enough to cover the selected missing curves, or for min_points-driven runs; in the latest 4-candidate generated-branch diagnostic the min-required-gv-degree branch still requires degrees 4..2334",
             "A PPL/cdd diagnostic on the dumped 561658-ray, 214-dimensional V-representation also exceeded a 300-second cap without producing an H-representation",
             "Finish a post-orientation-fix validation run of adjacency-filtered DDM on the full 214-dimensional McAllister Mori cone",
