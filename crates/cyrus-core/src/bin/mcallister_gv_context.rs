@@ -17,7 +17,7 @@ use cyrus_core::types::rational::Rational;
 use cyrus_core::types::tags::Finite;
 use cyrus_core::{
     Intersection, compute_gv_invariants_with_explicit_semigroup,
-    compute_gv_invariants_with_provided_generators,
+    compute_gv_invariants_with_provided_generators, cygv_pair_reduced_seed_generators,
 };
 
 #[derive(Debug, Deserialize)]
@@ -187,6 +187,9 @@ struct TargetReport {
     support_overlap_run_error: Option<String>,
     cygv_semigroup_measure_status: Option<String>,
     cygv_semigroup_seed_count: Option<usize>,
+    cygv_semigroup_reduced_seed_count: Option<usize>,
+    cygv_semigroup_target_is_seed: Option<bool>,
+    cygv_semigroup_target_is_reduced_seed: Option<bool>,
     cygv_semigroup_element_count: Option<usize>,
     cygv_semigroup_max_degree: Option<u32>,
     cygv_semigroup_error: Option<String>,
@@ -215,6 +218,16 @@ struct SupportClosureLayerCount {
     layer: usize,
     generator_count: usize,
     support_size: usize,
+}
+
+struct CygvSemigroupMeasurement {
+    status: String,
+    seed_count: usize,
+    reduced_seed_count: usize,
+    target_is_seed: bool,
+    target_is_reduced_seed: bool,
+    max_degree: u32,
+    element_count: Option<usize>,
 }
 
 fn parse_arg_value<T: std::str::FromStr>(flag: &str) -> Option<T> {
@@ -665,6 +678,9 @@ fn report_target(
                 support_overlap_run_error: None,
                 cygv_semigroup_measure_status: None,
                 cygv_semigroup_seed_count: None,
+                cygv_semigroup_reduced_seed_count: None,
+                cygv_semigroup_target_is_seed: None,
+                cygv_semigroup_target_is_reduced_seed: None,
                 cygv_semigroup_element_count: None,
                 cygv_semigroup_max_degree: None,
                 cygv_semigroup_error: None,
@@ -711,6 +727,9 @@ fn report_target(
         support_overlap_run_error: None,
         cygv_semigroup_measure_status: None,
         cygv_semigroup_seed_count: None,
+        cygv_semigroup_reduced_seed_count: None,
+        cygv_semigroup_target_is_seed: None,
+        cygv_semigroup_target_is_reduced_seed: None,
         cygv_semigroup_element_count: None,
         cygv_semigroup_max_degree: None,
         cygv_semigroup_error: None,
@@ -759,6 +778,9 @@ fn report_target(
     let (
         cygv_semigroup_measure_status,
         cygv_semigroup_seed_count,
+        cygv_semigroup_reduced_seed_count,
+        cygv_semigroup_target_is_seed,
+        cygv_semigroup_target_is_reduced_seed,
         cygv_semigroup_element_count,
         cygv_semigroup_max_degree,
         cygv_semigroup_error,
@@ -771,21 +793,36 @@ fn report_target(
                 None,
                 None,
                 None,
+                None,
+                None,
+                None,
             )
         } else {
             match measure_cygv_semigroup(sample, context, semigroup_measure_max_seed_count) {
-                Ok((status, seed_count, max_degree, element_count)) => (
-                    Some(status),
-                    Some(seed_count),
-                    element_count,
-                    Some(max_degree),
+                Ok(measurement) => (
+                    Some(measurement.status),
+                    Some(measurement.seed_count),
+                    Some(measurement.reduced_seed_count),
+                    Some(measurement.target_is_seed),
+                    Some(measurement.target_is_reduced_seed),
+                    measurement.element_count,
+                    Some(measurement.max_degree),
                     None,
                 ),
-                Err(error) => (Some("error".to_string()), None, None, None, Some(error)),
+                Err(error) => (
+                    Some("error".to_string()),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(error),
+                ),
             }
         }
     } else {
-        (None, None, None, None, None)
+        (None, None, None, None, None, None, None, None)
     };
 
     match report_target_inner(sample, context, run_integer_diamonds, element_limit) {
@@ -805,6 +842,9 @@ fn report_target(
             support_overlap_run_error,
             cygv_semigroup_measure_status,
             cygv_semigroup_seed_count,
+            cygv_semigroup_reduced_seed_count,
+            cygv_semigroup_target_is_seed,
+            cygv_semigroup_target_is_reduced_seed,
             cygv_semigroup_element_count,
             cygv_semigroup_max_degree,
             cygv_semigroup_error,
@@ -826,6 +866,9 @@ fn report_target(
             support_overlap_run_error,
             cygv_semigroup_measure_status,
             cygv_semigroup_seed_count,
+            cygv_semigroup_reduced_seed_count,
+            cygv_semigroup_target_is_seed,
+            cygv_semigroup_target_is_reduced_seed,
             cygv_semigroup_element_count,
             cygv_semigroup_max_degree,
             cygv_semigroup_error,
@@ -966,9 +1009,10 @@ fn measure_cygv_semigroup(
     sample: &MissingGvTargetSample,
     context: &ValidatedContext<'_>,
     max_seed_count: Option<usize>,
-) -> Result<(String, usize, u32, Option<usize>), String> {
+) -> Result<CygvSemigroupMeasurement, String> {
     let max_deg = u32::try_from(sample.degree)
         .map_err(|_| format!("target degree {} does not fit in u32", sample.degree))?;
+    let target = dense_from_sparse(&sample.basis_nonzero, context.dimension)?;
     let mut seeds = Vec::new();
     let mut seen = HashSet::new();
     for ray in context.degree_bounded_rays {
@@ -980,16 +1024,31 @@ fn measure_cygv_semigroup(
             seeds.push(ray.clone());
         }
     }
+    let target_is_seed = seen.contains(&target);
+    let reduced_seeds = cygv_pair_reduced_seed_generators(&seeds)
+        .map_err(|error| format!("cygv seed reduction failed: {error}"))?;
+    let target_is_reduced_seed = reduced_seeds.iter().any(|row| row == &target);
     if max_seed_count.is_some_and(|limit| seeds.len() > limit) {
-        return Ok(("skipped_seed_limit".to_string(), seeds.len(), max_deg, None));
+        return Ok(CygvSemigroupMeasurement {
+            status: "skipped_seed_limit".to_string(),
+            seed_count: seeds.len(),
+            reduced_seed_count: reduced_seeds.len(),
+            target_is_seed,
+            target_is_reduced_seed,
+            max_degree: max_deg,
+            element_count: None,
+        });
     }
     measure_cygv_semigroup_size(&seeds, context.grading, max_deg).map(|element_count| {
-        (
-            "measured_cygv_semigroup".to_string(),
-            seeds.len(),
-            max_deg,
-            Some(element_count),
-        )
+        CygvSemigroupMeasurement {
+            status: "measured_cygv_semigroup".to_string(),
+            seed_count: seeds.len(),
+            reduced_seed_count: reduced_seeds.len(),
+            target_is_seed,
+            target_is_reduced_seed,
+            max_degree: max_deg,
+            element_count: Some(element_count),
+        }
     })
 }
 

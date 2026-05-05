@@ -1600,6 +1600,19 @@ The current `cygv` crate source sharpens the same boundary:
   `Semigroup::with_min_elements` instead increments the degree until the
   semigroup contains the requested number of elements. In both cases the zero
   element is inserted and the final elements are sorted by degree.
+- Cyrus now mirrors cygv's private pair-sum seed reduction explicitly via
+  `cygv_pair_reduced_seed_generators`. This is not a GV computation and does
+  not replace cygv closure; it exposes the first source-defined pruning stage so
+  corrected-chamber diagnostics can distinguish raw seed size from actual cygv
+  generator size before closure.
+- On the fresh 4-214-647 corrected-chamber context, running
+  `mcallister_gv_context --measure-cygv-semigroups --semigroup-measure-max-seeds 1`
+  with degree limits shows the remaining low/mid-degree missing targets remain
+  cygv-reduced seeds: degree 10 has `720` raw seeds and `450` reduced seeds,
+  degree 12 has `905 -> 486`, degree 18 has `1616 -> 702`, and degree 22 has
+  `2212 -> 949`. In all measured cases the missing target is present in the raw
+  seed set and survives the pair-sum reduction. Thus these misses are not
+  explained by cygv's initial decomposable-seed pruning.
 - `PolynomialProperties::new` creates the monomial lookup table from every
   semigroup element. Polynomial multiplication and series substitution drop
   terms whose sums are absent from this table. The finite semigroup therefore

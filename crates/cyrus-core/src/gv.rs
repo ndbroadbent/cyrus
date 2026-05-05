@@ -7681,6 +7681,67 @@ pub fn compute_gv_invariants_with_provided_generators(
     )
 }
 
+/// Mirror the private `cygv::Semigroup::with_max_degree` seed-reduction step.
+///
+/// In `cygv` 0.1.2, the supplied degree-trimmed seed elements are first
+/// converted to a set, the zero vector is removed, and any seed that can be
+/// written as a sum of two seeds is removed before the additive closure is
+/// generated. This function exposes that exact pair-sum pruning as a
+/// source-auditing primitive without running the expensive closure step.
+///
+/// # Errors
+/// Returns an error if no elements are supplied, if the dimension is zero, if
+/// row dimensions are inconsistent, or if an intermediate sum overflows `i64`.
+pub fn cygv_pair_reduced_seed_generators(elements: &[Vec<i64>]) -> Result<Vec<Vec<i64>>> {
+    let Some(first) = elements.first() else {
+        return Err(Error::InvalidInput(
+            "cygv seed reduction requires at least one element".into(),
+        ));
+    };
+    let dimension = first.len();
+    if dimension == 0 {
+        return Err(Error::InvalidInput(
+            "cygv seed reduction dimension is zero".into(),
+        ));
+    }
+    if elements.iter().any(|row| row.len() != dimension) {
+        return Err(Error::InvalidInput(
+            "cygv seed reduction rows have inconsistent dimensions".into(),
+        ));
+    }
+
+    let zero = vec![0i64; dimension];
+    let mut generator_set = elements.iter().cloned().collect::<HashSet<_>>();
+    generator_set.remove(&zero);
+    let original_generators = generator_set.iter().cloned().collect::<Vec<_>>();
+    let mut to_remove = HashSet::new();
+    let mut sum = vec![0i64; dimension];
+
+    for lhs_idx in 0..original_generators.len() {
+        for rhs_idx in lhs_idx..original_generators.len() {
+            for ((slot, &lhs), &rhs) in sum
+                .iter_mut()
+                .zip(original_generators[lhs_idx].iter())
+                .zip(original_generators[rhs_idx].iter())
+            {
+                *slot = lhs.checked_add(rhs).ok_or_else(|| {
+                    Error::InvalidInput("cygv seed reduction sum overflowed i64".into())
+                })?;
+            }
+            if generator_set.contains(&sum) {
+                to_remove.insert(sum.clone());
+            }
+        }
+    }
+
+    for generator in &to_remove {
+        generator_set.remove(generator);
+    }
+    let mut generators = generator_set.into_iter().collect::<Vec<_>>();
+    generators.sort();
+    Ok(generators)
+}
+
 /// Compute GV invariants using an explicitly truncated semigroup.
 ///
 /// Unlike [`compute_gv_invariants_with_provided_generators`], this does not ask
@@ -8859,7 +8920,7 @@ mod tests {
         compute_gv_invariants_with_provided_generators, compute_local_p2_genus_zero_gv_series,
         compute_local_toric_circuit_gv_series, compute_one_dimensional_ray_gv_series,
         compute_ray_gv_series_with_provided_generators, curve_in_rational_row_span,
-        curve_row_span_rank, curve_volume_in_divisor_basis,
+        curve_row_span_rank, curve_volume_in_divisor_basis, cygv_pair_reduced_seed_generators,
         detect_apparent_nilpotent_ray_from_gv_multiples,
         detect_apparent_nilpotent_rays_from_gv_table, diagnose_affine_toric_circuit,
         dump_mori_rays_cdd, extract_ckyz_local_gv_invariants_from_potential,
@@ -8887,6 +8948,32 @@ mod tests {
     use crate::{DivisorBasis, f64_finite, f64_pos};
     use malachite::Integer;
     use malachite::Rational;
+
+    #[test]
+    fn cygv_pair_seed_reduction_mirrors_private_pair_pruning() {
+        let reduced = cygv_pair_reduced_seed_generators(&[
+            vec![0, 0],
+            vec![1, 0],
+            vec![0, 1],
+            vec![1, 1],
+            vec![2, 0],
+            vec![2, 1],
+            vec![1, -1],
+        ])
+        .unwrap();
+        assert_eq!(reduced, vec![vec![0, 1], vec![1, -1]]);
+    }
+
+    #[test]
+    fn cygv_pair_seed_reduction_rejects_bad_inputs() {
+        assert!(cygv_pair_reduced_seed_generators(&[]).is_err());
+        assert!(cygv_pair_reduced_seed_generators(&[vec![]]).is_err());
+        assert!(cygv_pair_reduced_seed_generators(&[vec![1, 0], vec![1]]).is_err());
+        assert!(
+            cygv_pair_reduced_seed_generators(&[vec![i64::MAX, 0], vec![1, 0], vec![i64::MIN, 0],])
+                .is_err()
+        );
+    }
 
     #[test]
     fn basis_gv_invariants_map_to_ambient_curve_classes() {

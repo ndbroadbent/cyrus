@@ -190,6 +190,14 @@ to make the remaining GV layer more first-principles:
    and an unguarded cygv semigroup closure measurement did not finish within
    `120s`. The missing object is therefore the source-derived generated
    semigroup/chamber history, not a small visible-generator subset.
+   Cyrus now exposes cygv's private pair-sum seed-reduction stage via
+   `cygv_pair_reduced_seed_generators`, and `mcallister_gv_context` reports raw
+   seed counts, reduced seed counts, and whether each target survives that
+   reduction. On the current corrected-chamber context, the measured
+   low/mid-degree targets all survive as cygv-reduced seeds: degree 10
+   `720 -> 450`, degree 12 `905 -> 486`, degree 18 `1616 -> 702`, and degree 22
+   `2212 -> 949`. So the missing targets are not artifacts of cygv's first
+   decomposable-seed pruning pass.
    The context report now preserves origin-circuit provenance from the export:
    the nine misses are affine-rank-three/four origin circuits with local charge
    rows `[2,1,2,-1,-2,-2]`, `[1,2,1,-2,-1,-1]`,
