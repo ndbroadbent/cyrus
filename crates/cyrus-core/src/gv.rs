@@ -2438,42 +2438,51 @@ fn ckyz_observed_support_domain_for_degrees(
     CkyzMonomialDomain::from_degrees(rank, degree_set)
 }
 
-fn ckyz_series_support(series: &BTreeMap<Vec<usize>, Rational>) -> BTreeSet<Vec<usize>> {
+fn ckyz_series_support_indices(
+    series: &BTreeMap<Vec<usize>, Rational>,
+    domain: &CkyzMonomialDomain,
+) -> BTreeSet<usize> {
     series
         .iter()
         .filter(|(_, coefficient)| **coefficient != 0)
-        .map(|(degree, _)| degree.clone())
+        .filter_map(|(degree, _)| domain.index_of(degree))
         .collect()
 }
 
-fn ckyz_support_coordinate_series_domain(
+fn ckyz_support_identity_index(domain: &CkyzMonomialDomain) -> Result<usize> {
+    domain.index_of(&vec![0; domain.rank]).ok_or_else(|| {
+        Error::InvalidInput("CKYZ support domain is missing the identity monomial".into())
+    })
+}
+
+fn ckyz_support_coordinate_series_indices(
     rank: usize,
     coordinate: usize,
     domain: &CkyzMonomialDomain,
-) -> BTreeSet<Vec<usize>> {
+) -> BTreeSet<usize> {
     let mut out = BTreeSet::new();
     if coordinate < rank && rank == domain.rank {
         let mut degree = vec![0; rank];
         degree[coordinate] = 1;
-        if domain.contains(&degree) {
-            out.insert(degree);
+        if let Some(index) = domain.index_of(&degree) {
+            out.insert(index);
         }
     }
     out
 }
 
 fn ckyz_support_min_total_degree(
-    support: &BTreeSet<Vec<usize>>,
-    rank: usize,
+    support: &BTreeSet<usize>,
+    domain: &CkyzMonomialDomain,
     context: &str,
 ) -> Result<Option<usize>> {
     let mut min_degree = None;
-    for degree in support {
-        if degree.len() != rank {
+    for &degree_index in support {
+        let Some(degree) = domain.degrees.get(degree_index) else {
             return Err(Error::InvalidInput(format!(
-                "{context} monomial rank does not match coordinate rank"
+                "{context} monomial index is outside the support domain"
             )));
-        }
+        };
         let total_degree = ckyz_total_degree(degree)?;
         if total_degree == 0 {
             return Err(Error::InvalidInput(format!(
@@ -2487,23 +2496,15 @@ fn ckyz_support_min_total_degree(
 }
 
 fn ckyz_support_mul_domain(
-    lhs: &BTreeSet<Vec<usize>>,
-    rhs: &BTreeSet<Vec<usize>>,
+    lhs: &BTreeSet<usize>,
+    rhs: &BTreeSet<usize>,
     domain: &CkyzMonomialDomain,
-) -> Result<BTreeSet<Vec<usize>>> {
+) -> Result<BTreeSet<usize>> {
     let mut out = BTreeSet::new();
-    let lhs_indices = lhs
-        .iter()
-        .filter_map(|degree| domain.index_of(degree))
-        .collect::<Vec<_>>();
-    let rhs_indices = rhs
-        .iter()
-        .filter_map(|degree| domain.index_of(degree))
-        .collect::<Vec<_>>();
-    for lhs_index in &lhs_indices {
-        for rhs_index in &rhs_indices {
+    for lhs_index in lhs {
+        for rhs_index in rhs {
             if let Some(product_index) = domain.sum_index(*lhs_index, *rhs_index)? {
-                out.insert(domain.degrees[product_index].clone());
+                out.insert(product_index);
             }
         }
     }
@@ -2511,12 +2512,12 @@ fn ckyz_support_mul_domain(
 }
 
 fn ckyz_support_power_cache_domain(
-    support: &BTreeSet<Vec<usize>>,
+    support: &BTreeSet<usize>,
     max_exponent: usize,
     domain: &CkyzMonomialDomain,
-) -> Result<Vec<BTreeSet<Vec<usize>>>> {
+) -> Result<Vec<BTreeSet<usize>>> {
     let mut powers = Vec::with_capacity(max_exponent + 1);
-    powers.push(BTreeSet::from([vec![0; domain.rank]]));
+    powers.push(BTreeSet::from([ckyz_support_identity_index(domain)?]));
     for exponent in 1..=max_exponent {
         let next = ckyz_support_mul_domain(&powers[exponent - 1], support, domain)?;
         if next.is_empty() {
@@ -2530,13 +2531,13 @@ fn ckyz_support_power_cache_domain(
 }
 
 fn ckyz_support_exp_domain(
-    support: &BTreeSet<Vec<usize>>,
+    support: &BTreeSet<usize>,
     domain: &CkyzMonomialDomain,
-) -> Result<BTreeSet<Vec<usize>>> {
+) -> Result<BTreeSet<usize>> {
     let max_exponent =
-        ckyz_support_min_total_degree(support, domain.rank, "CKYZ support exponential input")?
+        ckyz_support_min_total_degree(support, domain, "CKYZ support exponential input")?
             .map_or(0, |min_degree| domain.max_total_degree / min_degree);
-    let mut out = BTreeSet::from([vec![0; domain.rank]]);
+    let mut out = BTreeSet::from([ckyz_support_identity_index(domain)?]);
     let mut power = out.clone();
     for _ in 1..=max_exponent {
         power = ckyz_support_mul_domain(&power, support, domain)?;
@@ -2549,10 +2550,10 @@ fn ckyz_support_exp_domain(
 }
 
 fn ckyz_support_compose_domain(
-    series_support: &BTreeSet<Vec<usize>>,
-    argument_supports: &[BTreeSet<Vec<usize>>],
+    series_support: &BTreeSet<usize>,
+    argument_supports: &[BTreeSet<usize>],
     domain: &CkyzMonomialDomain,
-) -> Result<BTreeSet<Vec<usize>>> {
+) -> Result<BTreeSet<usize>> {
     let rank = argument_supports.len();
     if rank != domain.rank {
         return Err(Error::InvalidInput(
@@ -2560,15 +2561,12 @@ fn ckyz_support_compose_domain(
         ));
     }
     let mut max_exponents = vec![0usize; rank];
-    for degree in series_support {
-        if !domain.contains(degree) {
-            continue;
-        }
-        if degree.len() != rank {
+    for &degree_index in series_support {
+        let Some(degree) = domain.degrees.get(degree_index) else {
             return Err(Error::InvalidInput(
-                "CKYZ support composition rank mismatch".into(),
+                "CKYZ support composition index is outside the domain".into(),
             ));
-        }
+        };
         for (coordinate, &exponent) in degree.iter().enumerate() {
             max_exponents[coordinate] = max_exponents[coordinate].max(exponent);
         }
@@ -2582,16 +2580,13 @@ fn ckyz_support_compose_domain(
         .collect::<Result<Vec<_>>>()?;
 
     let mut out = BTreeSet::new();
-    for degree in series_support {
-        if !domain.contains(degree) {
-            continue;
-        }
-        if degree.len() != rank {
+    for &degree_index in series_support {
+        let Some(degree) = domain.degrees.get(degree_index) else {
             return Err(Error::InvalidInput(
-                "CKYZ support composition rank mismatch".into(),
+                "CKYZ support composition index is outside the domain".into(),
             ));
-        }
-        let mut monomial = BTreeSet::from([vec![0; rank]]);
+        };
+        let mut monomial = BTreeSet::from([ckyz_support_identity_index(domain)?]);
         for (coordinate, &exponent) in degree.iter().enumerate() {
             if exponent == 0 {
                 continue;
@@ -2608,9 +2603,9 @@ fn ckyz_support_compose_domain(
 }
 
 fn ckyz_inverse_mirror_map_support_domain(
-    alpha_supports: &[BTreeSet<Vec<usize>>],
+    alpha_supports: &[BTreeSet<usize>],
     domain: &CkyzMonomialDomain,
-) -> Result<Vec<BTreeSet<Vec<usize>>>> {
+) -> Result<Vec<BTreeSet<usize>>> {
     let rank = alpha_supports.len();
     if rank == 0 || rank != domain.rank {
         return Err(Error::InvalidInput(
@@ -2618,14 +2613,14 @@ fn ckyz_inverse_mirror_map_support_domain(
         ));
     }
     let mut z_of_q = (0..rank)
-        .map(|coordinate| ckyz_support_coordinate_series_domain(rank, coordinate, domain))
+        .map(|coordinate| ckyz_support_coordinate_series_indices(rank, coordinate, domain))
         .collect::<Vec<_>>();
     for _ in 0..domain.max_total_degree {
         let mut next = Vec::with_capacity(rank);
         for (coordinate, alpha_support) in alpha_supports.iter().enumerate() {
             let correction_at_z = ckyz_support_compose_domain(alpha_support, &z_of_q, domain)?;
             let exp_negative_correction = ckyz_support_exp_domain(&correction_at_z, domain)?;
-            let q_coordinate = ckyz_support_coordinate_series_domain(rank, coordinate, domain);
+            let q_coordinate = ckyz_support_coordinate_series_indices(rank, coordinate, domain);
             next.push(ckyz_support_mul_domain(
                 &q_coordinate,
                 &exp_negative_correction,
@@ -2671,13 +2666,24 @@ fn ckyz_predicted_support_domain_for_degrees(
     }
 
     let alpha = compute_ckyz_log_period_corrections_domain(relations, &broad_domain)?;
-    let alpha_supports = alpha.iter().map(ckyz_series_support).collect::<Vec<_>>();
+    let alpha_supports = alpha
+        .iter()
+        .map(|series| ckyz_series_support_indices(series, &broad_domain))
+        .collect::<Vec<_>>();
     for support in &alpha_supports {
-        degree_set.extend(support.iter().cloned());
+        degree_set.extend(
+            support
+                .iter()
+                .map(|&index| broad_domain.degrees[index].clone()),
+        );
     }
     let z_of_q_supports = ckyz_inverse_mirror_map_support_domain(&alpha_supports, &broad_domain)?;
     for support in &z_of_q_supports {
-        degree_set.extend(support.iter().cloned());
+        degree_set.extend(
+            support
+                .iter()
+                .map(|&index| broad_domain.degrees[index].clone()),
+        );
     }
 
     let mut contracted_support = BTreeSet::new();
@@ -2688,24 +2694,40 @@ fn ckyz_predicted_support_domain_for_degrees(
             term.second,
             &broad_domain,
         )?;
-        let beta_support = ckyz_series_support(&beta);
-        degree_set.extend(beta_support.iter().cloned());
+        let beta_support = ckyz_series_support_indices(&beta, &broad_domain);
+        degree_set.extend(
+            beta_support
+                .iter()
+                .map(|&index| broad_domain.degrees[index].clone()),
+        );
 
         let alpha_product_support = ckyz_support_mul_domain(
             &alpha_supports[term.first],
             &alpha_supports[term.second],
             &broad_domain,
         )?;
-        degree_set.extend(alpha_product_support.iter().cloned());
+        degree_set.extend(
+            alpha_product_support
+                .iter()
+                .map(|&index| broad_domain.degrees[index].clone()),
+        );
 
         contracted_support.extend(beta_support);
         contracted_support.extend(alpha_product_support);
     }
-    degree_set.extend(contracted_support.iter().cloned());
+    degree_set.extend(
+        contracted_support
+            .iter()
+            .map(|&index| broad_domain.degrees[index].clone()),
+    );
 
     let potential_support =
         ckyz_support_compose_domain(&contracted_support, &z_of_q_supports, &broad_domain)?;
-    degree_set.extend(potential_support);
+    degree_set.extend(
+        potential_support
+            .iter()
+            .map(|&index| broad_domain.degrees[index].clone()),
+    );
 
     CkyzMonomialDomain::from_degrees(rank, degree_set)
 }
