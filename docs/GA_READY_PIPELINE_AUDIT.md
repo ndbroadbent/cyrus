@@ -147,9 +147,13 @@ to make the remaining GV layer more first-principles:
    flop-continuation semantics for the relevant `B_2` branch. The LP-witness
    face diagnostic is useful but currently uncertified, so it must remain a
    diagnostic rather than a fallback. The immediate audit checkpoint is to
-   distinguish exact integer-semigroup decompositions from rational-cone-only
-   decompositions for the LP active-generator witnesses, because cygv assigns GV
-   values from a finite semigroup and degree-ordered subtraction history, not
-   from a sparse curve relation in isolation.
+   reconstruct the smallest exact semigroup/chamber context for these
+   higher-rank origin circuits. The prior checkpoint of distinguishing exact
+   integer-semigroup decompositions from rational-cone-only LP witnesses is now
+   complete: the nine current solved-t misses split into five integer-semigroup
+   LP active-generator decompositions and four rational-cone-only
+   decompositions. That split is triage only, because cygv assigns GV values
+   from a finite semigroup and degree-ordered subtraction history, not from a
+   sparse curve relation in isolation.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.
