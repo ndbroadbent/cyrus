@@ -1947,15 +1947,18 @@ pub fn compute_ckyz_local_gv_invariants_for_degrees_with_predicted_support_domai
         local_intersection_terms,
         &extraction_degrees,
     )?;
-    let potential = compute_ckyz_local_instanton_potential_corrections_domain(
+    let (alpha, potential_z) = compute_ckyz_local_instanton_potential_z_domain(
         relations,
         local_intersection_terms,
         &domain,
     )?;
-    let mut invariants = extract_ckyz_local_gv_invariants_from_potential_for_degrees(
-        &potential,
+    let path_history_degrees = domain.nonzero_degrees().cloned().collect::<Vec<_>>();
+    let mut invariants = extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
+        &potential_z,
+        &alpha,
         cover_weight_coefficients,
-        &extraction_degrees,
+        &path_history_degrees,
+        &domain,
     )?;
     invariants.retain(|degree, _| target_degrees.iter().any(|target| target == degree));
     Ok(invariants)
@@ -4229,7 +4232,6 @@ fn compute_ckyz_local_instanton_potential_corrections_domain(
     substitute_ckyz_series_in_flat_coordinates_domain(&contracted, &z_of_q, domain)
 }
 
-#[cfg(test)]
 fn compute_ckyz_local_instanton_potential_z_domain(
     relations: &[Vec<i64>],
     local_intersection_terms: &[CkyzLocalIntersectionTerm],
@@ -4278,7 +4280,6 @@ fn compute_ckyz_local_instanton_potential_z_domain(
     Ok((alpha, contracted))
 }
 
-#[cfg(test)]
 fn ckyz_q_degree_series_in_z_domain(
     degree: &[usize],
     alpha: &[BTreeMap<Vec<usize>, Rational>],
@@ -4310,7 +4311,6 @@ fn ckyz_q_degree_series_in_z_domain(
     ckyz_series_mul_domain(&monomial, &exp_exponent, domain)
 }
 
-#[cfg(test)]
 fn ckyz_series_li2_domain(
     series: &BTreeMap<Vec<usize>, Rational>,
     domain: &CkyzMonomialDomain,
@@ -4346,7 +4346,6 @@ fn ckyz_series_li2_domain(
     Ok(out)
 }
 
-#[cfg(test)]
 fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
     potential_z_coefficients: &BTreeMap<Vec<usize>, Rational>,
     alpha: &[BTreeMap<Vec<usize>, Rational>],
@@ -10892,6 +10891,70 @@ mod tests {
             let extraction_degrees = ckyz_cover_closed_target_degrees(&target_degrees).unwrap();
             let domain =
                 CkyzMonomialDomain::target_downset(&extraction_degrees, relations.len()).unwrap();
+            let path_history_degrees = domain.nonzero_degrees().cloned().collect::<Vec<_>>();
+            let (alpha, potential_z) = compute_ckyz_local_instanton_potential_z_domain(
+                &relations,
+                &local_intersection_terms,
+                &domain,
+            )
+            .unwrap();
+            let mut actual = extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
+                &potential_z,
+                &alpha,
+                &cover_weights,
+                &path_history_degrees,
+                &domain,
+            )
+            .unwrap();
+            actual.retain(|degree, _| target_degrees.iter().any(|target| target == degree));
+
+            assert_eq!(actual, expected);
+        }
+    }
+
+    #[test]
+    fn ckyz_z_series_inversion_matches_predicted_support_domain() {
+        let cases = [
+            (
+                vec![vec![-2, 1, 0, 1, 0], vec![-2, 0, 1, 0, 1]],
+                vec![CkyzLocalIntersectionTerm {
+                    first: 0,
+                    second: 1,
+                    coefficient: 1,
+                }],
+                vec![2, 2],
+                vec![vec![3, 2], vec![6, 4], vec![9, 6]],
+            ),
+            (
+                ckyz_polygon5_relations(),
+                ckyz_polygon5_intersection_terms(),
+                vec![1, 1, 1],
+                vec![vec![4, 3, 2], vec![8, 6, 4]],
+            ),
+        ];
+
+        for (relations, local_intersection_terms, cover_weights, target_degrees) in cases {
+            let extraction_degrees = ckyz_cover_closed_target_degrees(&target_degrees).unwrap();
+            let domain = ckyz_predicted_support_domain_for_degrees(
+                &relations,
+                &local_intersection_terms,
+                &extraction_degrees,
+            )
+            .unwrap();
+            let potential = compute_ckyz_local_instanton_potential_corrections_domain(
+                &relations,
+                &local_intersection_terms,
+                &domain,
+            )
+            .unwrap();
+            let mut expected = extract_ckyz_local_gv_invariants_from_potential_for_degrees(
+                &potential,
+                &cover_weights,
+                &extraction_degrees,
+            )
+            .unwrap();
+            expected.retain(|degree, _| target_degrees.iter().any(|target| target == degree));
+
             let path_history_degrees = domain.nonzero_degrees().cloned().collect::<Vec<_>>();
             let (alpha, potential_z) = compute_ckyz_local_instanton_potential_z_domain(
                 &relations,

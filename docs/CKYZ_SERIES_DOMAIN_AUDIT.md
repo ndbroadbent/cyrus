@@ -147,3 +147,21 @@ tests match the existing flat-coordinate extractor when the full lower-degree
 path history is included. A failed ray-only attempt was instructive: F0
 `[1,1]` is wrong unless `[1,0]` and `[0,1]` are processed first, exactly the
 same lower-degree history requirement seen in cygv's `series_inversion`.
+
+After checking out `cygv` tag `v0.1.2` (the version installed in the local
+CYTools Python environment), the production switch is source-aligned in one
+important respect and still incomplete in another:
+
+- Aligned: cygv keeps the instanton corrections in the original monomial
+  variable, then performs degree-ordered residual subtraction with
+  `Li2(q_N)`. Cyrus now uses the same residual shape for the
+  support-predicted CKYZ API instead of first materializing the full
+  flat-coordinate potential.
+- Incomplete: cygv's traversal is over a finite semigroup sorted by a grading
+  vector. Cyrus currently uses every nonzero element of the predicted monomial
+  domain as the path history. This is correct for the tested local models, but
+  it is still too broad for McAllister `[4,3,2]` at ten multiples.
+- Performance hotspot: the long McAllister all-ten run was stopped after a few
+  minutes with stack samples in z-series residual extraction, specifically
+  repeated `q^d exp(d.alpha)` and `Li2` products over the 21k-element predicted
+  domain. The earlier global inverse-map bottleneck has moved, not disappeared.
