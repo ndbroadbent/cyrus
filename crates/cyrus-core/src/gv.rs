@@ -1782,7 +1782,7 @@ struct CkyzMonomialDomain {
     rank: usize,
     degrees: Vec<Vec<usize>>,
     degree_indices: BTreeMap<Vec<usize>, usize>,
-    addition_indices: Vec<Vec<Option<usize>>>,
+    addition_indices: Option<Vec<Vec<Option<usize>>>>,
     max_total_degree: usize,
 }
 
@@ -1825,20 +1825,20 @@ impl CkyzMonomialDomain {
             .enumerate()
             .map(|(index, degree)| (degree, index))
             .collect::<BTreeMap<_, _>>();
-        let mut addition_indices = vec![vec![None; degrees.len()]; degrees.len()];
-        for (lhs_index, lhs_degree) in degrees.iter().enumerate() {
-            for (rhs_index, rhs_degree) in degrees.iter().enumerate() {
-                let mut degree = Vec::with_capacity(rank);
-                for (&lhs_entry, &rhs_entry) in lhs_degree.iter().zip(rhs_degree.iter()) {
-                    degree.push(lhs_entry.checked_add(rhs_entry).ok_or_else(|| {
-                        Error::InvalidInput("CKYZ multidegree addition overflowed usize".into())
-                    })?);
-                }
-                if let Some(&sum_index) = degree_indices.get(&degree) {
-                    addition_indices[lhs_index][rhs_index] = Some(sum_index);
+        let addition_entries = degrees.len().saturating_mul(degrees.len());
+        let addition_indices = if addition_entries <= 250_000 {
+            let mut addition_indices = vec![vec![None; degrees.len()]; degrees.len()];
+            for (lhs_index, lhs_degree) in degrees.iter().enumerate() {
+                for (rhs_index, rhs_degree) in degrees.iter().enumerate() {
+                    let sum_index =
+                        ckyz_sum_degree_index(lhs_degree, rhs_degree, rank, &degree_indices)?;
+                    addition_indices[lhs_index][rhs_index] = sum_index;
                 }
             }
-        }
+            Some(addition_indices)
+        } else {
+            None
+        };
         Ok(Self {
             rank,
             degrees,
@@ -1862,13 +1862,42 @@ impl CkyzMonomialDomain {
         self.degree_indices.get(degree).copied()
     }
 
-    fn sum_index(&self, lhs_index: usize, rhs_index: usize) -> Option<usize> {
-        self.addition_indices
-            .get(lhs_index)
-            .and_then(|row| row.get(rhs_index))
-            .copied()
-            .flatten()
+    fn sum_index(&self, lhs_index: usize, rhs_index: usize) -> Result<Option<usize>> {
+        if let Some(addition_indices) = &self.addition_indices {
+            return Ok(addition_indices
+                .get(lhs_index)
+                .and_then(|row| row.get(rhs_index))
+                .copied()
+                .flatten());
+        }
+        let lhs_degree = self.degrees.get(lhs_index).ok_or_else(|| {
+            Error::InvalidInput("CKYZ left monomial index is outside the domain".into())
+        })?;
+        let rhs_degree = self.degrees.get(rhs_index).ok_or_else(|| {
+            Error::InvalidInput("CKYZ right monomial index is outside the domain".into())
+        })?;
+        ckyz_sum_degree_index(lhs_degree, rhs_degree, self.rank, &self.degree_indices)
     }
+}
+
+fn ckyz_sum_degree_index(
+    lhs_degree: &[usize],
+    rhs_degree: &[usize],
+    rank: usize,
+    degree_indices: &BTreeMap<Vec<usize>, usize>,
+) -> Result<Option<usize>> {
+    if lhs_degree.len() != rank || rhs_degree.len() != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ series multiplication rank mismatch".into(),
+        ));
+    }
+    let mut degree = Vec::with_capacity(rank);
+    for (&lhs_entry, &rhs_entry) in lhs_degree.iter().zip(rhs_degree.iter()) {
+        degree.push(lhs_entry.checked_add(rhs_entry).ok_or_else(|| {
+            Error::InvalidInput("CKYZ multidegree addition overflowed usize".into())
+        })?);
+    }
+    Ok(degree_indices.get(&degree).copied())
 }
 
 fn ckyz_coordinate_series(
@@ -1979,7 +2008,7 @@ fn ckyz_series_mul_domain(
     let mut out_by_index = vec![None::<Rational>; domain.degrees.len()];
     for (lhs_index, lhs_coefficient) in lhs_terms.iter().copied() {
         for (rhs_index, rhs_coefficient) in rhs_terms.iter().copied() {
-            if let Some(product_index) = domain.sum_index(lhs_index, rhs_index) {
+            if let Some(product_index) = domain.sum_index(lhs_index, rhs_index)? {
                 let entry = out_by_index[product_index].get_or_insert_with(|| Rational::from(0));
                 *entry += lhs_coefficient.clone() * rhs_coefficient.clone();
             }
