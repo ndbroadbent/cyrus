@@ -197,9 +197,13 @@ to make the remaining GV layer more first-principles:
    `[1,-1,-1,-2,3]`, `[1,-2,-1,3,-1]`, and
    `[1,-2,3,-1,-1]`. These are not rank-two CKYZ local-surface supports, and
    the CMS-general divisor checks still fail exact divisor-intersection
-   verification. The next step is therefore to reconstruct the broader
-   source-derived finite semigroup/path history for these higher-rank
-   origin circuits, not to promote LP active-generator diamonds or reuse the
-   rank-two local-surface machinery.
+   verification. A cygv hypersurface shape diagnostic now records
+   `q_rows - q_cols - 1`: the five six-point affine-rank-four rows are
+   fourfold-shaped (`cy_dim=4`), while the four five-point affine-rank-three
+   rows are threefold-shaped (`cy_dim=3`) but still lack a source-derived
+   semigroup, grading, intersection tensor, and chamber interpretation. The
+   next step is therefore to reconstruct the broader source-derived finite
+   semigroup/path history for these higher-rank origin circuits, not to promote
+   LP active-generator diamonds or reuse the rank-two local-surface machinery.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.

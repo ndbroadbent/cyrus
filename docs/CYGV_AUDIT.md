@@ -1472,23 +1472,31 @@ confirms that all nine current missing targets are higher-rank origin circuits,
 not rank-two CKYZ local-surface supports. Their affine ranks and local charge
 rows are:
 
-| target | degree | exact LP kind | affine rank | local charge row |
-|--------|--------|---------------|-------------|------------------|
-| 0 | 18 | integer semigroup | 4 | `[2, 1, 2, -1, -2, -2]` |
-| 1 | 18 | integer semigroup | 4 | `[1, 2, 1, -2, -1, -1]` |
-| 2 | 24 | integer semigroup | 4 | `[1, 1, -2, -1, -1, 2]` |
-| 3 | 26 | integer semigroup | 3 | `[1, -2, -1, -1, 3]` |
-| 4 | 22 | rational cone | 4 | `[1, -2, -1, -1, 2, 1]` |
-| 5 | 24 | integer semigroup | 4 | `[1, -1, -1, 1, -3, 3]` |
-| 6 | 12 | rational cone | 3 | `[1, -1, -1, -2, 3]` |
-| 7 | 10 | rational cone | 3 | `[1, -2, -1, 3, -1]` |
-| 8 | 10 | rational cone | 3 | `[1, -2, 3, -1, -1]` |
+| target | degree | exact LP kind | affine rank | local charge row | cygv hypersurface `cy_dim` |
+|--------|--------|---------------|-------------|------------------|----------------------------|
+| 0 | 18 | integer semigroup | 4 | `[2, 1, 2, -1, -2, -2]` | 4 |
+| 1 | 18 | integer semigroup | 4 | `[1, 2, 1, -2, -1, -1]` | 4 |
+| 2 | 24 | integer semigroup | 4 | `[1, 1, -2, -1, -1, 2]` | 4 |
+| 3 | 26 | integer semigroup | 3 | `[1, -2, -1, -1, 3]` | 3 |
+| 4 | 22 | rational cone | 4 | `[1, -2, -1, -1, 2, 1]` | 4 |
+| 5 | 24 | integer semigroup | 4 | `[1, -1, -1, 1, -3, 3]` | 4 |
+| 6 | 12 | rational cone | 3 | `[1, -1, -1, -2, 3]` | 3 |
+| 7 | 10 | rational cone | 3 | `[1, -2, -1, 3, -1]` | 3 |
+| 8 | 10 | rational cone | 3 | `[1, -2, 3, -1, -1]` | 3 |
 
 The report also preserves the first triangulation witness, branch diagnostic,
 and failed CMS-general divisor-intersection checks for each target. The first
 target, for example, has relation
 `[(0,-2),(55,-1),(56,-2),(202,1),(208,2),(211,2)]`, two witnesses, and both
 candidate shrinking divisors fail `has_rational_divisor_solution=false`.
+All nine local charge rows have zero row sum, so they pass the Calabi-Yau charge
+sum check. However, the five six-point affine-rank-four targets are fourfold-
+shaped under cygv's compact hypersurface dimension count
+`q_rows - q_cols - 1`, not threefold-shaped. The four five-point
+affine-rank-three targets are threefold-shaped by this gate, but this is only a
+shape check: Cyrus still needs a source-derived compact/local semigroup, grading,
+intersection data, and chamber interpretation before any HKTY output can be
+promoted.
 
 This narrows the next source-read task: the existing CKYZ rank-two surface path
 is the wrong abstraction for these corrected-chamber misses. The missing

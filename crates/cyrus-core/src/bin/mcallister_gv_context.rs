@@ -159,6 +159,7 @@ struct TargetReport {
     origin_circuit_witness_count: Option<usize>,
     origin_circuit_first_witness: Option<OriginCircuitWitnessSample>,
     origin_circuit_affine_support: Option<OriginCircuitAffineSupportSample>,
+    local_cygv_hypersurface_shape: Option<LocalCygvHypersurfaceShape>,
     cms_general_divisor_shape_candidates: Option<Vec<CmsGeneralDivisorShapeCandidate>>,
     cms_general_divisor_intersection_checks: Option<Vec<CmsGeneralDivisorIntersectionCheck>>,
     branch_diagnostic: Option<MissingGvBranchDiagnostic>,
@@ -189,6 +190,18 @@ struct TargetReport {
     cygv_semigroup_element_count: Option<usize>,
     cygv_semigroup_max_degree: Option<u32>,
     cygv_semigroup_error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvHypersurfaceShape {
+    q_rows: usize,
+    q_cols: usize,
+    cy_codim: usize,
+    ambient_dim: i64,
+    cy_dim: i64,
+    charge_sums: Vec<i64>,
+    is_calabi_yau_charge: bool,
+    is_compact_threefold_hypersurface_shape: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -441,6 +454,52 @@ fn support_window_stats(
     Ok((eligible_supports.len(), overlap_counts, closure_counts))
 }
 
+fn local_cygv_hypersurface_shape(
+    sample: &MissingGvTargetSample,
+) -> Result<Option<LocalCygvHypersurfaceShape>, String> {
+    let Some(support) = sample.origin_circuit_affine_support.as_ref() else {
+        return Ok(None);
+    };
+    let Some(first_row) = support.local_charge_basis.first() else {
+        return Err("origin-circuit affine support has no local charge rows".to_string());
+    };
+    let q_rows = first_row.len();
+    if q_rows == 0 {
+        return Err("origin-circuit local charge row is empty".to_string());
+    }
+    if support
+        .local_charge_basis
+        .iter()
+        .any(|row| row.len() != q_rows)
+    {
+        return Err("origin-circuit local charge rows have inconsistent lengths".to_string());
+    }
+    let q_cols = support.local_charge_basis.len();
+    let q_rows_i64 =
+        i64::try_from(q_rows).map_err(|_| "local q row count does not fit in i64".to_string())?;
+    let q_cols_i64 = i64::try_from(q_cols)
+        .map_err(|_| "local q column count does not fit in i64".to_string())?;
+    let cy_codim = 1usize;
+    let ambient_dim = q_rows_i64 - q_cols_i64;
+    let cy_dim = ambient_dim - i64::try_from(cy_codim).expect("cy_codim fits in i64");
+    let charge_sums = support
+        .local_charge_basis
+        .iter()
+        .map(|row| row.iter().sum())
+        .collect::<Vec<i64>>();
+    let is_calabi_yau_charge = charge_sums.iter().all(|&sum| sum == 0);
+    Ok(Some(LocalCygvHypersurfaceShape {
+        q_rows,
+        q_cols,
+        cy_codim,
+        ambient_dim,
+        cy_dim,
+        charge_sums,
+        is_calabi_yau_charge,
+        is_compact_threefold_hypersurface_shape: is_calabi_yau_charge && cy_dim == 3,
+    }))
+}
+
 fn validate_context<'a>(
     context: &'a CorrectedChamberGvContext,
 ) -> Result<ValidatedContext<'a>, String> {
@@ -561,6 +620,57 @@ fn report_target(
         .as_ref()
         .map(Vec::len)
         .or(sample.real_cone_decomposition_active_generators);
+    let local_cygv_hypersurface_shape = match local_cygv_hypersurface_shape(sample) {
+        Ok(shape) => shape,
+        Err(error) => {
+            return TargetReport {
+                index,
+                degree: sample.degree,
+                generators_le_degree: sample.generators_le_degree,
+                is_mori_generator: sample.is_mori_generator,
+                origin_circuit_pattern: sample.origin_circuit_pattern.clone(),
+                origin_circuit_witness_count: sample.origin_circuit_witness_count,
+                origin_circuit_first_witness: sample.origin_circuit_first_witness.clone(),
+                origin_circuit_affine_support: sample.origin_circuit_affine_support.clone(),
+                local_cygv_hypersurface_shape: None,
+                cms_general_divisor_shape_candidates: sample
+                    .cms_general_divisor_shape_candidates
+                    .clone(),
+                cms_general_divisor_intersection_checks: sample
+                    .cms_general_divisor_intersection_checks
+                    .clone(),
+                branch_diagnostic: sample.branch_diagnostic.clone(),
+                real_cone_decomposable_by_other_generators: sample
+                    .real_cone_decomposable_by_other_generators,
+                ambient_nonzero: sample.ambient_nonzero.clone(),
+                basis_nonzero: sample.basis_nonzero.clone(),
+                exact_kind,
+                active_generator_count,
+                integer_term_count: None,
+                diamond_element_count: None,
+                status: "error".to_string(),
+                gv: None,
+                error: Some(error),
+                active_support_generator_count: None,
+                active_support_status: None,
+                active_support_gv: None,
+                active_support_error: None,
+                degree_bounded_candidate_count: 0,
+                support_overlap_generator_counts: Vec::new(),
+                support_closure_layer_counts: Vec::new(),
+                support_overlap_min_for_run,
+                support_overlap_run_generator_count: None,
+                support_overlap_run_status: None,
+                support_overlap_run_gv: None,
+                support_overlap_run_error: None,
+                cygv_semigroup_measure_status: None,
+                cygv_semigroup_seed_count: None,
+                cygv_semigroup_element_count: None,
+                cygv_semigroup_max_degree: None,
+                cygv_semigroup_error: None,
+            };
+        }
+    };
     let base = TargetReport {
         index,
         degree: sample.degree,
@@ -570,6 +680,7 @@ fn report_target(
         origin_circuit_witness_count: sample.origin_circuit_witness_count,
         origin_circuit_first_witness: sample.origin_circuit_first_witness.clone(),
         origin_circuit_affine_support: sample.origin_circuit_affine_support.clone(),
+        local_cygv_hypersurface_shape,
         cms_general_divisor_shape_candidates: sample.cms_general_divisor_shape_candidates.clone(),
         cms_general_divisor_intersection_checks: sample
             .cms_general_divisor_intersection_checks
@@ -1463,6 +1574,12 @@ mod tests {
                 .affine_rank,
             3
         );
+        let shape = report.local_cygv_hypersurface_shape.as_ref().unwrap();
+        assert_eq!(shape.q_rows, 3);
+        assert_eq!(shape.q_cols, 1);
+        assert_eq!(shape.cy_dim, 1);
+        assert_eq!(shape.charge_sums, vec![0]);
+        assert!(!shape.is_compact_threefold_hypersurface_shape);
         assert_eq!(
             report
                 .cms_general_divisor_intersection_checks
