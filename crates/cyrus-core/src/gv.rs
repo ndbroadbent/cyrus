@@ -4674,6 +4674,95 @@ pub fn partition_finite_cutoff_gv_charges_by_nilpotence(
     })
 }
 
+/// Extract finite-cutoff nonzero GV charges after removing charges whose
+/// primitive ray is in `excluded_primitive_rays`.
+///
+/// This is the finite-table complement used for the paper's second nop pass:
+/// after the provisional nop set `F0` is known, the comparison set becomes
+/// `C \ F0` rather than `C \ N`.
+pub fn finite_cutoff_gv_charges_excluding_primitive_rays(
+    grading_vector: &[i64],
+    cutoff_degree: i128,
+    gv_invariants: &[(Vec<i64>, Integer)],
+    excluded_primitive_rays: &[Vec<i64>],
+) -> Result<Vec<(Vec<i64>, Integer)>> {
+    if grading_vector.is_empty() {
+        return Err(Error::InvalidInput(
+            "finite-cutoff GV complement requires a nonempty grading vector".into(),
+        ));
+    }
+    if cutoff_degree <= 0 {
+        return Err(Error::InvalidInput(
+            "finite-cutoff GV complement cutoff degree must be positive".into(),
+        ));
+    }
+
+    let mut excluded = BTreeSet::new();
+    for ray in excluded_primitive_rays {
+        if ray.len() != grading_vector.len() {
+            return Err(Error::InvalidInput(
+                "finite-cutoff GV complement excluded-ray dimension does not match grading dimension"
+                    .into(),
+            ));
+        }
+        let gcd = primitive_i64_gcd(ray, "finite-cutoff GV complement excluded ray")?;
+        if gcd == 0 {
+            return Err(Error::InvalidInput(
+                "finite-cutoff GV complement excluded ray must not be zero".into(),
+            ));
+        }
+        if gcd != 1 {
+            return Err(Error::InvalidInput(format!(
+                "finite-cutoff GV complement excluded ray must be co-prime, got gcd {gcd}"
+            )));
+        }
+        excluded.insert(ray.clone());
+    }
+
+    let zero = Integer::from(0);
+    let mut gv_by_class: HashMap<Vec<i64>, Integer> = HashMap::with_capacity(gv_invariants.len());
+    let mut retained = Vec::new();
+    for (class, gv) in gv_invariants {
+        if class.len() != grading_vector.len() {
+            return Err(Error::InvalidInput(
+                "finite-cutoff GV complement class dimension does not match grading dimension"
+                    .into(),
+            ));
+        }
+        if let Some(existing) = gv_by_class.get(class) {
+            if existing != gv {
+                return Err(Error::InvalidInput(
+                    "finite-cutoff GV complement table contains conflicting duplicate classes"
+                        .into(),
+                ));
+            }
+            continue;
+        }
+        gv_by_class.insert(class.clone(), gv.clone());
+
+        if gv == &zero {
+            continue;
+        }
+        let degree =
+            checked_i128_dot(class, grading_vector, "finite-cutoff GV complement grading")?;
+        if degree <= 0 {
+            return Err(Error::InvalidInput(format!(
+                "finite-cutoff GV complement nonzero class has non-positive grading degree {degree}"
+            )));
+        }
+        if degree > cutoff_degree {
+            continue;
+        }
+        let primitive = primitive_ray_from_curve_class(class, "finite-cutoff GV complement class")?;
+        if !excluded.contains(&primitive) {
+            retained.push((class.clone(), gv.clone()));
+        }
+    }
+
+    retained.sort_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
+    Ok(retained)
+}
+
 /// Extract nonzero finite-GV charges that lie exactly on one grading-degree
 /// slice.
 ///
@@ -8464,10 +8553,10 @@ mod tests {
         detect_apparent_nilpotent_rays_from_gv_table, diagnose_affine_toric_circuit,
         dump_mori_rays_cdd, extract_ckyz_local_gv_invariants_from_potential,
         extract_ckyz_local_gv_invariants_from_potential_for_degrees, find_pair_decomposition,
-        find_semigroup_decomposition, finite_gv_nonzero_degree_slice_points, gv_divisor_basis_data,
-        gv_lattice_search_request, load_grading_cache, local_p2_inverse_mirror_map,
-        local_p2_mirror_correction, map_basis_gv_invariants_to_ambient,
-        nilpotent_ray_degree_slice_for_cutoff_fraction,
+        find_semigroup_decomposition, finite_cutoff_gv_charges_excluding_primitive_rays,
+        finite_gv_nonzero_degree_slice_points, gv_divisor_basis_data, gv_lattice_search_request,
+        load_grading_cache, local_p2_inverse_mirror_map, local_p2_mirror_correction,
+        map_basis_gv_invariants_to_ambient, nilpotent_ray_degree_slice_for_cutoff_fraction,
         nilpotent_ray_divergence_check_from_slice_distances,
         nilpotent_ray_divergence_check_with_explicit_slice_lattices,
         nilpotent_ray_lll_reduced_slice_distance, nilpotent_ray_slice_comparison_points,
@@ -10437,6 +10526,62 @@ mod tests {
                 (vec![1, 0], Integer::from(11)),
             ]
         );
+    }
+
+    #[test]
+    fn finite_cutoff_gv_complement_excludes_primitive_rays() {
+        let retained = finite_cutoff_gv_charges_excluding_primitive_rays(
+            &[1, 1],
+            5,
+            &[
+                (vec![1, 0], Integer::from(3)),
+                (vec![2, 0], Integer::from(7)),
+                (vec![0, 1], Integer::from(5)),
+                (vec![1, 1], Integer::from(11)),
+                (vec![0, 5], Integer::from(13)),
+                (vec![6, 0], Integer::from(17)),
+                (vec![1, 1], Integer::from(11)),
+            ],
+            &[vec![1, 0], vec![1, 1]],
+        )
+        .unwrap();
+
+        assert_eq!(
+            retained,
+            vec![
+                (vec![0, 1], Integer::from(5)),
+                (vec![0, 5], Integer::from(13)),
+            ]
+        );
+    }
+
+    #[test]
+    fn finite_cutoff_gv_complement_rejects_bad_inputs() {
+        let nonprimitive =
+            finite_cutoff_gv_charges_excluding_primitive_rays(&[1, 1], 3, &[], &[vec![2, 0]])
+                .unwrap_err();
+        assert!(nonprimitive.to_string().contains("co-prime"));
+
+        let duplicate = finite_cutoff_gv_charges_excluding_primitive_rays(
+            &[1, 1],
+            3,
+            &[
+                (vec![1, 0], Integer::from(3)),
+                (vec![1, 0], Integer::from(4)),
+            ],
+            &[],
+        )
+        .unwrap_err();
+        assert!(duplicate.to_string().contains("conflicting duplicate"));
+
+        let bad_degree = finite_cutoff_gv_charges_excluding_primitive_rays(
+            &[0, 1],
+            3,
+            &[(vec![1, 0], Integer::from(3))],
+            &[],
+        )
+        .unwrap_err();
+        assert!(bad_degree.to_string().contains("non-positive grading"));
     }
 
     #[test]
