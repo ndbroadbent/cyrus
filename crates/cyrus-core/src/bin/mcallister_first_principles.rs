@@ -446,6 +446,7 @@ struct BranchReportSummary {
     record_type: &'static str,
     branch_seed: u64,
     branch_selection: &'static str,
+    small_curve_pruning: &'static str,
     kklt_steps: usize,
     attempted: usize,
     solved: usize,
@@ -492,6 +493,7 @@ struct BranchReportBranch {
     record_type: &'static str,
     branch_seed: u64,
     branch_selection: &'static str,
+    small_curve_pruning: &'static str,
     rank_by_volume: usize,
     selected: bool,
     init_index: usize,
@@ -882,6 +884,7 @@ struct FaceGvAttempt {
 struct BranchReportContext {
     branch_seed: u64,
     branch_selection: BranchSelection,
+    small_curve_pruning: CurvePruningStrategy,
     kklt_steps: usize,
     attempted: usize,
     solved: usize,
@@ -5723,6 +5726,7 @@ fn write_branch_report_jsonl(
         record_type: "summary",
         branch_seed: ctx.branch_seed,
         branch_selection: ctx.branch_selection.as_str(),
+        small_curve_pruning: ctx.small_curve_pruning.as_str(),
         kklt_steps: ctx.kklt_steps,
         attempted: ctx.attempted,
         solved: ctx.solved,
@@ -5790,6 +5794,7 @@ fn write_branch_report_jsonl(
             record_type: "positive_branch",
             branch_seed: ctx.branch_seed,
             branch_selection: ctx.branch_selection.as_str(),
+            small_curve_pruning: ctx.small_curve_pruning.as_str(),
             rank_by_volume,
             selected: rank_by_volume == ctx.selected_rank_by_volume,
             init_index: branch.init_index,
@@ -8537,6 +8542,7 @@ fn stage_volume(
                 let ctx = BranchReportContext {
                     branch_seed,
                     branch_selection,
+                    small_curve_pruning,
                     kklt_steps,
                     attempted,
                     solved,
@@ -9700,6 +9706,27 @@ mod tests {
         assert!(BranchSelection::MinRequiredGvDegree.requires_gv_degree_summary());
         assert!(!BranchSelection::MinVolume.requires_gv_coverage());
         assert!(!BranchSelection::MinVolume.requires_gv_degree_summary());
+    }
+
+    #[test]
+    fn curve_pruning_strategy_parser_accepts_declared_policies() {
+        assert_eq!(
+            parse_curve_pruning_strategy("pair"),
+            Some(CurvePruningStrategy::PairDecomposable)
+        );
+        assert_eq!(
+            parse_curve_pruning_strategy("pair-decomposable"),
+            Some(CurvePruningStrategy::PairDecomposable)
+        );
+        assert_eq!(
+            parse_curve_pruning_strategy("finite-semigroup"),
+            Some(CurvePruningStrategy::FiniteSemigroup)
+        );
+        assert_eq!(
+            parse_curve_pruning_strategy("semigroup"),
+            Some(CurvePruningStrategy::FiniteSemigroup)
+        );
+        assert!(parse_curve_pruning_strategy("hilbert").is_none());
     }
 
     #[test]
