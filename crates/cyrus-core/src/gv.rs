@@ -5249,6 +5249,10 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
     let mut extraction_degrees = target_degrees.to_vec();
     ckyz_sort_degrees_for_extraction_with_grading(&mut extraction_degrees, &grading_vector)?;
     extraction_degrees.dedup();
+    let extraction_gradings = extraction_degrees
+        .iter()
+        .map(|degree| ckyz_grading_degree(degree, &grading_vector))
+        .collect::<Result<Vec<_>>>()?;
 
     let mut residual = extraction_degrees
         .iter()
@@ -5308,6 +5312,9 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
         nonzero_gv_count += 1;
 
         let subtraction_scale = -Rational::from(weight) * Rational::from(gv);
+        let degree_grading = extraction_gradings[degree_index];
+        let first_later_grading_index =
+            extraction_gradings.partition_point(|&grading| grading <= degree_grading);
         let coordinate_key = ckyz_q_degree_nonzero_coordinate_key(degree);
         if !exp_support_cache.contains_key(&coordinate_key) {
             let exp_support = ckyz_q_degree_exp_support_for_coordinate_key(
@@ -5321,7 +5328,7 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
         let exp_support = exp_support_cache
             .get(&coordinate_key)
             .expect("exponential support was inserted above");
-        for target in extraction_degrees.iter().skip(degree_index + 1) {
+        for target in extraction_degrees.iter().skip(first_later_grading_index) {
             let (li2_coefficient, has_supported_delta) =
                 ckyz_q_degree_li2_coefficient_and_support_in_z_domain(
                     degree,
