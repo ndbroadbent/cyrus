@@ -31,7 +31,9 @@ use rayon::prelude::*;
 
 use crate::error::Result as CyrusResult;
 use crate::f64_pos;
-use crate::gv::{ExtremalMoriRayCertificate, check_extremal_mori_ray_separator};
+use crate::gv::{
+    ExtremalMoriRayCertificate, check_extremal_mori_ray_separator, find_extremal_mori_ray_separator,
+};
 use crate::integer_math::integer_kernel;
 use crate::intersection::Intersection;
 use crate::types::f64::F64;
@@ -470,6 +472,35 @@ pub fn check_stable_weyl_candidate_certificate(
         extremal_ray,
         weyl_matrix,
     }))
+}
+
+/// Find and verify the exact algebraic parts of a proposed stable Weyl
+/// continuation in a supplied finite Mori-generator cone.
+///
+/// This first constructs an exact separator with
+/// [`find_extremal_mori_ray_separator`], then runs
+/// [`check_stable_weyl_candidate_certificate`] with the resulting certificate.
+/// It still does not prove that `mori_generators` are the complete Mori cone or
+/// the corrected chamber's source-derived finite context.
+pub fn find_stable_weyl_candidate_certificate(
+    kappa: &Intersection,
+    mori_generators: &[Vec<i64>],
+    shrinking_divisor: &[Integer],
+    curve_class: &[i64],
+    gv_invariant: &Integer,
+) -> CyrusResult<Option<StableWeylCandidateCertificate>> {
+    let Some(extremal_ray) = find_extremal_mori_ray_separator(curve_class, mori_generators)? else {
+        return Ok(None);
+    };
+
+    check_stable_weyl_candidate_certificate(
+        kappa,
+        &extremal_ray.separator_normal,
+        mori_generators,
+        shrinking_divisor,
+        curve_class,
+        gv_invariant,
+    )
 }
 
 fn divisor_quadratic_bilinear_pairing(
@@ -2505,6 +2536,48 @@ mod tests {
                 vec![Rational::from(0), Rational::from(1)]
             ]
         );
+    }
+
+    #[test]
+    fn test_find_stable_weyl_candidate_certificate_finds_separator_first() {
+        let mut kappa = Intersection::new(2);
+        kappa.set(0, 0, 0, finite_rational(1));
+
+        let certificate = find_stable_weyl_candidate_certificate(
+            &kappa,
+            &[vec![1, 0], vec![0, 1], vec![1, 1]],
+            &[Integer::from(1), Integer::from(0)],
+            &[1, 0],
+            &Integer::from(2),
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(certificate.extremal_ray.separator_normal, vec![-1, 1]);
+        assert_eq!(
+            certificate.weyl_matrix,
+            vec![
+                vec![Rational::from(-1), Rational::from(0)],
+                vec![Rational::from(0), Rational::from(1)]
+            ]
+        );
+    }
+
+    #[test]
+    fn test_find_stable_weyl_candidate_certificate_rejects_non_extremal_target() {
+        let mut kappa = Intersection::new(2);
+        kappa.set(0, 0, 0, finite_rational(1));
+
+        let certificate = find_stable_weyl_candidate_certificate(
+            &kappa,
+            &[vec![1, 0], vec![0, 1], vec![1, 1]],
+            &[Integer::from(1), Integer::from(0)],
+            &[1, 1],
+            &Integer::from(2),
+        )
+        .unwrap();
+
+        assert!(certificate.is_none());
     }
 
     #[test]

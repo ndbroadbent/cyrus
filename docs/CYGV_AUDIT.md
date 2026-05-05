@@ -1585,12 +1585,13 @@ separator verifier, `check_extremal_mori_ray_separator`, and an exact DDM-based
 finite-cone separator search, `find_extremal_mori_ray_separator`, for the
 cone-theoretic claim that a target curve spans an extremal Mori ray in a
 supplied generator set. `check_stable_weyl_candidate_certificate` combines that
-certificate with the divisor-collapse and tensor-transform checks. A usable
-continuation step still needs the supplied finite generators to be certified as
-the relevant chamber/Mori context, the Kähler wall transition to be certified,
-the divisor to be identified from geometry rather than a fitted candidate, and
-`n_C^0` to be computed or otherwise certified without reading the target GV
-row.
+certificate with the divisor-collapse and tensor-transform checks, while
+`find_stable_weyl_candidate_certificate` performs the separator search before
+running those same algebraic checks. A usable continuation step still needs the
+supplied finite generators to be certified as the relevant chamber/Mori context,
+the Kähler wall transition to be certified, the divisor to be identified from
+geometry rather than a fitted candidate, and `n_C^0` to be computed or otherwise
+certified without reading the target GV row.
 
 The immediate implementation standard from this checkpoint is:
 
