@@ -1008,6 +1008,7 @@ fn mcallister_rank_two_ckyz_domain_profiles_are_inventoried() {
     };
 
     let multiples_to_profile = ckyz_multiples_to_check(4);
+    let target_direction_filter = ckyz_target_direction_filter();
     let print_profiles = std::env::var_os("CYRUS_PRINT_CKYZ_DOMAIN_PROFILES").is_some();
     let points_raw = read_csv_rows_i64(&data_dir.join("points.dat"));
     let potent_rays = read_csv_rows_i64(&data_dir.join("potent_rays.dat"));
@@ -1033,6 +1034,11 @@ fn mcallister_rank_two_ckyz_domain_profiles_are_inventoried() {
         let identification = identify_ckyz_local_surface(&model)
             .expect("CKYZ identification should run exactly")
             .expect("rank-two McAllister model should match a CKYZ source");
+        if let Some(filter) = &target_direction_filter {
+            if *filter != identification.source_target_direction {
+                continue;
+            }
+        }
         let key = (
             ckyz_kind_index(&identification.kind),
             identification.source_target_direction.clone(),
@@ -1072,19 +1078,31 @@ fn mcallister_rank_two_ckyz_domain_profiles_are_inventoried() {
         }
     }
 
-    assert_eq!(profiled_rows, 395);
-    assert_eq!(
-        profiles_by_source.len(),
-        16,
-        "rank-two CKYZ domain profiles should follow the audited source inventory"
-    );
-    assert!(
-        profiles_by_source
-            .values()
-            .any(|profile| profile.predicted_support_degree_count
-                < profile.target_downset_degree_count),
-        "at least one nontrivial CKYZ family should reduce the broad downset"
-    );
+    if target_direction_filter.is_none() {
+        assert_eq!(profiled_rows, 395);
+        assert_eq!(
+            profiles_by_source.len(),
+            16,
+            "rank-two CKYZ domain profiles should follow the audited source inventory"
+        );
+        assert!(
+            profiles_by_source
+                .values()
+                .any(|profile| profile.predicted_support_degree_count
+                    < profile.target_downset_degree_count),
+            "at least one nontrivial CKYZ family should reduce the broad downset"
+        );
+    } else {
+        assert!(
+            profiled_rows > 0,
+            "CKYZ target-direction filter did not match any rank-two CKYZ potent-ray row"
+        );
+        assert_eq!(
+            profiles_by_source.len(),
+            1,
+            "CKYZ target-direction filter should isolate one source profile"
+        );
+    }
 }
 
 #[test]

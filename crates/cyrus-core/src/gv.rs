@@ -2755,6 +2755,7 @@ fn ckyz_observed_support_domain_for_degrees(
     CkyzMonomialDomain::from_degrees(rank, degree_set)
 }
 
+#[cfg(test)]
 fn ckyz_series_support_indices(
     series: &BTreeMap<Vec<usize>, Rational>,
     domain: &CkyzMonomialDomain,
@@ -2764,6 +2765,119 @@ fn ckyz_series_support_indices(
         .filter(|(_, coefficient)| **coefficient != 0)
         .filter_map(|(degree, _)| domain.index_of(degree))
         .collect()
+}
+
+fn ckyz_log_period_support_indices_domain(
+    relations: &[Vec<i64>],
+    domain: &CkyzMonomialDomain,
+) -> Result<Vec<BTreeSet<usize>>> {
+    validate_ckyz_relations(relations)?;
+    let rank = relations.len();
+    if domain.rank != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ monomial domain rank does not match relation rank".into(),
+        ));
+    }
+
+    let mut supports = vec![BTreeSet::new(); rank];
+    for (degree_index, degree) in domain.degrees.iter().enumerate() {
+        if degree.iter().all(|&entry| entry == 0) {
+            continue;
+        }
+        let point_pairings = ckyz_point_pairings(relations, degree)?;
+        let negative_points = point_pairings
+            .iter()
+            .enumerate()
+            .filter_map(|(index, &pairing)| (pairing < 0).then_some(index))
+            .collect::<Vec<_>>();
+
+        match negative_points.as_slice() {
+            [negative_point] => {
+                for coordinate_index in 0..rank {
+                    if relations[coordinate_index][*negative_point] != 0 {
+                        supports[coordinate_index].insert(degree_index);
+                    }
+                }
+            }
+            [] => {
+                let regular_terms = ckyz_regular_harmonic_terms(relations, &point_pairings)?;
+                for (coordinate_index, term) in regular_terms.iter().enumerate() {
+                    if *term != 0 {
+                        supports[coordinate_index].insert(degree_index);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Ok(supports)
+}
+
+fn ckyz_second_log_period_support_indices_for_pair_domain(
+    relations: &[Vec<i64>],
+    first: usize,
+    second: usize,
+    domain: &CkyzMonomialDomain,
+) -> Result<BTreeSet<usize>> {
+    let rank = relations.len();
+    if first >= rank || second >= rank {
+        return Err(Error::InvalidInput(
+            "CKYZ second-log period pair index is outside the relation rank".into(),
+        ));
+    }
+    if domain.rank != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ componentwise cutoff rank does not match relation rank".into(),
+        ));
+    }
+
+    let mut support = BTreeSet::new();
+    for (degree_index, degree) in domain.degrees.iter().enumerate() {
+        if degree.iter().all(|&entry| entry == 0) {
+            continue;
+        }
+        let point_pairings = ckyz_point_pairings(relations, degree)?;
+        let negative_points = point_pairings
+            .iter()
+            .enumerate()
+            .filter_map(|(index, &pairing)| (pairing < 0).then_some(index))
+            .collect::<Vec<_>>();
+
+        let supported = match negative_points.as_slice() {
+            [] => {
+                let regular_terms = ckyz_regular_harmonic_terms(relations, &point_pairings)?;
+                let mut term = regular_terms[first].clone() * regular_terms[second].clone();
+                for point_index in 0..point_pairings.len() {
+                    let arg = ckyz_harmonic_argument(point_pairings[point_index])?;
+                    term += Rational::from(relations[first][point_index])
+                        * Rational::from(relations[second][point_index])
+                        * harmonic_number_order_two(arg);
+                }
+                term != 0
+            }
+            [negative_point] => {
+                let regular_terms = ckyz_regular_harmonic_terms(relations, &point_pairings)?;
+                regular_terms[first].clone() * Rational::from(relations[second][*negative_point])
+                    + regular_terms[second].clone()
+                        * Rational::from(relations[first][*negative_point])
+                    != 0
+            }
+            [first_negative, second_negative] => {
+                Rational::from(relations[first][*first_negative])
+                    * Rational::from(relations[second][*second_negative])
+                    + Rational::from(relations[first][*second_negative])
+                        * Rational::from(relations[second][*first_negative])
+                    != 0
+            }
+            _ => false,
+        };
+        if supported {
+            support.insert(degree_index);
+        }
+    }
+
+    Ok(support)
 }
 
 fn ckyz_support_identity_index(domain: &CkyzMonomialDomain) -> Result<usize> {
@@ -2982,11 +3096,7 @@ fn ckyz_predicted_support_domain_for_degrees(
         }
     }
 
-    let alpha = compute_ckyz_log_period_corrections_domain(relations, &broad_domain)?;
-    let alpha_supports = alpha
-        .iter()
-        .map(|series| ckyz_series_support_indices(series, &broad_domain))
-        .collect::<Vec<_>>();
+    let alpha_supports = ckyz_log_period_support_indices_domain(relations, &broad_domain)?;
     for support in &alpha_supports {
         degree_set.extend(
             support
@@ -3005,13 +3115,12 @@ fn ckyz_predicted_support_domain_for_degrees(
 
     let mut contracted_support = BTreeSet::new();
     for term in local_intersection_terms {
-        let beta = ckyz_second_log_period_series_for_pair_domain(
+        let beta_support = ckyz_second_log_period_support_indices_for_pair_domain(
             relations,
             term.first,
             term.second,
             &broad_domain,
         )?;
-        let beta_support = ckyz_series_support_indices(&beta, &broad_domain);
         degree_set.extend(
             beta_support
                 .iter()
@@ -9265,8 +9374,10 @@ mod tests {
         ckyz_local_domain_profile_for_degrees_with_causal_domain,
         ckyz_local_surface_causal_domain_spec, ckyz_local_surface_cover_weight_coefficients,
         ckyz_local_surface_domain_profile_for_multiples, ckyz_local_surface_target_degrees,
-        ckyz_observed_support_domain_for_degrees, ckyz_predicted_support_domain_for_degrees,
-        ckyz_series_mul_domain, classify_nilpotent_rays_from_two_pass_divergence_checks,
+        ckyz_log_period_support_indices_domain, ckyz_observed_support_domain_for_degrees,
+        ckyz_predicted_support_domain_for_degrees, ckyz_second_log_period_series_for_pair_domain,
+        ckyz_second_log_period_support_indices_for_pair_domain, ckyz_series_mul_domain,
+        ckyz_series_support_indices, classify_nilpotent_rays_from_two_pass_divergence_checks,
         classify_nop_rays_from_finite_gv_table, compute_ambient_one_dimensional_ray_gv_series,
         compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
         compute_ckyz_local_gv_invariants, compute_ckyz_local_gv_invariants_for_degrees,
@@ -9276,8 +9387,8 @@ mod tests {
         compute_ckyz_local_instanton_potential_corrections_domain,
         compute_ckyz_local_prepotential_period_corrections,
         compute_ckyz_local_surface_gv_invariants_for_multiples_with_causal_domain,
-        compute_ckyz_log_period_corrections, compute_grading_vector,
-        compute_gv_invariants_with_explicit_semigroup,
+        compute_ckyz_log_period_corrections, compute_ckyz_log_period_corrections_domain,
+        compute_grading_vector, compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_provided_generators, compute_local_p2_genus_zero_gv_series,
         compute_local_toric_circuit_gv_series, compute_one_dimensional_ray_gv_series,
         compute_ray_gv_series_with_provided_generators, curve_in_rational_row_span,
@@ -10225,6 +10336,57 @@ mod tests {
         .unwrap();
 
         assert_eq!(predicted, broad);
+    }
+
+    #[test]
+    fn ckyz_support_predicates_match_rational_period_supports() {
+        let cases = [
+            (
+                vec![vec![-2, 1, 0, 1, 0], vec![-2, 0, 1, 0, 1]],
+                vec![CkyzLocalIntersectionTerm {
+                    first: 0,
+                    second: 1,
+                    coefficient: 1,
+                }],
+                vec![vec![3, 2], vec![6, 4], vec![9, 6]],
+            ),
+            (
+                ckyz_polygon5_relations(),
+                ckyz_polygon5_intersection_terms(),
+                vec![vec![4, 3, 2], vec![8, 6, 4]],
+            ),
+        ];
+
+        for (relations, local_intersection_terms, target_degrees) in cases {
+            let extraction_degrees = ckyz_cover_closed_target_degrees(&target_degrees).unwrap();
+            let domain =
+                CkyzMonomialDomain::target_downset(&extraction_degrees, relations.len()).unwrap();
+            let alpha = compute_ckyz_log_period_corrections_domain(&relations, &domain).unwrap();
+            let alpha_supports =
+                ckyz_log_period_support_indices_domain(&relations, &domain).unwrap();
+            assert_eq!(alpha_supports.len(), alpha.len());
+            for (support, series) in alpha_supports.iter().zip(alpha.iter()) {
+                assert_eq!(*support, ckyz_series_support_indices(series, &domain));
+            }
+
+            for term in local_intersection_terms {
+                let beta = ckyz_second_log_period_series_for_pair_domain(
+                    &relations,
+                    term.first,
+                    term.second,
+                    &domain,
+                )
+                .unwrap();
+                let beta_support = ckyz_second_log_period_support_indices_for_pair_domain(
+                    &relations,
+                    term.first,
+                    term.second,
+                    &domain,
+                )
+                .unwrap();
+                assert_eq!(beta_support, ckyz_series_support_indices(&beta, &domain));
+            }
+        }
     }
 
     #[test]
