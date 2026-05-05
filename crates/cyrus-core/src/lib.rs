@@ -95,7 +95,8 @@ pub use glsm::compute_glsm_and_linrels;
 pub use glsm::compute_glsm_charge_matrix;
 pub use glsm::compute_glsm_linear_relations;
 pub use gv::{
-    AffineCircuitRelationPoint, AffineToricCircuitDiagnostic, CurveDecompositionTerm,
+    AffineCircuitRelationPoint, AffineToricCircuitDiagnostic, CkyzLocalIntersectionTerm,
+    CkyzLocalSurfaceIdentification, CkyzLocalSurfaceKind, CurveDecompositionTerm,
     CurvePruningStrategy, LocalToricCircuitKind, LocalToricCoordinate2D, OneDimensionalRayGvSeries,
     OriginCircuitCurveDiagnostic, OriginCircuitCurveWitness, OriginCircuitRelationPoint,
     PotentRayConvergence, RankTwoLocalChargeModel, RankTwoLocalChargeModelPoint,
@@ -111,12 +112,13 @@ pub use gv::{
     compute_toric_curve_gv_diagnostics, compute_toric_two_face_curve_gv_invariants,
     curve_in_rational_row_span, curve_row_span_rank, curve_volume_in_divisor_basis,
     diagnose_affine_toric_circuit, find_pair_decomposition, find_semigroup_decomposition,
-    map_basis_gv_invariants_to_ambient, potent_ray_convergence, potent_ray_log_xi_slope,
-    potent_ray_log_xi_terms, project_ambient_curve_to_basis, project_mori_cone_cap_rays_to_basis,
-    prune_decomposable_curve_candidates, rank_two_local_charge_model,
-    rank_two_local_support_signature, remove_pair_decomposable_curve_candidates,
-    remove_semigroup_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
-    supporting_mori_face_for_curve_from_normal, supporting_mori_face_from_normal,
+    identify_ckyz_local_surface, map_basis_gv_invariants_to_ambient, potent_ray_convergence,
+    potent_ray_log_xi_slope, potent_ray_log_xi_terms, project_ambient_curve_to_basis,
+    project_mori_cone_cap_rays_to_basis, prune_decomposable_curve_candidates,
+    rank_two_local_charge_model, rank_two_local_support_signature,
+    remove_pair_decomposable_curve_candidates, remove_semigroup_decomposable_curve_candidates,
+    subcutoff_toric_curve_candidates, supporting_mori_face_for_curve_from_normal,
+    supporting_mori_face_from_normal,
 };
 pub use height_kahler::{
     effective_prime_divisors_from_curve_basis, heights_to_kahler, kahler_to_heights,

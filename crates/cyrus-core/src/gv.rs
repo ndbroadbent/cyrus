@@ -437,6 +437,58 @@ pub struct RankTwoLocalChargeModel {
     pub charge_basis: Vec<Vec<i64>>,
 }
 
+/// CKYZ local toric surface source model matched to a reconstructed support.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CkyzLocalSurfaceKind {
+    /// Canonical bundle over `P^2`.
+    LocalP2,
+    /// Canonical bundle over `F0 = P^1 x P^1`.
+    HirzebruchF0,
+    /// Canonical bundle over the first Hirzebruch surface.
+    HirzebruchF1,
+    /// CKYZ two-dimensional reflexive polygon 5.
+    Polygon5,
+}
+
+/// One term in CKYZ's local base intersection expression.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CkyzLocalIntersectionTerm {
+    /// Zero-based first divisor index.
+    pub first: usize,
+    /// Zero-based second divisor index.
+    pub second: usize,
+    /// Integral coefficient of `J_first J_second`.
+    pub coefficient: i64,
+}
+
+/// Exact identification of a local charge model with CKYZ source relation data.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CkyzLocalSurfaceIdentification {
+    /// CKYZ source surface.
+    pub kind: CkyzLocalSurfaceKind,
+    /// Column permutation putting Cyrus' canonical point order into CKYZ order.
+    pub point_permutation: Vec<usize>,
+    /// Unimodular row transform mapping the permuted Cyrus charge basis to CKYZ
+    /// source relation rows.
+    pub row_transform: Vec<Vec<i64>>,
+    /// CKYZ source relation rows.
+    pub source_relations: Vec<Vec<i64>>,
+    /// Target potent-ray direction in the CKYZ source relation basis.
+    pub source_target_direction: Vec<i64>,
+    /// CKYZ `c1(B).J_i` pairings in source coordinates.
+    pub c1_pairings: Vec<i64>,
+    /// CKYZ local base intersection expression in source coordinates.
+    pub local_intersection_terms: Vec<CkyzLocalIntersectionTerm>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CkyzLocalSurfaceSource {
+    kind: CkyzLocalSurfaceKind,
+    relations: Vec<Vec<i64>>,
+    c1_pairings: Vec<i64>,
+    local_intersection_terms: Vec<CkyzLocalIntersectionTerm>,
+}
+
 /// Recognized local toric circuit shape.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LocalToricCircuitKind {
@@ -751,6 +803,209 @@ pub fn rank_two_local_charge_model(
         target_relation_in_charge_basis,
         charge_basis,
     })
+}
+
+/// Identify a rank-two local charge model with CKYZ local mirror source data.
+///
+/// The match is exact and pre-GV: Cyrus searches point permutations and
+/// unimodular row transformations until the reconstructed local charge basis
+/// equals one of the CKYZ relation systems. The returned target direction is
+/// expressed in that CKYZ source basis. This function does not read or assign
+/// any GV sequence.
+pub fn identify_ckyz_local_surface(
+    model: &RankTwoLocalChargeModel,
+) -> Result<Option<CkyzLocalSurfaceIdentification>> {
+    for source in ckyz_local_surface_sources() {
+        if source.relations.is_empty() || source.relations[0].len() != model.points.len() {
+            continue;
+        }
+        if source.relations.len() != model.charge_basis.len() {
+            continue;
+        }
+
+        for point_permutation in permutations(model.points.len()) {
+            let permuted_charge_basis =
+                permute_matrix_columns(&model.charge_basis, &point_permutation);
+            let Some(row_transform) =
+                integer_row_transform_between_bases(&source.relations, &permuted_charge_basis)?
+            else {
+                continue;
+            };
+            let permuted_target = permute_vector_values(&model.target_relation, &point_permutation);
+            let Ok(source_target_direction) =
+                relation_coordinates_in_row_basis(&permuted_target, &source.relations)
+            else {
+                continue;
+            };
+            return Ok(Some(CkyzLocalSurfaceIdentification {
+                kind: source.kind,
+                point_permutation,
+                row_transform,
+                source_relations: source.relations,
+                source_target_direction,
+                c1_pairings: source.c1_pairings,
+                local_intersection_terms: source.local_intersection_terms,
+            }));
+        }
+    }
+
+    Ok(None)
+}
+
+fn ckyz_local_surface_sources() -> Vec<CkyzLocalSurfaceSource> {
+    vec![
+        CkyzLocalSurfaceSource {
+            kind: CkyzLocalSurfaceKind::LocalP2,
+            relations: vec![vec![-3, 1, 1, 1]],
+            c1_pairings: vec![3],
+            local_intersection_terms: vec![CkyzLocalIntersectionTerm {
+                first: 0,
+                second: 0,
+                coefficient: 1,
+            }],
+        },
+        CkyzLocalSurfaceSource {
+            kind: CkyzLocalSurfaceKind::HirzebruchF0,
+            relations: vec![vec![-2, 1, 0, 1, 0], vec![-2, 0, 1, 0, 1]],
+            c1_pairings: vec![2, 2],
+            local_intersection_terms: vec![CkyzLocalIntersectionTerm {
+                first: 0,
+                second: 1,
+                coefficient: 1,
+            }],
+        },
+        CkyzLocalSurfaceSource {
+            kind: CkyzLocalSurfaceKind::HirzebruchF1,
+            relations: vec![vec![-2, 1, 0, 1, 0], vec![-1, 0, 1, -1, 1]],
+            c1_pairings: vec![3, 2],
+            local_intersection_terms: vec![
+                CkyzLocalIntersectionTerm {
+                    first: 0,
+                    second: 1,
+                    coefficient: 1,
+                },
+                CkyzLocalIntersectionTerm {
+                    first: 0,
+                    second: 0,
+                    coefficient: 1,
+                },
+            ],
+        },
+        CkyzLocalSurfaceSource {
+            kind: CkyzLocalSurfaceKind::Polygon5,
+            relations: vec![
+                vec![-1, 1, -1, 1, 0, 0],
+                vec![-1, -1, 1, 0, 0, 1],
+                vec![-1, 0, 1, -1, 1, 0],
+            ],
+            c1_pairings: vec![3, 2, 2],
+            local_intersection_terms: vec![
+                CkyzLocalIntersectionTerm {
+                    first: 0,
+                    second: 0,
+                    coefficient: 1,
+                },
+                CkyzLocalIntersectionTerm {
+                    first: 1,
+                    second: 0,
+                    coefficient: 1,
+                },
+                CkyzLocalIntersectionTerm {
+                    first: 0,
+                    second: 2,
+                    coefficient: 1,
+                },
+                CkyzLocalIntersectionTerm {
+                    first: 1,
+                    second: 2,
+                    coefficient: 1,
+                },
+            ],
+        },
+    ]
+}
+
+fn integer_row_transform_between_bases(
+    target_rows: &[Vec<i64>],
+    source_rows: &[Vec<i64>],
+) -> Result<Option<Vec<Vec<i64>>>> {
+    let mut transform = Vec::with_capacity(target_rows.len());
+    for target_row in target_rows {
+        let Ok(coordinates) = relation_coordinates_in_row_basis(target_row, source_rows) else {
+            return Ok(None);
+        };
+        transform.push(coordinates);
+    }
+    let transformed = transform_rows_i64(&transform, source_rows);
+    if transformed != target_rows {
+        return Ok(None);
+    }
+    if !is_unimodular_i64_matrix(&transform) {
+        return Ok(None);
+    }
+    Ok(Some(transform))
+}
+
+fn transform_rows_i64(transform: &[Vec<i64>], matrix: &[Vec<i64>]) -> Vec<Vec<i64>> {
+    transform
+        .iter()
+        .map(|row| {
+            (0..matrix[0].len())
+                .map(|col| {
+                    row.iter()
+                        .zip(matrix.iter())
+                        .map(|(coefficient, source_row)| coefficient * source_row[col])
+                        .sum()
+                })
+                .collect()
+        })
+        .collect()
+}
+
+fn is_unimodular_i64_matrix(matrix: &[Vec<i64>]) -> bool {
+    if matrix.is_empty() || matrix.iter().any(|row| row.len() != matrix.len()) {
+        return false;
+    }
+    let mut rational_matrix = matrix
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|&value| Rational::from(Integer::from(value)))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let determinant = crate::integer_math::determinant_gaussian(&mut rational_matrix);
+    determinant == Rational::from(1) || determinant == Rational::from(-1)
+}
+
+fn permutations(size: usize) -> Vec<Vec<usize>> {
+    let mut values = (0..size).collect::<Vec<_>>();
+    let mut out = Vec::new();
+    push_permutations(0, &mut values, &mut out);
+    out
+}
+
+fn push_permutations(start: usize, values: &mut [usize], out: &mut Vec<Vec<usize>>) {
+    if start == values.len() {
+        out.push(values.to_vec());
+        return;
+    }
+    for idx in start..values.len() {
+        values.swap(start, idx);
+        push_permutations(start + 1, values, out);
+        values.swap(start, idx);
+    }
+}
+
+fn permute_matrix_columns(matrix: &[Vec<i64>], permutation: &[usize]) -> Vec<Vec<i64>> {
+    matrix
+        .iter()
+        .map(|row| permutation.iter().map(|&idx| row[idx]).collect())
+        .collect()
+}
+
+fn permute_vector_values(vector: &[i64], permutation: &[usize]) -> Vec<i64> {
+    permutation.iter().map(|&idx| vector[idx]).collect()
 }
 
 fn relation_coordinates_in_row_basis(target: &[i64], rows: &[Vec<i64>]) -> Result<Vec<i64>> {

@@ -249,6 +249,13 @@ for non-`P^2` supports, where the local charge lattice has rank greater than
 one and the saved ray is a specific one-parameter direction inside that
 lattice.
 
+Cyrus also has a reusable CKYZ source matcher for those rank-two models. It
+does exact column-permutation and unimodular-row-transform matching against the
+CKYZ relation systems for local `P^2`, `F0`, `F1`, and polygon 5, then reports
+the target ray in CKYZ source coordinates together with the source `c1` pairings
+and local intersection expression. This is local mirror input construction, not
+GV assignment.
+
 ## Deeper Internal Read Boundary
 
 A follow-up source pass confirms the boundary for the next code change:
@@ -297,6 +304,8 @@ Executable evidence is now split by layer:
 - `mcallister_rank_two_local_charge_models_are_inventoried` pins the canonical
   charge bases and target charge-lattice directions for all 16 rank-two support
   families;
+- `mcallister_rank_two_models_identify_ckyz_sources` verifies the reusable CKYZ
+  source matcher for all 16 rank-two support families;
 - `mcallister_rank_four_local_affine_supports_are_inventoried` keeps the 16
   affine-rank-four rows explicit instead of projecting them into fake rank-two
   local coordinates;

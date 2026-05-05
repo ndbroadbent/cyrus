@@ -5,9 +5,10 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use cyrus_core::{
-    AffineToricCircuitDiagnostic, LocalToricCircuitKind, LocalToricCoordinate2D, Point, Polytope,
-    RankTwoLocalChargeModel, RankTwoLocalSupportSignature, compute_local_toric_circuit_gv_series,
-    curve_in_rational_row_span, diagnose_affine_toric_circuit, rank_two_local_charge_model,
+    AffineToricCircuitDiagnostic, CkyzLocalSurfaceKind, LocalToricCircuitKind,
+    LocalToricCoordinate2D, Point, Polytope, RankTwoLocalChargeModel, RankTwoLocalSupportSignature,
+    compute_local_toric_circuit_gv_series, curve_in_rational_row_span,
+    diagnose_affine_toric_circuit, identify_ckyz_local_surface, rank_two_local_charge_model,
     rank_two_local_support_signature,
 };
 use malachite::Integer;
@@ -431,6 +432,99 @@ fn mcallister_rank_four_local_affine_supports_are_inventoried() {
         ]),
         "rank-four potent-ray supports should remain explicit local affine charge contexts"
     );
+}
+
+#[test]
+fn mcallister_rank_two_models_identify_ckyz_sources() {
+    if !first_principles_enabled() {
+        return;
+    }
+    let Some(data_dir) = mcallister_data_dir() else {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    };
+
+    let models_by_pattern = rank_two_models_by_coefficient_pattern(&data_dir);
+    let expected = BTreeMap::from([
+        (
+            vec![-14, 1, 4, 4, 5],
+            (CkyzLocalSurfaceKind::HirzebruchF1, vec![5, 4]),
+        ),
+        (
+            vec![-12, 1, 1, 5, 5],
+            (CkyzLocalSurfaceKind::HirzebruchF0, vec![1, 5]),
+        ),
+        (
+            vec![-11, 1, 1, 4, 5],
+            (CkyzLocalSurfaceKind::HirzebruchF1, vec![5, 1]),
+        ),
+        (
+            vec![-11, 1, 3, 3, 4],
+            (CkyzLocalSurfaceKind::HirzebruchF1, vec![4, 3]),
+        ),
+        (
+            vec![-10, 1, 1, 4, 4],
+            (CkyzLocalSurfaceKind::HirzebruchF0, vec![1, 4]),
+        ),
+        (
+            vec![-10, 2, 2, 3, 3],
+            (CkyzLocalSurfaceKind::HirzebruchF0, vec![2, 3]),
+        ),
+        (
+            vec![-9, 1, 1, 2, 2, 3],
+            (CkyzLocalSurfaceKind::Polygon5, vec![4, 3, 2]),
+        ),
+        (
+            vec![-9, 1, 1, 3, 4],
+            (CkyzLocalSurfaceKind::HirzebruchF1, vec![4, 1]),
+        ),
+        (
+            vec![-8, 1, 1, 3, 3],
+            (CkyzLocalSurfaceKind::HirzebruchF0, vec![1, 3]),
+        ),
+        (
+            vec![-8, 1, 2, 2, 3],
+            (CkyzLocalSurfaceKind::HirzebruchF1, vec![3, 2]),
+        ),
+        (
+            vec![-7, 1, 1, 1, 2, 2],
+            (CkyzLocalSurfaceKind::Polygon5, vec![3, 2, 2]),
+        ),
+        (
+            vec![-7, 1, 1, 2, 3],
+            (CkyzLocalSurfaceKind::HirzebruchF1, vec![3, 1]),
+        ),
+        (
+            vec![-6, 1, 1, 2, 2],
+            (CkyzLocalSurfaceKind::HirzebruchF0, vec![1, 2]),
+        ),
+        (
+            vec![-5, 1, 1, 1, 2],
+            (CkyzLocalSurfaceKind::HirzebruchF1, vec![2, 1]),
+        ),
+        (
+            vec![-4, 1, 1, 1, 1],
+            (CkyzLocalSurfaceKind::HirzebruchF0, vec![1, 1]),
+        ),
+        (vec![-3, 1, 1, 1], (CkyzLocalSurfaceKind::LocalP2, vec![1])),
+    ]);
+
+    assert_eq!(models_by_pattern.len(), expected.len());
+    for (coefficient_pattern, (expected_kind, expected_target)) in expected {
+        let model = models_by_pattern
+            .get(&coefficient_pattern)
+            .expect("expected rank-two local charge model should be present");
+        let identification = identify_ckyz_local_surface(model)
+            .expect("CKYZ identification should run exactly")
+            .expect("rank-two McAllister model should match a CKYZ source");
+        assert_eq!(
+            identification.kind, expected_kind,
+            "CKYZ source kind mismatch for {coefficient_pattern:?}"
+        );
+        assert_eq!(
+            identification.source_target_direction, expected_target,
+            "CKYZ target direction mismatch for {coefficient_pattern:?}"
+        );
+    }
 }
 
 #[test]

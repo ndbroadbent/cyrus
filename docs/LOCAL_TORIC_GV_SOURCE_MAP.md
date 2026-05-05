@@ -209,6 +209,14 @@ input coordinates from source relation data. The next missing algorithm is the
 CKYZ local mirror series and instanton-number extraction in these source
 coordinates.
 
+The matching logic is now available as reusable Cyrus code via
+`identify_ckyz_local_surface`. It searches point permutations and unimodular row
+transforms, then returns the CKYZ source kind, source relation rows, `c1`
+pairings, local intersection expression, and the target potent-ray direction in
+source coordinates. The gated test
+`mcallister_rank_two_models_identify_ckyz_sources` verifies this path for all
+16 rank-two 4-214-647 support families. It still does not attach any GV values.
+
 ## Rank-Four Boundary
 
 The gated test
