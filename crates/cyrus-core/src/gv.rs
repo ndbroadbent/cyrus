@@ -522,6 +522,36 @@ pub fn curve_row_span_rank(curves: &[Vec<i64>]) -> Result<usize> {
     Ok(integer_matrix_rank(curves))
 }
 
+/// Check whether a curve row lies in the rational span of other curve rows.
+///
+/// This is an exact rank comparison over `Q`, not a floating least-squares
+/// test. The zero vector lies in the span of an empty row set; any nonzero
+/// vector does not.
+pub fn curve_in_rational_row_span(curve: &[i64], rows: &[Vec<i64>]) -> Result<bool> {
+    if rows.is_empty() {
+        return Ok(curve.iter().all(|&value| value == 0));
+    }
+    let dim = rows[0].len();
+    if curve.len() != dim {
+        return Err(Error::InvalidInput(format!(
+            "curve dimension {} does not match row span dimension {dim}",
+            curve.len()
+        )));
+    }
+    for row in rows {
+        if row.len() != dim {
+            return Err(Error::InvalidInput(
+                "curve rows have inconsistent dimensions".into(),
+            ));
+        }
+    }
+
+    let rank = integer_matrix_rank(rows);
+    let mut augmented = rows.to_vec();
+    augmented.push(curve.to_vec());
+    Ok(integer_matrix_rank(&augmented) == rank)
+}
+
 /// Compute the paper's potent-ray convergence terms.
 ///
 /// For a ray `q` with volume `q.t`, the paper defines
@@ -3500,9 +3530,9 @@ mod tests {
         compute_ambient_one_dimensional_ray_gv_series, compute_grading_vector,
         compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_provided_generators, compute_one_dimensional_ray_gv_series,
-        curve_row_span_rank, curve_volume_in_divisor_basis, dump_mori_rays_cdd,
-        find_pair_decomposition, find_semigroup_decomposition, gv_lattice_search_request,
-        load_grading_cache, map_basis_gv_invariants_to_ambient,
+        curve_in_rational_row_span, curve_row_span_rank, curve_volume_in_divisor_basis,
+        dump_mori_rays_cdd, find_pair_decomposition, find_semigroup_decomposition,
+        gv_lattice_search_request, load_grading_cache, map_basis_gv_invariants_to_ambient,
         origin_circuit_diagnostic_from_class_and_witnesses, potent_ray_convergence,
         potent_ray_log_xi_terms, project_ambient_curve_to_basis,
         project_mori_cone_cap_rays_to_basis, prune_decomposable_curve_candidates,
@@ -3857,6 +3887,27 @@ mod tests {
 
         assert_eq!(curve_row_span_rank(&rows).unwrap(), 2);
         assert!(curve_row_span_rank(&[vec![1], vec![1, 2]]).is_err());
+    }
+
+    #[test]
+    fn curve_in_rational_row_span_uses_exact_rank_comparison() {
+        let rows = vec![vec![2, 0, 0], vec![0, 3, 0]];
+
+        assert!(curve_in_rational_row_span(&[4, 9, 0], &rows).unwrap());
+        assert!(!curve_in_rational_row_span(&[1, 0, 1], &rows).unwrap());
+    }
+
+    #[test]
+    fn curve_in_rational_row_span_handles_empty_span() {
+        assert!(curve_in_rational_row_span(&[0, 0], &[]).unwrap());
+        assert!(!curve_in_rational_row_span(&[0, 1], &[]).unwrap());
+    }
+
+    #[test]
+    fn curve_in_rational_row_span_rejects_dimension_mismatch() {
+        let err = curve_in_rational_row_span(&[1, 0, 0], &[vec![1, 0]]).unwrap_err();
+
+        assert!(err.to_string().contains("curve dimension 3"));
     }
 
     #[test]
