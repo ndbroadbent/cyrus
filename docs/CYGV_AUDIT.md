@@ -773,3 +773,57 @@ Concrete missing implementation pieces after the source read are:
 - an explicit chamber/flop continuation rule for the Kähler-coordinate instanton
   terms, including what to do with even-parity curves that hit the
   `Li2(exp(...))` branch cut.
+
+## May 2026 Source-Read Checkpoint
+
+The latest no-code pass through CYTools and cygv reinforces that the next
+implementation should start from source-derived local input construction, not
+from another Rust-side GV shortcut.
+
+CYTools' `compute_gvs()` path has only two real responsibilities before it
+delegates to cygv:
+
+- build the CYTools curve-basis matrix with `curve_basis(include_origin=False)`;
+- build the Mori-cap generator context, either from explicit
+  `mcap_generators` or from `mori_cone_cap().rays()` plus
+  `mori.find_lattice_points(min_points=100*h11)`.
+
+The important source details are in those inputs. `mori_cone_cap()` constructs
+ambient relations from adjacent 2-simplices in primal 2-faces and from
+"origin circuits" built from a 2-simplex plus one point from each containing
+facet. `Cone.find_lattice_points()` first checks that the proposed grading has
+only the origin at nonpositive degree, then CP-SAT enumerates integer points in
+degree windows and returns them sorted by degree and lexicographic order. These
+choices define the semigroup that HKTY sees; they are not cosmetic
+preprocessing.
+
+The cygv crate then treats the supplied rows as a semigroup seed, not as an
+independent list of classes. `run_hkty` constructs a `Semigroup`, computes the
+fundamental period, computes instanton data, and only then performs the
+degree-ordered `Li2(qN)` subtraction in `series_inversion`. The high-level cygv
+entry points still `unwrap()` several internal errors, while the lower-level
+functions return `Result`; any production Cyrus path that builds custom local
+semigroups should keep using the lower-level calls or otherwise convert those
+failures explicitly.
+
+The Python reproduction scripts are mixed-trust sources. In particular,
+`string_theory/mcallister_2107/full_pipeline_from_data.py` loads
+`dual_curves*.dat` and final volume checkpoints, while
+`2021_cytools/full_pipeline.py` uses generic `compute_gvs(min_points=20000)`
+for the low-dimensional mirror/racetrack side. Those are useful validation
+scaffolds, but they are not the high-`h11` selected-small-curve or potent-ray
+algorithm. The stale line in `REPRODUCTION_OUTLINE.md` saying high-dimensional
+GVs are just `cy.compute_gvs(max_deg=N)` should not guide Cyrus implementation.
+
+The concrete next source-derived object is therefore:
+
+1. inventory the normalized rank-two support signatures that Cyrus now derives;
+2. for each signature family, derive the local toric charge/mirror input from
+   the reconstructed local coordinates and local charge lattice;
+3. compute the local mirror/HKTY series from that input;
+4. compare against `potent_rays_gv.dat` only after the local input has been
+   derived without using the saved GV values.
+
+This is intentionally different from a coefficient-pattern table. The
+coefficient patterns are a diagnostic index into local toric geometry, not the
+source of the GV values.
