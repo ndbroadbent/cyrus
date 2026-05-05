@@ -198,6 +198,13 @@ to make the remaining GV layer more first-principles:
    `720 -> 450`, degree 12 `905 -> 486`, degree 18 `1616 -> 702`, and degree 22
    `2212 -> 949`. So the missing targets are not artifacts of cygv's first
    decomposable-seed pruning pass.
+   The same context report now mirrors cygv's `compute_omega` negative-GLSM-
+   intersection buckets. None of the nine missing targets are in the
+   `>2` ignored bucket: the six-point degree `18/22/24` targets are `neg2`,
+   and the five-point degree `10/12/26` targets are `neg1`. For degree 10 the
+   seed histogram is `{neg1:228, neg2:492}` and the reduced-seed histogram is
+   `{neg1:55, neg2:395}`. Thus the low-degree misses are not simply discarded
+   before cygv's fundamental-period coefficient formulas.
    The context report now preserves origin-circuit provenance from the export:
    the nine misses are affine-rank-three/four origin circuits with local charge
    rows `[2,1,2,-1,-2,-2]`, `[1,2,1,-2,-1,-1]`,

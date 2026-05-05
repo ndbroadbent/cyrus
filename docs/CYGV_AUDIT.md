@@ -1621,6 +1621,14 @@ The current `cygv` crate source sharpens the same boundary:
   semigroup elements by having zero, one, or two negative GLSM intersections,
   and ignores elements with more than two negative intersections. The formulas
   for `c0`, `c1`, and `c2` differ across those three cases.
+- `mcallister_gv_context` now records this same negative-intersection bucket
+  for each corrected-chamber missing target. On the current context, none of
+  the nine targets are in cygv's `>2` ignored bucket: six-point degree
+  `18/22/24` targets are `neg2`, while the five-point degree `10/12/26`
+  targets are `neg1`. For degree 10, the raw seed histogram is
+  `{neg0:0, neg1:228, neg2:492, gt2:0}` and cygv-pair-reduced seeds are
+  `{neg0:0, neg1:55, neg2:395, gt2:0}`. So the low-degree misses are not
+  explained by `compute_omega` discarding their source semigroup elements.
 - `instanton::compute_instanton_data` builds `alpha = c0^{-1} c1`,
   `beta = c0^{-1} c2`, forms the instanton potential as
   `beta - alpha alpha`, contracts it with the intersection tensor, and builds

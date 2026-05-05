@@ -166,6 +166,8 @@ struct TargetReport {
     real_cone_decomposable_by_other_generators: bool,
     ambient_nonzero: Vec<(usize, i64)>,
     basis_nonzero: Vec<(usize, i64)>,
+    target_cygv_negative_intersections: Option<usize>,
+    target_cygv_omega_bucket: Option<String>,
     exact_kind: Option<String>,
     active_generator_count: Option<usize>,
     integer_term_count: Option<usize>,
@@ -190,6 +192,8 @@ struct TargetReport {
     cygv_semigroup_reduced_seed_count: Option<usize>,
     cygv_semigroup_target_is_seed: Option<bool>,
     cygv_semigroup_target_is_reduced_seed: Option<bool>,
+    cygv_semigroup_seed_negative_histogram: Option<CygvNegativeIntersectionHistogram>,
+    cygv_semigroup_reduced_seed_negative_histogram: Option<CygvNegativeIntersectionHistogram>,
     cygv_semigroup_element_count: Option<usize>,
     cygv_semigroup_max_degree: Option<u32>,
     cygv_semigroup_error: Option<String>,
@@ -220,12 +224,22 @@ struct SupportClosureLayerCount {
     support_size: usize,
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct CygvNegativeIntersectionHistogram {
+    neg0: usize,
+    neg1: usize,
+    neg2: usize,
+    gt2: usize,
+}
+
 struct CygvSemigroupMeasurement {
     status: String,
     seed_count: usize,
     reduced_seed_count: usize,
     target_is_seed: bool,
     target_is_reduced_seed: bool,
+    seed_negative_histogram: CygvNegativeIntersectionHistogram,
+    reduced_seed_negative_histogram: CygvNegativeIntersectionHistogram,
     max_degree: u32,
     element_count: Option<usize>,
 }
@@ -236,6 +250,8 @@ struct CygvSemigroupDegreeMeasurement {
     reduced_seed_count: usize,
     seed_set: HashSet<Vec<i64>>,
     reduced_seed_set: HashSet<Vec<i64>>,
+    seed_negative_histogram: CygvNegativeIntersectionHistogram,
+    reduced_seed_negative_histogram: CygvNegativeIntersectionHistogram,
     max_degree: u32,
     element_count: Option<usize>,
 }
@@ -284,6 +300,69 @@ fn dense_from_sparse(entries: &[(usize, i64)], dimension: usize) -> Result<Vec<i
         *slot = value;
     }
     Ok(out)
+}
+
+fn q_intersections(curve: &[i64], q_matrix: &[Vec<i64>]) -> Result<Vec<i128>, String> {
+    if q_matrix.is_empty() {
+        return Err("q-matrix is empty".to_string());
+    }
+    if q_matrix.len() != curve.len() {
+        return Err(format!(
+            "q-matrix row count {} does not match curve dimension {}",
+            q_matrix.len(),
+            curve.len()
+        ));
+    }
+    let q_cols = q_matrix[0].len();
+    if q_matrix.iter().any(|row| row.len() != q_cols) {
+        return Err("q-matrix rows have inconsistent lengths".to_string());
+    }
+    let mut intersections = vec![0i128; q_cols];
+    for (coefficient, row) in curve.iter().zip(q_matrix.iter()) {
+        for (slot, &charge) in intersections.iter_mut().zip(row.iter()) {
+            *slot = slot
+                .checked_add(i128::from(*coefficient) * i128::from(charge))
+                .ok_or_else(|| "q-intersection overflowed i128".to_string())?;
+        }
+    }
+    Ok(intersections)
+}
+
+fn cygv_negative_intersection_count(curve: &[i64], q_matrix: &[Vec<i64>]) -> Result<usize, String> {
+    Ok(q_intersections(curve, q_matrix)?
+        .into_iter()
+        .filter(|value| *value < 0)
+        .count())
+}
+
+fn cygv_omega_bucket(negative_intersections: usize) -> String {
+    match negative_intersections {
+        0 => "neg0".to_string(),
+        1 => "neg1".to_string(),
+        2 => "neg2".to_string(),
+        _ => "ignored_gt2".to_string(),
+    }
+}
+
+fn cygv_negative_intersection_histogram(
+    curves: impl IntoIterator<Item = Vec<i64>>,
+    q_matrix: &[Vec<i64>],
+) -> Result<CygvNegativeIntersectionHistogram, String> {
+    let mut histogram = CygvNegativeIntersectionHistogram {
+        neg0: 0,
+        neg1: 0,
+        neg2: 0,
+        gt2: 0,
+    };
+    for curve in curves {
+        match cygv_negative_intersection_count(&curve, q_matrix)? {
+            0 => histogram.neg0 += 1,
+            1 => histogram.neg1 += 1,
+            2 => histogram.neg2 += 1,
+            _ => histogram.gt2 += 1,
+        }
+    }
+    Ok(histogram)
 }
 
 fn parse_rational(value: &str) -> Result<MalachiteRational, String> {
@@ -668,6 +747,8 @@ fn report_target(
                     .real_cone_decomposable_by_other_generators,
                 ambient_nonzero: sample.ambient_nonzero.clone(),
                 basis_nonzero: sample.basis_nonzero.clone(),
+                target_cygv_negative_intersections: None,
+                target_cygv_omega_bucket: None,
                 exact_kind,
                 active_generator_count,
                 integer_term_count: None,
@@ -692,12 +773,78 @@ fn report_target(
                 cygv_semigroup_reduced_seed_count: None,
                 cygv_semigroup_target_is_seed: None,
                 cygv_semigroup_target_is_reduced_seed: None,
+                cygv_semigroup_seed_negative_histogram: None,
+                cygv_semigroup_reduced_seed_negative_histogram: None,
                 cygv_semigroup_element_count: None,
                 cygv_semigroup_max_degree: None,
                 cygv_semigroup_error: None,
             };
         }
     };
+    let (target_cygv_negative_intersections, target_cygv_omega_bucket) =
+        match dense_from_sparse(&sample.basis_nonzero, context.dimension)
+            .and_then(|target| cygv_negative_intersection_count(&target, context.q_matrix))
+        {
+            Ok(negative_intersections) => (
+                Some(negative_intersections),
+                Some(cygv_omega_bucket(negative_intersections)),
+            ),
+            Err(error) => {
+                return TargetReport {
+                    index,
+                    degree: sample.degree,
+                    generators_le_degree: sample.generators_le_degree,
+                    is_mori_generator: sample.is_mori_generator,
+                    origin_circuit_pattern: sample.origin_circuit_pattern.clone(),
+                    origin_circuit_witness_count: sample.origin_circuit_witness_count,
+                    origin_circuit_first_witness: sample.origin_circuit_first_witness.clone(),
+                    origin_circuit_affine_support: sample.origin_circuit_affine_support.clone(),
+                    local_cygv_hypersurface_shape,
+                    cms_general_divisor_shape_candidates: sample
+                        .cms_general_divisor_shape_candidates
+                        .clone(),
+                    cms_general_divisor_intersection_checks: sample
+                        .cms_general_divisor_intersection_checks
+                        .clone(),
+                    branch_diagnostic: sample.branch_diagnostic.clone(),
+                    real_cone_decomposable_by_other_generators: sample
+                        .real_cone_decomposable_by_other_generators,
+                    ambient_nonzero: sample.ambient_nonzero.clone(),
+                    basis_nonzero: sample.basis_nonzero.clone(),
+                    target_cygv_negative_intersections: None,
+                    target_cygv_omega_bucket: None,
+                    exact_kind,
+                    active_generator_count,
+                    integer_term_count: None,
+                    diamond_element_count: None,
+                    status: "error".to_string(),
+                    gv: None,
+                    error: Some(error),
+                    active_support_generator_count: None,
+                    active_support_status: None,
+                    active_support_gv: None,
+                    active_support_error: None,
+                    degree_bounded_candidate_count: 0,
+                    support_overlap_generator_counts: Vec::new(),
+                    support_closure_layer_counts: Vec::new(),
+                    support_overlap_min_for_run,
+                    support_overlap_run_generator_count: None,
+                    support_overlap_run_status: None,
+                    support_overlap_run_gv: None,
+                    support_overlap_run_error: None,
+                    cygv_semigroup_measure_status: None,
+                    cygv_semigroup_seed_count: None,
+                    cygv_semigroup_reduced_seed_count: None,
+                    cygv_semigroup_target_is_seed: None,
+                    cygv_semigroup_target_is_reduced_seed: None,
+                    cygv_semigroup_seed_negative_histogram: None,
+                    cygv_semigroup_reduced_seed_negative_histogram: None,
+                    cygv_semigroup_element_count: None,
+                    cygv_semigroup_max_degree: None,
+                    cygv_semigroup_error: None,
+                };
+            }
+        };
     let base = TargetReport {
         index,
         degree: sample.degree,
@@ -717,6 +864,8 @@ fn report_target(
             .real_cone_decomposable_by_other_generators,
         ambient_nonzero: sample.ambient_nonzero.clone(),
         basis_nonzero: sample.basis_nonzero.clone(),
+        target_cygv_negative_intersections,
+        target_cygv_omega_bucket,
         exact_kind,
         active_generator_count,
         integer_term_count: None,
@@ -741,6 +890,8 @@ fn report_target(
         cygv_semigroup_reduced_seed_count: None,
         cygv_semigroup_target_is_seed: None,
         cygv_semigroup_target_is_reduced_seed: None,
+        cygv_semigroup_seed_negative_histogram: None,
+        cygv_semigroup_reduced_seed_negative_histogram: None,
         cygv_semigroup_element_count: None,
         cygv_semigroup_max_degree: None,
         cygv_semigroup_error: None,
@@ -792,6 +943,8 @@ fn report_target(
         cygv_semigroup_reduced_seed_count,
         cygv_semigroup_target_is_seed,
         cygv_semigroup_target_is_reduced_seed,
+        cygv_semigroup_seed_negative_histogram,
+        cygv_semigroup_reduced_seed_negative_histogram,
         cygv_semigroup_element_count,
         cygv_semigroup_max_degree,
         cygv_semigroup_error,
@@ -800,6 +953,8 @@ fn report_target(
         {
             (
                 Some("skipped_target_degree_limit".to_string()),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -821,6 +976,8 @@ fn report_target(
                     Some(measurement.reduced_seed_count),
                     Some(measurement.target_is_seed),
                     Some(measurement.target_is_reduced_seed),
+                    Some(measurement.seed_negative_histogram),
+                    Some(measurement.reduced_seed_negative_histogram),
                     measurement.element_count,
                     Some(measurement.max_degree),
                     None,
@@ -833,12 +990,14 @@ fn report_target(
                     None,
                     None,
                     None,
+                    None,
+                    None,
                     Some(error),
                 ),
             }
         }
     } else {
-        (None, None, None, None, None, None, None, None)
+        (None, None, None, None, None, None, None, None, None, None)
     };
 
     match report_target_inner(sample, context, run_integer_diamonds, element_limit) {
@@ -861,6 +1020,8 @@ fn report_target(
             cygv_semigroup_reduced_seed_count,
             cygv_semigroup_target_is_seed,
             cygv_semigroup_target_is_reduced_seed,
+            cygv_semigroup_seed_negative_histogram,
+            cygv_semigroup_reduced_seed_negative_histogram,
             cygv_semigroup_element_count,
             cygv_semigroup_max_degree,
             cygv_semigroup_error,
@@ -885,6 +1046,8 @@ fn report_target(
             cygv_semigroup_reduced_seed_count,
             cygv_semigroup_target_is_seed,
             cygv_semigroup_target_is_reduced_seed,
+            cygv_semigroup_seed_negative_histogram,
+            cygv_semigroup_reduced_seed_negative_histogram,
             cygv_semigroup_element_count,
             cygv_semigroup_max_degree,
             cygv_semigroup_error,
@@ -1043,6 +1206,8 @@ fn measure_cygv_semigroup(
         reduced_seed_count: degree_measurement.reduced_seed_count,
         target_is_seed: degree_measurement.seed_set.contains(&target),
         target_is_reduced_seed: degree_measurement.reduced_seed_set.contains(&target),
+        seed_negative_histogram: degree_measurement.seed_negative_histogram.clone(),
+        reduced_seed_negative_histogram: degree_measurement.reduced_seed_negative_histogram.clone(),
         max_degree: degree_measurement.max_degree,
         element_count: degree_measurement.element_count,
     })
@@ -1069,6 +1234,10 @@ fn measure_cygv_semigroup_degree(
     let reduced_seeds = cygv_pair_reduced_seed_generators(&seeds)
         .map_err(|error| format!("cygv seed reduction failed: {error}"))?;
     let reduced_seed_set = reduced_seeds.into_iter().collect::<HashSet<_>>();
+    let seed_negative_histogram =
+        cygv_negative_intersection_histogram(seeds.iter().cloned(), context.q_matrix)?;
+    let reduced_seed_negative_histogram =
+        cygv_negative_intersection_histogram(reduced_seed_set.iter().cloned(), context.q_matrix)?;
     if max_seed_count.is_some_and(|limit| seeds.len() > limit) {
         return Ok(CygvSemigroupDegreeMeasurement {
             status: "skipped_seed_limit".to_string(),
@@ -1076,6 +1245,8 @@ fn measure_cygv_semigroup_degree(
             reduced_seed_count: reduced_seed_set.len(),
             seed_set: seen,
             reduced_seed_set,
+            seed_negative_histogram,
+            reduced_seed_negative_histogram,
             max_degree: max_deg,
             element_count: None,
         });
@@ -1087,6 +1258,8 @@ fn measure_cygv_semigroup_degree(
             reduced_seed_count: reduced_seed_set.len(),
             seed_set: seen,
             reduced_seed_set,
+            seed_negative_histogram,
+            reduced_seed_negative_histogram,
             max_degree: max_deg,
             element_count: Some(element_count),
         }
@@ -1511,6 +1684,30 @@ mod tests {
     fn curve_degree_rejects_dimension_mismatch() {
         assert_eq!(curve_degree(&[2, -1], &[3, 5]).unwrap(), 1);
         assert!(curve_degree(&[1], &[1, 2]).is_err());
+    }
+
+    #[test]
+    fn q_intersection_bucket_counts_cygv_negative_intersections() {
+        let q_matrix = vec![vec![1, -2, 0], vec![-1, 1, 3]];
+        assert_eq!(q_intersections(&[2, 1], &q_matrix).unwrap(), vec![1, -3, 3]);
+        let negative_count = cygv_negative_intersection_count(&[2, 1], &q_matrix).unwrap();
+        assert_eq!(negative_count, 1);
+        assert_eq!(cygv_omega_bucket(negative_count), "neg1");
+        assert!(q_intersections(&[1], &q_matrix).is_err());
+    }
+
+    #[test]
+    fn q_intersection_histogram_tracks_ignored_gt2_bucket() {
+        let q_matrix = vec![vec![-1, -1, -1], vec![2, 0, 0]];
+        let histogram = cygv_negative_intersection_histogram(
+            vec![vec![1, 0], vec![0, 1], vec![1, 1]],
+            &q_matrix,
+        )
+        .unwrap();
+        assert_eq!(histogram.neg0, 1);
+        assert_eq!(histogram.neg1, 0);
+        assert_eq!(histogram.neg2, 1);
+        assert_eq!(histogram.gt2, 1);
     }
 
     #[test]
