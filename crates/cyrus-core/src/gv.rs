@@ -4674,6 +4674,65 @@ pub fn partition_finite_cutoff_gv_charges_by_nilpotence(
     })
 }
 
+/// Extract nonzero finite-GV charges that lie exactly on one grading-degree
+/// slice.
+///
+/// This is a finite-table utility only. It is useful for diagnostics and for
+/// wiring explicit slice-lattice inputs, but it is not by itself a certificate
+/// that the complete same-degree slice lattice required by the nop test has
+/// been generated.
+pub fn finite_gv_nonzero_degree_slice_points(
+    grading_vector: &[i64],
+    slice_degree: i128,
+    gv_invariants: &[(Vec<i64>, Integer)],
+) -> Result<Vec<Vec<i64>>> {
+    if grading_vector.is_empty() {
+        return Err(Error::InvalidInput(
+            "finite-GV degree-slice extraction requires a nonempty grading vector".into(),
+        ));
+    }
+    if slice_degree <= 0 {
+        return Err(Error::InvalidInput(
+            "finite-GV degree-slice extraction requires a positive slice degree".into(),
+        ));
+    }
+
+    let zero = Integer::from(0);
+    let mut gv_by_class: HashMap<Vec<i64>, Integer> = HashMap::with_capacity(gv_invariants.len());
+    let mut slice_points = BTreeSet::new();
+    for (class, gv) in gv_invariants {
+        if class.len() != grading_vector.len() {
+            return Err(Error::InvalidInput(
+                "finite-GV degree-slice class dimension does not match grading dimension".into(),
+            ));
+        }
+        if let Some(existing) = gv_by_class.get(class) {
+            if existing != gv {
+                return Err(Error::InvalidInput(
+                    "finite-GV degree-slice table contains conflicting duplicate classes".into(),
+                ));
+            }
+            continue;
+        }
+        gv_by_class.insert(class.clone(), gv.clone());
+
+        if gv == &zero {
+            continue;
+        }
+        let degree = checked_i128_dot(class, grading_vector, "finite-GV degree-slice grading")?;
+        if degree <= 0 {
+            return Err(Error::InvalidInput(format!(
+                "finite-GV degree-slice nonzero class has non-positive grading degree {degree}"
+            )));
+        }
+        if degree == slice_degree {
+            slice_points.insert(class.clone());
+        }
+    }
+
+    Ok(slice_points.into_iter().collect())
+}
+
 /// Compute the appendix's degree-slice origin for a candidate nilpotent ray.
 ///
 /// The nop-divergence test evaluates the candidate ray on a half-cutoff slice
@@ -8405,9 +8464,10 @@ mod tests {
         detect_apparent_nilpotent_rays_from_gv_table, diagnose_affine_toric_circuit,
         dump_mori_rays_cdd, extract_ckyz_local_gv_invariants_from_potential,
         extract_ckyz_local_gv_invariants_from_potential_for_degrees, find_pair_decomposition,
-        find_semigroup_decomposition, gv_divisor_basis_data, gv_lattice_search_request,
-        load_grading_cache, local_p2_inverse_mirror_map, local_p2_mirror_correction,
-        map_basis_gv_invariants_to_ambient, nilpotent_ray_degree_slice_for_cutoff_fraction,
+        find_semigroup_decomposition, finite_gv_nonzero_degree_slice_points, gv_divisor_basis_data,
+        gv_lattice_search_request, load_grading_cache, local_p2_inverse_mirror_map,
+        local_p2_mirror_correction, map_basis_gv_invariants_to_ambient,
+        nilpotent_ray_degree_slice_for_cutoff_fraction,
         nilpotent_ray_divergence_check_from_slice_distances,
         nilpotent_ray_divergence_check_with_explicit_slice_lattices,
         nilpotent_ray_lll_reduced_slice_distance, nilpotent_ray_slice_comparison_points,
@@ -10377,6 +10437,43 @@ mod tests {
                 (vec![1, 0], Integer::from(11)),
             ]
         );
+    }
+
+    #[test]
+    fn finite_gv_nonzero_degree_slice_points_extracts_sorted_slice() {
+        let points = finite_gv_nonzero_degree_slice_points(
+            &[2, 1],
+            4,
+            &[
+                (vec![1, 2], Integer::from(7)),
+                (vec![2, 0], Integer::from(5)),
+                (vec![0, 4], Integer::from(0)),
+                (vec![0, 3], Integer::from(11)),
+                (vec![1, 2], Integer::from(7)),
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(points, vec![vec![1, 2], vec![2, 0]]);
+    }
+
+    #[test]
+    fn finite_gv_nonzero_degree_slice_points_rejects_bad_tables() {
+        let duplicate = finite_gv_nonzero_degree_slice_points(
+            &[1, 1],
+            2,
+            &[
+                (vec![1, 1], Integer::from(3)),
+                (vec![1, 1], Integer::from(4)),
+            ],
+        )
+        .unwrap_err();
+        assert!(duplicate.to_string().contains("conflicting duplicate"));
+
+        let bad_degree =
+            finite_gv_nonzero_degree_slice_points(&[0, 1], 2, &[(vec![1, 0], Integer::from(3))])
+                .unwrap_err();
+        assert!(bad_degree.to_string().contains("non-positive grading"));
     }
 
     #[test]
