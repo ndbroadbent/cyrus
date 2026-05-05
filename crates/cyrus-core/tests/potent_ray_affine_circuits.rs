@@ -5,8 +5,8 @@ use std::path::Path;
 
 use cyrus_core::{
     AffineToricCircuitDiagnostic, LocalToricCircuitKind, LocalToricCoordinate2D, Point, Polytope,
-    compute_local_toric_circuit_gv_series, curve_in_rational_row_span,
-    diagnose_affine_toric_circuit,
+    RankTwoLocalSupportSignature, compute_local_toric_circuit_gv_series,
+    curve_in_rational_row_span, diagnose_affine_toric_circuit, rank_two_local_support_signature,
 };
 use malachite::Integer;
 
@@ -82,6 +82,10 @@ fn assert_rank_two_local_coordinates_satisfy_relation(diagnostic: &AffineToricCi
         [0, 0],
         "affine relation should remain zero in reconstructed local coordinates"
     );
+    assert!(
+        rank_two_local_support_signature(diagnostic).is_some(),
+        "rank-two affine support should have a normalized local signature"
+    );
 }
 
 #[test]
@@ -105,6 +109,8 @@ fn mcallister_potent_rays_are_affine_toric_circuits() {
     let mut local_p2_count = 0usize;
     let mut rank_two_local_coordinate_count = 0usize;
     let mut affine_rank_counts = BTreeMap::new();
+    let mut signature_counts: BTreeMap<RankTwoLocalSupportSignature, usize> = BTreeMap::new();
+    let mut local_p2_signature: Option<RankTwoLocalSupportSignature> = None;
     for ray in &potent_rays {
         let diagnostic = diagnose_affine_toric_circuit(ray, &triangulation_points)
             .expect("affine circuit diagnostic should accept McAllister dimensions")
@@ -122,6 +128,21 @@ fn mcallister_potent_rays_are_affine_toric_circuits() {
         if diagnostic.affine_rank == 2 {
             rank_two_local_coordinate_count += 1;
             assert_rank_two_local_coordinates_satisfy_relation(&diagnostic);
+            let signature = rank_two_local_support_signature(&diagnostic)
+                .expect("rank-two diagnostic should have a local signature");
+            *signature_counts.entry(signature.clone()).or_insert(0) += 1;
+            if matches!(
+                diagnostic.kind,
+                Some(LocalToricCircuitKind::LocalP2Triangle { .. })
+            ) {
+                match &local_p2_signature {
+                    Some(existing) => assert_eq!(
+                        existing, &signature,
+                        "all recognized local P2 supports should share one normalized signature"
+                    ),
+                    None => local_p2_signature = Some(signature),
+                }
+            }
         } else {
             assert!(
                 diagnostic.local_coordinates_2d.is_none(),
@@ -135,6 +156,21 @@ fn mcallister_potent_rays_are_affine_toric_circuits() {
     assert_eq!(affine_rank_counts, BTreeMap::from([(2, 395), (4, 16)]));
     assert_eq!(rank_two_local_coordinate_count, 395);
     assert_eq!(local_p2_count, 56);
+    assert_eq!(
+        signature_counts
+            .get(
+                local_p2_signature
+                    .as_ref()
+                    .expect("at least one local P2 signature should be present")
+            )
+            .copied(),
+        Some(56),
+        "the normalized local P2 signature should account for every recognized local P2 ray"
+    );
+    assert!(
+        signature_counts.len() > 1,
+        "rank-two local support signatures should distinguish non-P2 families"
+    );
 
     let first = diagnose_affine_toric_circuit(&potent_rays[0], &triangulation_points)
         .expect("first potent-ray diagnostic should succeed")

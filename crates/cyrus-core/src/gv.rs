@@ -385,6 +385,28 @@ pub struct LocalToricCoordinate2D {
     pub coordinates: [i64; 2],
 }
 
+/// One point in a normalized rank-two local support signature.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RankTwoLocalSupportSignatureEntry {
+    /// Affine relation coefficient at this local point.
+    pub coefficient: i64,
+    /// Translated local coordinate. The signature translation places the
+    /// lexicographically smallest local point at the origin.
+    pub coordinates: [i64; 2],
+}
+
+/// Point-index-free signature of a rank-two local toric support.
+///
+/// This deliberately does not assign any GV value. It is a grouping and audit
+/// object for reconstructing the local toric model from upstream lattice
+/// points before any mirror-symmetry computation is attempted.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RankTwoLocalSupportSignature {
+    /// Coefficient-coordinate entries, sorted after translation and relation
+    /// orientation normalization.
+    pub entries: Vec<RankTwoLocalSupportSignatureEntry>,
+}
+
 /// Recognized local toric circuit shape.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LocalToricCircuitKind {
@@ -596,6 +618,122 @@ pub fn diagnose_affine_toric_circuit(
         local_coordinates_2d,
         kind,
     }))
+}
+
+/// Build a stable point-index-free signature for a rank-two affine support.
+///
+/// The signature uses the reconstructed rank-two local coordinates, translates
+/// the local diagram so the lexicographically smallest coordinate is at the
+/// origin, sorts coefficient-coordinate entries, and normalizes the overall
+/// relation sign by choosing the lexicographically smaller of `q` and `-q`.
+#[must_use]
+pub fn rank_two_local_support_signature(
+    diagnostic: &AffineToricCircuitDiagnostic,
+) -> Option<RankTwoLocalSupportSignature> {
+    let coordinates = diagnostic.local_coordinates_2d.as_ref()?;
+    let coordinates_by_point: BTreeMap<usize, [i64; 2]> = coordinates
+        .iter()
+        .map(|point| (point.point_index, point.coordinates))
+        .collect();
+    let entries = diagnostic
+        .relation_points
+        .iter()
+        .map(|point| {
+            let coordinates = coordinates_by_point.get(&point.point_index).copied()?;
+            Some(RankTwoLocalSupportSignatureEntry {
+                coefficient: point.coefficient,
+                coordinates,
+            })
+        })
+        .collect::<Option<Vec<_>>>()?;
+
+    let entries = canonical_rank_two_signature_entries(&entries)?;
+    Some(RankTwoLocalSupportSignature { entries })
+}
+
+fn canonical_rank_two_signature_entries(
+    entries: &[RankTwoLocalSupportSignatureEntry],
+) -> Option<Vec<RankTwoLocalSupportSignatureEntry>> {
+    if entries.is_empty() {
+        return Some(Vec::new());
+    }
+
+    let mut candidates = Vec::new();
+    push_rank_two_signature_candidate(&mut candidates, entries.to_vec());
+
+    for anchor in entries {
+        for first in entries {
+            let first_basis = coordinate_2d_difference(&first.coordinates, &anchor.coordinates);
+            if first_basis == [0, 0] {
+                continue;
+            }
+            for second in entries {
+                let second_basis =
+                    coordinate_2d_difference(&second.coordinates, &anchor.coordinates);
+                if second_basis == [0, 0] {
+                    continue;
+                }
+                let det = first_basis[0] * second_basis[1] - first_basis[1] * second_basis[0];
+                if det == 0 {
+                    continue;
+                }
+
+                let mut transformed = Vec::with_capacity(entries.len());
+                let first_basis = first_basis.to_vec();
+                let second_basis = second_basis.to_vec();
+                let mut valid = true;
+                for entry in entries {
+                    let target =
+                        coordinate_2d_difference(&entry.coordinates, &anchor.coordinates).to_vec();
+                    let Some(coordinates) =
+                        solve_in_two_vector_basis(&first_basis, &second_basis, &target)
+                    else {
+                        valid = false;
+                        break;
+                    };
+                    transformed.push(RankTwoLocalSupportSignatureEntry {
+                        coefficient: entry.coefficient,
+                        coordinates,
+                    });
+                }
+                if valid {
+                    push_rank_two_signature_candidate(&mut candidates, transformed);
+                }
+            }
+        }
+    }
+
+    candidates.into_iter().min()
+}
+
+fn push_rank_two_signature_candidate(
+    candidates: &mut Vec<Vec<RankTwoLocalSupportSignatureEntry>>,
+    entries: Vec<RankTwoLocalSupportSignatureEntry>,
+) {
+    candidates.push(normalize_rank_two_signature_entries(entries.clone(), 1));
+    candidates.push(normalize_rank_two_signature_entries(entries, -1));
+}
+
+fn coordinate_2d_difference(lhs: &[i64; 2], rhs: &[i64; 2]) -> [i64; 2] {
+    [lhs[0] - rhs[0], lhs[1] - rhs[1]]
+}
+
+fn normalize_rank_two_signature_entries(
+    mut entries: Vec<RankTwoLocalSupportSignatureEntry>,
+    sign: i64,
+) -> Vec<RankTwoLocalSupportSignatureEntry> {
+    let origin = entries
+        .iter()
+        .map(|entry| entry.coordinates)
+        .min()
+        .unwrap_or([0, 0]);
+    for entry in &mut entries {
+        entry.coefficient *= sign;
+        entry.coordinates[0] -= origin[0];
+        entry.coordinates[1] -= origin[1];
+    }
+    entries.sort_unstable();
+    entries
 }
 
 fn local_affine_charge_basis(
@@ -4241,9 +4379,10 @@ mod tests {
         origin_circuit_diagnostic_from_class_and_witnesses, potent_ray_convergence,
         potent_ray_log_xi_terms, project_ambient_curve_to_basis,
         project_mori_cone_cap_rays_to_basis, prune_decomposable_curve_candidates,
-        remove_pair_decomposable_curve_candidates, remove_semigroup_decomposable_curve_candidates,
-        subcutoff_toric_curve_candidates, supporting_mori_face_for_curve_from_normal,
-        supporting_mori_face_from_normal, write_grading_cache,
+        rank_two_local_support_signature, remove_pair_decomposable_curve_candidates,
+        remove_semigroup_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
+        supporting_mori_face_for_curve_from_normal, supporting_mori_face_from_normal,
+        write_grading_cache,
     };
     use crate::Intersection;
     use crate::lattice::Point;
@@ -4399,6 +4538,28 @@ mod tests {
                 Integer::from(27),
                 Integer::from(-192),
             ]
+        );
+    }
+
+    #[test]
+    fn rank_two_local_support_signature_ignores_relation_orientation() {
+        let points = vec![
+            Point::new(vec![0, 1, -3, 6]),
+            Point::new(vec![-2, -1, -4, 5]),
+            Point::new(vec![-1, 0, -3, 5]),
+            Point::new(vec![-1, 0, -2, 4]),
+        ];
+
+        let positive = diagnose_affine_toric_circuit(&[1, 1, -3, 1], &points)
+            .unwrap()
+            .expect("local P2 row is an affine circuit");
+        let negative = diagnose_affine_toric_circuit(&[-1, -1, 3, -1], &points)
+            .unwrap()
+            .expect("opposite local P2 row is an affine circuit");
+
+        assert_eq!(
+            rank_two_local_support_signature(&positive),
+            rank_two_local_support_signature(&negative)
         );
     }
 
