@@ -2300,6 +2300,92 @@ fn ckyz_causal_monomial_domain(
     CkyzMonomialDomain::from_degrees(rank, degree_set)
 }
 
+#[cfg(test)]
+fn ckyz_record_series_support(
+    degree_set: &mut BTreeSet<Vec<usize>>,
+    series: &BTreeMap<Vec<usize>, Rational>,
+) {
+    degree_set.extend(
+        series
+            .iter()
+            .filter(|(_, coefficient)| **coefficient != 0)
+            .map(|(degree, _)| degree.clone()),
+    );
+}
+
+#[cfg(test)]
+fn ckyz_observed_support_domain_for_degrees(
+    relations: &[Vec<i64>],
+    local_intersection_terms: &[CkyzLocalIntersectionTerm],
+    target_degrees: &[Vec<usize>],
+) -> Result<CkyzMonomialDomain> {
+    validate_ckyz_relations(relations)?;
+    let rank = relations.len();
+    validate_ckyz_target_degrees(target_degrees, rank)?;
+    for term in local_intersection_terms {
+        if term.first >= rank || term.second >= rank {
+            return Err(Error::InvalidInput(
+                "CKYZ local intersection term index is outside the relation rank".into(),
+            ));
+        }
+    }
+
+    let extraction_degrees = ckyz_cover_closed_target_degrees(target_degrees)?;
+    let broad_domain = CkyzMonomialDomain::target_downset(&extraction_degrees, rank)?;
+    let mut degree_set = BTreeSet::from([vec![0; rank]]);
+    for degree in &extraction_degrees {
+        degree_set.insert(degree.clone());
+    }
+    for coordinate in 0..rank {
+        let mut degree = vec![0; rank];
+        degree[coordinate] = 1;
+        if broad_domain.contains(&degree) {
+            degree_set.insert(degree);
+        }
+    }
+
+    let alpha = compute_ckyz_log_period_corrections_domain(relations, &broad_domain)?;
+    for series in &alpha {
+        ckyz_record_series_support(&mut degree_set, series);
+    }
+    let z_of_q = compute_ckyz_inverse_mirror_map_domain(&alpha, &broad_domain)?;
+    for series in &z_of_q {
+        ckyz_record_series_support(&mut degree_set, series);
+    }
+
+    let mut contracted = BTreeMap::new();
+    for term in local_intersection_terms {
+        let beta = ckyz_second_log_period_series_for_pair_domain(
+            relations,
+            term.first,
+            term.second,
+            &broad_domain,
+        )?;
+        ckyz_record_series_support(&mut degree_set, &beta);
+
+        let alpha_product =
+            ckyz_series_mul_domain(&alpha[term.first], &alpha[term.second], &broad_domain)?;
+        ckyz_record_series_support(&mut degree_set, &alpha_product);
+
+        let mut f_pair = beta;
+        ckyz_series_add_scaled_assign(&mut f_pair, &alpha_product, Rational::from(-1));
+        ckyz_record_series_support(&mut degree_set, &f_pair);
+
+        let mut term_coefficient = Rational::from(term.coefficient);
+        if term.first == term.second {
+            term_coefficient /= Rational::from(2);
+        }
+        ckyz_series_add_scaled_assign(&mut contracted, &f_pair, term_coefficient);
+    }
+    ckyz_record_series_support(&mut degree_set, &contracted);
+
+    let potential =
+        substitute_ckyz_series_in_flat_coordinates_domain(&contracted, &z_of_q, &broad_domain)?;
+    ckyz_record_series_support(&mut degree_set, &potential);
+
+    CkyzMonomialDomain::from_degrees(rank, degree_set)
+}
+
 fn ckyz_grading_degree(degree: &[usize], grading_vector: &[usize]) -> Result<usize> {
     if degree.len() != grading_vector.len() {
         return Err(Error::InvalidInput(
@@ -7096,12 +7182,13 @@ mod tests {
         OriginCircuitCurveWitness, OriginCircuitRelationPoint, ToricCurveCandidate,
         check_supporting_mori_face_normal, ckyz_cover_closed_target_degrees,
         ckyz_local_surface_causal_domain_spec, ckyz_local_surface_cover_weight_coefficients,
-        ckyz_local_surface_target_degrees, ckyz_series_mul_domain,
-        compute_ambient_one_dimensional_ray_gv_series,
+        ckyz_local_surface_target_degrees, ckyz_observed_support_domain_for_degrees,
+        ckyz_series_mul_domain, compute_ambient_one_dimensional_ray_gv_series,
         compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
         compute_ckyz_local_gv_invariants, compute_ckyz_local_gv_invariants_for_degrees,
         compute_ckyz_local_gv_invariants_for_degrees_with_causal_domain,
         compute_ckyz_local_instanton_potential_corrections,
+        compute_ckyz_local_instanton_potential_corrections_domain,
         compute_ckyz_local_prepotential_period_corrections,
         compute_ckyz_local_surface_gv_invariants_for_multiples_with_causal_domain,
         compute_ckyz_log_period_corrections, compute_grading_vector,
@@ -7801,6 +7888,55 @@ mod tests {
         .unwrap();
 
         assert_eq!(causal, targeted);
+    }
+
+    #[test]
+    fn ckyz_observed_support_domain_recomputes_targeted_f0_ray() {
+        let relations = vec![vec![-2, 1, 0, 1, 0], vec![-2, 0, 1, 0, 1]];
+        let local_intersection_terms = [CkyzLocalIntersectionTerm {
+            first: 0,
+            second: 1,
+            coefficient: 1,
+        }];
+        let cover_weights = [2, 2];
+        let target_degrees = [vec![3, 2], vec![6, 4], vec![9, 6]];
+
+        let broad = compute_ckyz_local_gv_invariants_for_degrees(
+            &relations,
+            &local_intersection_terms,
+            &cover_weights,
+            &target_degrees,
+        )
+        .unwrap();
+        let extraction_degrees = ckyz_cover_closed_target_degrees(&target_degrees).unwrap();
+        let broad_domain = CkyzMonomialDomain::target_downset(&extraction_degrees, 2).unwrap();
+        let observed_domain = ckyz_observed_support_domain_for_degrees(
+            &relations,
+            &local_intersection_terms,
+            &target_degrees,
+        )
+        .unwrap();
+
+        assert!(
+            observed_domain.degrees.len() <= broad_domain.degrees.len(),
+            "observed support domain must not add terms outside the componentwise target downset"
+        );
+
+        let potential = compute_ckyz_local_instanton_potential_corrections_domain(
+            &relations,
+            &local_intersection_terms,
+            &observed_domain,
+        )
+        .unwrap();
+        let mut observed = extract_ckyz_local_gv_invariants_from_potential_for_degrees(
+            &potential,
+            &cover_weights,
+            &extraction_degrees,
+        )
+        .unwrap();
+        observed.retain(|degree, _| target_degrees.iter().any(|target| target == degree));
+
+        assert_eq!(observed, broad);
     }
 
     #[test]

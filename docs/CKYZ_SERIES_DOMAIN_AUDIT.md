@@ -87,3 +87,18 @@ for local CKYZ surfaces:
 This is separate from the later rank-four task. Rank-four saved potent rays
 need their own local face/semigroup context before any GV row comparison is
 meaningful.
+
+## Current Guardrail
+
+Cyrus now has an internal test-only support tracer,
+`ckyz_observed_support_domain_for_degrees`, that records the nonzero supports
+of the current broad local CKYZ calculation and rebuilds a finite monomial
+domain from those supports. The unit test
+`ckyz_observed_support_domain_recomputes_targeted_f0_ray` checks that this
+domain recomputes the same targeted F0 skew-ray GV values and does not add
+terms outside the componentwise target downset.
+
+This is not the production dependency-domain builder yet, because it traces a
+broad computation. It is a regression guard for the next step: a forward
+source-derived builder should match this support-traced result on small local
+models before it is used to raise the McAllister potent-ray gate.
