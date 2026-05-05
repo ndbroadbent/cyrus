@@ -1380,3 +1380,14 @@ acceptable as validation scaffolding, but they are not a GA-ready pipeline. In
 Cyrus, these files should remain assertions or explicit model choices; they
 cannot supply downstream GV values, corrected Kähler parameters, final volumes,
 or branch seeds.
+
+The corrected-chamber GV diagnostic now has a source-shaped JSON export via
+`--dump-corrected-chamber-gv-context`. The export intentionally writes the
+finite degree-bounded semigroup slice needed by the current missing targets,
+not the full corrected-chamber Mori-cap generator set. For 4-214-647 solved-t,
+the full set has `561596` projected rays, while the missing-target bound
+`degree<=26` contains `2963` rays. The export also records the no-origin
+`cygv` q-matrix, curve-basis matrix, grading vector, corrected-chamber
+intersection entries, and complete diagnostics for all nine missing
+origin-circuit targets. This is still diagnostic input for HKTY reconstruction,
+not a promoted GV fallback.

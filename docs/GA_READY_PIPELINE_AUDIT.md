@@ -160,10 +160,12 @@ to make the remaining GV layer more first-principles:
    LP active-generator decompositions and four rational-cone-only
    decompositions. That split is triage only, because cygv assigns GV values
    from a finite semigroup and degree-ordered subtraction history, not from a
-   sparse curve relation in isolation. The immediate concrete artifact should
-   be a structured export of the missing origin-circuit semigroup/chamber
-   context: local charge basis, target degree, lower-degree generators, exact
-   active-generator decompositions, and the CYTools/cygv inputs needed to run a
-   finite HKTY check without reading `small_curves_gv.dat`.
+   sparse curve relation in isolation. A structured export now exists via
+   `--dump-corrected-chamber-gv-context`; it records the local charge basis,
+   target degree, degree-bounded projected Mori rays, exact active-generator
+   decompositions, q-matrix, curve-basis matrix, grading vector, and sparse
+   corrected-chamber intersection entries needed for a finite HKTY check
+   without reading `small_curves_gv.dat`. The next step is to consume that
+   artifact through a source-faithful cygv/HKTY reconstruction path.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.

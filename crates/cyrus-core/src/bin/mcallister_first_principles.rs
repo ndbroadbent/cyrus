@@ -41,6 +41,8 @@
 //! - `--diagnose-corrected-chamber-lp-face-gv` to try small HKTY face
 //!   diagnostics generated from LP decomposition witnesses of missing
 //!   corrected-chamber primitive Mori generators.
+//! - `--dump-corrected-chamber-gv-context path` to export the corrected-chamber
+//!   missing-GV context as JSON for source-level CYTools/cygv reconstruction.
 //! - `--diagnose-chamber-updated-kklt` to run a diagnostic-only KKLT
 //!   fixed-point loop that recomputes the FRST chamber, intersections, divisor
 //!   χ, and toric-covered small-curve GV target correction at each iteration.
@@ -627,11 +629,53 @@ struct ChamberGvDiagnostic {
     missing_required_degree_min: Option<i128>,
     missing_required_degree_max: Option<i128>,
     missing_target_stats: Option<MissingGvTargetStats>,
+    basis_mori_rays_for_missing_degree_bound: Option<i128>,
+    basis_mori_rays_for_missing_degree_bounded: Option<Vec<Vec<i64>>>,
+    gv_q_matrix_for_missing: Option<Vec<Vec<i64>>>,
+    gv_curve_basis_matrix_for_missing: Option<Vec<Vec<String>>>,
+    grading_for_missing: Option<Vec<i64>>,
+    corrected_kappa_basis_for_missing: Option<Vec<SparseIntersectionEntry>>,
     covered_toric_gv_divisor_representation_baseline:
         Option<CoveredToricGvDivisorRepresentationBaseline>,
     covered_gv_target_correction: Option<Vec<F64<Finite>>>,
     covered_gv_volume_correction: Option<F64<Finite>>,
     gv_volume_correction: Option<F64<Finite>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+struct SparseIntersectionEntry {
+    indices: [usize; 3],
+    value: String,
+}
+
+#[derive(Serialize)]
+struct CorrectedChamberGvContextExport<'a> {
+    schema_version: u32,
+    source: &'static str,
+    small_curve_cutoff: f64,
+    small_curve_pruning: &'static str,
+    ambient_rays: usize,
+    subcutoff_count: usize,
+    filtered_count: usize,
+    toric_gv_covered_count: usize,
+    toric_gv_missing_count: usize,
+    remaining_gv_missing_count: usize,
+    first_missing_class: Option<&'a Vec<i64>>,
+    missing_required_degree_min: Option<i128>,
+    missing_required_degree_max: Option<i128>,
+    basis_mori_ray_count: Option<usize>,
+    degree_bounded_basis_mori_ray_count: Option<usize>,
+    basis_mori_ray_degree_min: Option<i128>,
+    basis_mori_ray_degree_max: Option<i128>,
+    basis_mori_rays_for_missing_degree_bound: Option<i128>,
+    basis_mori_rays_for_missing_degree_bounded: Option<&'a Vec<Vec<i64>>>,
+    gv_q_matrix_for_missing: Option<&'a Vec<Vec<i64>>>,
+    gv_curve_basis_matrix_for_missing: Option<&'a Vec<Vec<String>>>,
+    grading_for_missing: Option<&'a Vec<i64>>,
+    corrected_kappa_basis_for_missing: Option<&'a Vec<SparseIntersectionEntry>>,
+    missing_target_sample_limit: usize,
+    missing_target_sample_is_complete: Option<bool>,
+    missing_target_stats: Option<&'a MissingGvTargetStats>,
 }
 
 struct ChamberToricGvSelection {
@@ -743,7 +787,7 @@ struct TargetCorrectionDeltaSummary {
     max_abs_candidate: f64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 struct MissingGvTargetStats {
     target_count: usize,
     targets_that_are_mori_generators: usize,
@@ -764,7 +808,7 @@ struct MissingGvTargetStats {
     sample: Vec<MissingGvTargetSample>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 struct MissingGvTargetSample {
     degree: i128,
     generators_le_degree: usize,
@@ -785,7 +829,7 @@ struct MissingGvTargetSample {
     basis_nonzero: Vec<(usize, i64)>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 struct MissingGvBranchDiagnostic {
     q_dot_t: String,
     parity: i128,
@@ -794,7 +838,7 @@ struct MissingGvBranchDiagnostic {
     dilog_status: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 struct OriginCircuitAffineSupportSample {
     affine_rank: usize,
     coefficient_counts: BTreeMap<i64, usize>,
@@ -802,13 +846,13 @@ struct OriginCircuitAffineSupportSample {
     local_coordinates_2d: Option<Vec<OriginCircuitLocalCoordinate2DSample>>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 struct OriginCircuitLocalCoordinate2DSample {
     point_index: usize,
     coordinates: [i64; 2],
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 struct CmsGeneralDivisorShapeCandidate {
     shrinking_divisor_index: usize,
     shrinking_divisor_coefficient: i64,
@@ -818,7 +862,7 @@ struct CmsGeneralDivisorShapeCandidate {
     all_non_origin_relation_points_are_two_face: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 struct CmsGeneralDivisorIntersectionCheck {
     shrinking_divisor_index: usize,
     has_rational_divisor_solution: bool,
@@ -851,7 +895,7 @@ struct DivisorRepresentationSolution {
     other_normal_degree: malachite::Rational,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 struct OriginCircuitWitnessSample {
     first_facet_exclusive_point: usize,
     second_facet_exclusive_point: usize,
@@ -862,7 +906,7 @@ struct OriginCircuitWitnessSample {
     relation_points: Vec<OriginCircuitRelationPointSample>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 struct OriginCircuitRelationPointSample {
     point_index: usize,
     coefficient: i64,
@@ -1000,6 +1044,7 @@ struct PipelineArgs {
     diagnose_corrected_chamber_provided_generators_gv: bool,
     diagnose_corrected_chamber_ray_gv: bool,
     diagnose_corrected_chamber_lp_face_gv: bool,
+    dump_corrected_chamber_gv_context_path: Option<String>,
     diagnose_chamber_updated_kklt: bool,
     diagnose_chamber_updated_kklt_iterations: usize,
     dual_basis_override: Option<BasisOverride>,
@@ -1094,6 +1139,8 @@ fn parse_args() -> PipelineArgs {
     let diagnose_corrected_chamber_ray_gv = parse_flag("--diagnose-corrected-chamber-ray-gv");
     let diagnose_corrected_chamber_lp_face_gv =
         parse_flag("--diagnose-corrected-chamber-lp-face-gv");
+    let dump_corrected_chamber_gv_context_path =
+        parse_arg_value::<String>("--dump-corrected-chamber-gv-context");
     let diagnose_chamber_updated_kklt = parse_flag("--diagnose-chamber-updated-kklt");
     let diagnose_chamber_updated_kklt_iterations =
         parse_arg_value::<usize>("--diagnose-chamber-updated-kklt-iterations").unwrap_or(6);
@@ -1129,6 +1176,7 @@ fn parse_args() -> PipelineArgs {
         diagnose_corrected_chamber_provided_generators_gv,
         diagnose_corrected_chamber_ray_gv,
         diagnose_corrected_chamber_lp_face_gv,
+        dump_corrected_chamber_gv_context_path,
         diagnose_chamber_updated_kklt,
         diagnose_chamber_updated_kklt_iterations,
         dual_basis_override,
@@ -1716,6 +1764,16 @@ fn finite_values(values: &[F64<Finite>]) -> Vec<f64> {
 
 fn pos_values(values: &[F64<Pos>]) -> Vec<f64> {
     values.iter().map(|value| value.get()).collect()
+}
+
+fn sparse_intersection_entries(kappa: &cyrus_core::Intersection) -> Vec<SparseIntersectionEntry> {
+    kappa
+        .iter()
+        .map(|(&(i, j, k), value)| SparseIntersectionEntry {
+            indices: [i, j, k],
+            value: value.get().to_string(),
+        })
+        .collect()
 }
 
 fn compute_branch_gv_coverages(
@@ -6385,6 +6443,7 @@ fn diagnose_chamber_gv_volume_correction(
     provided_generators_only: bool,
     ray_gv_requested: bool,
     lp_face_gv_requested: bool,
+    missing_target_sample_limit: usize,
 ) -> Result<ChamberGvDiagnostic, String> {
     let ambient_rays = compute_mori_cone_cap_rays(
         tri,
@@ -6426,8 +6485,11 @@ fn diagnose_chamber_gv_volume_correction(
 
     let mut basis_ray_stats = None;
     let mut basis_rays_for_missing = None;
+    let mut basis_rays_for_missing_degree_bound = None;
+    let mut basis_rays_for_missing_degree_bounded = None;
     let mut gv_basis_data_for_missing = None;
     let mut grading_for_missing = None;
+    let mut corrected_kappa_basis_for_missing = None;
     let mut degree_summary = None;
     let mut missing_target_stats = None;
     let mut covered_toric_gv_divisor_representation_baseline = None;
@@ -6458,6 +6520,10 @@ fn diagnose_chamber_gv_volume_correction(
                 .map(|diagnostic| (diagnostic.class.clone(), diagnostic))
                 .collect();
         let corrected_kappa_full = chamber_intersection_full(tri, &geom.triangulation_points)?;
+        let corrected_kappa_basis =
+            intersection_in_basis(&corrected_kappa_full, &intersection.basis);
+        corrected_kappa_basis_for_missing =
+            Some(sparse_intersection_entries(&corrected_kappa_basis));
         let cms_intersection_checks_by_class = cms_general_divisor_intersection_checks_by_class(
             &missing_gv_classes,
             &origin_circuits_by_class,
@@ -6481,6 +6547,17 @@ fn diagnose_chamber_gv_volume_correction(
             &grading,
             general_max_deg,
         )?;
+        let degree_bounded_basis_rays = basis_rays
+            .iter()
+            .filter(|ray| {
+                ray.iter()
+                    .zip(grading.iter())
+                    .map(|(&coefficient, &weight)| i128::from(coefficient) * i128::from(weight))
+                    .sum::<i128>()
+                    <= summary.max_degree
+            })
+            .cloned()
+            .collect::<Vec<_>>();
         let ray_stats = graded_ray_stats(&basis_rays, &grading, general_max_deg)?;
         let target_stats = missing_gv_target_stats(
             &missing_gv_classes,
@@ -6493,8 +6570,10 @@ fn diagnose_chamber_gv_volume_correction(
             origin_idx,
             &origin_circuits_by_class,
             &cms_intersection_checks_by_class,
-            10,
+            missing_target_sample_limit,
         )?;
+        basis_rays_for_missing_degree_bound = Some(summary.max_degree);
+        basis_rays_for_missing_degree_bounded = Some(degree_bounded_basis_rays);
         basis_rays_for_missing = Some(basis_rays);
         gv_basis_data_for_missing = Some(gv_basis_data);
         grading_for_missing = Some(grading);
@@ -7007,6 +7086,19 @@ fn diagnose_chamber_gv_volume_correction(
         missing_required_degree_min,
         missing_required_degree_max,
         missing_target_stats,
+        basis_mori_rays_for_missing_degree_bound: basis_rays_for_missing_degree_bound,
+        basis_mori_rays_for_missing_degree_bounded: basis_rays_for_missing_degree_bounded,
+        gv_q_matrix_for_missing: gv_basis_data_for_missing
+            .as_ref()
+            .map(|data| data.q_matrix.clone()),
+        gv_curve_basis_matrix_for_missing: gv_basis_data_for_missing.as_ref().map(|data| {
+            data.curve_basis_matrix
+                .iter()
+                .map(|row| row.iter().map(ToString::to_string).collect())
+                .collect()
+        }),
+        grading_for_missing,
+        corrected_kappa_basis_for_missing,
         covered_toric_gv_divisor_representation_baseline,
         covered_gv_target_correction,
         covered_gv_volume_correction,
@@ -7726,6 +7818,60 @@ fn write_corrected_chamber_gv_trace_json(
 
     let content = serde_json::to_string_pretty(&trace)
         .map_err(|e| format!("failed to serialize corrected-chamber GV trace: {e}"))?;
+    std::fs::write(path, content)
+        .map_err(|e| format!("failed to write {}: {e}", path.display()))?;
+    Ok(())
+}
+
+fn write_corrected_chamber_gv_context_export(
+    path: &Path,
+    diag: &ChamberGvDiagnostic,
+    small_curve_cutoff: F64<Pos>,
+    small_curve_pruning: CurvePruningStrategy,
+    missing_target_sample_limit: usize,
+) -> Result<(), String> {
+    let missing_target_sample_is_complete = diag
+        .missing_target_stats
+        .as_ref()
+        .map(|stats| stats.sample.len() == stats.target_count);
+    let export = CorrectedChamberGvContextExport {
+        schema_version: 1,
+        source: "mcallister_first_principles corrected-chamber GV diagnostic",
+        small_curve_cutoff: small_curve_cutoff.get(),
+        small_curve_pruning: small_curve_pruning.as_str(),
+        ambient_rays: diag.ambient_rays,
+        subcutoff_count: diag.subcutoff_count,
+        filtered_count: diag.filtered_count,
+        toric_gv_covered_count: diag.toric_gv_covered_count,
+        toric_gv_missing_count: diag.toric_gv_missing_count,
+        remaining_gv_missing_count: diag.remaining_gv_missing_count,
+        first_missing_class: diag.first_missing_class.as_ref(),
+        missing_required_degree_min: diag.missing_required_degree_min,
+        missing_required_degree_max: diag.missing_required_degree_max,
+        basis_mori_ray_count: diag.basis_mori_ray_count,
+        degree_bounded_basis_mori_ray_count: diag.degree_bounded_basis_mori_ray_count,
+        basis_mori_ray_degree_min: diag.basis_mori_ray_degree_min,
+        basis_mori_ray_degree_max: diag.basis_mori_ray_degree_max,
+        basis_mori_rays_for_missing_degree_bound: diag.basis_mori_rays_for_missing_degree_bound,
+        basis_mori_rays_for_missing_degree_bounded: diag
+            .basis_mori_rays_for_missing_degree_bounded
+            .as_ref(),
+        gv_q_matrix_for_missing: diag.gv_q_matrix_for_missing.as_ref(),
+        gv_curve_basis_matrix_for_missing: diag.gv_curve_basis_matrix_for_missing.as_ref(),
+        grading_for_missing: diag.grading_for_missing.as_ref(),
+        corrected_kappa_basis_for_missing: diag.corrected_kappa_basis_for_missing.as_ref(),
+        missing_target_sample_limit,
+        missing_target_sample_is_complete,
+        missing_target_stats: diag.missing_target_stats.as_ref(),
+    };
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("failed to create {}: {e}", parent.display()))?;
+    }
+    let content = serde_json::to_string_pretty(&export)
+        .map_err(|e| format!("failed to serialize corrected-chamber GV context: {e}"))?;
     std::fs::write(path, content)
         .map_err(|e| format!("failed to write {}: {e}", path.display()))?;
     Ok(())
@@ -8528,6 +8674,7 @@ fn stage_volume(
     diagnose_corrected_chamber_provided_generators_gv: bool,
     diagnose_corrected_chamber_ray_gv: bool,
     diagnose_corrected_chamber_lp_face_gv: bool,
+    dump_corrected_chamber_gv_context_path: Option<&str>,
     diagnose_chamber_updated_kklt: bool,
     diagnose_chamber_updated_kklt_iterations: usize,
     small_curve_cutoff: F64<Pos>,
@@ -9507,10 +9654,12 @@ fn stage_volume(
             );
         }
     }
+    let dump_corrected_chamber_gv_context = dump_corrected_chamber_gv_context_path.is_some();
     if diagnose_corrected_chamber_gv
         || diagnose_corrected_chamber_provided_generators_gv
         || diagnose_corrected_chamber_ray_gv
         || diagnose_corrected_chamber_lp_face_gv
+        || dump_corrected_chamber_gv_context
     {
         let gamma = gamma_for_chamber_gv.as_deref().unwrap_or_else(|| {
             eprintln!("[ERROR] corrected-chamber GV diagnostic requires first-principles gamma");
@@ -9522,6 +9671,11 @@ fn stage_volume(
             );
             std::process::exit(2);
         });
+        let missing_target_sample_limit = if dump_corrected_chamber_gv_context {
+            usize::MAX
+        } else {
+            10
+        };
         let diag = diagnose_chamber_gv_volume_correction(
             &corrected_chamber,
             geom,
@@ -9536,11 +9690,30 @@ fn stage_volume(
             diagnose_corrected_chamber_provided_generators_gv,
             diagnose_corrected_chamber_ray_gv,
             diagnose_corrected_chamber_lp_face_gv,
+            missing_target_sample_limit,
         )
         .unwrap_or_else(|e| {
             eprintln!("[ERROR] corrected-chamber GV diagnostic failed: {e}");
             std::process::exit(2);
         });
+        if let Some(path) = dump_corrected_chamber_gv_context_path {
+            let path = PathBuf::from(path);
+            write_corrected_chamber_gv_context_export(
+                &path,
+                &diag,
+                small_curve_cutoff,
+                small_curve_pruning,
+                missing_target_sample_limit,
+            )
+            .unwrap_or_else(|e| {
+                eprintln!("[ERROR] failed to write corrected-chamber GV context export: {e}");
+                std::process::exit(2);
+            });
+            eprintln!(
+                "[INFO] corrected-chamber GV context JSON written: {}",
+                path.display()
+            );
+        }
         eprintln!(
             "[INFO] corrected-chamber small toric curves: ambient_rays={} subcutoff={} pair_pruned={} toric_covered={} toric_missing={} cutoff={}",
             diag.ambient_rays,
@@ -10040,6 +10213,7 @@ fn run_pipeline(args: PipelineArgs) {
         args.diagnose_corrected_chamber_provided_generators_gv,
         args.diagnose_corrected_chamber_ray_gv,
         args.diagnose_corrected_chamber_lp_face_gv,
+        args.dump_corrected_chamber_gv_context_path.as_deref(),
         args.diagnose_chamber_updated_kklt,
         args.diagnose_chamber_updated_kklt_iterations,
         small_curve_cutoff,
