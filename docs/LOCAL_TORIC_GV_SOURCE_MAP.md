@@ -164,7 +164,18 @@ The matched families are:
 | `(-12, 1, 1, 5, 5)` | `F0` | `(1, 5)` |
 | `(-14, 1, 4, 4, 5)` | `F1` | `(5, 4)` |
 
-This covers the common five-point families. The two six-point families,
-`(-7, 1, 1, 1, 2, 2)` and `(-9, 1, 1, 2, 2, 3)`, still need a separate CKYZ
-polygon-5/polygon-6 or non-simplicial-chamber identification before Cyrus can
-honestly attach local mirror data to them.
+This covers the common five-point families.
+
+The gated test
+`mcallister_six_point_rank_two_models_match_ckyz_polygon5_data` extends the same
+identification layer to the two six-point families. These match CKYZ polygon 5:
+
+| Coefficients | CKYZ polygon | Source target direction |
+|--------------|--------------|-------------------------|
+| `(-7, 1, 1, 1, 2, 2)` | polygon 5 | `(3, 2, 2)` |
+| `(-9, 1, 1, 2, 2, 3)` | polygon 5 | `(4, 3, 2)` |
+
+As above, this is still not a GV computation. It only fixes the local mirror
+input coordinates from source relation data. The next missing algorithm is the
+CKYZ local mirror series and instanton-number extraction in these source
+coordinates.

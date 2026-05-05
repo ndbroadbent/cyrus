@@ -6,7 +6,7 @@ use std::path::Path;
 
 use cyrus_core::{
     AffineToricCircuitDiagnostic, LocalToricCircuitKind, LocalToricCoordinate2D, Point, Polytope,
-    RankTwoLocalSupportSignature, compute_local_toric_circuit_gv_series,
+    RankTwoLocalChargeModel, RankTwoLocalSupportSignature, compute_local_toric_circuit_gv_series,
     curve_in_rational_row_span, diagnose_affine_toric_circuit, rank_two_local_charge_model,
     rank_two_local_support_signature,
 };
@@ -321,6 +321,38 @@ fn combine_source_charges(coordinates: &[i64], source_relations: &[Vec<i64>]) ->
         }
     }
     out
+}
+
+fn rank_two_models_by_coefficient_pattern(
+    data_dir: &Path,
+) -> BTreeMap<Vec<i64>, RankTwoLocalChargeModel> {
+    let points_raw = read_csv_rows_i64(&data_dir.join("points.dat"));
+    let potent_rays = read_csv_rows_i64(&data_dir.join("potent_rays.dat"));
+    let all_points: Vec<Point> = points_raw.into_iter().map(Point::new).collect();
+    let polytope = Polytope::from_vertices(all_points).expect("failed to create polytope");
+    let triangulation_points = polytope
+        .points_not_interior_to_facets()
+        .expect("failed to filter triangulation points");
+
+    let mut models_by_pattern = BTreeMap::new();
+    for ray in &potent_rays {
+        let diagnostic = diagnose_affine_toric_circuit(ray, &triangulation_points)
+            .expect("affine circuit diagnostic should accept McAllister dimensions")
+            .expect("saved potent ray should be an affine toric circuit");
+        if diagnostic.affine_rank != 2 {
+            continue;
+        }
+        let signature = rank_two_local_support_signature(&diagnostic)
+            .expect("rank-two diagnostic should have a local signature");
+        let coefficient_pattern = rank_two_signature_coefficient_pattern(&signature);
+        let model =
+            rank_two_local_charge_model(&signature).expect("rank-two support should have a model");
+        models_by_pattern
+            .entry(coefficient_pattern)
+            .and_modify(|existing| assert_eq!(existing, &model))
+            .or_insert(model);
+    }
+    models_by_pattern
 }
 
 #[test]
@@ -792,32 +824,7 @@ fn mcallister_five_point_rank_two_models_match_ckyz_hirzebruch_data() {
         panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
     };
 
-    let points_raw = read_csv_rows_i64(&data_dir.join("points.dat"));
-    let potent_rays = read_csv_rows_i64(&data_dir.join("potent_rays.dat"));
-    let all_points: Vec<Point> = points_raw.into_iter().map(Point::new).collect();
-    let polytope = Polytope::from_vertices(all_points).expect("failed to create polytope");
-    let triangulation_points = polytope
-        .points_not_interior_to_facets()
-        .expect("failed to filter triangulation points");
-
-    let mut models_by_pattern = BTreeMap::new();
-    for ray in &potent_rays {
-        let diagnostic = diagnose_affine_toric_circuit(ray, &triangulation_points)
-            .expect("affine circuit diagnostic should accept McAllister dimensions")
-            .expect("saved potent ray should be an affine toric circuit");
-        if diagnostic.affine_rank != 2 {
-            continue;
-        }
-        let signature = rank_two_local_support_signature(&diagnostic)
-            .expect("rank-two diagnostic should have a local signature");
-        let coefficient_pattern = rank_two_signature_coefficient_pattern(&signature);
-        let model =
-            rank_two_local_charge_model(&signature).expect("rank-two support should have a model");
-        models_by_pattern
-            .entry(coefficient_pattern)
-            .and_modify(|existing| assert_eq!(existing, &model))
-            .or_insert(model);
-    }
+    let models_by_pattern = rank_two_models_by_coefficient_pattern(&data_dir);
 
     let ckyz_f0 = vec![vec![-2, 1, 0, 1, 0], vec![-2, 0, 1, 0, 1]];
     let ckyz_f1 = vec![vec![-2, 1, 0, 1, 0], vec![-1, 0, 1, -1, 1]];
@@ -900,6 +907,63 @@ fn mcallister_five_point_rank_two_models_match_ckyz_hirzebruch_data() {
             combine_source_charges(&source_target, source_relations),
             permute_vector(&model.target_relation, &permutation),
             "CKYZ target coordinates should reconstruct the potent-ray relation for {coefficient_pattern:?}"
+        );
+    }
+}
+
+#[test]
+fn mcallister_six_point_rank_two_models_match_ckyz_polygon5_data() {
+    if !first_principles_enabled() {
+        return;
+    }
+    let Some(data_dir) = mcallister_data_dir() else {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    };
+
+    let models_by_pattern = rank_two_models_by_coefficient_pattern(&data_dir);
+    let ckyz_polygon5 = vec![
+        vec![-1, 1, -1, 1, 0, 0],
+        vec![-1, -1, 1, 0, 0, 1],
+        vec![-1, 0, 1, -1, 1, 0],
+    ];
+    let expected = BTreeMap::from([
+        (
+            vec![-9, 1, 1, 2, 2, 3],
+            (
+                vec![0, 1, 2, 4, 3, 5],
+                vec![vec![-1, 0, 0], vec![0, -1, 0], vec![1, 0, -1]],
+                vec![4, 3, 2],
+            ),
+        ),
+        (
+            vec![-7, 1, 1, 1, 2, 2],
+            (
+                vec![0, 1, 3, 2, 5, 4],
+                vec![vec![-1, 0, 0], vec![1, 0, -1], vec![1, -1, 0]],
+                vec![3, 2, 2],
+            ),
+        ),
+    ]);
+
+    for (coefficient_pattern, (permutation, transform, source_target)) in expected {
+        let model = models_by_pattern
+            .get(&coefficient_pattern)
+            .expect("expected CKYZ polygon-5 local charge model should be present");
+        assert_eq!(
+            model.points.len(),
+            6,
+            "CKYZ polygon-5 comparison only covers six-point local polygons"
+        );
+        let permuted_charge_basis = permute_columns(&model.charge_basis, &permutation);
+        assert_eq!(
+            transform_rows(&transform, &permuted_charge_basis),
+            ckyz_polygon5,
+            "local charge basis should match the CKYZ polygon-5 source relations for {coefficient_pattern:?}"
+        );
+        assert_eq!(
+            combine_source_charges(&source_target, &ckyz_polygon5),
+            permute_vector(&model.target_relation, &permutation),
+            "CKYZ polygon-5 target coordinates should reconstruct the potent-ray relation for {coefficient_pattern:?}"
         );
     }
 }
