@@ -3,7 +3,9 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use cyrus_core::{LocalToricCircuitKind, Point, Polytope, diagnose_affine_toric_circuit};
+use cyrus_core::{
+    LocalToricCircuitKind, LocalToricCoordinate2D, Point, Polytope, diagnose_affine_toric_circuit,
+};
 
 fn first_principles_enabled() -> bool {
     std::env::var_os("CYRUS_FIRST_PRINCIPLES").is_some()
@@ -84,6 +86,24 @@ fn mcallister_potent_rays_are_affine_toric_circuits() {
             vertex_points: vec![43, 155, 169],
             interior_coefficient: -3,
             vertex_coefficient: 1,
+            local_coordinates: vec![
+                LocalToricCoordinate2D {
+                    point_index: 43,
+                    coordinates: [1, 0],
+                },
+                LocalToricCoordinate2D {
+                    point_index: 155,
+                    coordinates: [0, 1],
+                },
+                LocalToricCoordinate2D {
+                    point_index: 168,
+                    coordinates: [0, 0],
+                },
+                LocalToricCoordinate2D {
+                    point_index: 169,
+                    coordinates: [-1, -1],
+                },
+            ],
         })
     );
 }

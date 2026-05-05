@@ -375,6 +375,15 @@ pub struct AffineCircuitRelationPoint {
     pub coordinates: Vec<i64>,
 }
 
+/// Two-dimensional coordinates for a point in a reconstructed local toric model.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LocalToricCoordinate2D {
+    /// Index of the triangulation point in the ambient point list.
+    pub point_index: usize,
+    /// Coordinates in a deterministic rank-two local lattice basis.
+    pub coordinates: [i64; 2],
+}
+
 /// Recognized local toric circuit shape.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LocalToricCircuitKind {
@@ -388,6 +397,8 @@ pub enum LocalToricCircuitKind {
         interior_coefficient: i64,
         /// Coefficient of each vertex in the supplied orientation.
         vertex_coefficient: i64,
+        /// Local rank-two coordinates for the triangle support.
+        local_coordinates: Vec<LocalToricCoordinate2D>,
     },
 }
 
@@ -634,6 +645,7 @@ fn classify_local_toric_circuit(
         }
 
         vertices.sort_by_key(|point| point.point_index);
+        let local_coordinates = local_p2_triangle_coordinates(interior, &vertices)?;
         return Some(LocalToricCircuitKind::LocalP2Triangle {
             interior_point: interior.point_index,
             vertex_points: vertices
@@ -642,9 +654,83 @@ fn classify_local_toric_circuit(
                 .collect(),
             interior_coefficient,
             vertex_coefficient,
+            local_coordinates,
         });
     }
 
+    None
+}
+
+fn local_p2_triangle_coordinates(
+    interior: &AffineCircuitRelationPoint,
+    vertices: &[&AffineCircuitRelationPoint],
+) -> Option<Vec<LocalToricCoordinate2D>> {
+    if vertices.len() != 3 {
+        return None;
+    }
+    let first_basis = coordinate_difference(&vertices[0].coordinates, &interior.coordinates);
+    let second_basis = coordinate_difference(&vertices[1].coordinates, &interior.coordinates);
+    let mut local_coordinates = vec![LocalToricCoordinate2D {
+        point_index: interior.point_index,
+        coordinates: [0, 0],
+    }];
+    for vertex in vertices {
+        let target = coordinate_difference(&vertex.coordinates, &interior.coordinates);
+        let coordinates = solve_in_two_vector_basis(&first_basis, &second_basis, &target)?;
+        local_coordinates.push(LocalToricCoordinate2D {
+            point_index: vertex.point_index,
+            coordinates,
+        });
+    }
+    local_coordinates.sort_by_key(|point| point.point_index);
+    Some(local_coordinates)
+}
+
+fn coordinate_difference(lhs: &[i64], rhs: &[i64]) -> Vec<i64> {
+    lhs.iter()
+        .zip(rhs.iter())
+        .map(|(&left, &right)| left - right)
+        .collect()
+}
+
+fn solve_in_two_vector_basis(
+    first_basis: &[i64],
+    second_basis: &[i64],
+    target: &[i64],
+) -> Option<[i64; 2]> {
+    for first_coord in 0..target.len() {
+        for second_coord in (first_coord + 1)..target.len() {
+            let det = i128::from(first_basis[first_coord]) * i128::from(second_basis[second_coord])
+                - i128::from(first_basis[second_coord]) * i128::from(second_basis[first_coord]);
+            if det == 0 {
+                continue;
+            }
+            let first_num = i128::from(target[first_coord])
+                * i128::from(second_basis[second_coord])
+                - i128::from(target[second_coord]) * i128::from(second_basis[first_coord]);
+            let second_num = i128::from(first_basis[first_coord])
+                * i128::from(target[second_coord])
+                - i128::from(first_basis[second_coord]) * i128::from(target[first_coord]);
+            if first_num % det != 0 || second_num % det != 0 {
+                continue;
+            }
+            let first = i64::try_from(first_num / det).ok()?;
+            let second = i64::try_from(second_num / det).ok()?;
+            let reconstructs_target = target
+                .iter()
+                .zip(first_basis.iter().zip(second_basis.iter()))
+                .all(
+                    |(&target_coord, (&first_basis_coord, &second_basis_coord))| {
+                        i128::from(first) * i128::from(first_basis_coord)
+                            + i128::from(second) * i128::from(second_basis_coord)
+                            == i128::from(target_coord)
+                    },
+                );
+            if reconstructs_target {
+                return Some([first, second]);
+            }
+        }
+    }
     None
 }
 
@@ -3781,10 +3867,10 @@ mod tests {
 
     use super::{
         BoundedCurveDecompositionIndex, CurveDecompositionTerm, CurvePruningStrategy,
-        GvLatticeAugmentation, LocalToricCircuitKind, OriginCircuitCurveWitness,
-        OriginCircuitRelationPoint, ToricCurveCandidate, check_supporting_mori_face_normal,
-        compute_ambient_one_dimensional_ray_gv_series, compute_grading_vector,
-        compute_gv_invariants_with_explicit_semigroup,
+        GvLatticeAugmentation, LocalToricCircuitKind, LocalToricCoordinate2D,
+        OriginCircuitCurveWitness, OriginCircuitRelationPoint, ToricCurveCandidate,
+        check_supporting_mori_face_normal, compute_ambient_one_dimensional_ray_gv_series,
+        compute_grading_vector, compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_provided_generators, compute_one_dimensional_ray_gv_series,
         compute_ray_gv_series_with_provided_generators, curve_in_rational_row_span,
         curve_row_span_rank, curve_volume_in_divisor_basis, diagnose_affine_toric_circuit,
@@ -3878,6 +3964,24 @@ mod tests {
                 vertex_points: vec![0, 1, 3],
                 interior_coefficient: -3,
                 vertex_coefficient: 1,
+                local_coordinates: vec![
+                    LocalToricCoordinate2D {
+                        point_index: 0,
+                        coordinates: [1, 0],
+                    },
+                    LocalToricCoordinate2D {
+                        point_index: 1,
+                        coordinates: [0, 1],
+                    },
+                    LocalToricCoordinate2D {
+                        point_index: 2,
+                        coordinates: [0, 0],
+                    },
+                    LocalToricCoordinate2D {
+                        point_index: 3,
+                        coordinates: [-1, -1],
+                    },
+                ],
             })
         );
     }
@@ -3907,6 +4011,24 @@ mod tests {
                 vertex_points: vec![0, 1, 3],
                 interior_coefficient: 3,
                 vertex_coefficient: -1,
+                local_coordinates: vec![
+                    LocalToricCoordinate2D {
+                        point_index: 0,
+                        coordinates: [1, 0],
+                    },
+                    LocalToricCoordinate2D {
+                        point_index: 1,
+                        coordinates: [0, 1],
+                    },
+                    LocalToricCoordinate2D {
+                        point_index: 2,
+                        coordinates: [0, 0],
+                    },
+                    LocalToricCoordinate2D {
+                        point_index: 3,
+                        coordinates: [-1, -1],
+                    },
+                ],
             })
         );
     }

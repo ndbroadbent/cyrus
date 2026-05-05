@@ -87,7 +87,10 @@ Its saved GV sequence begins
 which is the standard local `P^2` sequence. The new Cyrus validation test shows
 that all 411 saved potent rays are affine toric circuits. Their support ranks
 are not all the same: 395 have affine rank 2, 16 have affine rank 4, and 56 of
-the rank-2 circuits have this local `P^2` triangle pattern.
+the rank-2 circuits have this local `P^2` triangle pattern. For the first ray,
+Cyrus now reconstructs deterministic rank-two local coordinates
+`p43=(1,0)`, `p155=(0,1)`, `p168=(0,0)`, `p169=(-1,-1)` from the upstream
+lattice points.
 
 This is a structural clue, not permission to hardcode GV sequences. The same
 four indices are not a current-phase adjacent two-face circuit in the

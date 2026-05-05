@@ -96,7 +96,7 @@ pub use glsm::compute_glsm_charge_matrix;
 pub use glsm::compute_glsm_linear_relations;
 pub use gv::{
     AffineCircuitRelationPoint, AffineToricCircuitDiagnostic, CurveDecompositionTerm,
-    CurvePruningStrategy, LocalToricCircuitKind, OneDimensionalRayGvSeries,
+    CurvePruningStrategy, LocalToricCircuitKind, LocalToricCoordinate2D, OneDimensionalRayGvSeries,
     OriginCircuitCurveDiagnostic, OriginCircuitCurveWitness, OriginCircuitRelationPoint,
     PotentRayConvergence, SupportingMoriFace, SupportingMoriFaceCertificate, ToricCurveCandidate,
     ToricCurveGvDiagnostic, ToricCurveGvInvariant, ToricCurveGvSource,

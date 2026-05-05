@@ -475,9 +475,11 @@ that all 411 saved rows are affine relations in the triangulation-point
 configuration, with 395 rank-2 supports and 16 rank-4 supports. The most common
 rank-2 patterns are local toric-surface-like sparse charge vectors, e.g.
 `(-3,1,1,1)` for local `P^2`, `(-5,1,1,1,2)`, `(-8,1,1,3,3)`, and
-`(-10,2,2,3,3)`. The next Cyrus test should therefore identify the
-low-dimensional toric face or local surface model behind one rank-2 saved ray,
-construct the full local charge/semigroup context, and reproduce the saved
+`(-10,2,2,3,3)`. Cyrus now records affine support rank and, for the first local
+`P^2` ray, reconstructs rank-two local coordinates
+`p43=(1,0)`, `p155=(0,1)`, `p168=(0,0)`, `p169=(-1,-1)` directly from the
+ambient lattice points. The next Cyrus test should therefore construct the full
+local charge/semigroup context from that local model and reproduce the saved
 `N_q, ..., N_10q` values without reading `potent_rays_gv.dat` except as the
 assertion. Hardcoding the recognized local sequence would be another replay
 shortcut; reconstructing the local toric geometry is the actual missing step.
