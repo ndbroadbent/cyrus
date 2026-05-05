@@ -74,10 +74,10 @@ use cyrus_core::{
     compute_toric_two_face_curve_gv_invariants, compute_w0_from_terms,
     effective_prime_divisors_from_curve_basis, generate_scaled_kklt_branch_initializations,
     heights_to_kahler, intersection_in_basis, is_unimodular, kahler_to_heights,
-    map_basis_gv_invariants_to_ambient, prune_decomposable_curve_candidates,
-    scale_mixed_basis_kklt_branch_initialization_to_target, solve_mixed_basis_path_following,
-    solve_mixed_basis_path_following_branch_candidates, solve_racetrack,
-    subcutoff_toric_curve_candidates,
+    map_basis_gv_invariants_to_ambient, project_ambient_curve_to_basis,
+    prune_decomposable_curve_candidates, scale_mixed_basis_kklt_branch_initialization_to_target,
+    solve_mixed_basis_path_following, solve_mixed_basis_path_following_branch_candidates,
+    solve_racetrack, subcutoff_toric_curve_candidates,
 };
 
 const DEFAULT_MCALLISTER_GV_MIN_POINTS: u32 = 20_000;
@@ -2208,7 +2208,8 @@ fn missing_gv_target_stats(
         *origin_coefficient_counts
             .entry(origin_coefficient)
             .or_insert(0) += 1;
-        let basis_class = project_ambient_curve_to_basis(ambient_class, basis)?;
+        let basis_class =
+            project_ambient_curve_to_basis(ambient_class, basis).map_err(|e| e.to_string())?;
         let degree = basis_class
             .iter()
             .zip(grading.iter())
@@ -2519,7 +2520,8 @@ fn one_dimensional_ray_gv_targets(
     let mut skipped_non_generators = 0usize;
     let mut skipped_decomposable_generators = 0usize;
     for ambient_class in ambient_classes {
-        let basis_class = project_ambient_curve_to_basis(ambient_class, basis)?;
+        let basis_class =
+            project_ambient_curve_to_basis(ambient_class, basis).map_err(|e| e.to_string())?;
         let degree = basis_class
             .iter()
             .zip(grading.iter())
@@ -2981,23 +2983,6 @@ fn toric_gv1_formula_value(m: i64) -> Option<i64> {
     Some(sign * magnitude)
 }
 
-fn project_ambient_curve_to_basis(
-    ambient_class: &[i64],
-    basis: &[usize],
-) -> Result<Vec<i64>, String> {
-    basis
-        .iter()
-        .map(|&idx| {
-            ambient_class.get(idx).copied().ok_or_else(|| {
-                format!(
-                    "basis index {idx} is out of bounds for ambient curve dimension {}",
-                    ambient_class.len()
-                )
-            })
-        })
-        .collect()
-}
-
 fn compute_missing_one_dimensional_ray_gvs(
     ambient_classes: &[Vec<i64>],
     basis: &[usize],
@@ -3007,7 +2992,8 @@ fn compute_missing_one_dimensional_ray_gvs(
 ) -> Result<Vec<(Vec<i64>, malachite::Integer, i128)>, String> {
     let mut out = Vec::with_capacity(ambient_classes.len());
     for ambient_class in ambient_classes {
-        let basis_class = project_ambient_curve_to_basis(ambient_class, basis)?;
+        let basis_class =
+            project_ambient_curve_to_basis(ambient_class, basis).map_err(|e| e.to_string())?;
         let degree = basis_class
             .iter()
             .zip(grading.iter())
@@ -3018,8 +3004,9 @@ fn compute_missing_one_dimensional_ray_gvs(
                 "one-dimensional ray GV target has non-positive grading degree {degree}: {ambient_class:?}"
             ));
         }
-        let series = cyrus_core::compute_one_dimensional_ray_gv_series(
-            &basis_class,
+        let series = cyrus_core::compute_ambient_one_dimensional_ray_gv_series(
+            ambient_class,
+            basis,
             grading,
             q_matrix,
             intnums,
@@ -3051,7 +3038,8 @@ fn compute_missing_lp_witness_face_gvs(
 ) -> Result<Vec<FaceGvDiagnosticResult>, String> {
     let mut out = Vec::new();
     for ambient_class in ambient_classes {
-        let basis_class = project_ambient_curve_to_basis(ambient_class, basis)?;
+        let basis_class =
+            project_ambient_curve_to_basis(ambient_class, basis).map_err(|e| e.to_string())?;
         let degree = basis_class
             .iter()
             .zip(grading.iter())

@@ -576,6 +576,26 @@ pub fn potent_ray_convergence(
     })
 }
 
+/// Project an ambient curve class to coordinates in a divisor basis.
+///
+/// The McAllister ancillary curve files store ambient divisor-intersection
+/// vectors, while `cygv` expects Kähler-basis curve coordinates. For a vector
+/// divisor basis this projection is the CYTools convention used throughout the
+/// McAllister pipeline: keep the entries at the selected basis divisor indices.
+pub fn project_ambient_curve_to_basis(ambient_class: &[i64], basis: &[usize]) -> Result<Vec<i64>> {
+    basis
+        .iter()
+        .map(|&idx| {
+            ambient_class.get(idx).copied().ok_or_else(|| {
+                Error::InvalidInput(format!(
+                    "basis index {idx} is out of bounds for ambient curve dimension {}",
+                    ambient_class.len()
+                ))
+            })
+        })
+        .collect()
+}
+
 /// Compute genus-zero GV invariants along a one-dimensional ray.
 ///
 /// The ray is expressed in Kähler-basis curve coordinates. The function calls
@@ -680,6 +700,25 @@ pub fn compute_one_dimensional_ray_gv_series(
         degree,
         values,
     })
+}
+
+/// Compute genus-zero GV invariants along an ambient one-dimensional ray.
+///
+/// This is a convenience boundary for McAllister-style ambient curve files. It
+/// projects the ambient class to the supplied divisor basis, then delegates to
+/// [`compute_one_dimensional_ray_gv_series`]. It does not change the cygv
+/// semigroup semantics: a one-generator call remains a local diagnostic unless
+/// the caller has established that this is the intended face context.
+pub fn compute_ambient_one_dimensional_ray_gv_series(
+    ambient_ray: &[i64],
+    basis: &[usize],
+    grading_vector: &[i64],
+    q_matrix: &[Vec<i64>],
+    intnums: &Intersection,
+    max_multiple: u32,
+) -> Result<OneDimensionalRayGvSeries> {
+    let ray = project_ambient_curve_to_basis(ambient_ray, basis)?;
+    compute_one_dimensional_ray_gv_series(&ray, grading_vector, q_matrix, intnums, max_multiple)
 }
 
 fn integer_abs_ln(value: &Integer) -> Result<Option<f64>> {
@@ -3320,16 +3359,17 @@ mod tests {
     use super::{
         BoundedCurveDecompositionIndex, CurveDecompositionTerm, CurvePruningStrategy,
         GvLatticeAugmentation, OriginCircuitCurveWitness, OriginCircuitRelationPoint,
-        ToricCurveCandidate, compute_grading_vector, compute_gv_invariants_with_explicit_semigroup,
+        ToricCurveCandidate, compute_ambient_one_dimensional_ray_gv_series, compute_grading_vector,
+        compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_provided_generators, compute_one_dimensional_ray_gv_series,
         curve_row_span_rank, curve_volume_in_divisor_basis, dump_mori_rays_cdd,
         find_pair_decomposition, find_semigroup_decomposition, gv_lattice_search_request,
         load_grading_cache, map_basis_gv_invariants_to_ambient,
         origin_circuit_diagnostic_from_class_and_witnesses, potent_ray_convergence,
-        potent_ray_log_xi_terms, project_mori_cone_cap_rays_to_basis,
-        prune_decomposable_curve_candidates, remove_pair_decomposable_curve_candidates,
-        remove_semigroup_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
-        write_grading_cache,
+        potent_ray_log_xi_terms, project_ambient_curve_to_basis,
+        project_mori_cone_cap_rays_to_basis, prune_decomposable_curve_candidates,
+        remove_pair_decomposable_curve_candidates, remove_semigroup_decomposable_curve_candidates,
+        subcutoff_toric_curve_candidates, write_grading_cache,
     };
     use crate::Intersection;
     use crate::{f64_finite, f64_pos};
@@ -3561,6 +3601,23 @@ mod tests {
     }
 
     #[test]
+    fn ambient_curve_projection_keeps_basis_entries() {
+        let ambient = vec![7, -3, 0, 11];
+        let basis = vec![3, 1];
+
+        let projected = project_ambient_curve_to_basis(&ambient, &basis).unwrap();
+
+        assert_eq!(projected, vec![11, -3]);
+    }
+
+    #[test]
+    fn ambient_curve_projection_rejects_out_of_bounds_basis() {
+        let err = project_ambient_curve_to_basis(&[1, 2], &[0, 3]).unwrap_err();
+
+        assert!(err.to_string().contains("basis index 3 is out of bounds"));
+    }
+
+    #[test]
     fn curve_row_span_rank_is_exact_over_rationals() {
         let rows = vec![vec![2, 0, 0], vec![4, 0, 0], vec![0, 3, 0]];
 
@@ -3627,6 +3684,21 @@ mod tests {
     fn one_dimensional_ray_gv_series_propagates_cygv_input_errors() {
         let err = compute_one_dimensional_ray_gv_series(&[1], &[1], &[], &Intersection::new(1), 1)
             .unwrap_err();
+
+        assert!(err.to_string().contains("q_matrix is empty"));
+    }
+
+    #[test]
+    fn ambient_one_dimensional_ray_gv_series_projects_before_cygv() {
+        let err = compute_ambient_one_dimensional_ray_gv_series(
+            &[9, 1, 8],
+            &[1],
+            &[1],
+            &[],
+            &Intersection::new(1),
+            1,
+        )
+        .unwrap_err();
 
         assert!(err.to_string().contains("q_matrix is empty"));
     }
