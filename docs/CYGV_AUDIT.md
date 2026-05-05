@@ -34,6 +34,12 @@ If `mcap_generators` is supplied, CYTools passes those rows directly as
 `generators`; otherwise it augments Mori-cap rays with lattice points before
 calling `cygv`.
 
+One subtlety: CYTools does this augmentation with
+`mori.find_lattice_points(min_points=100*h11)` regardless of whether the later
+`cygv.compute_gv` call is controlled by `max_deg` or by `min_points`. The
+`max_deg` value is a cygv semigroup truncation parameter, not a CYTools
+lattice-enumeration cutoff.
+
 The `mori_cone_cap` source is also part of the contract, not a black box. It
 constructs ambient curve relations from two families:
 
@@ -100,15 +106,20 @@ The Rust call chain is:
 
 Important details:
 
-- `Semigroup::with_min_elements` starts from the supplied generators and closes
-  the semigroup under addition until at least `min_points` elements exist.
+- `Semigroup::with_min_elements` uses the supplied rows only to derive a
+  generator set, starts the semigroup from the identity, and closes under
+  addition until at least `min_points` elements exist.
+- `Semigroup::with_max_degree` first trims supplied rows by grading degree,
+  uses the trimmed rows both as initial elements and to derive generators, then
+  closes under addition up to `max_deg`.
 - Before closure, `cygv` calls `find_generators`, which removes some supplied
   elements that are sums of two others. The current crate implementation only
   tests sums with `n = 2` because `max_sum_elements = 3` and the Rust range is
   `2..max_sum_elements`.
 - `compute_omega` builds `q0` from GLSM charges by summing rows for the
   hypersurface nef partition, then groups semigroup elements by the number of
-  negative GLSM intersections.
+  negative GLSM intersections. Only the 0-, 1-, and 2-negative-intersection
+  groups are used by the current HKTY coefficient code.
 - `invert_series` processes classes by grading degree and subtracts previously
   found lower-degree `Li2(qN)` contributions from the instanton corrections.
 
@@ -161,6 +172,19 @@ Cyrus already has wrappers around the same Rust `cygv` crate:
 - `compute_gv_invariants`
 - `compute_gv_invariants_with_provided_generators`
 - `compute_gv_invariants_with_explicit_semigroup`
+
+Their boundaries are different:
+
+- `compute_gv_invariants` tries to mirror the CYTools default augmentation, but
+  currently changes the lattice-point request to `max_deg`-bounded enumeration
+  when `max_deg` is supplied. That is useful for controlled diagnostics, but it
+  is not the literal CYTools wrapper contract described above.
+- `compute_gv_invariants_with_provided_generators` mirrors CYTools'
+  `mcap_generators=...` entry point: Cyrus supplies rows directly to cygv and
+  lets cygv perform its own semigroup closure.
+- `compute_gv_invariants_with_explicit_semigroup` bypasses cygv closure with
+  `Semigroup::from_data`. This is a diagnostic-only shape for hand-constructed
+  local semigroups, not a replacement for CYTools' public `compute_gvs()`.
 
 But the McAllister corrected-chamber diagnostic path currently relies first on
 toric two-face/origin-circuit formula values for selected small curves, then uses
