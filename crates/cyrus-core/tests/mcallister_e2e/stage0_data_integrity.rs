@@ -243,6 +243,11 @@ const ARTIFACT_POLICIES: &[ArtifactPolicy] = &[
         note: "computed racetrack superpotential checkpoint",
     },
     ArtifactPolicy {
+        file: "c_tau.dat",
+        usage: ArtifactUse::ValidationCheckpoint,
+        note: "computed KKLT c_tau scalar checkpoint; never a production input",
+    },
+    ArtifactPolicy {
         file: "kahler_param.dat",
         usage: ArtifactUse::ValidationReplayOnly,
         note: "downstream KKLT output; never a first-principles computation input",
@@ -272,6 +277,57 @@ const ARTIFACT_POLICIES: &[ArtifactPolicy] = &[
         usage: ArtifactUse::ValidationReplayOnly,
         note: "downstream corrected volume output; compare only",
     },
+    ArtifactPolicy {
+        file: "potent_rays.dat",
+        usage: ArtifactUse::ValidationCheckpoint,
+        note: "validation-supplied potent-ray sample; Cyrus must eventually generate this set",
+    },
+    ArtifactPolicy {
+        file: "potent_rays_gv.dat",
+        usage: ArtifactUse::ValidationCheckpoint,
+        note: "potent-ray GV series checkpoint, used only after local ray contexts are computed",
+    },
+    ArtifactPolicy {
+        file: "potent_rays_rank.dat",
+        usage: ArtifactUse::ValidationCheckpoint,
+        note: "rank checkpoint for the supplied potent-ray sample",
+    },
+    ArtifactPolicy {
+        file: "potent_rays_vols.dat",
+        usage: ArtifactUse::ValidationCheckpoint,
+        note: "computed potent-ray volume checkpoint at corrected Kähler parameters",
+    },
+];
+
+const KNOWN_MCALLISTER_DAT_FILES: &[&str] = &[
+    "basis.dat",
+    "c_tau.dat",
+    "corrected_cy_vol.dat",
+    "corrected_heights.dat",
+    "corrected_kahler_param.dat",
+    "corrected_target_volumes.dat",
+    "cy_vol.dat",
+    "dual_curves.dat",
+    "dual_curves_gv.dat",
+    "dual_points.dat",
+    "dual_simplices.dat",
+    "g_s.dat",
+    "heights.dat",
+    "K_vec.dat",
+    "kahler_param.dat",
+    "kklt_basis.dat",
+    "M_vec.dat",
+    "points.dat",
+    "potent_rays.dat",
+    "potent_rays_gv.dat",
+    "potent_rays_rank.dat",
+    "potent_rays_vols.dat",
+    "small_curves.dat",
+    "small_curves_cutoff.dat",
+    "small_curves_gv.dat",
+    "small_curves_vols.dat",
+    "target_volumes.dat",
+    "W_0.dat",
 ];
 
 fn artifact_policy(file: &str) -> Option<ArtifactPolicy> {
@@ -370,10 +426,18 @@ fn stage0_artifact_policy_is_explicit_and_complete() {
         );
     }
 
+    for file in KNOWN_MCALLISTER_DAT_FILES {
+        assert!(
+            artifact_policy(file).is_some(),
+            "{file} exists in McAllister ancillary data but is missing from ARTIFACT_POLICIES"
+        );
+    }
+
     for policy in ARTIFACT_POLICIES {
         assert!(
-            referenced.contains_key(policy.file),
-            "{} has a policy but is not referenced by McAllister sources",
+            referenced.contains_key(policy.file)
+                || KNOWN_MCALLISTER_DAT_FILES.contains(&policy.file),
+            "{} has a policy but is neither referenced by McAllister sources nor listed as a known ancillary .dat file",
             policy.file
         );
     }

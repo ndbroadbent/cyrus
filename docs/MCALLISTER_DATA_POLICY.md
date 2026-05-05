@@ -35,6 +35,8 @@ corresponding object:
   selected toric-curve method, not a full 214-dimensional generic
   `compute_gvs()` call.
 - `g_s.dat`, `W_0.dat`: racetrack outputs.
+- `c_tau.dat`: derived KKLT scalar checkpoint computed from the racetrack
+  outputs, not a declared model input.
 - `corrected_heights.dat`: corrected-chamber FRST checkpoint for diagnostics.
   It may be used to compare the chamber implied by the ancillary data after
   Cyrus has computed its own chamber data, but not to select a production
@@ -42,6 +44,10 @@ corresponding object:
 - `corrected_target_volumes.dat`: corrected-chamber classical KKLT divisor
   volumes. This is a checkpoint used to localize the remaining instanton-layer
   discrepancy, not an input to the production solve.
+- `potent_rays.dat`, `potent_rays_gv.dat`, `potent_rays_rank.dat`,
+  `potent_rays_vols.dat`: potent-ray validation samples and derived
+  convergence quantities. Cyrus may use them as assertions after reconstructing
+  the ray contexts, but not as the source of a reusable search algorithm.
 
 The reusable runner must still compute these quantities from upstream inputs
 when they are needed for a new landscape candidate.
