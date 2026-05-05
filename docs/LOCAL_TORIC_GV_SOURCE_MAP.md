@@ -242,9 +242,20 @@ double-log/prepotential-period series into flat `q` coordinates. Unit tests
 check that this reduces to the existing local `P^2` inverse mirror map and that
 the coupled `F0` source terms transform consistently through degree two.
 
-The remaining missing step is not optional bookkeeping: Cyrus still needs
-multiple-cover inversion before any non-`P^2` CKYZ flat-coordinate period
-coefficient can be called a GV invariant.
+Cyrus also now has the first source-normalized local GV extraction layer:
+`compute_ckyz_local_instanton_potential_corrections` forms the cygv-style
+`beta - alpha_i alpha_j` instanton-potential coefficients, applies the local
+intersection expression with the diagonal `1/2` symmetry factor, and substitutes
+the inverse mirror map. `compute_ckyz_local_gv_invariants` then applies the
+CKYZ `instbase` multiple-cover inversion
+`A_m = sum_{k d = m} w(d) N_d / k^2`, with
+`w(d) = -sum_i x_i d_i`.
+
+This is validated against the local `P^2` table and the start of the `F0`
+appendix table. It is not yet wired to all McAllister potent-ray families:
+`F1`/polygon-5 cover-weight normalization and the target-direction extraction
+still need explicit source-backed tests before the saved `potent_rays_gv.dat`
+rows can be reproduced without using them as inputs.
 
 ## Rank-Four Boundary
 

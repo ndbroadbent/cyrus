@@ -475,8 +475,8 @@ pub struct CkyzLocalSurfaceIdentification {
     pub source_relations: Vec<Vec<i64>>,
     /// Target potent-ray direction in the CKYZ source relation basis.
     pub source_target_direction: Vec<i64>,
-    /// CKYZ `c1(B).J_i` pairings in source coordinates.
-    pub c1_pairings: Vec<i64>,
+    /// CKYZ `c1(B)` expression coefficients in source divisor coordinates.
+    pub c1_coefficients: Vec<i64>,
     /// CKYZ local base intersection expression in source coordinates.
     pub local_intersection_terms: Vec<CkyzLocalIntersectionTerm>,
 }
@@ -485,7 +485,7 @@ pub struct CkyzLocalSurfaceIdentification {
 struct CkyzLocalSurfaceSource {
     kind: CkyzLocalSurfaceKind,
     relations: Vec<Vec<i64>>,
-    c1_pairings: Vec<i64>,
+    c1_coefficients: Vec<i64>,
     local_intersection_terms: Vec<CkyzLocalIntersectionTerm>,
 }
 
@@ -843,7 +843,7 @@ pub fn identify_ckyz_local_surface(
                 row_transform,
                 source_relations: source.relations,
                 source_target_direction,
-                c1_pairings: source.c1_pairings,
+                c1_coefficients: source.c1_coefficients,
                 local_intersection_terms: source.local_intersection_terms,
             }));
         }
@@ -1031,6 +1031,181 @@ pub fn compute_ckyz_flat_prepotential_period_corrections(
     substitute_ckyz_series_in_flat_coordinates(&prepotential_z, &z_of_q, max_total_degree)
 }
 
+/// Compute CKYZ local instanton-potential corrections in flat coordinates.
+///
+/// This mirrors the cygv instanton-data layer for the local CKYZ source: it
+/// forms `beta_ij - alpha_i alpha_j` from second and first `rho`-derivative
+/// coefficients, contracts with the local base-intersection expression, and
+/// substitutes the inverse mirror map. Diagonal intersection terms carry the
+/// same `1/2` symmetry factor used by cygv when contracting symmetric
+/// intersection data.
+///
+/// The returned coefficients are still the integrated local metric potential.
+/// GV extraction requires the multiple-cover inversion implemented by
+/// [`extract_ckyz_local_gv_invariants_from_potential`].
+///
+/// # Errors
+/// Returns an error for invalid CKYZ relation rows, invalid local intersection
+/// terms, or formal-series degree/rank inconsistencies.
+pub fn compute_ckyz_local_instanton_potential_corrections(
+    relations: &[Vec<i64>],
+    local_intersection_terms: &[CkyzLocalIntersectionTerm],
+    max_total_degree: usize,
+) -> Result<BTreeMap<Vec<usize>, Rational>> {
+    validate_ckyz_relations(relations)?;
+    let rank = relations.len();
+    for term in local_intersection_terms {
+        if term.first >= rank || term.second >= rank {
+            return Err(Error::InvalidInput(
+                "CKYZ local intersection term index is outside the relation rank".into(),
+            ));
+        }
+    }
+
+    let alpha = compute_ckyz_log_period_corrections(relations, max_total_degree)?;
+    let z_of_q = compute_ckyz_inverse_mirror_map(&alpha, max_total_degree)?;
+    let mut contracted = BTreeMap::new();
+
+    for term in local_intersection_terms {
+        let beta = ckyz_second_log_period_series_for_pair(
+            relations,
+            term.first,
+            term.second,
+            max_total_degree,
+        )?;
+        let alpha_product = ckyz_series_mul(
+            &alpha[term.first],
+            &alpha[term.second],
+            rank,
+            max_total_degree,
+        )?;
+        let mut f_pair = beta;
+        ckyz_series_add_scaled_assign(&mut f_pair, &alpha_product, Rational::from(-1));
+
+        let mut term_coefficient = Rational::from(term.coefficient);
+        if term.first == term.second {
+            term_coefficient /= Rational::from(2);
+        }
+        ckyz_series_add_scaled_assign(&mut contracted, &f_pair, term_coefficient);
+    }
+
+    substitute_ckyz_series_in_flat_coordinates(&contracted, &z_of_q, max_total_degree)
+}
+
+/// Extract local genus-zero GV invariants from CKYZ flat potential coefficients.
+///
+/// The input potential coefficients are interpreted as
+/// `A_m = sum_{k d = m} w(d) N_d / k^2`, where
+/// `w(d) = -sum_i cover_weight_coefficients_i d_i`. This is the
+/// twice-integrated form of CKYZ's `instbase` expansion after the local
+/// `beta - alpha alpha` conversion. The returned map stores nonzero invariants
+/// only.
+///
+/// # Errors
+/// Returns an error if ranks are inconsistent, weight arithmetic overflows, or
+/// a recovered invariant is non-integral.
+pub fn extract_ckyz_local_gv_invariants_from_potential(
+    potential_coefficients: &BTreeMap<Vec<usize>, Rational>,
+    cover_weight_coefficients: &[i64],
+    max_total_degree: usize,
+) -> Result<BTreeMap<Vec<usize>, Integer>> {
+    let rank = cover_weight_coefficients.len();
+    if rank == 0 {
+        return Err(Error::InvalidInput(
+            "CKYZ local GV extraction requires at least one coordinate".into(),
+        ));
+    }
+    validate_ckyz_series(
+        potential_coefficients,
+        rank,
+        "CKYZ local instanton potential",
+    )?;
+
+    let mut degrees = ckyz_multi_degrees(rank, max_total_degree);
+    degrees.sort_by(|lhs, rhs| {
+        ckyz_total_degree(lhs)
+            .expect("validated degree")
+            .cmp(&ckyz_total_degree(rhs).expect("validated degree"))
+            .then_with(|| lhs.cmp(rhs))
+    });
+
+    let mut invariants = BTreeMap::new();
+    for degree in degrees {
+        let mut residual = potential_coefficients
+            .get(&degree)
+            .cloned()
+            .unwrap_or_else(|| Rational::from(0));
+        for cover in ckyz_nontrivial_covers(&degree) {
+            let primitive = ckyz_divide_degree(&degree, cover)?;
+            let Some(gv) = invariants.get(&primitive) else {
+                continue;
+            };
+            let weight = ckyz_cover_weight(cover_weight_coefficients, &primitive)?;
+            let cover_squared = cover.checked_mul(cover).ok_or_else(|| {
+                Error::InvalidInput("CKYZ cover multiplicity overflowed usize".into())
+            })?;
+            residual -= Rational::from(weight) * Rational::from(gv)
+                / Rational::from(Integer::from(cover_squared));
+        }
+
+        if residual == 0 {
+            continue;
+        }
+        let weight = ckyz_cover_weight(cover_weight_coefficients, &degree)?;
+        if weight == 0 {
+            return Err(Error::InvalidInput(
+                "CKYZ local GV extraction encountered a nonzero coefficient with zero cover weight"
+                    .into(),
+            ));
+        }
+        let gv_rational = residual / Rational::from(weight);
+        if gv_rational.denominator_ref() != &1u32 {
+            return Err(Error::InvalidInput(format!(
+                "CKYZ local GV invariant at degree {degree:?} is not integral: {gv_rational}"
+            )));
+        }
+        let gv = Integer::try_from(gv_rational).map_err(|_| {
+            Error::InvalidInput(format!(
+                "CKYZ local GV invariant at degree {degree:?} is not integral"
+            ))
+        })?;
+        if gv != 0 {
+            invariants.insert(degree, gv);
+        }
+    }
+
+    Ok(invariants)
+}
+
+/// Compute local CKYZ genus-zero GV invariants through a total-degree cutoff.
+///
+/// This combines the source-derived period coefficients, mirror-map
+/// substitution, cygv-style `beta - alpha alpha` conversion, and the
+/// `instbase` multiple-cover inversion. The `cover_weight_coefficients` are the
+/// coefficients `x_i` in CKYZ's finite-limit expression
+/// `sum_i x_i (J_i J_j) = c1(B) J_j`.
+///
+/// # Errors
+/// Returns an error for invalid source data or non-integral extracted
+/// invariants.
+pub fn compute_ckyz_local_gv_invariants(
+    relations: &[Vec<i64>],
+    local_intersection_terms: &[CkyzLocalIntersectionTerm],
+    cover_weight_coefficients: &[i64],
+    max_total_degree: usize,
+) -> Result<BTreeMap<Vec<usize>, Integer>> {
+    let potential = compute_ckyz_local_instanton_potential_corrections(
+        relations,
+        local_intersection_terms,
+        max_total_degree,
+    )?;
+    extract_ckyz_local_gv_invariants_from_potential(
+        &potential,
+        cover_weight_coefficients,
+        max_total_degree,
+    )
+}
+
 fn validate_ckyz_relations(relations: &[Vec<i64>]) -> Result<()> {
     let Some(first_relation) = relations.first() else {
         return Err(Error::InvalidInput(
@@ -1069,7 +1244,7 @@ fn ckyz_local_surface_sources() -> Vec<CkyzLocalSurfaceSource> {
         CkyzLocalSurfaceSource {
             kind: CkyzLocalSurfaceKind::LocalP2,
             relations: vec![vec![-3, 1, 1, 1]],
-            c1_pairings: vec![3],
+            c1_coefficients: vec![3],
             local_intersection_terms: vec![CkyzLocalIntersectionTerm {
                 first: 0,
                 second: 0,
@@ -1079,7 +1254,7 @@ fn ckyz_local_surface_sources() -> Vec<CkyzLocalSurfaceSource> {
         CkyzLocalSurfaceSource {
             kind: CkyzLocalSurfaceKind::HirzebruchF0,
             relations: vec![vec![-2, 1, 0, 1, 0], vec![-2, 0, 1, 0, 1]],
-            c1_pairings: vec![2, 2],
+            c1_coefficients: vec![2, 2],
             local_intersection_terms: vec![CkyzLocalIntersectionTerm {
                 first: 0,
                 second: 1,
@@ -1089,7 +1264,7 @@ fn ckyz_local_surface_sources() -> Vec<CkyzLocalSurfaceSource> {
         CkyzLocalSurfaceSource {
             kind: CkyzLocalSurfaceKind::HirzebruchF1,
             relations: vec![vec![-2, 1, 0, 1, 0], vec![-1, 0, 1, -1, 1]],
-            c1_pairings: vec![3, 2],
+            c1_coefficients: vec![3, 2],
             local_intersection_terms: vec![
                 CkyzLocalIntersectionTerm {
                     first: 0,
@@ -1110,7 +1285,7 @@ fn ckyz_local_surface_sources() -> Vec<CkyzLocalSurfaceSource> {
                 vec![-1, -1, 1, 0, 0, 1],
                 vec![-1, 0, 1, -1, 1, 0],
             ],
-            c1_pairings: vec![3, 2, 2],
+            c1_coefficients: vec![3, 2, 2],
             local_intersection_terms: vec![
                 CkyzLocalIntersectionTerm {
                     first: 0,
@@ -1285,6 +1460,31 @@ fn ckyz_second_log_period_coefficients_for_degree(
         _ => {}
     }
     Ok(values)
+}
+
+fn ckyz_second_log_period_series_for_pair(
+    relations: &[Vec<i64>],
+    first: usize,
+    second: usize,
+    max_total_degree: usize,
+) -> Result<BTreeMap<Vec<usize>, Rational>> {
+    let rank = relations.len();
+    if first >= rank || second >= rank {
+        return Err(Error::InvalidInput(
+            "CKYZ second-log period pair index is outside the relation rank".into(),
+        ));
+    }
+
+    let mut out = BTreeMap::new();
+    for degree in ckyz_multi_degrees(rank, max_total_degree) {
+        let point_pairings = ckyz_point_pairings(relations, &degree)?;
+        let values = ckyz_second_log_period_coefficients_for_degree(relations, &point_pairings)?;
+        let value = values[first][second].clone();
+        if value != 0 {
+            out.insert(degree, value);
+        }
+    }
+    Ok(out)
 }
 
 fn ckyz_regular_harmonic_terms(
@@ -1640,6 +1840,44 @@ fn ckyz_series_compose(
         ckyz_series_add_scaled_assign(&mut out, &monomial, coefficient.clone());
     }
     Ok(out)
+}
+
+fn ckyz_nontrivial_covers(degree: &[usize]) -> Vec<usize> {
+    let max_cover = degree.iter().copied().max().unwrap_or(0);
+    (2..=max_cover)
+        .filter(|&cover| degree.iter().all(|entry| entry % cover == 0))
+        .collect()
+}
+
+fn ckyz_divide_degree(degree: &[usize], divisor: usize) -> Result<Vec<usize>> {
+    if divisor == 0 {
+        return Err(Error::InvalidInput(
+            "CKYZ degree divisor must be nonzero".into(),
+        ));
+    }
+    Ok(degree.iter().map(|entry| entry / divisor).collect())
+}
+
+fn ckyz_cover_weight(coefficients: &[i64], degree: &[usize]) -> Result<i64> {
+    if coefficients.len() != degree.len() {
+        return Err(Error::InvalidInput(
+            "CKYZ cover-weight rank does not match degree rank".into(),
+        ));
+    }
+    let mut dot = 0i64;
+    for (&coefficient, &degree_entry) in coefficients.iter().zip(degree.iter()) {
+        let degree_entry = i64::try_from(degree_entry).map_err(|_| {
+            Error::InvalidInput("CKYZ cover-weight degree entry does not fit i64".into())
+        })?;
+        let contribution = coefficient.checked_mul(degree_entry).ok_or_else(|| {
+            Error::InvalidInput("CKYZ cover-weight multiplication overflowed i64".into())
+        })?;
+        dot = dot.checked_add(contribution).ok_or_else(|| {
+            Error::InvalidInput("CKYZ cover-weight addition overflowed i64".into())
+        })?;
+    }
+    dot.checked_neg()
+        .ok_or_else(|| Error::InvalidInput("CKYZ cover weight overflowed i64".into()))
 }
 
 fn integer_row_transform_between_bases(
@@ -5560,17 +5798,18 @@ mod tests {
         OriginCircuitCurveWitness, OriginCircuitRelationPoint, ToricCurveCandidate,
         check_supporting_mori_face_normal, compute_ambient_one_dimensional_ray_gv_series,
         compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
+        compute_ckyz_local_gv_invariants, compute_ckyz_local_instanton_potential_corrections,
         compute_ckyz_local_prepotential_period_corrections, compute_ckyz_log_period_corrections,
         compute_grading_vector, compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_provided_generators, compute_local_p2_genus_zero_gv_series,
         compute_local_toric_circuit_gv_series, compute_one_dimensional_ray_gv_series,
         compute_ray_gv_series_with_provided_generators, curve_in_rational_row_span,
         curve_row_span_rank, curve_volume_in_divisor_basis, diagnose_affine_toric_circuit,
-        dump_mori_rays_cdd, find_pair_decomposition, find_semigroup_decomposition,
-        gv_lattice_search_request, load_grading_cache, local_p2_inverse_mirror_map,
-        local_p2_mirror_correction, map_basis_gv_invariants_to_ambient,
-        origin_circuit_diagnostic_from_class_and_witnesses, potent_ray_convergence,
-        potent_ray_log_xi_terms, project_ambient_curve_to_basis,
+        dump_mori_rays_cdd, extract_ckyz_local_gv_invariants_from_potential,
+        find_pair_decomposition, find_semigroup_decomposition, gv_lattice_search_request,
+        load_grading_cache, local_p2_inverse_mirror_map, local_p2_mirror_correction,
+        map_basis_gv_invariants_to_ambient, origin_circuit_diagnostic_from_class_and_witnesses,
+        potent_ray_convergence, potent_ray_log_xi_terms, project_ambient_curve_to_basis,
         project_mori_cone_cap_rays_to_basis, prune_decomposable_curve_candidates,
         rank_two_local_charge_model, rank_two_local_support_signature,
         remove_pair_decomposable_curve_candidates, remove_semigroup_decomposable_curve_candidates,
@@ -5853,6 +6092,98 @@ mod tests {
         expected.insert(vec![0, 2], Rational::from(5));
 
         assert_eq!(corrections, expected);
+    }
+
+    #[test]
+    fn ckyz_local_instanton_potential_removes_alpha_product_terms() {
+        let potential = compute_ckyz_local_instanton_potential_corrections(
+            &[vec![-3, 1, 1, 1]],
+            &[CkyzLocalIntersectionTerm {
+                first: 0,
+                second: 0,
+                coefficient: 1,
+            }],
+            3,
+        )
+        .unwrap();
+
+        assert_eq!(potential.get(&vec![1]), Some(&Rational::from(-9)));
+        assert_eq!(
+            potential.get(&vec![2]),
+            Some(&Rational::from_signeds(135, 4))
+        );
+        assert_eq!(potential.get(&vec![3]), Some(&Rational::from(-244)));
+    }
+
+    #[test]
+    fn ckyz_local_gv_extraction_matches_local_p2_table() {
+        let gvs = compute_ckyz_local_gv_invariants(
+            &[vec![-3, 1, 1, 1]],
+            &[CkyzLocalIntersectionTerm {
+                first: 0,
+                second: 0,
+                coefficient: 1,
+            }],
+            &[3],
+            6,
+        )
+        .unwrap();
+
+        let expected = BTreeMap::from([
+            (vec![1], Integer::from(3)),
+            (vec![2], Integer::from(-6)),
+            (vec![3], Integer::from(27)),
+            (vec![4], Integer::from(-192)),
+            (vec![5], Integer::from(1695)),
+            (vec![6], Integer::from(-17064)),
+        ]);
+
+        assert_eq!(gvs, expected);
+    }
+
+    #[test]
+    fn ckyz_local_gv_extraction_matches_f0_table_start() {
+        let relations = vec![vec![-2, 1, 0, 1, 0], vec![-2, 0, 1, 0, 1]];
+        let gvs = compute_ckyz_local_gv_invariants(
+            &relations,
+            &[CkyzLocalIntersectionTerm {
+                first: 0,
+                second: 1,
+                coefficient: 1,
+            }],
+            &[2, 2],
+            4,
+        )
+        .unwrap();
+
+        let expected_nonzero = BTreeMap::from([
+            (vec![1, 0], Integer::from(-2)),
+            (vec![0, 1], Integer::from(-2)),
+            (vec![1, 1], Integer::from(-4)),
+            (vec![2, 1], Integer::from(-6)),
+            (vec![1, 2], Integer::from(-6)),
+            (vec![3, 1], Integer::from(-8)),
+            (vec![1, 3], Integer::from(-8)),
+            (vec![2, 2], Integer::from(-32)),
+        ]);
+
+        for (degree, expected) in expected_nonzero {
+            assert_eq!(gvs.get(&degree), Some(&expected));
+        }
+        for zero_degree in [vec![2, 0], vec![0, 2], vec![3, 0], vec![0, 3]] {
+            assert!(
+                !gvs.contains_key(&zero_degree),
+                "zero F0 invariant should be omitted at {zero_degree:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn ckyz_local_gv_extraction_rejects_nonintegral_residuals() {
+        let potential = BTreeMap::from([(vec![1], Rational::from_signeds(1, 2))]);
+        let err = extract_ckyz_local_gv_invariants_from_potential(&potential, &[1], 1).unwrap_err();
+
+        assert!(err.to_string().contains("not integral"));
     }
 
     #[test]

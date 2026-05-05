@@ -55,10 +55,11 @@ The local CKYZ path Cyrus is building mirrors only the period-coefficient layer
 of that machinery. The new double-log/prepotential-period routine computes the
 source CKYZ `rho`-derivatives in B-model `z` coordinates, and the inverse
 mirror-map helper now composes those coefficients into flat `q` coordinates.
-It still does not run cygv's later `c0_inv`, alpha/beta/F-polynomial, or
-degree-ordered `Li2(qN)` subtraction stages. That boundary is deliberate: until
-multiple-cover inversion is implemented, these coefficients are source-derived
-period data, not GV invariants.
+The local instanton-potential helper now mirrors cygv's essential
+`beta - alpha alpha` conversion and applies the CKYZ `instbase`
+multiple-cover inversion for source weights supplied by the caller. This is
+validated for local `P^2` and `F0`, but not yet for every CKYZ surface family
+matched in the McAllister potent-ray inventory.
 
 The computational-mirror paper explains the implementation boundary that this
 source code implies. Finite HKTY computations need a causally closed truncation:

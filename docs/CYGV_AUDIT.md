@@ -149,6 +149,14 @@ double-log/prepotential-period `z`-series into the resulting `q`-series. This
 matches the mirror-map composition step but still stops before the
 multiple-cover subtraction that cygv performs in `series_inversion`.
 
+The local CKYZ GV helper now ports the relevant intermediate cygv conversion:
+it forms `beta - alpha_i alpha_j`, contracts it with the local intersection
+expression using the same diagonal `1/2` convention as cygv's symmetric
+intersection contraction, and then applies the CKYZ `instbase` cover relation
+`A_m = sum_{k d = m} w(d) N_d / k^2`. This is deliberately separate from the
+compact cygv semigroup inversion and is currently validated only for the source
+normalizations that are pinned by local `P^2` and `F0` tables.
+
 This means local face/ray HKTY checks can be correct for isolated classes while
 still not reproducing the global CYTools/cygv output. The global result depends
 on the full semigroup truncation and the degree-ordered subtraction history.
