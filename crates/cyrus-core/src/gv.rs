@@ -4280,6 +4280,7 @@ fn compute_ckyz_local_instanton_potential_z_domain(
     Ok((alpha, contracted))
 }
 
+#[cfg(test)]
 fn ckyz_q_degree_series_in_z_domain(
     degree: &[usize],
     alpha: &[BTreeMap<Vec<usize>, Rational>],
@@ -4395,57 +4396,6 @@ fn ckyz_delta_degree(target: &[usize], base: &[usize]) -> Option<Vec<usize>> {
         .collect()
 }
 
-fn ckyz_q_degree_series_with_previous_cache_in_z_domain(
-    degree: &[usize],
-    alpha: &[BTreeMap<Vec<usize>, Rational>],
-    previous_q_degrees: &[(Vec<usize>, BTreeMap<Vec<usize>, Rational>)],
-    delta_q_cache: &mut HashMap<Vec<usize>, BTreeMap<Vec<usize>, Rational>>,
-    domain: &CkyzMonomialDomain,
-) -> Result<BTreeMap<Vec<usize>, Rational>> {
-    let rank = alpha.len();
-    if rank == 0 || degree.len() != rank || domain.rank != rank {
-        return Err(Error::InvalidInput(
-            "CKYZ cached q-degree series rank mismatch".into(),
-        ));
-    }
-
-    let mut best_previous_index = None;
-    let mut best_delta = Vec::new();
-    let mut best_delta_total_degree = ckyz_total_degree(degree)?;
-    for (previous_index, (previous_degree, _)) in previous_q_degrees.iter().enumerate().rev() {
-        if !ckyz_componentwise_le(previous_degree, degree) {
-            continue;
-        }
-        let Some(delta) = ckyz_delta_degree(degree, previous_degree) else {
-            continue;
-        };
-        if delta.iter().all(|&entry| entry == 0) || !domain.contains(&delta) {
-            continue;
-        }
-        let delta_total_degree = ckyz_total_degree(&delta)?;
-        if delta_total_degree < best_delta_total_degree {
-            best_previous_index = Some(previous_index);
-            best_delta = delta;
-            best_delta_total_degree = delta_total_degree;
-            if best_delta_total_degree == 1 {
-                break;
-            }
-        }
-    }
-
-    let Some(previous_index) = best_previous_index else {
-        return ckyz_q_degree_series_in_z_domain(degree, alpha, domain);
-    };
-    if !delta_q_cache.contains_key(&best_delta) {
-        let q_delta = ckyz_q_degree_series_in_z_domain(&best_delta, alpha, domain)?;
-        delta_q_cache.insert(best_delta.clone(), q_delta);
-    }
-    let q_delta = delta_q_cache
-        .get(&best_delta)
-        .expect("delta q-series was inserted above");
-    ckyz_series_mul_domain(&previous_q_degrees[previous_index].1, q_delta, domain)
-}
-
 fn ckyz_q_degree_nonzero_coordinate_key(degree: &[usize]) -> Vec<usize> {
     degree
         .iter()
@@ -4479,6 +4429,7 @@ fn ckyz_q_degree_exp_support_for_coordinate_key(
     ckyz_support_exp_domain(&exponent_support, domain)
 }
 
+#[cfg(test)]
 fn ckyz_series_li2_domain(
     series: &BTreeMap<Vec<usize>, Rational>,
     domain: &CkyzMonomialDomain,
@@ -4588,6 +4539,186 @@ fn ckyz_q_degree_li2_support_intersects_indices_in_z_domain(
     Ok(false)
 }
 
+#[derive(Clone, Debug)]
+struct CkyzScaledAlphaTerm {
+    degree: Vec<usize>,
+    total_degree: usize,
+    coefficients: Vec<Rational>,
+}
+
+fn ckyz_scaled_alpha_terms(
+    alpha: &[BTreeMap<Vec<usize>, Rational>],
+    domain: &CkyzMonomialDomain,
+) -> Result<Vec<CkyzScaledAlphaTerm>> {
+    let rank = alpha.len();
+    if rank == 0 || domain.rank != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ scaled-alpha term rank mismatch".into(),
+        ));
+    }
+
+    let mut terms_by_degree = BTreeMap::<Vec<usize>, Vec<Rational>>::new();
+    for (coordinate, series) in alpha.iter().enumerate() {
+        validate_ckyz_series(series, rank, "CKYZ log-period correction")?;
+        validate_ckyz_series_has_zero_constant(series, rank, "CKYZ log-period correction")?;
+        for (degree, coefficient) in series {
+            if *coefficient == 0 {
+                continue;
+            }
+            if !domain.contains(degree) {
+                continue;
+            }
+            let coefficients = terms_by_degree
+                .entry(degree.clone())
+                .or_insert_with(|| vec![Rational::from(0); rank]);
+            coefficients[coordinate] = coefficient.clone();
+        }
+    }
+
+    terms_by_degree
+        .into_iter()
+        .map(|(degree, coefficients)| {
+            Ok(CkyzScaledAlphaTerm {
+                total_degree: ckyz_total_degree(&degree)?,
+                degree,
+                coefficients,
+            })
+        })
+        .collect()
+}
+
+fn ckyz_scaled_alpha_coefficient(scale_degree: &[usize], term: &CkyzScaledAlphaTerm) -> Rational {
+    let mut coefficient = Rational::from(0);
+    for (&scale, term_coefficient) in scale_degree.iter().zip(term.coefficients.iter()) {
+        if scale == 0 || *term_coefficient == 0 {
+            continue;
+        }
+        coefficient += Rational::from(Integer::from(scale)) * term_coefficient.clone();
+    }
+    coefficient
+}
+
+fn ckyz_exp_scaled_alpha_coefficient_in_z_domain(
+    scale_degree: &[usize],
+    delta: &[usize],
+    alpha_terms: &[CkyzScaledAlphaTerm],
+    domain: &CkyzMonomialDomain,
+    cache: &mut HashMap<(Vec<usize>, Vec<usize>), Rational>,
+) -> Result<Rational> {
+    if scale_degree.len() != domain.rank || delta.len() != domain.rank {
+        return Err(Error::InvalidInput(
+            "CKYZ scaled exponential coefficient rank mismatch".into(),
+        ));
+    }
+    if delta.iter().all(|&entry| entry == 0) {
+        return Ok(Rational::from(1));
+    }
+    if !domain.contains(delta) {
+        return Ok(Rational::from(0));
+    }
+
+    let key = (scale_degree.to_vec(), delta.to_vec());
+    if let Some(coefficient) = cache.get(&key) {
+        return Ok(coefficient.clone());
+    }
+
+    let delta_total_degree = ckyz_total_degree(delta)?;
+    let mut coefficient = Rational::from(0);
+    for term in alpha_terms {
+        if term.total_degree == 0 || term.total_degree > delta_total_degree {
+            continue;
+        }
+        if !ckyz_componentwise_le(&term.degree, delta) {
+            continue;
+        }
+        let Some(remainder) = ckyz_delta_degree(delta, &term.degree) else {
+            continue;
+        };
+        if !domain.contains(&remainder) {
+            continue;
+        }
+        let scaled_alpha_coefficient = ckyz_scaled_alpha_coefficient(scale_degree, term);
+        if scaled_alpha_coefficient == 0 {
+            continue;
+        }
+        let remainder_coefficient = ckyz_exp_scaled_alpha_coefficient_in_z_domain(
+            scale_degree,
+            &remainder,
+            alpha_terms,
+            domain,
+            cache,
+        )?;
+        if remainder_coefficient == 0 {
+            continue;
+        }
+        coefficient += Rational::from(Integer::from(term.total_degree))
+            * scaled_alpha_coefficient
+            * remainder_coefficient;
+    }
+    coefficient /= Rational::from(Integer::from(delta_total_degree));
+    cache.insert(key, coefficient.clone());
+    Ok(coefficient)
+}
+
+fn ckyz_q_degree_li2_coefficient_in_z_domain(
+    degree: &[usize],
+    target: &[usize],
+    alpha_terms: &[CkyzScaledAlphaTerm],
+    domain: &CkyzMonomialDomain,
+    exp_cache: &mut HashMap<(Vec<usize>, Vec<usize>), Rational>,
+) -> Result<Rational> {
+    if degree.len() != domain.rank || target.len() != domain.rank {
+        return Err(Error::InvalidInput(
+            "CKYZ coefficient-level Li2 rank mismatch".into(),
+        ));
+    }
+    if !ckyz_componentwise_le(degree, target) {
+        return Ok(Rational::from(0));
+    }
+
+    let max_multiple = degree
+        .iter()
+        .zip(target.iter())
+        .filter_map(|(&degree_entry, &target_entry)| {
+            (degree_entry != 0).then(|| target_entry / degree_entry)
+        })
+        .min()
+        .ok_or_else(|| Error::InvalidInput("CKYZ Li2 degree must be nonzero".into()))?;
+
+    let mut coefficient = Rational::from(0);
+    for multiple in 1..=max_multiple {
+        let Some(delta) = ckyz_subtract_degree_multiple(target, degree, multiple) else {
+            continue;
+        };
+        if !domain.contains(&delta) {
+            continue;
+        }
+        let scale_degree = degree
+            .iter()
+            .map(|entry| {
+                entry.checked_mul(multiple).ok_or_else(|| {
+                    Error::InvalidInput("CKYZ scaled degree overflowed usize".into())
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let exp_coefficient = ckyz_exp_scaled_alpha_coefficient_in_z_domain(
+            &scale_degree,
+            &delta,
+            alpha_terms,
+            domain,
+            exp_cache,
+        )?;
+        if exp_coefficient == 0 {
+            continue;
+        }
+        let multiple_squared = multiple
+            .checked_mul(multiple)
+            .ok_or_else(|| Error::InvalidInput("CKYZ Li2 exponent overflowed usize".into()))?;
+        coefficient += exp_coefficient / Rational::from(Integer::from(multiple_squared));
+    }
+    Ok(coefficient)
+}
+
 fn ckyz_z_residual_dependency_degrees(
     alpha: &[BTreeMap<Vec<usize>, Rational>],
     terminal_degrees: &[Vec<usize>],
@@ -4695,14 +4826,26 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
     ckyz_sort_degrees_for_extraction(&mut extraction_degrees);
     extraction_degrees.dedup();
 
-    let mut residual = potential_z_coefficients.clone();
+    let mut residual = extraction_degrees
+        .iter()
+        .map(|degree| {
+            (
+                degree.clone(),
+                potential_z_coefficients
+                    .get(degree)
+                    .cloned()
+                    .unwrap_or_else(|| Rational::from(0)),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
     let mut invariants = BTreeMap::new();
     let trace_timing = env::var_os("CYRUS_TRACE_CKYZ_Z_HISTORY").is_some();
     let extraction_start = trace_timing.then(std::time::Instant::now);
     let mut nonzero_gv_count = 0usize;
-    let mut previous_q_degrees = Vec::new();
-    let mut delta_q_cache = HashMap::new();
-    for degree in &extraction_degrees {
+    let mut li2_coefficient_evaluations = 0usize;
+    let alpha_terms = ckyz_scaled_alpha_terms(alpha, domain)?;
+    let mut exp_coefficient_cache = HashMap::new();
+    for (degree_index, degree) in extraction_degrees.iter().enumerate() {
         let coefficient = residual
             .get(degree)
             .cloned()
@@ -4734,28 +4877,32 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
         invariants.insert(degree.clone(), gv.clone());
         nonzero_gv_count += 1;
 
-        let q_degree = ckyz_q_degree_series_with_previous_cache_in_z_domain(
-            degree,
-            alpha,
-            &previous_q_degrees,
-            &mut delta_q_cache,
-            domain,
-        )?;
-        let li2 = ckyz_series_li2_domain(&q_degree, domain)?;
-        ckyz_series_add_scaled_assign(
-            &mut residual,
-            &li2,
-            -Rational::from(weight) * Rational::from(gv),
-        );
-        previous_q_degrees.push((degree.clone(), q_degree));
+        let subtraction_scale = -Rational::from(weight) * Rational::from(gv);
+        for target in extraction_degrees.iter().skip(degree_index + 1) {
+            let li2_coefficient = ckyz_q_degree_li2_coefficient_in_z_domain(
+                degree,
+                target,
+                &alpha_terms,
+                domain,
+                &mut exp_coefficient_cache,
+            )?;
+            if li2_coefficient == 0 {
+                continue;
+            }
+            li2_coefficient_evaluations += 1;
+            let entry = residual
+                .get_mut(target)
+                .expect("target residual was initialized above");
+            *entry += subtraction_scale.clone() * li2_coefficient;
+        }
     }
     if let Some(start) = extraction_start {
         eprintln!(
-            "[CKYZ_Z_EXTRACT] degrees={} nonzero_gvs={} previous_qns={} delta_q_cache={} elapsed={:?}",
+            "[CKYZ_Z_EXTRACT] degrees={} nonzero_gvs={} li2_coefficients={} exp_coeff_cache={} elapsed={:?}",
             extraction_degrees.len(),
             nonzero_gv_count,
-            previous_q_degrees.len(),
-            delta_q_cache.len(),
+            li2_coefficient_evaluations,
+            exp_coefficient_cache.len(),
             start.elapsed(),
         );
     }
@@ -10213,7 +10360,7 @@ fn is_strictly_dual(rays: &[Vec<i64>], v: &[i64]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::{BTreeMap, BTreeSet, HashMap};
     use std::f64::consts::PI;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -10231,12 +10378,12 @@ mod tests {
         ckyz_local_surface_causal_domain_spec, ckyz_local_surface_cover_weight_coefficients,
         ckyz_local_surface_domain_profile_for_multiples, ckyz_local_surface_target_degrees,
         ckyz_log_period_support_indices_domain, ckyz_observed_support_domain_for_degrees,
-        ckyz_predicted_support_domain_for_degrees,
+        ckyz_predicted_support_domain_for_degrees, ckyz_q_degree_li2_coefficient_in_z_domain,
         ckyz_q_degree_series_from_expalpha_powers_in_z_domain, ckyz_q_degree_series_in_z_domain,
-        ckyz_second_log_period_series_for_pair_domain,
-        ckyz_second_log_period_support_indices_for_pair_domain, ckyz_series_mul_domain,
-        ckyz_series_support_indices, ckyz_support_exp_domain, ckyz_support_exp_domain_by_powers,
-        ckyz_z_residual_dependency_degrees,
+        ckyz_scaled_alpha_terms, ckyz_second_log_period_series_for_pair_domain,
+        ckyz_second_log_period_support_indices_for_pair_domain, ckyz_series_li2_domain,
+        ckyz_series_mul_domain, ckyz_series_support_indices, ckyz_support_exp_domain,
+        ckyz_support_exp_domain_by_powers, ckyz_z_residual_dependency_degrees,
         classify_nilpotent_rays_from_two_pass_divergence_checks,
         classify_nop_rays_from_finite_gv_table, compute_ambient_one_dimensional_ray_gv_series,
         compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
@@ -11319,6 +11466,43 @@ mod tests {
             )
             .unwrap();
             assert_eq!(cached, direct);
+        }
+    }
+
+    #[test]
+    fn ckyz_coefficient_li2_matches_full_series_on_polygon5() {
+        let relations = ckyz_polygon5_relations();
+        let local_intersection_terms = ckyz_polygon5_intersection_terms();
+        let target_degrees = [vec![4, 3, 2], vec![8, 6, 4]];
+        let extraction_degrees = ckyz_cover_closed_target_degrees(&target_degrees).unwrap();
+        let domain = ckyz_predicted_support_domain_for_degrees(
+            &relations,
+            &local_intersection_terms,
+            &extraction_degrees,
+        )
+        .unwrap();
+        let alpha = compute_ckyz_log_period_corrections_domain(&relations, &domain).unwrap();
+        let alpha_terms = ckyz_scaled_alpha_terms(&alpha, &domain).unwrap();
+        let mut coefficient_cache = HashMap::new();
+
+        for degree in &extraction_degrees {
+            let q_degree = ckyz_q_degree_series_in_z_domain(degree, &alpha, &domain).unwrap();
+            let full_li2 = ckyz_series_li2_domain(&q_degree, &domain).unwrap();
+            for target in &extraction_degrees {
+                let actual = ckyz_q_degree_li2_coefficient_in_z_domain(
+                    degree,
+                    target,
+                    &alpha_terms,
+                    &domain,
+                    &mut coefficient_cache,
+                )
+                .unwrap();
+                let expected = full_li2
+                    .get(target)
+                    .cloned()
+                    .unwrap_or_else(|| Rational::from(0));
+                assert_eq!(actual, expected, "degree={degree:?} target={target:?}");
+            }
         }
     }
 

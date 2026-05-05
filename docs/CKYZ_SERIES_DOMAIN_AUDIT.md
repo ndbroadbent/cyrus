@@ -235,3 +235,49 @@ So the next target is not another whole-domain cache. The coefficient work must
 be restricted to the degrees that can actually be read or subtracted in the
 selected residual history, so that even the first `q_delta` exponential is not
 computed over the full predicted monomial domain.
+
+## May 6 Source Refresh
+
+The current source-read pass rechecked the exact CYTools/cygv boundary before
+adding more Rust logic:
+
+- CYTools `CalabiYau.compute_gvs` is only an input builder. It computes
+  intersection numbers, the no-origin curve-basis matrix, the Mori cap, optional
+  lattice-point augmentation, and a grading vector, then calls
+  `cygv.compute_gv`. There is no separate hidden Python GV algorithm to port.
+- cygv `run_hkty` constructs the finite semigroup first, then computes
+  `omega`, `alpha`, `beta`, the contracted instanton polynomials, and finally
+  runs `series_inversion::invert_series`.
+- cygv polynomial multiplication is domain-defined: if the sum of two monomial
+  exponent vectors is absent from `PolynomialProperties::monomial_map`, the
+  product is dropped. This is the real truncation contract.
+- cygv `compute_instanton_data` precomputes `exp(alpha_i)` and
+  `exp(-alpha_i)` once for each coordinate, but the final GV extraction still
+  depends on degree-ordered residual subtraction. The rolling `previous_qn`
+  cache is a performance aid for building `q_N`; it is not the correctness
+  source.
+- cygv's threefold inversion reads a candidate GV from the first nonzero curve
+  coordinate, checks integrality, records nonzero invariants, computes
+  `Li2(q_N)`, and subtracts `GV * component * Li2(q_N)` from all later
+  instanton polynomials.
+
+This confirms that the local CKYZ path should keep working in the z-domain and
+update only the residual coefficients that are actually in the selected
+history. Materializing whole `q_N` or whole `Li2(q_N)` series over the
+21,721-monomial McAllister support-predicted domain is not source-required for
+reading 5,235 history coefficients.
+
+The current coefficient-level prototype follows that direction: it computes the
+coefficient of `Li2(q^d exp(d.alpha(z)))` at a selected target degree directly,
+using the standard exponential coefficient recurrence over the CKYZ finite
+domain. The polygon-5 regression checks this coefficient path against the old
+full-series `Li2` construction.
+
+The remaining hotspot is now implementation shape, not a new physics formula:
+the exponential coefficient cache is keyed by cloned degree vectors
+`(scale_degree, delta)`, and sampling the McAllister N=10 gate showed most time
+under those recursive coefficient/cache lookups plus rational arithmetic. The
+next code change should therefore preserve the same source-derived residual
+algorithm but replace vector-pair cache keys with dense domain indices or
+assigned scale IDs. It should not return to a full-series q-cache or introduce
+any ray-only shortcut.
