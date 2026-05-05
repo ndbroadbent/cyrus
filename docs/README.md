@@ -10,6 +10,12 @@ Current local notes:
 - [MCALLISTER_DATA_POLICY.md](MCALLISTER_DATA_POLICY.md): allowed ancillary
   inputs, validation checkpoints, replay-only artifacts, and current unresolved
   gaps for the no-replay McAllister runner.
+- [POTENT_RAY_SOURCE_READ.md](POTENT_RAY_SOURCE_READ.md): potent-ray source
+  audit, current rank-two/reflexive-polygon inventory, and no-cheat boundary
+  for `potent_rays*.dat`.
+- [LOCAL_TORIC_GV_SOURCE_MAP.md](LOCAL_TORIC_GV_SOURCE_MAP.md): source map for
+  the next non-`P^2` local toric GV implementation, centered on CKYZ local
+  mirror symmetry and the topological vertex fallback.
 - [RUST_CRATES_GUIDE.md](RUST_CRATES_GUIDE.md): notes on Rust dependency usage.
 
 For broader project-level formula and architecture notes, see
