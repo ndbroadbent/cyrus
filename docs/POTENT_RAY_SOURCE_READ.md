@@ -272,3 +272,35 @@ So the next implementation should first produce a source-derived inventory of
 rank-two local support families from the normalized signatures, then derive the
 local mirror/HKTY input for one non-`P^2` family. It should not assign a GV
 sequence merely because a coefficient pattern matches an ancillary row.
+
+## Current Implementation Boundary
+
+The current Cyrus potent-ray code has reached a useful stopping point for
+source reading:
+
+- it can recover the affine support and local charge lattice of every saved
+  rank-two potent-ray support in the 4-214-647 checkpoint;
+- it can express the saved potent-ray relation as an integer direction in that
+  local charge lattice;
+- it can compute the first local `P^2` GV row from the one-parameter local
+  mirror map, without reading the saved GV row as input.
+
+This is not yet a general potent-ray GV engine. For non-`P^2` rank-two supports,
+the reconstructed charge basis is usually multi-parameter. The saved potent ray
+is one direction inside that charge lattice, so the next source-derived object
+is the full local toric/HKTY input for the support, not a one-dimensional
+coefficient-pattern rule.
+
+The intended next code change should therefore be narrow:
+
+1. choose one non-`P^2` normalized support family;
+2. construct the local semigroup generators, grading vector, local `q` matrix,
+   and local intersection/Yukawa data from the reconstructed support and charge
+   basis;
+3. run the lower-level cygv/HKTY path on that local input;
+4. only then compare the resulting multiples of the target charge direction
+   against the corresponding `potent_rays_gv.dat` row.
+
+Anything that directly maps a coefficient pattern such as `(-5, 1, 1, 1, 2)`
+to a saved GV sequence would reintroduce the same cheating this audit is meant
+to avoid.

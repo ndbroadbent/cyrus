@@ -847,3 +847,20 @@ kernel of the local `[1; x; y]` matrix. The gated potent-ray tests verify that
 the target relation lies in this reconstructed local charge lattice for every
 rank-two saved support. This is still pre-GV input construction; the remaining
 missing piece is the local mirror/HKTY series attached to those charge models.
+
+The current source-read boundary is therefore deliberately conservative. Cyrus'
+local `P^2` routine is a one-parameter local mirror-map calculation for
+`O(-3) -> P^2`; it is not a template that can be generalized by changing the
+coefficient vector. For a non-`P^2` rank-two support, the local charge model can
+have more than one independent charge row, and the saved potent ray is an
+integer direction inside that charge lattice. The next real implementation
+should build the full local toric/HKTY input for one such support family first:
+local semigroup generators, grading vector, local `q` matrix, and the relevant
+intersection/Yukawa data. After HKTY has produced local GV data in that context,
+Cyrus can restrict to the multiples of the target charge direction and compare
+with `potent_rays_gv.dat`.
+
+This keeps the ancillary GV rows as assertions. It also explains why simply
+calling cygv on one ray, or adding a coefficient-pattern-to-GV dispatch table,
+would be the wrong abstraction: both would skip the semigroup and lower-degree
+subtraction history that cygv's `series_inversion` actually uses.
