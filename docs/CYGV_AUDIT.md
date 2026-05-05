@@ -277,6 +277,27 @@ Two source details make this boundary explicit:
   truncation, while CYTools' wrapper independently augments generators with
   `mori.find_lattice_points(min_points=100*h11)`.
 
+## Paper Contract for Large h11 GVs
+
+The McAllister paper separates the large-`h11` Kähler-side GV problem into
+potent and nilpotent regimes:
+
+- Potent rays are rays with infinitely many nonzero GV invariants. These govern
+  the radius of convergence, so the paper checks them by computing GV invariants
+  to high degree in low-dimensional faces of the Mori cone.
+- Nilpotent curves have only finitely many nonzero multiples. The important
+  small nilpotent classes are found by starting from toric ambient curves,
+  cutting by Kähler volume, removing curves that are sums of others because they
+  are not Hilbert-basis elements, and computing the GV values of the remainder.
+- The paper states that, in examples where systematic low-volume checks are
+  possible, the nonzero low-volume curves found this way are the toric curves
+  with order-one GV values.
+
+For 4-214-647, the ancillary `potent_rays*.dat` files are therefore not
+optional decoration: they are the saved evidence for the potent-ray convergence
+check. The `small_curves*.dat` files are the saved evidence for the selected
+nilpotent/small-toric contribution to the Kähler-coordinate instanton sums.
+
 ## Flop Continuation
 
 The paper warns that continuing the Kähler-coordinate formula through a flop is
@@ -287,6 +308,18 @@ relevant real-axis dilogarithm continuation is:
 Li2(-exp(-2*pi*t))/(2*pi)^2
   = -Li2(-exp(-2*pi*(-t)))/(2*pi)^2 - 1/2*t^2 - 1/24
 ```
+
+The local TeX source for arXiv:2107.09064 prints this equation with a
+`+ 1/2*t^2` term. Direct evaluation of the real dilogarithm identity gives the
+negative sign above:
+
+```text
+Li2(-x) + Li2(-1/x) = -pi^2/6 - 1/2 log(x)^2, x > 0
+```
+
+This is not a place to blindly copy the printed sign into code. Cyrus'
+`real_dilog_real_axis` tests match the standard identity and mpmath/SciPy
+reference values in the near-flop regime.
 
 This polynomial correction is tied to the transformations of `chi(D_i)` and
 `kappa_ijk` across the flop. Therefore simply evaluating the original chamber's
