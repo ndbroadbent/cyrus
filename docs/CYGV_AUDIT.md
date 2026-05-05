@@ -866,6 +866,13 @@ supports collapse to 16 canonical charge models, each with a fixed target
 direction in its local charge basis. This remains upstream input construction.
 It deliberately does not attach GV sequences to the non-`P^2` models.
 
+The companion test `mcallister_rank_two_local_supports_are_reflexive_polygons`
+checks the geometry behind that inventory. After shifting each support so the
+negative-coefficient compact point is at the origin, every normalized rank-two
+family has exactly one interior lattice point and every polygon edge has lattice
+distance one. The next local mirror implementation should therefore be organized
+around canonical bundles over these reflexive polygon toric surfaces.
+
 This keeps the ancillary GV rows as assertions. It also explains why simply
 calling cygv on one ray, or adding a coefficient-pattern-to-GV dispatch table,
 would be the wrong abstraction: both would skip the semigroup and lower-degree

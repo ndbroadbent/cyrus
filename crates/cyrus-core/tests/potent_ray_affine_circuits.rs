@@ -156,6 +156,136 @@ fn rank_two_signature_coefficient_pattern(signature: &RankTwoLocalSupportSignatu
     coefficients
 }
 
+fn gcd_abs(mut a: i64, mut b: i64) -> i64 {
+    a = a.abs();
+    b = b.abs();
+    while b != 0 {
+        let rem = a % b;
+        a = b;
+        b = rem;
+    }
+    a
+}
+
+fn cross(origin: [i64; 2], lhs: [i64; 2], rhs: [i64; 2]) -> i64 {
+    (lhs[0] - origin[0]) * (rhs[1] - origin[1]) - (lhs[1] - origin[1]) * (rhs[0] - origin[0])
+}
+
+fn convex_hull_2d(points: &[[i64; 2]]) -> Vec<[i64; 2]> {
+    let mut sorted = points.to_vec();
+    sorted.sort_unstable();
+    sorted.dedup();
+    if sorted.len() <= 1 {
+        return sorted;
+    }
+
+    let mut lower = Vec::new();
+    for point in &sorted {
+        while lower.len() >= 2 && cross(lower[lower.len() - 2], lower[lower.len() - 1], *point) <= 0
+        {
+            lower.pop();
+        }
+        lower.push(*point);
+    }
+
+    let mut upper = Vec::new();
+    for point in sorted.iter().rev() {
+        while upper.len() >= 2 && cross(upper[upper.len() - 2], upper[upper.len() - 1], *point) <= 0
+        {
+            upper.pop();
+        }
+        upper.push(*point);
+    }
+
+    lower.pop();
+    upper.pop();
+    lower.extend(upper);
+    lower
+}
+
+fn point_on_segment(point: [i64; 2], start: [i64; 2], end: [i64; 2]) -> bool {
+    cross(start, end, point) == 0
+        && point[0] >= start[0].min(end[0])
+        && point[0] <= start[0].max(end[0])
+        && point[1] >= start[1].min(end[1])
+        && point[1] <= start[1].max(end[1])
+}
+
+fn point_in_convex_polygon(point: [i64; 2], hull: &[[i64; 2]]) -> bool {
+    hull.iter()
+        .zip(hull.iter().cycle().skip(1))
+        .all(|(&start, &end)| cross(start, end, point) >= 0)
+}
+
+fn point_on_polygon_boundary(point: [i64; 2], hull: &[[i64; 2]]) -> bool {
+    hull.iter()
+        .zip(hull.iter().cycle().skip(1))
+        .any(|(&start, &end)| point_on_segment(point, start, end))
+}
+
+fn assert_rank_two_signature_is_reflexive_polygon(signature: &RankTwoLocalSupportSignature) {
+    let negative_points: Vec<[i64; 2]> = signature
+        .entries
+        .iter()
+        .filter(|entry| entry.coefficient < 0)
+        .map(|entry| entry.coordinates)
+        .collect();
+    assert_eq!(
+        negative_points.len(),
+        1,
+        "rank-two support should have one compact interior point"
+    );
+    let interior = negative_points[0];
+    let shifted: Vec<[i64; 2]> = signature
+        .entries
+        .iter()
+        .map(|entry| {
+            [
+                entry.coordinates[0] - interior[0],
+                entry.coordinates[1] - interior[1],
+            ]
+        })
+        .collect();
+    let hull = convex_hull_2d(&shifted);
+    assert!(
+        hull.len() >= 3,
+        "rank-two support should have a two-dimensional polygon hull"
+    );
+
+    let min_x = shifted.iter().map(|point| point[0]).min().unwrap();
+    let max_x = shifted.iter().map(|point| point[0]).max().unwrap();
+    let min_y = shifted.iter().map(|point| point[1]).min().unwrap();
+    let max_y = shifted.iter().map(|point| point[1]).max().unwrap();
+    let mut interior_lattice_points = Vec::new();
+    for x in min_x..=max_x {
+        for y in min_y..=max_y {
+            let point = [x, y];
+            if point_in_convex_polygon(point, &hull) && !point_on_polygon_boundary(point, &hull) {
+                interior_lattice_points.push(point);
+            }
+        }
+    }
+    assert_eq!(
+        interior_lattice_points,
+        vec![[0, 0]],
+        "rank-two local polygon should have the compact point as its unique interior lattice point"
+    );
+
+    for (&start, &end) in hull.iter().zip(hull.iter().cycle().skip(1)) {
+        let dx = end[0] - start[0];
+        let dy = end[1] - start[1];
+        let edge_gcd = gcd_abs(dx, dy);
+        assert!(edge_gcd > 0, "polygon edge should be nonzero");
+        let primitive_normal = [-dy / edge_gcd, dx / edge_gcd];
+        let distance = primitive_normal[0] * start[0] + primitive_normal[1] * start[1];
+        assert_eq!(
+            distance.abs(),
+            1,
+            "rank-two local polygon edge should have lattice distance one from the compact point"
+        );
+    }
+}
+
 #[test]
 fn mcallister_potent_rays_are_affine_toric_circuits() {
     if !first_principles_enabled() {
@@ -304,6 +434,46 @@ fn mcallister_potent_rays_are_affine_toric_circuits() {
         })
     );
     assert_rank_two_local_coordinates_satisfy_relation(&first);
+}
+
+#[test]
+fn mcallister_rank_two_local_supports_are_reflexive_polygons() {
+    if !first_principles_enabled() {
+        return;
+    }
+    let Some(data_dir) = mcallister_data_dir() else {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    };
+
+    let points_raw = read_csv_rows_i64(&data_dir.join("points.dat"));
+    let potent_rays = read_csv_rows_i64(&data_dir.join("potent_rays.dat"));
+    let all_points: Vec<Point> = points_raw.into_iter().map(Point::new).collect();
+    let polytope = Polytope::from_vertices(all_points).expect("failed to create polytope");
+    let triangulation_points = polytope
+        .points_not_interior_to_facets()
+        .expect("failed to filter triangulation points");
+
+    let mut signature_counts: BTreeMap<RankTwoLocalSupportSignature, usize> = BTreeMap::new();
+    for ray in &potent_rays {
+        let diagnostic = diagnose_affine_toric_circuit(ray, &triangulation_points)
+            .expect("affine circuit diagnostic should accept McAllister dimensions")
+            .expect("saved potent ray should be an affine toric circuit");
+        if diagnostic.affine_rank != 2 {
+            continue;
+        }
+        let signature = rank_two_local_support_signature(&diagnostic)
+            .expect("rank-two diagnostic should have a local signature");
+        *signature_counts.entry(signature).or_insert(0) += 1;
+    }
+
+    assert_eq!(
+        signature_counts.len(),
+        16,
+        "rank-two supports should match the 16 reflexive-polygon local families"
+    );
+    for signature in signature_counts.keys() {
+        assert_rank_two_signature_is_reflexive_polygon(signature);
+    }
 }
 
 #[test]
