@@ -4951,6 +4951,58 @@ pub fn nilpotent_ray_divergence_check_from_slice_distances(
     })
 }
 
+/// Run the paper's half/full finite-cutoff distance comparison for one
+/// candidate ray, using explicit same-degree slice lattices supplied by the
+/// caller.
+///
+/// The returned `None` means the candidate ray does not reach the half or full
+/// cutoff slice with a positive integer multiple. This function intentionally
+/// does not build the slice lattices: those must come from a certified GV
+/// semigroup/chamber source.
+pub fn nilpotent_ray_divergence_check_with_explicit_slice_lattices(
+    primitive_ray: &[i64],
+    grading_vector: &[i64],
+    cutoff_degree: i128,
+    half_slice_lattice_points: &[Vec<i64>],
+    full_slice_lattice_points: &[Vec<i64>],
+    comparison_charges: &[Vec<i64>],
+) -> Result<Option<NilpotentRayDivergenceCheck>> {
+    let Some(half_slice) = nilpotent_ray_degree_slice_for_cutoff_fraction(
+        primitive_ray,
+        grading_vector,
+        cutoff_degree,
+        1,
+        2,
+    )?
+    else {
+        return Ok(None);
+    };
+    let Some(full_slice) = nilpotent_ray_degree_slice_for_cutoff_fraction(
+        primitive_ray,
+        grading_vector,
+        cutoff_degree,
+        1,
+        1,
+    )?
+    else {
+        return Ok(None);
+    };
+
+    let half_distance = nilpotent_ray_lll_reduced_slice_distance(
+        &half_slice,
+        half_slice_lattice_points,
+        comparison_charges,
+        grading_vector,
+    )?;
+    let full_distance = nilpotent_ray_lll_reduced_slice_distance(
+        &full_slice,
+        full_slice_lattice_points,
+        comparison_charges,
+        grading_vector,
+    )?;
+    nilpotent_ray_divergence_check_from_slice_distances(half_distance, full_distance).map(Some)
+}
+
 /// Compute the paper's potent-ray convergence terms.
 ///
 /// For a ray `q` with volume `q.t`, the paper defines
@@ -8357,6 +8409,7 @@ mod tests {
         load_grading_cache, local_p2_inverse_mirror_map, local_p2_mirror_correction,
         map_basis_gv_invariants_to_ambient, nilpotent_ray_degree_slice_for_cutoff_fraction,
         nilpotent_ray_divergence_check_from_slice_distances,
+        nilpotent_ray_divergence_check_with_explicit_slice_lattices,
         nilpotent_ray_lll_reduced_slice_distance, nilpotent_ray_slice_comparison_points,
         origin_circuit_diagnostic_from_class_and_witnesses,
         partition_finite_cutoff_gv_charges_by_nilpotence, potent_ray_convergence,
@@ -10527,6 +10580,40 @@ mod tests {
 
         let check = nilpotent_ray_divergence_check_from_slice_distances(half, full).unwrap();
         assert_eq!(check.appears_divergent, Some(true));
+    }
+
+    #[test]
+    fn nilpotent_ray_divergence_check_with_explicit_lattices_builds_slices() {
+        let check = nilpotent_ray_divergence_check_with_explicit_slice_lattices(
+            &[1, 0],
+            &[1, 1],
+            4,
+            &[vec![2, 0], vec![1, 1], vec![0, 2]],
+            &[vec![4, 0], vec![3, 1], vec![0, 4]],
+            &[vec![0, 1]],
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(check.half_cutoff.slice.slice_origin, vec![2, 0]);
+        assert_eq!(check.full_cutoff.slice.slice_origin, vec![4, 0]);
+        assert!(check.half_cutoff.minimum_infinity_norm.is_some());
+        assert!(check.full_cutoff.minimum_infinity_norm.is_some());
+    }
+
+    #[test]
+    fn nilpotent_ray_divergence_check_with_explicit_lattices_returns_none_when_slice_missing() {
+        let check = nilpotent_ray_divergence_check_with_explicit_slice_lattices(
+            &[1, 0],
+            &[5, 1],
+            4,
+            &[],
+            &[],
+            &[],
+        )
+        .unwrap();
+
+        assert_eq!(check, None);
     }
 
     #[test]
