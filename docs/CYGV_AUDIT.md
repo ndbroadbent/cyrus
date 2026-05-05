@@ -376,10 +376,11 @@ Stop expanding top-contributor local checks. The selected-small-curve
 approximate-chamber checkpoint is now reproduced, so the next useful comparisons
 are corrected-chamber and generality audits:
 
-1. Certify the intended "sums of others" rule for production search. The
-   4-214 checkpoint matches pair pruning, while Cyrus' finite-semigroup
-   diagnostic proves that full finite-semigroup pruning would remove 5 more
-   input-chamber curves.
+1. Decide which selected-curve pruning rule to use for GA production search.
+   Cyrus now exposes this as `CurvePruningStrategy` and the
+   `mcallister_first_principles --small-curve-pruning <pair|finite-semigroup>`
+   flag. The default `pair` reproduces the 4-214 checkpoint; the stricter
+   `finite-semigroup` path intentionally removes 5 more input-chamber curves.
 2. Apply the selected-small-curve rule to the corrected chamber, or if the
    intended McAllister operation is analytic continuation through flops, port
    that transformation explicitly using the paper's polylog identities.
@@ -412,10 +413,9 @@ not reopen that loop unless a new source contradicts the current checkpoint.
 
 Concrete missing implementation pieces after the source read are:
 
-- a decision and implementation contract for "sums of others": keep
-  checkpoint-faithful pair pruning for McAllister reproduction, or promote
-  finite-semigroup/Hilbert-basis pruning for GA search with intentionally
-  different selected-curve sets;
+- a policy decision for GA runs: keep checkpoint-faithful pair pruning for
+  comparability, or run the implemented finite-semigroup selected-set pruning
+  knowing it intentionally differs from `small_curves.dat`;
 - the low-dimensional face/ray GV computation path used for large-`h11` potent
   and nilpotent curve checks, distinct from a full 214-dimensional global HKTY
   run;

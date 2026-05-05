@@ -110,7 +110,9 @@ This policy is not a completion certificate. The remaining known gaps are:
   finite-semigroup-pruned: a Cyrus finite integer-feasibility diagnostic finds
   5 additional multi-term decompositions among the 344 retained input-chamber
   curves, so full finite-semigroup pruning would retain 339 curves instead of
-  matching `small_curves.dat`;
+  matching `small_curves.dat`. Cyrus exposes both rules explicitly via
+  `CurvePruningStrategy` and
+  `mcallister_first_principles --small-curve-pruning <pair|finite-semigroup>`;
 - corrected-chamber/flop continuation for the Kähler-coordinate instanton terms
   remains unresolved, especially for even-parity branch-cut cases;
 - corrected-chamber GV coverage still has a checkpoint-implied target residual;

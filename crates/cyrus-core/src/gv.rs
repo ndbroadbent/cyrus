@@ -285,6 +285,32 @@ pub struct CurveDecompositionTerm {
     pub multiplicity: u64,
 }
 
+/// Pruning rule for selected toric curve candidates.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CurvePruningStrategy {
+    /// Remove curves that are sums of two selected candidates.
+    ///
+    /// This is the rule that reproduces the McAllister `small_curves.dat`
+    /// checkpoint for 4-214-647.
+    PairDecomposable,
+    /// Remove curves that are finite-semigroup sums of selected candidates.
+    ///
+    /// This is stricter than the McAllister checkpoint rule and is intended for
+    /// GA/search runs that want a finite selected-set Hilbert-basis proxy.
+    FiniteSemigroup,
+}
+
+impl CurvePruningStrategy {
+    /// Stable CLI/log label for this pruning rule.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::PairDecomposable => "pair",
+            Self::FiniteSemigroup => "finite-semigroup",
+        }
+    }
+}
+
 /// A toric curve class with its genus-zero GV invariant.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ToricCurveGvInvariant {
@@ -672,6 +698,21 @@ pub fn remove_semigroup_decomposable_curve_candidates(
         }
     }
     Ok(out)
+}
+
+/// Prune selected toric curve candidates with an explicit pruning strategy.
+pub fn prune_decomposable_curve_candidates(
+    candidates: &[ToricCurveCandidate],
+    strategy: CurvePruningStrategy,
+) -> Result<Vec<ToricCurveCandidate>> {
+    match strategy {
+        CurvePruningStrategy::PairDecomposable => {
+            remove_pair_decomposable_curve_candidates(candidates)
+        }
+        CurvePruningStrategy::FiniteSemigroup => {
+            remove_semigroup_decomposable_curve_candidates(candidates)
+        }
+    }
 }
 
 /// Exact bounded semigroup-decomposition diagnostic for toric curve candidates.
@@ -2964,15 +3005,16 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        BoundedCurveDecompositionIndex, CurveDecompositionTerm, OriginCircuitCurveWitness,
-        OriginCircuitRelationPoint, ToricCurveCandidate, compute_grading_vector,
-        compute_gv_invariants_with_explicit_semigroup,
+        BoundedCurveDecompositionIndex, CurveDecompositionTerm, CurvePruningStrategy,
+        OriginCircuitCurveWitness, OriginCircuitRelationPoint, ToricCurveCandidate,
+        compute_grading_vector, compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_provided_generators, curve_volume_in_divisor_basis,
         dump_mori_rays_cdd, find_pair_decomposition, find_semigroup_decomposition,
         gv_lattice_search_request, load_grading_cache, map_basis_gv_invariants_to_ambient,
         origin_circuit_diagnostic_from_class_and_witnesses, project_mori_cone_cap_rays_to_basis,
-        remove_pair_decomposable_curve_candidates, remove_semigroup_decomposable_curve_candidates,
-        subcutoff_toric_curve_candidates, write_grading_cache,
+        prune_decomposable_curve_candidates, remove_pair_decomposable_curve_candidates,
+        remove_semigroup_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
+        write_grading_cache,
     };
     use crate::Intersection;
     use crate::{f64_finite, f64_pos};
@@ -3425,6 +3467,45 @@ mod tests {
         let filtered = remove_semigroup_decomposable_curve_candidates(&candidates).unwrap();
 
         assert_eq!(filtered, candidates[..3].to_vec());
+    }
+
+    #[test]
+    fn explicit_curve_pruning_strategy_selects_rule() {
+        let candidates = vec![
+            ToricCurveCandidate {
+                class: vec![1, 0, 0],
+                volume: f64_pos!(0.2),
+            },
+            ToricCurveCandidate {
+                class: vec![0, 1, 0],
+                volume: f64_pos!(0.3),
+            },
+            ToricCurveCandidate {
+                class: vec![0, 0, 1],
+                volume: f64_pos!(0.4),
+            },
+            ToricCurveCandidate {
+                class: vec![1, 1, 1],
+                volume: f64_pos!(0.9),
+            },
+        ];
+
+        let pair_pruned = prune_decomposable_curve_candidates(
+            &candidates,
+            CurvePruningStrategy::PairDecomposable,
+        )
+        .unwrap();
+        let semigroup_pruned =
+            prune_decomposable_curve_candidates(&candidates, CurvePruningStrategy::FiniteSemigroup)
+                .unwrap();
+
+        assert_eq!(CurvePruningStrategy::PairDecomposable.as_str(), "pair");
+        assert_eq!(
+            CurvePruningStrategy::FiniteSemigroup.as_str(),
+            "finite-semigroup"
+        );
+        assert_eq!(pair_pruned, candidates);
+        assert_eq!(semigroup_pruned, candidates[..3].to_vec());
     }
 
     #[test]

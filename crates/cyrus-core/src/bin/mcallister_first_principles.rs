@@ -44,6 +44,9 @@
 //! - `--diagnose-chamber-updated-kklt` to run a diagnostic-only KKLT
 //!   fixed-point loop that recomputes the FRST chamber, intersections, divisor
 //!   χ, and toric-covered small-curve GV target correction at each iteration.
+//! - `--small-curve-pruning <pair|finite-semigroup>` to choose the selected
+//!   toric curve pruning rule. The default `pair` reproduces McAllister
+//!   checkpoints; `finite-semigroup` is stricter for GA/search diagnostics.
 
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
@@ -63,7 +66,7 @@ use cyrus_core::types::tags::{Finite, Pos};
 use cyrus_core::vacuum::compute_vacuum;
 use cyrus_core::volume::bbhl_correction;
 use cyrus_core::{
-    Point, Polytope, ToricCurveCandidate, Triangulation, basis_change_matrix,
+    CurvePruningStrategy, Point, Polytope, ToricCurveCandidate, Triangulation, basis_change_matrix,
     build_racetrack_terms, compute_curve_basis_matrix, compute_glsm_and_linrels,
     compute_grading_vector, compute_intersection_cytools, compute_linear_relations_no_origin,
     compute_mori_cone_cap_rays, compute_origin_circuit_curve_diagnostics,
@@ -71,7 +74,7 @@ use cyrus_core::{
     compute_toric_two_face_curve_gv_invariants, compute_w0_from_terms,
     effective_prime_divisors_from_curve_basis, generate_scaled_kklt_branch_initializations,
     heights_to_kahler, intersection_in_basis, is_unimodular, kahler_to_heights,
-    map_basis_gv_invariants_to_ambient, remove_pair_decomposable_curve_candidates,
+    map_basis_gv_invariants_to_ambient, prune_decomposable_curve_candidates,
     scale_mixed_basis_kklt_branch_initialization_to_target, solve_mixed_basis_path_following,
     solve_mixed_basis_path_following_branch_candidates, solve_racetrack,
     subcutoff_toric_curve_candidates,
@@ -142,6 +145,16 @@ fn parse_branch_selection(name: &str) -> Option<BranchSelection> {
         "min-condition" => Some(BranchSelection::MinCondition),
         "min-toric-gv-missing" | "min-gv-missing" => Some(BranchSelection::MinToricGvMissing),
         "min-required-gv-degree" | "min-gv-degree" => Some(BranchSelection::MinRequiredGvDegree),
+        _ => None,
+    }
+}
+
+fn parse_curve_pruning_strategy(name: &str) -> Option<CurvePruningStrategy> {
+    match name {
+        "pair" | "pair-decomposable" | "mcallister-pair" => {
+            Some(CurvePruningStrategy::PairDecomposable)
+        }
+        "finite-semigroup" | "semigroup" => Some(CurvePruningStrategy::FiniteSemigroup),
         _ => None,
     }
 }
@@ -883,6 +896,7 @@ struct PipelineArgs {
     min_points: Option<u32>,
     cutoff: f64,
     small_curve_cutoff: f64,
+    small_curve_pruning: CurvePruningStrategy,
     out_path: Option<String>,
     compare_dir: Option<String>,
     data_dir: Option<String>,
@@ -955,6 +969,17 @@ fn parse_args() -> PipelineArgs {
     };
     let cutoff = parse_arg_value::<f64>("--cutoff").unwrap_or(1.0);
     let small_curve_cutoff = parse_arg_value::<f64>("--small-curve-cutoff").unwrap_or(1.0);
+    let small_curve_pruning = parse_arg_value::<String>("--small-curve-pruning").map_or(
+        CurvePruningStrategy::PairDecomposable,
+        |value| {
+            parse_curve_pruning_strategy(&value).unwrap_or_else(|| {
+                eprintln!(
+                    "[ERROR] unknown --small-curve-pruning value {value}; expected pair or finite-semigroup"
+                );
+                std::process::exit(2);
+            })
+        },
+    );
     let out_path = parse_arg_value::<String>("--out");
     let compare_dir = parse_arg_value::<String>("--compare-dir");
     let data_dir = parse_arg_value::<String>("--data-dir")
@@ -1000,6 +1025,7 @@ fn parse_args() -> PipelineArgs {
         min_points,
         cutoff,
         small_curve_cutoff,
+        small_curve_pruning,
         out_path,
         compare_dir,
         data_dir,
@@ -1047,6 +1073,19 @@ fn enforce_modes(data_dir: Option<&str>, allow_fixtures: bool) {
     }
     eprintln!("[MODE] fixtures (JSON)");
     eprintln!("[WARN] using JSON fixtures (not a first-principles run)");
+}
+
+fn prune_selected_curve_candidates(
+    candidates: &[ToricCurveCandidate],
+    strategy: CurvePruningStrategy,
+    context: &str,
+) -> Result<Vec<ToricCurveCandidate>, String> {
+    prune_decomposable_curve_candidates(candidates, strategy).map_err(|e| {
+        format!(
+            "failed to prune {context} small curves with {} strategy: {e}",
+            strategy.as_str()
+        )
+    })
 }
 
 fn load_primal_inputs(data_dir: Option<&str>, manifest_dir: &PathBuf) -> (Vec<Vec<i64>>, Vec<f64>) {
@@ -1605,6 +1644,7 @@ fn compute_branch_gv_coverages(
     intersection: &PrimalIntersection,
     branches_by_volume: &[cyrus_core::KkltBranchSolution],
     small_curve_cutoff: F64<Pos>,
+    small_curve_pruning: CurvePruningStrategy,
     missing_class_sample_limit: usize,
     bounded_decomposition_max_terms: Option<usize>,
     include_required_degree_summary: bool,
@@ -1650,9 +1690,11 @@ fn compute_branch_gv_coverages(
                 small_curve_cutoff,
             )
             .map_err(|e| format!("failed to select branch small toric curve candidates: {e}"))?;
-            let small_curves =
-                remove_pair_decomposable_curve_candidates(&small_curve_candidates)
-                    .map_err(|e| format!("failed to prune branch pair-decomposable curves: {e}"))?;
+            let small_curves = prune_selected_curve_candidates(
+                &small_curve_candidates,
+                small_curve_pruning,
+                "branch",
+            )?;
             let decomposition_index = bounded_decomposition_max_terms
                 .map(|_| BoundedCurveDecompositionIndex::new(&small_curve_candidates))
                 .transpose()
@@ -5911,6 +5953,7 @@ fn diagnose_chamber_gv_volume_correction(
     kahler: &[F64<Finite>],
     gamma: &[I64<Finite>],
     cutoff: F64<Pos>,
+    small_curve_pruning: CurvePruningStrategy,
     general_min_points: Option<u32>,
     general_max_deg: Option<u32>,
     provided_generators_only: bool,
@@ -5929,8 +5972,11 @@ fn diagnose_chamber_gv_volume_correction(
     let small_curve_candidates =
         subcutoff_toric_curve_candidates(&ambient_rays, &intersection.basis, kahler, cutoff)
             .map_err(|e| format!("failed to select corrected-chamber small curves: {e}"))?;
-    let small_curves = remove_pair_decomposable_curve_candidates(&small_curve_candidates)
-        .map_err(|e| format!("failed to prune corrected-chamber small curves: {e}"))?;
+    let small_curves = prune_selected_curve_candidates(
+        &small_curve_candidates,
+        small_curve_pruning,
+        "corrected-chamber",
+    )?;
     let toric_gvs =
         compute_toric_two_face_curve_gv_invariants(tri, &geom.triangulation_points, &geom.polytope)
             .map_err(|e| format!("failed to compute corrected-chamber toric GV values: {e}"))?;
@@ -6575,6 +6621,7 @@ fn compute_chamber_toric_gv_selection(
     intersection: &PrimalIntersection,
     kahler: &[F64<Finite>],
     cutoff: F64<Pos>,
+    small_curve_pruning: CurvePruningStrategy,
 ) -> Result<ChamberToricGvSelection, String> {
     let ambient_rays = compute_mori_cone_cap_rays(
         tri,
@@ -6588,8 +6635,8 @@ fn compute_chamber_toric_gv_selection(
     let small_curve_candidates =
         subcutoff_toric_curve_candidates(&ambient_rays, &intersection.basis, kahler, cutoff)
             .map_err(|e| format!("failed to select chamber small curves: {e}"))?;
-    let small_curves = remove_pair_decomposable_curve_candidates(&small_curve_candidates)
-        .map_err(|e| format!("failed to prune chamber small curves: {e}"))?;
+    let small_curves =
+        prune_selected_curve_candidates(&small_curve_candidates, small_curve_pruning, "chamber")?;
     let toric_gvs =
         compute_toric_two_face_curve_gv_invariants(tri, &geom.triangulation_points, &geom.polytope)
             .map_err(|e| format!("failed to compute chamber toric GV values: {e}"))?;
@@ -6644,6 +6691,7 @@ fn diagnose_chamber_updated_kklt_toric_only(
     gamma: &[I64<Finite>],
     start_t: &[F64<Finite>],
     cutoff: F64<Pos>,
+    small_curve_pruning: CurvePruningStrategy,
     kklt_steps: usize,
     max_iterations: usize,
 ) -> Result<ChamberUpdatedKkltDiagnostic, String> {
@@ -6672,8 +6720,14 @@ fn diagnose_chamber_updated_kklt_toric_only(
             kklt_basis,
         )
         .map_err(|e| format!("failed to compute chamber-updated divisor chi: {e}"))?;
-        let selection =
-            compute_chamber_toric_gv_selection(&tri, geom, intersection, &current_t, cutoff)?;
+        let selection = compute_chamber_toric_gv_selection(
+            &tri,
+            geom,
+            intersection,
+            &current_t,
+            cutoff,
+            small_curve_pruning,
+        )?;
         if selection.small_curve_gvs.is_empty() {
             return Err(
                 "chamber-updated KKLT diagnostic found no toric-covered small-curve GV values"
@@ -7290,6 +7344,7 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
     checkpoint_t: &[F64<Finite>],
     gamma: &[I64<Finite>],
     cutoff: F64<Pos>,
+    small_curve_pruning: CurvePruningStrategy,
 ) {
     let Some(dir) = data_dir.map(PathBuf::from) else {
         return;
@@ -7426,6 +7481,7 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
         intersection,
         checkpoint_t,
         cutoff,
+        small_curve_pruning,
     )
     .unwrap_or_else(|e| {
         eprintln!("[ERROR] failed to compute checkpoint-t corrected-chamber GV selection: {e}");
@@ -7451,7 +7507,7 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
             std::process::exit(2);
         });
     eprintln!(
-        "[COMPARE] checkpoint-t corrected-chamber GV target correction delta: max_abs={} relative_l2={} max_abs_checkpoint_implied={} max_abs_toric_covered={} ambient_rays={} subcutoff={} pair_pruned={} toric_covered={} toric_missing={}",
+        "[COMPARE] checkpoint-t corrected-chamber GV target correction delta: max_abs={} relative_l2={} max_abs_checkpoint_implied={} max_abs_toric_covered={} ambient_rays={} subcutoff={} pruned={} pruning={} toric_covered={} toric_missing={}",
         summary.max_abs_delta,
         summary.relative_l2_delta,
         summary.max_abs_reference,
@@ -7459,6 +7515,7 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
         selection.ambient_rays,
         selection.subcutoff_count,
         selection.filtered_count,
+        small_curve_pruning.as_str(),
         selection.toric_gv_covered_count,
         selection.toric_gv_missing_count
     );
@@ -7483,12 +7540,12 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
             target_correction_delta_summary(&covered_gv_target, &subcutoff_target)
                 .unwrap_or_else(|e| {
                     eprintln!(
-                        "[ERROR] failed to compare unpruned vs pair-pruned corrected-chamber GV target correction: {e}"
+                        "[ERROR] failed to compare unpruned vs pruned corrected-chamber GV target correction: {e}"
                     );
                     std::process::exit(2);
                 });
         eprintln!(
-            "[COMPARE] checkpoint-t corrected-chamber GV target correction delta (unpruned_subcutoff): max_abs={} relative_l2={} max_abs_checkpoint_implied={} max_abs_unpruned={} subcutoff_toric_covered={} subcutoff_toric_missing={} vs_pair_pruned_max_abs={} vs_pair_pruned_relative_l2={}",
+            "[COMPARE] checkpoint-t corrected-chamber GV target correction delta (unpruned_subcutoff): max_abs={} relative_l2={} max_abs_checkpoint_implied={} max_abs_unpruned={} subcutoff_toric_covered={} subcutoff_toric_missing={} vs_pruned_max_abs={} vs_pruned_relative_l2={} pruning={}",
             subcutoff_summary.max_abs_delta,
             subcutoff_summary.relative_l2_delta,
             subcutoff_summary.max_abs_reference,
@@ -7496,7 +7553,8 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
             selection.subcutoff_toric_gv_covered_count,
             selection.subcutoff_toric_gv_missing_count,
             subcutoff_vs_pruned_summary.max_abs_delta,
-            subcutoff_vs_pruned_summary.relative_l2_delta
+            subcutoff_vs_pruned_summary.relative_l2_delta,
+            small_curve_pruning.as_str()
         );
     } else {
         eprintln!(
@@ -7784,6 +7842,7 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
             intersection,
             checkpoint_t,
             cutoff,
+            small_curve_pruning,
         )
         .unwrap_or_else(|e| {
             eprintln!("[ERROR] failed to compute corrected_heights.dat GV selection: {e}");
@@ -8073,6 +8132,7 @@ fn stage_volume(
     diagnose_chamber_updated_kklt: bool,
     diagnose_chamber_updated_kklt_iterations: usize,
     small_curve_cutoff: F64<Pos>,
+    small_curve_pruning: CurvePruningStrategy,
     h21: usize,
     t0: &Instant,
 ) -> (f64, F64<Pos>) {
@@ -8127,6 +8187,10 @@ fn stage_volume(
         );
         std::process::exit(2);
     }
+    eprintln!(
+        "[INFO] selected toric curve pruning strategy: {}",
+        small_curve_pruning.as_str()
+    );
     if (diagnose_corrected_chamber_gv
         || diagnose_corrected_chamber_provided_generators_gv
         || diagnose_corrected_chamber_ray_gv
@@ -8343,6 +8407,7 @@ fn stage_volume(
                     intersection,
                     &positive_branches,
                     small_curve_cutoff,
+                    small_curve_pruning,
                     branch_report_missing_limit,
                     (branch_report_decomposition_depth > 0)
                         .then_some(branch_report_decomposition_depth),
@@ -8510,6 +8575,7 @@ fn stage_volume(
                             intersection,
                             &positive_branches,
                             small_curve_cutoff,
+                            small_curve_pruning,
                             branch_report_missing_limit,
                             (branch_report_decomposition_depth > 0)
                                 .then_some(branch_report_decomposition_depth),
@@ -8620,16 +8686,18 @@ fn stage_volume(
             eprintln!("[ERROR] failed to select small toric curve candidates: {e}");
             std::process::exit(2);
         });
-        let small_curves = remove_pair_decomposable_curve_candidates(&small_curve_candidates)
-            .unwrap_or_else(|e| {
-                eprintln!("[ERROR] failed to prune pair-decomposable small curves: {e}");
-                std::process::exit(2);
-            });
+        let small_curves =
+            prune_selected_curve_candidates(&small_curve_candidates, small_curve_pruning, "primal")
+                .unwrap_or_else(|e| {
+                    eprintln!("[ERROR] {e}");
+                    std::process::exit(2);
+                });
         eprintln!(
-            "[INFO] primal small toric curves: ambient_rays={} subcutoff={} pair_pruned={} cutoff={}",
+            "[INFO] primal small toric curves: ambient_rays={} subcutoff={} pruned={} pruning={} cutoff={}",
             ambient_rays.len(),
             small_curve_candidates.len(),
             small_curves.len(),
+            small_curve_pruning.as_str(),
             small_curve_cutoff.get()
         );
         let toric_gvs = compute_toric_two_face_curve_gv_invariants(
@@ -8870,6 +8938,7 @@ fn stage_volume(
                 checkpoint_t,
                 &gamma,
                 small_curve_cutoff,
+                small_curve_pruning,
             );
         }
         let Some(input_chamber_target_tau) = cyrus_core::kklt::compute_gv_corrected_target_tau(
@@ -8914,6 +8983,7 @@ fn stage_volume(
                 &gamma,
                 &corrected.t,
                 small_curve_cutoff,
+                small_curve_pruning,
                 kklt_steps,
                 diagnose_chamber_updated_kklt_iterations,
             )
@@ -9066,6 +9136,7 @@ fn stage_volume(
             &t,
             gamma,
             small_curve_cutoff,
+            small_curve_pruning,
             primal_gv_min_points,
             primal_gv_max_deg,
             diagnose_corrected_chamber_provided_generators_gv,
@@ -9568,6 +9639,7 @@ fn run_pipeline(args: PipelineArgs) {
         args.diagnose_chamber_updated_kklt,
         args.diagnose_chamber_updated_kklt_iterations,
         small_curve_cutoff,
+        args.small_curve_pruning,
         flat.dual_basis.len(),
         &t0,
     );
