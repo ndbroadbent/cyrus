@@ -59,7 +59,13 @@ run pass. Any remaining mismatch must be explicit and localizable.
    while `cygv` computes through a finite semigroup and degree-ordered
    subtraction history. The next implementation target must reconstruct the
    missing origin-circuit face/chamber semigroup, not infer a GV value directly
-   from the sparse coefficient pattern.
+   from the sparse coefficient pattern. A fresh release diagnostic confirms
+   the nine solved-t misses are still all higher-rank origin-circuit Mori
+   generators (`ambient_rays=561596`, `subcutoff=561`, `pair_pruned=419`,
+   `toric_covered=410`, `toric_missing=9`), with target grading degrees
+   `10..26`. The CMS-general-divisor candidate checks currently fail exact
+   divisor-intersection verification for every missing target, so those
+   candidate `1/-2/3` values cannot be promoted.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for
@@ -154,6 +160,10 @@ to make the remaining GV layer more first-principles:
    LP active-generator decompositions and four rational-cone-only
    decompositions. That split is triage only, because cygv assigns GV values
    from a finite semigroup and degree-ordered subtraction history, not from a
-   sparse curve relation in isolation.
+   sparse curve relation in isolation. The immediate concrete artifact should
+   be a structured export of the missing origin-circuit semigroup/chamber
+   context: local charge basis, target degree, lower-degree generators, exact
+   active-generator decompositions, and the CYTools/cygv inputs needed to run a
+   finite HKTY check without reading `small_curves_gv.dat`.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.
