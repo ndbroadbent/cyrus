@@ -132,6 +132,24 @@ It also means `cygv` should not be treated as the implementation of the paper's
 internal heuristic for the supplied semigroup, not a documented Hilbert-basis
 extraction pass over the selected toric curves.
 
+The direct `cygv` source read also fixes the exact computation boundary. In
+`cygv-0.1.2/src/hkty.rs`, `run_hkty` constructs the semigroup first, then builds
+the fundamental period, instanton data, and finally inverts the series. In
+`src/semigroup.rs`, `with_max_degree` and `with_min_elements` close the supplied
+generator set under addition before any HKTY coefficient is computed. In
+`src/fundamental_period.rs`, `compute_omega` multiplies the semigroup elements
+by the GLSM charge matrix and dispatches only the 0-, 1-, and
+2-negative-intersection cases. In `src/series_inversion.rs`, the final GV value
+for a class is not just read off independently: lower-degree `Li2(qN)` terms are
+subtracted from the remaining instanton polynomials degree by degree.
+
+Therefore, when a saved McAllister ray has a GV sequence in
+`potent_rays_gv.dat`, the hidden input is not just the ray vector. It is the
+low-dimensional face semigroup in which that ray was evaluated, including the
+other elements that affect the degree-ordered subtraction history. Feeding the
+single ray and its multiples to `cygv` is a valid diagnostic, but it asks a
+different mathematical question.
+
 ## Two Distinct GV Regimes
 
 The McAllister pipeline uses GV data in two different regimes:
