@@ -121,11 +121,18 @@ as the assertion. The elapsed time increased to about 132 seconds on the latest
 run, so this is a correctness/structure promotion rather than a performance
 breakthrough.
 
-This is still not the completed coefficient-domain solution. It enumerates
-alpha/beta supports on the broad downset, and a focused polygon-5
-`[4,3,2]`, `N=5` McAllister diagnostic still exceeded a 300 second timeout.
-An isolated domain-size diagnostic that only tried to construct the
-support-predicted domain for the same target also exceeded a 300 second
-timeout, before final rational potential extraction. A production builder
-should derive the needed alpha/beta and inverse-mirror-map supports directly
-enough to avoid that `N=5` boundary before the potent-ray gate is raised.
+This is still not the completed coefficient-domain solution. A fresh source
+read of `cygv-0.1.2` shows why: cygv computes `exp(alpha)` once and then uses
+degree-ordered `q_N`/`Li2(q_N)` path history during series inversion, while the
+current local CKYZ path still materializes the full rational inverse mirror map
+`z(q)` before extracting coefficients. The support predictor now avoids a
+repeated fixed-point support recomputation when all alpha support closures are
+identical and caches duplicate alpha-product support multiplications. On the
+focused polygon-5 `[4,3,2]`, `N=10` domain profile this changes the
+support-domain run from timing out earlier, then 81.7 seconds, to 26.2 seconds
+(`z` support about 117 ms, contracted support about 22.9 seconds). The actual
+all-ten rational GV reconstruction was stopped after about six minutes; a stack
+sample was in `compute_ckyz_inverse_mirror_map_domain ->
+ckyz_series_exp_domain -> ckyz_series_mul_domain`. That confirms the next
+builder needs cygv-style coefficient/path-history domains, not just narrower
+support sets.

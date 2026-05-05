@@ -3101,10 +3101,38 @@ fn ckyz_inverse_mirror_map_support_domain(
             "CKYZ support inverse mirror map rank mismatch".into(),
         ));
     }
-    let mut z_of_q = (0..rank)
-        .map(|coordinate| ckyz_support_coordinate_series_indices(rank, coordinate, domain))
-        .collect::<Vec<_>>();
-    for _ in 0..domain.max_total_degree {
+    let trace_timing = env::var_os("CYRUS_TRACE_CKYZ_SUPPORT_DOMAIN").is_some();
+    let first_iteration_start = trace_timing.then(std::time::Instant::now);
+    let exp_negative_corrections = alpha_supports
+        .iter()
+        .map(|alpha_support| ckyz_support_exp_domain(alpha_support, domain))
+        .collect::<Result<Vec<_>>>()?;
+    let mut z_of_q = Vec::with_capacity(rank);
+    for (coordinate, exp_negative_correction) in exp_negative_corrections.iter().enumerate() {
+        let q_coordinate = ckyz_support_coordinate_series_indices(rank, coordinate, domain);
+        z_of_q.push(ckyz_support_mul_domain(
+            &q_coordinate,
+            exp_negative_correction,
+            domain,
+        )?);
+    }
+    if let Some(start) = first_iteration_start {
+        let sizes = z_of_q.iter().map(BTreeSet::len).collect::<Vec<_>>();
+        eprintln!(
+            "[CKYZ_SUPPORT_Z] iteration=1 sizes={sizes:?} elapsed={:?}",
+            start.elapsed(),
+        );
+    }
+    // If every alpha coordinate generates the same support semigroup, substituting
+    // z_i = q_i * S into any alpha_j cannot leave S and still contains alpha_j.
+    if exp_negative_corrections
+        .windows(2)
+        .all(|window| window[0] == window[1])
+    {
+        return Ok(z_of_q);
+    }
+    for iteration in 1..domain.max_total_degree {
+        let iteration_start = trace_timing.then(std::time::Instant::now);
         let mut next = Vec::with_capacity(rank);
         for (coordinate, alpha_support) in alpha_supports.iter().enumerate() {
             let correction_at_z = ckyz_support_compose_domain(alpha_support, &z_of_q, domain)?;
@@ -3115,6 +3143,14 @@ fn ckyz_inverse_mirror_map_support_domain(
                 &exp_negative_correction,
                 domain,
             )?);
+        }
+        if let Some(start) = iteration_start {
+            let sizes = next.iter().map(BTreeSet::len).collect::<Vec<_>>();
+            eprintln!(
+                "[CKYZ_SUPPORT_Z] iteration={} sizes={sizes:?} elapsed={:?}",
+                iteration + 1,
+                start.elapsed(),
+            );
         }
         if next == z_of_q {
             break;
@@ -3176,6 +3212,19 @@ fn ckyz_predicted_support_domain_for_degrees(
         );
     }
 
+    let mut alpha_support_classes = Vec::with_capacity(rank);
+    let mut unique_alpha_supports = Vec::<&BTreeSet<usize>>::new();
+    for support in &alpha_supports {
+        let class = unique_alpha_supports
+            .iter()
+            .position(|candidate| *candidate == support)
+            .unwrap_or_else(|| {
+                unique_alpha_supports.push(support);
+                unique_alpha_supports.len() - 1
+            });
+        alpha_support_classes.push(class);
+    }
+    let mut alpha_product_cache = BTreeMap::<(usize, usize), BTreeSet<usize>>::new();
     let mut contracted_support = BTreeSet::new();
     for term in local_intersection_terms {
         let beta_support = ckyz_second_log_period_support_indices_for_pair_domain(
@@ -3190,11 +3239,25 @@ fn ckyz_predicted_support_domain_for_degrees(
                 .map(|&index| broad_domain.degrees[index].clone()),
         );
 
-        let alpha_product_support = ckyz_support_mul_domain(
-            &alpha_supports[term.first],
-            &alpha_supports[term.second],
-            &broad_domain,
-        )?;
+        let mut alpha_product_key = (
+            alpha_support_classes[term.first],
+            alpha_support_classes[term.second],
+        );
+        if alpha_product_key.0 > alpha_product_key.1 {
+            alpha_product_key = (alpha_product_key.1, alpha_product_key.0);
+        }
+        let alpha_product_support =
+            if let Some(cached_support) = alpha_product_cache.get(&alpha_product_key) {
+                cached_support.clone()
+            } else {
+                let support = ckyz_support_mul_domain(
+                    unique_alpha_supports[alpha_product_key.0],
+                    unique_alpha_supports[alpha_product_key.1],
+                    &broad_domain,
+                )?;
+                alpha_product_cache.insert(alpha_product_key, support.clone());
+                support
+            };
         degree_set.extend(
             alpha_product_support
                 .iter()
