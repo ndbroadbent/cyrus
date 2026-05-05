@@ -311,6 +311,15 @@ pub struct SupportingMoriFaceCertificate {
     pub positive_generator_count: usize,
 }
 
+/// Mori generators lying on an exactly certified supporting face.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SupportingMoriFace {
+    /// Exact certificate for the supporting normal.
+    pub certificate: SupportingMoriFaceCertificate,
+    /// Mori generators with zero pairing against the supporting normal.
+    pub generators: Vec<Vec<i64>>,
+}
+
 /// One term in a finite semigroup decomposition of a curve class.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CurveDecompositionTerm {
@@ -667,6 +676,34 @@ pub fn check_supporting_mori_face_normal(
         normal: normal.to_vec(),
         zero_generator_count,
         positive_generator_count,
+    }))
+}
+
+/// Extract the Mori generators cut out by an exact supporting normal.
+///
+/// The returned generators are the rows of `mori_generators` whose exact
+/// integer pairing with `normal` is zero. If the proposed normal is not
+/// supporting, this returns `Ok(None)`.
+pub fn supporting_mori_face_from_normal(
+    normal: &[i64],
+    mori_generators: &[Vec<i64>],
+) -> Result<Option<SupportingMoriFace>> {
+    let Some(certificate) = check_supporting_mori_face_normal(normal, &[], mori_generators)? else {
+        return Ok(None);
+    };
+
+    let mut generators = Vec::with_capacity(certificate.zero_generator_count);
+    for generator in mori_generators {
+        let dot = exact_i64_dot_checked(normal, generator)?;
+        if dot == 0 {
+            generators.push(generator.clone());
+        }
+    }
+    debug_assert_eq!(generators.len(), certificate.zero_generator_count);
+
+    Ok(Some(SupportingMoriFace {
+        certificate,
+        generators,
     }))
 }
 
@@ -3470,7 +3507,7 @@ mod tests {
         potent_ray_log_xi_terms, project_ambient_curve_to_basis,
         project_mori_cone_cap_rays_to_basis, prune_decomposable_curve_candidates,
         remove_pair_decomposable_curve_candidates, remove_semigroup_decomposable_curve_candidates,
-        subcutoff_toric_curve_candidates, write_grading_cache,
+        subcutoff_toric_curve_candidates, supporting_mori_face_from_normal, write_grading_cache,
     };
     use crate::Intersection;
     use crate::{f64_finite, f64_pos};
@@ -3783,6 +3820,35 @@ mod tests {
         .unwrap_err();
 
         assert!(err.to_string().contains("dot product overflowed"));
+    }
+
+    #[test]
+    fn supporting_mori_face_from_normal_extracts_zero_generators() {
+        let face = supporting_mori_face_from_normal(&[0, 1], &[vec![1, 0], vec![0, 1], vec![1, 1]])
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(face.generators, vec![vec![1, 0]]);
+        assert_eq!(face.certificate.zero_generator_count, 1);
+        assert_eq!(face.certificate.positive_generator_count, 2);
+    }
+
+    #[test]
+    fn supporting_mori_face_from_normal_allows_zero_face() {
+        let face = supporting_mori_face_from_normal(&[1, 1], &[vec![1, 0], vec![0, 1]])
+            .unwrap()
+            .unwrap();
+
+        assert!(face.generators.is_empty());
+        assert_eq!(face.certificate.zero_generator_count, 0);
+        assert_eq!(face.certificate.positive_generator_count, 2);
+    }
+
+    #[test]
+    fn supporting_mori_face_from_normal_rejects_non_supporting_normal() {
+        let face = supporting_mori_face_from_normal(&[0, 1], &[vec![1, 0], vec![0, -1]]).unwrap();
+
+        assert!(face.is_none());
     }
 
     #[test]
