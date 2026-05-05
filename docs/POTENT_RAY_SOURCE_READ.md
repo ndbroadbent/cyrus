@@ -350,7 +350,10 @@ until the finite monomial-domain extractor exists. A later indexed-domain
 multiplication refactor removed much of the per-product lookup overhead but
 still did not make all-ten validation finish under a 600 second timeout, so the
 remaining blocker is the monomial set being too broad, not only the arithmetic
-representation.
+representation. A 240 second instrumented run after indexing progressed through
+`P2` `[1]`, `F0` `[1,1]`, `F1` `[2,1]`, `F0` `[1,2]`, and `F1` `[3,1]`, then
+timed out after starting `F0` `[1,3]`. That profile is better than the
+pre-indexed run but still not acceptable as an all-ten validation path.
 
 ## Current Implementation Boundary
 

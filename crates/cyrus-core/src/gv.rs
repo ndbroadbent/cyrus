@@ -1976,21 +1976,22 @@ fn ckyz_series_mul_domain(
 ) -> Result<BTreeMap<Vec<usize>, Rational>> {
     let lhs_terms = ckyz_indexed_domain_terms(lhs, domain)?;
     let rhs_terms = ckyz_indexed_domain_terms(rhs, domain)?;
-    let mut out_by_index = BTreeMap::<usize, Rational>::new();
+    let mut out_by_index = vec![None::<Rational>; domain.degrees.len()];
     for (lhs_index, lhs_coefficient) in lhs_terms.iter().copied() {
         for (rhs_index, rhs_coefficient) in rhs_terms.iter().copied() {
             if let Some(product_index) = domain.sum_index(lhs_index, rhs_index) {
-                let entry = out_by_index
-                    .entry(product_index)
-                    .or_insert_with(|| Rational::from(0));
+                let entry = out_by_index[product_index].get_or_insert_with(|| Rational::from(0));
                 *entry += lhs_coefficient.clone() * rhs_coefficient.clone();
             }
         }
     }
     let mut out = out_by_index
         .into_iter()
+        .enumerate()
         .filter_map(|(index, coefficient)| {
-            (coefficient != 0).then(|| (domain.degrees[index].clone(), coefficient))
+            coefficient.and_then(|coefficient| {
+                (coefficient != 0).then(|| (domain.degrees[index].clone(), coefficient))
+            })
         })
         .collect::<BTreeMap<_, _>>();
     out.retain(|_, coefficient| *coefficient != 0);
