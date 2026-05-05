@@ -435,15 +435,23 @@ contexts, but not two-dimensional reflexive polygons. Their GV source therefore
 has to come from the low-dimensional face/semigroup construction, not from the
 rank-two CKYZ surface matching.
 
-The intended next code change should therefore be narrow:
+The intended next code change should therefore be narrow, but it must not assume
+that a local CKYZ surface can be handed directly to compact `cygv`. The cygv
+source computes
+`cy_dim = q.nrows() - q.ncols() - cy_codim` in `compute_omega`, with
+`cy_codim = 1` for the hypersurface path, and rejects `cy_dim < 3`. Local toric
+surface charge systems such as local `P^2` fail that compact-hypersurface shape
+check. The valid next step for rank-two CKYZ families is therefore the local
+source-derived series path: keep the CKYZ relation rows, local intersection
+expression, finite-limit cover weights, and construct the missing
+coefficient/path-history domain for that local calculation.
 
-1. choose one non-`P^2` normalized support family;
-2. construct the local semigroup generators, grading vector, local `q` matrix,
-   and local intersection/Yukawa data from the reconstructed support and charge
-   basis;
-3. run the lower-level cygv/HKTY path on that local input;
-4. only then compare the resulting multiples of the target charge direction
-   against the corresponding `potent_rays_gv.dat` row.
+For the affine-rank-four rows, the source-derived path is different: first
+derive the actual low-dimensional compact Mori-face context, including its
+semigroup generators, grading vector, compact `q` matrix, and intersection data.
+Only after those compact inputs are available should Cyrus call the cygv/HKTY
+path and compare multiples of the target charge direction against the
+corresponding `potent_rays_gv.dat` row.
 
 Anything that directly maps a coefficient pattern such as `(-5, 1, 1, 1, 2)`
 to a saved GV sequence would reintroduce the same cheating this audit is meant
