@@ -273,11 +273,30 @@ using the standard exponential coefficient recurrence over the CKYZ finite
 domain. The polygon-5 regression checks this coefficient path against the old
 full-series `Li2` construction.
 
-The remaining hotspot is now implementation shape, not a new physics formula:
-the exponential coefficient cache is keyed by cloned degree vectors
-`(scale_degree, delta)`, and sampling the McAllister N=10 gate showed most time
-under those recursive coefficient/cache lookups plus rational arithmetic. The
-next code change should therefore preserve the same source-derived residual
-algorithm but replace vector-pair cache keys with dense domain indices or
-assigned scale IDs. It should not return to a full-series q-cache or introduce
-any ray-only shortcut.
+The first implementation-shape fix replaced the cloned vector-pair exponential
+cache with source-equivalent indexed caches. The exponential coefficient cache
+is now keyed by `(scale_id, delta_index)`, and repeated
+`scale_degree dot alpha_term` values are cached per scale. The small polygon-5
+trace improved monotonically:
+
+```text
+vector-pair coefficient cache: [CKYZ_Z_EXTRACT] ... exp_coeff_cache=1382 elapsed=35.5ms
+indexed coefficient cache:    [CKYZ_Z_EXTRACT] ... exp_coeff_cache=1382 elapsed=29.4ms
+per-scale alpha cache:        [CKYZ_Z_EXTRACT] ... exp_coeff_cache=1382 scaled_alpha_cache=1362 elapsed=26.1ms
+```
+
+This did not make the McAllister `[4,3,2]`, N=10 gate finish. The gate still
+reaches the same source-predicted domain and history:
+
+```text
+[CKYZ_SUPPORT_DOMAIN] rank=3 broad=26691 selected=21721 ...
+[CKYZ_Z_HISTORY] domain=21721 terminals=10 selected=5235 candidate_evaluations=38195 ...
+```
+
+Sampling after the indexed-cache changes no longer shows cloned vector-pair
+keys as the top cost. The hot path is now recursive coefficient lookup over
+too many selected history targets: per-scale `HashMap<usize>` lookups, degree
+subtraction, componentwise checks, dense degree indexing, and Malachite rational
+multiply/GCD. The next substantive change should therefore reduce the
+coefficient-history/domain itself. More cache reshaping may help constants, but
+it will not change the core 5,235-history-degree workload.
