@@ -85,6 +85,23 @@ production `t` or `V_string` result. This distinction is important: diagnostic
 reads are allowed only because they explain discrepancies; they are not allowed
 to repair them.
 
+## Legacy Python Boundary
+
+The older Python reproduction scripts are useful context, but they are not the
+contract for the GA-ready engine.
+
+- `string_theory/mcallister_2107/full_pipeline_from_data.py` computes the
+  dual-side flat direction, `e^{K0}`, and a racetrack from `dual_curves*.dat`,
+  but then reads `cy_vol.dat` for `V[0]` with a TODO to derive it from Kähler
+  stabilization. Despite its success message, that script is a validation
+  checkpoint, not a no-replay pipeline.
+- `string_theory_project/research/mcallister_reproduction/REPRODUCTION_OUTLINE.md`
+  still describes high-dimensional `small_curves*.dat` as if it came from a
+  generic `cy.compute_gvs(max_deg=N)` call. The paper and ancillary readme are
+  more specific: the Kähler-side data comes from selected toric curves below a
+  volume cutoff, followed by removal of curves that are sums of others and GV
+  evaluation of the retained curves.
+
 ## Open Gaps
 
 This policy is not a completion certificate. The remaining known gaps are:
