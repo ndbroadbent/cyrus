@@ -58,7 +58,10 @@ use good_lp::{
 };
 
 use cyrus_core::flat_direction::{compute_flat_direction, compute_flat_direction_full};
-use cyrus_core::gv::{BoundedCurveDecompositionIndex, project_mori_cone_cap_rays_to_basis};
+use cyrus_core::gv::{
+    BoundedCurveDecompositionIndex, check_supporting_mori_face_normal,
+    project_mori_cone_cap_rays_to_basis,
+};
 use cyrus_core::types::f64::F64;
 use cyrus_core::types::i64::I64;
 use cyrus_core::types::range::CheckedRange;
@@ -3952,11 +3955,15 @@ fn integer_supporting_face_certificate_from_lp(
         if !seen_normals.insert(normal.clone()) {
             continue;
         }
-        if !normal_vanishes_on_generators(&normal, face_generators) {
-            continue;
-        }
-        if let Some(certificate) = check_integer_supporting_face_normal(&normal, basis_rays)? {
-            return Ok(Some(certificate));
+        if let Some(certificate) =
+            check_supporting_mori_face_normal(&normal, face_generators, basis_rays)
+                .map_err(|err| err.to_string())?
+        {
+            return Ok(Some(SupportingFaceCertificate {
+                zero_generator_count: certificate.zero_generator_count,
+                positive_generator_count: certificate.positive_generator_count,
+                normal: certificate.normal,
+            }));
         }
     }
     Ok(None)
@@ -3994,56 +4001,6 @@ fn reduce_i64_vector_preserve_sign(values: &[i64]) -> Result<Option<Vec<i64>>, S
         })
         .collect::<Result<Vec<_>, _>>()
         .map(Some)
-}
-
-fn normal_vanishes_on_generators(normal: &[i64], generators: &[Vec<i64>]) -> bool {
-    generators
-        .iter()
-        .all(|generator| exact_i64_dot(normal, generator) == 0)
-}
-
-fn check_integer_supporting_face_normal(
-    normal: &[i64],
-    basis_rays: &[Vec<i64>],
-) -> Result<Option<SupportingFaceCertificate>, String> {
-    if normal.iter().all(|&value| value == 0) {
-        return Ok(None);
-    }
-    let mut zero_generator_count = 0usize;
-    let mut positive_generator_count = 0usize;
-    for ray in basis_rays {
-        if ray.len() != normal.len() {
-            return Err(format!(
-                "supporting-face normal dimension {} does not match Mori ray dimension {}",
-                normal.len(),
-                ray.len()
-            ));
-        }
-        let dot = exact_i64_dot(normal, ray);
-        if dot < 0 {
-            return Ok(None);
-        }
-        if dot == 0 {
-            zero_generator_count += 1;
-        } else {
-            positive_generator_count += 1;
-        }
-    }
-    if positive_generator_count == 0 {
-        return Ok(None);
-    }
-    Ok(Some(SupportingFaceCertificate {
-        zero_generator_count,
-        positive_generator_count,
-        normal: normal.to_vec(),
-    }))
-}
-
-fn exact_i64_dot(lhs: &[i64], rhs: &[i64]) -> i128 {
-    lhs.iter()
-        .zip(rhs)
-        .map(|(&left, &right)| i128::from(left) * i128::from(right))
-        .sum()
 }
 
 fn gcd_i64(a: i64, b: i64) -> i64 {
@@ -10392,8 +10349,8 @@ mod tests {
                 .unwrap()
                 .unwrap();
 
-        assert_eq!(exact_i64_dot(&certificate.normal, &[1, 0]), 0);
-        assert!(exact_i64_dot(&certificate.normal, &[0, 1]) > 0);
+        assert_eq!(integer_dot_for_test(&certificate.normal, &[1, 0]), 0);
+        assert!(integer_dot_for_test(&certificate.normal, &[0, 1]) > 0);
         assert_eq!(certificate.zero_generator_count, 1);
         assert_eq!(certificate.positive_generator_count, 2);
     }
@@ -10405,6 +10362,13 @@ mod tests {
                 .unwrap();
 
         assert!(certificate.is_none());
+    }
+
+    fn integer_dot_for_test(lhs: &[i64], rhs: &[i64]) -> i128 {
+        lhs.iter()
+            .zip(rhs)
+            .map(|(&left, &right)| i128::from(left) * i128::from(right))
+            .sum()
     }
 
     #[test]
