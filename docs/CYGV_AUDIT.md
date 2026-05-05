@@ -1580,11 +1580,13 @@ c'_a         = c_a + 2 n_C^0 C_a
 
 and the GV invariant is reassigned from `C` to `-C` in the adjacent chamber.
 Those rules are source-derived and belong in Cyrus, but they are not by
-themselves the missing origin-circuit GV source. A usable continuation step
-still needs the shrinking curve to be certified as a supporting Mori-facet
-generator, the divisor to be identified from geometry rather than a fitted
-candidate, and `n_C^0` to be computed or otherwise certified without reading the
-target GV row.
+themselves the missing origin-circuit GV source. Cyrus now has an exact
+separator verifier, `check_extremal_mori_ray_separator`, for the cone-theoretic
+claim that a target curve spans an extremal Mori ray. A usable continuation step
+still needs that separator to be found from exact geometry, the Kähler
+wall/chamber transition to be certified, the divisor to be identified from
+geometry rather than a fitted candidate, and `n_C^0` to be computed or otherwise
+certified without reading the target GV row.
 
 The immediate implementation standard from this checkpoint is:
 
