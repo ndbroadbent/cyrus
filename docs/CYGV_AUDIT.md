@@ -1576,3 +1576,39 @@ The immediate implementation standard from this checkpoint is:
 - do reconstruct either the correct finite semigroup/path history for the
   affine-rank-three/four origin circuits, or the certified chamber-continuation
   chain that supplies their GV data from another chamber.
+
+## cygv 0.1.2 HKTY Mechanics
+
+The current `cygv` crate source sharpens the same boundary:
+
+- `Semigroup::with_max_degree` trims the supplied columns by grading degree,
+  finds a smaller generator set by removing sums of two existing generators,
+  and then closes the set under generator addition up to `max_degree`.
+  `Semigroup::with_min_elements` instead increments the degree until the
+  semigroup contains the requested number of elements. In both cases the zero
+  element is inserted and the final elements are sorted by degree.
+- `PolynomialProperties::new` creates the monomial lookup table from every
+  semigroup element. Polynomial multiplication and series substitution drop
+  terms whose sums are absent from this table. The finite semigroup therefore
+  defines the actual coefficient domain.
+- `fundamental_period::compute_omega` computes `q0`, forms `q * curves`, groups
+  semigroup elements by having zero, one, or two negative GLSM intersections,
+  and ignores elements with more than two negative intersections. The formulas
+  for `c0`, `c1`, and `c2` differ across those three cases.
+- `instanton::compute_instanton_data` builds `alpha = c0^{-1} c1`,
+  `beta = c0^{-1} c2`, forms the instanton potential as
+  `beta - alpha alpha`, contracts it with the intersection tensor, and builds
+  both `exp(alpha)` and `exp(-alpha)` for later mirror-map substitution.
+- `series_inversion::invert_series` walks distinct semigroup degrees in order.
+  For a threefold class it selects a nonzero coordinate of the curve, divides
+  the corresponding instanton coefficient by that coordinate, rounds/checks the
+  GV integer, computes `q_N` and `Li2(q_N)`, and subtracts that contribution
+  from all remaining instanton polynomials before the next degrees are read.
+  It maintains a rolling cache of previous `q_N` polynomials, with ten previous
+  levels for `h11 >= 10`.
+
+The actionable consequence is that a Cyrus replacement for corrected-chamber
+or potent-ray GV values must recreate the finite semigroup and lower-degree
+residual history used for the target class. A target curve class plus a
+plausible local charge matrix is insufficient unless it induces the same
+monomial domain and lower-degree subtraction path.
