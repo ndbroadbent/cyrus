@@ -320,6 +320,89 @@ optional decoration: they are the saved evidence for the potent-ray convergence
 check. The `small_curves*.dat` files are the saved evidence for the selected
 nilpotent/small-toric contribution to the Kähler-coordinate instanton sums.
 
+## Source-Derived Port Map
+
+The next GV work should be split by the source algorithm, not by the names of
+the ancillary files. The paper, ancillary readme, CYTools wrapper, and `cygv`
+source imply the following Cyrus contracts.
+
+### Selected Nilpotent / Small-Toric Curves
+
+This is the contract behind `small_curves*.dat`:
+
+1. Build the primal triangulation from `points.dat` and `heights.dat`.
+2. Compute ambient Mori-cap curve relations with the CYTools
+   `mori_cone_cap()` circuit construction.
+3. Select toric curves whose volume is positive and below
+   `small_curves_cutoff.dat` at the approximate Kähler point
+   `kahler_param.dat`. The paper describes this as homogeneous scaling with
+   `c_tau = 1`; the checkpoint value is the resulting validation point for
+   4-214-647, not a general production input.
+4. Remove selected curves that are sums of other selected curves. The
+   4-214-647 checkpoint matches pair-decomposable pruning exactly, while
+   Cyrus' stricter finite-semigroup diagnostic removes five additional curves.
+   Both policies are now explicit, so a GA production run must choose one
+   deliberately rather than inheriting the checkpoint accident silently.
+5. Compute GV values for the retained toric/nilpotent curves. For the
+   checkpoint-covered classes, Cyrus' local two-face and resolved-conifold
+   origin-circuit formulas reproduce all saved `1/-2` values. For retained
+   classes not covered by these local formulas in a new chamber or geometry,
+   the next production method must be a certified face/local HKTY computation
+   or a faithful general CYTools/cygv computation, not a fitted value.
+
+Executable evidence for this contract is
+`stage5_mcallister_small_toric_curves_match_checkpoint`,
+`stage5_mcallister_small_toric_curve_finite_semigroup_diagnostic`, and
+`stage5_mcallister_small_toric_curve_gvs_match_checkpoint`.
+
+### Potent-Ray / `M_infinity(X)` Checks
+
+This is the contract behind `potent_rays*.dat`:
+
+1. Construct or sample low-dimensional faces of `M_infinity(X)` in phases where
+   those faces are also faces of the Mori cone.
+2. Produce rational rays inside those low-dimensional faces and track their
+   ambient curve classes.
+3. For each ray, compute `N_q, N_2q, ..., N_10q` by running HKTY in the
+   corresponding low-dimensional face/semigroup context. A one-generator
+   provided-generator call is only a diagnostic unless it is supplied with the
+   same local semigroup context used by the face computation.
+4. Validate the sample by recomputing row-span rank, corrected-Kähler volumes,
+   and the paper's `log xi_n = log|N_{nq}| - 2 pi n q.t` slopes.
+
+Cyrus currently implements only step 4 plus a reusable
+`compute_one_dimensional_ray_gv_series` helper. It does not yet implement steps
+1-3. Therefore `potent_rays.dat` and `potent_rays_gv.dat` remain validation
+samples, not reusable pipeline inputs.
+
+The first useful production test here is not another final-volume assertion.
+It should be a focused test that takes one saved potent ray, reconstructs the
+low-dimensional face/semigroup context from upstream geometry, regenerates the
+first ten GV values, and compares them to the corresponding row of
+`potent_rays_gv.dat`. Only after that passes should Cyrus attempt to generate
+the full 411-ray 4-214-647 sample.
+
+### Corrected-Chamber Continuation
+
+The selected-small-curve checkpoint is an input-chamber construction. The
+corrected Kähler point can cross flop walls; for 4-214-647, ten saved
+small-curve volumes become negative after moving to
+`corrected_kahler_param.dat`.
+
+For a GA-ready corrected-volume solve, Cyrus must choose and test one of these
+source-backed paths:
+
+1. Recompute selected toric/nilpotent curves, local GV values, divisor Euler
+   characteristics, and the Kähler-coordinate instanton vector in the current
+   corrected chamber at each KKLT fixed-point iteration.
+2. Or implement the explicit flop/chamber continuation of the original
+   input-chamber instanton data, including the accompanying transformations of
+   the intersection form and divisor Euler characteristics.
+
+Simply evaluating the saved input-chamber finite curve list at negative
+`q.t`, dropping near-flop curves, flipping signs, or fitting per-curve weights
+has already been ruled out by diagnostics and is not a production method.
+
 ## Flop Continuation
 
 The paper warns that continuing the Kähler-coordinate formula through a flop is
