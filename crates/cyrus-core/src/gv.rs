@@ -1240,10 +1240,15 @@ fn insert_toric_gv_diagnostic(
 fn gv_lattice_search_request(
     gen_min_points: usize,
     max_deg: Option<u32>,
+    lattice_augmentation: GvLatticeAugmentation,
 ) -> (Option<usize>, Option<i64>) {
-    match max_deg {
-        Some(degree) => (None, Some(i64::from(degree))),
-        None => (Some(gen_min_points), None),
+    match lattice_augmentation {
+        GvLatticeAugmentation::CytoolsDefault => (Some(gen_min_points), None),
+        GvLatticeAugmentation::DegreeBoundedDiagnostic => match max_deg {
+            Some(degree) => (None, Some(i64::from(degree))),
+            None => (Some(gen_min_points), None),
+        },
+        GvLatticeAugmentation::None => (None, None),
     }
 }
 
@@ -1797,7 +1802,28 @@ fn gcd_i64(a: i64, b: i64) -> i64 {
     if b == 0 { a } else { gcd_i64(b, a % b) }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GvLatticeAugmentation {
+    CytoolsDefault,
+    DegreeBoundedDiagnostic,
+    None,
+}
+
+impl GvLatticeAugmentation {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::CytoolsDefault => "cytools-default",
+            Self::DegreeBoundedDiagnostic => "degree-bounded-diagnostic",
+            Self::None => "none",
+        }
+    }
+}
+
 /// Compute GV invariants using cygv.
+///
+/// This mirrors the CYTools default wrapper: the supplied Mori-cap rays are
+/// augmented with `mori.find_lattice_points(min_points=100*h11)` before calling
+/// `cygv`, even when the final `cygv` semigroup truncation uses `max_deg`.
 ///
 /// This requires:
 /// - Mori cone cap generators (rays)
@@ -1819,7 +1845,36 @@ pub fn compute_gv_invariants(
         intnums,
         min_points,
         max_deg,
-        true,
+        GvLatticeAugmentation::CytoolsDefault,
+    )
+}
+
+/// Compute GV invariants with a degree-bounded lattice augmentation.
+///
+/// This is a diagnostic shortcut, not the CYTools wrapper contract. When
+/// `max_deg` is supplied it enumerates Mori-cone lattice points only up to that
+/// degree before calling `cygv`, which can make bounded investigations
+/// tractable but may omit generators that CYTools would provide before cygv's
+/// own semigroup truncation.
+///
+/// # Errors
+/// Returns an error if the input shapes or numeric ranges are invalid.
+pub fn compute_gv_invariants_with_degree_bounded_lattice(
+    rays: &[Vec<i64>],
+    grading_vector: &[i64],
+    q_matrix: &[Vec<i64>],
+    intnums: &Intersection,
+    min_points: Option<u32>,
+    max_deg: Option<u32>,
+) -> Result<Vec<(Vec<i32>, Integer)>> {
+    compute_gv_invariants_inner(
+        rays,
+        grading_vector,
+        q_matrix,
+        intnums,
+        min_points,
+        max_deg,
+        GvLatticeAugmentation::DegreeBoundedDiagnostic,
     )
 }
 
@@ -1847,7 +1902,7 @@ pub fn compute_gv_invariants_with_provided_generators(
         intnums,
         min_points,
         max_deg,
-        false,
+        GvLatticeAugmentation::None,
     )
 }
 
@@ -2009,16 +2064,16 @@ fn compute_gv_invariants_inner(
     intnums: &Intersection,
     min_points: Option<u32>,
     max_deg: Option<u32>,
-    augment_lattice_points: bool,
+    lattice_augmentation: GvLatticeAugmentation,
 ) -> Result<Vec<(Vec<i32>, Integer)>> {
     let t0 = std::time::Instant::now();
     eprintln!(
-        "[DEBUG] gv start: rays={}, dim={}, max_deg={:?}, min_points={:?}, augment_lattice_points={}",
+        "[DEBUG] gv start: rays={}, dim={}, max_deg={:?}, min_points={:?}, lattice_augmentation={}",
         rays.len(),
         rays.first().map_or(0, Vec::len),
         max_deg,
         min_points,
-        augment_lattice_points
+        lattice_augmentation.as_str()
     );
     if min_points.is_none() && max_deg.is_none() {
         return Err(Error::InvalidInput(
@@ -2081,21 +2136,20 @@ fn compute_gv_invariants_inner(
         t0.elapsed()
     );
 
-    // Augment generators with lattice points, matching CYTools for unbounded
-    // runs and using degree-bounded enumeration for explicit max-degree runs.
     // CYTools default: lattice_pts = mori.find_lattice_points(min_points=100*h11)
     let factor = env::var("CYRUS_LATTICE_MIN_POINTS_FACTOR")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(100);
     let gen_min_points = factor * dim;
-    let (lattice_min_points, lattice_max_deg) = gv_lattice_search_request(gen_min_points, max_deg);
+    let (lattice_min_points, lattice_max_deg) =
+        gv_lattice_search_request(gen_min_points, max_deg, lattice_augmentation);
     eprintln!(
         "[DEBUG] gv lattice request: min_points={:?} max_deg={:?}",
         lattice_min_points, lattice_max_deg
     );
 
-    let lattice_pts = if augment_lattice_points {
+    let lattice_pts = if lattice_augmentation != GvLatticeAugmentation::None {
         let lattice_cache = LatticeCacheControls::from_env(1000, 0);
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         LATTICE_CACHE_VERSION.hash(&mut hasher);
@@ -3006,8 +3060,8 @@ mod tests {
 
     use super::{
         BoundedCurveDecompositionIndex, CurveDecompositionTerm, CurvePruningStrategy,
-        OriginCircuitCurveWitness, OriginCircuitRelationPoint, ToricCurveCandidate,
-        compute_grading_vector, compute_gv_invariants_with_explicit_semigroup,
+        GvLatticeAugmentation, OriginCircuitCurveWitness, OriginCircuitRelationPoint,
+        ToricCurveCandidate, compute_grading_vector, compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_provided_generators, curve_volume_in_divisor_basis,
         dump_mori_rays_cdd, find_pair_decomposition, find_semigroup_decomposition,
         gv_lattice_search_request, load_grading_cache, map_basis_gv_invariants_to_ambient,
@@ -3521,9 +3575,23 @@ mod tests {
     }
 
     #[test]
-    fn gv_lattice_search_uses_max_degree_when_requested() {
-        assert_eq!(gv_lattice_search_request(400, None), (Some(400), None));
-        assert_eq!(gv_lattice_search_request(400, Some(7)), (None, Some(7)));
+    fn gv_lattice_search_contracts_are_explicit() {
+        assert_eq!(
+            gv_lattice_search_request(400, None, GvLatticeAugmentation::CytoolsDefault),
+            (Some(400), None)
+        );
+        assert_eq!(
+            gv_lattice_search_request(400, Some(7), GvLatticeAugmentation::CytoolsDefault),
+            (Some(400), None)
+        );
+        assert_eq!(
+            gv_lattice_search_request(400, Some(7), GvLatticeAugmentation::DegreeBoundedDiagnostic),
+            (None, Some(7))
+        );
+        assert_eq!(
+            gv_lattice_search_request(400, Some(7), GvLatticeAugmentation::None),
+            (None, None)
+        );
     }
 
     #[test]

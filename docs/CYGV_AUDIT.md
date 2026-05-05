@@ -170,15 +170,19 @@ instanton correction.
 Cyrus already has wrappers around the same Rust `cygv` crate:
 
 - `compute_gv_invariants`
+- `compute_gv_invariants_with_degree_bounded_lattice`
 - `compute_gv_invariants_with_provided_generators`
 - `compute_gv_invariants_with_explicit_semigroup`
 
 Their boundaries are different:
 
-- `compute_gv_invariants` tries to mirror the CYTools default augmentation, but
-  currently changes the lattice-point request to `max_deg`-bounded enumeration
-  when `max_deg` is supplied. That is useful for controlled diagnostics, but it
-  is not the literal CYTools wrapper contract described above.
+- `compute_gv_invariants` mirrors the CYTools default augmentation: it always
+  augments Mori-cap rays with `min_points=100*h11` lattice points before calling
+  `cygv`, even when the final semigroup truncation is controlled by `max_deg`.
+- `compute_gv_invariants_with_degree_bounded_lattice` is the explicitly named
+  diagnostic shortcut: when `max_deg` is supplied it bounds the Mori-cone
+  lattice-point enumeration before calling `cygv`. This is useful for controlled
+  investigations, but it is not the literal CYTools wrapper contract.
 - `compute_gv_invariants_with_provided_generators` mirrors CYTools'
   `mcap_generators=...` entry point: Cyrus supplies rows directly to cygv and
   lets cygv perform its own semigroup closure.

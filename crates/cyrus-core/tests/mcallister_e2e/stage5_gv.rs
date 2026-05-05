@@ -886,7 +886,7 @@ fn stage5_gv_computation_roadmap() {
             "basis-coordinate GV invariants can be mapped back to ambient divisor-intersection curve classes for primal volume corrections",
             "mcallister_first_principles can explicitly attempt general primal GV fallback for missing small-curve toric formula coverage via --primal-gv-max-deg or --primal-gv-min-points",
             "compute_gv_invariants can dump the exact pre-lattice Mori-cap generator matrix as a CDD V-representation for PPL/cdd diagnostics",
-            "compute_gv_invariants uses degree-bounded lattice-point enumeration when max_deg is specified instead of always requesting CYTools-style min_points augmentation",
+            "compute_gv_invariants now uses CYTools-style min_points lattice augmentation even when max_deg is specified; degree-bounded lattice enumeration is isolated behind compute_gv_invariants_with_degree_bounded_lattice for diagnostics",
             "mcallister_first_principles rejects insufficient primal --primal-gv-max-deg values before full GV enumeration; for the selected 4-214-647 missing small curves, degree 1 is impossible because the required grading degrees are 10..2386",
             "branch-report JSONL records init_source so validation artifacts distinguish generated branch-search candidates from the computed height_projected secondary-fan initializer",
             "generated KKLT branch candidates now use one scaled-uniform baseline plus non-uniform deterministic random starts instead of wasting the prefix on equivalent scaled-uniform duplicates",
