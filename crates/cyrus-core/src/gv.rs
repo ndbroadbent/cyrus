@@ -553,6 +553,21 @@ pub struct NilpotentRayTwoPassNopClassification {
     pub second_pass_inconclusive_rays: Vec<NilpotentRayCandidate>,
 }
 
+/// Full finite-GV-table result for the two-pass nop classification.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FiniteGvTableNopClassification {
+    /// Initial partition into apparently nilpotent rays and `C \ N`.
+    pub partition: FiniteCutoffGvChargePartition,
+    /// First-pass checks against `C \ N`.
+    pub first_pass_checks: Vec<(Vec<i64>, NilpotentRayDivergenceCheck)>,
+    /// Finite-table comparison charges for the second pass, i.e. `C \ F0`.
+    pub second_pass_comparison_charges: Vec<(Vec<i64>, Integer)>,
+    /// Second-pass checks against `C \ F0`.
+    pub second_pass_checks: Vec<(Vec<i64>, NilpotentRayDivergenceCheck)>,
+    /// Provisional `F0`, final `F`, and inconclusive rays.
+    pub classification: NilpotentRayTwoPassNopClassification,
+}
+
 /// Exact certificate that an integer normal cuts out a supporting Mori face.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SupportingMoriFaceCertificate {
@@ -4468,6 +4483,67 @@ fn collect_nilpotent_divergence_checks_by_ray<'a>(
     Ok(by_ray)
 }
 
+fn finite_gv_table_divergence_check_for_candidate(
+    primitive_ray: &[i64],
+    grading_vector: &[i64],
+    cutoff_degree: i128,
+    gv_invariants: &[(Vec<i64>, Integer)],
+    comparison_charges: &[Vec<i64>],
+    context: &str,
+) -> Result<NilpotentRayDivergenceCheck> {
+    let half_slice = nilpotent_ray_degree_slice_for_cutoff_fraction(
+        primitive_ray,
+        grading_vector,
+        cutoff_degree,
+        1,
+        2,
+    )?
+    .ok_or_else(|| {
+        Error::InvalidInput(format!(
+            "finite GV nop {context} candidate ray does not reach the half-cutoff slice"
+        ))
+    })?;
+    let full_slice = nilpotent_ray_degree_slice_for_cutoff_fraction(
+        primitive_ray,
+        grading_vector,
+        cutoff_degree,
+        1,
+        1,
+    )?
+    .ok_or_else(|| {
+        Error::InvalidInput(format!(
+            "finite GV nop {context} candidate ray does not reach the full-cutoff slice"
+        ))
+    })?;
+
+    let mut half_slice_lattice_points = finite_gv_nonzero_degree_slice_points(
+        grading_vector,
+        half_slice.slice_degree,
+        gv_invariants,
+    )?;
+    half_slice_lattice_points.push(half_slice.slice_origin.clone());
+    let mut full_slice_lattice_points = finite_gv_nonzero_degree_slice_points(
+        grading_vector,
+        full_slice.slice_degree,
+        gv_invariants,
+    )?;
+    full_slice_lattice_points.push(full_slice.slice_origin.clone());
+
+    let half_distance = nilpotent_ray_lll_reduced_slice_distance(
+        &half_slice,
+        &half_slice_lattice_points,
+        comparison_charges,
+        grading_vector,
+    )?;
+    let full_distance = nilpotent_ray_lll_reduced_slice_distance(
+        &full_slice,
+        &full_slice_lattice_points,
+        comparison_charges,
+        grading_vector,
+    )?;
+    nilpotent_ray_divergence_check_from_slice_distances(half_distance, full_distance)
+}
+
 fn primitive_i64_gcd(ray: &[i64], context: &str) -> Result<i64> {
     let mut gcd = 0i64;
     for &entry in ray {
@@ -5291,6 +5367,97 @@ pub fn classify_nilpotent_rays_from_two_pass_divergence_checks(
         nop_rays,
         first_pass_inconclusive_rays,
         second_pass_inconclusive_rays,
+    })
+}
+
+/// Run the paper's finite-cutoff two-pass nop classification from a supplied
+/// finite GV table.
+///
+/// This function assumes `gv_invariants` is already the caller's computed
+/// finite table up to `cutoff_degree`. It does not compute GV invariants or
+/// certify that the table came from the correct chamber/semigroup; it only
+/// applies the appendix algorithm to that explicit finite source.
+pub fn classify_nop_rays_from_finite_gv_table(
+    grading_vector: &[i64],
+    cutoff_degree: i128,
+    gv_invariants: &[(Vec<i64>, Integer)],
+) -> Result<FiniteGvTableNopClassification> {
+    let partition = partition_finite_cutoff_gv_charges_by_nilpotence(
+        grading_vector,
+        cutoff_degree,
+        gv_invariants,
+    )?;
+    let first_pass_comparison_charges: Vec<Vec<i64>> = partition
+        .potent_charges
+        .iter()
+        .map(|(charge, _)| charge.clone())
+        .collect();
+
+    let mut first_pass_checks = Vec::with_capacity(partition.nilpotent_rays.len());
+    for candidate in &partition.nilpotent_rays {
+        let check = finite_gv_table_divergence_check_for_candidate(
+            &candidate.primitive_ray,
+            grading_vector,
+            cutoff_degree,
+            gv_invariants,
+            &first_pass_comparison_charges,
+            "first-pass",
+        )?;
+        first_pass_checks.push((candidate.primitive_ray.clone(), check));
+    }
+
+    let f0_candidates: Vec<NilpotentRayCandidate> = partition
+        .nilpotent_rays
+        .iter()
+        .zip(first_pass_checks.iter())
+        .filter_map(|(candidate, (_, check))| {
+            if check.appears_divergent == Some(true) {
+                Some(candidate.clone())
+            } else {
+                None
+            }
+        })
+        .collect();
+    let f0_primitive_rays: Vec<Vec<i64>> = f0_candidates
+        .iter()
+        .map(|candidate| candidate.primitive_ray.clone())
+        .collect();
+    let second_pass_comparison_charges = finite_cutoff_gv_charges_excluding_primitive_rays(
+        grading_vector,
+        cutoff_degree,
+        gv_invariants,
+        &f0_primitive_rays,
+    )?;
+    let second_pass_comparison_charge_rows: Vec<Vec<i64>> = second_pass_comparison_charges
+        .iter()
+        .map(|(charge, _)| charge.clone())
+        .collect();
+
+    let mut second_pass_checks = Vec::with_capacity(f0_candidates.len());
+    for candidate in &f0_candidates {
+        let check = finite_gv_table_divergence_check_for_candidate(
+            &candidate.primitive_ray,
+            grading_vector,
+            cutoff_degree,
+            gv_invariants,
+            &second_pass_comparison_charge_rows,
+            "second-pass",
+        )?;
+        second_pass_checks.push((candidate.primitive_ray.clone(), check));
+    }
+
+    let classification = classify_nilpotent_rays_from_two_pass_divergence_checks(
+        &partition.nilpotent_rays,
+        &first_pass_checks,
+        &second_pass_checks,
+    )?;
+
+    Ok(FiniteGvTableNopClassification {
+        partition,
+        first_pass_checks,
+        second_pass_comparison_charges,
+        second_pass_checks,
+        classification,
     })
 }
 
@@ -8678,7 +8845,7 @@ mod tests {
         ckyz_local_surface_cover_weight_coefficients, ckyz_local_surface_target_degrees,
         ckyz_observed_support_domain_for_degrees, ckyz_predicted_support_domain_for_degrees,
         ckyz_series_mul_domain, classify_nilpotent_rays_from_two_pass_divergence_checks,
-        compute_ambient_one_dimensional_ray_gv_series,
+        classify_nop_rays_from_finite_gv_table, compute_ambient_one_dimensional_ray_gv_series,
         compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
         compute_ckyz_local_gv_invariants, compute_ckyz_local_gv_invariants_for_degrees,
         compute_ckyz_local_gv_invariants_for_degrees_with_causal_domain,
@@ -11156,6 +11323,42 @@ mod tests {
         )
         .unwrap_err();
         assert!(mismatched_err.to_string().contains("does not match"));
+    }
+
+    #[test]
+    fn finite_gv_table_nop_classification_runs_two_pass_pipeline() {
+        let report = classify_nop_rays_from_finite_gv_table(
+            &[1, 1],
+            4,
+            &[
+                (vec![1, 0], Integer::from(1)),
+                (vec![0, 1], Integer::from(1)),
+                (vec![0, 2], Integer::from(1)),
+                (vec![0, 3], Integer::from(1)),
+                (vec![0, 4], Integer::from(1)),
+                (vec![1, 1], Integer::from(1)),
+                (vec![2, 2], Integer::from(1)),
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(report.partition.nilpotent_rays.len(), 1);
+        assert_eq!(report.partition.nilpotent_rays[0].primitive_ray, vec![1, 0]);
+        assert_eq!(report.first_pass_checks.len(), 1);
+        assert!(report.first_pass_checks[0].1.appears_divergent.is_some());
+        assert_eq!(
+            report.second_pass_checks.len(),
+            report.classification.initial_candidate_nop_rays.len()
+        );
+    }
+
+    #[test]
+    fn finite_gv_table_nop_classification_requires_nontrivial_slice_lattice() {
+        let err =
+            classify_nop_rays_from_finite_gv_table(&[1, 1], 2, &[(vec![1, 0], Integer::from(1))])
+                .unwrap_err();
+
+        assert!(err.to_string().contains("nonzero offset"));
     }
 
     #[test]
