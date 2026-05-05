@@ -298,6 +298,46 @@ rank-two local support families from the normalized signatures, then derive the
 local mirror/HKTY input for one non-`P^2` family. It should not assign a GV
 sequence merely because a coefficient pattern matches an ancillary row.
 
+## Code-Level Targeted-Extraction Implications
+
+Reading `cygv` more closely gives a sharper implementation constraint for the
+rank-two CKYZ performance gap. The current Cyrus targeted CKYZ path is
+mathematically source-derived, but it still truncates formal series by the
+componentwise box spanned by the requested degrees. That is the source of the
+all-ten-row blowup: for a target like `n * (a,b,c)`, the box contains many
+monomials that cannot affect the requested coefficients.
+
+`cygv` avoids this shape of waste by doing all polynomial arithmetic over a
+finite semigroup object. `Semigroup::with_max_degree` and
+`Semigroup::with_min_elements` first close the supplied generators under
+addition, then `Polynomial::mul` emits a product only when the summed exponent
+is present in `poly_props.monomial_map`. In other words, the truncation is an
+explicit finite monomial set with an addition lookup, not an axis-aligned box.
+
+The corresponding CKYZ fix should therefore be a coefficient-targeted monomial
+domain:
+
+1. start from the target ray multiples and their cover divisors;
+2. close under the lower-degree monomials needed by log-period corrections,
+   inverse mirror-map substitution, exponentials, and local
+   `beta - alpha alpha` multiplication;
+3. perform series addition/multiplication/composition against that domain's
+   addition map;
+4. extract only the requested GV degrees after the same multiple-cover
+   subtraction used by the full CKYZ path.
+
+This is a source-derived analogue of cygv's semigroup arithmetic. It is not a
+coefficient-pattern table and it is not a one-dimensional shortcut. The saved
+`potent_rays_gv.dat` row should still enter only at the final assertion stage.
+
+The cygv series-inversion code also reinforces that "just compute the ray" is
+not a well-defined independent operation. `invert_series` processes classes in
+grading order and subtracts the `Li2(q^N)` history of previously found classes.
+For the CKYZ local-surface path this history is mirrored by the
+multiple-cover/primitive-divisor subtraction; for rank-four local affine
+supports, Cyrus still needs the actual local semigroup, `q` matrix, and
+intersection/Yukawa data before any ray comparison is meaningful.
+
 ## Current Implementation Boundary
 
 The current Cyrus potent-ray code has reached a useful stopping point for

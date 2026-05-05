@@ -82,7 +82,9 @@ to make the remaining GV layer more first-principles:
    `M_infinity(X)` and compute the ray `N_{nq}` series rather than reading
    `potent_rays*.dat`. Rank-two CKYZ rows now have first-two checks; next make
    the local extractor coefficient-targeted enough for complete rows where
-   feasible, then handle the rank-four affine supports.
+   feasible. The intended shape is a cygv-style finite monomial domain with an
+   addition map/past-light-cone closure, not the current componentwise formal
+   box. After that, handle the rank-four affine supports.
 2. Compare broader corrected-chamber per-curve cygv/general-GV values against
    toric formula values and missing non-toric contributions.
 3. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
