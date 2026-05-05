@@ -363,3 +363,11 @@ puts the next work in this order:
 This keeps the project from going in circles: the next code should be driven by
 one fully read source path, not by another diagnostic wrapper around the same
 saved data.
+
+The first part of item 2 is now implemented as
+`compute_ckyz_log_period_corrections`. It computes the CKYZ logarithmic-period
+correction coefficients from the local relation rows, with tests against local
+`P^2`, `F0`, and `F1` source systems. The remaining rank-two CKYZ work is the
+second-derivative/local-prepotential period and the multi-parameter
+multiple-cover extraction needed before comparing non-`P^2` potent-ray GV
+sequences.

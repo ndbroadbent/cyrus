@@ -217,6 +217,16 @@ source coordinates. The gated test
 `mcallister_rank_two_models_identify_ckyz_sources` verifies this path for all
 16 rank-two 4-214-647 support families. It still does not attach any GV values.
 
+Cyrus now also implements the first CKYZ period layer:
+`compute_ckyz_log_period_corrections` evaluates the hypergeometric
+`rho`-derivative coefficients for the logarithmic periods directly from the
+source relation rows. Unit tests verify that this reproduces the existing local
+`P^2` mirror-map correction and produces the coupled first correction terms for
+the CKYZ `F0` and `F1` relation systems. This is still upstream of GV
+extraction: the double-log/local-prepotential period, mirror-map inversion in
+multiple variables, and multiple-cover inversion remain the next missing
+pieces.
+
 ## Rank-Four Boundary
 
 The gated test

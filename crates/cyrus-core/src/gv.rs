@@ -852,6 +852,108 @@ pub fn identify_ckyz_local_surface(
     Ok(None)
 }
 
+/// Compute CKYZ logarithmic-period corrections from local relation rows.
+///
+/// CKYZ writes the local hypergeometric coefficient as
+/// `1 / product_i Gamma(sum_a l_i^(a)(n_a + rho_a) + 1)`. This computes the
+/// non-logarithmic correction terms in `partial_{rho_a} Pi_0 |_{rho=0}` for
+/// all multi-degrees of total degree at most `max_total_degree`.
+///
+/// The returned vector is indexed by relation row / flat coordinate. Each map
+/// is keyed by the multi-degree `n`.
+///
+/// # Errors
+/// Returns an error if the relation matrix is empty, ragged, not Calabi-Yau
+/// (`sum_i l_i^(a) = 0`), or if a degree conversion overflows.
+pub fn compute_ckyz_log_period_corrections(
+    relations: &[Vec<i64>],
+    max_total_degree: usize,
+) -> Result<Vec<BTreeMap<Vec<usize>, Rational>>> {
+    let Some(first_relation) = relations.first() else {
+        return Err(Error::InvalidInput(
+            "CKYZ log-period corrections require at least one relation row".into(),
+        ));
+    };
+    if first_relation.is_empty() {
+        return Err(Error::InvalidInput(
+            "CKYZ relation rows must contain at least one point".into(),
+        ));
+    }
+    if relations
+        .iter()
+        .any(|relation| relation.len() != first_relation.len())
+    {
+        return Err(Error::InvalidInput(
+            "CKYZ relation rows must all have the same length".into(),
+        ));
+    }
+    for relation in relations {
+        let row_sum = relation.iter().try_fold(0i64, |acc, &entry| {
+            acc.checked_add(entry)
+                .ok_or_else(|| Error::InvalidInput("CKYZ relation row sum overflowed i64".into()))
+        })?;
+        if row_sum != 0 {
+            return Err(Error::InvalidInput(
+                "CKYZ local relation rows must satisfy the Calabi-Yau sum-zero condition".into(),
+            ));
+        }
+    }
+
+    let rank = relations.len();
+    let mut corrections = vec![BTreeMap::new(); rank];
+    for degree in ckyz_multi_degrees(rank, max_total_degree) {
+        let point_pairings = ckyz_point_pairings(relations, &degree)?;
+        let negative_points = point_pairings
+            .iter()
+            .enumerate()
+            .filter_map(|(index, &pairing)| (pairing < 0).then_some(index))
+            .collect::<Vec<_>>();
+
+        match negative_points.as_slice() {
+            [negative_point] => {
+                let coefficient =
+                    ckyz_one_negative_log_period_base(&point_pairings, *negative_point)?;
+                for coordinate_index in 0..rank {
+                    let relation_entry = relations[coordinate_index][*negative_point];
+                    if relation_entry == 0 {
+                        continue;
+                    }
+                    let value = coefficient.clone() * Rational::from(relation_entry);
+                    if value != 0 {
+                        corrections[coordinate_index].insert(degree.clone(), value);
+                    }
+                }
+            }
+            [] => {
+                let coefficient = ckyz_zero_negative_hypergeometric_coeff(&point_pairings)?;
+                for coordinate_index in 0..rank {
+                    let mut harmonic_sum = Rational::from(0);
+                    for (&relation_entry, &pairing) in relations[coordinate_index]
+                        .iter()
+                        .zip(point_pairings.iter())
+                    {
+                        if relation_entry == 0 || pairing == 0 {
+                            continue;
+                        }
+                        let pairing = usize::try_from(pairing).map_err(|_| {
+                            Error::InvalidInput(
+                                "nonnegative CKYZ point pairing does not fit usize".into(),
+                            )
+                        })?;
+                        harmonic_sum += Rational::from(relation_entry) * harmonic_number(pairing);
+                    }
+                    let value = -coefficient.clone() * harmonic_sum;
+                    if value != 0 {
+                        corrections[coordinate_index].insert(degree.clone(), value);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(corrections)
+}
+
 fn ckyz_local_surface_sources() -> Vec<CkyzLocalSurfaceSource> {
     vec![
         CkyzLocalSurfaceSource {
@@ -923,6 +1025,116 @@ fn ckyz_local_surface_sources() -> Vec<CkyzLocalSurfaceSource> {
             ],
         },
     ]
+}
+
+fn ckyz_multi_degrees(rank: usize, max_total_degree: usize) -> Vec<Vec<usize>> {
+    let mut out = Vec::new();
+    let mut current = vec![0; rank];
+    push_ckyz_multi_degrees(rank, max_total_degree, 0, &mut current, &mut out);
+    out.retain(|degree| degree.iter().any(|&entry| entry != 0));
+    out
+}
+
+fn push_ckyz_multi_degrees(
+    rank: usize,
+    remaining_degree: usize,
+    coordinate_index: usize,
+    current: &mut [usize],
+    out: &mut Vec<Vec<usize>>,
+) {
+    if coordinate_index == rank {
+        out.push(current.to_vec());
+        return;
+    }
+    for value in 0..=remaining_degree {
+        current[coordinate_index] = value;
+        push_ckyz_multi_degrees(
+            rank,
+            remaining_degree - value,
+            coordinate_index + 1,
+            current,
+            out,
+        );
+    }
+}
+
+fn ckyz_point_pairings(relations: &[Vec<i64>], degree: &[usize]) -> Result<Vec<i64>> {
+    let n_points = relations[0].len();
+    let mut pairings = vec![0i64; n_points];
+    for (relation, &degree_entry) in relations.iter().zip(degree.iter()) {
+        if degree_entry == 0 {
+            continue;
+        }
+        let degree_entry = i64::try_from(degree_entry)
+            .map_err(|_| Error::InvalidInput("CKYZ multi-degree entry does not fit i64".into()))?;
+        for (pairing, &relation_entry) in pairings.iter_mut().zip(relation.iter()) {
+            let contribution = relation_entry.checked_mul(degree_entry).ok_or_else(|| {
+                Error::InvalidInput("CKYZ point pairing multiplication overflowed i64".into())
+            })?;
+            *pairing = pairing.checked_add(contribution).ok_or_else(|| {
+                Error::InvalidInput("CKYZ point pairing addition overflowed i64".into())
+            })?;
+        }
+    }
+    Ok(pairings)
+}
+
+fn ckyz_one_negative_log_period_base(
+    point_pairings: &[i64],
+    negative_point: usize,
+) -> Result<Rational> {
+    let negative_pairing = point_pairings[negative_point];
+    if negative_pairing >= 0 {
+        return Err(Error::InvalidInput(
+            "CKYZ one-negative coefficient received a nonnegative point".into(),
+        ));
+    }
+    let pole_order = usize::try_from(-negative_pairing - 1).map_err(|_| {
+        Error::InvalidInput("CKYZ negative point pairing does not fit usize".into())
+    })?;
+    let mut coefficient = Rational::from(factorial_integer(pole_order));
+    for (point_index, &pairing) in point_pairings.iter().enumerate() {
+        if point_index == negative_point {
+            continue;
+        }
+        if pairing < 0 {
+            return Err(Error::InvalidInput(
+                "CKYZ one-negative coefficient received multiple negative points".into(),
+            ));
+        }
+        let pairing = usize::try_from(pairing).map_err(|_| {
+            Error::InvalidInput("CKYZ nonnegative point pairing does not fit usize".into())
+        })?;
+        coefficient /= Rational::from(factorial_integer(pairing));
+    }
+    if negative_pairing % 2 == 0 {
+        coefficient = -coefficient;
+    }
+    Ok(coefficient)
+}
+
+fn ckyz_zero_negative_hypergeometric_coeff(point_pairings: &[i64]) -> Result<Rational> {
+    let mut coefficient = Rational::from(1);
+    for &pairing in point_pairings {
+        if pairing < 0 {
+            return Err(Error::InvalidInput(
+                "CKYZ zero-negative coefficient received a negative point".into(),
+            ));
+        }
+        let pairing = usize::try_from(pairing).map_err(|_| {
+            Error::InvalidInput("CKYZ nonnegative point pairing does not fit usize".into())
+        })?;
+        coefficient /= Rational::from(factorial_integer(pairing));
+    }
+    Ok(coefficient)
+}
+
+fn harmonic_number(n: usize) -> Rational {
+    let mut out = Rational::from(0);
+    for denominator in 1..=n {
+        out += Rational::from_signeds(1i64, i64::try_from(denominator).expect("usize fits i64"));
+    }
+    out
 }
 
 fn integer_row_transform_between_bases(
@@ -4842,15 +5054,16 @@ mod tests {
         GvLatticeAugmentation, LocalToricCircuitKind, LocalToricCoordinate2D,
         OriginCircuitCurveWitness, OriginCircuitRelationPoint, ToricCurveCandidate,
         check_supporting_mori_face_normal, compute_ambient_one_dimensional_ray_gv_series,
-        compute_grading_vector, compute_gv_invariants_with_explicit_semigroup,
+        compute_ckyz_log_period_corrections, compute_grading_vector,
+        compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_provided_generators, compute_local_p2_genus_zero_gv_series,
         compute_local_toric_circuit_gv_series, compute_one_dimensional_ray_gv_series,
         compute_ray_gv_series_with_provided_generators, curve_in_rational_row_span,
         curve_row_span_rank, curve_volume_in_divisor_basis, diagnose_affine_toric_circuit,
         dump_mori_rays_cdd, find_pair_decomposition, find_semigroup_decomposition,
-        gv_lattice_search_request, load_grading_cache, map_basis_gv_invariants_to_ambient,
-        origin_circuit_diagnostic_from_class_and_witnesses, potent_ray_convergence,
-        potent_ray_log_xi_terms, project_ambient_curve_to_basis,
+        gv_lattice_search_request, load_grading_cache, local_p2_mirror_correction,
+        map_basis_gv_invariants_to_ambient, origin_circuit_diagnostic_from_class_and_witnesses,
+        potent_ray_convergence, potent_ray_log_xi_terms, project_ambient_curve_to_basis,
         project_mori_cone_cap_rays_to_basis, prune_decomposable_curve_candidates,
         rank_two_local_charge_model, rank_two_local_support_signature,
         remove_pair_decomposable_curve_candidates, remove_semigroup_decomposable_curve_candidates,
@@ -4861,6 +5074,7 @@ mod tests {
     use crate::lattice::Point;
     use crate::{f64_finite, f64_pos};
     use malachite::Integer;
+    use malachite::Rational;
 
     #[test]
     fn basis_gv_invariants_map_to_ambient_curve_classes() {
@@ -4984,6 +5198,55 @@ mod tests {
                 Integer::from(-360012150),
             ]
         );
+    }
+
+    #[test]
+    fn ckyz_log_period_corrections_match_local_p2_mirror_map() {
+        let corrections = compute_ckyz_log_period_corrections(&[vec![-3, 1, 1, 1]], 6).unwrap();
+        let local_p2 = local_p2_mirror_correction(6);
+
+        for degree in 1..=6 {
+            assert_eq!(
+                corrections[0].get(&vec![degree]),
+                Some(&local_p2[degree]),
+                "CKYZ logarithmic period should reproduce local P2 mirror correction at degree {degree}"
+            );
+        }
+    }
+
+    #[test]
+    fn ckyz_log_period_corrections_compute_f0_coupled_mirror_map_terms() {
+        let relations = vec![vec![-2, 1, 0, 1, 0], vec![-2, 0, 1, 0, 1]];
+        let corrections = compute_ckyz_log_period_corrections(&relations, 2).unwrap();
+
+        let mut expected = BTreeMap::new();
+        expected.insert(vec![1, 0], Rational::from(2));
+        expected.insert(vec![0, 1], Rational::from(2));
+        expected.insert(vec![2, 0], Rational::from(3));
+        expected.insert(vec![1, 1], Rational::from(12));
+        expected.insert(vec![0, 2], Rational::from(3));
+
+        assert_eq!(corrections[0], expected);
+        assert_eq!(corrections[1], expected);
+    }
+
+    #[test]
+    fn ckyz_log_period_corrections_compute_f1_source_terms() {
+        let relations = vec![vec![-2, 1, 0, 1, 0], vec![-1, 0, 1, -1, 1]];
+        let corrections = compute_ckyz_log_period_corrections(&relations, 2).unwrap();
+
+        let mut expected_first = BTreeMap::new();
+        expected_first.insert(vec![1, 0], Rational::from(2));
+        expected_first.insert(vec![2, 0], Rational::from(3));
+        expected_first.insert(vec![1, 1], Rational::from(-4));
+
+        let mut expected_second = BTreeMap::new();
+        expected_second.insert(vec![1, 0], Rational::from(1));
+        expected_second.insert(vec![2, 0], Rational::from_signeds(3, 2));
+        expected_second.insert(vec![1, 1], Rational::from(-2));
+
+        assert_eq!(corrections[0], expected_first);
+        assert_eq!(corrections[1], expected_second);
     }
 
     #[test]
