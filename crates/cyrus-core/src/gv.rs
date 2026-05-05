@@ -1278,10 +1278,10 @@ pub fn compute_ckyz_local_gv_invariants(
 /// Compute local CKYZ genus-zero GV invariants only for requested degrees.
 ///
 /// This follows the same source-derived path as
-/// [`compute_ckyz_local_gv_invariants`], but truncates all formal series by the
-/// componentwise maximum of `target_degrees`. It is intended for ray checks
-/// such as McAllister potent-ray validation, where a total-degree cutoff would
-/// compute many irrelevant monomials.
+/// [`compute_ckyz_local_gv_invariants`], but truncates all formal series to the
+/// cover-closed union of componentwise past downsets for `target_degrees`. It is
+/// intended for ray checks such as McAllister potent-ray validation, where a
+/// total-degree cutoff would compute many irrelevant monomials.
 ///
 /// Cover divisors of the requested degrees are included automatically because
 /// multiple-cover subtraction for a target degree depends on its primitive
