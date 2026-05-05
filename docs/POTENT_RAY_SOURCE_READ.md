@@ -62,11 +62,12 @@ source-derived finite-limit weights.
 
 This is now validated for local `P^2`, `F0`, `F1`, and polygon 5. The gated
 McAllister rank-two CKYZ test checks the first three saved GV entries for all
-395 rank-two CKYZ potent-ray rows from source relation data. The saved
-`potent_rays_gv.dat` values remain validation targets only. The full ten-entry
-rows still need a sharper coefficient-targeted extractor; the current
-cover-closed past-downset domain is source-derived but still too broad for the
-largest target directions.
+395 rank-two CKYZ potent-ray rows from source relation data, and a focused
+first-principles regression checks all ten saved entries for the canonical F1
+source direction `[2,1]`. The saved `potent_rays_gv.dat` values remain
+validation targets only. The full ten-entry rows across all families still need
+a sharper coefficient-targeted extractor; the current cover-closed past-downset
+domain is source-derived but still too broad for the largest target directions.
 
 The computational-mirror paper explains the implementation boundary that this
 source code implies. Finite HKTY computations need a causally closed truncation:
@@ -345,8 +346,9 @@ it under a 600 second timeout still timed out. A shorter instrumented run showed
 that this is not only a polygon-5 problem: local `P2` and `F0` direction `[1,1]`
 finished, `F1` direction `[2,1]` finished, but `F0` direction `[1,2]` already
 took roughly 90 seconds and the run timed out shortly after starting `F1`
-direction `[3,1]`. The committed test must therefore remain at first-three
-checks until the finite monomial-domain extractor exists. A later indexed-domain
+direction `[3,1]`. The committed all-row gate must therefore remain at
+first-three checks until the finite monomial-domain extractor exists, with
+`[2,1]` kept as a focused all-ten non-`P^2` regression. A later indexed-domain
 multiplication refactor removed much of the per-product lookup overhead but
 still did not make all-ten validation finish under a 600 second timeout, so the
 remaining blocker is the monomial set being too broad, not only the arithmetic
@@ -396,15 +398,19 @@ Executable evidence is now split by layer:
   local coordinates;
 - `mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed` reaches GV values
   for all 395 rank-two CKYZ rows, currently checking the first three saved
-  entries from source-derived local mirror data.
+  entries from source-derived local mirror data;
+- `mcallister_f1_2_1_ckyz_potent_ray_all_ten_gvs_are_reconstructed` checks all
+  ten saved entries for the canonical F1 source direction `[2,1]` without using
+  the saved GV row as input.
 
 This is not yet a general potent-ray GV engine. The rank-two CKYZ local-surface
 path is source-derived, and its current targeted extractor uses the
 cover-closed union of componentwise past downsets for the requested degrees.
-That is sufficient for first-three validation and small local tables, but it is
-not the right performance model for all ten saved entries across large target
-directions. The next source-derived object is a coefficient/path-history
-local-series extractor, not a one-dimensional coefficient-pattern rule.
+That is sufficient for first-three validation, small local tables, and the full
+F1 `[2,1]` saved row, but it is not the right performance model for all ten
+saved entries across larger target directions. The next source-derived object
+is a coefficient/path-history local-series extractor, not a one-dimensional
+coefficient-pattern rule.
 
 The rank-four checkpoint is deliberately separate from the CKYZ local-surface
 path. For 4-214-647, those 16 rows collapse to one seven-point affine-rank-four
@@ -457,7 +463,8 @@ Item 2 now includes logarithmic periods, second-derivative/local-prepotential
 periods, inverse mirror-map substitution, local `beta - alpha alpha`
 conversion, and multiple-cover extraction. The remaining rank-two CKYZ work is
 coefficient-targeted extraction for larger requested degrees, plus broader
-validation beyond the first three saved entries.
+validation beyond the all-row first-three gate and the focused F1 `[2,1]`
+all-ten row.
 
 ## Source-Derived Implementation Checklist
 

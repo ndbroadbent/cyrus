@@ -851,9 +851,34 @@ fn first_mcallister_local_p2_potent_ray_gvs_are_reconstructed() {
 
 #[test]
 fn mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed() {
+    assert_mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed(
+        ckyz_target_direction_filter(),
+        ckyz_multiples_to_check(3),
+        None,
+    );
+}
+
+#[test]
+fn mcallister_f1_2_1_ckyz_potent_ray_all_ten_gvs_are_reconstructed() {
+    assert_mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed(
+        Some(vec![2, 1]),
+        10,
+        Some(34),
+    );
+}
+
+fn assert_mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed(
+    target_direction_filter: Option<Vec<i64>>,
+    requested_multiples: usize,
+    expected_checked_rows: Option<usize>,
+) {
     if !first_principles_enabled() {
         return;
     }
+    assert!(
+        requested_multiples > 0,
+        "CKYZ requested multiple count must be positive"
+    );
     let Some(data_dir) = mcallister_data_dir() else {
         panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
     };
@@ -869,7 +894,6 @@ fn mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed() {
 
     let mut gv_cache: BTreeMap<(usize, Vec<usize>, usize), BTreeMap<Vec<usize>, Integer>> =
         BTreeMap::new();
-    let target_direction_filter = ckyz_target_direction_filter();
     let mut checked_rows = 0usize;
     for (row_index, (ray, expected_gvs)) in
         potent_rays.iter().zip(expected_gv_rows.iter()).enumerate()
@@ -900,10 +924,10 @@ fn mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed() {
                 continue;
             }
         }
-        let multiples_to_check = expected_gvs.len().min(ckyz_multiples_to_check(3));
+        let multiples_to_check = expected_gvs.len().min(requested_multiples);
         assert!(
             multiples_to_check > 0,
-            "CYRUS_CKYZ_MULTIPLES_TO_CHECK must be positive"
+            "CKYZ requested multiple count must be positive"
         );
         let target_degrees = (1..=multiples_to_check)
             .map(|multiple| scale_ckyz_degree(&source_target_direction, multiple))
@@ -937,16 +961,23 @@ fn mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed() {
         checked_rows += 1;
     }
 
-    if target_direction_filter.is_none() {
-        assert_eq!(
-            checked_rows, 395,
-            "all rank-two CKYZ potent-ray rows should now have CKYZ-reconstructed first-three GV checks"
-        );
-    } else {
-        assert!(
-            checked_rows > 0,
-            "CYRUS_CKYZ_TARGET_DIRECTION did not match any rank-two CKYZ potent-ray row"
-        );
+    match expected_checked_rows {
+        Some(expected) => assert_eq!(
+            checked_rows, expected,
+            "unexpected number of CKYZ potent-ray rows for the requested filter"
+        ),
+        None if target_direction_filter.is_none() => {
+            assert_eq!(
+                checked_rows, 395,
+                "all rank-two CKYZ potent-ray rows should now have CKYZ-reconstructed GV checks"
+            );
+        }
+        None => {
+            assert!(
+                checked_rows > 0,
+                "CKYZ target-direction filter did not match any rank-two CKYZ potent-ray row"
+            );
+        }
     }
 }
 

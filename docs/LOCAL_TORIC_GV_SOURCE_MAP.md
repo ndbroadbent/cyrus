@@ -263,12 +263,13 @@ This is validated against the local `P^2` table, the start of the `F0` and
 `F1` appendix tables, and the start of CKYZ Table 3 for polygon 5. The `F1`
 and polygon-5 checks are important because the finite-limit cover weights are
 not always the printed `C1` coefficients: `F1` uses `[2, 1]`, while polygon 5
-uses `[1, 1, 1]` rather than `[3, 2, 2]`. The gated McAllister test now
-reconstructs the first two saved GV entries for all 395 rank-two CKYZ
-potent-ray rows from source data. It does not yet reproduce all ten entries:
-the current box-truncated formal-series path is still too slow for the largest
-directions, so true coefficient-targeted extraction remains the next
-optimization.
+uses `[1, 1, 1]` rather than `[3, 2, 2]`. The gated McAllister tests now
+reconstruct the first three saved GV entries for all 395 rank-two CKYZ
+potent-ray rows from source data, and all ten saved entries for the canonical
+F1 source direction `[2,1]`. They do not yet reproduce all ten entries across
+every rank-two row: the current box-truncated formal-series path is still too
+slow for the largest directions, so true coefficient-targeted extraction
+remains the next optimization.
 
 ## Rank-Four Boundary
 
