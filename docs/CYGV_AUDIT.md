@@ -778,6 +778,10 @@ divergence from the potent cone or certify that a ray is a floppable wall.
 finite `C \ N` charge partition for the next step, excluding every nonzero
 charge whose primitive ray has already been classified as apparently
 nilpotent.
+`nilpotent_ray_degree_slice_for_cutoff_fraction` computes the exact `k*C`
+origin on the half-cutoff and full-cutoff degree slices used by the subsequent
+distance comparison. It does not choose the affine lattice basis or measure
+distance to the potent cone.
 
 This reinforces the production boundary above: the corrected-chamber fix should
 be a chamber/`M_infinity`/nop continuation implementation or a current-chamber

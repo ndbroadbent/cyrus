@@ -465,6 +465,24 @@ pub struct FiniteCutoffGvChargePartition {
     pub potent_charges: Vec<(Vec<i64>, Integer)>,
 }
 
+/// Degree-slice origin for the finite-cutoff nop divergence test.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NilpotentRayDegreeSlice {
+    /// Primitive candidate nilpotent ray.
+    pub primitive_ray: Vec<i64>,
+    /// Numerator of the cutoff fraction used for this slice.
+    pub cutoff_numerator: i128,
+    /// Denominator of the cutoff fraction used for this slice.
+    pub cutoff_denominator: i128,
+    /// Largest positive integer `k` satisfying
+    /// `k * primitive_ray.degree <= cutoff_degree * numerator / denominator`.
+    pub slice_multiple: i128,
+    /// Grading degree of `slice_origin`.
+    pub slice_degree: i128,
+    /// Curve class `slice_multiple * primitive_ray`.
+    pub slice_origin: Vec<i64>,
+}
+
 /// Exact certificate that an integer normal cuts out a supporting Mori face.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SupportingMoriFaceCertificate {
@@ -4513,6 +4531,93 @@ pub fn partition_finite_cutoff_gv_charges_by_nilpotence(
     })
 }
 
+/// Compute the appendix's degree-slice origin for a candidate nilpotent ray.
+///
+/// The nop-divergence test evaluates the candidate ray on a half-cutoff slice
+/// and again on the full-cutoff slice. This helper computes the largest
+/// positive integer `k` with
+/// `k * C.v_g <= cutoff_degree * cutoff_numerator / cutoff_denominator`, and
+/// returns the corresponding origin `k*C`. It does not compute the potent-ray
+/// distance in the slice.
+pub fn nilpotent_ray_degree_slice_for_cutoff_fraction(
+    primitive_ray: &[i64],
+    grading_vector: &[i64],
+    cutoff_degree: i128,
+    cutoff_numerator: i128,
+    cutoff_denominator: i128,
+) -> Result<Option<NilpotentRayDegreeSlice>> {
+    if primitive_ray.is_empty() {
+        return Err(Error::InvalidInput(
+            "nilpotent-ray degree slice requires a nonempty primitive ray".into(),
+        ));
+    }
+    if primitive_ray.len() != grading_vector.len() {
+        return Err(Error::InvalidInput(
+            "nilpotent-ray degree-slice grading dimension does not match ray dimension".into(),
+        ));
+    }
+    if cutoff_degree <= 0 {
+        return Err(Error::InvalidInput(
+            "nilpotent-ray degree-slice cutoff must be positive".into(),
+        ));
+    }
+    if cutoff_numerator <= 0 || cutoff_denominator <= 0 {
+        return Err(Error::InvalidInput(
+            "nilpotent-ray degree-slice cutoff fraction must be positive".into(),
+        ));
+    }
+
+    let gcd = primitive_i64_gcd(primitive_ray, "nilpotent-ray degree-slice primitive ray")?;
+    if gcd == 0 {
+        return Err(Error::InvalidInput(
+            "nilpotent-ray degree-slice primitive ray must not be zero".into(),
+        ));
+    }
+    if gcd != 1 {
+        return Err(Error::InvalidInput(format!(
+            "nilpotent-ray degree-slice primitive ray must be co-prime, got gcd {gcd}"
+        )));
+    }
+
+    let primitive_degree = checked_i128_dot(
+        primitive_ray,
+        grading_vector,
+        "nilpotent-ray degree-slice grading",
+    )?;
+    if primitive_degree <= 0 {
+        return Err(Error::InvalidInput(format!(
+            "nilpotent-ray degree-slice primitive ray has non-positive grading degree {primitive_degree}"
+        )));
+    }
+
+    let numerator = cutoff_degree
+        .checked_mul(cutoff_numerator)
+        .ok_or_else(|| Error::InvalidInput("nilpotent-ray degree-slice cutoff overflow".into()))?;
+    let denominator = primitive_degree
+        .checked_mul(cutoff_denominator)
+        .ok_or_else(|| {
+            Error::InvalidInput("nilpotent-ray degree-slice denominator overflow".into())
+        })?;
+    let slice_multiple = numerator / denominator;
+    if slice_multiple == 0 {
+        return Ok(None);
+    }
+    let slice_degree = primitive_degree
+        .checked_mul(slice_multiple)
+        .ok_or_else(|| Error::InvalidInput("nilpotent-ray degree-slice degree overflow".into()))?;
+    let slice_origin =
+        checked_ray_multiple(primitive_ray, slice_multiple, "nilpotent-ray degree slice")?;
+
+    Ok(Some(NilpotentRayDegreeSlice {
+        primitive_ray: primitive_ray.to_vec(),
+        cutoff_numerator,
+        cutoff_denominator,
+        slice_multiple,
+        slice_degree,
+        slice_origin,
+    }))
+}
+
 /// Compute the paper's potent-ray convergence terms.
 ///
 /// For a ray `q` with volume `q.t`, the paper defines
@@ -7916,7 +8021,8 @@ mod tests {
         extract_ckyz_local_gv_invariants_from_potential_for_degrees, find_pair_decomposition,
         find_semigroup_decomposition, gv_divisor_basis_data, gv_lattice_search_request,
         load_grading_cache, local_p2_inverse_mirror_map, local_p2_mirror_correction,
-        map_basis_gv_invariants_to_ambient, origin_circuit_diagnostic_from_class_and_witnesses,
+        map_basis_gv_invariants_to_ambient, nilpotent_ray_degree_slice_for_cutoff_fraction,
+        origin_circuit_diagnostic_from_class_and_witnesses,
         partition_finite_cutoff_gv_charges_by_nilpotence, potent_ray_convergence,
         potent_ray_log_xi_terms, project_ambient_curve_to_basis,
         project_ambient_curve_to_basis_matrix, project_mori_cone_cap_rays_for_divisor_basis,
@@ -9882,6 +9988,50 @@ mod tests {
                 (vec![1, 0], Integer::from(11)),
             ]
         );
+    }
+
+    #[test]
+    fn nilpotent_ray_degree_slice_computes_half_and_full_cutoff_origins() {
+        let half = nilpotent_ray_degree_slice_for_cutoff_fraction(&[1, 0], &[2, 5], 5, 1, 2)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(half.cutoff_numerator, 1);
+        assert_eq!(half.cutoff_denominator, 2);
+        assert_eq!(half.slice_multiple, 1);
+        assert_eq!(half.slice_degree, 2);
+        assert_eq!(half.slice_origin, vec![1, 0]);
+
+        let full = nilpotent_ray_degree_slice_for_cutoff_fraction(&[1, 0], &[2, 5], 5, 1, 1)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(full.slice_multiple, 2);
+        assert_eq!(full.slice_degree, 4);
+        assert_eq!(full.slice_origin, vec![2, 0]);
+    }
+
+    #[test]
+    fn nilpotent_ray_degree_slice_returns_none_when_ray_misses_cutoff_fraction() {
+        let slice =
+            nilpotent_ray_degree_slice_for_cutoff_fraction(&[1, 0], &[5, 1], 4, 1, 2).unwrap();
+
+        assert_eq!(slice, None);
+    }
+
+    #[test]
+    fn nilpotent_ray_degree_slice_rejects_invalid_inputs() {
+        let nonprimitive =
+            nilpotent_ray_degree_slice_for_cutoff_fraction(&[2, 0], &[1, 1], 4, 1, 1).unwrap_err();
+        assert!(nonprimitive.to_string().contains("co-prime"));
+
+        let bad_fraction =
+            nilpotent_ray_degree_slice_for_cutoff_fraction(&[1, 0], &[1, 1], 4, 0, 1).unwrap_err();
+        assert!(bad_fraction.to_string().contains("fraction"));
+
+        let bad_degree =
+            nilpotent_ray_degree_slice_for_cutoff_fraction(&[1, 0], &[0, 1], 4, 1, 1).unwrap_err();
+        assert!(bad_degree.to_string().contains("non-positive grading"));
     }
 
     #[test]
