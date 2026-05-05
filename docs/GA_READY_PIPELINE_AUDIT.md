@@ -210,6 +210,14 @@ to make the remaining GV layer more first-principles:
    the coordinate cygv would read, with first-coordinate `kappa_{i,a,b}` pair
    counts `20,20,19,19,14,13,13,45,6`. So the target coefficients are not
    ruled out by a zero intersection row at the selected series coordinate.
+   The context report also has a bounded path-history probe that mirrors
+   cygv's degree-trimmed seed set, pair-sum seed reduction, additive closure,
+   and previous-`q_N` `target - previous` monomial-map lookup. On the current
+   context, the two degree-10 missing targets are present in the bounded
+   closure, but closure already exceeds a 20000-element guard before exact
+   predecessor counts can be certified. This reinforces that the missing input
+   is the source-defined finite semigroup/path history, not another small
+   active-support or overlap window.
    The context report now preserves origin-circuit provenance from the export:
    the nine misses are affine-rank-three/four origin circuits with local charge
    rows `[2,1,2,-1,-2,-2]`, `[1,2,1,-2,-1,-1]`,

@@ -1647,6 +1647,18 @@ The current `cygv` crate source sharpens the same boundary:
   are `20,20,19,19,14,13,13,45,6` for targets `0..8`, respectively. Thus the
   remaining misses are not explained by a zero intersection row at cygv's
   selected series coordinate.
+- The report now has a bounded source-shaped path-history probe. It mirrors
+  cygv's degree-trimmed seed set, private pair-sum seed reduction, additive
+  closure, and the `series_inversion` previous-`q_N` lookup rule
+  `target - previous in monomial_map`, but it stops at an explicit element
+  limit instead of substituting a smaller semigroup. With
+  `--semigroup-measure-max-target-degree 10 --semigroup-measure-max-seeds 0
+  --element-limit 20000`, both degree-10 missing targets are already in the
+  bounded closure but the exact closure exceeds 20000 elements before
+  predecessor counts can be certified. The partial closure has nontrivial
+  degree support through degree 10, so the remaining blocker is still the
+  source-defined finite semigroup/path history rather than a small local
+  generator window.
 
 The actionable consequence is that a Cyrus replacement for corrected-chamber
 or potent-ray GV values must recreate the finite semigroup and lower-degree

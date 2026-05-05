@@ -200,6 +200,7 @@ struct TargetReport {
     cygv_semigroup_element_count: Option<usize>,
     cygv_semigroup_max_degree: Option<u32>,
     cygv_semigroup_error: Option<String>,
+    cygv_path_history_probe: Option<CygvPathHistoryProbe>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -239,6 +240,20 @@ struct CygvNegativeIntersectionHistogram {
 struct CygvCoordinateKappaSupport {
     coordinate: usize,
     kappa_pair_count: usize,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CygvPathHistoryProbe {
+    status: String,
+    closure_element_count: Option<usize>,
+    closure_degree_counts: BTreeMap<i128, usize>,
+    target_in_closure: Option<bool>,
+    previous_level_count: usize,
+    previous_window_degree_count: Option<usize>,
+    previous_window_element_count: Option<usize>,
+    predecessor_difference_count: Option<usize>,
+    improving_predecessor_difference_count: Option<usize>,
+    closest_series_distance: Option<String>,
 }
 
 struct CygvSemigroupMeasurement {
@@ -852,6 +867,7 @@ fn report_target(
                 cygv_semigroup_element_count: None,
                 cygv_semigroup_max_degree: None,
                 cygv_semigroup_error: None,
+                cygv_path_history_probe: None,
             };
         }
     };
@@ -913,6 +929,7 @@ fn report_target(
                 cygv_semigroup_element_count: None,
                 cygv_semigroup_max_degree: None,
                 cygv_semigroup_error: None,
+                cygv_path_history_probe: None,
             };
         }
     };
@@ -974,6 +991,7 @@ fn report_target(
                 cygv_semigroup_element_count: None,
                 cygv_semigroup_max_degree: None,
                 cygv_semigroup_error: None,
+                cygv_path_history_probe: None,
             };
         }
     };
@@ -1039,6 +1057,7 @@ fn report_target(
                 cygv_semigroup_element_count: None,
                 cygv_semigroup_max_degree: None,
                 cygv_semigroup_error: None,
+                cygv_path_history_probe: None,
             };
         }
     };
@@ -1095,6 +1114,7 @@ fn report_target(
         cygv_semigroup_element_count: None,
         cygv_semigroup_max_degree: None,
         cygv_semigroup_error: None,
+        cygv_path_history_probe: None,
     };
     let (
         degree_bounded_candidate_count,
@@ -1199,6 +1219,21 @@ fn report_target(
     } else {
         (None, None, None, None, None, None, None, None, None, None)
     };
+    let cygv_path_history_probe = if measure_cygv_semigroups {
+        if semigroup_measure_max_target_degree.is_some_and(|max_degree| sample.degree > max_degree)
+        {
+            None
+        } else {
+            Some(cygv_path_history_probe(
+                sample,
+                context,
+                &target,
+                element_limit,
+            ))
+        }
+    } else {
+        None
+    };
 
     match report_target_inner(sample, context, run_integer_diamonds, element_limit) {
         Ok((status, term_count, element_count, gv, error)) => TargetReport {
@@ -1225,6 +1260,7 @@ fn report_target(
             cygv_semigroup_element_count,
             cygv_semigroup_max_degree,
             cygv_semigroup_error,
+            cygv_path_history_probe,
             degree_bounded_candidate_count,
             support_overlap_generator_counts,
             support_closure_layer_counts,
@@ -1251,6 +1287,7 @@ fn report_target(
             cygv_semigroup_element_count,
             cygv_semigroup_max_degree,
             cygv_semigroup_error,
+            cygv_path_history_probe,
             degree_bounded_candidate_count,
             support_overlap_generator_counts,
             support_closure_layer_counts,
@@ -1502,6 +1539,276 @@ fn measure_cygv_semigroup_size(
     let semigroup = cygv::Semigroup::with_max_degree(generators, grading, max_deg)
         .map_err(|error| format!("cygv semigroup construction failed: {error}"))?;
     Ok(semigroup.elements.ncols())
+}
+
+struct BoundedCygvClosure {
+    status: String,
+    elements: HashSet<Vec<i64>>,
+    degree_counts: BTreeMap<i128, usize>,
+    completed: bool,
+}
+
+fn cygv_path_history_probe(
+    sample: &MissingGvTargetSample,
+    context: &ValidatedContext<'_>,
+    target: &[i64],
+    element_limit: usize,
+) -> CygvPathHistoryProbe {
+    match cygv_path_history_probe_inner(sample, context, target, element_limit) {
+        Ok(probe) => probe,
+        Err(error) => CygvPathHistoryProbe {
+            status: format!("error: {error}"),
+            closure_element_count: None,
+            closure_degree_counts: BTreeMap::new(),
+            target_in_closure: None,
+            previous_level_count: cygv_previous_level_count(context.dimension),
+            previous_window_degree_count: None,
+            previous_window_element_count: None,
+            predecessor_difference_count: None,
+            improving_predecessor_difference_count: None,
+            closest_series_distance: None,
+        },
+    }
+}
+
+fn cygv_path_history_probe_inner(
+    sample: &MissingGvTargetSample,
+    context: &ValidatedContext<'_>,
+    target: &[i64],
+    element_limit: usize,
+) -> Result<CygvPathHistoryProbe, String> {
+    let previous_level_count = cygv_previous_level_count(context.dimension);
+    let mut seeds = Vec::new();
+    let mut seen = HashSet::new();
+    for ray in context.degree_bounded_rays {
+        let degree = curve_degree(ray, context.grading)?;
+        if degree <= 0 || degree > sample.degree {
+            continue;
+        }
+        if seen.insert(ray.clone()) {
+            seeds.push(ray.clone());
+        }
+    }
+    if seeds.is_empty() {
+        return Ok(CygvPathHistoryProbe {
+            status: "skipped_empty_seed_set".to_string(),
+            closure_element_count: None,
+            closure_degree_counts: BTreeMap::new(),
+            target_in_closure: None,
+            previous_level_count,
+            previous_window_degree_count: None,
+            previous_window_element_count: None,
+            predecessor_difference_count: None,
+            improving_predecessor_difference_count: None,
+            closest_series_distance: None,
+        });
+    }
+
+    let closure =
+        bounded_cygv_semigroup_closure(&seeds, context.grading, sample.degree, element_limit)?;
+    let target_in_closure = closure.elements.contains(target);
+    if !closure.completed {
+        return Ok(CygvPathHistoryProbe {
+            status: closure.status,
+            closure_element_count: Some(closure.elements.len()),
+            closure_degree_counts: closure.degree_counts,
+            target_in_closure: Some(target_in_closure),
+            previous_level_count,
+            previous_window_degree_count: None,
+            previous_window_element_count: None,
+            predecessor_difference_count: None,
+            improving_predecessor_difference_count: None,
+            closest_series_distance: None,
+        });
+    }
+
+    let mut lower_degrees = closure
+        .degree_counts
+        .keys()
+        .copied()
+        .filter(|degree| *degree > 0 && *degree < sample.degree)
+        .collect::<Vec<_>>();
+    lower_degrees.sort_unstable();
+    let selected_degrees = lower_degrees
+        .into_iter()
+        .rev()
+        .take(previous_level_count)
+        .collect::<HashSet<_>>();
+
+    let mut previous_window_element_count = 0usize;
+    let mut predecessor_difference_count = 0usize;
+    let mut improving_predecessor_difference_count = 0usize;
+    let mut closest_distance = cygv_series_distance(target);
+    for element in &closure.elements {
+        let degree = curve_degree(element, context.grading)?;
+        if !selected_degrees.contains(&degree) {
+            continue;
+        }
+        previous_window_element_count += 1;
+        let difference = checked_vector_difference(target, element)?;
+        if !closure.elements.contains(&difference) {
+            continue;
+        }
+        predecessor_difference_count += 1;
+        let distance = cygv_series_distance(&difference);
+        if distance < closest_distance {
+            closest_distance = distance;
+            improving_predecessor_difference_count += 1;
+        }
+    }
+
+    Ok(CygvPathHistoryProbe {
+        status: "completed_bounded_closure".to_string(),
+        closure_element_count: Some(closure.elements.len()),
+        closure_degree_counts: closure.degree_counts,
+        target_in_closure: Some(target_in_closure),
+        previous_level_count,
+        previous_window_degree_count: Some(selected_degrees.len()),
+        previous_window_element_count: Some(previous_window_element_count),
+        predecessor_difference_count: Some(predecessor_difference_count),
+        improving_predecessor_difference_count: Some(improving_predecessor_difference_count),
+        closest_series_distance: Some(format!("{closest_distance:.6}")),
+    })
+}
+
+fn cygv_previous_level_count(dimension: usize) -> usize {
+    if dimension < 4 {
+        2
+    } else if dimension < 10 {
+        5
+    } else {
+        10
+    }
+}
+
+fn bounded_cygv_semigroup_closure(
+    seeds: &[Vec<i64>],
+    grading_vector: &[i64],
+    target_degree: i128,
+    element_limit: usize,
+) -> Result<BoundedCygvClosure, String> {
+    if element_limit == 0 {
+        return Err("bounded cygv closure element limit must be positive".to_string());
+    }
+    let dimension = grading_vector.len();
+    if dimension == 0 {
+        return Err("grading vector is empty".to_string());
+    }
+    if seeds.iter().any(|row| row.len() != dimension) {
+        return Err("cygv closure seed dimensions do not match grading".to_string());
+    }
+    let generators = cygv_pair_reduced_seed_generators(seeds)
+        .map_err(|error| format!("cygv seed reduction failed: {error}"))?;
+    let zero = vec![0i64; dimension];
+    let mut elements = HashSet::new();
+    let mut starting_elements = HashSet::new();
+    elements.insert(zero);
+    for seed in seeds {
+        elements.insert(seed.clone());
+        starting_elements.insert(seed.clone());
+    }
+    let degree_counts = cygv_closure_degree_counts(&elements, grading_vector)?;
+    if elements.len() > element_limit {
+        return Ok(BoundedCygvClosure {
+            status: format!("exceeded_element_limit_initial_{element_limit}"),
+            elements,
+            degree_counts,
+            completed: false,
+        });
+    }
+
+    loop {
+        let mut new_elements = HashSet::new();
+        for generator in &generators {
+            for element in &starting_elements {
+                let sum = checked_vector_sum(generator, element)?;
+                let degree = curve_degree(&sum, grading_vector)?;
+                if degree <= target_degree && !elements.contains(&sum) {
+                    new_elements.insert(sum);
+                }
+            }
+        }
+        if new_elements.is_empty() {
+            let degree_counts = cygv_closure_degree_counts(&elements, grading_vector)?;
+            return Ok(BoundedCygvClosure {
+                status: "completed_bounded_closure".to_string(),
+                elements,
+                degree_counts,
+                completed: true,
+            });
+        }
+        if elements.len() + new_elements.len() > element_limit {
+            for element in new_elements {
+                if elements.len() >= element_limit {
+                    break;
+                }
+                elements.insert(element);
+            }
+            let degree_counts = cygv_closure_degree_counts(&elements, grading_vector)?;
+            return Ok(BoundedCygvClosure {
+                status: format!("exceeded_element_limit_{element_limit}"),
+                elements,
+                degree_counts,
+                completed: false,
+            });
+        }
+        for element in &new_elements {
+            elements.insert(element.clone());
+        }
+        starting_elements = new_elements;
+    }
+}
+
+fn cygv_closure_degree_counts(
+    elements: &HashSet<Vec<i64>>,
+    grading_vector: &[i64],
+) -> Result<BTreeMap<i128, usize>, String> {
+    let mut counts = BTreeMap::new();
+    for element in elements {
+        *counts
+            .entry(curve_degree(element, grading_vector)?)
+            .or_insert(0) += 1;
+    }
+    Ok(counts)
+}
+
+fn checked_vector_sum(lhs: &[i64], rhs: &[i64]) -> Result<Vec<i64>, String> {
+    if lhs.len() != rhs.len() {
+        return Err("vector dimensions do not match for sum".to_string());
+    }
+    lhs.iter()
+        .zip(rhs.iter())
+        .map(|(&left, &right)| {
+            left.checked_add(right)
+                .ok_or_else(|| "vector sum overflowed i64".to_string())
+        })
+        .collect()
+}
+
+fn checked_vector_difference(lhs: &[i64], rhs: &[i64]) -> Result<Vec<i64>, String> {
+    if lhs.len() != rhs.len() {
+        return Err("vector dimensions do not match for difference".to_string());
+    }
+    lhs.iter()
+        .zip(rhs.iter())
+        .map(|(&left, &right)| {
+            left.checked_sub(right)
+                .ok_or_else(|| "vector difference overflowed i64".to_string())
+        })
+        .collect()
+}
+
+fn cygv_series_distance(curve: &[i64]) -> f64 {
+    curve
+        .iter()
+        .map(|value| {
+            if *value == 0 {
+                0.0
+            } else {
+                (*value as f64).abs().log2() + 1.0
+            }
+        })
+        .sum()
 }
 
 fn active_support_generator_gv(
@@ -1933,6 +2240,69 @@ mod tests {
         let seeds = vec![vec![1, 0], vec![0, 1]];
         let size = measure_cygv_semigroup_size(&seeds, &[1, 1], 2).unwrap();
         assert_eq!(size, 6);
+    }
+
+    #[test]
+    fn bounded_cygv_closure_mirrors_degree_limited_seed_closure() {
+        let seeds = vec![vec![1, 0], vec![0, 1]];
+        let closure = bounded_cygv_semigroup_closure(&seeds, &[1, 1], 2, 16).unwrap();
+        assert!(closure.completed);
+        assert_eq!(closure.elements.len(), 6);
+        assert_eq!(closure.degree_counts.get(&0), Some(&1));
+        assert_eq!(closure.degree_counts.get(&1), Some(&2));
+        assert_eq!(closure.degree_counts.get(&2), Some(&3));
+        assert!(closure.elements.contains(&vec![1, 1]));
+    }
+
+    #[test]
+    fn path_history_probe_counts_cygv_monomial_map_predecessors() {
+        let stats = MissingGvTargetStats {
+            target_count: 1,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: vec![MissingGvTargetSample {
+                degree: 2,
+                generators_le_degree: 2,
+                is_mori_generator: false,
+                origin_circuit_pattern: None,
+                origin_circuit_witness_count: None,
+                origin_circuit_first_witness: None,
+                origin_circuit_affine_support: None,
+                cms_general_divisor_shape_candidates: None,
+                cms_general_divisor_intersection_checks: None,
+                branch_diagnostic: None,
+                real_cone_decomposable_by_other_generators: false,
+                real_cone_decomposition_active_generators: None,
+                real_cone_decomposition_active_generator_basis_nonzero: None,
+                real_cone_decomposition_exact_coefficients: None,
+                real_cone_decomposition_exact_kind: None,
+                ambient_nonzero: vec![(0, 1), (1, 1)],
+                basis_nonzero: vec![(0, 1), (1, 1)],
+            }],
+        };
+        let grading = vec![1, 1];
+        let q_matrix = vec![vec![1, 0], vec![0, 1]];
+        let degree_bounded_rays = vec![vec![1, 0], vec![0, 1], vec![1, 1]];
+        let context = ValidatedContext {
+            dimension: 2,
+            degree_bound: 2,
+            q_cols: 2,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            intersection: Intersection::new(2),
+            stats: &stats,
+        };
+
+        let target = vec![1, 1];
+        let probe = cygv_path_history_probe_inner(&stats.sample[0], &context, &target, 16).unwrap();
+        assert_eq!(probe.status, "completed_bounded_closure");
+        assert_eq!(probe.target_in_closure, Some(true));
+        assert_eq!(probe.previous_level_count, 2);
+        assert_eq!(probe.previous_window_degree_count, Some(1));
+        assert_eq!(probe.previous_window_element_count, Some(2));
+        assert_eq!(probe.predecessor_difference_count, Some(2));
+        assert_eq!(probe.improving_predecessor_difference_count, Some(1));
+        assert_eq!(probe.closest_series_distance.as_deref(), Some("1.000000"));
     }
 
     #[test]
