@@ -595,6 +595,24 @@ struct AmbientTargetContributionRow {
     contribution: f64,
 }
 
+struct GvBranchBucketAccumulator {
+    count: usize,
+    q_dot_min: f64,
+    q_dot_max: f64,
+    correction: Vec<f64>,
+}
+
+struct GvBranchBucketReport {
+    parity_mod2: i128,
+    q_dot_bucket: &'static str,
+    count: usize,
+    q_dot_min: f64,
+    q_dot_max: f64,
+    max_abs_correction: f64,
+    l2_correction: f64,
+    correction: Vec<f64>,
+}
+
 struct ChamberUpdatedKkltDiagnostic {
     iterations: usize,
     converged: bool,
@@ -4251,6 +4269,178 @@ fn ambient_target_contribution_rows(
     Some(rows)
 }
 
+fn gv_branch_q_dot_bucket(q_dot_t: f64) -> &'static str {
+    if q_dot_t <= 0.0 {
+        "nonpositive"
+    } else if q_dot_t < 0.005 {
+        "0_0.005"
+    } else if q_dot_t < 0.01 {
+        "0.005_0.01"
+    } else if q_dot_t < 0.02 {
+        "0.01_0.02"
+    } else if q_dot_t < 0.05 {
+        "0.02_0.05"
+    } else if q_dot_t < 0.1 {
+        "0.05_0.1"
+    } else {
+        "gte_0.1"
+    }
+}
+
+fn f64_target_vector(values: impl IntoIterator<Item = f64>) -> Option<Vec<F64<Finite>>> {
+    values.into_iter().map(F64::<Finite>::new).collect()
+}
+
+fn max_abs_and_l2(values: &[f64]) -> (f64, f64) {
+    let mut max_abs = 0.0f64;
+    let mut l2_sq = 0.0f64;
+    for &value in values {
+        max_abs = max_abs.max(value.abs());
+        l2_sq += value * value;
+    }
+    (max_abs, l2_sq.sqrt())
+}
+
+fn report_corrected_chamber_gv_branch_buckets(
+    gv_invariants: &[(Vec<i64>, malachite::Integer)],
+    basis: &[usize],
+    kklt_basis: &[usize],
+    t: &[F64<Finite>],
+    gamma: &[I64<Finite>],
+    input_chi_reference: &[F64<Finite>],
+    corrected_chi_reference: &[F64<Finite>],
+    covered_target: &[F64<Finite>],
+) {
+    if basis.len() != t.len() || kklt_basis.len() != covered_target.len() {
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber GV branch buckets unavailable: dimension mismatch"
+        );
+        return;
+    }
+
+    let mut buckets: BTreeMap<(i128, &'static str), GvBranchBucketAccumulator> = BTreeMap::new();
+    for (curve, invariant) in gv_invariants {
+        if kklt_basis.iter().any(|&idx| idx >= curve.len())
+            || basis.iter().any(|&idx| idx >= curve.len())
+        {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber GV branch buckets unavailable: curve dimension mismatch"
+            );
+            return;
+        }
+        let q_dot_t = basis
+            .iter()
+            .zip(t.iter())
+            .map(|(&idx, ti)| curve[idx] as f64 * ti.get())
+            .sum::<f64>();
+        let Some(parity) = ambient_curve_b_field_parity_diagnostic(curve, basis, gamma) else {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber GV branch buckets unavailable: gamma dimension mismatch"
+            );
+            return;
+        };
+        let single = [(curve.clone(), invariant.clone())];
+        let Some(contribution) = cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+            &single,
+            basis,
+            kklt_basis,
+            t,
+            Some(gamma),
+        ) else {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber GV branch buckets unavailable: invalid single-curve contribution q_dot_t={q_dot_t} parity_mod2={}",
+                parity.rem_euclid(2)
+            );
+            return;
+        };
+        let bucket_key = (parity.rem_euclid(2), gv_branch_q_dot_bucket(q_dot_t));
+        let bucket = buckets
+            .entry(bucket_key)
+            .or_insert_with(|| GvBranchBucketAccumulator {
+                count: 0,
+                q_dot_min: f64::INFINITY,
+                q_dot_max: f64::NEG_INFINITY,
+                correction: vec![0.0; kklt_basis.len()],
+            });
+        bucket.count += 1;
+        bucket.q_dot_min = bucket.q_dot_min.min(q_dot_t);
+        bucket.q_dot_max = bucket.q_dot_max.max(q_dot_t);
+        for (accumulated, value) in bucket.correction.iter_mut().zip(contribution.iter()) {
+            *accumulated += value.get();
+        }
+    }
+
+    let mut reports = buckets
+        .into_iter()
+        .map(|((parity_mod2, q_dot_bucket), bucket)| {
+            let (max_abs_correction, l2_correction) = max_abs_and_l2(&bucket.correction);
+            GvBranchBucketReport {
+                parity_mod2,
+                q_dot_bucket,
+                count: bucket.count,
+                q_dot_min: bucket.q_dot_min,
+                q_dot_max: bucket.q_dot_max,
+                max_abs_correction,
+                l2_correction,
+                correction: bucket.correction,
+            }
+        })
+        .collect::<Vec<_>>();
+    reports.sort_unstable_by(|lhs, rhs| {
+        rhs.l2_correction
+            .total_cmp(&lhs.l2_correction)
+            .then_with(|| lhs.parity_mod2.cmp(&rhs.parity_mod2))
+            .then_with(|| lhs.q_dot_bucket.cmp(rhs.q_dot_bucket))
+    });
+
+    for report in reports {
+        let Some(target_without_bucket) = f64_target_vector(
+            covered_target
+                .iter()
+                .zip(report.correction.iter())
+                .map(|(covered, bucket)| covered.get() - bucket),
+        ) else {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber GV branch bucket parity_mod2={} qdot_bin={} unavailable: non-finite drop vector",
+                report.parity_mod2, report.q_dot_bucket
+            );
+            continue;
+        };
+        let input_drop_summary = target_correction_delta_summary(
+            input_chi_reference,
+            &target_without_bucket,
+        )
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "[ERROR] failed to compare input-chi corrected-chamber GV branch bucket drop: {e}"
+            );
+            std::process::exit(2);
+        });
+        let corrected_drop_summary =
+            target_correction_delta_summary(corrected_chi_reference, &target_without_bucket)
+                .unwrap_or_else(|e| {
+                    eprintln!(
+                        "[ERROR] failed to compare corrected-chi corrected-chamber GV branch bucket drop: {e}"
+                    );
+                    std::process::exit(2);
+                });
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber GV branch bucket parity_mod2={} qdot_bin={} count={} qdot_min={} qdot_max={} bucket_max_abs={} bucket_l2={} drop_input_chi_max_abs={} drop_input_chi_relative_l2={} drop_corrected_chi_max_abs={} drop_corrected_chi_relative_l2={}",
+            report.parity_mod2,
+            report.q_dot_bucket,
+            report.count,
+            report.q_dot_min,
+            report.q_dot_max,
+            report.max_abs_correction,
+            report.l2_correction,
+            input_drop_summary.max_abs_delta,
+            input_drop_summary.relative_l2_delta,
+            corrected_drop_summary.max_abs_delta,
+            corrected_drop_summary.relative_l2_delta
+        );
+    }
+}
+
 fn insert_missing_diagnostic_gv(
     diagnostic_gvs: &mut HashMap<Vec<i64>, malachite::Integer>,
     ambient_class: &[i64],
@@ -5901,6 +6091,16 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
         corrected_chi_summary.relative_l2_delta,
         corrected_chi_summary.max_abs_reference,
         corrected_chi_summary.max_abs_candidate
+    );
+    report_corrected_chamber_gv_branch_buckets(
+        &selection.small_curve_gvs,
+        &intersection.basis,
+        kklt_basis,
+        checkpoint_t,
+        gamma,
+        &checkpoint_implied_gv,
+        &checkpoint_chamber_implied_gv,
+        &covered_gv_target,
     );
     for threshold in [0.005_f64, 0.01, 0.02, 0.05, 0.1] {
         let thresholded_gvs = selection
