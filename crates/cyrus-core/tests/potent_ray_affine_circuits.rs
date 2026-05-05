@@ -88,6 +88,16 @@ fn assert_rank_two_local_coordinates_satisfy_relation(diagnostic: &AffineToricCi
     );
 }
 
+fn rank_two_signature_coefficient_pattern(signature: &RankTwoLocalSupportSignature) -> Vec<i64> {
+    let mut coefficients = signature
+        .entries
+        .iter()
+        .map(|entry| entry.coefficient)
+        .collect::<Vec<_>>();
+    coefficients.sort_unstable();
+    coefficients
+}
+
 #[test]
 fn mcallister_potent_rays_are_affine_toric_circuits() {
     if !first_principles_enabled() {
@@ -110,6 +120,7 @@ fn mcallister_potent_rays_are_affine_toric_circuits() {
     let mut rank_two_local_coordinate_count = 0usize;
     let mut affine_rank_counts = BTreeMap::new();
     let mut signature_counts: BTreeMap<RankTwoLocalSupportSignature, usize> = BTreeMap::new();
+    let mut coefficient_pattern_counts: BTreeMap<Vec<i64>, usize> = BTreeMap::new();
     let mut local_p2_signature: Option<RankTwoLocalSupportSignature> = None;
     for ray in &potent_rays {
         let diagnostic = diagnose_affine_toric_circuit(ray, &triangulation_points)
@@ -131,6 +142,9 @@ fn mcallister_potent_rays_are_affine_toric_circuits() {
             let signature = rank_two_local_support_signature(&diagnostic)
                 .expect("rank-two diagnostic should have a local signature");
             *signature_counts.entry(signature.clone()).or_insert(0) += 1;
+            *coefficient_pattern_counts
+                .entry(rank_two_signature_coefficient_pattern(&signature))
+                .or_insert(0) += 1;
             if matches!(
                 diagnostic.kind,
                 Some(LocalToricCircuitKind::LocalP2Triangle { .. })
@@ -156,6 +170,33 @@ fn mcallister_potent_rays_are_affine_toric_circuits() {
     assert_eq!(affine_rank_counts, BTreeMap::from([(2, 395), (4, 16)]));
     assert_eq!(rank_two_local_coordinate_count, 395);
     assert_eq!(local_p2_count, 56);
+    assert_eq!(
+        signature_counts.len(),
+        16,
+        "rank-two local supports should collapse to the audited signature inventory"
+    );
+    assert_eq!(
+        coefficient_pattern_counts,
+        BTreeMap::from([
+            (vec![-14, 1, 4, 4, 5], 7),
+            (vec![-12, 1, 1, 5, 5], 31),
+            (vec![-11, 1, 1, 4, 5], 19),
+            (vec![-11, 1, 3, 3, 4], 9),
+            (vec![-10, 1, 1, 4, 4], 32),
+            (vec![-10, 2, 2, 3, 3], 34),
+            (vec![-9, 1, 1, 2, 2, 3], 1),
+            (vec![-9, 1, 1, 3, 4], 25),
+            (vec![-8, 1, 1, 3, 3], 34),
+            (vec![-8, 1, 2, 2, 3], 32),
+            (vec![-7, 1, 1, 1, 2, 2], 1),
+            (vec![-7, 1, 1, 2, 3], 32),
+            (vec![-6, 1, 1, 2, 2], 31),
+            (vec![-5, 1, 1, 1, 2], 34),
+            (vec![-4, 1, 1, 1, 1], 17),
+            (vec![-3, 1, 1, 1], 56),
+        ]),
+        "rank-two local support families should be inventoried without using GV values"
+    );
     assert_eq!(
         signature_counts
             .get(

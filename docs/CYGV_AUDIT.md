@@ -827,3 +827,10 @@ The concrete next source-derived object is therefore:
 This is intentionally different from a coefficient-pattern table. The
 coefficient patterns are a diagnostic index into local toric geometry, not the
 source of the GV values.
+
+The first item is now pinned down for the `4-214-647` checkpoint: the 395
+rank-two saved potent-ray supports collapse to 16 normalized support
+signatures. The gated structural test records the coefficient-pattern counts
+for that inventory, but still does not use those patterns to assign any GV
+value. The next implementation step remains item 2: derive the local
+toric/mirror input for a non-`P^2` signature family.
