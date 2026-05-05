@@ -255,6 +255,9 @@ For ray-local validation, `compute_ckyz_local_gv_invariants_for_degrees`
 uses the same source path but truncates the formal series componentwise to the
 requested source degrees. This avoids treating `potent_rays_gv.dat` as input
 while keeping the computation small enough for targeted McAllister checks.
+The finite-limit cover weights are exposed by
+`ckyz_local_surface_cover_weight_coefficients` so production callers do not
+need to duplicate the validation test's normalization table.
 
 This is validated against the local `P^2` table, the start of the `F0` and
 `F1` appendix tables, and the start of CKYZ Table 3 for polygon 5. The `F1`

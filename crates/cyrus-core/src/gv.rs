@@ -852,6 +852,23 @@ pub fn identify_ckyz_local_surface(
     Ok(None)
 }
 
+/// Return the finite-limit cover-weight coefficients for a CKYZ local surface.
+///
+/// These are the coefficients `x_i` used by
+/// [`extract_ckyz_local_gv_invariants_from_potential`] in
+/// `w(d) = -sum_i x_i d_i`. They are not always the printed CKYZ `C1`
+/// coefficients: for example `F1` uses `[2, 1]`, and polygon 5 uses
+/// `[1, 1, 1]`.
+#[must_use]
+pub fn ckyz_local_surface_cover_weight_coefficients(kind: &CkyzLocalSurfaceKind) -> &'static [i64] {
+    match kind {
+        CkyzLocalSurfaceKind::LocalP2 => &[3],
+        CkyzLocalSurfaceKind::HirzebruchF0 => &[2, 2],
+        CkyzLocalSurfaceKind::HirzebruchF1 => &[2, 1],
+        CkyzLocalSurfaceKind::Polygon5 => &[1, 1, 1],
+    }
+}
+
 /// Compute CKYZ logarithmic-period corrections from local relation rows.
 ///
 /// CKYZ writes the local hypergeometric coefficient as

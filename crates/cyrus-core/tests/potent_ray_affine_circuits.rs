@@ -7,9 +7,10 @@ use std::path::Path;
 use cyrus_core::{
     AffineToricCircuitDiagnostic, CkyzLocalSurfaceKind, LocalToricCircuitKind,
     LocalToricCoordinate2D, Point, Polytope, RankTwoLocalChargeModel, RankTwoLocalSupportSignature,
-    compute_ckyz_local_gv_invariants_for_degrees, compute_local_toric_circuit_gv_series,
-    curve_in_rational_row_span, diagnose_affine_toric_circuit, identify_ckyz_local_surface,
-    rank_two_local_charge_model, rank_two_local_support_signature,
+    ckyz_local_surface_cover_weight_coefficients, compute_ckyz_local_gv_invariants_for_degrees,
+    compute_local_toric_circuit_gv_series, curve_in_rational_row_span,
+    diagnose_affine_toric_circuit, identify_ckyz_local_surface, rank_two_local_charge_model,
+    rank_two_local_support_signature,
 };
 use malachite::Integer;
 
@@ -163,15 +164,6 @@ fn ckyz_kind_index(kind: &CkyzLocalSurfaceKind) -> usize {
         CkyzLocalSurfaceKind::HirzebruchF0 => 1,
         CkyzLocalSurfaceKind::HirzebruchF1 => 2,
         CkyzLocalSurfaceKind::Polygon5 => 3,
-    }
-}
-
-fn ckyz_cover_weights(kind: &CkyzLocalSurfaceKind) -> Option<Vec<i64>> {
-    match kind {
-        CkyzLocalSurfaceKind::LocalP2 => Some(vec![3]),
-        CkyzLocalSurfaceKind::HirzebruchF0 => Some(vec![2, 2]),
-        CkyzLocalSurfaceKind::HirzebruchF1 => Some(vec![2, 1]),
-        CkyzLocalSurfaceKind::Polygon5 => Some(vec![1, 1, 1]),
     }
 }
 
@@ -870,9 +862,7 @@ fn mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed() {
         let identification = identify_ckyz_local_surface(&model)
             .expect("CKYZ identification should run exactly")
             .expect("rank-two McAllister model should match a CKYZ source");
-        let Some(cover_weights) = ckyz_cover_weights(&identification.kind) else {
-            continue;
-        };
+        let cover_weights = ckyz_local_surface_cover_weight_coefficients(&identification.kind);
         let source_target_direction = identification
             .source_target_direction
             .iter()
@@ -893,7 +883,7 @@ fn mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed() {
             compute_ckyz_local_gv_invariants_for_degrees(
                 &identification.source_relations,
                 &identification.local_intersection_terms,
-                &cover_weights,
+                cover_weights,
                 &target_degrees,
             )
             .expect("source-derived CKYZ local GV extraction should succeed")

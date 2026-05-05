@@ -103,7 +103,7 @@ pub use gv::{
     RankTwoLocalSupportSignature, RankTwoLocalSupportSignatureEntry, SupportingMoriFace,
     SupportingMoriFaceCertificate, ToricCurveCandidate, ToricCurveGvDiagnostic,
     ToricCurveGvInvariant, ToricCurveGvSource, check_supporting_mori_face_normal,
-    compute_ambient_one_dimensional_ray_gv_series,
+    ckyz_local_surface_cover_weight_coefficients, compute_ambient_one_dimensional_ray_gv_series,
     compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
     compute_ckyz_local_gv_invariants, compute_ckyz_local_gv_invariants_for_degrees,
     compute_ckyz_local_instanton_potential_corrections,
