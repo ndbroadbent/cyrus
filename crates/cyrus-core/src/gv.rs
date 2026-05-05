@@ -300,6 +300,17 @@ pub struct OneDimensionalRayGvSeries {
     pub values: Vec<Integer>,
 }
 
+/// Exact certificate that an integer normal cuts out a supporting Mori face.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SupportingMoriFaceCertificate {
+    /// Integer normal with non-negative pairing on every Mori generator.
+    pub normal: Vec<i64>,
+    /// Number of Mori generators with zero pairing against `normal`.
+    pub zero_generator_count: usize,
+    /// Number of Mori generators with positive pairing against `normal`.
+    pub positive_generator_count: usize,
+}
+
 /// One term in a finite semigroup decomposition of a curve class.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CurveDecompositionTerm {
@@ -596,6 +607,69 @@ pub fn project_ambient_curve_to_basis(ambient_class: &[i64], basis: &[usize]) ->
         .collect()
 }
 
+/// Check an integer normal as an exact supporting-face certificate.
+///
+/// This function does not try to find a normal. It verifies a proposed normal
+/// using integer arithmetic only:
+///
+/// - every supplied face generator must pair to zero;
+/// - every Mori generator must pair non-negatively;
+/// - at least one Mori generator must pair positively.
+///
+/// A failed certificate returns `Ok(None)`. Malformed dimensions or arithmetic
+/// overflow return an error.
+pub fn check_supporting_mori_face_normal(
+    normal: &[i64],
+    face_generators: &[Vec<i64>],
+    mori_generators: &[Vec<i64>],
+) -> Result<Option<SupportingMoriFaceCertificate>> {
+    if normal.is_empty() {
+        return Err(Error::InvalidInput(
+            "supporting Mori face normal is empty".into(),
+        ));
+    }
+    if mori_generators.is_empty() {
+        return Err(Error::InvalidInput(
+            "supporting Mori face check requires Mori generators".into(),
+        ));
+    }
+    if normal.iter().all(|&value| value == 0) {
+        return Ok(None);
+    }
+
+    for generator in face_generators {
+        validate_curve_dimension("face generator", generator, normal.len())?;
+        if exact_i64_dot_checked(normal, generator)? != 0 {
+            return Ok(None);
+        }
+    }
+
+    let mut zero_generator_count = 0usize;
+    let mut positive_generator_count = 0usize;
+    for generator in mori_generators {
+        validate_curve_dimension("Mori generator", generator, normal.len())?;
+        let dot = exact_i64_dot_checked(normal, generator)?;
+        if dot < 0 {
+            return Ok(None);
+        }
+        if dot == 0 {
+            zero_generator_count += 1;
+        } else {
+            positive_generator_count += 1;
+        }
+    }
+
+    if positive_generator_count == 0 {
+        return Ok(None);
+    }
+
+    Ok(Some(SupportingMoriFaceCertificate {
+        normal: normal.to_vec(),
+        zero_generator_count,
+        positive_generator_count,
+    }))
+}
+
 /// Compute genus-zero GV invariants along a one-dimensional ray.
 ///
 /// The ray is expressed in Kähler-basis curve coordinates. The function calls
@@ -754,6 +828,32 @@ fn panic_payload_message(payload: &(dyn std::any::Any + Send)) -> String {
     } else {
         "non-string panic payload".to_string()
     }
+}
+
+fn validate_curve_dimension(label: &str, curve: &[i64], expected_dim: usize) -> Result<()> {
+    if curve.len() == expected_dim {
+        Ok(())
+    } else {
+        Err(Error::InvalidInput(format!(
+            "{label} dimension {} does not match normal dimension {expected_dim}",
+            curve.len()
+        )))
+    }
+}
+
+fn exact_i64_dot_checked(lhs: &[i64], rhs: &[i64]) -> Result<i128> {
+    lhs.iter()
+        .zip(rhs)
+        .try_fold(0_i128, |acc, (&left, &right)| {
+            let product = i128::from(left)
+                .checked_mul(i128::from(right))
+                .ok_or_else(|| {
+                    Error::InvalidInput("supporting Mori face dot product overflowed".into())
+                })?;
+            acc.checked_add(product).ok_or_else(|| {
+                Error::InvalidInput("supporting Mori face dot product overflowed".into())
+            })
+        })
 }
 
 /// Find a decomposition of a curve as a sum of two selected toric curve candidates.
@@ -3359,7 +3459,8 @@ mod tests {
     use super::{
         BoundedCurveDecompositionIndex, CurveDecompositionTerm, CurvePruningStrategy,
         GvLatticeAugmentation, OriginCircuitCurveWitness, OriginCircuitRelationPoint,
-        ToricCurveCandidate, compute_ambient_one_dimensional_ray_gv_series, compute_grading_vector,
+        ToricCurveCandidate, check_supporting_mori_face_normal,
+        compute_ambient_one_dimensional_ray_gv_series, compute_grading_vector,
         compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_provided_generators, compute_one_dimensional_ray_gv_series,
         curve_row_span_rank, curve_volume_in_divisor_basis, dump_mori_rays_cdd,
@@ -3615,6 +3716,73 @@ mod tests {
         let err = project_ambient_curve_to_basis(&[1, 2], &[0, 3]).unwrap_err();
 
         assert!(err.to_string().contains("basis index 3 is out of bounds"));
+    }
+
+    #[test]
+    fn supporting_mori_face_normal_certifies_exact_face() {
+        let certificate = check_supporting_mori_face_normal(
+            &[0, 1],
+            &[vec![1, 0]],
+            &[vec![1, 0], vec![0, 1], vec![1, 1]],
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(certificate.normal, vec![0, 1]);
+        assert_eq!(certificate.zero_generator_count, 1);
+        assert_eq!(certificate.positive_generator_count, 2);
+    }
+
+    #[test]
+    fn supporting_mori_face_normal_rejects_nonvanishing_face_generator() {
+        let certificate = check_supporting_mori_face_normal(
+            &[0, 1],
+            &[vec![1, 1]],
+            &[vec![1, 0], vec![0, 1], vec![1, 1]],
+        )
+        .unwrap();
+
+        assert!(certificate.is_none());
+    }
+
+    #[test]
+    fn supporting_mori_face_normal_rejects_negative_mori_pairing() {
+        let certificate = check_supporting_mori_face_normal(
+            &[0, 1],
+            &[vec![1, 0]],
+            &[vec![1, 0], vec![0, -1], vec![1, 1]],
+        )
+        .unwrap();
+
+        assert!(certificate.is_none());
+    }
+
+    #[test]
+    fn supporting_mori_face_normal_rejects_zero_normal() {
+        let certificate =
+            check_supporting_mori_face_normal(&[0, 0], &[vec![1, 0]], &[vec![1, 0]]).unwrap();
+
+        assert!(certificate.is_none());
+    }
+
+    #[test]
+    fn supporting_mori_face_normal_checks_dimensions() {
+        let err = check_supporting_mori_face_normal(&[0, 1], &[vec![1, 0, 0]], &[vec![1, 0]])
+            .unwrap_err();
+
+        assert!(err.to_string().contains("face generator dimension 3"));
+    }
+
+    #[test]
+    fn supporting_mori_face_normal_reports_dot_overflow() {
+        let err = check_supporting_mori_face_normal(
+            &[i64::MAX, i64::MAX, i64::MAX],
+            &[],
+            &[vec![i64::MAX, i64::MAX, i64::MAX]],
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("dot product overflowed"));
     }
 
     #[test]
