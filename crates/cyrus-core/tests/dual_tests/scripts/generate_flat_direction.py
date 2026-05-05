@@ -52,9 +52,10 @@ def main():
                     kappa_ppp += kappa_val * p[a] * p[b] * p[c]
         result["kappa_ppp"] = kappa_ppp
 
-        # e^K0 = (4/3) / kappa_ppp
-        if abs(kappa_ppp) > 1e-10:
-            result["eK0"] = (4.0 / 3.0) / kappa_ppp
+        # e^K0 = 1 / ((4/3) * kappa_ppp).  Negative kappa_ppp is not a
+        # physically valid flat direction for the exponential Kähler factor.
+        if kappa_ppp > 1e-10:
+            result["eK0"] = 1.0 / ((4.0 / 3.0) * kappa_ppp)
         else:
             result["eK0"] = None
     except np.linalg.LinAlgError:
