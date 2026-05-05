@@ -6128,6 +6128,52 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
         corrected_chi_summary.max_abs_reference,
         corrected_chi_summary.max_abs_candidate
     );
+    if let Some(no_gamma_target) = cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+        &selection.small_curve_gvs,
+        &intersection.basis,
+        kklt_basis,
+        checkpoint_t,
+        None,
+    ) {
+        let no_gamma_input_chi_summary =
+            target_correction_delta_summary(&checkpoint_implied_gv, &no_gamma_target)
+                .unwrap_or_else(|e| {
+                    eprintln!(
+                        "[ERROR] failed to compare checkpoint-t corrected-chamber no-gamma GV target correction: {e}"
+                    );
+                    std::process::exit(2);
+                });
+        let no_gamma_corrected_chi_summary =
+            target_correction_delta_summary(&checkpoint_chamber_implied_gv, &no_gamma_target)
+                .unwrap_or_else(|e| {
+                    eprintln!(
+                        "[ERROR] failed to compare corrected-chi checkpoint-t corrected-chamber no-gamma GV target correction: {e}"
+                    );
+                    std::process::exit(2);
+                });
+        let no_gamma_vs_gamma_summary =
+            target_correction_delta_summary(&covered_gv_target, &no_gamma_target).unwrap_or_else(
+                |e| {
+                    eprintln!(
+                        "[ERROR] failed to compare checkpoint-t corrected-chamber no-gamma-vs-gamma GV target correction: {e}"
+                    );
+                    std::process::exit(2);
+                },
+            );
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber GV target correction delta (no_gamma): input_chi_max_abs={} input_chi_relative_l2={} corrected_chi_max_abs={} corrected_chi_relative_l2={} vs_gamma_max_abs={} vs_gamma_relative_l2={}",
+            no_gamma_input_chi_summary.max_abs_delta,
+            no_gamma_input_chi_summary.relative_l2_delta,
+            no_gamma_corrected_chi_summary.max_abs_delta,
+            no_gamma_corrected_chi_summary.relative_l2_delta,
+            no_gamma_vs_gamma_summary.max_abs_delta,
+            no_gamma_vs_gamma_summary.relative_l2_delta
+        );
+    } else {
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber no-gamma GV target correction is invalid"
+        );
+    }
     report_corrected_chamber_gv_branch_buckets(
         &selection.small_curve_gvs,
         &intersection.basis,
