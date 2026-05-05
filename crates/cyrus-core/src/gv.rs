@@ -442,6 +442,19 @@ pub struct OneDimensionalRayGvSeries {
     pub values: Vec<Integer>,
 }
 
+/// Finite-cutoff evidence that a primitive ray is apparently nilpotent.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NilpotentRayCandidate {
+    /// Primitive co-prime curve ray being tested.
+    pub primitive_ray: Vec<i64>,
+    /// First positive multiple with zero genus-zero GV invariant.
+    pub first_vanishing_multiple: i128,
+    /// Grading degree of `first_vanishing_multiple * primitive_ray`.
+    pub first_vanishing_degree: i128,
+    /// `sum_{k=1}^{k*-1} k^2 n^0_{kC}` at the first vanishing multiple.
+    pub weighted_lower_gv_sum: Integer,
+}
+
 /// Exact certificate that an integer normal cuts out a supporting Mori face.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SupportingMoriFaceCertificate {
@@ -4221,6 +4234,143 @@ pub fn curve_in_rational_row_span(curve: &[i64], rows: &[Vec<i64>]) -> Result<bo
     Ok(integer_matrix_rank(&augmented) == rank)
 }
 
+fn checked_i128_dot(lhs: &[i64], rhs: &[i64], context: &str) -> Result<i128> {
+    lhs.iter()
+        .zip(rhs.iter())
+        .try_fold(0i128, |acc, (&left, &right)| {
+            let term = i128::from(left)
+                .checked_mul(i128::from(right))
+                .ok_or_else(|| Error::InvalidInput(format!("{context} dot product overflow")))?;
+            acc.checked_add(term)
+                .ok_or_else(|| Error::InvalidInput(format!("{context} dot product overflow")))
+        })
+}
+
+fn checked_ray_multiple(ray: &[i64], multiple: i128, context: &str) -> Result<Vec<i64>> {
+    ray.iter()
+        .map(|&entry| {
+            let value = i128::from(entry)
+                .checked_mul(multiple)
+                .ok_or_else(|| Error::InvalidInput(format!("{context} multiple overflow")))?;
+            i64::try_from(value)
+                .map_err(|_| Error::InvalidInput(format!("{context} multiple does not fit in i64")))
+        })
+        .collect()
+}
+
+fn primitive_i64_gcd(ray: &[i64], context: &str) -> Result<i64> {
+    let mut gcd = 0i64;
+    for &entry in ray {
+        let abs = entry
+            .checked_abs()
+            .ok_or_else(|| Error::InvalidInput(format!("{context} contains i64::MIN")))?;
+        gcd = gcd_i64(gcd, abs);
+    }
+    Ok(gcd)
+}
+
+/// Apply the finite-cutoff nilpotent-ray test from the McAllister
+/// moduli-space reconstruction appendix.
+///
+/// For a co-prime curve class `C`, the source criterion adds `C` to the
+/// apparently nilpotent set if some multiple `k* C` lies below the grading
+/// cutoff, has zero genus-zero GV invariant, and the lower weighted sum
+/// `sum_{k=1}^{k*-1} k^2 n^0_{kC}` is positive. Missing classes in the supplied
+/// finite GV table are treated as zero at the cutoff already computed by the
+/// caller.
+pub fn detect_apparent_nilpotent_ray_from_gv_multiples(
+    primitive_ray: &[i64],
+    grading_vector: &[i64],
+    cutoff_degree: i128,
+    gv_invariants: &[(Vec<i64>, Integer)],
+) -> Result<Option<NilpotentRayCandidate>> {
+    if primitive_ray.is_empty() {
+        return Err(Error::InvalidInput(
+            "nilpotent-ray test requires a nonempty primitive ray".into(),
+        ));
+    }
+    if grading_vector.len() != primitive_ray.len() {
+        return Err(Error::InvalidInput(
+            "nilpotent-ray grading dimension does not match ray dimension".into(),
+        ));
+    }
+    if cutoff_degree <= 0 {
+        return Err(Error::InvalidInput(
+            "nilpotent-ray cutoff degree must be positive".into(),
+        ));
+    }
+
+    let gcd = primitive_i64_gcd(primitive_ray, "nilpotent-ray primitive ray")?;
+    if gcd == 0 {
+        return Err(Error::InvalidInput(
+            "nilpotent-ray primitive ray must not be zero".into(),
+        ));
+    }
+    if gcd != 1 {
+        return Err(Error::InvalidInput(format!(
+            "nilpotent-ray primitive ray must be co-prime, got gcd {gcd}"
+        )));
+    }
+
+    let degree = checked_i128_dot(primitive_ray, grading_vector, "nilpotent-ray grading")?;
+    if degree <= 0 {
+        return Err(Error::InvalidInput(format!(
+            "nilpotent-ray primitive ray has non-positive grading degree {degree}"
+        )));
+    }
+
+    let mut gv_by_class: HashMap<Vec<i64>, Integer> = HashMap::with_capacity(gv_invariants.len());
+    for (class, gv) in gv_invariants {
+        if class.len() != primitive_ray.len() {
+            return Err(Error::InvalidInput(
+                "nilpotent-ray GV invariant dimension does not match ray dimension".into(),
+            ));
+        }
+        if let Some(existing) = gv_by_class.get(class) {
+            if existing != gv {
+                return Err(Error::InvalidInput(
+                    "nilpotent-ray GV table contains conflicting duplicate classes".into(),
+                ));
+            }
+        } else {
+            gv_by_class.insert(class.clone(), gv.clone());
+        }
+    }
+
+    let max_multiple = cutoff_degree / degree;
+    if max_multiple == 0 {
+        return Ok(None);
+    }
+
+    let zero = Integer::from(0);
+    let mut weighted_lower_gv_sum = Integer::from(0);
+    let mut multiple = 1i128;
+    while multiple <= max_multiple {
+        let class = checked_ray_multiple(primitive_ray, multiple, "nilpotent-ray class")?;
+        let gv = gv_by_class
+            .get(&class)
+            .cloned()
+            .unwrap_or_else(|| zero.clone());
+        if gv == zero && weighted_lower_gv_sum > zero {
+            let first_vanishing_degree = degree.checked_mul(multiple).ok_or_else(|| {
+                Error::InvalidInput("nilpotent-ray vanishing degree overflow".into())
+            })?;
+            return Ok(Some(NilpotentRayCandidate {
+                primitive_ray: primitive_ray.to_vec(),
+                first_vanishing_multiple: multiple,
+                first_vanishing_degree,
+                weighted_lower_gv_sum,
+            }));
+        }
+
+        let weight = Integer::from(multiple) * Integer::from(multiple);
+        weighted_lower_gv_sum += weight * gv;
+        multiple += 1;
+    }
+
+    Ok(None)
+}
+
 /// Compute the paper's potent-ray convergence terms.
 ///
 /// For a ray `q` with volume `q.t`, the paper defines
@@ -7617,7 +7767,8 @@ mod tests {
         compute_gv_invariants_with_provided_generators, compute_local_p2_genus_zero_gv_series,
         compute_local_toric_circuit_gv_series, compute_one_dimensional_ray_gv_series,
         compute_ray_gv_series_with_provided_generators, curve_in_rational_row_span,
-        curve_row_span_rank, curve_volume_in_divisor_basis, diagnose_affine_toric_circuit,
+        curve_row_span_rank, curve_volume_in_divisor_basis,
+        detect_apparent_nilpotent_ray_from_gv_multiples, diagnose_affine_toric_circuit,
         dump_mori_rays_cdd, extract_ckyz_local_gv_invariants_from_potential,
         extract_ckyz_local_gv_invariants_from_potential_for_degrees, find_pair_decomposition,
         find_semigroup_decomposition, gv_divisor_basis_data, gv_lattice_search_request,
@@ -9377,6 +9528,89 @@ mod tests {
         let err = curve_in_rational_row_span(&[1, 0, 0], &[vec![1, 0]]).unwrap_err();
 
         assert!(err.to_string().contains("curve dimension 3"));
+    }
+
+    #[test]
+    fn nilpotent_ray_candidate_detects_first_zero_after_positive_weighted_history() {
+        let candidate = detect_apparent_nilpotent_ray_from_gv_multiples(
+            &[1, 0],
+            &[2, 5],
+            4,
+            &[(vec![1, 0], Integer::from(3))],
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(candidate.primitive_ray, vec![1, 0]);
+        assert_eq!(candidate.first_vanishing_multiple, 2);
+        assert_eq!(candidate.first_vanishing_degree, 4);
+        assert_eq!(candidate.weighted_lower_gv_sum, Integer::from(3));
+    }
+
+    #[test]
+    fn nilpotent_ray_candidate_uses_explicit_zero_gv_values() {
+        let candidate = detect_apparent_nilpotent_ray_from_gv_multiples(
+            &[0, 1],
+            &[3, 2],
+            4,
+            &[
+                (vec![0, 1], Integer::from(2)),
+                (vec![0, 2], Integer::from(0)),
+            ],
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(candidate.first_vanishing_multiple, 2);
+        assert_eq!(candidate.weighted_lower_gv_sum, Integer::from(2));
+    }
+
+    #[test]
+    fn nilpotent_ray_candidate_requires_positive_lower_weighted_sum() {
+        let no_candidate = detect_apparent_nilpotent_ray_from_gv_multiples(
+            &[1, 0],
+            &[2, 5],
+            4,
+            &[(vec![1, 0], Integer::from(-3))],
+        )
+        .unwrap();
+
+        assert_eq!(no_candidate, None);
+    }
+
+    #[test]
+    fn nilpotent_ray_candidate_rejects_nonprimitive_or_bad_degree_inputs() {
+        let nonprimitive =
+            detect_apparent_nilpotent_ray_from_gv_multiples(&[2, 0], &[1, 1], 4, &[]).unwrap_err();
+        assert!(nonprimitive.to_string().contains("co-prime"));
+
+        let bad_degree =
+            detect_apparent_nilpotent_ray_from_gv_multiples(&[1, 0], &[0, 1], 4, &[]).unwrap_err();
+        assert!(bad_degree.to_string().contains("non-positive grading"));
+    }
+
+    #[test]
+    fn nilpotent_ray_candidate_rejects_bad_gv_table() {
+        let dim = detect_apparent_nilpotent_ray_from_gv_multiples(
+            &[1, 0],
+            &[1, 1],
+            4,
+            &[(vec![1], Integer::from(1))],
+        )
+        .unwrap_err();
+        assert!(dim.to_string().contains("dimension"));
+
+        let duplicate = detect_apparent_nilpotent_ray_from_gv_multiples(
+            &[1, 0],
+            &[1, 1],
+            4,
+            &[
+                (vec![1, 0], Integer::from(1)),
+                (vec![1, 0], Integer::from(2)),
+            ],
+        )
+        .unwrap_err();
+        assert!(duplicate.to_string().contains("conflicting duplicate"));
     }
 
     #[test]
