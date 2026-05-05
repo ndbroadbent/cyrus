@@ -5,7 +5,7 @@
 //!
 //! Reference: CYTools `calabiyau.py` (mori_cone_cap) and `cone.py` (grading vector).
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::env;
 use std::f64::consts::{LN_10, PI};
 use std::fs;
@@ -1321,6 +1321,56 @@ pub fn compute_ckyz_local_gv_invariants_for_degrees(
     Ok(invariants)
 }
 
+/// Compute CKYZ local GV invariants using an explicit causal semigroup domain.
+///
+/// This follows the same local CKYZ extraction as
+/// [`compute_ckyz_local_gv_invariants_for_degrees`], but it builds the finite
+/// monomial domain by closing `causal_generators` under addition up to the
+/// largest requested grading degree. This mirrors the cygv polynomial-domain
+/// contract more closely than a componentwise formal box: products whose summed
+/// degree is absent from the generated semigroup are intentionally outside the
+/// truncation domain.
+///
+/// The returned map contains only the requested target degrees. Cover divisors
+/// are still included internally for multiple-cover subtraction.
+///
+/// # Errors
+/// Returns an error for invalid CKYZ source data, invalid causal generators,
+/// non-generated target degrees, or non-integral extracted invariants.
+pub fn compute_ckyz_local_gv_invariants_for_degrees_with_causal_domain(
+    relations: &[Vec<i64>],
+    local_intersection_terms: &[CkyzLocalIntersectionTerm],
+    cover_weight_coefficients: &[i64],
+    target_degrees: &[Vec<usize>],
+    causal_generators: &[Vec<usize>],
+    grading_vector: &[usize],
+) -> Result<BTreeMap<Vec<usize>, Integer>> {
+    validate_ckyz_relations(relations)?;
+    let rank = relations.len();
+    validate_ckyz_target_degrees(target_degrees, rank)?;
+    if cover_weight_coefficients.len() != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ cover-weight rank does not match relation rank".into(),
+        ));
+    }
+
+    let extraction_degrees = ckyz_cover_closed_target_degrees(target_degrees)?;
+    let domain =
+        ckyz_causal_monomial_domain(rank, causal_generators, grading_vector, &extraction_degrees)?;
+    let potential = compute_ckyz_local_instanton_potential_corrections_domain(
+        relations,
+        local_intersection_terms,
+        &domain,
+    )?;
+    let mut invariants = extract_ckyz_local_gv_invariants_from_potential_for_degrees(
+        &potential,
+        cover_weight_coefficients,
+        &extraction_degrees,
+    )?;
+    invariants.retain(|degree, _| target_degrees.iter().any(|target| target == degree));
+    Ok(invariants)
+}
+
 fn validate_ckyz_relations(relations: &[Vec<i64>]) -> Result<()> {
     let Some(first_relation) = relations.first() else {
         return Err(Error::InvalidInput(
@@ -1942,6 +1992,103 @@ impl CkyzMonomialDomain {
     }
 }
 
+fn ckyz_causal_monomial_domain(
+    rank: usize,
+    generators: &[Vec<usize>],
+    grading_vector: &[usize],
+    target_degrees: &[Vec<usize>],
+) -> Result<CkyzMonomialDomain> {
+    if rank == 0 {
+        return Err(Error::InvalidInput(
+            "CKYZ causal domain requires at least one coordinate".into(),
+        ));
+    }
+    if generators.is_empty() {
+        return Err(Error::InvalidInput(
+            "CKYZ causal domain requires at least one generator".into(),
+        ));
+    }
+    if grading_vector.len() != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ causal domain grading rank mismatch".into(),
+        ));
+    }
+    validate_ckyz_target_degrees(target_degrees, rank)?;
+
+    let mut normalized_generators = Vec::with_capacity(generators.len());
+    for generator in generators {
+        if generator.len() != rank {
+            return Err(Error::InvalidInput(
+                "CKYZ causal generator rank mismatch".into(),
+            ));
+        }
+        if generator.iter().all(|&entry| entry == 0) {
+            return Err(Error::InvalidInput(
+                "CKYZ causal generators must be nonzero".into(),
+            ));
+        }
+        let degree = ckyz_grading_degree(generator, grading_vector)?;
+        if degree == 0 {
+            return Err(Error::InvalidInput(
+                "CKYZ causal generator has zero grading degree".into(),
+            ));
+        }
+        normalized_generators.push(generator.clone());
+    }
+
+    let max_grading = target_degrees
+        .iter()
+        .map(|degree| ckyz_grading_degree(degree, grading_vector))
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .max()
+        .expect("validated target degrees are nonempty");
+
+    let zero = vec![0; rank];
+    let mut degree_set = BTreeSet::from([zero.clone()]);
+    let mut frontier = VecDeque::from([zero]);
+    while let Some(current) = frontier.pop_front() {
+        for generator in &normalized_generators {
+            let next = ckyz_add_degrees_unbounded(&current, generator, rank)?;
+            if ckyz_grading_degree(&next, grading_vector)? > max_grading {
+                continue;
+            }
+            if degree_set.insert(next.clone()) {
+                frontier.push_back(next);
+            }
+        }
+    }
+
+    for target in target_degrees {
+        if !degree_set.contains(target) {
+            return Err(Error::InvalidInput(format!(
+                "CKYZ causal generators do not generate target degree {target:?}"
+            )));
+        }
+    }
+
+    CkyzMonomialDomain::from_degrees(rank, degree_set)
+}
+
+fn ckyz_grading_degree(degree: &[usize], grading_vector: &[usize]) -> Result<usize> {
+    if degree.len() != grading_vector.len() {
+        return Err(Error::InvalidInput(
+            "CKYZ grading degree rank mismatch".into(),
+        ));
+    }
+    degree
+        .iter()
+        .zip(grading_vector.iter())
+        .try_fold(0usize, |sum, (&entry, &weight)| {
+            let term = entry.checked_mul(weight).ok_or_else(|| {
+                Error::InvalidInput("CKYZ grading degree multiplication overflowed usize".into())
+            })?;
+            sum.checked_add(term).ok_or_else(|| {
+                Error::InvalidInput("CKYZ grading degree addition overflowed usize".into())
+            })
+        })
+}
+
 fn ckyz_sum_degree_index(
     lhs_degree: &[usize],
     rhs_degree: &[usize],
@@ -1960,6 +2107,27 @@ fn ckyz_sum_degree_index(
         })?);
     }
     Ok(degree_indices.get(&degree).copied())
+}
+
+fn ckyz_add_degrees_unbounded(
+    lhs_degree: &[usize],
+    rhs_degree: &[usize],
+    rank: usize,
+) -> Result<Vec<usize>> {
+    if lhs_degree.len() != rank || rhs_degree.len() != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ series multiplication rank mismatch".into(),
+        ));
+    }
+    lhs_degree
+        .iter()
+        .zip(rhs_degree.iter())
+        .map(|(&lhs_entry, &rhs_entry)| {
+            lhs_entry.checked_add(rhs_entry).ok_or_else(|| {
+                Error::InvalidInput("CKYZ multidegree addition overflowed usize".into())
+            })
+        })
+        .collect()
 }
 
 fn ckyz_coordinate_series(
@@ -6597,6 +6765,7 @@ mod tests {
         compute_ambient_one_dimensional_ray_gv_series,
         compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
         compute_ckyz_local_gv_invariants, compute_ckyz_local_gv_invariants_for_degrees,
+        compute_ckyz_local_gv_invariants_for_degrees_with_causal_domain,
         compute_ckyz_local_instanton_potential_corrections,
         compute_ckyz_local_prepotential_period_corrections, compute_ckyz_log_period_corrections,
         compute_grading_vector, compute_gv_invariants_with_explicit_semigroup,
@@ -7035,6 +7204,39 @@ mod tests {
     }
 
     #[test]
+    fn ckyz_causal_domain_local_gv_extraction_matches_local_p2_table() {
+        let target_degrees = (1..=10).map(|degree| vec![degree]).collect::<Vec<_>>();
+        let gvs = compute_ckyz_local_gv_invariants_for_degrees_with_causal_domain(
+            &[vec![-3, 1, 1, 1]],
+            &[CkyzLocalIntersectionTerm {
+                first: 0,
+                second: 0,
+                coefficient: 1,
+            }],
+            &[3],
+            &target_degrees,
+            &[vec![1]],
+            &[1],
+        )
+        .unwrap();
+
+        let expected = BTreeMap::from([
+            (vec![1], Integer::from(3)),
+            (vec![2], Integer::from(-6)),
+            (vec![3], Integer::from(27)),
+            (vec![4], Integer::from(-192)),
+            (vec![5], Integer::from(1695)),
+            (vec![6], Integer::from(-17064)),
+            (vec![7], Integer::from(188454)),
+            (vec![8], Integer::from(-2228160)),
+            (vec![9], Integer::from(27748899)),
+            (vec![10], Integer::from(-360012150)),
+        ]);
+
+        assert_eq!(gvs, expected);
+    }
+
+    #[test]
     fn ckyz_local_gv_extraction_matches_f0_table_start() {
         let relations = vec![vec![-2, 1, 0, 1, 0], vec![-2, 0, 1, 0, 1]];
         let gvs = compute_ckyz_local_gv_invariants(
@@ -7105,6 +7307,38 @@ mod tests {
                 "targeted F0 extraction should match full extraction at {degree:?}"
             );
         }
+    }
+
+    #[test]
+    fn ckyz_causal_domain_matches_target_downset_for_full_f0_ray() {
+        let relations = vec![vec![-2, 1, 0, 1, 0], vec![-2, 0, 1, 0, 1]];
+        let target_degrees = [vec![1, 1], vec![2, 2], vec![3, 3]];
+        let targeted = compute_ckyz_local_gv_invariants_for_degrees(
+            &relations,
+            &[CkyzLocalIntersectionTerm {
+                first: 0,
+                second: 1,
+                coefficient: 1,
+            }],
+            &[2, 2],
+            &target_degrees,
+        )
+        .unwrap();
+        let causal = compute_ckyz_local_gv_invariants_for_degrees_with_causal_domain(
+            &relations,
+            &[CkyzLocalIntersectionTerm {
+                first: 0,
+                second: 1,
+                coefficient: 1,
+            }],
+            &[2, 2],
+            &target_degrees,
+            &[vec![1, 0], vec![0, 1]],
+            &[1, 1],
+        )
+        .unwrap();
+
+        assert_eq!(causal, targeted);
     }
 
     #[test]
