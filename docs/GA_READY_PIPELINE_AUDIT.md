@@ -39,6 +39,11 @@ run pass. Any remaining mismatch must be explicit and localizable.
    checkpoint-implied vector. The leading residual has been ruled out as a
    simple issue with divisor `chi`, gamma indexing, `q.t` branch aggregation,
    local toric formulas, or checkpoint-file semantics.
+   A focused LP-witness face diagnostic now covers 9 of the 10 toric-missing
+   corrected-chamber curves and reduces the target-correction delta versus the
+   input-chamber correction to max_abs ≈ 0.04718, relative_l2 ≈ 0.59696, but
+   exact supporting-face certification remains 0/9. Those values are therefore
+   still diagnostic evidence, not a reusable GV fallback.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for
@@ -88,6 +93,8 @@ CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/strin
 CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 cargo test -p cyrus-core --test mcallister_e2e stage5_mcallister_small_toric_curves_match_checkpoint -- --nocapture
 CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 cargo test -p cyrus-core --test mcallister_e2e stage5_mcallister_small_toric_curve_gvs_match_checkpoint -- --nocapture
 cargo build --release -p cyrus-core --bin mcallister_first_principles
+CARGO_PROFILE_RELEASE_PANIC=unwind cargo build --release -p cyrus-core --bin mcallister_first_principles
+CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 CYRUS_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE=1 timeout 600 ./target/release/mcallister_first_principles --stop-after volume --allow-invalid-ek0 --diagnose-corrected-chamber-gv --diagnose-corrected-chamber-lp-face-gv
 CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_RUNNER_HEAVY=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 cargo test -p cyrus-core --test mcallister_e2e stage0_first_principles_runner_accepts_declared_inputs_only_data_dir -- --nocapture
 cargo check -p cyrus-core --bin mcallister_first_principles
 cargo fmt --check
@@ -118,6 +125,9 @@ to make the remaining GV layer more first-principles:
    bundled handoff. Higher-level APIs still need to either accept a generic
    matrix basis end-to-end or reject it loudly until that path is ported.
 3. Compare broader corrected-chamber per-curve cygv/general-GV values against
-   toric formula values and missing non-toric contributions.
+   toric formula values and missing non-toric contributions. The LP-witness
+   face diagnostic is useful but currently uncertified, so the next step should
+   reconstruct the actual supporting face or origin-circuit semigroup context
+   rather than promote floating decomposition witnesses.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.

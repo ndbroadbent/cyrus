@@ -201,6 +201,14 @@ LP-rounded normal. That leaves the harder higher-codimension face-selection
 problem open, but prevents an approximate diagnostic from becoming a hidden
 assumption in the GV pipeline.
 
+The McAllister corrected-chamber LP-witness diagnostic confirms this boundary.
+With exact-kernel and aggregate-normal LP certificate attempts enabled, the
+current local face diagnostic computes values for 9 of the 10 toric-missing
+curves, but certifies 0 of those 9 as supporting Mori faces. The combined
+diagnostic improves the target-correction delta versus the input-chamber
+correction to max_abs ≈ 0.04718 and relative_l2 ≈ 0.59696, yet the values remain
+unpromoted because the semigroup context is not proven to be a valid face.
+
 ## Computational Mirror Symmetry Source Read
 
 The later paper *Computational Mirror Symmetry* (arXiv:2303.00757) is the
