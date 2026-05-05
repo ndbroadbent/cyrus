@@ -578,11 +578,14 @@ struct ChamberToricGvSelection {
     ambient_rays: usize,
     subcutoff_count: usize,
     filtered_count: usize,
+    subcutoff_toric_gv_covered_count: usize,
+    subcutoff_toric_gv_missing_count: usize,
     toric_gv_covered_count: usize,
     toric_gv_missing_count: usize,
     first_missing_class: Option<Vec<i64>>,
     small_curve_candidates: Vec<ToricCurveCandidate>,
     small_curves: Vec<ToricCurveCandidate>,
+    subcutoff_curve_gvs: Vec<(Vec<i64>, malachite::Integer)>,
     small_curve_gvs: Vec<(Vec<i64>, malachite::Integer)>,
 }
 
@@ -6579,6 +6582,15 @@ fn compute_chamber_toric_gv_selection(
         .map(|item| (item.class, item.gv))
         .collect();
 
+    let mut subcutoff_curve_gvs = Vec::with_capacity(small_curve_candidates.len());
+    let mut subcutoff_missing_gv_classes = Vec::new();
+    for curve in &small_curve_candidates {
+        match gv_by_class.get(&curve.class) {
+            Some(gv) => subcutoff_curve_gvs.push((curve.class.clone(), gv.clone())),
+            None => subcutoff_missing_gv_classes.push(curve.class.clone()),
+        }
+    }
+
     let mut small_curve_gvs = Vec::with_capacity(small_curves.len());
     let mut missing_gv_classes = Vec::new();
     for curve in &small_curves {
@@ -6592,11 +6604,14 @@ fn compute_chamber_toric_gv_selection(
         ambient_rays: ambient_rays.len(),
         subcutoff_count: small_curve_candidates.len(),
         filtered_count: small_curves.len(),
+        subcutoff_toric_gv_covered_count: subcutoff_curve_gvs.len(),
+        subcutoff_toric_gv_missing_count: subcutoff_missing_gv_classes.len(),
         toric_gv_covered_count: small_curve_gvs.len(),
         toric_gv_missing_count: missing_gv_classes.len(),
         first_missing_class: missing_gv_classes.first().cloned(),
         small_curve_candidates,
         small_curves,
+        subcutoff_curve_gvs,
         small_curve_gvs,
     })
 }
@@ -7259,6 +7274,47 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
         selection.toric_gv_covered_count,
         selection.toric_gv_missing_count
     );
+    if let Some(subcutoff_target) =
+        cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+            &selection.subcutoff_curve_gvs,
+            &intersection.basis,
+            kklt_basis,
+            checkpoint_t,
+            Some(gamma),
+        )
+    {
+        let subcutoff_summary =
+            target_correction_delta_summary(&checkpoint_implied_gv, &subcutoff_target)
+                .unwrap_or_else(|e| {
+                    eprintln!(
+                        "[ERROR] failed to compare checkpoint-t corrected-chamber unpruned GV target correction: {e}"
+                    );
+                    std::process::exit(2);
+                });
+        let subcutoff_vs_pruned_summary =
+            target_correction_delta_summary(&covered_gv_target, &subcutoff_target)
+                .unwrap_or_else(|e| {
+                    eprintln!(
+                        "[ERROR] failed to compare unpruned vs pair-pruned corrected-chamber GV target correction: {e}"
+                    );
+                    std::process::exit(2);
+                });
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber GV target correction delta (unpruned_subcutoff): max_abs={} relative_l2={} max_abs_checkpoint_implied={} max_abs_unpruned={} subcutoff_toric_covered={} subcutoff_toric_missing={} vs_pair_pruned_max_abs={} vs_pair_pruned_relative_l2={}",
+            subcutoff_summary.max_abs_delta,
+            subcutoff_summary.relative_l2_delta,
+            subcutoff_summary.max_abs_reference,
+            subcutoff_summary.max_abs_candidate,
+            selection.subcutoff_toric_gv_covered_count,
+            selection.subcutoff_toric_gv_missing_count,
+            subcutoff_vs_pruned_summary.max_abs_delta,
+            subcutoff_vs_pruned_summary.relative_l2_delta
+        );
+    } else {
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber unpruned subcutoff GV target correction is invalid"
+        );
+    }
     let raw_kklt_target = c_i
         .iter()
         .map(|ci| {
