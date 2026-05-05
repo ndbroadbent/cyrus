@@ -184,6 +184,23 @@ other elements that affect the degree-ordered subtraction history. Feeding the
 single ray and its multiples to `cygv` is a valid diagnostic, but it asks a
 different mathematical question.
 
+The corresponding Cyrus boundary is now explicit. A low-dimensional face
+context may only replace the full Mori semigroup after an integer supporting
+normal certifies that every retained face generator has zero pairing and every
+ambient Mori generator has nonnegative pairing. `gv.rs` therefore exposes two
+separate operations:
+
+- `check_supporting_mori_face_normal` verifies a caller-supplied integer normal;
+- `certify_supporting_mori_face_by_exact_kernel` proves codimension-one faces
+  directly from the integer kernel of the supplied face generators, then runs
+  the same verifier.
+
+The exact-kernel path is deliberately conservative. If the face has a
+higher-dimensional kernel, Cyrus returns no certificate instead of choosing an
+LP-rounded normal. That leaves the harder higher-codimension face-selection
+problem open, but prevents an approximate diagnostic from becoming a hidden
+assumption in the GV pipeline.
+
 ## Computational Mirror Symmetry Source Read
 
 The later paper *Computational Mirror Symmetry* (arXiv:2303.00757) is the
