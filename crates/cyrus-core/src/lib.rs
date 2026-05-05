@@ -162,7 +162,8 @@ pub mod kklt;
 
 pub use kklt::{
     GvDilogFailure, KkltBranchSearchResult, KkltBranchSolution, KkltJacobianDiagnostics,
-    KkltResult, compute_c_tau as kklt_compute_c_tau, compute_corrected_target_tau,
+    KkltResult, StableWeylCandidateCertificate, check_stable_weyl_candidate_certificate,
+    compute_c_tau as kklt_compute_c_tau, compute_corrected_target_tau,
     compute_divisor_volumes as kklt_compute_tau, compute_gv_target_correction_for_ambient_curves,
     compute_jacobian as kklt_compute_jacobian, compute_jacobian_diagnostics,
     compute_kklt_divisor_volumes, compute_kklt_jacobian, compute_target_tau,

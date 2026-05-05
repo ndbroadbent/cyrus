@@ -29,7 +29,9 @@ use malachite::{Integer, Rational};
 use rand::{Rng, SeedableRng};
 use rayon::prelude::*;
 
+use crate::error::Result as CyrusResult;
 use crate::f64_pos;
+use crate::gv::{ExtremalMoriRayCertificate, check_extremal_mori_ray_separator};
 use crate::integer_math::integer_kernel;
 use crate::intersection::Intersection;
 use crate::types::f64::F64;
@@ -43,6 +45,16 @@ const TWO_PI: F64<Pos> = f64_pos!(2.0 * PI);
 const DILOG_TOL: f64 = 1e-16;
 const DILOG_MAX_TERMS: usize = 100_000;
 const ZETA_3: f64 = 1.202_056_903_159_594;
+
+/// Exact algebraic certificate for a proposed stable Weyl continuation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StableWeylCandidateCertificate {
+    /// Exact certificate that the curve spans an extremal ray in the supplied
+    /// finite Mori-generator cone.
+    pub extremal_ray: ExtremalMoriRayCertificate,
+    /// Exact Weyl reflection matrix for the certified candidate.
+    pub weyl_matrix: Vec<Vec<Rational>>,
+}
 
 /// Why a real-axis GV dilogarithm evaluation failed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -408,6 +420,56 @@ pub fn divisor_quadratic_vanishes_on_curve_facet(
         }
     }
     Some(true)
+}
+
+/// Verify the exact algebraic parts of a proposed stable Weyl continuation.
+///
+/// This combines three exact checks:
+///
+/// - `curve_class` spans an extremal ray of the supplied finite Mori cone,
+///   certified by `mori_separator_normal`;
+/// - the candidate shrinking divisor has
+///   `kappa_{abc} D^a t^b t^c == 0` on the hyperplane `C.t=0`;
+/// - the Weyl-reflected intersection tensor matches the flop-updated tensor
+///   for the supplied genus-zero invariant `gv_invariant`.
+///
+/// It does not find the separator, divisor, or GV invariant. Those must come
+/// from source-derived geometry/GV computation before this certificate is a
+/// usable chamber-continuation step.
+pub fn check_stable_weyl_candidate_certificate(
+    kappa: &Intersection,
+    mori_separator_normal: &[i64],
+    mori_generators: &[Vec<i64>],
+    shrinking_divisor: &[Integer],
+    curve_class: &[i64],
+    gv_invariant: &Integer,
+) -> CyrusResult<Option<StableWeylCandidateCertificate>> {
+    let Some(extremal_ray) =
+        check_extremal_mori_ray_separator(mori_separator_normal, curve_class, mori_generators)?
+    else {
+        return Ok(None);
+    };
+
+    if divisor_quadratic_vanishes_on_curve_facet(kappa, shrinking_divisor, curve_class)
+        != Some(true)
+    {
+        return Ok(None);
+    }
+
+    if weyl_reflection_matches_flop_transform(kappa, shrinking_divisor, curve_class, gv_invariant)
+        != Some(true)
+    {
+        return Ok(None);
+    }
+
+    let Some(weyl_matrix) = weyl_reflection_matrix(shrinking_divisor, curve_class) else {
+        return Ok(None);
+    };
+
+    Ok(Some(StableWeylCandidateCertificate {
+        extremal_ray,
+        weyl_matrix,
+    }))
 }
 
 fn divisor_quadratic_bilinear_pairing(
@@ -2416,6 +2478,65 @@ mod tests {
                 &[1, 0]
             ),
             Some(false)
+        );
+    }
+
+    #[test]
+    fn test_stable_weyl_candidate_certificate_combines_exact_checks() {
+        let mut kappa = Intersection::new(2);
+        kappa.set(0, 0, 0, finite_rational(1));
+
+        let certificate = check_stable_weyl_candidate_certificate(
+            &kappa,
+            &[-1, 1],
+            &[vec![1, 0], vec![0, 1], vec![1, 1]],
+            &[Integer::from(1), Integer::from(0)],
+            &[1, 0],
+            &Integer::from(2),
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(certificate.extremal_ray.separator_normal, vec![-1, 1]);
+        assert_eq!(
+            certificate.weyl_matrix,
+            vec![
+                vec![Rational::from(-1), Rational::from(0)],
+                vec![Rational::from(0), Rational::from(1)]
+            ]
+        );
+    }
+
+    #[test]
+    fn test_stable_weyl_candidate_certificate_rejects_failed_subchecks() {
+        let mut kappa = Intersection::new(2);
+        kappa.set(0, 0, 0, finite_rational(1));
+        let mori_generators = [vec![1, 0], vec![0, 1], vec![1, 1]];
+        let divisor = [Integer::from(1), Integer::from(0)];
+
+        assert!(
+            check_stable_weyl_candidate_certificate(
+                &kappa,
+                &[-1, 0],
+                &mori_generators,
+                &divisor,
+                &[1, 1],
+                &Integer::from(2),
+            )
+            .unwrap()
+            .is_none()
+        );
+        assert!(
+            check_stable_weyl_candidate_certificate(
+                &kappa,
+                &[-1, 1],
+                &mori_generators,
+                &divisor,
+                &[1, 0],
+                &Integer::from(1),
+            )
+            .unwrap()
+            .is_none()
         );
     }
 
