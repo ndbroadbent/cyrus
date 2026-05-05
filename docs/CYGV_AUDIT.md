@@ -999,8 +999,10 @@ cygv instanton-data layer for the CKYZ local surface examples:
 
 The new targeted API truncates by requested source degrees instead of a single
 total degree. That is enough to validate the first two `potent_rays_gv.dat`
-entries for all 393 rank-two `P^2`/`F0`/`F1` McAllister potent-ray rows without
-using those GV rows as inputs. It is not yet enough for all ten entries: the
-box-truncated multivariable series still becomes too slow on the largest source
-directions, so the remaining work is coefficient-level extraction rather than a
-new physics shortcut.
+entries for all 395 rank-two CKYZ McAllister potent-ray rows without using
+those GV rows as inputs. Polygon 5 is included with finite-limit cover weights
+`[1, 1, 1]`; the printed `C1 = 3J1 + 2J2 + 2J3` weights are intentionally
+rejected because they produce non-integral invariants in this extraction. This
+is not yet enough for all ten entries: the box-truncated multivariable series
+still becomes too slow on the largest source directions, so the remaining work
+is coefficient-level extraction rather than a new physics shortcut.

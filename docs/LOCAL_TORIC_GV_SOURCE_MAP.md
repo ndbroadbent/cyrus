@@ -256,15 +256,16 @@ uses the same source path but truncates the formal series componentwise to the
 requested source degrees. This avoids treating `potent_rays_gv.dat` as input
 while keeping the computation small enough for targeted McAllister checks.
 
-This is validated against the local `P^2` table and the start of the `F0` and
-`F1` appendix tables. The `F1` check is important because the finite-limit cover
-weights are `[2, 1]` in CKYZ source coordinate order, not the printed
-`C1 = 3J1 + 2J2` coefficients. The gated McAllister test now reconstructs the
-first two saved GV entries for all 393 rank-two `P^2`/`F0`/`F1` potent-ray rows
-from CKYZ source data. It does not yet reproduce all ten entries: the current
-box-truncated formal-series path is still too slow for the largest directions,
-so true coefficient-targeted extraction remains the next optimization. Polygon-5
-cover-weight normalization also remains separate.
+This is validated against the local `P^2` table, the start of the `F0` and
+`F1` appendix tables, and the start of CKYZ Table 3 for polygon 5. The `F1`
+and polygon-5 checks are important because the finite-limit cover weights are
+not always the printed `C1` coefficients: `F1` uses `[2, 1]`, while polygon 5
+uses `[1, 1, 1]` rather than `[3, 2, 2]`. The gated McAllister test now
+reconstructs the first two saved GV entries for all 395 rank-two CKYZ
+potent-ray rows from source data. It does not yet reproduce all ten entries:
+the current box-truncated formal-series path is still too slow for the largest
+directions, so true coefficient-targeted extraction remains the next
+optimization.
 
 ## Rank-Four Boundary
 

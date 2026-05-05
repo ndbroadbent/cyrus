@@ -58,8 +58,8 @@ mirror-map helper now composes those coefficients into flat `q` coordinates.
 The local instanton-potential helper now mirrors cygv's essential
 `beta - alpha alpha` conversion and applies the CKYZ `instbase`
 multiple-cover inversion for source weights supplied by the caller. This is
-validated for local `P^2`, `F0`, and `F1`, and the McAllister rank-two
-`P^2`/`F0`/`F1` potent-ray rows now check their first two saved GV entries
+validated for local `P^2`, `F0`, `F1`, and polygon 5, and all 395 McAllister
+rank-two CKYZ potent-ray rows now check their first two saved GV entries
 against source-derived CKYZ extraction. The saved `potent_rays_gv.dat` values
 remain validation targets only. The full ten-entry rows still need a sharper
 coefficient-targeted extractor; componentwise box truncation is correct but too

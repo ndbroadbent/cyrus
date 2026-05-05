@@ -171,7 +171,7 @@ fn ckyz_cover_weights(kind: &CkyzLocalSurfaceKind) -> Option<Vec<i64>> {
         CkyzLocalSurfaceKind::LocalP2 => Some(vec![3]),
         CkyzLocalSurfaceKind::HirzebruchF0 => Some(vec![2, 2]),
         CkyzLocalSurfaceKind::HirzebruchF1 => Some(vec![2, 1]),
-        CkyzLocalSurfaceKind::Polygon5 => None,
+        CkyzLocalSurfaceKind::Polygon5 => Some(vec![1, 1, 1]),
     }
 }
 
@@ -834,7 +834,7 @@ fn first_mcallister_local_p2_potent_ray_gvs_are_reconstructed() {
 }
 
 #[test]
-fn mcallister_rank_two_ckyz_p2_f0_f1_potent_ray_gvs_are_reconstructed() {
+fn mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed() {
     if !first_principles_enabled() {
         return;
     }
@@ -914,8 +914,8 @@ fn mcallister_rank_two_ckyz_p2_f0_f1_potent_ray_gvs_are_reconstructed() {
     }
 
     assert_eq!(
-        checked_rows, 393,
-        "all rank-two P2/F0/F1 potent-ray rows should now have CKYZ-reconstructed first-two GV checks; polygon-5 rows remain separate"
+        checked_rows, 395,
+        "all rank-two CKYZ potent-ray rows should now have CKYZ-reconstructed first-two GV checks"
     );
 }
 

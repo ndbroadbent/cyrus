@@ -6847,6 +6847,98 @@ mod tests {
         assert!(err.to_string().contains("not integral"));
     }
 
+    fn ckyz_polygon5_relations() -> Vec<Vec<i64>> {
+        vec![
+            vec![-1, 1, -1, 1, 0, 0],
+            vec![-1, -1, 1, 0, 0, 1],
+            vec![-1, 0, 1, -1, 1, 0],
+        ]
+    }
+
+    fn ckyz_polygon5_intersection_terms() -> Vec<CkyzLocalIntersectionTerm> {
+        vec![
+            CkyzLocalIntersectionTerm {
+                first: 0,
+                second: 0,
+                coefficient: 1,
+            },
+            CkyzLocalIntersectionTerm {
+                first: 1,
+                second: 0,
+                coefficient: 1,
+            },
+            CkyzLocalIntersectionTerm {
+                first: 0,
+                second: 2,
+                coefficient: 1,
+            },
+            CkyzLocalIntersectionTerm {
+                first: 1,
+                second: 2,
+                coefficient: 1,
+            },
+        ]
+    }
+
+    #[test]
+    fn ckyz_targeted_local_gv_extraction_matches_polygon5_table_start() {
+        let target_degrees = [
+            vec![0, 0, 1],
+            vec![0, 1, 0],
+            vec![0, 1, 1],
+            vec![1, 0, 0],
+            vec![1, 0, 1],
+            vec![1, 1, 0],
+            vec![1, 1, 1],
+            vec![2, 1, 1],
+            vec![2, 1, 2],
+            vec![2, 2, 1],
+            vec![2, 2, 2],
+        ];
+
+        let gvs = compute_ckyz_local_gv_invariants_for_degrees(
+            &ckyz_polygon5_relations(),
+            &ckyz_polygon5_intersection_terms(),
+            &[1, 1, 1],
+            &target_degrees,
+        )
+        .unwrap();
+
+        let expected_nonzero = BTreeMap::from([
+            (vec![0, 0, 1], Integer::from(1)),
+            (vec![0, 1, 0], Integer::from(1)),
+            (vec![1, 0, 0], Integer::from(1)),
+            (vec![1, 0, 1], Integer::from(-2)),
+            (vec![1, 1, 0], Integer::from(-2)),
+            (vec![1, 1, 1], Integer::from(3)),
+            (vec![2, 1, 1], Integer::from(-4)),
+            (vec![2, 1, 2], Integer::from(5)),
+            (vec![2, 2, 1], Integer::from(5)),
+            (vec![2, 2, 2], Integer::from(-6)),
+        ]);
+
+        for (degree, expected) in expected_nonzero {
+            assert_eq!(gvs.get(&degree), Some(&expected));
+        }
+        assert!(
+            !gvs.contains_key(&vec![0, 1, 1]),
+            "zero polygon-5 invariant should be omitted"
+        );
+    }
+
+    #[test]
+    fn ckyz_local_gv_extraction_rejects_printed_polygon5_c1_weights() {
+        let err = compute_ckyz_local_gv_invariants_for_degrees(
+            &ckyz_polygon5_relations(),
+            &ckyz_polygon5_intersection_terms(),
+            &[3, 2, 2],
+            &[vec![0, 0, 1]],
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("not integral"));
+    }
+
     #[test]
     fn local_p2_circuit_dispatches_to_local_mirror_series() {
         let points = vec![
