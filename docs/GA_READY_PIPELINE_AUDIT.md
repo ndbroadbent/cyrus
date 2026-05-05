@@ -26,7 +26,7 @@ run pass. Any remaining mismatch must be explicit and localizable.
 | High-dimensional selected small toric curves | Cyrus computes Mori-cap rays, applies the input-chamber volume cutoff, and matches the 4-214-647 `small_curves.dat` checkpoint with pair pruning | Implemented for checkpoint rule |
 | Small-curve pruning semantics | `CurvePruningStrategy::{PairDecomposable, FiniteSemigroup}` exposes the checkpoint rule and stricter finite-set semigroup diagnostic separately | Implemented, with documented mismatch |
 | Small toric GV values | Toric two-face/origin-circuit formulas match `small_curves_gv.dat` for 4-214-647 | Implemented for covered selected-toric formulas |
-| Potent-ray convergence data | `curve_row_span_rank`, `potent_ray_convergence`, `diagnose_affine_toric_circuit`, CKYZ local-surface identification, source-derived local CKYZ GV extraction, and the Stage 5 potent-ray diagnostics compute rank, corrected-Kähler volumes, affine local-circuit structure, `log xi_n` slopes, and first-three GV checks for all 395 rank-two CKYZ rows; targeted CKYZ extraction now uses a past-downset domain for requested degrees; source read confirms full rows require a sharper local semigroup/domain, not just the saved ray and multiples | Partially implemented; full ten-entry extraction, rank-four contexts, and generated low-dimensional-face ray sampling still missing |
+| Potent-ray convergence data | `curve_row_span_rank`, `potent_ray_convergence`, `diagnose_affine_toric_circuit`, CKYZ local-surface identification, source-derived local CKYZ GV extraction, and the Stage 5 potent-ray diagnostics compute rank, corrected-Kähler volumes, affine local-circuit structure, `log xi_n` slopes, and first-three GV checks for all 395 rank-two CKYZ rows; targeted CKYZ extraction now uses a past-downset domain for requested degrees; `compute_ckyz_local_gv_invariants_for_degrees_with_causal_domain` adds a cygv-style generated semigroup domain and is validated on local P2/F0 guardrails | Partially implemented; full ten-entry extraction, rank-four contexts, generated local causal domains for each McAllister support, and generated low-dimensional-face ray sampling still missing |
 | Flop/corrected-chamber continuation | Negative small-curve volumes and real-axis dilog branch behavior are classified; even-parity branch-cut failures are explicit via `GvDilogFailure` | Diagnosed, not resolved |
 | KKLT corrected Kähler solve | Runner reaches a no-replay corrected Kähler vector and corrected volume without loading `corrected_kahler_param.dat` by default | Implemented but not exact |
 | Corrected target-volume / GV correction agreement | Diagnostics localize the residual to corrected-chamber GV target corrections, not classical geometry or file semantics | Open blocker |
@@ -91,12 +91,11 @@ to make the remaining GV layer more first-principles:
    `M_infinity(X)` and compute the ray `N_{nq}` series rather than reading
    `potent_rays*.dat`. Rank-two CKYZ rows now have first-three checks; next make
    the local extractor coefficient-targeted enough for complete rows where
-   feasible. The intended shape is a cygv-style causal semigroup domain: a
-   local grading, deterministic degree order, monomial lookup/addition map, and
-   cover-closed target multiples plus the lower classes needed for
-   `Li2(q_N)` subtraction. This builds on the current target-downset domain but
-   should not return to a componentwise formal box. After that, handle the
-   rank-four affine supports.
+   feasible. A first causal-domain extraction API now exists and is checked on
+   local P2/F0 examples. Next, derive the local generator set and grading from
+   each McAllister support signature, then use the causal path to raise the
+   rank-two potent-ray checks beyond the current first-three gate. After that,
+   handle the rank-four affine supports.
 2. Close the remaining CYTools basis contract gap for GA use: matrix-basis
    projection, dual curve-basis construction, and no-origin q-matrix
    construction now exist, but higher-level APIs still need to either accept a

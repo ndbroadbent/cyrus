@@ -1129,3 +1129,22 @@ targets where the current `target_downset` is affordable, the causal domain
 must reproduce the same extracted CKYZ GV values. Only after that equivalence
 holds should the domain be used to raise `CYRUS_CKYZ_MULTIPLES_TO_CHECK` toward
 the full ten-entry `potent_rays_gv.dat` rows.
+
+The first implementation of this boundary is now present as
+`compute_ckyz_local_gv_invariants_for_degrees_with_causal_domain`. It takes
+explicit local generators and a grading vector, closes the generated semigroup up
+to the largest cover-closed target grading, and then runs the same CKYZ
+instanton-potential and multiple-cover extraction on that finite domain. The
+small guardrail tests currently prove:
+
+- local `P^2` causal-domain extraction reproduces the known degree-1 through
+  degree-10 table;
+- the standard-generator F0 ray causal-domain extraction agrees with the
+  existing `target_downset` extractor for the first three diagonal targets;
+- explicit CKYZ domains drop products whose summed degree is absent from the
+  monomial map, matching the cygv polynomial-domain contract.
+
+This is still not the full McAllister potent-ray solution. The missing step is
+to derive the local generator set and grading for each normalized support
+signature from geometry, then use this causal-domain path to raise the
+rank-two CKYZ check beyond the first three multiples.
