@@ -9730,6 +9730,93 @@ mod tests {
     }
 
     #[test]
+    fn branch_report_records_curve_pruning_strategy() {
+        use cyrus_core::{
+            KkltBranchSolution, KkltJacobianDiagnostics, KkltResult, f64_finite, f64_pos,
+            types::tags::NonNeg,
+        };
+
+        let cache_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/cyrus-test-cache");
+        std::fs::create_dir_all(&cache_dir).expect("create cache dir");
+        let path = cache_dir.join(format!(
+            "branch-report-{}-{}.jsonl",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time after epoch")
+                .as_nanos()
+        ));
+        let ctx = BranchReportContext {
+            branch_seed: 7,
+            branch_selection: BranchSelection::MinToricGvMissing,
+            small_curve_pruning: CurvePruningStrategy::FiniteSemigroup,
+            kklt_steps: 3,
+            attempted: 1,
+            solved: 1,
+            non_converged: 0,
+            non_positive_volume: 0,
+            selected_rank_by_volume: 0,
+        };
+        let branch = KkltBranchSolution {
+            init_index: 0,
+            result: KkltResult {
+                t: vec![f64_finite!(1.0)],
+                tau: vec![f64_finite!(2.0)],
+                tau_target: vec![f64_pos!(2.0)],
+                converged: true,
+                relative_error: F64::<NonNeg>::ZERO,
+            },
+            classical_volume: f64_pos!(3.0),
+            jacobian_diagnostics: KkltJacobianDiagnostics {
+                rank: 1,
+                max_rank: 1,
+                max_singular_value: f64_pos!(4.0),
+                min_nonzero_singular_value: f64_pos!(2.0),
+                condition_number: Some(f64_pos!(2.0)),
+            },
+        };
+        let coverage = BranchGvCoverage {
+            ambient_rays: 7,
+            subcutoff_count: 5,
+            filtered_count: 4,
+            toric_gv_covered_count: 3,
+            toric_gv_missing_count: 1,
+            first_missing_class: Some(vec![1, 0]),
+            missing_required_degree_min: Some(2),
+            missing_required_degree_max: Some(9),
+            missing_class_sample: vec![vec![1, 0]],
+            bounded_decomposition_max_terms: Some(4),
+            missing_bounded_decomposable_count: Some(1),
+            first_missing_bounded_decomposition: Some(vec![vec![1, 0], vec![0, 1]]),
+        };
+
+        write_branch_report_jsonl(
+            &path,
+            &ctx,
+            &[branch],
+            &[vec![f64_finite!(0.5)]],
+            &["unit"],
+            Some(&[coverage]),
+        )
+        .expect("write branch report");
+
+        let content = std::fs::read_to_string(&path).expect("read branch report");
+        let rows = content
+            .lines()
+            .map(|line| serde_json::from_str::<serde_json::Value>(line).expect("valid jsonl row"))
+            .collect::<Vec<_>>();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0]["type"], "summary");
+        assert_eq!(rows[0]["small_curve_pruning"], "finite-semigroup");
+        assert_eq!(rows[0]["selected_small_curve_filtered_count"], 4);
+        assert_eq!(rows[1]["type"], "positive_branch");
+        assert_eq!(rows[1]["small_curve_pruning"], "finite-semigroup");
+        assert_eq!(rows[1]["small_curve_filtered_count"], 4);
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
     fn min_toric_gv_missing_selection_ties_by_volume() {
         let coverages = vec![
             BranchGvCoverage {
