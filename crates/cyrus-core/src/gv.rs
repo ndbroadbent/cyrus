@@ -1833,7 +1833,7 @@ fn ckyz_total_degree(degree: &[usize]) -> Result<usize> {
 struct CkyzMonomialDomain {
     rank: usize,
     degrees: Vec<Vec<usize>>,
-    degree_indices: BTreeMap<Vec<usize>, usize>,
+    degree_indices: HashMap<Vec<usize>, usize>,
     addition_indices: Option<Vec<Vec<Option<usize>>>>,
     max_total_degree: usize,
 }
@@ -1886,7 +1886,7 @@ impl CkyzMonomialDomain {
             .cloned()
             .enumerate()
             .map(|(index, degree)| (degree, index))
-            .collect::<BTreeMap<_, _>>();
+            .collect::<HashMap<_, _>>();
         let addition_entries = degrees.len().saturating_mul(degrees.len());
         let addition_indices = if addition_entries <= CKYZ_ADDITION_TABLE_MAX_ENTRIES {
             let mut addition_indices = vec![vec![None; degrees.len()]; degrees.len()];
@@ -1946,7 +1946,7 @@ fn ckyz_sum_degree_index(
     lhs_degree: &[usize],
     rhs_degree: &[usize],
     rank: usize,
-    degree_indices: &BTreeMap<Vec<usize>, usize>,
+    degree_indices: &HashMap<Vec<usize>, usize>,
 ) -> Result<Option<usize>> {
     if lhs_degree.len() != rank || rhs_degree.len() != rank {
         return Err(Error::InvalidInput(
