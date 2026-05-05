@@ -374,3 +374,20 @@ seconds. Support pruning is therefore a real reduction, but not the final
 coefficient-demand solution. The remaining target is to shrink the selected
 history or compute the surviving 2.59 million supported states with a
 source-aligned dynamic program instead of recursive per-coefficient lookup.
+
+A scale-distribution profile shows that the supported work is not concentrated
+in a few huge scale degrees:
+
+```text
+[CKYZ_COEFFICIENT_WORK] ... support_unique_exp_states=2587631 support_scales=5235
+[CKYZ_COEFFICIENT_SCALE] ... scale=[0, 1, 0] support_unique_exp_states=2519
+[CKYZ_COEFFICIENT_SCALE] ... scale=[0, 2, 0] support_unique_exp_states=2457
+[CKYZ_COEFFICIENT_SCALE] ... scale=[0, 0, 1] support_unique_exp_states=2419
+[CKYZ_COEFFICIENT_SCALE] ... scale=[1, 1, 0] support_unique_exp_states=2419
+[CKYZ_COEFFICIENT_SCALE] ... scale=[1, 0, 0] support_unique_exp_states=2399
+```
+
+The top scale has only about 2.5k supported deltas, while there are 5,235
+support scales total. That makes an eager dense cache per scale unattractive.
+The next coefficient evaluator should stay sparse and source-ordered, or the
+history builder needs a sharper dependency criterion.

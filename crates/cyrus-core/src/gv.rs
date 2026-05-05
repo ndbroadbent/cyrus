@@ -841,6 +841,8 @@ pub struct CkyzZResidualCoefficientWorkProfile {
     pub unique_exp_state_count: usize,
     /// Number of distinct `(scale, delta)` states that survive support pruning.
     pub support_unique_exp_state_count: usize,
+    /// Supported `(scale, delta)` counts grouped by scale degree, sorted largest first.
+    pub support_exp_state_counts_by_scale: Vec<(Vec<usize>, usize)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1529,6 +1531,7 @@ fn ckyz_z_residual_coefficient_work_profile(
     let mut unique_deltas = BTreeSet::<Vec<usize>>::new();
     let mut unique_exp_states = BTreeSet::<(Vec<usize>, Vec<usize>)>::new();
     let mut support_unique_exp_states = BTreeSet::<(Vec<usize>, Vec<usize>)>::new();
+    let mut support_exp_states_by_scale = BTreeMap::<Vec<usize>, BTreeSet<Vec<usize>>>::new();
     let alpha_supports = alpha
         .iter()
         .map(|series| ckyz_series_support_indices(series, domain))
@@ -1601,6 +1604,10 @@ fn ckyz_z_residual_coefficient_work_profile(
                             )
                         })?;
                     support_unique_exp_states.insert((scale.clone(), delta.clone()));
+                    support_exp_states_by_scale
+                        .entry(scale.clone())
+                        .or_default()
+                        .insert(delta.clone());
                     pair_has_support = true;
                 }
                 unique_exp_states.insert((scale, delta));
@@ -1612,6 +1619,20 @@ fn ckyz_z_residual_coefficient_work_profile(
             }
         }
     }
+    let mut support_exp_state_counts_by_scale = support_exp_states_by_scale
+        .into_iter()
+        .map(|(scale, deltas)| (scale, deltas.len()))
+        .collect::<Vec<_>>();
+    support_exp_state_counts_by_scale.sort_by(|lhs, rhs| {
+        rhs.1
+            .cmp(&lhs.1)
+            .then_with(|| {
+                ckyz_total_degree(&lhs.0)
+                    .expect("validated scale degree")
+                    .cmp(&ckyz_total_degree(&rhs.0).expect("validated scale degree"))
+            })
+            .then_with(|| lhs.0.cmp(&rhs.0))
+    });
 
     Ok(CkyzZResidualCoefficientWorkProfile {
         rank: domain.rank,
@@ -1626,6 +1647,7 @@ fn ckyz_z_residual_coefficient_work_profile(
         unique_delta_count: unique_deltas.len(),
         unique_exp_state_count: unique_exp_states.len(),
         support_unique_exp_state_count: support_unique_exp_states.len(),
+        support_exp_state_counts_by_scale,
     })
 }
 
@@ -11845,6 +11867,14 @@ mod tests {
         assert!(profile.unique_scale_count <= profile.li2_delta_term_count);
         assert!(profile.unique_exp_state_count <= profile.li2_delta_term_count);
         assert!(profile.support_unique_exp_state_count <= profile.unique_exp_state_count);
+        assert_eq!(
+            profile
+                .support_exp_state_counts_by_scale
+                .iter()
+                .map(|(_, count)| count)
+                .sum::<usize>(),
+            profile.support_unique_exp_state_count
+        );
     }
 
     #[test]
