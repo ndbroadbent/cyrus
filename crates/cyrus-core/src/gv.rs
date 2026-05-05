@@ -2598,6 +2598,11 @@ fn ckyz_series_power_cache(
     powers.push(identity);
     for exponent in 1..=max_exponent {
         let next = ckyz_series_mul(&powers[exponent - 1], series, rank, max_total_degree)?;
+        if next.is_empty() {
+            powers.push(next);
+            powers.resize_with(max_exponent + 1, BTreeMap::new);
+            break;
+        }
         powers.push(next);
     }
     Ok(powers)
@@ -2614,6 +2619,11 @@ fn ckyz_series_power_cache_domain(
     powers.push(identity);
     for exponent in 1..=max_exponent {
         let next = ckyz_series_mul_domain(&powers[exponent - 1], series, domain)?;
+        if next.is_empty() {
+            powers.push(next);
+            powers.resize_with(max_exponent + 1, BTreeMap::new);
+            break;
+        }
         powers.push(next);
     }
     Ok(powers)
@@ -7186,6 +7196,20 @@ mod tests {
                 (vec![1, 1], Rational::from(15)),
             ])
         );
+    }
+
+    #[test]
+    fn ckyz_power_cache_fills_empty_higher_powers() {
+        let series = BTreeMap::from([(vec![1], Rational::from(2))]);
+
+        let powers = super::ckyz_series_power_cache(&series, 4, 1, 2).unwrap();
+
+        assert_eq!(powers.len(), 5);
+        assert_eq!(powers[0], BTreeMap::from([(vec![0], Rational::from(1))]));
+        assert_eq!(powers[1], BTreeMap::from([(vec![1], Rational::from(2))]));
+        assert_eq!(powers[2], BTreeMap::from([(vec![2], Rational::from(4))]));
+        assert!(powers[3].is_empty());
+        assert!(powers[4].is_empty());
     }
 
     #[test]
