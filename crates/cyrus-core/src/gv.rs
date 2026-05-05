@@ -1305,11 +1305,11 @@ pub fn compute_ckyz_local_gv_invariants_for_degrees(
     }
 
     let extraction_degrees = ckyz_cover_closed_target_degrees(target_degrees)?;
-    let max_degrees = ckyz_componentwise_max_degrees(&extraction_degrees, rank)?;
-    let potential = compute_ckyz_local_instanton_potential_corrections_box(
+    let domain = CkyzMonomialDomain::target_downset(&extraction_degrees, rank)?;
+    let potential = compute_ckyz_local_instanton_potential_corrections_domain(
         relations,
         local_intersection_terms,
-        &max_degrees,
+        &domain,
     )?;
     let mut invariants = extract_ckyz_local_gv_invariants_from_potential_for_degrees(
         &potential,
@@ -1838,6 +1838,7 @@ struct CkyzMonomialDomain {
 }
 
 impl CkyzMonomialDomain {
+    #[cfg(test)]
     fn componentwise_box(max_degrees: &[usize]) -> Result<Self> {
         if max_degrees.is_empty() {
             return Err(Error::InvalidInput(
@@ -1846,6 +1847,15 @@ impl CkyzMonomialDomain {
         }
         let rank = max_degrees.len();
         Self::from_degrees(rank, ckyz_multi_degrees_box(max_degrees))
+    }
+
+    fn target_downset(target_degrees: &[Vec<usize>], rank: usize) -> Result<Self> {
+        validate_ckyz_target_degrees(target_degrees, rank)?;
+        let mut degrees = Vec::new();
+        for target in target_degrees {
+            degrees.extend(ckyz_multi_degrees_box(target));
+        }
+        Self::from_degrees(rank, degrees)
     }
 
     fn from_degrees<I>(rank: usize, degrees: I) -> Result<Self>
@@ -2403,21 +2413,6 @@ fn ckyz_cover_closed_target_degrees(target_degrees: &[Vec<usize>]) -> Result<Vec
     Ok(degrees)
 }
 
-fn ckyz_componentwise_max_degrees(degrees: &[Vec<usize>], rank: usize) -> Result<Vec<usize>> {
-    let mut max_degrees = vec![0usize; rank];
-    for degree in degrees {
-        if degree.len() != rank {
-            return Err(Error::InvalidInput(
-                "CKYZ target degree rank does not match relation rank".into(),
-            ));
-        }
-        for (max_entry, &entry) in max_degrees.iter_mut().zip(degree.iter()) {
-            *max_entry = (*max_entry).max(entry);
-        }
-    }
-    Ok(max_degrees)
-}
-
 fn compute_ckyz_log_period_corrections_domain(
     relations: &[Vec<i64>],
     domain: &CkyzMonomialDomain,
@@ -2511,13 +2506,12 @@ fn substitute_ckyz_series_in_flat_coordinates_domain(
     ckyz_series_compose_domain(series_z, z_of_q, domain)
 }
 
-fn compute_ckyz_local_instanton_potential_corrections_box(
+fn compute_ckyz_local_instanton_potential_corrections_domain(
     relations: &[Vec<i64>],
     local_intersection_terms: &[CkyzLocalIntersectionTerm],
-    max_degrees: &[usize],
+    domain: &CkyzMonomialDomain,
 ) -> Result<BTreeMap<Vec<usize>, Rational>> {
     validate_ckyz_relations(relations)?;
-    let domain = CkyzMonomialDomain::componentwise_box(max_degrees)?;
     let rank = relations.len();
     if domain.rank != rank {
         return Err(Error::InvalidInput(
@@ -2532,8 +2526,8 @@ fn compute_ckyz_local_instanton_potential_corrections_box(
         }
     }
 
-    let alpha = compute_ckyz_log_period_corrections_domain(relations, &domain)?;
-    let z_of_q = compute_ckyz_inverse_mirror_map_domain(&alpha, &domain)?;
+    let alpha = compute_ckyz_log_period_corrections_domain(relations, domain)?;
+    let z_of_q = compute_ckyz_inverse_mirror_map_domain(&alpha, domain)?;
     let mut contracted = BTreeMap::new();
 
     for term in local_intersection_terms {
@@ -2541,10 +2535,10 @@ fn compute_ckyz_local_instanton_potential_corrections_box(
             relations,
             term.first,
             term.second,
-            &domain,
+            domain,
         )?;
         let alpha_product =
-            ckyz_series_mul_domain(&alpha[term.first], &alpha[term.second], &domain)?;
+            ckyz_series_mul_domain(&alpha[term.first], &alpha[term.second], domain)?;
         let mut f_pair = beta;
         ckyz_series_add_scaled_assign(&mut f_pair, &alpha_product, Rational::from(-1));
 
@@ -2555,7 +2549,7 @@ fn compute_ckyz_local_instanton_potential_corrections_box(
         ckyz_series_add_scaled_assign(&mut contracted, &f_pair, term_coefficient);
     }
 
-    substitute_ckyz_series_in_flat_coordinates_domain(&contracted, &z_of_q, &domain)
+    substitute_ckyz_series_in_flat_coordinates_domain(&contracted, &z_of_q, domain)
 }
 
 fn extract_ckyz_local_gv_invariants_from_potential_for_degrees(
@@ -6704,6 +6698,18 @@ mod tests {
         let product = ckyz_series_mul_domain(&lhs, &rhs, &domain).unwrap();
 
         assert_eq!(product, BTreeMap::from([(vec![300], Rational::from(6))]));
+    }
+
+    #[test]
+    fn ckyz_target_downset_keeps_only_past_monomials_for_requested_degrees() {
+        let domain = CkyzMonomialDomain::target_downset(&[vec![3, 0], vec![0, 3]], 2).unwrap();
+
+        assert_eq!(domain.degrees.len(), 7);
+        assert!(domain.contains(&[0, 0]));
+        assert!(domain.contains(&[3, 0]));
+        assert!(domain.contains(&[0, 3]));
+        assert!(!domain.contains(&[1, 1]));
+        assert_eq!(domain.max_total_degree, 3);
     }
 
     #[test]

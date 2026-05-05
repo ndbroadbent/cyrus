@@ -26,7 +26,7 @@ run pass. Any remaining mismatch must be explicit and localizable.
 | High-dimensional selected small toric curves | Cyrus computes Mori-cap rays, applies the input-chamber volume cutoff, and matches the 4-214-647 `small_curves.dat` checkpoint with pair pruning | Implemented for checkpoint rule |
 | Small-curve pruning semantics | `CurvePruningStrategy::{PairDecomposable, FiniteSemigroup}` exposes the checkpoint rule and stricter finite-set semigroup diagnostic separately | Implemented, with documented mismatch |
 | Small toric GV values | Toric two-face/origin-circuit formulas match `small_curves_gv.dat` for 4-214-647 | Implemented for covered selected-toric formulas |
-| Potent-ray convergence data | `curve_row_span_rank`, `potent_ray_convergence`, `diagnose_affine_toric_circuit`, CKYZ local-surface identification, source-derived local CKYZ GV extraction, and the Stage 5 potent-ray diagnostics compute rank, corrected-Kähler volumes, affine local-circuit structure, `log xi_n` slopes, and first-two GV checks for all 395 rank-two CKYZ rows; source read confirms full rows require a past-closed local semigroup/domain, not just the saved ray and multiples | Partially implemented; full ten-entry extraction, rank-four contexts, and generated low-dimensional-face ray sampling still missing |
+| Potent-ray convergence data | `curve_row_span_rank`, `potent_ray_convergence`, `diagnose_affine_toric_circuit`, CKYZ local-surface identification, source-derived local CKYZ GV extraction, and the Stage 5 potent-ray diagnostics compute rank, corrected-Kähler volumes, affine local-circuit structure, `log xi_n` slopes, and first-two GV checks for all 395 rank-two CKYZ rows; targeted CKYZ extraction now uses a past-downset domain for requested degrees; source read confirms full rows require a sharper local semigroup/domain, not just the saved ray and multiples | Partially implemented; full ten-entry extraction, rank-four contexts, and generated low-dimensional-face ray sampling still missing |
 | Flop/corrected-chamber continuation | Negative small-curve volumes and real-axis dilog branch behavior are classified; even-parity branch-cut failures are explicit via `GvDilogFailure` | Diagnosed, not resolved |
 | KKLT corrected Kähler solve | Runner reaches a no-replay corrected Kähler vector and corrected volume without loading `corrected_kahler_param.dat` by default | Implemented but not exact |
 | Corrected target-volume / GV correction agreement | Diagnostics localize the residual to corrected-chamber GV target corrections, not classical geometry or file semantics | Open blocker |
@@ -48,8 +48,9 @@ run pass. Any remaining mismatch must be explicit and localizable.
    all ten entries efficiently, or handle the rank-four local charge contexts.
    The source-level reason is now explicit: cygv's series inversion subtracts
    lower-degree `Li2(q_N)` history from a semigroup, so a coefficient-targeted
-   past-closed local domain is needed before the saved ten-entry rows are a fair
-   comparison.
+   local domain is needed before the saved ten-entry rows are a fair comparison.
+   The current CKYZ target-downset domain is a prerequisite, not the full
+   history domain for ray-direction rows.
 3. Pair-pruned selected curves match McAllister's `small_curves.dat`, while a
    stricter finite-semigroup diagnostic removes five additional curves. This is
    exposed as a policy choice, not hidden.
@@ -87,8 +88,9 @@ to make the remaining GV layer more first-principles:
    `potent_rays*.dat`. Rank-two CKYZ rows now have first-two checks; next make
    the local extractor coefficient-targeted enough for complete rows where
    feasible. The intended shape is a cygv-style finite monomial domain with an
-   addition map/past-light-cone closure, not the current componentwise formal
-   box. After that, handle the rank-four affine supports.
+   addition map/past-light-cone closure, building on the current target-downset
+   domain rather than returning to a componentwise formal box. After that,
+   handle the rank-four affine supports.
 2. Close the remaining CYTools basis contract gap for GA use: matrix-basis
    projection now exists, but generic matrix divisor-basis construction and
    call-site wiring still need to be ported or rejected loudly until ported.

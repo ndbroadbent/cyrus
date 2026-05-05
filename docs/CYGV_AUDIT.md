@@ -1040,13 +1040,16 @@ degree classes and on the order in which they are subtracted.
 Third, the current all-ten CKYZ blocker is domain shape, not arithmetic alone.
 Dense indexing and guarded addition tables fixed the obvious multiplication
 overhead, and the first-two checks now run quickly for all 395 rank-two CKYZ
-rows. The all-ten run still stalls because the componentwise monomial boxes are
-far larger than the coefficients actually needed by the target ray direction
-and the lower-degree subtraction history. The next implementation should build
-a coefficient-targeted, past-closed local monomial domain for one canonical
-rank-two support family, then generalize across the 16 normalized support
-signatures. More box optimization would still be asking cygv/CKYZ the wrong
-finite-domain question.
+rows. Cyrus' targeted extractor now uses the union of componentwise past
+downsets of the requested degrees instead of the single box of coordinate
+maxima, so incomparable target degrees no longer force irrelevant mixed
+monomials. The all-ten ray-direction case still needs a sharper
+coefficient/path-history domain, because multiples of one positive direction
+have a large componentwise past even after this downset refinement. The next
+implementation should build that coefficient-targeted local monomial domain for
+one canonical rank-two support family, then generalize across the 16 normalized
+support signatures. More box optimization would still be asking cygv/CKYZ the
+wrong finite-domain question.
 
 This makes the next source-derived implementation boundary precise:
 
@@ -1054,7 +1057,8 @@ This makes the next source-derived implementation boundary precise:
    unsupported matrix bases loudly at APIs that still accept only index bases;
 2. for one non-`P^2` rank-two support signature, construct the local toric/HKTY
    input from local coordinates and charge lattice without using saved GV rows;
-3. drive the extraction with a past-closed coefficient domain that contains the
-   target multiples and the lower-degree terms needed by series inversion;
+3. refine the current target-downset domain into a coefficient/path-history
+   domain that contains the target multiples and the lower-degree terms needed
+   by series inversion;
 4. compare to `potent_rays_gv.dat` only as an assertion after the local input
    and finite domain have been built from geometry.
