@@ -2499,6 +2499,28 @@ fn ckyz_series_mul_domain(
         } else {
             (rhs_terms, lhs_terms)
         };
+        let indexed_candidate_count = outer_terms
+            .iter()
+            .map(|(outer_index, _)| addition_pairs_by_lhs[*outer_index].len())
+            .sum::<usize>();
+        let direct_candidate_count = outer_terms
+            .len()
+            .checked_mul(inner_terms.len())
+            .ok_or_else(|| {
+                Error::InvalidInput("CKYZ sparse product candidate count overflowed usize".into())
+            })?;
+        if direct_candidate_count <= indexed_candidate_count {
+            for (outer_index, outer_coefficient) in outer_terms {
+                for (inner_index, inner_coefficient) in inner_terms.iter().copied() {
+                    if let Some(product_index) = domain.sum_index(outer_index, inner_index)? {
+                        let entry =
+                            out_by_index[product_index].get_or_insert_with(|| Rational::from(0));
+                        *entry += outer_coefficient.clone() * inner_coefficient.clone();
+                    }
+                }
+            }
+            return Ok(ckyz_series_from_domain_coefficients(out_by_index, domain));
+        }
         let mut inner_by_index = vec![None; domain.degrees.len()];
         for (inner_index, inner_coefficient) in inner_terms {
             inner_by_index[inner_index] = Some(inner_coefficient);
