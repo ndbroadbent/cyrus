@@ -8,6 +8,7 @@
 //! decomposition is an integer semigroup.
 
 use malachite::Rational as MalachiteRational;
+use nalgebra::{DMatrix, RowDVector};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -100,6 +101,11 @@ struct TargetReport {
     support_overlap_run_status: Option<String>,
     support_overlap_run_gv: Option<String>,
     support_overlap_run_error: Option<String>,
+    cygv_semigroup_measure_status: Option<String>,
+    cygv_semigroup_seed_count: Option<usize>,
+    cygv_semigroup_element_count: Option<usize>,
+    cygv_semigroup_max_degree: Option<u32>,
+    cygv_semigroup_error: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -446,6 +452,9 @@ fn report_target(
     run_integer_diamonds: bool,
     run_active_support_generators: bool,
     support_overlap_min_for_run: Option<usize>,
+    measure_cygv_semigroups: bool,
+    semigroup_measure_max_target_degree: Option<i128>,
+    semigroup_measure_max_seed_count: Option<usize>,
     element_limit: usize,
 ) -> TargetReport {
     let exact_kind = sample.real_cone_decomposition_exact_kind.clone();
@@ -477,6 +486,11 @@ fn report_target(
         support_overlap_run_status: None,
         support_overlap_run_gv: None,
         support_overlap_run_error: None,
+        cygv_semigroup_measure_status: None,
+        cygv_semigroup_seed_count: None,
+        cygv_semigroup_element_count: None,
+        cygv_semigroup_max_degree: None,
+        cygv_semigroup_error: None,
     };
     let (
         degree_bounded_candidate_count,
@@ -519,6 +533,37 @@ fn report_target(
     } else {
         (None, None, None, None)
     };
+    let (
+        cygv_semigroup_measure_status,
+        cygv_semigroup_seed_count,
+        cygv_semigroup_element_count,
+        cygv_semigroup_max_degree,
+        cygv_semigroup_error,
+    ) = if measure_cygv_semigroups {
+        if semigroup_measure_max_target_degree.is_some_and(|max_degree| sample.degree > max_degree)
+        {
+            (
+                Some("skipped_target_degree_limit".to_string()),
+                None,
+                None,
+                None,
+                None,
+            )
+        } else {
+            match measure_cygv_semigroup(sample, context, semigroup_measure_max_seed_count) {
+                Ok((status, seed_count, max_degree, element_count)) => (
+                    Some(status),
+                    Some(seed_count),
+                    element_count,
+                    Some(max_degree),
+                    None,
+                ),
+                Err(error) => (Some("error".to_string()), None, None, None, Some(error)),
+            }
+        }
+    } else {
+        (None, None, None, None, None)
+    };
 
     match report_target_inner(sample, context, run_integer_diamonds, element_limit) {
         Ok((status, term_count, element_count, gv, error)) => TargetReport {
@@ -535,6 +580,11 @@ fn report_target(
             support_overlap_run_status,
             support_overlap_run_gv,
             support_overlap_run_error,
+            cygv_semigroup_measure_status,
+            cygv_semigroup_seed_count,
+            cygv_semigroup_element_count,
+            cygv_semigroup_max_degree,
+            cygv_semigroup_error,
             degree_bounded_candidate_count,
             support_overlap_generator_counts,
             support_closure_layer_counts,
@@ -551,6 +601,11 @@ fn report_target(
             support_overlap_run_status,
             support_overlap_run_gv,
             support_overlap_run_error,
+            cygv_semigroup_measure_status,
+            cygv_semigroup_seed_count,
+            cygv_semigroup_element_count,
+            cygv_semigroup_max_degree,
+            cygv_semigroup_error,
             degree_bounded_candidate_count,
             support_overlap_generator_counts,
             support_closure_layer_counts,
@@ -682,6 +737,75 @@ fn report_target_inner(
         Some(gv),
         None,
     ))
+}
+
+fn measure_cygv_semigroup(
+    sample: &MissingGvTargetSample,
+    context: &ValidatedContext<'_>,
+    max_seed_count: Option<usize>,
+) -> Result<(String, usize, u32, Option<usize>), String> {
+    let max_deg = u32::try_from(sample.degree)
+        .map_err(|_| format!("target degree {} does not fit in u32", sample.degree))?;
+    let mut seeds = Vec::new();
+    let mut seen = HashSet::new();
+    for ray in context.degree_bounded_rays {
+        let degree = curve_degree(ray, context.grading)?;
+        if degree <= 0 || degree > sample.degree {
+            continue;
+        }
+        if seen.insert(ray.clone()) {
+            seeds.push(ray.clone());
+        }
+    }
+    if max_seed_count.is_some_and(|limit| seeds.len() > limit) {
+        return Ok(("skipped_seed_limit".to_string(), seeds.len(), max_deg, None));
+    }
+    measure_cygv_semigroup_size(&seeds, context.grading, max_deg).map(|element_count| {
+        (
+            "measured_cygv_semigroup".to_string(),
+            seeds.len(),
+            max_deg,
+            Some(element_count),
+        )
+    })
+}
+
+fn measure_cygv_semigroup_size(
+    seeds: &[Vec<i64>],
+    grading_vector: &[i64],
+    max_deg: u32,
+) -> Result<usize, String> {
+    if seeds.is_empty() {
+        return Err("cygv semigroup seed set is empty".to_string());
+    }
+    let dimension = grading_vector.len();
+    if dimension == 0 {
+        return Err("grading vector is empty".to_string());
+    }
+    if seeds.iter().any(|row| row.len() != dimension) {
+        return Err("cygv semigroup seed dimensions do not match grading".to_string());
+    }
+    let grading = RowDVector::from_row_slice(
+        &grading_vector
+            .iter()
+            .map(|&value| {
+                i32::try_from(value).map_err(|_| "grading entry does not fit in i32".to_string())
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+    );
+    let mut data = Vec::with_capacity(dimension * seeds.len());
+    for col in 0..seeds.len() {
+        for row in 0..dimension {
+            data.push(
+                i32::try_from(seeds[col][row])
+                    .map_err(|_| "semigroup seed entry does not fit in i32".to_string())?,
+            );
+        }
+    }
+    let generators = DMatrix::from_column_slice(dimension, seeds.len(), &data);
+    let semigroup = cygv::Semigroup::with_max_degree(generators, grading, max_deg)
+        .map_err(|error| format!("cygv semigroup construction failed: {error}"))?;
+    Ok(semigroup.elements.ncols())
 }
 
 fn active_support_generator_gv(
@@ -920,6 +1044,9 @@ fn build_report(
     run_integer_diamonds: bool,
     run_active_support_generators: bool,
     support_overlap_min_for_run: Option<usize>,
+    measure_cygv_semigroups: bool,
+    semigroup_measure_max_target_degree: Option<i128>,
+    semigroup_measure_max_seed_count: Option<usize>,
     element_limit: usize,
 ) -> ContextReport {
     let targets = validated
@@ -935,6 +1062,9 @@ fn build_report(
                 run_integer_diamonds,
                 run_active_support_generators,
                 support_overlap_min_for_run,
+                measure_cygv_semigroups,
+                semigroup_measure_max_target_degree,
+                semigroup_measure_max_seed_count,
                 element_limit,
             )
         })
@@ -963,13 +1093,18 @@ fn build_report(
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--element-limit N] [--out path]"
+            "[ERROR] usage: mcallister_gv_context --context path [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--measure-cygv-semigroups] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--out path]"
         );
         std::process::exit(2);
     };
     let run_integer_diamonds = parse_flag("--run-integer-diamonds");
     let run_active_support_generators = parse_flag("--run-active-support-generators");
     let support_overlap_min_for_run = parse_arg_value::<usize>("--run-support-overlap-generators");
+    let measure_cygv_semigroups = parse_flag("--measure-cygv-semigroups");
+    let semigroup_measure_max_target_degree =
+        parse_arg_value::<i128>("--semigroup-measure-max-target-degree");
+    let semigroup_measure_max_seed_count =
+        parse_arg_value::<usize>("--semigroup-measure-max-seeds");
     let element_limit = parse_arg_value::<usize>("--element-limit").unwrap_or(256);
     let out_path = parse_arg_value::<PathBuf>("--out");
 
@@ -987,6 +1122,9 @@ fn main() {
         run_integer_diamonds,
         run_active_support_generators,
         support_overlap_min_for_run,
+        measure_cygv_semigroups,
+        semigroup_measure_max_target_degree,
+        semigroup_measure_max_seed_count,
         element_limit,
     );
     let content = serde_json::to_string_pretty(&report).unwrap_or_else(|e| {
@@ -1053,6 +1191,13 @@ mod tests {
     fn curve_degree_rejects_dimension_mismatch() {
         assert_eq!(curve_degree(&[2, -1], &[3, 5]).unwrap(), 1);
         assert!(curve_degree(&[1], &[1, 2]).is_err());
+    }
+
+    #[test]
+    fn cygv_semigroup_size_closes_seed_generators_to_degree() {
+        let seeds = vec![vec![1, 0], vec![0, 1]];
+        let size = measure_cygv_semigroup_size(&seeds, &[1, 1], 2).unwrap();
+        assert_eq!(size, 6);
     }
 
     #[test]

@@ -1437,3 +1437,16 @@ standard compact GV path is not currently blocked by a q-matrix, grading,
 intersection, or Mori/lattice generator handoff mismatch. The remaining
 corrected-chamber misses are a chamber/local source-domain problem, not an
 ordinary compact-dual cygv input mismatch.
+
+`mcallister_gv_context` can now measure cygv's own finite semigroup closure
+size without running the full HKTY period/series computation, via
+`--measure-cygv-semigroups`. This is deliberately guarded by
+`--semigroup-measure-max-seeds` because the first corrected-chamber missing
+targets at degree `10` already have `720` seed rows at or below the target
+degree. An unguarded degree-10 measurement did not finish within `120s`; the
+guarded run with `--semigroup-measure-max-target-degree 10
+--semigroup-measure-max-seeds 700` reports both degree-10 targets as
+`skipped_seed_limit` with `720` seeds. This rules out treating the remaining
+origin-circuit misses as a tiny visible-generator problem: the source-shaped
+object is cygv's generated semigroup closure, not only the exported Mori rows
+or LP-active rows.

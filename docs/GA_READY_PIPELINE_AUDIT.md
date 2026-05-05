@@ -184,6 +184,11 @@ to make the remaining GV layer more first-principles:
    `366..2814` rows, so naive support closure returns to the intractable broad
    domain. Executing the small overlap-4 windows (`3..19` generators) also
    fails as a source domain: seven `NonIntegerGVError` panics and two zeros.
+   A direct cygv semigroup-size diagnostic now confirms why: the degree-10
+   missing targets already have `720` seed rows at or below the target degree,
+   and an unguarded cygv semigroup closure measurement did not finish within
+   `120s`. The missing object is therefore the source-derived generated
+   semigroup/chamber history, not a small visible-generator subset.
    The next step is therefore to reconstruct the broader source-derived finite
    semigroup/path history for the missing origin circuits, not to promote LP
    active-generator diamonds.
