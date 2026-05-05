@@ -4752,42 +4752,6 @@ fn ckyz_q_degree_li2_support_intersects_indices_in_z_domain(
     Ok(false)
 }
 
-fn ckyz_q_degree_li2_support_intersects_target_in_z_domain(
-    degree: &[usize],
-    target: &[usize],
-    exp_support: &BTreeSet<usize>,
-    domain: &CkyzMonomialDomain,
-) -> Result<bool> {
-    if degree.len() != domain.rank || target.len() != domain.rank {
-        return Err(Error::InvalidInput(
-            "CKYZ coefficient-level Li2 support rank mismatch".into(),
-        ));
-    }
-    if !ckyz_componentwise_le(degree, target) {
-        return Ok(false);
-    }
-    let max_multiple = degree
-        .iter()
-        .zip(target.iter())
-        .filter_map(|(&degree_entry, &target_entry)| {
-            (degree_entry != 0).then(|| target_entry / degree_entry)
-        })
-        .min()
-        .ok_or_else(|| Error::InvalidInput("CKYZ Li2 support degree must be nonzero".into()))?;
-    for multiple in 1..=max_multiple {
-        let Some(delta) = ckyz_subtract_degree_multiple(target, degree, multiple) else {
-            continue;
-        };
-        let Some(delta_index) = domain.index_of(&delta) else {
-            continue;
-        };
-        if exp_support.contains(&delta_index) {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
 #[derive(Clone, Debug)]
 struct CkyzScaledAlphaTerm {
     degree: Vec<usize>,
@@ -5016,6 +4980,7 @@ fn ckyz_exp_scaled_alpha_coefficient_by_index_in_z_domain(
     Ok(coefficient)
 }
 
+#[cfg(test)]
 fn ckyz_q_degree_li2_coefficient_in_z_domain(
     degree: &[usize],
     target: &[usize],
@@ -5024,13 +4989,32 @@ fn ckyz_q_degree_li2_coefficient_in_z_domain(
     exp_support: Option<&BTreeSet<usize>>,
     exp_cache: &mut CkyzExpCoefficientCache,
 ) -> Result<Rational> {
+    ckyz_q_degree_li2_coefficient_and_support_in_z_domain(
+        degree,
+        target,
+        alpha_terms,
+        domain,
+        exp_support,
+        exp_cache,
+    )
+    .map(|(coefficient, _)| coefficient)
+}
+
+fn ckyz_q_degree_li2_coefficient_and_support_in_z_domain(
+    degree: &[usize],
+    target: &[usize],
+    alpha_terms: &[CkyzScaledAlphaTerm],
+    domain: &CkyzMonomialDomain,
+    exp_support: Option<&BTreeSet<usize>>,
+    exp_cache: &mut CkyzExpCoefficientCache,
+) -> Result<(Rational, bool)> {
     if degree.len() != domain.rank || target.len() != domain.rank {
         return Err(Error::InvalidInput(
             "CKYZ coefficient-level Li2 rank mismatch".into(),
         ));
     }
     if !ckyz_componentwise_le(degree, target) {
-        return Ok(Rational::from(0));
+        return Ok((Rational::from(0), false));
     }
 
     let max_multiple = degree
@@ -5043,6 +5027,7 @@ fn ckyz_q_degree_li2_coefficient_in_z_domain(
         .ok_or_else(|| Error::InvalidInput("CKYZ Li2 degree must be nonzero".into()))?;
 
     let mut coefficient = Rational::from(0);
+    let mut has_supported_delta = false;
     for multiple in 1..=max_multiple {
         let Some(delta) = ckyz_subtract_degree_multiple(target, degree, multiple) else {
             continue;
@@ -5056,6 +5041,7 @@ fn ckyz_q_degree_li2_coefficient_in_z_domain(
         if exp_support.is_some_and(|support| !support.contains(&delta_index)) {
             continue;
         }
+        has_supported_delta = true;
         let scale_degree = degree
             .iter()
             .map(|entry| {
@@ -5081,7 +5067,7 @@ fn ckyz_q_degree_li2_coefficient_in_z_domain(
             .ok_or_else(|| Error::InvalidInput("CKYZ Li2 exponent overflowed usize".into()))?;
         coefficient += exp_coefficient / Rational::from(Integer::from(multiple_squared));
     }
-    Ok(coefficient)
+    Ok((coefficient, has_supported_delta))
 }
 
 fn ckyz_z_residual_dependency_degrees(
@@ -5263,25 +5249,21 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
             .get(&coordinate_key)
             .expect("exponential support was inserted above");
         for target in extraction_degrees.iter().skip(degree_index + 1) {
-            if !ckyz_q_degree_li2_support_intersects_target_in_z_domain(
-                degree,
-                target,
-                exp_support,
-                domain,
-            )? {
+            let (li2_coefficient, has_supported_delta) =
+                ckyz_q_degree_li2_coefficient_and_support_in_z_domain(
+                    degree,
+                    target,
+                    &alpha_terms,
+                    domain,
+                    Some(exp_support),
+                    &mut exp_coefficient_cache,
+                )?;
+            if !has_supported_delta {
                 li2_support_skips = li2_support_skips.checked_add(1).ok_or_else(|| {
                     Error::InvalidInput("CKYZ Li2 support skip count overflowed".into())
                 })?;
                 continue;
             }
-            let li2_coefficient = ckyz_q_degree_li2_coefficient_in_z_domain(
-                degree,
-                target,
-                &alpha_terms,
-                domain,
-                Some(exp_support),
-                &mut exp_coefficient_cache,
-            )?;
             if li2_coefficient == 0 {
                 continue;
             }

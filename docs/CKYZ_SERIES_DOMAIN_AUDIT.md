@@ -368,6 +368,15 @@ exponential cache from 1,382 entries to 1,165 entries while keeping the same
 [CKYZ_Z_EXTRACT] degrees=79 nonzero_gvs=43 li2_coefficients=502 li2_support_skips=815 li2_support_classes=6 exp_coeff_cache=1165 scaled_alpha_cache=1165 predecessor_deltas=174 elapsed=20.084541ms
 ```
 
+The extraction loop now obtains the support flag and coefficient in the same
+multiple-cover scan, rather than scanning once for support and then again for
+the coefficient. This keeps the same cache sizes and gives:
+
+```text
+polygon-5: [CKYZ_Z_EXTRACT] ... exp_coeff_cache=1165 ... elapsed=19.270875ms
+McAllister [4,3,2], N=4: [CKYZ_Z_EXTRACT] ... exp_coeff_cache=23529 ... elapsed=814.916084ms
+```
+
 The `[4,3,2]`, N=10 filtered gate still timed out after 240 seconds without an
 extraction trace, even after reaching the same 5,235-degree history in 16.7
 seconds. Support pruning is therefore a real reduction, but not the final
