@@ -37,6 +37,7 @@ use crate::types::{F64, Finite, I64, Pos};
 
 const GRADING_CACHE_VERSION: &str = "grading-vector-cytools-lp-v1";
 const LATTICE_CACHE_VERSION: &str = "lattice-points-v2";
+const CKYZ_ADDITION_TABLE_MAX_ENTRIES: usize = 1_000_000;
 
 /// Compute the Mori cone cap generators (rays) using the CYTools algorithm.
 ///
@@ -1887,7 +1888,7 @@ impl CkyzMonomialDomain {
             .map(|(index, degree)| (degree, index))
             .collect::<BTreeMap<_, _>>();
         let addition_entries = degrees.len().saturating_mul(degrees.len());
-        let addition_indices = if addition_entries <= 250_000 {
+        let addition_indices = if addition_entries <= CKYZ_ADDITION_TABLE_MAX_ENTRIES {
             let mut addition_indices = vec![vec![None; degrees.len()]; degrees.len()];
             for (lhs_index, lhs_degree) in degrees.iter().enumerate() {
                 for (rhs_index, rhs_degree) in degrees.iter().enumerate() {
@@ -6687,7 +6688,7 @@ mod tests {
 
     #[test]
     fn ckyz_large_monomial_domain_uses_checked_addition_fallback() {
-        let domain = CkyzMonomialDomain::componentwise_box(&[500]).unwrap();
+        let domain = CkyzMonomialDomain::componentwise_box(&[1_000]).unwrap();
         assert!(
             domain.addition_indices.is_none(),
             "large CKYZ domains should avoid quadratic addition tables"

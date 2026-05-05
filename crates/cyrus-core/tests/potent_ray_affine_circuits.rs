@@ -900,7 +900,7 @@ fn mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed() {
                 continue;
             }
         }
-        let multiples_to_check = expected_gvs.len().min(ckyz_multiples_to_check(2));
+        let multiples_to_check = expected_gvs.len().min(ckyz_multiples_to_check(3));
         assert!(
             multiples_to_check > 0,
             "CYRUS_CKYZ_MULTIPLES_TO_CHECK must be positive"
@@ -940,7 +940,7 @@ fn mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed() {
     if target_direction_filter.is_none() {
         assert_eq!(
             checked_rows, 395,
-            "all rank-two CKYZ potent-ray rows should now have CKYZ-reconstructed first-two GV checks"
+            "all rank-two CKYZ potent-ray rows should now have CKYZ-reconstructed first-three GV checks"
         );
     } else {
         assert!(
