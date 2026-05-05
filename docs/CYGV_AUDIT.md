@@ -572,10 +572,17 @@ The source-read checkpoint after inspecting CYTools and the installed
 - Cyrus now reconstructs the integer affine charge lattice of each saved potent
   ray support from upstream point coordinates, by taking the integer kernel of
   the matrix with rows `[1; lattice coordinates]`.
+- Cyrus also reconstructs integral two-dimensional local coordinates for every
+  rank-two potent-ray support, by computing a Hermite-normal-form basis for the
+  affine difference lattice. In the 4-214-647 checkpoint this covers all 395
+  rank-two supports and deliberately leaves the 16 rank-four supports without
+  rank-two coordinates.
 - A gated 4-214-647 test verifies that every saved potent-ray sparse relation
   lies in the rational row span of that reconstructed local charge basis. This
   uses `potent_rays.dat` as an assertion only; the charge basis itself is
   computed from `points.dat` and the filtered triangulation-point set.
+- The same gated test verifies that the rank-two affine relations remain zero
+  after projection to the reconstructed local coordinates.
 
 This is the right intermediate object for the next implementation step. It is
 not a coefficient-pattern lookup table, and it is not yet a GV computation for

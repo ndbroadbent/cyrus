@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use cyrus_core::{
-    LocalToricCircuitKind, LocalToricCoordinate2D, Point, Polytope,
+    AffineToricCircuitDiagnostic, LocalToricCircuitKind, LocalToricCoordinate2D, Point, Polytope,
     compute_local_toric_circuit_gv_series, curve_in_rational_row_span,
     diagnose_affine_toric_circuit,
 };
@@ -54,6 +54,36 @@ fn read_csv_rows_integer(path: &Path) -> Vec<Vec<Integer>> {
         .collect()
 }
 
+fn assert_rank_two_local_coordinates_satisfy_relation(diagnostic: &AffineToricCircuitDiagnostic) {
+    let coordinates = diagnostic
+        .local_coordinates_2d
+        .as_ref()
+        .expect("rank-two affine support should have local coordinates");
+    assert_eq!(
+        coordinates.len(),
+        diagnostic.relation_points.len(),
+        "local coordinate count should match affine support size"
+    );
+
+    let coordinates_by_point: BTreeMap<usize, [i64; 2]> = coordinates
+        .iter()
+        .map(|point| (point.point_index, point.coordinates))
+        .collect();
+    let mut coordinate_sum = [0i128; 2];
+    for point in &diagnostic.relation_points {
+        let coordinates = coordinates_by_point
+            .get(&point.point_index)
+            .expect("every relation point should have local coordinates");
+        coordinate_sum[0] += i128::from(point.coefficient) * i128::from(coordinates[0]);
+        coordinate_sum[1] += i128::from(point.coefficient) * i128::from(coordinates[1]);
+    }
+    assert_eq!(
+        coordinate_sum,
+        [0, 0],
+        "affine relation should remain zero in reconstructed local coordinates"
+    );
+}
+
 #[test]
 fn mcallister_potent_rays_are_affine_toric_circuits() {
     if !first_principles_enabled() {
@@ -73,6 +103,7 @@ fn mcallister_potent_rays_are_affine_toric_circuits() {
 
     let mut affine_count = 0usize;
     let mut local_p2_count = 0usize;
+    let mut rank_two_local_coordinate_count = 0usize;
     let mut affine_rank_counts = BTreeMap::new();
     for ray in &potent_rays {
         let diagnostic = diagnose_affine_toric_circuit(ray, &triangulation_points)
@@ -88,11 +119,21 @@ fn mcallister_potent_rays_are_affine_toric_circuits() {
         ) {
             local_p2_count += 1;
         }
+        if diagnostic.affine_rank == 2 {
+            rank_two_local_coordinate_count += 1;
+            assert_rank_two_local_coordinates_satisfy_relation(&diagnostic);
+        } else {
+            assert!(
+                diagnostic.local_coordinates_2d.is_none(),
+                "non-rank-two supports should not expose rank-two local coordinates"
+            );
+        }
     }
 
     assert_eq!(potent_rays.len(), 411);
     assert_eq!(affine_count, 411);
     assert_eq!(affine_rank_counts, BTreeMap::from([(2, 395), (4, 16)]));
+    assert_eq!(rank_two_local_coordinate_count, 395);
     assert_eq!(local_p2_count, 56);
 
     let first = diagnose_affine_toric_circuit(&potent_rays[0], &triangulation_points)
@@ -127,6 +168,7 @@ fn mcallister_potent_rays_are_affine_toric_circuits() {
             ],
         })
     );
+    assert_rank_two_local_coordinates_satisfy_relation(&first);
 }
 
 #[test]
@@ -156,6 +198,14 @@ fn mcallister_potent_rays_have_local_affine_charge_contexts() {
             expected_relation_rank,
             "local charge-basis rank should match support affine rank"
         );
+        if diagnostic.affine_rank == 2 {
+            assert_rank_two_local_coordinates_satisfy_relation(&diagnostic);
+        } else {
+            assert!(
+                diagnostic.local_coordinates_2d.is_none(),
+                "non-rank-two supports should not expose rank-two local coordinates"
+            );
+        }
 
         let support_relation: Vec<i64> = diagnostic
             .relation_points

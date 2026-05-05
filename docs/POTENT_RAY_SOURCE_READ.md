@@ -188,3 +188,21 @@ The remaining potent-ray target is to generalize this beyond the first local
 `P^2` row: reconstruct the local toric charge/face contexts for the other
 rank-two patterns, keep the rank-four cases explicit, and then generate the
 full 411-ray sample without treating `potent_rays*.dat` as production input.
+
+As a narrower checkpoint toward that target, Cyrus now reconstructs integral
+two-dimensional local coordinates for every rank-two saved potent-ray support
+from the upstream lattice points. The reconstruction uses the affine difference
+lattice of the support, not a coefficient-pattern table. The gated
+4-214-647 tests verify:
+
+- 395 rank-two supports expose local 2D coordinates;
+- 16 rank-four supports remain explicit and do not expose fake rank-two
+  coordinates;
+- each rank-two affine relation still sums to zero in the reconstructed local
+  coordinates;
+- each saved sparse relation lies in the rational row span of the reconstructed
+  local affine charge basis.
+
+This still stops short of assigning GV sequences to the non-`P^2` patterns. The
+next missing source-derived object is the local mirror/HKTY input attached to
+each reconstructed support.
