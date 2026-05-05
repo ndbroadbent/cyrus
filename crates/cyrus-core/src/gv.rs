@@ -1204,6 +1204,237 @@ pub fn compute_ambient_one_dimensional_ray_gv_series(
     compute_one_dimensional_ray_gv_series(&ray, grading_vector, q_matrix, intnums, max_multiple)
 }
 
+/// Compute genus-zero GV invariants for the local `P^2` geometry.
+///
+/// This is the one-parameter local mirror-symmetry computation for
+/// `O(-3) -> P^2`, whose toric charge is `(-3, 1, 1, 1)`. It is not a lookup
+/// table: Cyrus expands the Picard-Fuchs mirror map, transforms the local
+/// B-model Yukawa coupling to the flat coordinate, and applies the standard
+/// multiple-cover inversion
+/// `K(Q) = -1/3 + sum_d N_d d^3 Q^d / (1 - Q^d)`.
+pub fn compute_local_p2_genus_zero_gv_series(max_degree: usize) -> Result<Vec<Integer>> {
+    if max_degree == 0 {
+        return Ok(Vec::new());
+    }
+
+    let mirror_correction = local_p2_mirror_correction(max_degree);
+    let z_of_q = local_p2_inverse_mirror_map(&mirror_correction, max_degree);
+    let yukawa_z = local_p2_log_yukawa_in_b_model_coordinate(&mirror_correction, max_degree)?;
+    let yukawa_q = rational_series_compose(&yukawa_z, &z_of_q, max_degree);
+
+    extract_genus_zero_gv_from_yukawa(&yukawa_q, max_degree)
+}
+
+/// Compute genus-zero GV invariants for a recognized affine toric circuit.
+///
+/// Currently the only supported local model is the rank-two local `P^2`
+/// triangle. Other circuit shapes return `Ok(None)` so callers cannot silently
+/// promote an unsupported local model to a zero or fitted GV sequence.
+pub fn compute_local_toric_circuit_gv_series(
+    kind: &LocalToricCircuitKind,
+    max_degree: usize,
+) -> Result<Option<Vec<Integer>>> {
+    match kind {
+        LocalToricCircuitKind::LocalP2Triangle { .. } => {
+            compute_local_p2_genus_zero_gv_series(max_degree).map(Some)
+        }
+    }
+}
+
+fn local_p2_mirror_correction(order: usize) -> Vec<Rational> {
+    let mut correction = vec![Rational::from(0); order + 1];
+    for degree in 1..=order {
+        let mut numerator = factorial_integer(3 * degree);
+        if degree % 2 == 1 {
+            numerator = -numerator;
+        }
+        let degree_factorial = factorial_integer(degree);
+        let mut denominator = degree_factorial.clone() * degree_factorial.clone();
+        denominator *= degree_factorial;
+        denominator *= Integer::from(degree);
+        correction[degree] = Rational::from(numerator) / Rational::from(denominator);
+    }
+    correction
+}
+
+fn local_p2_inverse_mirror_map(mirror_correction: &[Rational], order: usize) -> Vec<Rational> {
+    let mut z_of_q = vec![Rational::from(0); order + 1];
+    z_of_q[1] = Rational::from(1);
+
+    for _ in 0..order {
+        let correction_at_z = rational_series_compose(mirror_correction, &z_of_q, order);
+        let exp_correction = rational_series_exp(&correction_at_z, order);
+        let inverse_exp_correction = rational_series_inverse(&exp_correction, order)
+            .expect("formal exponential has unit constant coefficient");
+        let mut next = vec![Rational::from(0); order + 1];
+        next[1..=order].clone_from_slice(&inverse_exp_correction[..order]);
+        z_of_q = next;
+    }
+
+    z_of_q
+}
+
+fn local_p2_log_yukawa_in_b_model_coordinate(
+    mirror_correction: &[Rational],
+    order: usize,
+) -> Result<Vec<Rational>> {
+    let mut theta_t = vec![Rational::from(0); order + 1];
+    theta_t[0] = Rational::from(1);
+    for degree in 1..=order {
+        theta_t[degree] = Rational::from(degree) * mirror_correction[degree].clone();
+    }
+
+    let theta_t_cubed = rational_series_pow(&theta_t, 3, order);
+    let mut discriminant = vec![Rational::from(0); order + 1];
+    discriminant[0] = Rational::from(1);
+    if order >= 1 {
+        discriminant[1] = Rational::from(27);
+    }
+    let denominator = rational_series_mul(&discriminant, &theta_t_cubed, order);
+    let mut yukawa = rational_series_inverse(&denominator, order).ok_or_else(|| {
+        Error::InvalidInput("local P2 Yukawa denominator has zero constant term".into())
+    })?;
+    for coefficient in &mut yukawa {
+        *coefficient *= Rational::from_signeds(-1, 3);
+    }
+    Ok(yukawa)
+}
+
+fn extract_genus_zero_gv_from_yukawa(
+    yukawa: &[Rational],
+    max_degree: usize,
+) -> Result<Vec<Integer>> {
+    if yukawa.len() <= max_degree {
+        return Err(Error::InvalidInput(
+            "local GV Yukawa series is shorter than requested degree".into(),
+        ));
+    }
+
+    let mut gvs = Vec::with_capacity(max_degree);
+    for degree in 1..=max_degree {
+        let mut lower_multiple_cover_sum = Rational::from(0);
+        for divisor in 1..degree {
+            if degree % divisor != 0 {
+                continue;
+            }
+            let divisor_cubed = divisor * divisor * divisor;
+            lower_multiple_cover_sum +=
+                Rational::from(&gvs[divisor - 1]) * Rational::from(divisor_cubed);
+        }
+        let gv_rational =
+            (yukawa[degree].clone() - lower_multiple_cover_sum) / Rational::from(degree.pow(3));
+        if gv_rational.denominator_ref() != &1u32 {
+            return Err(Error::InvalidInput(format!(
+                "local P2 GV invariant at degree {degree} is not integral: {gv_rational}"
+            )));
+        }
+        let gv = Integer::try_from(gv_rational).map_err(|_| {
+            Error::InvalidInput(format!(
+                "local P2 GV invariant at degree {degree} is not integral"
+            ))
+        })?;
+        gvs.push(gv);
+    }
+    Ok(gvs)
+}
+
+fn factorial_integer(n: usize) -> Integer {
+    let mut out = Integer::from(1);
+    for factor in 2..=n {
+        out *= Integer::from(factor);
+    }
+    out
+}
+
+fn rational_series_mul(lhs: &[Rational], rhs: &[Rational], order: usize) -> Vec<Rational> {
+    let mut out = vec![Rational::from(0); order + 1];
+    for (lhs_degree, lhs_coefficient) in lhs.iter().enumerate().take(order + 1) {
+        if *lhs_coefficient == 0 {
+            continue;
+        }
+        for (rhs_degree, rhs_coefficient) in rhs.iter().enumerate().take(order + 1 - lhs_degree) {
+            if *rhs_coefficient == 0 {
+                continue;
+            }
+            out[lhs_degree + rhs_degree] += lhs_coefficient * rhs_coefficient;
+        }
+    }
+    out
+}
+
+fn rational_series_pow(series: &[Rational], exponent: usize, order: usize) -> Vec<Rational> {
+    let mut out = vec![Rational::from(0); order + 1];
+    out[0] = Rational::from(1);
+    for _ in 0..exponent {
+        out = rational_series_mul(&out, series, order);
+    }
+    out
+}
+
+fn rational_series_exp(series: &[Rational], order: usize) -> Vec<Rational> {
+    let mut out = vec![Rational::from(0); order + 1];
+    out[0] = Rational::from(1);
+    for degree in 1..=order {
+        let mut coefficient = Rational::from(0);
+        for term_degree in 1..=degree {
+            if term_degree >= series.len() {
+                break;
+            }
+            coefficient += Rational::from(term_degree)
+                * series[term_degree].clone()
+                * out[degree - term_degree].clone();
+        }
+        out[degree] = coefficient / Rational::from(degree);
+    }
+    out
+}
+
+fn rational_series_inverse(series: &[Rational], order: usize) -> Option<Vec<Rational>> {
+    let constant = series.first()?;
+    if *constant == 0 {
+        return None;
+    }
+    let mut out = vec![Rational::from(0); order + 1];
+    out[0] = Rational::from(1) / constant;
+    for degree in 1..=order {
+        let mut coefficient = Rational::from(0);
+        for term_degree in 1..=degree {
+            if term_degree >= series.len() {
+                break;
+            }
+            coefficient += series[term_degree].clone() * out[degree - term_degree].clone();
+        }
+        out[degree] = -coefficient / constant;
+    }
+    Some(out)
+}
+
+fn rational_series_compose(
+    series: &[Rational],
+    argument: &[Rational],
+    order: usize,
+) -> Vec<Rational> {
+    let mut out = vec![Rational::from(0); order + 1];
+    let mut argument_power = vec![Rational::from(0); order + 1];
+    argument_power[0] = Rational::from(1);
+    for degree in 0..=order {
+        if degree > 0 {
+            argument_power = rational_series_mul(&argument_power, argument, order);
+        }
+        let coefficient = series
+            .get(degree)
+            .cloned()
+            .unwrap_or_else(|| Rational::from(0));
+        if coefficient == 0 {
+            continue;
+        }
+        for term_degree in 0..=order {
+            out[term_degree] += coefficient.clone() * argument_power[term_degree].clone();
+        }
+    }
+    out
+}
+
 fn integer_abs_ln(value: &Integer) -> Result<Option<f64>> {
     let magnitude = value.clone().abs();
     if magnitude == 0 {
@@ -3871,7 +4102,8 @@ mod tests {
         OriginCircuitCurveWitness, OriginCircuitRelationPoint, ToricCurveCandidate,
         check_supporting_mori_face_normal, compute_ambient_one_dimensional_ray_gv_series,
         compute_grading_vector, compute_gv_invariants_with_explicit_semigroup,
-        compute_gv_invariants_with_provided_generators, compute_one_dimensional_ray_gv_series,
+        compute_gv_invariants_with_provided_generators, compute_local_p2_genus_zero_gv_series,
+        compute_local_toric_circuit_gv_series, compute_one_dimensional_ray_gv_series,
         compute_ray_gv_series_with_provided_generators, curve_in_rational_row_span,
         curve_row_span_rank, curve_volume_in_divisor_basis, diagnose_affine_toric_circuit,
         dump_mori_rays_cdd, find_pair_decomposition, find_semigroup_decomposition,
@@ -3983,6 +4215,55 @@ mod tests {
                     },
                 ],
             })
+        );
+    }
+
+    #[test]
+    fn local_p2_gv_series_is_computed_from_mirror_map() {
+        let gvs = compute_local_p2_genus_zero_gv_series(10).unwrap();
+
+        assert_eq!(
+            gvs,
+            vec![
+                Integer::from(3),
+                Integer::from(-6),
+                Integer::from(27),
+                Integer::from(-192),
+                Integer::from(1695),
+                Integer::from(-17064),
+                Integer::from(188454),
+                Integer::from(-2228160),
+                Integer::from(27748899),
+                Integer::from(-360012150),
+            ]
+        );
+    }
+
+    #[test]
+    fn local_p2_circuit_dispatches_to_local_mirror_series() {
+        let points = vec![
+            Point::new(vec![0, 1, -3, 6]),
+            Point::new(vec![-2, -1, -4, 5]),
+            Point::new(vec![-1, 0, -3, 5]),
+            Point::new(vec![-1, 0, -2, 4]),
+        ];
+
+        let diagnostic = diagnose_affine_toric_circuit(&[1, 1, -3, 1], &points)
+            .unwrap()
+            .expect("local P2 row is an affine circuit");
+        let kind = diagnostic.kind.expect("local P2 kind should be recognized");
+        let gvs = compute_local_toric_circuit_gv_series(&kind, 4)
+            .unwrap()
+            .expect("local P2 circuit should have a GV series");
+
+        assert_eq!(
+            gvs,
+            vec![
+                Integer::from(3),
+                Integer::from(-6),
+                Integer::from(27),
+                Integer::from(-192),
+            ]
         );
     }
 

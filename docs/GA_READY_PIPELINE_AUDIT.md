@@ -41,13 +41,11 @@ run pass. Any remaining mismatch must be explicit and localizable.
    local toric formulas, or checkpoint-file semantics.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples, and Cyrus has a reusable one-dimensional cygv series
-   entry point. Cyrus still does not generate the sampled low-dimensional-face
-   rays or validate regenerated `N_{nq}` values against `potent_rays_gv.dat`.
-   A source/data audit of the 4-214-647 checkpoint shows the first saved potent
-   ray has the sparse local charge pattern `(1, 1, -3, 1)` and the standard
-   local `P^2` GV sequence, so the next implementation target is reconstructing
-   local toric face/surface contexts, not adding more one-generator ray
-   diagnostics.
+   entry point. The first saved 4-214-647 potent ray is now regenerated from its
+   reconstructed local `P^2` circuit via a local mirror-map/Yukawa calculation,
+   with `potent_rays_gv.dat` used only as the assertion. Cyrus still does not
+   generate the full sampled low-dimensional-face ray set or handle the other
+   rank-two/rank-four local charge contexts.
 3. Pair-pruned selected curves match McAllister's `small_curves.dat`, while a
    stricter finite-semigroup diagnostic removes five additional curves. This is
    exposed as a policy choice, not hidden.
@@ -64,6 +62,8 @@ cargo test -p cyrus-core gv::tests::provided_generator_ray_gv_series -- --nocapt
 cargo test -p cyrus-core gv::tests::one_dimensional_ray_gv_series -- --nocapture
 cargo test -p cyrus-core affine_toric_circuit -- --nocapture
 CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 cargo test -p cyrus-core --test potent_ray_affine_circuits -- --nocapture
+CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 cargo test -p cyrus-core --test potent_ray_affine_circuits first_mcallister_local_p2_potent_ray_gvs_are_reconstructed -- --nocapture
+cargo test -p cyrus-core local_p2 -- --nocapture
 cargo test -p cyrus-core --test mcallister_e2e stage5_gv_computation_roadmap -- --nocapture
 CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 cargo test -p cyrus-core --test mcallister_e2e stage5_mcallister_potent_ray_checkpoint_quantities_are_computed -- --nocapture
 CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 cargo test -p cyrus-core --test mcallister_e2e stage5_mcallister_small_toric_curves_match_checkpoint -- --nocapture
@@ -80,9 +80,9 @@ to make the remaining GV layer more first-principles:
 
 1. Generate potent-ray samples from low-dimensional faces of
    `M_infinity(X)` and compute the ray `N_{nq}` series rather than reading
-   `potent_rays*.dat`. Start with the first 4-214-647 saved ray by recovering
-   its local toric face/surface charge data and reproducing the local `P^2`
-   sequence from that reconstructed context.
+   `potent_rays*.dat`. The first local `P^2` row is now covered; next extend
+   the same source-backed reconstruction to the other rank-two charge patterns
+   and then to the rank-four affine supports.
 2. Compare broader corrected-chamber per-curve cygv/general-GV values against
    toric formula values and missing non-toric contributions.
 3. Implement explicit chamber/flop continuation rules for the Kähler-coordinate

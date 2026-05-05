@@ -104,6 +104,7 @@ pub use gv::{
     compute_grading_vector, compute_gv_invariants,
     compute_gv_invariants_with_degree_bounded_lattice,
     compute_gv_invariants_with_explicit_semigroup, compute_gv_invariants_with_provided_generators,
+    compute_local_p2_genus_zero_gv_series, compute_local_toric_circuit_gv_series,
     compute_mori_cone_cap_rays, compute_one_dimensional_ray_gv_series,
     compute_origin_circuit_curve_diagnostics, compute_ray_gv_series_with_provided_generators,
     compute_toric_curve_gv_diagnostics, compute_toric_two_face_curve_gv_invariants,

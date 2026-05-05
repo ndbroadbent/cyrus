@@ -4,8 +4,10 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use cyrus_core::{
-    LocalToricCircuitKind, LocalToricCoordinate2D, Point, Polytope, diagnose_affine_toric_circuit,
+    LocalToricCircuitKind, LocalToricCoordinate2D, Point, Polytope,
+    compute_local_toric_circuit_gv_series, diagnose_affine_toric_circuit,
 };
+use malachite::Integer;
 
 fn first_principles_enabled() -> bool {
     std::env::var_os("CYRUS_FIRST_PRINCIPLES").is_some()
@@ -27,6 +29,24 @@ fn read_csv_rows_i64(path: &Path) -> Vec<Vec<i64>> {
                         .trim()
                         .parse::<i64>()
                         .unwrap_or_else(|err| panic!("invalid integer {value}: {err}"))
+                })
+                .collect()
+        })
+        .collect()
+}
+
+fn read_csv_rows_integer(path: &Path) -> Vec<Vec<Integer>> {
+    std::fs::read_to_string(path)
+        .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()))
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            line.split(',')
+                .map(|value| {
+                    value
+                        .trim()
+                        .parse::<Integer>()
+                        .unwrap_or_else(|err| panic!("invalid integer {value}: {err:?}"))
                 })
                 .collect()
         })
@@ -105,5 +125,47 @@ fn mcallister_potent_rays_are_affine_toric_circuits() {
                 },
             ],
         })
+    );
+}
+
+#[test]
+fn first_mcallister_local_p2_potent_ray_gvs_are_reconstructed() {
+    if !first_principles_enabled() {
+        return;
+    }
+    let Some(data_dir) = mcallister_data_dir() else {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    };
+
+    let points_raw = read_csv_rows_i64(&data_dir.join("points.dat"));
+    let potent_rays = read_csv_rows_i64(&data_dir.join("potent_rays.dat"));
+    let expected_gv_rows = read_csv_rows_integer(&data_dir.join("potent_rays_gv.dat"));
+    let all_points: Vec<Point> = points_raw.into_iter().map(Point::new).collect();
+    let polytope = Polytope::from_vertices(all_points).expect("failed to create polytope");
+    let triangulation_points = polytope
+        .points_not_interior_to_facets()
+        .expect("failed to filter triangulation points");
+
+    let first_ray = potent_rays
+        .first()
+        .expect("McAllister potent-ray checkpoint is nonempty");
+    let first_expected_gvs = expected_gv_rows
+        .first()
+        .expect("McAllister potent-ray GV checkpoint is nonempty");
+    let diagnostic = diagnose_affine_toric_circuit(first_ray, &triangulation_points)
+        .expect("first potent ray diagnostic should accept McAllister dimensions")
+        .expect("first potent ray should be an affine circuit");
+    let kind = diagnostic
+        .kind
+        .as_ref()
+        .expect("first potent ray should be the local P2 triangle");
+
+    let computed = compute_local_toric_circuit_gv_series(kind, first_expected_gvs.len())
+        .expect("local P2 GV reconstruction should succeed")
+        .expect("local P2 circuit should have a GV series");
+
+    assert_eq!(
+        computed, *first_expected_gvs,
+        "first saved potent-ray GV row must be reproduced from the reconstructed local P2 model"
     );
 }

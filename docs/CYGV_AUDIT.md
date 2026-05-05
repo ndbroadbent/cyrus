@@ -547,11 +547,17 @@ rank-2 patterns are local toric-surface-like sparse charge vectors, e.g.
 `(-10,2,2,3,3)`. Cyrus now records affine support rank and, for the first local
 `P^2` ray, reconstructs rank-two local coordinates
 `p43=(1,0)`, `p155=(0,1)`, `p168=(0,0)`, `p169=(-1,-1)` directly from the
-ambient lattice points. The next Cyrus test should therefore construct the full
-local charge/semigroup context from that local model and reproduce the saved
-`N_q, ..., N_10q` values without reading `potent_rays_gv.dat` except as the
-assertion. Hardcoding the recognized local sequence would be another replay
-shortcut; reconstructing the local toric geometry is the actual missing step.
+ambient lattice points. Cyrus now implements the first local `P^2` instance as
+an exact one-parameter local mirror calculation: it expands the Picard-Fuchs
+mirror map for `O(-3) -> P^2`, transforms the local B-model Yukawa coupling to
+the flat coordinate, and applies the multiple-cover inversion to recover
+`N_q, ..., N_10q`. The gated 4-214-647 test reads `potent_rays_gv.dat` only as
+the assertion for row 0.
+
+This is still not a proof that all potent-ray rows are solved. The remaining
+work is to reconstruct the local toric charge/face contexts for the other
+rank-two patterns and to handle the 16 rank-four affine supports without
+collapsing them into a local `P^2` special case.
 
 ### Corrected-Chamber Continuation
 

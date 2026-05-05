@@ -131,19 +131,24 @@ face/phase reconstruction, not a lookup against the current FRST.
 - Do not keep expanding final-volume fitting diagnostics until the face/ray GV
   source problem is solved.
 
-## Next Implementation Target
+## Implemented First-Ray Reconstruction
 
-The next useful Cyrus work is a focused reconstruction test for one saved
-potent ray:
+Cyrus now has a first non-replay potent-ray GV reconstruction for the leading
+4-214-647 local `P^2` ray:
 
-1. start from `points.dat` and `heights.dat`;
-2. detect the affine circuit support of the first potent ray without using its
-   saved GV values;
-3. reconstruct the low-dimensional toric face/surface model or phase context
-   associated with that rank-2 circuit, while keeping the rank-4 cases
-   explicit as a separate class;
-4. compute `N_q, ..., N_10q` from that reconstructed context;
-5. compare to row 0 of `potent_rays_gv.dat` only as the assertion.
+1. detect the affine circuit support of the first potent ray from
+   `points.dat`/`potent_rays.dat`, without reading its GV row;
+2. classify the support as the rank-two local `P^2` triangle;
+3. compute the local `O(-3) -> P^2` genus-zero GV sequence from the
+   Picard-Fuchs mirror map, local Yukawa coupling, and multiple-cover
+   inversion;
+4. use row 0 of `potent_rays_gv.dat` only as the assertion.
 
-Only after that single-ray test is understood should Cyrus try to regenerate
-the full 411-ray sample or use potent-ray data in a GA fitness pipeline.
+The gated test is
+`first_mcallister_local_p2_potent_ray_gvs_are_reconstructed` in
+`crates/cyrus-core/tests/potent_ray_affine_circuits.rs`.
+
+The remaining potent-ray target is to generalize this beyond the first local
+`P^2` row: reconstruct the local toric charge/face contexts for the other
+rank-two patterns, keep the rank-four cases explicit, and then generate the
+full 411-ray sample without treating `potent_rays*.dat` as production input.
