@@ -35,6 +35,10 @@ corresponding object:
   selected toric-curve method, not a full 214-dimensional generic
   `compute_gvs()` call.
 - `g_s.dat`, `W_0.dat`: racetrack outputs.
+- `corrected_heights.dat`: corrected-chamber FRST checkpoint for diagnostics.
+  It may be used to compare the chamber implied by the ancillary data after
+  Cyrus has computed its own chamber data, but not to select a production
+  chamber.
 - `corrected_target_volumes.dat`: corrected-chamber classical KKLT divisor
   volumes. This is a checkpoint used to localize the remaining instanton-layer
   discrepancy, not an input to the production solve.

@@ -228,6 +228,11 @@ const ARTIFACT_POLICIES: &[ArtifactPolicy] = &[
         note: "computed racetrack GV subset checkpoint",
     },
     ArtifactPolicy {
+        file: "small_curves_vols.dat",
+        usage: ArtifactUse::ValidationReplayOnly,
+        note: "downstream small-curve volumes; only used to pin checkpoint semantics",
+    },
+    ArtifactPolicy {
         file: "g_s.dat",
         usage: ArtifactUse::ValidationCheckpoint,
         note: "computed racetrack string coupling checkpoint",
@@ -246,6 +251,16 @@ const ARTIFACT_POLICIES: &[ArtifactPolicy] = &[
         file: "corrected_kahler_param.dat",
         usage: ArtifactUse::ValidationReplayOnly,
         note: "downstream corrected KKLT output; gated for checkpoint replay only",
+    },
+    ArtifactPolicy {
+        file: "corrected_heights.dat",
+        usage: ArtifactUse::ValidationCheckpoint,
+        note: "corrected-chamber FRST checkpoint for diagnostics, never a production chamber input",
+    },
+    ArtifactPolicy {
+        file: "corrected_target_volumes.dat",
+        usage: ArtifactUse::ValidationCheckpoint,
+        note: "corrected-chamber classical KKLT divisor-volume checkpoint",
     },
     ArtifactPolicy {
         file: "cy_vol.dat",
