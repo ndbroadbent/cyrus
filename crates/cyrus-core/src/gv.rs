@@ -335,6 +335,44 @@ pub struct OriginCircuitCurveDiagnostic {
     pub witnesses: Vec<OriginCircuitCurveWitness>,
 }
 
+/// The local formula source used for a toric curve GV value.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ToricCurveGvSource {
+    /// Curve from a circuit in a primal two-face.
+    TwoFace {
+        /// Edge shared by the two adjacent two-face simplices.
+        edge: Vec<usize>,
+        /// All triangulation-point indices in the two-face.
+        two_face_points: Vec<usize>,
+        /// Genus of the dual one-face.
+        two_face_genus: usize,
+        /// Curve coefficients on the shared edge endpoints.
+        edge_coefficients: (i64, i64),
+        /// Smallest primal face dimensions for the shared edge endpoints.
+        edge_face_dimensions: (Option<usize>, Option<usize>),
+        /// Dual two-face genera for edge endpoints that are primal one-face points.
+        edge_one_face_genera: (Option<usize>, Option<usize>),
+    },
+    /// Origin-circuit curve matching the isolated resolved-conifold pattern.
+    ResolvedConifoldOriginCircuit {
+        /// Index of the origin point in ambient curve coordinates.
+        origin_index: usize,
+        /// Triangulation witness that produced this curve class.
+        witness: OriginCircuitCurveWitness,
+    },
+}
+
+/// A toric curve class with its GV value and local formula provenance.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ToricCurveGvDiagnostic {
+    /// Curve class in ambient divisor-intersection coordinates.
+    pub class: Vec<i64>,
+    /// Genus-zero GV invariant for this toric curve class.
+    pub gv: Integer,
+    /// Local formulas/witnesses that produced the value.
+    pub sources: Vec<ToricCurveGvSource>,
+}
+
 /// Compute the volume of an ambient curve class from Kähler parameters in a divisor basis.
 pub fn curve_volume_in_divisor_basis(
     curve: &[i64],
@@ -649,16 +687,19 @@ pub fn compute_toric_two_face_curve_gv_invariants(
             }
         }
 
-        let simps: Vec<Vec<usize>> = simp_2d.into_iter().collect();
+        let mut simps: Vec<Vec<usize>> = simp_2d.into_iter().collect();
+        simps.sort();
         for i in 0..simps.len() {
             for j in i..simps.len() {
                 let s1: HashSet<usize> = simps[i].iter().copied().collect();
                 let s2: HashSet<usize> = simps[j].iter().copied().collect();
-                let comm: Vec<usize> = s1.intersection(&s2).copied().collect();
+                let mut comm: Vec<usize> = s1.intersection(&s2).copied().collect();
+                comm.sort_unstable();
                 if comm.len() != 2 {
                     continue;
                 }
-                let diff: Vec<usize> = s1.symmetric_difference(&s2).copied().collect();
+                let mut diff: Vec<usize> = s1.symmetric_difference(&s2).copied().collect();
+                diff.sort_unstable();
                 if diff.len() != 2 {
                     continue;
                 }
@@ -699,6 +740,137 @@ pub fn compute_toric_two_face_curve_gv_invariants(
         .into_iter()
         .map(|(class, gv)| ToricCurveGvInvariant { class, gv })
         .collect();
+    out.sort_by(|a, b| a.class.cmp(&b.class));
+    Ok(out)
+}
+
+/// Compute toric curve GV values with local formula provenance.
+pub fn compute_toric_curve_gv_diagnostics(
+    tri: &Triangulation,
+    points: &[Point],
+    polytope: &Polytope,
+) -> Result<Vec<ToricCurveGvDiagnostic>> {
+    if points.is_empty() {
+        return Err(Error::InvalidInput("No points provided".into()));
+    }
+    if polytope.dim() != 4 {
+        return Err(Error::InvalidInput(
+            "toric curve GV diagnostics are only implemented for 4D polytopes".into(),
+        ));
+    }
+
+    let pts_ext: Vec<Vec<i64>> = points
+        .iter()
+        .map(|p| {
+            let mut v = p.coords().to_vec();
+            v.push(1);
+            v
+        })
+        .collect();
+    let face_data = compute_two_face_data_4d(points, polytope)?;
+    let point_face_dims = classify_primal_point_face_dimensions(points, polytope)?;
+    let one_face_genera = compute_primal_one_face_genera(points, polytope, &point_face_dims)?;
+    let (facets, _) = compute_faces_4d(points, polytope)?;
+    let origin_idx = points
+        .iter()
+        .position(|p| p.coords().iter().all(|&x| x == 0))
+        .ok_or_else(|| Error::InvalidInput("Origin not found in points".into()))?;
+
+    let mut gv_by_class: HashMap<Vec<i64>, ToricCurveGvDiagnostic> = HashMap::new();
+    let mut simp_2d_all: HashSet<Vec<usize>> = HashSet::new();
+    for face in &face_data {
+        if face.points.len() < 4 {
+            continue;
+        }
+        let face_pts: HashSet<usize> = face.points.iter().copied().collect();
+        let mut simp_2d: HashSet<Vec<usize>> = HashSet::new();
+
+        for simplex in tri.simplices() {
+            let inter: Vec<usize> = simplex
+                .iter()
+                .filter(|idx| face_pts.contains(idx))
+                .copied()
+                .collect();
+            if inter.len() == 3 {
+                let mut inter_sorted = inter;
+                inter_sorted.sort_unstable();
+                simp_2d.insert(inter_sorted.clone());
+                simp_2d_all.insert(inter_sorted);
+            }
+        }
+
+        let mut simps: Vec<Vec<usize>> = simp_2d.into_iter().collect();
+        simps.sort();
+        for i in 0..simps.len() {
+            for j in i..simps.len() {
+                let s1: HashSet<usize> = simps[i].iter().copied().collect();
+                let s2: HashSet<usize> = simps[j].iter().copied().collect();
+                let mut comm: Vec<usize> = s1.intersection(&s2).copied().collect();
+                comm.sort_unstable();
+                if comm.len() != 2 {
+                    continue;
+                }
+                let mut diff: Vec<usize> = s1.symmetric_difference(&s2).copied().collect();
+                diff.sort_unstable();
+                if diff.len() != 2 {
+                    continue;
+                }
+
+                let Some(v) = nullspace_vector(&pts_ext, &diff, &comm, false) else {
+                    continue;
+                };
+                let full_v = build_full_v(&diff, &comm, &v);
+                let class = normalized_row_from_sparse_relation(points.len(), full_v);
+                if class.iter().all(|&x| x == 0) {
+                    continue;
+                }
+                let gv = toric_two_face_curve_gv(
+                    &class,
+                    &comm,
+                    face.genus,
+                    &point_face_dims,
+                    &one_face_genera,
+                )?;
+                let edge_coefficients = (
+                    class.get(comm[0]).copied().unwrap_or(0),
+                    class.get(comm[1]).copied().unwrap_or(0),
+                );
+                let source = ToricCurveGvSource::TwoFace {
+                    edge: comm.clone(),
+                    two_face_points: face.points.clone(),
+                    two_face_genus: face.genus,
+                    edge_coefficients,
+                    edge_face_dimensions: (
+                        point_face_dims.get(comm[0]).copied(),
+                        point_face_dims.get(comm[1]).copied(),
+                    ),
+                    edge_one_face_genera: (
+                        one_face_genera.get(comm[0]).copied().flatten(),
+                        one_face_genera.get(comm[1]).copied().flatten(),
+                    ),
+                };
+                insert_toric_gv_diagnostic(&mut gv_by_class, class, gv, source)?;
+            }
+        }
+    }
+
+    for witness in compute_origin_circuit_curve_witnesses(
+        &pts_ext,
+        &facets,
+        &simp_2d_all,
+        origin_idx,
+        Some(&point_face_dims),
+    ) {
+        if let Some(gv) = resolved_conifold_origin_circuit_gv(&witness.class, origin_idx) {
+            let source = ToricCurveGvSource::ResolvedConifoldOriginCircuit {
+                origin_index: origin_idx,
+                witness: witness.clone(),
+            };
+            insert_toric_gv_diagnostic(&mut gv_by_class, witness.class, gv, source)?;
+        }
+    }
+
+    let mut out: Vec<ToricCurveGvDiagnostic> = gv_by_class.into_values().collect();
     out.sort_by(|a, b| a.class.cmp(&b.class));
     Ok(out)
 }
@@ -797,6 +969,33 @@ fn insert_toric_gv(
         }
         std::collections::hash_map::Entry::Vacant(slot) => {
             slot.insert(gv);
+        }
+    }
+    Ok(())
+}
+
+fn insert_toric_gv_diagnostic(
+    gv_by_class: &mut HashMap<Vec<i64>, ToricCurveGvDiagnostic>,
+    class: Vec<i64>,
+    gv: Integer,
+    source: ToricCurveGvSource,
+) -> Result<()> {
+    match gv_by_class.entry(class.clone()) {
+        std::collections::hash_map::Entry::Occupied(mut existing) => {
+            if existing.get().gv != gv {
+                return Err(Error::InvalidInput(format!(
+                    "conflicting toric GV diagnostic values for duplicate curve class: {} vs {gv}",
+                    existing.get().gv
+                )));
+            }
+            existing.get_mut().sources.push(source);
+        }
+        std::collections::hash_map::Entry::Vacant(slot) => {
+            slot.insert(ToricCurveGvDiagnostic {
+                class,
+                gv,
+                sources: vec![source],
+            });
         }
     }
     Ok(())

@@ -96,9 +96,10 @@ pub use glsm::compute_glsm_charge_matrix;
 pub use glsm::compute_glsm_linear_relations;
 pub use gv::{
     OriginCircuitCurveDiagnostic, OriginCircuitCurveWitness, OriginCircuitRelationPoint,
-    ToricCurveCandidate, ToricCurveGvInvariant, compute_grading_vector, compute_gv_invariants,
-    compute_gv_invariants_with_explicit_semigroup, compute_gv_invariants_with_provided_generators,
-    compute_mori_cone_cap_rays, compute_origin_circuit_curve_diagnostics,
+    ToricCurveCandidate, ToricCurveGvDiagnostic, ToricCurveGvInvariant, ToricCurveGvSource,
+    compute_grading_vector, compute_gv_invariants, compute_gv_invariants_with_explicit_semigroup,
+    compute_gv_invariants_with_provided_generators, compute_mori_cone_cap_rays,
+    compute_origin_circuit_curve_diagnostics, compute_toric_curve_gv_diagnostics,
     compute_toric_two_face_curve_gv_invariants, curve_volume_in_divisor_basis,
     find_pair_decomposition, map_basis_gv_invariants_to_ambient,
     project_mori_cone_cap_rays_to_basis, remove_pair_decomposable_curve_candidates,

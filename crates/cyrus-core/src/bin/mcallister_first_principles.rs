@@ -67,11 +67,11 @@ use cyrus_core::{
     build_racetrack_terms, compute_curve_basis_matrix, compute_glsm_and_linrels,
     compute_grading_vector, compute_intersection_cytools, compute_linear_relations_no_origin,
     compute_mori_cone_cap_rays, compute_origin_circuit_curve_diagnostics,
-    compute_regular_triangulation, compute_toric_two_face_curve_gv_invariants,
-    compute_w0_from_terms, effective_prime_divisors_from_curve_basis,
-    generate_scaled_kklt_branch_initializations, heights_to_kahler, intersection_in_basis,
-    is_unimodular, kahler_to_heights, map_basis_gv_invariants_to_ambient,
-    remove_pair_decomposable_curve_candidates,
+    compute_regular_triangulation, compute_toric_curve_gv_diagnostics,
+    compute_toric_two_face_curve_gv_invariants, compute_w0_from_terms,
+    effective_prime_divisors_from_curve_basis, generate_scaled_kklt_branch_initializations,
+    heights_to_kahler, intersection_in_basis, is_unimodular, kahler_to_heights,
+    map_basis_gv_invariants_to_ambient, remove_pair_decomposable_curve_candidates,
     scale_mixed_basis_kklt_branch_initialization_to_target, solve_mixed_basis_path_following,
     solve_mixed_basis_path_following_branch_candidates, solve_racetrack,
     subcutoff_toric_curve_candidates,
@@ -2488,6 +2488,43 @@ fn origin_circuit_witness_sample(
             })
             .collect(),
     }
+}
+
+fn toric_curve_gv_source_summary(source: &cyrus_core::ToricCurveGvSource) -> String {
+    match source {
+        cyrus_core::ToricCurveGvSource::TwoFace {
+            edge,
+            two_face_points,
+            two_face_genus,
+            edge_coefficients,
+            edge_face_dimensions,
+            edge_one_face_genera,
+        } => format!(
+            "two_face(edge={edge:?};coeffs={edge_coefficients:?};face_dims={edge_face_dimensions:?};one_face_genera={edge_one_face_genera:?};two_face_genus={two_face_genus};two_face_points={two_face_points:?})"
+        ),
+        cyrus_core::ToricCurveGvSource::ResolvedConifoldOriginCircuit {
+            origin_index,
+            witness,
+        } => format!(
+            "resolved_conifold_origin(origin={origin_index};shared_two_simplex={:?};relation={:?})",
+            witness.shared_two_simplex, witness.sparse_relation
+        ),
+    }
+}
+
+fn toric_curve_gv_diagnostic_summary(diagnostic: &cyrus_core::ToricCurveGvDiagnostic) -> String {
+    let mut sources = diagnostic
+        .sources
+        .iter()
+        .map(toric_curve_gv_source_summary)
+        .collect::<Vec<_>>();
+    sources.sort();
+    format!(
+        "gv={};source_count={};sources=[{}]",
+        diagnostic.gv,
+        diagnostic.sources.len(),
+        sources.join("|")
+    )
 }
 
 fn cms_general_divisor_shape_candidates(
@@ -6367,6 +6404,20 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
         .iter()
         .map(|candidate| (candidate.class.clone(), candidate))
         .collect::<HashMap<_, _>>();
+    let toric_gv_diagnostic_by_class = compute_toric_curve_gv_diagnostics(
+        &checkpoint_chamber,
+        &geom.triangulation_points,
+        &geom.polytope,
+    )
+    .unwrap_or_else(|e| {
+        eprintln!(
+            "[ERROR] failed to compute checkpoint-t corrected-chamber toric GV diagnostics: {e}"
+        );
+        std::process::exit(2);
+    })
+    .into_iter()
+    .map(|diagnostic| (diagnostic.class.clone(), diagnostic))
+    .collect::<HashMap<_, _>>();
     for &(idx, _abs_delta, _delta, _checkpoint_implied, _toric_covered) in gv_deltas.iter().take(4)
     {
         let divisor_idx = kklt_basis[idx];
@@ -6393,8 +6444,12 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
                         .flatten()
                 })
                 .map(|decomposition| decomposition.len());
+            let gv_source = toric_gv_diagnostic_by_class
+                .get(&row.class)
+                .map(toric_curve_gv_diagnostic_summary)
+                .unwrap_or_else(|| "missing".to_string());
             eprintln!(
-                "[COMPARE] checkpoint-t corrected-chamber GV target contribution kklt_idx={} point_idx={} contribution={} q_i={} q_dot_t={} parity_mod2={} gv={} decomp_terms_le4={:?} class={:?}",
+                "[COMPARE] checkpoint-t corrected-chamber GV target contribution kklt_idx={} point_idx={} contribution={} q_i={} q_dot_t={} parity_mod2={} gv={} decomp_terms_le4={:?} gv_source={} class={:?}",
                 idx,
                 divisor_idx,
                 row.contribution,
@@ -6403,6 +6458,7 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
                 row.parity.rem_euclid(2),
                 row.gv,
                 decomp_terms,
+                gv_source,
                 sparse_i64(&row.class)
             );
         }
