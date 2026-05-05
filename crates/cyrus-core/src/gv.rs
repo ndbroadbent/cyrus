@@ -1945,9 +1945,10 @@ pub fn extract_ckyz_local_gv_invariants_from_potential(
         rank,
         "CKYZ local instanton potential",
     )?;
+    let grading_vector = ckyz_grading_vector_from_cover_weights(cover_weight_coefficients)?;
 
     let mut degrees = ckyz_multi_degrees(rank, max_total_degree);
-    ckyz_sort_degrees_for_extraction(&mut degrees);
+    ckyz_sort_degrees_for_extraction_with_grading(&mut degrees, &grading_vector)?;
 
     let mut invariants = BTreeMap::new();
     for degree in degrees {
@@ -4259,6 +4260,26 @@ fn ckyz_cover_weight(coefficients: &[i64], degree: &[usize]) -> Result<i64> {
         .ok_or_else(|| Error::InvalidInput("CKYZ cover weight overflowed i64".into()))
 }
 
+fn ckyz_grading_vector_from_cover_weights(coefficients: &[i64]) -> Result<Vec<usize>> {
+    if coefficients.is_empty() {
+        return Err(Error::InvalidInput(
+            "CKYZ grading vector requires at least one cover weight".into(),
+        ));
+    }
+    coefficients
+        .iter()
+        .map(|&coefficient| {
+            if coefficient <= 0 {
+                return Err(Error::InvalidInput(
+                    "CKYZ grading weights must be positive".into(),
+                ));
+            }
+            usize::try_from(coefficient)
+                .map_err(|_| Error::InvalidInput("CKYZ grading weight does not fit usize".into()))
+        })
+        .collect()
+}
+
 fn validate_ckyz_target_degrees(target_degrees: &[Vec<usize>], rank: usize) -> Result<()> {
     if target_degrees.is_empty() {
         return Err(Error::InvalidInput(
@@ -4301,6 +4322,38 @@ fn ckyz_sort_degrees_for_extraction(degrees: &mut [Vec<usize>]) {
             .cmp(&ckyz_total_degree(rhs).expect("validated degree"))
             .then_with(|| lhs.cmp(rhs))
     });
+}
+
+fn ckyz_sort_degrees_for_extraction_with_grading(
+    degrees: &mut [Vec<usize>],
+    grading_vector: &[usize],
+) -> Result<()> {
+    if grading_vector.is_empty() {
+        return Err(Error::InvalidInput(
+            "CKYZ extraction grading requires at least one weight".into(),
+        ));
+    }
+    for degree in degrees.iter() {
+        if degree.len() != grading_vector.len() {
+            return Err(Error::InvalidInput(
+                "CKYZ extraction grading rank does not match degree rank".into(),
+            ));
+        }
+        ckyz_grading_degree(degree, grading_vector)?;
+        ckyz_total_degree(degree)?;
+    }
+    degrees.sort_by(|lhs, rhs| {
+        ckyz_grading_degree(lhs, grading_vector)
+            .expect("validated degree")
+            .cmp(&ckyz_grading_degree(rhs, grading_vector).expect("validated degree"))
+            .then_with(|| {
+                ckyz_total_degree(lhs)
+                    .expect("validated degree")
+                    .cmp(&ckyz_total_degree(rhs).expect("validated degree"))
+            })
+            .then_with(|| lhs.cmp(rhs))
+    });
+    Ok(())
 }
 
 fn compute_ckyz_log_period_corrections_domain(
@@ -5191,9 +5244,10 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
         "CKYZ local instanton potential",
     )?;
     validate_ckyz_target_degrees(target_degrees, rank)?;
+    let grading_vector = ckyz_grading_vector_from_cover_weights(cover_weight_coefficients)?;
 
     let mut extraction_degrees = target_degrees.to_vec();
-    ckyz_sort_degrees_for_extraction(&mut extraction_degrees);
+    ckyz_sort_degrees_for_extraction_with_grading(&mut extraction_degrees, &grading_vector)?;
     extraction_degrees.dedup();
 
     let mut residual = extraction_degrees
@@ -5328,9 +5382,10 @@ fn extract_ckyz_local_gv_invariants_from_potential_for_degrees(
         "CKYZ local instanton potential",
     )?;
     validate_ckyz_target_degrees(target_degrees, rank)?;
+    let grading_vector = ckyz_grading_vector_from_cover_weights(cover_weight_coefficients)?;
 
     let mut extraction_degrees = target_degrees.to_vec();
-    ckyz_sort_degrees_for_extraction(&mut extraction_degrees);
+    ckyz_sort_degrees_for_extraction_with_grading(&mut extraction_degrees, &grading_vector)?;
     extraction_degrees.dedup();
 
     let mut invariants = BTreeMap::new();
@@ -10775,7 +10830,7 @@ mod tests {
         ToricCurveCandidate, certify_supporting_mori_face_by_exact_kernel,
         check_extremal_mori_ray_separator, check_supporting_mori_face_normal,
         ckyz_cover_closed_target_degrees, ckyz_expalpha_power_caches_domain,
-        ckyz_local_domain_profile_for_degrees,
+        ckyz_grading_vector_from_cover_weights, ckyz_local_domain_profile_for_degrees,
         ckyz_local_domain_profile_for_degrees_with_causal_domain,
         ckyz_local_surface_causal_domain_spec, ckyz_local_surface_cover_weight_coefficients,
         ckyz_local_surface_domain_profile_for_multiples, ckyz_local_surface_target_degrees,
@@ -10784,7 +10839,8 @@ mod tests {
         ckyz_q_degree_series_from_expalpha_powers_in_z_domain, ckyz_q_degree_series_in_z_domain,
         ckyz_scaled_alpha_terms, ckyz_second_log_period_series_for_pair_domain,
         ckyz_second_log_period_support_indices_for_pair_domain, ckyz_series_li2_domain,
-        ckyz_series_mul_domain, ckyz_series_support_indices, ckyz_support_exp_domain,
+        ckyz_series_mul_domain, ckyz_series_support_indices,
+        ckyz_sort_degrees_for_extraction_with_grading, ckyz_support_exp_domain,
         ckyz_support_exp_domain_by_powers, ckyz_z_residual_coefficient_work_profile_for_degrees,
         ckyz_z_residual_dependency_degrees,
         classify_nilpotent_rays_from_two_pass_divergence_checks,
@@ -11842,6 +11898,26 @@ mod tests {
             "F0 [1,1] extraction needs the lower off-ray [0,1] subtraction"
         );
         assert!(history.contains(&vec![1, 1]));
+    }
+
+    #[test]
+    fn ckyz_extraction_order_uses_cover_weight_grading() {
+        let mut degrees = vec![vec![2, 0], vec![0, 3], vec![1, 1], vec![0, 1]];
+        let grading = ckyz_grading_vector_from_cover_weights(&[2, 1]).unwrap();
+
+        ckyz_sort_degrees_for_extraction_with_grading(&mut degrees, &grading).unwrap();
+
+        assert_eq!(
+            degrees,
+            vec![vec![0, 1], vec![1, 1], vec![0, 3], vec![2, 0]]
+        );
+    }
+
+    #[test]
+    fn ckyz_extraction_order_rejects_nonpositive_grading_weights() {
+        let err = ckyz_grading_vector_from_cover_weights(&[2, 0]).unwrap_err();
+
+        assert!(err.to_string().contains("grading weights must be positive"));
     }
 
     #[test]
