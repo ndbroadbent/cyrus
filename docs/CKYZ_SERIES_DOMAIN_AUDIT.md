@@ -88,7 +88,7 @@ This is separate from the later rank-four task. Rank-four saved potent rays
 need their own local face/semigroup context before any GV row comparison is
 meaningful.
 
-## Current Guardrail
+## Current Guardrail And API
 
 Cyrus now has an internal test-only support tracer,
 `ckyz_observed_support_domain_for_degrees`, that records the nonzero supports
@@ -98,20 +98,31 @@ domain from those supports. The unit test
 domain recomputes the same targeted F0 skew-ray GV values and does not add
 terms outside the componentwise target downset.
 
-Cyrus also has a test-only support-predicted domain path,
-`ckyz_predicted_support_domain_for_degrees`. It computes exact alpha/beta
-supports on the broad source-derived downset, then runs the inverse mirror-map
-and potential-composition steps at the support level rather than evaluating the
-full rational coefficient series. The test
-`ckyz_predicted_support_domain_covers_observed_f0_ray_support` verifies that
-this support-predicted domain covers the observed support and reproduces the
-same targeted F0 skew-ray GV values.
+Cyrus also has an explicit support-predicted public API,
+`compute_ckyz_local_gv_invariants_for_degrees_with_predicted_support_domain`.
+It computes exact alpha/beta supports on the broad source-derived downset, then
+runs the inverse mirror-map and potential-composition steps at the support level
+rather than evaluating the full rational coefficient series before building the
+final computation domain. The test
+`ckyz_predicted_support_domain_covers_observed_f0_ray_support` verifies that the
+support-predicted domain covers the observed support and reproduces the same
+targeted F0 skew-ray GV values.
 `ckyz_predicted_support_domain_covers_observed_polygon5_ray_support` applies
 the same check to the rank-three polygon-5 local model for the first two
 multiples of the McAllister-style `[4,3,2]` source direction.
+The API-level tests
+`ckyz_predicted_support_domain_api_matches_target_downset_for_f0_ray` and
+`ckyz_predicted_support_domain_api_matches_target_downset_for_polygon5_ray`
+check equality with the older broad target-downset extractor.
 
-This is not the production dependency-domain builder yet. It still enumerates
-alpha/beta supports on the broad downset, so it is a guardrail and staging
-point, not a completed coefficient-domain solution. A production builder should
-derive the needed alpha/beta supports directly enough to avoid the `N=5`
-McAllister rank-two timeout before it is used to raise the potent-ray gate.
+The McAllister rank-two CKYZ gate now uses this support-predicted API and still
+passes the default all-row `N=4` validation, with `potent_rays_gv.dat` used only
+as the assertion. The elapsed time increased to about 132 seconds on the latest
+run, so this is a correctness/structure promotion rather than a performance
+breakthrough.
+
+This is still not the completed coefficient-domain solution. It enumerates
+alpha/beta supports on the broad downset, and a focused polygon-5
+`[4,3,2]`, `N=5` McAllister diagnostic still exceeded a 300 second timeout.
+A production builder should derive the needed alpha/beta supports directly
+enough to avoid that `N=5` boundary before the potent-ray gate is raised.

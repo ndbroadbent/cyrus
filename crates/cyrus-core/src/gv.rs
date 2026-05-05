@@ -1590,6 +1590,58 @@ pub fn compute_ckyz_local_gv_invariants_for_degrees_with_causal_domain(
     Ok(invariants)
 }
 
+/// Compute CKYZ local GV invariants using a support-predicted finite domain.
+///
+/// This follows the same local CKYZ extraction as
+/// [`compute_ckyz_local_gv_invariants_for_degrees`], but first predicts the
+/// finite monomial domain needed by the inverse mirror map and
+/// flat-coordinate potential composition at the support level. The support
+/// prediction is exact with respect to the source-derived broad target downset:
+/// it still enumerates alpha/beta supports on that downset, but it avoids
+/// evaluating the full rational mirror-map/potential series before constructing
+/// the smaller computation domain.
+///
+/// The returned map contains only the requested target degrees. Cover divisors
+/// are included internally for multiple-cover subtraction.
+///
+/// # Errors
+/// Returns an error for invalid CKYZ source data, invalid target degrees, or
+/// non-integral extracted invariants.
+pub fn compute_ckyz_local_gv_invariants_for_degrees_with_predicted_support_domain(
+    relations: &[Vec<i64>],
+    local_intersection_terms: &[CkyzLocalIntersectionTerm],
+    cover_weight_coefficients: &[i64],
+    target_degrees: &[Vec<usize>],
+) -> Result<BTreeMap<Vec<usize>, Integer>> {
+    validate_ckyz_relations(relations)?;
+    let rank = relations.len();
+    validate_ckyz_target_degrees(target_degrees, rank)?;
+    if cover_weight_coefficients.len() != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ cover-weight rank does not match relation rank".into(),
+        ));
+    }
+
+    let extraction_degrees = ckyz_cover_closed_target_degrees(target_degrees)?;
+    let domain = ckyz_predicted_support_domain_for_degrees(
+        relations,
+        local_intersection_terms,
+        &extraction_degrees,
+    )?;
+    let potential = compute_ckyz_local_instanton_potential_corrections_domain(
+        relations,
+        local_intersection_terms,
+        &domain,
+    )?;
+    let mut invariants = extract_ckyz_local_gv_invariants_from_potential_for_degrees(
+        &potential,
+        cover_weight_coefficients,
+        &extraction_degrees,
+    )?;
+    invariants.retain(|degree, _| target_degrees.iter().any(|target| target == degree));
+    Ok(invariants)
+}
+
 fn validate_ckyz_relations(relations: &[Vec<i64>]) -> Result<()> {
     let Some(first_relation) = relations.first() else {
         return Err(Error::InvalidInput(
@@ -2386,7 +2438,6 @@ fn ckyz_observed_support_domain_for_degrees(
     CkyzMonomialDomain::from_degrees(rank, degree_set)
 }
 
-#[cfg(test)]
 fn ckyz_series_support(series: &BTreeMap<Vec<usize>, Rational>) -> BTreeSet<Vec<usize>> {
     series
         .iter()
@@ -2395,7 +2446,6 @@ fn ckyz_series_support(series: &BTreeMap<Vec<usize>, Rational>) -> BTreeSet<Vec<
         .collect()
 }
 
-#[cfg(test)]
 fn ckyz_support_coordinate_series_domain(
     rank: usize,
     coordinate: usize,
@@ -2412,7 +2462,6 @@ fn ckyz_support_coordinate_series_domain(
     out
 }
 
-#[cfg(test)]
 fn ckyz_support_min_total_degree(
     support: &BTreeSet<Vec<usize>>,
     rank: usize,
@@ -2437,7 +2486,6 @@ fn ckyz_support_min_total_degree(
     Ok(min_degree)
 }
 
-#[cfg(test)]
 fn ckyz_support_mul_domain(
     lhs: &BTreeSet<Vec<usize>>,
     rhs: &BTreeSet<Vec<usize>>,
@@ -2462,7 +2510,6 @@ fn ckyz_support_mul_domain(
     Ok(out)
 }
 
-#[cfg(test)]
 fn ckyz_support_power_cache_domain(
     support: &BTreeSet<Vec<usize>>,
     max_exponent: usize,
@@ -2482,7 +2529,6 @@ fn ckyz_support_power_cache_domain(
     Ok(powers)
 }
 
-#[cfg(test)]
 fn ckyz_support_exp_domain(
     support: &BTreeSet<Vec<usize>>,
     domain: &CkyzMonomialDomain,
@@ -2502,7 +2548,6 @@ fn ckyz_support_exp_domain(
     Ok(out)
 }
 
-#[cfg(test)]
 fn ckyz_support_compose_domain(
     series_support: &BTreeSet<Vec<usize>>,
     argument_supports: &[BTreeSet<Vec<usize>>],
@@ -2562,7 +2607,6 @@ fn ckyz_support_compose_domain(
     Ok(out)
 }
 
-#[cfg(test)]
 fn ckyz_inverse_mirror_map_support_domain(
     alpha_supports: &[BTreeSet<Vec<usize>>],
     domain: &CkyzMonomialDomain,
@@ -2596,7 +2640,6 @@ fn ckyz_inverse_mirror_map_support_domain(
     Ok(z_of_q)
 }
 
-#[cfg(test)]
 fn ckyz_predicted_support_domain_for_degrees(
     relations: &[Vec<i64>],
     local_intersection_terms: &[CkyzLocalIntersectionTerm],
@@ -7469,6 +7512,7 @@ mod tests {
         compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
         compute_ckyz_local_gv_invariants, compute_ckyz_local_gv_invariants_for_degrees,
         compute_ckyz_local_gv_invariants_for_degrees_with_causal_domain,
+        compute_ckyz_local_gv_invariants_for_degrees_with_predicted_support_domain,
         compute_ckyz_local_instanton_potential_corrections,
         compute_ckyz_local_instanton_potential_corrections_domain,
         compute_ckyz_local_prepotential_period_corrections,
@@ -8278,6 +8322,35 @@ mod tests {
     }
 
     #[test]
+    fn ckyz_predicted_support_domain_api_matches_target_downset_for_f0_ray() {
+        let relations = vec![vec![-2, 1, 0, 1, 0], vec![-2, 0, 1, 0, 1]];
+        let local_intersection_terms = [CkyzLocalIntersectionTerm {
+            first: 0,
+            second: 1,
+            coefficient: 1,
+        }];
+        let cover_weights = [2, 2];
+        let target_degrees = [vec![3, 2], vec![6, 4], vec![9, 6]];
+
+        let predicted = compute_ckyz_local_gv_invariants_for_degrees_with_predicted_support_domain(
+            &relations,
+            &local_intersection_terms,
+            &cover_weights,
+            &target_degrees,
+        )
+        .unwrap();
+        let broad = compute_ckyz_local_gv_invariants_for_degrees(
+            &relations,
+            &local_intersection_terms,
+            &cover_weights,
+            &target_degrees,
+        )
+        .unwrap();
+
+        assert_eq!(predicted, broad);
+    }
+
+    #[test]
     fn ckyz_predicted_support_domain_covers_observed_polygon5_ray_support() {
         let relations = ckyz_polygon5_relations();
         let local_intersection_terms = ckyz_polygon5_intersection_terms();
@@ -8326,6 +8399,31 @@ mod tests {
             &target_degrees,
         )
         .unwrap();
+        assert_eq!(predicted, broad);
+    }
+
+    #[test]
+    fn ckyz_predicted_support_domain_api_matches_target_downset_for_polygon5_ray() {
+        let relations = ckyz_polygon5_relations();
+        let local_intersection_terms = ckyz_polygon5_intersection_terms();
+        let cover_weights = [1, 1, 1];
+        let target_degrees = [vec![4, 3, 2], vec![8, 6, 4]];
+
+        let predicted = compute_ckyz_local_gv_invariants_for_degrees_with_predicted_support_domain(
+            &relations,
+            &local_intersection_terms,
+            &cover_weights,
+            &target_degrees,
+        )
+        .unwrap();
+        let broad = compute_ckyz_local_gv_invariants_for_degrees(
+            &relations,
+            &local_intersection_terms,
+            &cover_weights,
+            &target_degrees,
+        )
+        .unwrap();
+
         assert_eq!(predicted, broad);
     }
 

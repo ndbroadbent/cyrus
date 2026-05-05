@@ -67,8 +67,10 @@ first-principles regression checks all ten saved entries for the canonical F0
 source directions `[1,1]` and `[1,2]`, plus F1 source directions `[2,1]` and
 `[3,1]`. The saved `potent_rays_gv.dat` values remain validation targets only.
 The full ten-entry rows across all families still need a sharper
-coefficient-targeted extractor; the current cover-closed past-downset domain is
-source-derived but still too broad for the largest target directions.
+coefficient-targeted extractor; the current support-predicted domain is
+source-derived and avoids full broad rational composition before domain
+construction, but it still enumerates alpha/beta supports on the broad downset
+and remains too broad for the largest target directions.
 
 The computational-mirror paper explains the implementation boundary that this
 source code implies. Finite HKTY computations need a causally closed truncation:

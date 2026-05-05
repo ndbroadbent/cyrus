@@ -113,6 +113,7 @@ pub use gv::{
     compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
     compute_ckyz_local_gv_invariants, compute_ckyz_local_gv_invariants_for_degrees,
     compute_ckyz_local_gv_invariants_for_degrees_with_causal_domain,
+    compute_ckyz_local_gv_invariants_for_degrees_with_predicted_support_domain,
     compute_ckyz_local_instanton_potential_corrections,
     compute_ckyz_local_prepotential_period_corrections,
     compute_ckyz_local_surface_gv_invariants_for_multiples_with_causal_domain,

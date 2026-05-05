@@ -26,7 +26,7 @@ run pass. Any remaining mismatch must be explicit and localizable.
 | High-dimensional selected small toric curves | Cyrus computes Mori-cap rays, applies the input-chamber volume cutoff, and matches the 4-214-647 `small_curves.dat` checkpoint with pair pruning | Implemented for checkpoint rule |
 | Small-curve pruning semantics | `CurvePruningStrategy::{PairDecomposable, FiniteSemigroup}` exposes the checkpoint rule and stricter finite-set semigroup diagnostic separately | Implemented, with documented mismatch |
 | Small toric GV values | Toric two-face/origin-circuit formulas match `small_curves_gv.dat` for 4-214-647 | Implemented for covered selected-toric formulas |
-| Potent-ray convergence data | `curve_row_span_rank`, `potent_ray_convergence`, `diagnose_affine_toric_circuit`, CKYZ local-surface identification, source-derived local CKYZ GV extraction, and the Stage 5 potent-ray diagnostics compute rank, corrected-Kähler volumes, affine local-circuit structure, `log xi_n` slopes, first-four GV checks for all 395 rank-two CKYZ rows, and all-ten checks for the canonical F0 `[1,1]`/`[1,2]` and F1 `[2,1]`/`[3,1]` families; targeted CKYZ extraction now uses a past-downset domain for requested degrees; `compute_ckyz_local_gv_invariants_for_degrees_with_causal_domain` adds a cygv-style generated semigroup domain; `ckyz_local_surface_causal_domain_spec` derives coordinate generators and finite-limit grading from matched CKYZ source data for guardrail checks | Partially implemented; full ten-entry extraction across all families, rank-four contexts, coefficient-history causal domains for large McAllister supports, and generated low-dimensional-face ray sampling still missing |
+| Potent-ray convergence data | `curve_row_span_rank`, `potent_ray_convergence`, `diagnose_affine_toric_circuit`, CKYZ local-surface identification, source-derived local CKYZ GV extraction, and the Stage 5 potent-ray diagnostics compute rank, corrected-Kähler volumes, affine local-circuit structure, `log xi_n` slopes, first-four GV checks for all 395 rank-two CKYZ rows, and all-ten checks for the canonical F0 `[1,1]`/`[1,2]` and F1 `[2,1]`/`[3,1]` families; targeted CKYZ extraction now has the broad past-downset API, a cygv-style generated semigroup API, and a support-predicted API that is used by the McAllister rank-two CKYZ gate; `ckyz_local_surface_causal_domain_spec` derives coordinate generators and finite-limit grading from matched CKYZ source data for guardrail checks | Partially implemented; full ten-entry extraction across all families, rank-four contexts, direct coefficient-history domains for large McAllister supports, and generated low-dimensional-face ray sampling still missing |
 | Flop/corrected-chamber continuation | Negative small-curve volumes and real-axis dilog branch behavior are classified; even-parity branch-cut failures are explicit via `GvDilogFailure` | Diagnosed, not resolved |
 | KKLT corrected Kähler solve | Runner reaches a no-replay corrected Kähler vector and corrected volume without loading `corrected_kahler_param.dat` by default | Implemented but not exact |
 | Corrected target-volume / GV correction agreement | Diagnostics localize the residual to corrected-chamber GV target corrections, not classical geometry or file semantics | Open blocker |
@@ -51,15 +51,17 @@ run pass. Any remaining mismatch must be explicit and localizable.
    The source-level reason is now explicit: cygv's series inversion subtracts
    lower-degree `Li2(q_N)` history from a semigroup, so a coefficient-targeted
    local domain is needed before the saved ten-entry rows are a fair comparison.
-   The current CKYZ target-downset domain is a prerequisite, not the full
+   The current CKYZ support-predicted domain is a prerequisite, not the full
    history domain for ray-direction rows. The gated test can now be raised with
    `CYRUS_CKYZ_MULTIPLES_TO_CHECK` and narrowed with
    `CYRUS_CKYZ_TARGET_DIRECTION`; `N=4` now passes as the default first-principles
-   gate in about 110 seconds. The narrowed polygon-5 `[4,3,2]` direction now
-   also completes at `N=4` after flattening the CKYZ addition table and using
-   sparse valid product pairs. An unfiltered `N=5` run exceeded a 600 second
-   timeout, so the next step is the coefficient/path-history domain rather than
-   pushing the existing all-row gate higher.
+   gate through the support-predicted API in about 132 seconds. The older
+   target-downset path completed the same gate in about 110 seconds, so the new
+   API is a correctness/structure promotion rather than a performance win.
+   A focused polygon-5 `[4,3,2]`, `N=5` diagnostic still exceeded a 300 second
+   timeout, and an earlier unfiltered `N=5` run exceeded a 600 second timeout,
+   so the next step is direct coefficient/path-history support generation rather
+   than pushing the existing all-row gate higher.
 3. Pair-pruned selected curves match McAllister's `small_curves.dat`, while a
    stricter finite-semigroup diagnostic removes five additional curves. This is
    exposed as a policy choice, not hidden.

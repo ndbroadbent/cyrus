@@ -7,7 +7,8 @@ use std::path::Path;
 use cyrus_core::{
     AffineToricCircuitDiagnostic, CkyzLocalSurfaceKind, LocalToricCircuitKind,
     LocalToricCoordinate2D, Point, Polytope, RankTwoLocalChargeModel, RankTwoLocalSupportSignature,
-    ckyz_local_surface_cover_weight_coefficients, compute_ckyz_local_gv_invariants_for_degrees,
+    ckyz_local_surface_cover_weight_coefficients,
+    compute_ckyz_local_gv_invariants_for_degrees_with_predicted_support_domain,
     compute_local_toric_circuit_gv_series, curve_in_rational_row_span,
     diagnose_affine_toric_circuit, identify_ckyz_local_surface, rank_two_local_charge_model,
     rank_two_local_support_signature,
@@ -953,7 +954,7 @@ fn assert_mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed(
             multiples_to_check,
         );
         let source_gvs = gv_cache.entry(cache_key).or_insert_with(|| {
-            compute_ckyz_local_gv_invariants_for_degrees(
+            compute_ckyz_local_gv_invariants_for_degrees_with_predicted_support_domain(
                 &identification.source_relations,
                 &identification.local_intersection_terms,
                 cover_weights,
