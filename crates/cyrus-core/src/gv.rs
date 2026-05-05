@@ -385,14 +385,27 @@ pub fn gv_divisor_basis_data(
 fn integer_matrix_to_i64(matrix: &[Vec<Integer>], context: &str) -> Result<Vec<Vec<i64>>> {
     matrix
         .iter()
-        .map(|row| {
-            row.iter()
-                .map(|value| {
-                    i64::try_from(value).map_err(|_| {
-                        Error::InvalidInput(format!("{context} entry does not fit in i64"))
-                    })
-                })
-                .collect()
+        .map(|row| integer_vector_to_i64(row, &format!("{context} entry")))
+        .collect()
+}
+
+fn integer_vector_to_i64(vector: &[Integer], context: &str) -> Result<Vec<i64>> {
+    vector
+        .iter()
+        .map(|value| {
+            i64::try_from(value)
+                .map_err(|_| Error::InvalidInput(format!("{context} does not fit in i64")))
+        })
+        .collect()
+}
+
+fn checked_neg_i64_vector(vector: &[i64], context: &str) -> Result<Vec<i64>> {
+    vector
+        .iter()
+        .map(|&value| {
+            value
+                .checked_neg()
+                .ok_or_else(|| Error::InvalidInput(format!("{context} negation overflowed")))
         })
         .collect()
 }
@@ -4413,6 +4426,66 @@ pub fn check_supporting_mori_face_normal(
     }))
 }
 
+/// Find an exact supporting normal from the integer kernel of face generators.
+///
+/// This is deliberately conservative: it only succeeds for codimension-one
+/// faces where the supplied face generators have a one-dimensional integer
+/// kernel. Higher-codimension faces need an additional exact selection step
+/// inside that kernel, so this returns `Ok(None)` for them instead of guessing.
+///
+/// The found normal is then verified by [`check_supporting_mori_face_normal`],
+/// so malformed dimensions and non-supporting candidate faces fail loudly or
+/// return `Ok(None)` using the same integer arithmetic as a caller-supplied
+/// certificate.
+pub fn certify_supporting_mori_face_by_exact_kernel(
+    face_generators: &[Vec<i64>],
+    mori_generators: &[Vec<i64>],
+) -> Result<Option<SupportingMoriFaceCertificate>> {
+    let Some(first_mori_generator) = mori_generators.first() else {
+        return Err(Error::InvalidInput(
+            "supporting Mori face check requires Mori generators".into(),
+        ));
+    };
+    let dim = first_mori_generator.len();
+    if dim == 0 {
+        return Err(Error::InvalidInput(
+            "supporting Mori face generator dimension is zero".into(),
+        ));
+    }
+    for generator in mori_generators {
+        validate_curve_dimension("Mori generator", generator, dim)?;
+    }
+    if face_generators.is_empty() {
+        return Ok(None);
+    }
+
+    let mut face_matrix = Vec::with_capacity(face_generators.len());
+    for generator in face_generators {
+        validate_curve_dimension("face generator", generator, dim)?;
+        face_matrix.push(
+            generator
+                .iter()
+                .map(|&entry| Integer::from(entry))
+                .collect::<Vec<_>>(),
+        );
+    }
+
+    let kernel = integer_kernel(&face_matrix);
+    if kernel.len() != 1 {
+        return Ok(None);
+    }
+    let normal =
+        integer_vector_to_i64(&kernel[0], "supporting Mori face exact kernel normal entry")?;
+    if let Some(certificate) =
+        check_supporting_mori_face_normal(&normal, face_generators, mori_generators)?
+    {
+        return Ok(Some(certificate));
+    }
+
+    let opposite_normal = checked_neg_i64_vector(&normal, "supporting Mori face normal")?;
+    check_supporting_mori_face_normal(&opposite_normal, face_generators, mori_generators)
+}
+
 /// Extract the Mori generators cut out by an exact supporting normal.
 ///
 /// The returned generators are the rows of `mori_generators` whose exact
@@ -7526,11 +7599,11 @@ mod tests {
         CkyzLocalSurfaceKind, CkyzMonomialDomain, CurveDecompositionTerm, CurvePruningStrategy,
         GvLatticeAugmentation, LocalToricCircuitKind, LocalToricCoordinate2D,
         OriginCircuitCurveWitness, OriginCircuitRelationPoint, ToricCurveCandidate,
-        check_supporting_mori_face_normal, ckyz_cover_closed_target_degrees,
-        ckyz_local_surface_causal_domain_spec, ckyz_local_surface_cover_weight_coefficients,
-        ckyz_local_surface_target_degrees, ckyz_observed_support_domain_for_degrees,
-        ckyz_predicted_support_domain_for_degrees, ckyz_series_mul_domain,
-        compute_ambient_one_dimensional_ray_gv_series,
+        certify_supporting_mori_face_by_exact_kernel, check_supporting_mori_face_normal,
+        ckyz_cover_closed_target_degrees, ckyz_local_surface_causal_domain_spec,
+        ckyz_local_surface_cover_weight_coefficients, ckyz_local_surface_target_degrees,
+        ckyz_observed_support_domain_for_degrees, ckyz_predicted_support_domain_for_degrees,
+        ckyz_series_mul_domain, compute_ambient_one_dimensional_ray_gv_series,
         compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
         compute_ckyz_local_gv_invariants, compute_ckyz_local_gv_invariants_for_degrees,
         compute_ckyz_local_gv_invariants_for_degrees_with_causal_domain,
@@ -9149,6 +9222,56 @@ mod tests {
         .unwrap_err();
 
         assert!(err.to_string().contains("dot product overflowed"));
+    }
+
+    #[test]
+    fn supporting_mori_face_exact_kernel_certifies_codimension_one_face() {
+        let certificate = certify_supporting_mori_face_by_exact_kernel(
+            &[vec![1, 0]],
+            &[vec![1, 0], vec![0, 1], vec![1, 1]],
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(certificate.normal, vec![0, 1]);
+        assert_eq!(certificate.zero_generator_count, 1);
+        assert_eq!(certificate.positive_generator_count, 2);
+    }
+
+    #[test]
+    fn supporting_mori_face_exact_kernel_orients_the_normal() {
+        let certificate = certify_supporting_mori_face_by_exact_kernel(
+            &[vec![1, 0]],
+            &[vec![1, 0], vec![0, -1], vec![1, -1]],
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(certificate.normal, vec![0, -1]);
+        assert_eq!(certificate.zero_generator_count, 1);
+        assert_eq!(certificate.positive_generator_count, 2);
+    }
+
+    #[test]
+    fn supporting_mori_face_exact_kernel_declines_higher_codimension_faces() {
+        let certificate = certify_supporting_mori_face_by_exact_kernel(
+            &[vec![1, 0, 0]],
+            &[vec![1, 0, 0], vec![0, 1, 0], vec![0, 0, 1]],
+        )
+        .unwrap();
+
+        assert!(certificate.is_none());
+    }
+
+    #[test]
+    fn supporting_mori_face_exact_kernel_checks_dimensions() {
+        let err = certify_supporting_mori_face_by_exact_kernel(
+            &[vec![1, 0]],
+            &[vec![1, 0], vec![0, 1, 0]],
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("Mori generator dimension 3"));
     }
 
     #[test]
