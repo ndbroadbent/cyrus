@@ -214,6 +214,59 @@ pub fn flop_reassign_gv_invariants(
     Some(out)
 }
 
+/// Compute the exact Weyl reflection matrix across a finite-distance gauge
+/// facet.
+///
+/// This is the source formula used in McAllister et al.'s moduli-space
+/// reconstruction to identify stable Weyl redundancies:
+///
+/// ```text
+/// w^a_b = delta^a_b - 2 D^a C_b / <C,D>
+/// <C,D> = D^a C_a
+/// ```
+///
+/// `shrinking_divisor` is the divisor class `D^a`, and `curve_class` is the
+/// shrinking curve class `C_b` in the dual coordinate basis. The returned
+/// matrix is row-major with row `a` and column `b`. This function only
+/// computes the exact reflection; it does not prove that the divisor actually
+/// vanishes on the dual facet or that the chamber is a stable Weyl chamber.
+#[must_use]
+pub fn weyl_reflection_matrix(
+    shrinking_divisor: &[Integer],
+    curve_class: &[i64],
+) -> Option<Vec<Vec<Rational>>> {
+    if shrinking_divisor.is_empty() || shrinking_divisor.len() != curve_class.len() {
+        return None;
+    }
+
+    let pairing = shrinking_divisor
+        .iter()
+        .zip(curve_class.iter())
+        .fold(Integer::from(0), |acc, (divisor_entry, curve_entry)| {
+            acc + divisor_entry * Integer::from(*curve_entry)
+        });
+    if pairing == 0 {
+        return None;
+    }
+
+    let denominator = Rational::from(pairing);
+    let dim = curve_class.len();
+    let mut reflection = vec![vec![Rational::from(0); dim]; dim];
+    for (row, divisor_entry) in shrinking_divisor.iter().enumerate() {
+        for (col, curve_entry) in curve_class.iter().enumerate() {
+            let delta = if row == col {
+                Rational::from(1)
+            } else {
+                Rational::from(0)
+            };
+            let numerator = Integer::from(2) * divisor_entry * Integer::from(*curve_entry);
+            reflection[row][col] = delta - Rational::from(numerator) / denominator.clone();
+        }
+    }
+
+    Some(reflection)
+}
+
 fn kklt_debug_enabled() -> bool {
     env::var_os("CYRUS_KKLT_DEBUG").is_some()
 }
@@ -2055,6 +2108,43 @@ mod tests {
     }
 
     #[test]
+    fn test_weyl_reflection_matrix_applies_exact_source_formula() {
+        let divisor = vec![Integer::from(1), Integer::from(0)];
+
+        let reflection = weyl_reflection_matrix(&divisor, &[1, 0]).unwrap();
+
+        assert_eq!(
+            reflection,
+            vec![
+                vec![Rational::from(-1), Rational::from(0)],
+                vec![Rational::from(0), Rational::from(1)],
+            ]
+        );
+    }
+
+    #[test]
+    fn test_weyl_reflection_matrix_keeps_fractional_entries_exact() {
+        let divisor = vec![Integer::from(1), Integer::from(1)];
+
+        let reflection = weyl_reflection_matrix(&divisor, &[1, 2]).unwrap();
+
+        assert_eq!(
+            reflection,
+            vec![
+                vec![Rational::from_signeds(1, 3), Rational::from_signeds(-4, 3)],
+                vec![Rational::from_signeds(-2, 3), Rational::from_signeds(-1, 3)],
+            ]
+        );
+    }
+
+    #[test]
+    fn test_weyl_reflection_matrix_rejects_invalid_pairing() {
+        assert!(weyl_reflection_matrix(&[], &[]).is_none());
+        assert!(weyl_reflection_matrix(&[Integer::from(1)], &[1, 0]).is_none());
+        assert!(weyl_reflection_matrix(&[Integer::from(1), Integer::from(1)], &[1, -1]).is_none());
+    }
+
+    #[test]
     fn test_flop_transform_rejects_dimension_mismatch() {
         let kappa = Intersection::new(2);
         let c2 = vec![Integer::from(1), Integer::from(2)];
@@ -2065,6 +2155,7 @@ mod tests {
             flop_reassign_gv_invariants(&[(vec![1, 0], Integer::from(1))], &[1], &Integer::from(1))
                 .is_none()
         );
+        assert!(weyl_reflection_matrix(&c2, &[1]).is_none());
     }
 
     #[test]

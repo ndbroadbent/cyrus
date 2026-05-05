@@ -171,6 +171,7 @@ pub use kklt::{
     scale_mixed_basis_kklt_branch_initialization_to_target, solve_mixed_basis_path_following,
     solve_mixed_basis_path_following_branch_candidates, solve_path_following,
     solve_two_phase_mixed_basis_path_following, solve_two_phase_path_following,
+    weyl_reflection_matrix,
 };
 pub use lattice::Point;
 pub use polytope::Polytope;
