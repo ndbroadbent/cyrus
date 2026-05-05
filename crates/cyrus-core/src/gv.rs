@@ -6714,6 +6714,26 @@ mod tests {
     }
 
     #[test]
+    fn ckyz_explicit_domain_drops_products_outside_monomial_map() {
+        let domain =
+            CkyzMonomialDomain::from_degrees(2, [vec![0, 0], vec![1, 0], vec![0, 1], vec![2, 0]])
+                .unwrap();
+        let lhs = BTreeMap::from([
+            (vec![1, 0], Rational::from(2)),
+            (vec![0, 1], Rational::from(5)),
+        ]);
+        let rhs = BTreeMap::from([(vec![1, 0], Rational::from(3))]);
+
+        let product = ckyz_series_mul_domain(&lhs, &rhs, &domain).unwrap();
+
+        assert_eq!(product, BTreeMap::from([(vec![2, 0], Rational::from(6))]));
+        assert!(
+            !product.contains_key(&vec![1, 1]),
+            "explicit CKYZ domains must mirror cygv monomial_map semantics by dropping absent sums"
+        );
+    }
+
+    #[test]
     fn affine_toric_circuit_detects_local_p2_triangle() {
         let points = vec![
             Point::new(vec![0, 1, -3, 6]),
