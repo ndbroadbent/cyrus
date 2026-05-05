@@ -2961,7 +2961,57 @@ fn ckyz_support_power_cache_domain(
     Ok(powers)
 }
 
-fn ckyz_support_exp_domain(
+fn ckyz_support_additive_closure_domain(
+    support: &BTreeSet<usize>,
+    domain: &CkyzMonomialDomain,
+) -> Result<BTreeSet<usize>> {
+    let identity = ckyz_support_identity_index(domain)?;
+    let mut closure = BTreeSet::from([identity]);
+    if support.is_empty() {
+        return Ok(closure);
+    }
+
+    let mut generators = support.iter().copied().collect::<Vec<_>>();
+    generators.sort_by(|lhs, rhs| {
+        ckyz_total_degree(&domain.degrees[*lhs])
+            .expect("domain degrees are validated")
+            .cmp(&ckyz_total_degree(&domain.degrees[*rhs]).expect("domain degrees are validated"))
+            .then_with(|| domain.degrees[*lhs].cmp(&domain.degrees[*rhs]))
+    });
+
+    for generator in generators {
+        if generator >= domain.degrees.len() {
+            return Err(Error::InvalidInput(
+                "CKYZ support closure generator is outside the domain".into(),
+            ));
+        }
+        if generator == identity || closure.contains(&generator) {
+            continue;
+        }
+
+        let base_closure = closure.iter().copied().collect::<Vec<_>>();
+        let mut frontier = VecDeque::new();
+        for base in base_closure {
+            if let Some(sum_index) = domain.sum_index(base, generator)? {
+                if closure.insert(sum_index) {
+                    frontier.push_back(sum_index);
+                }
+            }
+        }
+        while let Some(current) = frontier.pop_front() {
+            if let Some(sum_index) = domain.sum_index(current, generator)? {
+                if closure.insert(sum_index) {
+                    frontier.push_back(sum_index);
+                }
+            }
+        }
+    }
+
+    Ok(closure)
+}
+
+#[cfg(test)]
+fn ckyz_support_exp_domain_by_powers(
     support: &BTreeSet<usize>,
     domain: &CkyzMonomialDomain,
 ) -> Result<BTreeSet<usize>> {
@@ -2975,9 +3025,17 @@ fn ckyz_support_exp_domain(
         if power.is_empty() {
             break;
         }
-        out.extend(power.iter().cloned());
+        out.extend(power.iter().copied());
     }
     Ok(out)
+}
+
+fn ckyz_support_exp_domain(
+    support: &BTreeSet<usize>,
+    domain: &CkyzMonomialDomain,
+) -> Result<BTreeSet<usize>> {
+    ckyz_support_min_total_degree(support, domain, "CKYZ support exponential input")?;
+    ckyz_support_additive_closure_domain(support, domain)
 }
 
 fn ckyz_support_compose_domain(
@@ -3071,6 +3129,8 @@ fn ckyz_predicted_support_domain_for_degrees(
     local_intersection_terms: &[CkyzLocalIntersectionTerm],
     target_degrees: &[Vec<usize>],
 ) -> Result<CkyzMonomialDomain> {
+    let trace_timing = env::var_os("CYRUS_TRACE_CKYZ_SUPPORT_DOMAIN").is_some();
+    let trace_start = trace_timing.then(std::time::Instant::now);
     validate_ckyz_relations(relations)?;
     let rank = relations.len();
     validate_ckyz_target_degrees(target_degrees, rank)?;
@@ -3084,6 +3144,7 @@ fn ckyz_predicted_support_domain_for_degrees(
 
     let extraction_degrees = ckyz_cover_closed_target_degrees(target_degrees)?;
     let broad_domain = CkyzMonomialDomain::target_downset(&extraction_degrees, rank)?;
+    let trace_after_domain = trace_timing.then(std::time::Instant::now);
     let mut degree_set = BTreeSet::from([vec![0; rank]]);
     for degree in &extraction_degrees {
         degree_set.insert(degree.clone());
@@ -3097,6 +3158,7 @@ fn ckyz_predicted_support_domain_for_degrees(
     }
 
     let alpha_supports = ckyz_log_period_support_indices_domain(relations, &broad_domain)?;
+    let trace_after_alpha = trace_timing.then(std::time::Instant::now);
     for support in &alpha_supports {
         degree_set.extend(
             support
@@ -3105,6 +3167,7 @@ fn ckyz_predicted_support_domain_for_degrees(
         );
     }
     let z_of_q_supports = ckyz_inverse_mirror_map_support_domain(&alpha_supports, &broad_domain)?;
+    let trace_after_z = trace_timing.then(std::time::Instant::now);
     for support in &z_of_q_supports {
         degree_set.extend(
             support
@@ -3141,19 +3204,46 @@ fn ckyz_predicted_support_domain_for_degrees(
         contracted_support.extend(beta_support);
         contracted_support.extend(alpha_product_support);
     }
+    let trace_after_contracted = trace_timing.then(std::time::Instant::now);
     degree_set.extend(
         contracted_support
             .iter()
             .map(|&index| broad_domain.degrees[index].clone()),
     );
 
-    let potential_support =
-        ckyz_support_compose_domain(&contracted_support, &z_of_q_supports, &broad_domain)?;
-    degree_set.extend(
-        potential_support
+    let trace_after_potential = trace_timing.then(std::time::Instant::now);
+    if let (
+        Some(start),
+        Some(after_domain),
+        Some(after_alpha),
+        Some(after_z),
+        Some(after_contracted),
+        Some(after_potential),
+    ) = (
+        trace_start,
+        trace_after_domain,
+        trace_after_alpha,
+        trace_after_z,
+        trace_after_contracted,
+        trace_after_potential,
+    ) {
+        let alpha_sizes = alpha_supports.iter().map(BTreeSet::len).collect::<Vec<_>>();
+        let z_sizes = z_of_q_supports
             .iter()
-            .map(|&index| broad_domain.degrees[index].clone()),
-    );
+            .map(BTreeSet::len)
+            .collect::<Vec<_>>();
+        eprintln!(
+            "[CKYZ_SUPPORT_DOMAIN] rank={rank} broad={} selected={} alpha_sizes={alpha_sizes:?} z_sizes={z_sizes:?} contracted_size={} domain={:?} alpha={:?} z={:?} contracted={:?} potential=skipped({:?})",
+            broad_domain.degrees.len(),
+            degree_set.len(),
+            contracted_support.len(),
+            after_domain.duration_since(start),
+            after_alpha.duration_since(after_domain),
+            after_z.duration_since(after_alpha),
+            after_contracted.duration_since(after_z),
+            after_potential.duration_since(after_contracted),
+        );
+    }
 
     CkyzMonomialDomain::from_degrees(rank, degree_set)
 }
@@ -9357,7 +9447,7 @@ fn is_strictly_dual(rays: &[Vec<i64>], v: &[i64]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::f64::consts::PI;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -9377,7 +9467,8 @@ mod tests {
         ckyz_log_period_support_indices_domain, ckyz_observed_support_domain_for_degrees,
         ckyz_predicted_support_domain_for_degrees, ckyz_second_log_period_series_for_pair_domain,
         ckyz_second_log_period_support_indices_for_pair_domain, ckyz_series_mul_domain,
-        ckyz_series_support_indices, classify_nilpotent_rays_from_two_pass_divergence_checks,
+        ckyz_series_support_indices, ckyz_support_exp_domain, ckyz_support_exp_domain_by_powers,
+        classify_nilpotent_rays_from_two_pass_divergence_checks,
         classify_nop_rays_from_finite_gv_table, compute_ambient_one_dimensional_ray_gv_series,
         compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
         compute_ckyz_local_gv_invariants, compute_ckyz_local_gv_invariants_for_degrees,
@@ -10387,6 +10478,24 @@ mod tests {
                 assert_eq!(beta_support, ckyz_series_support_indices(&beta, &domain));
             }
         }
+    }
+
+    #[test]
+    fn ckyz_support_exponential_uses_same_semigroup_as_power_union() {
+        let domain = CkyzMonomialDomain::target_downset(&[vec![4, 3, 2]], 3).unwrap();
+        let support = [vec![1, 0, 0], vec![0, 1, 1], vec![2, 1, 0]]
+            .into_iter()
+            .map(|degree| {
+                domain
+                    .index_of(&degree)
+                    .expect("degree should be in domain")
+            })
+            .collect::<BTreeSet<_>>();
+
+        let by_closure = ckyz_support_exp_domain(&support, &domain).unwrap();
+        let by_powers = ckyz_support_exp_domain_by_powers(&support, &domain).unwrap();
+
+        assert_eq!(by_closure, by_powers);
     }
 
     #[test]
