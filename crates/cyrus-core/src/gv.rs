@@ -4999,6 +4999,7 @@ fn ckyz_q_degree_li2_coefficient_in_z_domain(
     target: &[usize],
     alpha_terms: &[CkyzScaledAlphaTerm],
     domain: &CkyzMonomialDomain,
+    exp_support: Option<&BTreeSet<usize>>,
     exp_cache: &mut CkyzExpCoefficientCache,
 ) -> Result<Rational> {
     if degree.len() != domain.rank || target.len() != domain.rank {
@@ -5030,6 +5031,9 @@ fn ckyz_q_degree_li2_coefficient_in_z_domain(
         let delta_index = domain
             .index_of(&delta)
             .expect("delta was checked to be in domain");
+        if exp_support.is_some_and(|support| !support.contains(&delta_index)) {
+            continue;
+        }
         let scale_degree = degree
             .iter()
             .map(|entry| {
@@ -5253,6 +5257,7 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
                 target,
                 &alpha_terms,
                 domain,
+                Some(exp_support),
                 &mut exp_coefficient_cache,
             )?;
             if li2_coefficient == 0 {
@@ -11895,6 +11900,7 @@ mod tests {
                     target,
                     &alpha_terms,
                     &domain,
+                    None,
                     &mut coefficient_cache,
                 )
                 .unwrap();

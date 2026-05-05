@@ -355,11 +355,21 @@ validation this changes extraction from about 1.26 seconds in the rejected
 batched-demand experiment to:
 
 ```text
-[CKYZ_Z_EXTRACT] degrees=434 nonzero_gvs=217 li2_coefficients=9443 li2_support_skips=24090 li2_support_classes=6 exp_coeff_cache=25892 scaled_alpha_cache=25826 predecessor_deltas=1291 elapsed=859.49275ms
+[CKYZ_Z_EXTRACT] degrees=434 nonzero_gvs=217 li2_coefficients=9443 li2_support_skips=24090 li2_support_classes=6 exp_coeff_cache=23529 scaled_alpha_cache=23529 predecessor_deltas=1061 elapsed=817.675958ms
+```
+
+The coefficient routine also receives the support set now, so surviving target
+pairs no longer compute unsupported multiple-cover deltas just to discover zero
+coefficients recursively. On the small polygon-5 trace this lowers the
+exponential cache from 1,382 entries to 1,165 entries while keeping the same
+502 nonzero Li2 coefficients:
+
+```text
+[CKYZ_Z_EXTRACT] degrees=79 nonzero_gvs=43 li2_coefficients=502 li2_support_skips=815 li2_support_classes=6 exp_coeff_cache=1165 scaled_alpha_cache=1165 predecessor_deltas=174 elapsed=20.084541ms
 ```
 
 The `[4,3,2]`, N=10 filtered gate still timed out after 240 seconds without an
-extraction trace, even after reaching the same 5,235-degree history in 16.8
+extraction trace, even after reaching the same 5,235-degree history in 16.7
 seconds. Support pruning is therefore a real reduction, but not the final
 coefficient-demand solution. The remaining target is to shrink the selected
 history or compute the surviving 2.59 million supported states with a
