@@ -262,6 +262,21 @@ The better statement is: `dual_curves*.dat` validate generic low-dimensional
 `compute_gvs`, while `small_curves*.dat` validate the selected toric-curve
 pipeline.
 
+Two source details make this boundary explicit:
+
+- `latest_cytools/compute_gv_invariants.py` loads `dual_curves.dat` and
+  `dual_curves_gv.dat`, constructs the dual polytope triangulation, runs
+  `cy.compute_gvs(min_points=100)`, and then maps basis coordinates back to
+  ambient coordinates with `cy.curve_basis(include_origin=True, as_matrix=True)`.
+  That script is a low-dimensional mirror-side check, not the high-`h11`
+  selected-small-curve algorithm.
+- `mcallister_2107/CLAUDE.md` warns that `min_points`, not `max_deg`, is the
+  practical CYTools/cygv control for those generic GV runs and states that
+  McAllister's quoted "max degree" was the highest sampled curve, not a direct
+  cutoff. This matches the CYTools source: `max_deg` belongs to cygv semigroup
+  truncation, while CYTools' wrapper independently augments generators with
+  `mori.find_lattice_points(min_points=100*h11)`.
+
 ## Flop Continuation
 
 The paper warns that continuing the Kähler-coordinate formula through a flop is
@@ -291,14 +306,61 @@ Executable checks now pin the boundary:
 So the saved input-chamber small-curve set cannot be repaired by applying the
 simple odd-parity flop identity uniformly to all negative entries.
 
+## Verified Checkpoints
+
+The approximate-chamber selected-small-curve path is no longer speculative. With
+`CYRUS_FIRST_PRINCIPLES=1`, the focused Stage 5 tests recompute from upstream
+geometry:
+
+- 419 raw sub-cutoff toric curve candidates from `points.dat`, `heights.dat`,
+  `basis.dat`, `kahler_param.dat`, and `small_curves_cutoff.dat`;
+- 344 retained curves after the currently verified pair-decomposable pruning;
+- exact equality with `small_curves.dat`, using that file only as an assertion;
+- exact equality with all 344 `small_curves_gv.dat` values using Cyrus'
+  toric two-face/origin-circuit local formulas, again using the file only as an
+  assertion.
+
+The successful command was:
+
+```text
+CYRUS_FIRST_PRINCIPLES=1 cargo test -p cyrus-core --test mcallister_e2e \
+  stage5_mcallister_small_toric -- --nocapture
+```
+
+This narrows the remaining Stage 5 issue: the input-chamber small-curve
+selection and its local `1/-2` toric GV values are reproduced. The unresolved
+part is how to get a production-correct corrected-chamber instanton correction:
+full semigroup/Hilbert reduction, missing non-toric face/ray contributions, or
+explicit flop/chamber continuation.
+
 ## Next Productive Step
 
-Stop expanding top-contributor local checks. The next useful comparison is a
-faithful selected-small-curve method audit:
+Stop expanding top-contributor local checks. The selected-small-curve
+approximate-chamber checkpoint is now reproduced, so the next useful comparisons
+are corrected-chamber and generality audits:
 
-1. Reconstruct, from code/paper, the exact rule that produced
-   `small_curves.dat` and `small_curves_gv.dat`: chamber, volume cutoff,
-   toric-curve enumeration, pair-decomposable pruning, and face/ray GV method.
+1. Replace or certify the current pair-only "sums of others" pruning with a
+   faithful finite-semigroup/Hilbert-basis check. The 4-214 checkpoint happens
+   to match pair pruning, but the GA cannot assume that for arbitrary chambers.
+2. Apply the selected-small-curve rule to the corrected chamber, or if the
+   intended McAllister operation is analytic continuation through flops, port
+   that transformation explicitly using the paper's polylog identities.
+3. Port the low-dimensional face/ray GV path for potent and nilpotent checks,
+   where `cygv` full-semigroup input dumps are actually the right method.
+4. Use generic CYTools/cygv `compute_gvs` only for the low-dimensional
+   mirror/racetrack side and for isolated face/ray subproblems.
+
+The open question is now sharper: is the corrected-target residual caused by a
+missing corrected-chamber/non-toric contribution, an incomplete decomposition
+reduction, or by applying input-chamber small curves without the required
+flop/chamber continuation?
+
+Older wording of this audit treated the faithful selected-small-curve method as
+the next code change:
+
+1. Reconstruct, from code/paper, the exact rule that produced `small_curves.dat`
+   and `small_curves_gv.dat`: chamber, volume cutoff, toric-curve enumeration,
+   pair-decomposable pruning, and face/ray GV method.
 2. Compare Cyrus against that rule in the approximate chamber first, where the
    ancillary files are direct checkpoints.
 3. Then apply the same rule to the corrected chamber or, if the intended
@@ -307,20 +369,8 @@ faithful selected-small-curve method audit:
 4. Use `cygv` full-semigroup input dumps only for low-dimensional face/ray
    subproblems where that is the method actually being used.
 
-The open question is now sharper: is the residual caused by using the wrong
-small-curve chamber/continuation convention, or by an incomplete port of the
-toric/face GV method that generated the selected `small_curves_gv` values?
-
-The next code change should be one of these two narrow audits, not another broad
-GV fallback:
-
-1. The selected-small-curve checkpoint now reproduces the published 344 selected
-   classes and their `1/-2` GV values, using `small_curves*.dat` only as
-   assertions.
-2. Continue the corrected-chamber/flop-continuation audit beyond the 10 saved
-   input-chamber negative curves: the simple odd-parity identity is verified,
-   but the two even-parity saved curves and the broader corrected-chamber
-   target-vector residual still need a first-principles treatment.
+Items 1 and 2 in that older list are now done for the approximate chamber; do
+not reopen that loop unless a new source contradicts the current checkpoint.
 
 Concrete missing implementation pieces after the source read are:
 
