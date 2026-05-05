@@ -777,6 +777,7 @@ struct MissingGvTargetSample {
     branch_diagnostic: Option<MissingGvBranchDiagnostic>,
     real_cone_decomposable_by_other_generators: bool,
     real_cone_decomposition_active_generators: Option<usize>,
+    real_cone_decomposition_active_generator_basis_nonzero: Option<Vec<Vec<(usize, i64)>>>,
     ambient_nonzero: Vec<(usize, i64)>,
     basis_nonzero: Vec<(usize, i64)>,
 }
@@ -2339,6 +2340,20 @@ fn missing_gv_target_stats(
                 );
                 active_count
             });
+        let real_cone_decomposition_active_generator_basis_nonzero =
+            real_cone_decomposition.as_ref().map(|witness| {
+                witness
+                    .active_generator_indices
+                    .iter()
+                    .map(|&idx| {
+                        basis_rays[idx]
+                            .iter()
+                            .enumerate()
+                            .filter_map(|(coord, &value)| (value != 0).then_some((coord, value)))
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>()
+            });
         if is_mori_generator && !real_cone_decomposable {
             targets_that_are_lp_extremal_mori_generators += 1;
         }
@@ -2418,6 +2433,7 @@ fn missing_gv_target_stats(
                 branch_diagnostic,
                 real_cone_decomposable_by_other_generators: real_cone_decomposable,
                 real_cone_decomposition_active_generators,
+                real_cone_decomposition_active_generator_basis_nonzero,
                 ambient_nonzero: ambient_class
                     .iter()
                     .enumerate()
@@ -10483,6 +10499,10 @@ mod tests {
                     branch_diagnostic: None,
                     real_cone_decomposable_by_other_generators: true,
                     real_cone_decomposition_active_generators: Some(2),
+                    real_cone_decomposition_active_generator_basis_nonzero: Some(vec![
+                        vec![(0, 1)],
+                        vec![(1, 1)]
+                    ]),
                     ambient_nonzero: vec![(1, 1), (2, 1)],
                     basis_nonzero: vec![(0, 1), (1, 1)]
                 },
@@ -10499,6 +10519,9 @@ mod tests {
                     branch_diagnostic: None,
                     real_cone_decomposable_by_other_generators: true,
                     real_cone_decomposition_active_generators: Some(1),
+                    real_cone_decomposition_active_generator_basis_nonzero: Some(vec![vec![(
+                        0, 1
+                    )]]),
                     ambient_nonzero: vec![(1, 2)],
                     basis_nonzero: vec![(0, 2)]
                 }
