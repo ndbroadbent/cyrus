@@ -869,6 +869,64 @@ pub fn compute_ckyz_log_period_corrections(
     relations: &[Vec<i64>],
     max_total_degree: usize,
 ) -> Result<Vec<BTreeMap<Vec<usize>, Rational>>> {
+    validate_ckyz_relations(relations)?;
+    let rank = relations.len();
+    let mut corrections = vec![BTreeMap::new(); rank];
+    for degree in ckyz_multi_degrees(rank, max_total_degree) {
+        let point_pairings = ckyz_point_pairings(relations, &degree)?;
+        let values = ckyz_log_period_coefficients_for_degree(relations, &point_pairings)?;
+        for (coordinate_index, value) in values.into_iter().enumerate() {
+            if value != 0 {
+                corrections[coordinate_index].insert(degree.clone(), value);
+            }
+        }
+    }
+    Ok(corrections)
+}
+
+/// Compute CKYZ local double-log/prepotential period corrections.
+///
+/// This applies CKYZ's local intersection expression to the second
+/// `rho`-derivatives of the local hypergeometric coefficient. The output is
+/// still in B-model `z` coordinates; mirror-map substitution and
+/// multiple-cover inversion are intentionally separate later steps.
+///
+/// # Errors
+/// Returns an error for invalid CKYZ relation rows, out-of-range intersection
+/// terms, or degree conversion overflow.
+pub fn compute_ckyz_local_prepotential_period_corrections(
+    relations: &[Vec<i64>],
+    local_intersection_terms: &[CkyzLocalIntersectionTerm],
+    max_total_degree: usize,
+) -> Result<BTreeMap<Vec<usize>, Rational>> {
+    validate_ckyz_relations(relations)?;
+    let rank = relations.len();
+    for term in local_intersection_terms {
+        if term.first >= rank || term.second >= rank {
+            return Err(Error::InvalidInput(
+                "CKYZ local intersection term index is outside the relation rank".into(),
+            ));
+        }
+    }
+
+    let mut corrections = BTreeMap::new();
+    for degree in ckyz_multi_degrees(rank, max_total_degree) {
+        let point_pairings = ckyz_point_pairings(relations, &degree)?;
+        let second_derivatives =
+            ckyz_second_log_period_coefficients_for_degree(relations, &point_pairings)?;
+        let mut value = Rational::from(0);
+        for term in local_intersection_terms {
+            value += Rational::from(term.coefficient)
+                * second_derivatives[term.first][term.second].clone();
+        }
+        if value != 0 {
+            corrections.insert(degree, value);
+        }
+    }
+    Ok(corrections)
+}
+
+fn validate_ckyz_relations(relations: &[Vec<i64>]) -> Result<()> {
     let Some(first_relation) = relations.first() else {
         return Err(Error::InvalidInput(
             "CKYZ log-period corrections require at least one relation row".into(),
@@ -898,60 +956,7 @@ pub fn compute_ckyz_log_period_corrections(
             ));
         }
     }
-
-    let rank = relations.len();
-    let mut corrections = vec![BTreeMap::new(); rank];
-    for degree in ckyz_multi_degrees(rank, max_total_degree) {
-        let point_pairings = ckyz_point_pairings(relations, &degree)?;
-        let negative_points = point_pairings
-            .iter()
-            .enumerate()
-            .filter_map(|(index, &pairing)| (pairing < 0).then_some(index))
-            .collect::<Vec<_>>();
-
-        match negative_points.as_slice() {
-            [negative_point] => {
-                let coefficient =
-                    ckyz_one_negative_log_period_base(&point_pairings, *negative_point)?;
-                for coordinate_index in 0..rank {
-                    let relation_entry = relations[coordinate_index][*negative_point];
-                    if relation_entry == 0 {
-                        continue;
-                    }
-                    let value = coefficient.clone() * Rational::from(relation_entry);
-                    if value != 0 {
-                        corrections[coordinate_index].insert(degree.clone(), value);
-                    }
-                }
-            }
-            [] => {
-                let coefficient = ckyz_zero_negative_hypergeometric_coeff(&point_pairings)?;
-                for coordinate_index in 0..rank {
-                    let mut harmonic_sum = Rational::from(0);
-                    for (&relation_entry, &pairing) in relations[coordinate_index]
-                        .iter()
-                        .zip(point_pairings.iter())
-                    {
-                        if relation_entry == 0 || pairing == 0 {
-                            continue;
-                        }
-                        let pairing = usize::try_from(pairing).map_err(|_| {
-                            Error::InvalidInput(
-                                "nonnegative CKYZ point pairing does not fit usize".into(),
-                            )
-                        })?;
-                        harmonic_sum += Rational::from(relation_entry) * harmonic_number(pairing);
-                    }
-                    let value = -coefficient.clone() * harmonic_sum;
-                    if value != 0 {
-                        corrections[coordinate_index].insert(degree.clone(), value);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-    Ok(corrections)
+    Ok(())
 }
 
 fn ckyz_local_surface_sources() -> Vec<CkyzLocalSurfaceSource> {
@@ -1079,6 +1084,135 @@ fn ckyz_point_pairings(relations: &[Vec<i64>], degree: &[usize]) -> Result<Vec<i
     Ok(pairings)
 }
 
+fn ckyz_log_period_coefficients_for_degree(
+    relations: &[Vec<i64>],
+    point_pairings: &[i64],
+) -> Result<Vec<Rational>> {
+    let rank = relations.len();
+    let negative_points = point_pairings
+        .iter()
+        .enumerate()
+        .filter_map(|(index, &pairing)| (pairing < 0).then_some(index))
+        .collect::<Vec<_>>();
+    let mut values = vec![Rational::from(0); rank];
+
+    match negative_points.as_slice() {
+        [negative_point] => {
+            let coefficient = ckyz_one_negative_log_period_base(point_pairings, *negative_point)?;
+            for coordinate_index in 0..rank {
+                let relation_entry = relations[coordinate_index][*negative_point];
+                if relation_entry != 0 {
+                    values[coordinate_index] = coefficient.clone() * Rational::from(relation_entry);
+                }
+            }
+        }
+        [] => {
+            let coefficient = ckyz_zero_negative_hypergeometric_coeff(point_pairings)?;
+            let regular_terms = ckyz_regular_harmonic_terms(relations, point_pairings)?;
+            for coordinate_index in 0..rank {
+                values[coordinate_index] =
+                    coefficient.clone() * regular_terms[coordinate_index].clone();
+            }
+        }
+        _ => {}
+    }
+    Ok(values)
+}
+
+fn ckyz_second_log_period_coefficients_for_degree(
+    relations: &[Vec<i64>],
+    point_pairings: &[i64],
+) -> Result<Vec<Vec<Rational>>> {
+    let rank = relations.len();
+    let negative_points = point_pairings
+        .iter()
+        .enumerate()
+        .filter_map(|(index, &pairing)| (pairing < 0).then_some(index))
+        .collect::<Vec<_>>();
+    let mut values = vec![vec![Rational::from(0); rank]; rank];
+
+    match negative_points.as_slice() {
+        [] => {
+            let coefficient = ckyz_zero_negative_hypergeometric_coeff(point_pairings)?;
+            let regular_terms = ckyz_regular_harmonic_terms(relations, point_pairings)?;
+            for first in 0..rank {
+                for second in 0..rank {
+                    let mut term = regular_terms[first].clone() * regular_terms[second].clone();
+                    for point_index in 0..point_pairings.len() {
+                        let arg = ckyz_harmonic_argument(point_pairings[point_index])?;
+                        term += Rational::from(relations[first][point_index])
+                            * Rational::from(relations[second][point_index])
+                            * harmonic_number_order_two(arg);
+                    }
+                    values[first][second] = coefficient.clone() * term;
+                }
+            }
+        }
+        [negative_point] => {
+            let coefficient = ckyz_one_negative_log_period_base(point_pairings, *negative_point)?;
+            let regular_terms = ckyz_regular_harmonic_terms(relations, point_pairings)?;
+            for first in 0..rank {
+                for second in 0..rank {
+                    values[first][second] = coefficient.clone()
+                        * (regular_terms[first].clone()
+                            * Rational::from(relations[second][*negative_point])
+                            + regular_terms[second].clone()
+                                * Rational::from(relations[first][*negative_point]));
+                }
+            }
+        }
+        [first_negative, second_negative] => {
+            let coefficient = ckyz_two_negative_double_log_base(
+                point_pairings,
+                *first_negative,
+                *second_negative,
+            )?;
+            for first in 0..rank {
+                for second in 0..rank {
+                    values[first][second] = coefficient.clone()
+                        * (Rational::from(relations[first][*first_negative])
+                            * Rational::from(relations[second][*second_negative])
+                            + Rational::from(relations[first][*second_negative])
+                                * Rational::from(relations[second][*first_negative]));
+                }
+            }
+        }
+        _ => {}
+    }
+    Ok(values)
+}
+
+fn ckyz_regular_harmonic_terms(
+    relations: &[Vec<i64>],
+    point_pairings: &[i64],
+) -> Result<Vec<Rational>> {
+    let rank = relations.len();
+    let mut terms = vec![Rational::from(0); rank];
+    for coordinate_index in 0..rank {
+        for (&relation_entry, &pairing) in relations[coordinate_index]
+            .iter()
+            .zip(point_pairings.iter())
+        {
+            if relation_entry == 0 {
+                continue;
+            }
+            let harmonic_arg = ckyz_harmonic_argument(pairing)?;
+            if harmonic_arg == 0 {
+                continue;
+            }
+            terms[coordinate_index] -=
+                Rational::from(relation_entry) * harmonic_number(harmonic_arg);
+        }
+    }
+    Ok(terms)
+}
+
+fn ckyz_harmonic_argument(pairing: i64) -> Result<usize> {
+    let arg = if pairing < 0 { -pairing - 1 } else { pairing };
+    usize::try_from(arg)
+        .map_err(|_| Error::InvalidInput("CKYZ harmonic argument does not fit usize".into()))
+}
+
 fn ckyz_one_negative_log_period_base(
     point_pairings: &[i64],
     negative_point: usize,
@@ -1113,6 +1247,41 @@ fn ckyz_one_negative_log_period_base(
     Ok(coefficient)
 }
 
+fn ckyz_two_negative_double_log_base(
+    point_pairings: &[i64],
+    first_negative: usize,
+    second_negative: usize,
+) -> Result<Rational> {
+    let mut coefficient = Rational::from(1);
+    for (point_index, &pairing) in point_pairings.iter().enumerate() {
+        if point_index == first_negative || point_index == second_negative {
+            if pairing >= 0 {
+                return Err(Error::InvalidInput(
+                    "CKYZ two-negative coefficient received a nonnegative point".into(),
+                ));
+            }
+            let pole_order = usize::try_from(-pairing - 1).map_err(|_| {
+                Error::InvalidInput("CKYZ negative point pairing does not fit usize".into())
+            })?;
+            coefficient *= Rational::from(factorial_integer(pole_order));
+        } else {
+            if pairing < 0 {
+                return Err(Error::InvalidInput(
+                    "CKYZ two-negative coefficient received more than two negative points".into(),
+                ));
+            }
+            let pairing = usize::try_from(pairing).map_err(|_| {
+                Error::InvalidInput("CKYZ nonnegative point pairing does not fit usize".into())
+            })?;
+            coefficient /= Rational::from(factorial_integer(pairing));
+        }
+    }
+    if (point_pairings[first_negative] + point_pairings[second_negative]) % 2 != 0 {
+        coefficient = -coefficient;
+    }
+    Ok(coefficient)
+}
+
 fn ckyz_zero_negative_hypergeometric_coeff(point_pairings: &[i64]) -> Result<Rational> {
     let mut coefficient = Rational::from(1);
     for &pairing in point_pairings {
@@ -1133,6 +1302,15 @@ fn harmonic_number(n: usize) -> Rational {
     let mut out = Rational::from(0);
     for denominator in 1..=n {
         out += Rational::from_signeds(1i64, i64::try_from(denominator).expect("usize fits i64"));
+    }
+    out
+}
+
+fn harmonic_number_order_two(n: usize) -> Rational {
+    let mut out = Rational::from(0);
+    for denominator in 1..=n {
+        let denominator = i64::try_from(denominator).expect("usize fits i64");
+        out += Rational::from_signeds(1i64, denominator * denominator);
     }
     out
 }
@@ -5050,12 +5228,12 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        BoundedCurveDecompositionIndex, CurveDecompositionTerm, CurvePruningStrategy,
-        GvLatticeAugmentation, LocalToricCircuitKind, LocalToricCoordinate2D,
+        BoundedCurveDecompositionIndex, CkyzLocalIntersectionTerm, CurveDecompositionTerm,
+        CurvePruningStrategy, GvLatticeAugmentation, LocalToricCircuitKind, LocalToricCoordinate2D,
         OriginCircuitCurveWitness, OriginCircuitRelationPoint, ToricCurveCandidate,
         check_supporting_mori_face_normal, compute_ambient_one_dimensional_ray_gv_series,
-        compute_ckyz_log_period_corrections, compute_grading_vector,
-        compute_gv_invariants_with_explicit_semigroup,
+        compute_ckyz_local_prepotential_period_corrections, compute_ckyz_log_period_corrections,
+        compute_grading_vector, compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_provided_generators, compute_local_p2_genus_zero_gv_series,
         compute_local_toric_circuit_gv_series, compute_one_dimensional_ray_gv_series,
         compute_ray_gv_series_with_provided_generators, curve_in_rational_row_span,
@@ -5247,6 +5425,46 @@ mod tests {
 
         assert_eq!(corrections[0], expected_first);
         assert_eq!(corrections[1], expected_second);
+    }
+
+    #[test]
+    fn ckyz_local_prepotential_period_computes_p2_double_log_source_term() {
+        let corrections = compute_ckyz_local_prepotential_period_corrections(
+            &[vec![-3, 1, 1, 1]],
+            &[CkyzLocalIntersectionTerm {
+                first: 0,
+                second: 0,
+                coefficient: 1,
+            }],
+            1,
+        )
+        .unwrap();
+
+        assert_eq!(corrections.get(&vec![1]), Some(&Rational::from(-18)));
+    }
+
+    #[test]
+    fn ckyz_local_prepotential_period_computes_f0_source_terms() {
+        let relations = vec![vec![-2, 1, 0, 1, 0], vec![-2, 0, 1, 0, 1]];
+        let corrections = compute_ckyz_local_prepotential_period_corrections(
+            &relations,
+            &[CkyzLocalIntersectionTerm {
+                first: 0,
+                second: 1,
+                coefficient: 1,
+            }],
+            2,
+        )
+        .unwrap();
+
+        let mut expected = BTreeMap::new();
+        expected.insert(vec![1, 0], Rational::from(4));
+        expected.insert(vec![0, 1], Rational::from(4));
+        expected.insert(vec![2, 0], Rational::from(13));
+        expected.insert(vec![1, 1], Rational::from(40));
+        expected.insert(vec![0, 2], Rational::from(13));
+
+        assert_eq!(corrections, expected);
     }
 
     #[test]

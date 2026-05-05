@@ -51,6 +51,14 @@ sequence visible in the first potent ray cannot honestly be obtained by
 pretending the charge vector `(-3,1,1,1)` is just a compact CYTools/cygv
 hypersurface input.
 
+The local CKYZ path Cyrus is building mirrors only the period-coefficient layer
+of that machinery. The new double-log/prepotential-period routine computes the
+source CKYZ `rho`-derivatives in B-model `z` coordinates; it does not run
+cygv's later `c0_inv`, alpha/beta/F-polynomial, or degree-ordered
+`Li2(qN)` subtraction stages. That boundary is deliberate: until the
+multi-variable mirror map and multiple-cover inversion are implemented, these
+coefficients are source-derived period data, not GV invariants.
+
 The computational-mirror paper explains the implementation boundary that this
 source code implies. Finite HKTY computations need a causally closed truncation:
 either a degree cutoff from an interior grading vector, or a past-light-cone

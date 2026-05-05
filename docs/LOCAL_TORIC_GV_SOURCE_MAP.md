@@ -223,9 +223,20 @@ Cyrus now also implements the first CKYZ period layer:
 source relation rows. Unit tests verify that this reproduces the existing local
 `P^2` mirror-map correction and produces the coupled first correction terms for
 the CKYZ `F0` and `F1` relation systems. This is still upstream of GV
-extraction: the double-log/local-prepotential period, mirror-map inversion in
-multiple variables, and multiple-cover inversion remain the next missing
-pieces.
+extraction.
+
+The next CKYZ period layer is now isolated as
+`compute_ckyz_local_prepotential_period_corrections`. It applies the CKYZ local
+intersection expression to the second `rho`-derivative coefficients of the same
+hypergeometric series. The source check is against the same coefficient
+structure used by `cygv::fundamental_period`: zero, one, and two negative
+pairings are handled separately, with harmonic and order-two harmonic terms
+matching the compact HKTY derivative formulas after dropping the compact
+hypersurface numerator. The result is still a B-model `z`-series.
+
+The remaining missing steps are not optional bookkeeping: Cyrus still needs
+multi-variable mirror-map inversion/substitution and multiple-cover inversion
+before any non-`P^2` CKYZ period coefficient can be called a GV invariant.
 
 ## Rank-Four Boundary
 

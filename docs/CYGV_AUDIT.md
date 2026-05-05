@@ -123,6 +123,26 @@ Important details:
 - `invert_series` processes classes by grading degree and subtracts previously
   found lower-degree `Li2(qN)` contributions from the instanton corrections.
 
+The derivative layer inside `fundamental_period.rs` is also explicit enough to
+port locally when the compact hypersurface numerator is absent:
+
+- `compute_c_0neg` builds the regular fundamental coefficient and its first and
+  second `rho`-derivatives from factorial products, harmonic numbers, and
+  order-two harmonic numbers;
+- `compute_c_1neg` handles the simple-pole residue when exactly one GLSM
+  pairing is negative; the first derivative is the residue times the negative
+  row entry, and the second derivative multiplies that residue by the two
+  regular harmonic sums;
+- `compute_c_2neg` handles the double-pole case for second derivatives only,
+  using the product of the two negative row entries and the parity sign from
+  their pole orders.
+
+Cyrus' CKYZ local-period helpers intentionally stop at this analogous
+coefficient layer. They do not perform `compute_instanton_data`'s multiplication
+by `c0_inv`, do not build alpha/beta/F polynomials, and do not run
+`series_inversion`. A nonzero double-log coefficient in this layer is therefore
+not yet a GV invariant.
+
 This means local face/ray HKTY checks can be correct for isolated classes while
 still not reproducing the global CYTools/cygv output. The global result depends
 on the full semigroup truncation and the degree-ordered subtraction history.
