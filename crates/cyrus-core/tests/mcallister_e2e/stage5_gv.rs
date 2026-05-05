@@ -21,10 +21,11 @@
 use std::path::Path;
 
 use cyrus_core::{
-    F64, Finite, Point, Polytope, compute_curve_basis_matrix, compute_glsm_and_linrels,
-    compute_mori_cone_cap_rays, compute_regular_triangulation, compute_toric_curve_gv_diagnostics,
-    compute_toric_two_face_curve_gv_invariants, effective_prime_divisors_from_curve_basis,
-    find_semigroup_decomposition, heights_to_kahler, project_mori_cone_cap_rays_to_basis,
+    CurvePruningStrategy, F64, Finite, Point, Polytope, compute_curve_basis_matrix,
+    compute_glsm_and_linrels, compute_mori_cone_cap_rays, compute_regular_triangulation,
+    compute_toric_curve_gv_diagnostics, compute_toric_two_face_curve_gv_invariants,
+    effective_prime_divisors_from_curve_basis, find_semigroup_decomposition, heights_to_kahler,
+    project_mori_cone_cap_rays_to_basis, prune_decomposable_curve_candidates,
     remove_pair_decomposable_curve_candidates, subcutoff_toric_curve_candidates, types::i64::I64,
 };
 use malachite::Integer;
@@ -396,6 +397,12 @@ fn stage5_mcallister_small_toric_curve_finite_semigroup_diagnostic() {
         subcutoff_toric_curve_candidates(&rays, &basis, &kahler, cutoff).expect("curve selection");
     let pair_filtered =
         remove_pair_decomposable_curve_candidates(&selected).expect("pair-decomposable pruning");
+    let strategy_pair_filtered =
+        prune_decomposable_curve_candidates(&selected, CurvePruningStrategy::PairDecomposable)
+            .expect("explicit pair pruning strategy");
+    let finite_semigroup_filtered =
+        prune_decomposable_curve_candidates(&selected, CurvePruningStrategy::FiniteSemigroup)
+            .expect("explicit finite-semigroup pruning strategy");
 
     let mut semigroup_decomposable = Vec::new();
     for curve in &pair_filtered {
@@ -417,14 +424,23 @@ fn stage5_mcallister_small_toric_curve_finite_semigroup_diagnostic() {
         "pair-pruned small toric curve count changed"
     );
     assert_eq!(
+        strategy_pair_filtered, pair_filtered,
+        "explicit pair pruning strategy must match the checkpoint-faithful helper"
+    );
+    assert_eq!(
         semigroup_decomposable.len(),
         5,
         "McAllister checkpoint is pair-pruned, not finite-semigroup-pruned"
     );
     assert_eq!(
-        pair_filtered.len() - semigroup_decomposable.len(),
+        finite_semigroup_filtered.len(),
         339,
         "full finite-semigroup pruning would retain 339 input-chamber candidates"
+    );
+    assert_eq!(
+        pair_filtered.len() - finite_semigroup_filtered.len(),
+        semigroup_decomposable.len(),
+        "explicit finite-semigroup strategy must remove the multi-term decomposable checkpoint curves"
     );
 }
 
