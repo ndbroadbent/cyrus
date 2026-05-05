@@ -773,6 +773,41 @@ pub struct CkyzLocalCausalDomainSpec {
     pub grading_vector: Vec<usize>,
 }
 
+/// Size profile for CKYZ local finite monomial domains.
+///
+/// This is a source-auditing object: it does not assign GV values. It compares
+/// the domains used by the local CKYZ extraction so we can see whether a
+/// targeted computation is spending time in the componentwise target downset,
+/// the support-predicted mirror-map/potential history, or a generated causal
+/// semigroup domain.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CkyzLocalDomainProfile {
+    /// Number of CKYZ flat coordinates.
+    pub rank: usize,
+    /// Number of requested degrees after adding primitive cover divisors.
+    pub extraction_degree_count: usize,
+    /// Largest total degree among the originally requested target degrees.
+    pub max_target_total_degree: usize,
+    /// Number of monomials in the cover-closed componentwise downset.
+    pub target_downset_degree_count: usize,
+    /// Whether the target downset built the fast addition table.
+    pub target_downset_has_addition_table: bool,
+    /// Number of monomials retained by the support-predicted path-history
+    /// domain.
+    pub predicted_support_degree_count: usize,
+    /// Largest total degree retained by the support-predicted domain.
+    pub predicted_support_max_total_degree: usize,
+    /// Whether the support-predicted domain built the fast addition table.
+    pub predicted_support_has_addition_table: bool,
+    /// Number of monomials in an optional generated causal semigroup domain.
+    pub causal_semigroup_degree_count: Option<usize>,
+    /// Largest total degree retained by an optional causal semigroup domain.
+    pub causal_semigroup_max_total_degree: Option<usize>,
+    /// Whether an optional causal semigroup domain built the fast addition
+    /// table.
+    pub causal_semigroup_has_addition_table: Option<bool>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct CkyzLocalSurfaceSource {
     kind: CkyzLocalSurfaceKind,
@@ -1271,6 +1306,134 @@ pub fn ckyz_local_surface_target_degrees(
                 .collect::<Result<Vec<_>>>()
         })
         .collect()
+}
+
+/// Profile the CKYZ finite monomial domains for requested local degrees.
+///
+/// This is intended for source audits and performance work. It does not compute
+/// any GV invariant; it only compares the componentwise cover-closed downset
+/// with the support-predicted mirror-map/potential history domain.
+///
+/// # Errors
+/// Returns an error for invalid CKYZ relation rows, invalid local intersection
+/// terms, invalid target degrees, or domain-construction overflow.
+pub fn ckyz_local_domain_profile_for_degrees(
+    relations: &[Vec<i64>],
+    local_intersection_terms: &[CkyzLocalIntersectionTerm],
+    target_degrees: &[Vec<usize>],
+) -> Result<CkyzLocalDomainProfile> {
+    ckyz_local_domain_profile_for_degrees_impl(
+        relations,
+        local_intersection_terms,
+        target_degrees,
+        None,
+    )
+}
+
+/// Profile CKYZ finite monomial domains, including an explicit causal
+/// semigroup domain.
+///
+/// This mirrors [`compute_ckyz_local_gv_invariants_for_degrees_with_causal_domain`]
+/// at the domain-construction level, while also reporting the componentwise and
+/// support-predicted domains for comparison.
+///
+/// # Errors
+/// Returns an error for invalid CKYZ source data, invalid causal generators,
+/// non-generated target degrees, or domain-construction overflow.
+pub fn ckyz_local_domain_profile_for_degrees_with_causal_domain(
+    relations: &[Vec<i64>],
+    local_intersection_terms: &[CkyzLocalIntersectionTerm],
+    target_degrees: &[Vec<usize>],
+    causal_generators: &[Vec<usize>],
+    grading_vector: &[usize],
+) -> Result<CkyzLocalDomainProfile> {
+    ckyz_local_domain_profile_for_degrees_impl(
+        relations,
+        local_intersection_terms,
+        target_degrees,
+        Some((causal_generators, grading_vector)),
+    )
+}
+
+/// Profile CKYZ finite monomial domains for multiples of a matched local
+/// surface target direction.
+///
+/// The causal semigroup domain is built from
+/// [`ckyz_local_surface_causal_domain_spec`], so the report is tied to the same
+/// source-derived grading used by local-surface causal GV extraction.
+///
+/// # Errors
+/// Returns an error for invalid matched source data, invalid target multiples,
+/// or domain-construction failures.
+pub fn ckyz_local_surface_domain_profile_for_multiples(
+    identification: &CkyzLocalSurfaceIdentification,
+    multiples: usize,
+) -> Result<CkyzLocalDomainProfile> {
+    let target_degrees = ckyz_local_surface_target_degrees(identification, multiples)?;
+    let domain_spec = ckyz_local_surface_causal_domain_spec(identification)?;
+    ckyz_local_domain_profile_for_degrees_with_causal_domain(
+        &identification.source_relations,
+        &identification.local_intersection_terms,
+        &target_degrees,
+        &domain_spec.generators,
+        &domain_spec.grading_vector,
+    )
+}
+
+fn ckyz_local_domain_profile_for_degrees_impl(
+    relations: &[Vec<i64>],
+    local_intersection_terms: &[CkyzLocalIntersectionTerm],
+    target_degrees: &[Vec<usize>],
+    causal_domain: Option<(&[Vec<usize>], &[usize])>,
+) -> Result<CkyzLocalDomainProfile> {
+    validate_ckyz_relations(relations)?;
+    let rank = relations.len();
+    validate_ckyz_target_degrees(target_degrees, rank)?;
+    for term in local_intersection_terms {
+        if term.first >= rank || term.second >= rank {
+            return Err(Error::InvalidInput(
+                "CKYZ local intersection term index is outside the relation rank".into(),
+            ));
+        }
+    }
+
+    let extraction_degrees = ckyz_cover_closed_target_degrees(target_degrees)?;
+    let max_target_total_degree = target_degrees
+        .iter()
+        .map(|degree| ckyz_total_degree(degree))
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .max()
+        .expect("validated target degrees are nonempty");
+    let target_downset = CkyzMonomialDomain::target_downset(&extraction_degrees, rank)?;
+    let predicted_support = ckyz_predicted_support_domain_for_degrees(
+        relations,
+        local_intersection_terms,
+        target_degrees,
+    )?;
+    let causal_semigroup = causal_domain
+        .map(|(generators, grading_vector)| {
+            ckyz_causal_monomial_domain(rank, generators, grading_vector, &extraction_degrees)
+        })
+        .transpose()?;
+
+    Ok(CkyzLocalDomainProfile {
+        rank,
+        extraction_degree_count: extraction_degrees.len(),
+        max_target_total_degree,
+        target_downset_degree_count: target_downset.degrees.len(),
+        target_downset_has_addition_table: target_downset.addition_indices.is_some(),
+        predicted_support_degree_count: predicted_support.degrees.len(),
+        predicted_support_max_total_degree: predicted_support.max_total_degree,
+        predicted_support_has_addition_table: predicted_support.addition_indices.is_some(),
+        causal_semigroup_degree_count: causal_semigroup.as_ref().map(|domain| domain.degrees.len()),
+        causal_semigroup_max_total_degree: causal_semigroup
+            .as_ref()
+            .map(|domain| domain.max_total_degree),
+        causal_semigroup_has_addition_table: causal_semigroup
+            .as_ref()
+            .map(|domain| domain.addition_indices.is_some()),
+    })
 }
 
 /// Compute CKYZ local GV invariants for multiples of the matched target
@@ -9098,10 +9261,12 @@ mod tests {
         OriginCircuitCurveWitness, OriginCircuitRelationPoint, ToricCurveCandidate,
         certify_supporting_mori_face_by_exact_kernel, check_extremal_mori_ray_separator,
         check_supporting_mori_face_normal, ckyz_cover_closed_target_degrees,
+        ckyz_local_domain_profile_for_degrees,
+        ckyz_local_domain_profile_for_degrees_with_causal_domain,
         ckyz_local_surface_causal_domain_spec, ckyz_local_surface_cover_weight_coefficients,
-        ckyz_local_surface_target_degrees, ckyz_observed_support_domain_for_degrees,
-        ckyz_predicted_support_domain_for_degrees, ckyz_series_mul_domain,
-        classify_nilpotent_rays_from_two_pass_divergence_checks,
+        ckyz_local_surface_domain_profile_for_multiples, ckyz_local_surface_target_degrees,
+        ckyz_observed_support_domain_for_degrees, ckyz_predicted_support_domain_for_degrees,
+        ckyz_series_mul_domain, classify_nilpotent_rays_from_two_pass_divergence_checks,
         classify_nop_rays_from_finite_gv_table, compute_ambient_one_dimensional_ray_gv_series,
         compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
         compute_ckyz_local_gv_invariants, compute_ckyz_local_gv_invariants_for_degrees,
@@ -10063,6 +10228,30 @@ mod tests {
     }
 
     #[test]
+    fn ckyz_local_domain_profile_reports_polygon5_support_reduction() {
+        let relations = ckyz_polygon5_relations();
+        let local_intersection_terms = ckyz_polygon5_intersection_terms();
+        let target_degrees = [vec![4, 3, 2], vec![8, 6, 4]];
+
+        let profile = ckyz_local_domain_profile_for_degrees(
+            &relations,
+            &local_intersection_terms,
+            &target_degrees,
+        )
+        .unwrap();
+
+        assert_eq!(profile.rank, 3);
+        assert_eq!(profile.extraction_degree_count, 2);
+        assert_eq!(profile.max_target_total_degree, 18);
+        assert_eq!(profile.target_downset_degree_count, 315);
+        assert_eq!(profile.predicted_support_degree_count, 265);
+        assert_eq!(profile.predicted_support_max_total_degree, 18);
+        assert!(profile.target_downset_has_addition_table);
+        assert!(profile.predicted_support_has_addition_table);
+        assert_eq!(profile.causal_semigroup_degree_count, None);
+    }
+
+    #[test]
     fn ckyz_local_surface_causal_domain_spec_uses_source_weights() {
         let identification = CkyzLocalSurfaceIdentification {
             kind: CkyzLocalSurfaceKind::HirzebruchF1,
@@ -10091,6 +10280,53 @@ mod tests {
         assert_eq!(
             ckyz_local_surface_target_degrees(&identification, 3).unwrap(),
             vec![vec![5, 4], vec![10, 8], vec![15, 12]]
+        );
+    }
+
+    #[test]
+    fn ckyz_local_surface_domain_profile_reports_causal_f1_semigroup() {
+        let identification = CkyzLocalSurfaceIdentification {
+            kind: CkyzLocalSurfaceKind::HirzebruchF1,
+            point_permutation: vec![0, 1, 2, 3, 4],
+            row_transform: vec![vec![1, 0], vec![0, 1]],
+            source_relations: vec![vec![-2, 1, 0, 1, 0], vec![-1, 0, 1, -1, 1]],
+            source_target_direction: vec![2, 1],
+            c1_coefficients: vec![3, 2],
+            local_intersection_terms: vec![
+                CkyzLocalIntersectionTerm {
+                    first: 0,
+                    second: 1,
+                    coefficient: 1,
+                },
+                CkyzLocalIntersectionTerm {
+                    first: 0,
+                    second: 0,
+                    coefficient: 1,
+                },
+            ],
+        };
+
+        let surface_profile =
+            ckyz_local_surface_domain_profile_for_multiples(&identification, 3).unwrap();
+        let target_degrees = ckyz_local_surface_target_degrees(&identification, 3).unwrap();
+        let direct_profile = ckyz_local_domain_profile_for_degrees_with_causal_domain(
+            &identification.source_relations,
+            &identification.local_intersection_terms,
+            &target_degrees,
+            &[vec![1, 0], vec![0, 1]],
+            &[2, 1],
+        )
+        .unwrap();
+
+        assert_eq!(surface_profile, direct_profile);
+        assert_eq!(surface_profile.rank, 2);
+        assert_eq!(surface_profile.extraction_degree_count, 3);
+        assert_eq!(surface_profile.target_downset_degree_count, 28);
+        assert_eq!(surface_profile.causal_semigroup_degree_count, Some(72));
+        assert_eq!(surface_profile.causal_semigroup_max_total_degree, Some(15));
+        assert_eq!(
+            surface_profile.causal_semigroup_has_addition_table,
+            Some(true)
         );
     }
 

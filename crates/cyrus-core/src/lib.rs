@@ -100,8 +100,8 @@ pub use glsm::compute_glsm_charge_matrix;
 pub use glsm::compute_glsm_linear_relations;
 pub use gv::{
     AffineCircuitRelationPoint, AffineToricCircuitDiagnostic, CkyzLocalCausalDomainSpec,
-    CkyzLocalIntersectionTerm, CkyzLocalSurfaceIdentification, CkyzLocalSurfaceKind,
-    CurveDecompositionTerm, CurvePruningStrategy, ExtremalMoriRayCertificate,
+    CkyzLocalDomainProfile, CkyzLocalIntersectionTerm, CkyzLocalSurfaceIdentification,
+    CkyzLocalSurfaceKind, CurveDecompositionTerm, CurvePruningStrategy, ExtremalMoriRayCertificate,
     FiniteCutoffGvChargePartition, FiniteGvTableNopClassification, GvDivisorBasisData,
     LocalToricCircuitKind, LocalToricCoordinate2D, NilpotentRayCandidate, NilpotentRayDegreeSlice,
     NilpotentRayDivergenceCheck, NilpotentRaySliceComparisonPoint, NilpotentRaySliceDistance,
@@ -111,8 +111,11 @@ pub use gv::{
     RankTwoLocalSupportSignatureEntry, SupportingMoriFace, SupportingMoriFaceCertificate,
     ToricCurveCandidate, ToricCurveGvDiagnostic, ToricCurveGvInvariant, ToricCurveGvSource,
     check_extremal_mori_ray_separator, check_supporting_mori_face_normal,
+    ckyz_local_domain_profile_for_degrees,
+    ckyz_local_domain_profile_for_degrees_with_causal_domain,
     ckyz_local_surface_causal_domain_spec, ckyz_local_surface_cover_weight_coefficients,
-    ckyz_local_surface_target_degrees, classify_nilpotent_rays_from_two_pass_divergence_checks,
+    ckyz_local_surface_domain_profile_for_multiples, ckyz_local_surface_target_degrees,
+    classify_nilpotent_rays_from_two_pass_divergence_checks,
     classify_nop_rays_from_finite_gv_table, compute_ambient_one_dimensional_ray_gv_series,
     compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
     compute_ckyz_local_gv_invariants, compute_ckyz_local_gv_invariants_for_degrees,
