@@ -1423,3 +1423,17 @@ provided generators. This also fails as a source domain: seven targets panic in
 cygv with `NonIntegerGVError`, and the remaining two return `GV=0`. So the
 correct context is not just "rows sharing several active/target support
 coordinates" either.
+
+The compact dual-polytope CYTools-to-cygv handoff is now checked at the source
+boundary for 4-214-647. A Cyrus dump from
+`CYRUS_GV_DUMP_INPUTS=/tmp/cyrus_gv_handoff_4_214_647.json
+--bin mcallister_gv -- --min-points 1` was compared with a direct CYTools latest
+dump of `cy.compute_gvs` inputs from `dual_points.dat` and
+`dual_simplices.dat`. The grading vector, no-origin `q` matrix, and
+in-basis intersection dictionary match exactly. CYTools hands cygv `505`
+generator rows, while Cyrus dumps `496`, but CYTools' rows have only `496`
+unique vectors and the unique generator sets are identical. This means the
+standard compact GV path is not currently blocked by a q-matrix, grading,
+intersection, or Mori/lattice generator handoff mismatch. The remaining
+corrected-chamber misses are a chamber/local source-domain problem, not an
+ordinary compact-dual cygv input mismatch.

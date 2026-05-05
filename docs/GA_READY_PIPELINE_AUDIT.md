@@ -147,6 +147,12 @@ to make the remaining GV layer more first-principles:
    construction now exist, and the current vector-basis runner GV paths use the
    bundled handoff. Higher-level APIs still need to either accept a generic
    matrix basis end-to-end or reject it loudly until that path is ported.
+   The compact 4-214-647 dual-polytope handoff has been compared directly
+   against CYTools latest at the cygv boundary: grading vector, no-origin
+   q-matrix, and in-basis intersection numbers match exactly, and the unique
+   augmented generator set is identical (`496` unique rows; CYTools passes
+   `505` rows with duplicates). So the standard compact GV wrapper is not
+   blocked by a handoff mismatch.
 3. Reconstruct the actual corrected-chamber context for the nine remaining
    origin-circuit misses. This means either an exact supporting face/chamber
    semigroup that can be fed through the cygv/HKTY path, or source-derived
