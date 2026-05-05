@@ -1640,6 +1640,13 @@ The current `cygv` crate source sharpens the same boundary:
   from all remaining instanton polynomials before the next degrees are read.
   It maintains a rolling cache of previous `q_N` polynomials, with ten previous
   levels for `h11 >= 10`.
+- The corrected-chamber report now also mirrors the first series-inversion
+  coordinate choice and counts nonzero `kappa_{i,a,b}` pairs available to the
+  corresponding instanton polynomial. All nine missing targets have nonzero
+  support on the coordinate cygv would read. The first-coordinate pair counts
+  are `20,20,19,19,14,13,13,45,6` for targets `0..8`, respectively. Thus the
+  remaining misses are not explained by a zero intersection row at cygv's
+  selected series coordinate.
 
 The actionable consequence is that a Cyrus replacement for corrected-chamber
 or potent-ray GV values must recreate the finite semigroup and lower-degree

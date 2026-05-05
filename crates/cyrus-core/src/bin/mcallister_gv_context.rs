@@ -168,6 +168,9 @@ struct TargetReport {
     basis_nonzero: Vec<(usize, i64)>,
     target_cygv_negative_intersections: Option<usize>,
     target_cygv_omega_bucket: Option<String>,
+    target_cygv_series_coordinate: Option<usize>,
+    target_cygv_series_coordinate_kappa_pair_count: Option<usize>,
+    target_cygv_nonzero_coordinate_kappa_pair_counts: Vec<CygvCoordinateKappaSupport>,
     exact_kind: Option<String>,
     active_generator_count: Option<usize>,
     integer_term_count: Option<usize>,
@@ -230,6 +233,12 @@ struct CygvNegativeIntersectionHistogram {
     neg1: usize,
     neg2: usize,
     gt2: usize,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CygvCoordinateKappaSupport {
+    coordinate: usize,
+    kappa_pair_count: usize,
 }
 
 struct CygvSemigroupMeasurement {
@@ -363,6 +372,68 @@ fn cygv_negative_intersection_histogram(
         }
     }
     Ok(histogram)
+}
+
+fn kappa_pair_count_for_series_coordinate(
+    intersection: &Intersection,
+    coordinate: usize,
+) -> Result<usize, String> {
+    if coordinate >= intersection.dim() {
+        return Err(format!(
+            "series coordinate {coordinate} is out of bounds for intersection dimension {}",
+            intersection.dim()
+        ));
+    }
+    let mut count = 0usize;
+    for lhs in 0..intersection.dim() {
+        for rhs in lhs..intersection.dim() {
+            if *intersection.get(coordinate, lhs, rhs).get() != 0 {
+                count += 1;
+            }
+        }
+    }
+    Ok(count)
+}
+
+fn cygv_series_coordinate_support(
+    curve: &[i64],
+    intersection: &Intersection,
+) -> Result<
+    (
+        Option<usize>,
+        Option<usize>,
+        Vec<CygvCoordinateKappaSupport>,
+    ),
+    String,
+> {
+    if curve.len() != intersection.dim() {
+        return Err(format!(
+            "curve dimension {} does not match intersection dimension {}",
+            curve.len(),
+            intersection.dim()
+        ));
+    }
+    let mut nonzero_coordinate_counts = Vec::new();
+    for (coordinate, value) in curve.iter().enumerate() {
+        if *value == 0 {
+            continue;
+        }
+        nonzero_coordinate_counts.push(CygvCoordinateKappaSupport {
+            coordinate,
+            kappa_pair_count: kappa_pair_count_for_series_coordinate(intersection, coordinate)?,
+        });
+    }
+    let series_coordinate = nonzero_coordinate_counts
+        .first()
+        .map(|entry| entry.coordinate);
+    let series_coordinate_kappa_pair_count = nonzero_coordinate_counts
+        .first()
+        .map(|entry| entry.kappa_pair_count);
+    Ok((
+        series_coordinate,
+        series_coordinate_kappa_pair_count,
+        nonzero_coordinate_counts,
+    ))
 }
 
 fn parse_rational(value: &str) -> Result<MalachiteRational, String> {
@@ -749,6 +820,9 @@ fn report_target(
                 basis_nonzero: sample.basis_nonzero.clone(),
                 target_cygv_negative_intersections: None,
                 target_cygv_omega_bucket: None,
+                target_cygv_series_coordinate: None,
+                target_cygv_series_coordinate_kappa_pair_count: None,
+                target_cygv_nonzero_coordinate_kappa_pair_counts: Vec::new(),
                 exact_kind,
                 active_generator_count,
                 integer_term_count: None,
@@ -781,70 +855,193 @@ fn report_target(
             };
         }
     };
-    let (target_cygv_negative_intersections, target_cygv_omega_bucket) =
-        match dense_from_sparse(&sample.basis_nonzero, context.dimension)
-            .and_then(|target| cygv_negative_intersection_count(&target, context.q_matrix))
-        {
-            Ok(negative_intersections) => (
-                Some(negative_intersections),
-                Some(cygv_omega_bucket(negative_intersections)),
-            ),
-            Err(error) => {
-                return TargetReport {
-                    index,
-                    degree: sample.degree,
-                    generators_le_degree: sample.generators_le_degree,
-                    is_mori_generator: sample.is_mori_generator,
-                    origin_circuit_pattern: sample.origin_circuit_pattern.clone(),
-                    origin_circuit_witness_count: sample.origin_circuit_witness_count,
-                    origin_circuit_first_witness: sample.origin_circuit_first_witness.clone(),
-                    origin_circuit_affine_support: sample.origin_circuit_affine_support.clone(),
-                    local_cygv_hypersurface_shape,
-                    cms_general_divisor_shape_candidates: sample
-                        .cms_general_divisor_shape_candidates
-                        .clone(),
-                    cms_general_divisor_intersection_checks: sample
-                        .cms_general_divisor_intersection_checks
-                        .clone(),
-                    branch_diagnostic: sample.branch_diagnostic.clone(),
-                    real_cone_decomposable_by_other_generators: sample
-                        .real_cone_decomposable_by_other_generators,
-                    ambient_nonzero: sample.ambient_nonzero.clone(),
-                    basis_nonzero: sample.basis_nonzero.clone(),
-                    target_cygv_negative_intersections: None,
-                    target_cygv_omega_bucket: None,
-                    exact_kind,
-                    active_generator_count,
-                    integer_term_count: None,
-                    diamond_element_count: None,
-                    status: "error".to_string(),
-                    gv: None,
-                    error: Some(error),
-                    active_support_generator_count: None,
-                    active_support_status: None,
-                    active_support_gv: None,
-                    active_support_error: None,
-                    degree_bounded_candidate_count: 0,
-                    support_overlap_generator_counts: Vec::new(),
-                    support_closure_layer_counts: Vec::new(),
-                    support_overlap_min_for_run,
-                    support_overlap_run_generator_count: None,
-                    support_overlap_run_status: None,
-                    support_overlap_run_gv: None,
-                    support_overlap_run_error: None,
-                    cygv_semigroup_measure_status: None,
-                    cygv_semigroup_seed_count: None,
-                    cygv_semigroup_reduced_seed_count: None,
-                    cygv_semigroup_target_is_seed: None,
-                    cygv_semigroup_target_is_reduced_seed: None,
-                    cygv_semigroup_seed_negative_histogram: None,
-                    cygv_semigroup_reduced_seed_negative_histogram: None,
-                    cygv_semigroup_element_count: None,
-                    cygv_semigroup_max_degree: None,
-                    cygv_semigroup_error: None,
-                };
-            }
-        };
+    let target = match dense_from_sparse(&sample.basis_nonzero, context.dimension) {
+        Ok(target) => target,
+        Err(error) => {
+            return TargetReport {
+                index,
+                degree: sample.degree,
+                generators_le_degree: sample.generators_le_degree,
+                is_mori_generator: sample.is_mori_generator,
+                origin_circuit_pattern: sample.origin_circuit_pattern.clone(),
+                origin_circuit_witness_count: sample.origin_circuit_witness_count,
+                origin_circuit_first_witness: sample.origin_circuit_first_witness.clone(),
+                origin_circuit_affine_support: sample.origin_circuit_affine_support.clone(),
+                local_cygv_hypersurface_shape,
+                cms_general_divisor_shape_candidates: sample
+                    .cms_general_divisor_shape_candidates
+                    .clone(),
+                cms_general_divisor_intersection_checks: sample
+                    .cms_general_divisor_intersection_checks
+                    .clone(),
+                branch_diagnostic: sample.branch_diagnostic.clone(),
+                real_cone_decomposable_by_other_generators: sample
+                    .real_cone_decomposable_by_other_generators,
+                ambient_nonzero: sample.ambient_nonzero.clone(),
+                basis_nonzero: sample.basis_nonzero.clone(),
+                target_cygv_negative_intersections: None,
+                target_cygv_omega_bucket: None,
+                target_cygv_series_coordinate: None,
+                target_cygv_series_coordinate_kappa_pair_count: None,
+                target_cygv_nonzero_coordinate_kappa_pair_counts: Vec::new(),
+                exact_kind,
+                active_generator_count,
+                integer_term_count: None,
+                diamond_element_count: None,
+                status: "error".to_string(),
+                gv: None,
+                error: Some(error),
+                active_support_generator_count: None,
+                active_support_status: None,
+                active_support_gv: None,
+                active_support_error: None,
+                degree_bounded_candidate_count: 0,
+                support_overlap_generator_counts: Vec::new(),
+                support_closure_layer_counts: Vec::new(),
+                support_overlap_min_for_run,
+                support_overlap_run_generator_count: None,
+                support_overlap_run_status: None,
+                support_overlap_run_gv: None,
+                support_overlap_run_error: None,
+                cygv_semigroup_measure_status: None,
+                cygv_semigroup_seed_count: None,
+                cygv_semigroup_reduced_seed_count: None,
+                cygv_semigroup_target_is_seed: None,
+                cygv_semigroup_target_is_reduced_seed: None,
+                cygv_semigroup_seed_negative_histogram: None,
+                cygv_semigroup_reduced_seed_negative_histogram: None,
+                cygv_semigroup_element_count: None,
+                cygv_semigroup_max_degree: None,
+                cygv_semigroup_error: None,
+            };
+        }
+    };
+    let negative_intersections = match cygv_negative_intersection_count(&target, context.q_matrix) {
+        Ok(count) => count,
+        Err(error) => {
+            return TargetReport {
+                index,
+                degree: sample.degree,
+                generators_le_degree: sample.generators_le_degree,
+                is_mori_generator: sample.is_mori_generator,
+                origin_circuit_pattern: sample.origin_circuit_pattern.clone(),
+                origin_circuit_witness_count: sample.origin_circuit_witness_count,
+                origin_circuit_first_witness: sample.origin_circuit_first_witness.clone(),
+                origin_circuit_affine_support: sample.origin_circuit_affine_support.clone(),
+                local_cygv_hypersurface_shape,
+                cms_general_divisor_shape_candidates: sample
+                    .cms_general_divisor_shape_candidates
+                    .clone(),
+                cms_general_divisor_intersection_checks: sample
+                    .cms_general_divisor_intersection_checks
+                    .clone(),
+                branch_diagnostic: sample.branch_diagnostic.clone(),
+                real_cone_decomposable_by_other_generators: sample
+                    .real_cone_decomposable_by_other_generators,
+                ambient_nonzero: sample.ambient_nonzero.clone(),
+                basis_nonzero: sample.basis_nonzero.clone(),
+                target_cygv_negative_intersections: None,
+                target_cygv_omega_bucket: None,
+                target_cygv_series_coordinate: None,
+                target_cygv_series_coordinate_kappa_pair_count: None,
+                target_cygv_nonzero_coordinate_kappa_pair_counts: Vec::new(),
+                exact_kind,
+                active_generator_count,
+                integer_term_count: None,
+                diamond_element_count: None,
+                status: "error".to_string(),
+                gv: None,
+                error: Some(error),
+                active_support_generator_count: None,
+                active_support_status: None,
+                active_support_gv: None,
+                active_support_error: None,
+                degree_bounded_candidate_count: 0,
+                support_overlap_generator_counts: Vec::new(),
+                support_closure_layer_counts: Vec::new(),
+                support_overlap_min_for_run,
+                support_overlap_run_generator_count: None,
+                support_overlap_run_status: None,
+                support_overlap_run_gv: None,
+                support_overlap_run_error: None,
+                cygv_semigroup_measure_status: None,
+                cygv_semigroup_seed_count: None,
+                cygv_semigroup_reduced_seed_count: None,
+                cygv_semigroup_target_is_seed: None,
+                cygv_semigroup_target_is_reduced_seed: None,
+                cygv_semigroup_seed_negative_histogram: None,
+                cygv_semigroup_reduced_seed_negative_histogram: None,
+                cygv_semigroup_element_count: None,
+                cygv_semigroup_max_degree: None,
+                cygv_semigroup_error: None,
+            };
+        }
+    };
+    let (
+        target_cygv_series_coordinate,
+        target_cygv_series_coordinate_kappa_pair_count,
+        target_cygv_nonzero_coordinate_kappa_pair_counts,
+    ) = match cygv_series_coordinate_support(&target, &context.intersection) {
+        Ok(support) => support,
+        Err(error) => {
+            return TargetReport {
+                index,
+                degree: sample.degree,
+                generators_le_degree: sample.generators_le_degree,
+                is_mori_generator: sample.is_mori_generator,
+                origin_circuit_pattern: sample.origin_circuit_pattern.clone(),
+                origin_circuit_witness_count: sample.origin_circuit_witness_count,
+                origin_circuit_first_witness: sample.origin_circuit_first_witness.clone(),
+                origin_circuit_affine_support: sample.origin_circuit_affine_support.clone(),
+                local_cygv_hypersurface_shape,
+                cms_general_divisor_shape_candidates: sample
+                    .cms_general_divisor_shape_candidates
+                    .clone(),
+                cms_general_divisor_intersection_checks: sample
+                    .cms_general_divisor_intersection_checks
+                    .clone(),
+                branch_diagnostic: sample.branch_diagnostic.clone(),
+                real_cone_decomposable_by_other_generators: sample
+                    .real_cone_decomposable_by_other_generators,
+                ambient_nonzero: sample.ambient_nonzero.clone(),
+                basis_nonzero: sample.basis_nonzero.clone(),
+                target_cygv_negative_intersections: Some(negative_intersections),
+                target_cygv_omega_bucket: Some(cygv_omega_bucket(negative_intersections)),
+                target_cygv_series_coordinate: None,
+                target_cygv_series_coordinate_kappa_pair_count: None,
+                target_cygv_nonzero_coordinate_kappa_pair_counts: Vec::new(),
+                exact_kind,
+                active_generator_count,
+                integer_term_count: None,
+                diamond_element_count: None,
+                status: "error".to_string(),
+                gv: None,
+                error: Some(error),
+                active_support_generator_count: None,
+                active_support_status: None,
+                active_support_gv: None,
+                active_support_error: None,
+                degree_bounded_candidate_count: 0,
+                support_overlap_generator_counts: Vec::new(),
+                support_closure_layer_counts: Vec::new(),
+                support_overlap_min_for_run,
+                support_overlap_run_generator_count: None,
+                support_overlap_run_status: None,
+                support_overlap_run_gv: None,
+                support_overlap_run_error: None,
+                cygv_semigroup_measure_status: None,
+                cygv_semigroup_seed_count: None,
+                cygv_semigroup_reduced_seed_count: None,
+                cygv_semigroup_target_is_seed: None,
+                cygv_semigroup_target_is_reduced_seed: None,
+                cygv_semigroup_seed_negative_histogram: None,
+                cygv_semigroup_reduced_seed_negative_histogram: None,
+                cygv_semigroup_element_count: None,
+                cygv_semigroup_max_degree: None,
+                cygv_semigroup_error: None,
+            };
+        }
+    };
     let base = TargetReport {
         index,
         degree: sample.degree,
@@ -864,8 +1061,11 @@ fn report_target(
             .real_cone_decomposable_by_other_generators,
         ambient_nonzero: sample.ambient_nonzero.clone(),
         basis_nonzero: sample.basis_nonzero.clone(),
-        target_cygv_negative_intersections,
-        target_cygv_omega_bucket,
+        target_cygv_negative_intersections: Some(negative_intersections),
+        target_cygv_omega_bucket: Some(cygv_omega_bucket(negative_intersections)),
+        target_cygv_series_coordinate,
+        target_cygv_series_coordinate_kappa_pair_count,
+        target_cygv_nonzero_coordinate_kappa_pair_counts,
         exact_kind,
         active_generator_count,
         integer_term_count: None,
@@ -1708,6 +1908,24 @@ mod tests {
         assert_eq!(histogram.neg1, 0);
         assert_eq!(histogram.neg2, 1);
         assert_eq!(histogram.gt2, 1);
+    }
+
+    #[test]
+    fn series_coordinate_support_counts_kappa_pairs_for_cygv_coordinate() {
+        let mut intersection = Intersection::new(3);
+        intersection.set(1, 0, 0, Rational::<Finite>::new(MalachiteRational::from(1)));
+        intersection.set(1, 1, 2, Rational::<Finite>::new(MalachiteRational::from(1)));
+        intersection.set(2, 2, 2, Rational::<Finite>::new(MalachiteRational::from(1)));
+
+        let (series_coordinate, pair_count, all_counts) =
+            cygv_series_coordinate_support(&[0, 1, 2], &intersection).unwrap();
+        assert_eq!(series_coordinate, Some(1));
+        assert_eq!(pair_count, Some(2));
+        assert_eq!(all_counts.len(), 2);
+        assert_eq!(all_counts[0].coordinate, 1);
+        assert_eq!(all_counts[0].kappa_pair_count, 2);
+        assert_eq!(all_counts[1].coordinate, 2);
+        assert_eq!(all_counts[1].kappa_pair_count, 2);
     }
 
     #[test]

@@ -205,6 +205,11 @@ to make the remaining GV layer more first-principles:
    seed histogram is `{neg1:228, neg2:492}` and the reduced-seed histogram is
    `{neg1:55, neg2:395}`. Thus the low-degree misses are not simply discarded
    before cygv's fundamental-period coefficient formulas.
+   The report now mirrors cygv's first series-inversion coordinate choice too:
+   all nine targets have nonzero corrected-chamber intersection support for
+   the coordinate cygv would read, with first-coordinate `kappa_{i,a,b}` pair
+   counts `20,20,19,19,14,13,13,45,6`. So the target coefficients are not
+   ruled out by a zero intersection row at the selected series coordinate.
    The context report now preserves origin-circuit provenance from the export:
    the nine misses are affine-rank-three/four origin circuits with local charge
    rows `[2,1,2,-1,-2,-2]`, `[1,2,1,-2,-1,-1]`,
