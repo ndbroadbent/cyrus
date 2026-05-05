@@ -7,6 +7,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::env;
+use std::f64::consts::{LN_10, PI};
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io::BufWriter;
@@ -276,6 +277,18 @@ pub struct ToricCurveCandidate {
     pub volume: F64<Pos>,
 }
 
+/// Convergence data for the instanton series along one potent ray.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PotentRayConvergence {
+    /// `log(|N_{nq}| exp(-2π n q.t))` for `n = 1..`.
+    ///
+    /// A zero GV invariant has no finite log-magnitude and is represented by
+    /// `None`.
+    pub log_xi_terms: Vec<Option<F64<Finite>>>,
+    /// Least-squares slope of the finite log-xi terms against `n`.
+    pub log_xi_slope: Option<F64<Finite>>,
+}
+
 /// One term in a finite semigroup decomposition of a curve class.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CurveDecompositionTerm {
@@ -457,6 +470,124 @@ pub fn subcutoff_toric_curve_candidates(
         }
     }
     Ok(out)
+}
+
+/// Compute the exact rational rank of the span of curve rows.
+///
+/// This is used for potent-ray convergence audits, where the paper reports the
+/// rank of the cone spanned by sampled low-dimensional-face rays.
+pub fn curve_row_span_rank(curves: &[Vec<i64>]) -> Result<usize> {
+    if curves.is_empty() {
+        return Ok(0);
+    }
+    let dim = curves[0].len();
+    for curve in curves {
+        if curve.len() != dim {
+            return Err(Error::InvalidInput(
+                "curve rows have inconsistent dimensions".into(),
+            ));
+        }
+    }
+    Ok(integer_matrix_rank(curves))
+}
+
+/// Compute the paper's potent-ray convergence terms.
+///
+/// For a ray `q` with volume `q.t`, the paper defines
+/// `xi_n = N_{nq} exp(-2π n q.t)`. This function returns
+/// `log(|xi_n|)` for each supplied GV invariant `N_{nq}`.
+pub fn potent_ray_log_xi_terms(
+    gv_series: &[Integer],
+    curve_volume: F64<Pos>,
+) -> Result<Vec<Option<F64<Finite>>>> {
+    if gv_series.is_empty() {
+        return Err(Error::InvalidInput(
+            "potent-ray GV series must not be empty".into(),
+        ));
+    }
+
+    let mut terms = Vec::with_capacity(gv_series.len());
+    for (idx, gv) in gv_series.iter().enumerate() {
+        let Some(log_gv) = integer_abs_ln(gv)? else {
+            terms.push(None);
+            continue;
+        };
+        let degree = (idx + 1) as f64;
+        let log_xi = log_gv - 2.0 * PI * degree * curve_volume.get();
+        let finite = F64::<Finite>::new(log_xi)
+            .ok_or_else(|| Error::InvalidInput("potent-ray log-xi term is not finite".into()))?;
+        terms.push(Some(finite));
+    }
+    Ok(terms)
+}
+
+/// Compute a least-squares slope for finite potent-ray log-xi terms.
+pub fn potent_ray_log_xi_slope(log_xi_terms: &[Option<F64<Finite>>]) -> Option<F64<Finite>> {
+    let mut n = 0.0;
+    let mut sum_x = 0.0;
+    let mut sum_y = 0.0;
+    let mut sum_xx = 0.0;
+    let mut sum_xy = 0.0;
+
+    for (idx, term) in log_xi_terms.iter().enumerate() {
+        let Some(term) = term else {
+            continue;
+        };
+        let x = (idx + 1) as f64;
+        let y = term.get();
+        n += 1.0;
+        sum_x += x;
+        sum_y += y;
+        sum_xx += x * x;
+        sum_xy += x * y;
+    }
+
+    if n < 2.0 {
+        return None;
+    }
+    let denom = n * sum_xx - sum_x * sum_x;
+    if denom == 0.0 {
+        return None;
+    }
+    F64::<Finite>::new((n * sum_xy - sum_x * sum_y) / denom)
+}
+
+/// Summarize potent-ray convergence from a GV series and curve volume.
+pub fn potent_ray_convergence(
+    gv_series: &[Integer],
+    curve_volume: F64<Pos>,
+) -> Result<PotentRayConvergence> {
+    let log_xi_terms = potent_ray_log_xi_terms(gv_series, curve_volume)?;
+    let log_xi_slope = potent_ray_log_xi_slope(&log_xi_terms);
+    Ok(PotentRayConvergence {
+        log_xi_terms,
+        log_xi_slope,
+    })
+}
+
+fn integer_abs_ln(value: &Integer) -> Result<Option<f64>> {
+    let magnitude = value.clone().abs();
+    if magnitude == 0 {
+        return Ok(None);
+    }
+
+    let decimal = magnitude.to_string();
+    if decimal.len() < 300 {
+        let parsed = decimal.parse::<f64>().map_err(|err| {
+            Error::InvalidInput(format!("failed to parse GV magnitude as f64: {err}"))
+        })?;
+        return Ok(Some(parsed.ln()));
+    }
+
+    let leading_len = decimal.len().min(16);
+    let leading = decimal[..leading_len].parse::<f64>().map_err(|err| {
+        Error::InvalidInput(format!(
+            "failed to parse leading GV magnitude digits: {err}"
+        ))
+    })?;
+    Ok(Some(
+        leading.ln() + (decimal.len() - leading_len) as f64 * LN_10,
+    ))
 }
 
 /// Find a decomposition of a curve as a sum of two selected toric curve candidates.
@@ -3055,6 +3186,7 @@ fn is_strictly_dual(rays: &[Vec<i64>], v: &[i64]) -> bool {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::f64::consts::PI;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -3062,10 +3194,11 @@ mod tests {
         BoundedCurveDecompositionIndex, CurveDecompositionTerm, CurvePruningStrategy,
         GvLatticeAugmentation, OriginCircuitCurveWitness, OriginCircuitRelationPoint,
         ToricCurveCandidate, compute_grading_vector, compute_gv_invariants_with_explicit_semigroup,
-        compute_gv_invariants_with_provided_generators, curve_volume_in_divisor_basis,
-        dump_mori_rays_cdd, find_pair_decomposition, find_semigroup_decomposition,
-        gv_lattice_search_request, load_grading_cache, map_basis_gv_invariants_to_ambient,
-        origin_circuit_diagnostic_from_class_and_witnesses, project_mori_cone_cap_rays_to_basis,
+        compute_gv_invariants_with_provided_generators, curve_row_span_rank,
+        curve_volume_in_divisor_basis, dump_mori_rays_cdd, find_pair_decomposition,
+        find_semigroup_decomposition, gv_lattice_search_request, load_grading_cache,
+        map_basis_gv_invariants_to_ambient, origin_circuit_diagnostic_from_class_and_witnesses,
+        potent_ray_convergence, potent_ray_log_xi_terms, project_mori_cone_cap_rays_to_basis,
         prune_decomposable_curve_candidates, remove_pair_decomposable_curve_candidates,
         remove_semigroup_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
         write_grading_cache,
@@ -3296,6 +3429,45 @@ mod tests {
                 class: vec![1, 0],
                 volume: f64_pos!(0.4)
             }]
+        );
+    }
+
+    #[test]
+    fn curve_row_span_rank_is_exact_over_rationals() {
+        let rows = vec![vec![2, 0, 0], vec![4, 0, 0], vec![0, 3, 0]];
+
+        assert_eq!(curve_row_span_rank(&rows).unwrap(), 2);
+        assert!(curve_row_span_rank(&[vec![1], vec![1, 2]]).is_err());
+    }
+
+    #[test]
+    fn potent_ray_log_xi_matches_paper_definition() {
+        let gv = vec![Integer::from(3), Integer::from(-6), Integer::from(0)];
+
+        let terms = potent_ray_log_xi_terms(&gv, f64_pos!(1.25)).unwrap();
+
+        let expected_1 = 3.0_f64.ln() - 2.0 * PI * 1.25;
+        let expected_2 = 6.0_f64.ln() - 2.0 * PI * 2.0 * 1.25;
+        assert!((terms[0].unwrap().get() - expected_1).abs() < 1e-12);
+        assert!((terms[1].unwrap().get() - expected_2).abs() < 1e-12);
+        assert_eq!(terms[2], None);
+    }
+
+    #[test]
+    fn potent_ray_convergence_reports_negative_decay_slope() {
+        let gv = vec![
+            Integer::from(3),
+            Integer::from(-6),
+            Integer::from(27),
+            Integer::from(-192),
+        ];
+
+        let report = potent_ray_convergence(&gv, f64_pos!(1.37)).unwrap();
+
+        assert_eq!(report.log_xi_terms.len(), 4);
+        assert!(
+            report.log_xi_slope.unwrap().get() < 0.0,
+            "potent-ray log-xi terms should decay at this volume"
         );
     }
 

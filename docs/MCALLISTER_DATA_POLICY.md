@@ -116,6 +116,9 @@ This policy is not a completion certificate. The remaining known gaps are:
 - corrected-chamber/flop continuation for the Kähler-coordinate instanton terms
   remains unresolved, especially for even-parity branch-cut cases;
 - corrected-chamber GV coverage still has a checkpoint-implied target residual;
+- potent-ray checkpoints are now validated for rank, volumes, and convergence
+  slopes, but Cyrus does not yet generate the low-dimensional-face ray sample or
+  compute the ray GV series from upstream geometry;
 - the final McAllister corrected volume is close but not reproduced exactly by
   the no-replay path.
 

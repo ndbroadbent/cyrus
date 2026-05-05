@@ -173,6 +173,8 @@ Cyrus already has wrappers around the same Rust `cygv` crate:
 - `compute_gv_invariants_with_degree_bounded_lattice`
 - `compute_gv_invariants_with_provided_generators`
 - `compute_gv_invariants_with_explicit_semigroup`
+- `potent_ray_convergence` for the paper's low-dimensional-face convergence
+  diagnostic once a ray and its `N_{nq}` values are available.
 
 Their boundaries are different:
 
@@ -194,6 +196,13 @@ But the McAllister corrected-chamber diagnostic path currently relies first on
 toric two-face/origin-circuit formula values for selected small curves, then uses
 local one-dimensional ray or LP-witness face HKTY diagnostics only for misses.
 That is not equivalent to CYTools' full `cy.compute_gvs(min_points=N)` call.
+
+For potent-ray convergence, Cyrus can now compute the exact span rank, corrected
+Kähler volumes, and `log xi_n = log|N_{nq}| - 2π n q.t` decay slopes for a
+supplied ray/GV sample. This makes `potent_rays*.dat` checkable rather than
+opaque, but it is still not the full paper method: Cyrus does not yet sample
+low-dimensional faces of `M_infinity(X)` or compute the `N_{nq}` sequence along
+those rays from cygv.
 
 For the high-`h11` Kähler-correction side, however, exact equivalence to a full
 global `compute_gvs()` call is not the McAllister method either. The relevant

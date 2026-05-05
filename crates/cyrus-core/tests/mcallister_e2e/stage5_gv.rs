@@ -24,9 +24,10 @@ use cyrus_core::{
     CurvePruningStrategy, F64, Finite, Point, Polytope, compute_curve_basis_matrix,
     compute_glsm_and_linrels, compute_mori_cone_cap_rays, compute_regular_triangulation,
     compute_toric_curve_gv_diagnostics, compute_toric_two_face_curve_gv_invariants,
-    effective_prime_divisors_from_curve_basis, find_semigroup_decomposition, heights_to_kahler,
-    project_mori_cone_cap_rays_to_basis, prune_decomposable_curve_candidates,
-    remove_pair_decomposable_curve_candidates, subcutoff_toric_curve_candidates, types::i64::I64,
+    curve_row_span_rank, effective_prime_divisors_from_curve_basis, find_semigroup_decomposition,
+    heights_to_kahler, potent_ray_convergence, project_mori_cone_cap_rays_to_basis,
+    prune_decomposable_curve_candidates, remove_pair_decomposable_curve_candidates,
+    subcutoff_toric_curve_candidates, types::i64::I64,
 };
 use malachite::Integer;
 
@@ -61,6 +62,20 @@ fn read_csv_i64(path: &Path) -> Vec<i64> {
         .split([',', '\n', '\r'])
         .filter(|s| !s.trim().is_empty())
         .map(|s| s.trim().parse::<i64>().expect("invalid i64"))
+        .collect()
+}
+
+fn read_csv_rows_integer(path: &Path) -> Vec<Vec<Integer>> {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+    content
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            line.split(',')
+                .map(|s| s.trim().parse::<Integer>().expect("invalid integer"))
+                .collect()
+        })
         .collect()
 }
 
@@ -285,6 +300,75 @@ fn stage5_mcallister_gv_data_available() {
     };
 
     insta::assert_json_snapshot!("mcallister_gv_data_summary", summary);
+}
+
+/// Compute the validation quantities attached to McAllister's potent-ray sample.
+///
+/// This test does not yet generate the rays or their GV values from scratch.
+/// It verifies that the checkpoint files are no longer opaque: Cyrus computes
+/// their rank, their corrected-Kähler volumes, and the paper's convergence
+/// diagnostic from the supplied ray/GV sample.
+#[test]
+fn stage5_mcallister_potent_ray_checkpoint_quantities_are_computed() {
+    if !require_first_principles() {
+        return;
+    }
+    let Some(data_dir) = crate::mcallister_data_dir() else {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    };
+
+    let basis = read_csv_usize(&data_dir.join("basis.dat"));
+    let corrected_kahler = read_csv_finite(&data_dir.join("corrected_kahler_param.dat"));
+    let rays = read_csv_rows_i64(&data_dir.join("potent_rays.dat"));
+    let gv_rows = read_csv_rows_integer(&data_dir.join("potent_rays_gv.dat"));
+    let expected_rank = read_csv_usize(&data_dir.join("potent_rays_rank.dat"))[0];
+    let expected_volumes = read_csv_f64(&data_dir.join("potent_rays_vols.dat"));
+
+    assert_eq!(rays.len(), 411, "potent-ray checkpoint row count changed");
+    assert_eq!(
+        gv_rows.len(),
+        rays.len(),
+        "potent-ray GV row count mismatch"
+    );
+    assert_eq!(
+        expected_volumes.len(),
+        rays.len(),
+        "potent-ray volume row count mismatch"
+    );
+
+    let actual_rank = curve_row_span_rank(&rays).expect("potent ray rank");
+    assert_eq!(
+        actual_rank, expected_rank,
+        "Cyrus exact rank must match potent_rays_rank.dat"
+    );
+
+    let mut max_abs_volume_delta = 0.0_f64;
+    let mut nondecaying_slopes = 0usize;
+    for ((ray, gv_row), &expected_volume) in rays.iter().zip(gv_rows.iter()).zip(&expected_volumes)
+    {
+        let volume = cyrus_core::curve_volume_in_divisor_basis(ray, &basis, &corrected_kahler)
+            .expect("potent ray volume")
+            .try_to_pos()
+            .expect("potent ray volume must be positive");
+        max_abs_volume_delta = max_abs_volume_delta.max((volume.get() - expected_volume).abs());
+
+        let convergence = potent_ray_convergence(gv_row, volume).expect("convergence terms");
+        let slope = convergence
+            .log_xi_slope
+            .expect("ten nonzero potent-ray GV values should determine a slope");
+        if slope.get() >= 0.0 {
+            nondecaying_slopes += 1;
+        }
+    }
+
+    assert!(
+        max_abs_volume_delta < 1e-9,
+        "computed potent-ray volumes must match checkpoint; max_abs_delta={max_abs_volume_delta}"
+    );
+    assert_eq!(
+        nondecaying_slopes, 0,
+        "all checkpoint potent-ray log-xi slopes should decay at corrected t"
+    );
 }
 
 /// Compute the McAllister small toric curve checkpoint from upstream geometry.
@@ -842,8 +926,9 @@ fn stage5_gv_computation_roadmap() {
         status: &'static str,
         /// Bitmask of completed components:
         /// cygv=1, mori=2, grading=4, pipeline=8, small-toric-curves=16,
-        /// small-toric-gvs=32, primal-general-gv-fallback-wiring=64.
-        completed_components: u8,
+        /// small-toric-gvs=32, primal-general-gv-fallback-wiring=64,
+        /// potent-ray-convergence-checks=128.
+        completed_components: u16,
         verified_components: Vec<&'static str>,
         remaining_gaps: Vec<&'static str>,
     }
@@ -851,8 +936,9 @@ fn stage5_gv_computation_roadmap() {
     // Components: cygv integrated (1), mori cap (2), grading vector (4),
     // one-off pipeline wiring (8), small toric curve checkpoint (16),
     // small toric curve GV checkpoint (32), and general primal GV fallback
-    // wiring from basis-coordinate cygv output to ambient curve classes (64).
-    let completed = 1u8 | 2 | 4 | 8 | 16 | 32 | 64;
+    // wiring from basis-coordinate cygv output to ambient curve classes (64),
+    // plus potent-ray convergence checks over supplied samples (128).
+    let completed = 1u16 | 2 | 4 | 8 | 16 | 32 | 64 | 128;
 
     let roadmap = GvComputationRoadmap {
         status: "In Progress - Cyrus computes GV inputs, McAllister-sized validation is expensive",
@@ -884,6 +970,7 @@ fn stage5_gv_computation_roadmap() {
             "first-principles binaries do not load small_curves.dat or small_curves_gv.dat",
             "first-principles runner policy distinguishes downstream Kähler replay from post-computation corrected_cy_vol.dat validation comparison",
             "basis-coordinate GV invariants can be mapped back to ambient divisor-intersection curve classes for primal volume corrections",
+            "McAllister 4-214-647 potent-ray checkpoint samples have exact rank, corrected-Kähler volumes, and log-xi convergence slopes computed by Cyrus; all supplied slopes decay at corrected t",
             "mcallister_first_principles can explicitly attempt general primal GV fallback for missing small-curve toric formula coverage via --primal-gv-max-deg or --primal-gv-min-points",
             "compute_gv_invariants can dump the exact pre-lattice Mori-cap generator matrix as a CDD V-representation for PPL/cdd diagnostics",
             "compute_gv_invariants now uses CYTools-style min_points lattice augmentation even when max_deg is specified; degree-bounded lattice enumeration is isolated behind compute_gv_invariants_with_degree_bounded_lattice for diagnostics",
@@ -945,6 +1032,7 @@ fn stage5_gv_computation_roadmap() {
             "A direct CYTools/cygv provided-generator diagnostic using the 420 corrected-chamber pair-pruned curves reached grading construction but exceeded a 240-second timeout before returning GV values, so per-curve cygv comparison for the leading offenders remains unresolved",
             "A production chamber-updated KKLT solve still needs certified or general GV values for the 10 corrected-chamber toric-missing classes at every fixed-point chamber before it can replace the input-chamber small-curve/GV set",
             "The current production small-curve pruning only removes pair-decomposable curves; the new decomposition-depth report is bounded to four terms and is not a full faithful implementation of the paper's sums-of-others/Hilbert-basis reduction",
+            "Potent-ray rays and their N_{nq} GV series are still validation-supplied for 4-214-647; Cyrus computes rank/volumes/convergence from the sample but does not yet generate low-dimensional Mori-infinity face rays or compute their ray GV series from cygv",
             "The explicit general primal GV fallback still reaches full 214-dimensional Mori-cone dualization for any max_deg high enough to cover the selected missing curves, or for min_points-driven runs; in the latest 4-candidate generated-branch diagnostic the min-required-gv-degree branch still requires degrees 4..2334",
             "A PPL/cdd diagnostic on the dumped 561658-ray, 214-dimensional V-representation also exceeded a 300-second cap without producing an H-representation",
             "Finish a post-orientation-fix validation run of adjacency-filtered DDM on the full 214-dimensional McAllister Mori cone",
