@@ -621,6 +621,27 @@ struct GvBranchBucketReport {
     correction: Vec<f64>,
 }
 
+struct GvSourceBucketAccumulator {
+    count: usize,
+    source_count_min: usize,
+    source_count_max: usize,
+    q_dot_min: f64,
+    q_dot_max: f64,
+    correction: Vec<f64>,
+}
+
+struct GvSourceBucketReport {
+    label: String,
+    count: usize,
+    source_count_min: usize,
+    source_count_max: usize,
+    q_dot_min: f64,
+    q_dot_max: f64,
+    max_abs_correction: f64,
+    l2_correction: f64,
+    correction: Vec<f64>,
+}
+
 struct ChamberUpdatedKkltDiagnostic {
     iterations: usize,
     converged: bool,
@@ -2517,6 +2538,34 @@ fn toric_curve_gv_source_summary(source: &cyrus_core::ToricCurveGvSource) -> Str
             "resolved_conifold_origin(origin={origin_index};shared_two_simplex={:?};relation={:?})",
             witness.shared_two_simplex, witness.sparse_relation
         ),
+    }
+}
+
+fn toric_curve_gv_source_bucket_label(diagnostic: &cyrus_core::ToricCurveGvDiagnostic) -> String {
+    let mut labels = diagnostic
+        .sources
+        .iter()
+        .map(|source| match source {
+            cyrus_core::ToricCurveGvSource::TwoFace {
+                two_face_genus,
+                edge_coefficients,
+                edge_face_dimensions,
+                edge_one_face_genera,
+                ..
+            } => format!(
+                "two_face:g={two_face_genus}:coeffs={edge_coefficients:?}:edge_dims={edge_face_dimensions:?}:edge_one_face_genera={edge_one_face_genera:?}"
+            ),
+            cyrus_core::ToricCurveGvSource::ResolvedConifoldOriginCircuit { .. } => {
+                "resolved_conifold_origin".to_string()
+            }
+        })
+        .collect::<Vec<_>>();
+    labels.sort();
+    labels.dedup();
+    if labels.len() == 1 {
+        labels.pop().expect("one label is present")
+    } else {
+        format!("multi:{}", labels.join("|"))
     }
 }
 
@@ -4877,6 +4926,194 @@ fn report_corrected_chamber_gv_branch_buckets(
     }
 }
 
+fn report_corrected_chamber_toric_gv_source_buckets(
+    gv_invariants: &[(Vec<i64>, malachite::Integer)],
+    toric_gv_diagnostic_by_class: &HashMap<Vec<i64>, cyrus_core::ToricCurveGvDiagnostic>,
+    basis: &[usize],
+    kklt_basis: &[usize],
+    t: &[F64<Finite>],
+    gamma: &[I64<Finite>],
+    input_chi_reference: &[F64<Finite>],
+    corrected_chi_reference: &[F64<Finite>],
+    covered_target: &[F64<Finite>],
+) {
+    if basis.len() != t.len() || kklt_basis.len() != covered_target.len() {
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber GV source buckets unavailable: dimension mismatch"
+        );
+        return;
+    }
+
+    let mut buckets: BTreeMap<String, GvSourceBucketAccumulator> = BTreeMap::new();
+    for (curve, invariant) in gv_invariants {
+        if kklt_basis.iter().any(|&idx| idx >= curve.len())
+            || basis.iter().any(|&idx| idx >= curve.len())
+        {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber GV source buckets unavailable: curve dimension mismatch"
+            );
+            return;
+        }
+        let q_dot_t = basis
+            .iter()
+            .zip(t.iter())
+            .map(|(&idx, ti)| curve[idx] as f64 * ti.get())
+            .sum::<f64>();
+        let Some(parity) = ambient_curve_b_field_parity_diagnostic(curve, basis, gamma) else {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber GV source buckets unavailable: gamma dimension mismatch"
+            );
+            return;
+        };
+        let single = [(curve.clone(), invariant.clone())];
+        let Some(contribution) = cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+            &single,
+            basis,
+            kklt_basis,
+            t,
+            Some(gamma),
+        ) else {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber GV source buckets unavailable: invalid single-curve contribution q_dot_t={q_dot_t} parity_mod2={}",
+                parity.rem_euclid(2)
+            );
+            return;
+        };
+        let (bucket_key, source_count) =
+            if let Some(diagnostic) = toric_gv_diagnostic_by_class.get(curve) {
+                (
+                    toric_curve_gv_source_bucket_label(diagnostic),
+                    diagnostic.sources.len(),
+                )
+            } else {
+                ("missing_diagnostic".to_string(), 0)
+            };
+        let bucket = buckets
+            .entry(bucket_key)
+            .or_insert_with(|| GvSourceBucketAccumulator {
+                count: 0,
+                source_count_min: usize::MAX,
+                source_count_max: 0,
+                q_dot_min: f64::INFINITY,
+                q_dot_max: f64::NEG_INFINITY,
+                correction: vec![0.0; kklt_basis.len()],
+            });
+        bucket.count += 1;
+        bucket.source_count_min = bucket.source_count_min.min(source_count);
+        bucket.source_count_max = bucket.source_count_max.max(source_count);
+        bucket.q_dot_min = bucket.q_dot_min.min(q_dot_t);
+        bucket.q_dot_max = bucket.q_dot_max.max(q_dot_t);
+        for (accumulated, value) in bucket.correction.iter_mut().zip(contribution.iter()) {
+            *accumulated += value.get();
+        }
+    }
+
+    let mut reports = buckets
+        .into_iter()
+        .map(|(label, bucket)| {
+            let (max_abs_correction, l2_correction) = max_abs_and_l2(&bucket.correction);
+            GvSourceBucketReport {
+                label,
+                count: bucket.count,
+                source_count_min: bucket.source_count_min,
+                source_count_max: bucket.source_count_max,
+                q_dot_min: bucket.q_dot_min,
+                q_dot_max: bucket.q_dot_max,
+                max_abs_correction,
+                l2_correction,
+                correction: bucket.correction,
+            }
+        })
+        .collect::<Vec<_>>();
+    reports.sort_unstable_by(|lhs, rhs| {
+        rhs.l2_correction
+            .total_cmp(&lhs.l2_correction)
+            .then_with(|| lhs.label.cmp(&rhs.label))
+    });
+
+    for report in reports.into_iter().take(16) {
+        let Some(target_without_bucket) = f64_target_vector(
+            covered_target
+                .iter()
+                .zip(report.correction.iter())
+                .map(|(covered, bucket)| covered.get() - bucket),
+        ) else {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber GV source bucket label={} unavailable: non-finite drop vector",
+                report.label
+            );
+            continue;
+        };
+        let input_drop_summary = target_correction_delta_summary(
+            input_chi_reference,
+            &target_without_bucket,
+        )
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "[ERROR] failed to compare input-chi corrected-chamber GV source bucket drop: {e}"
+            );
+            std::process::exit(2);
+        });
+        let corrected_drop_summary =
+            target_correction_delta_summary(corrected_chi_reference, &target_without_bucket)
+                .unwrap_or_else(|e| {
+                    eprintln!(
+                        "[ERROR] failed to compare corrected-chi corrected-chamber GV source bucket drop: {e}"
+                    );
+                    std::process::exit(2);
+                });
+        let Some(target_with_flipped_bucket) = f64_target_vector(
+            covered_target
+                .iter()
+                .zip(report.correction.iter())
+                .map(|(covered, bucket)| covered.get() - 2.0 * bucket),
+        ) else {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber GV source bucket label={} unavailable: non-finite flip vector",
+                report.label
+            );
+            continue;
+        };
+        let input_flip_summary = target_correction_delta_summary(
+            input_chi_reference,
+            &target_with_flipped_bucket,
+        )
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "[ERROR] failed to compare input-chi corrected-chamber GV source bucket flip: {e}"
+            );
+            std::process::exit(2);
+        });
+        let corrected_flip_summary =
+            target_correction_delta_summary(corrected_chi_reference, &target_with_flipped_bucket)
+                .unwrap_or_else(|e| {
+                    eprintln!(
+                        "[ERROR] failed to compare corrected-chi corrected-chamber GV source bucket flip: {e}"
+                    );
+                    std::process::exit(2);
+                });
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber GV source bucket label={} count={} source_count_min={} source_count_max={} qdot_min={} qdot_max={} bucket_max_abs={} bucket_l2={} drop_input_chi_max_abs={} drop_input_chi_relative_l2={} drop_corrected_chi_max_abs={} drop_corrected_chi_relative_l2={} flip_input_chi_max_abs={} flip_input_chi_relative_l2={} flip_corrected_chi_max_abs={} flip_corrected_chi_relative_l2={}",
+            report.label,
+            report.count,
+            report.source_count_min,
+            report.source_count_max,
+            report.q_dot_min,
+            report.q_dot_max,
+            report.max_abs_correction,
+            report.l2_correction,
+            input_drop_summary.max_abs_delta,
+            input_drop_summary.relative_l2_delta,
+            corrected_drop_summary.max_abs_delta,
+            corrected_drop_summary.relative_l2_delta,
+            input_flip_summary.max_abs_delta,
+            input_flip_summary.relative_l2_delta,
+            corrected_flip_summary.max_abs_delta,
+            corrected_flip_summary.relative_l2_delta
+        );
+    }
+}
+
 fn insert_missing_diagnostic_gv(
     diagnostic_gvs: &mut HashMap<Vec<i64>, malachite::Integer>,
     ambient_class: &[i64],
@@ -6781,6 +7018,17 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
     .into_iter()
     .map(|diagnostic| (diagnostic.class.clone(), diagnostic))
     .collect::<HashMap<_, _>>();
+    report_corrected_chamber_toric_gv_source_buckets(
+        &selection.small_curve_gvs,
+        &toric_gv_diagnostic_by_class,
+        &intersection.basis,
+        kklt_basis,
+        checkpoint_t,
+        gamma,
+        &checkpoint_implied_gv,
+        &checkpoint_chamber_implied_gv,
+        &covered_gv_target,
+    );
     let collect_top_toric_local_gv = corrected_chamber_top_toric_local_gv_requested();
     let mut top_toric_local_gv_targets = Vec::new();
     let mut top_toric_local_gv_seen = HashSet::new();
