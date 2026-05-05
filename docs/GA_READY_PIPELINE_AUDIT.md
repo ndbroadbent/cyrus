@@ -214,7 +214,10 @@ to make the remaining GV layer more first-principles:
    local-surface machinery.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.
-   The source formula to port is
+   The exact classical-data transform is now available as
+   `flop_transform_intersection_numbers` and `flop_transform_c2_vector`, using
    `kappa'_{abc}=kappa_{abc}-n_C^0 C_a C_b C_c` and
-   `c'_a=c_a+2 n_C^0 C_a`, with GV reassignment from `C` to `-C`, but only
-   after Cyrus has certified the shrinking curve and its `n_C^0`.
+   `c'_a=c_a+2 n_C^0 C_a`. The remaining work is the certification layer:
+   Cyrus still needs to identify the shrinking curve, certify its `n_C^0`, and
+   perform the GV reassignment from `C` to `-C` before this can drive a
+   corrected-chamber instanton sum.

@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use std::env;
 use std::f64::consts::PI;
 
-use malachite::Integer;
+use malachite::{Integer, Rational};
 use rand::{Rng, SeedableRng};
 use rayon::prelude::*;
 
@@ -56,6 +56,106 @@ pub enum GvDilogFailure {
     RealBranchCut,
     /// The reduction/series evaluation did not converge.
     EvaluationFailed,
+}
+
+/// Transform classical triple intersection numbers across a certified flop or
+/// stable Weyl continuation.
+///
+/// This ports the geometric-data continuation formula used in McAllister et
+/// al.'s moduli-space reconstruction:
+///
+/// ```text
+/// kappa'_{abc} = kappa_{abc} - n_C^0 C_a C_b C_c
+/// ```
+///
+/// `curve_class` is expressed in the same divisor/curve basis as `kappa`, and
+/// `gv_invariant` is the certified genus-zero invariant `n_C^0` of the
+/// shrinking curve. This function only applies the exact algebraic
+/// transformation; it does not decide whether the curve is actually floppable
+/// or whether the supplied invariant is valid.
+#[must_use]
+pub fn flop_transform_intersection_numbers(
+    kappa: &Intersection,
+    curve_class: &[i64],
+    gv_invariant: &Integer,
+) -> Option<Intersection> {
+    if curve_class.len() != kappa.dim() {
+        return None;
+    }
+
+    let mut transformed = kappa.clone();
+    let nonzero_curve_entries: Vec<(usize, Integer)> = curve_class
+        .iter()
+        .enumerate()
+        .filter(|(_, entry)| **entry != 0)
+        .map(|(index, entry)| (index, Integer::from(*entry)))
+        .collect();
+
+    for a_pos in 0..nonzero_curve_entries.len() {
+        let (a, curve_a) = &nonzero_curve_entries[a_pos];
+        for b_pos in a_pos..nonzero_curve_entries.len() {
+            let (b, curve_b) = &nonzero_curve_entries[b_pos];
+            for (c, curve_c) in nonzero_curve_entries.iter().skip(b_pos) {
+                let mut delta = gv_invariant.clone();
+                delta *= curve_a;
+                delta *= curve_b;
+                delta *= curve_c;
+                if delta == 0 {
+                    continue;
+                }
+
+                let mut updated = transformed.get(*a, *b, *c).get().clone();
+                updated -= Rational::from(delta);
+                transformed.set(
+                    *a,
+                    *b,
+                    *c,
+                    crate::types::rational::Rational::<Finite>::from_raw(updated),
+                );
+            }
+        }
+    }
+
+    Some(transformed)
+}
+
+/// Transform the linear second-Chern/vector term across a certified flop or
+/// stable Weyl continuation.
+///
+/// This is the companion formula
+///
+/// ```text
+/// c'_a = c_a + 2 n_C^0 C_a
+/// ```
+///
+/// from the same chamber-continuation source. The vector is kept in exact
+/// integer arithmetic to avoid overflow-prone narrowing. As with
+/// [`flop_transform_intersection_numbers`], this function assumes the caller
+/// has already certified the shrinking curve and its GV invariant.
+#[must_use]
+pub fn flop_transform_c2_vector(
+    c2_vector: &[Integer],
+    curve_class: &[i64],
+    gv_invariant: &Integer,
+) -> Option<Vec<Integer>> {
+    if c2_vector.len() != curve_class.len() {
+        return None;
+    }
+
+    Some(
+        c2_vector
+            .iter()
+            .zip(curve_class.iter())
+            .map(|(entry, curve_entry)| {
+                let mut shift = gv_invariant.clone();
+                shift *= Integer::from(2);
+                shift *= Integer::from(*curve_entry);
+                let mut transformed_entry = entry.clone();
+                transformed_entry += shift;
+                transformed_entry
+            })
+            .collect(),
+    )
 }
 
 fn kklt_debug_enabled() -> bool {
@@ -1794,6 +1894,10 @@ mod tests {
         F64::<Finite>::new(v).unwrap()
     }
 
+    fn finite_rational(v: i64) -> TypedRational<Finite> {
+        TypedRational::<Finite>::from_raw(Rational::from(v))
+    }
+
     #[test]
     fn test_compute_c_tau() {
         // For McAllister 4-214-647:
@@ -1802,6 +1906,56 @@ mod tests {
         let w0 = f64_pos!(2.3e-90);
         let c_tau = compute_c_tau(g_s, w0);
         assert!((c_tau.get() - 3.34).abs() < 0.01, "c_tau = {}", c_tau.get());
+    }
+
+    #[test]
+    fn test_flop_transform_intersection_numbers_applies_exact_cubic_shift() {
+        let mut kappa = Intersection::new(3);
+        kappa.set(0, 0, 0, finite_rational(10));
+        kappa.set(0, 1, 2, finite_rational(7));
+        kappa.set(1, 1, 1, finite_rational(-2));
+
+        let transformed =
+            flop_transform_intersection_numbers(&kappa, &[2, -1, 0], &Integer::from(3)).unwrap();
+
+        assert_eq!(transformed.get(0, 0, 0).get(), &Rational::from(-14));
+        assert_eq!(transformed.get(0, 0, 1).get(), &Rational::from(12));
+        assert_eq!(transformed.get(0, 1, 1).get(), &Rational::from(-6));
+        assert_eq!(transformed.get(1, 1, 1).get(), &Rational::from(1));
+        assert_eq!(transformed.get(2, 1, 0).get(), &Rational::from(7));
+    }
+
+    #[test]
+    fn test_flop_transform_intersection_numbers_removes_cancelled_entries() {
+        let mut kappa = Intersection::new(1);
+        kappa.set(0, 0, 0, finite_rational(8));
+
+        let transformed =
+            flop_transform_intersection_numbers(&kappa, &[2], &Integer::from(1)).unwrap();
+
+        assert_eq!(transformed.get(0, 0, 0).get(), &Rational::from(0));
+        assert_eq!(transformed.num_nonzero(), 0);
+    }
+
+    #[test]
+    fn test_flop_transform_c2_vector_applies_exact_linear_shift() {
+        let c2 = vec![Integer::from(1), Integer::from(-5), Integer::from(0)];
+
+        let transformed = flop_transform_c2_vector(&c2, &[2, -1, 3], &Integer::from(4)).unwrap();
+
+        assert_eq!(
+            transformed,
+            vec![Integer::from(17), Integer::from(-13), Integer::from(24)]
+        );
+    }
+
+    #[test]
+    fn test_flop_transform_rejects_dimension_mismatch() {
+        let kappa = Intersection::new(2);
+        let c2 = vec![Integer::from(1), Integer::from(2)];
+
+        assert!(flop_transform_intersection_numbers(&kappa, &[1], &Integer::from(1)).is_none());
+        assert!(flop_transform_c2_vector(&c2, &[1], &Integer::from(1)).is_none());
     }
 
     #[test]

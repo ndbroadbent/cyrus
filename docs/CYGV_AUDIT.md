@@ -1543,9 +1543,10 @@ does not justify fitting the corrected target-volume residual from the saved
 `.dat` files.
 
 The moduli-space reconstruction source gives the chamber-continuation primitive
-that should be ported when we reach that layer. Across a flop or stable Weyl
-reflection with shrinking class `C` and genus-zero invariant `n_C^0`, the
-classical data transforms as
+that now has an exact algebraic Cyrus implementation in
+`flop_transform_intersection_numbers` and `flop_transform_c2_vector`. Across a
+flop or stable Weyl reflection with shrinking class `C` and genus-zero
+invariant `n_C^0`, the classical data transforms as
 
 ```text
 kappa'_{abc} = kappa_{abc} - n_C^0 C_a C_b C_c

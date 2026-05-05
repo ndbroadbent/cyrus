@@ -155,6 +155,7 @@ pub use kklt::{
     compute_divisor_volumes as kklt_compute_tau, compute_gv_target_correction_for_ambient_curves,
     compute_jacobian as kklt_compute_jacobian, compute_jacobian_diagnostics,
     compute_kklt_divisor_volumes, compute_kklt_jacobian, compute_target_tau,
+    flop_transform_c2_vector, flop_transform_intersection_numbers,
     generate_scaled_kklt_branch_initializations, gv_dilog_from_curve_volume_checked,
     scale_mixed_basis_kklt_branch_initialization_to_target, solve_mixed_basis_path_following,
     solve_mixed_basis_path_following_branch_candidates, solve_path_following,
