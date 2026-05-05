@@ -1051,6 +1051,11 @@ and no-origin q-matrix construction for either basis shape. The
 `curve_basis_q_matrix_for_divisor_basis_i64` helpers also centralize the
 `curve_basis(include_origin=False, as_matrix=True)` q-matrix boundary for direct
 cygv calls, so the origin column is not hand-dropped at each GV call site. The
+ordinary vector-basis GV paths in `mcallister_first_principles` now route their
+Mori projection, curve-basis matrix, and q-matrix construction through
+`gv_divisor_basis_data`, so the runner no longer repeats those pieces by hand
+for the default mirror, primal fallback, branch-report degree summary, and
+corrected-chamber diagnostics.
 `mcallister_first_principles --dual-basis` JSON override now distinguishes index
 and matrix basis shapes. Index overrides continue through the current
 vector-basis path, while matrix overrides parse and then fail with an explicit

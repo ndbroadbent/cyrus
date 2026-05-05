@@ -58,10 +58,7 @@ use good_lp::{
 };
 
 use cyrus_core::flat_direction::{compute_flat_direction, compute_flat_direction_full};
-use cyrus_core::gv::{
-    BoundedCurveDecompositionIndex, check_supporting_mori_face_normal,
-    project_mori_cone_cap_rays_to_basis,
-};
+use cyrus_core::gv::{BoundedCurveDecompositionIndex, check_supporting_mori_face_normal};
 use cyrus_core::types::f64::F64;
 use cyrus_core::types::i64::I64;
 use cyrus_core::types::range::CheckedRange;
@@ -69,15 +66,15 @@ use cyrus_core::types::tags::{Finite, Pos};
 use cyrus_core::vacuum::compute_vacuum;
 use cyrus_core::volume::bbhl_correction;
 use cyrus_core::{
-    CurvePruningStrategy, Point, Polytope, ToricCurveCandidate, Triangulation, basis_change_matrix,
-    build_racetrack_terms, compute_curve_basis_matrix, compute_glsm_and_linrels,
-    compute_grading_vector, compute_intersection_cytools, compute_linear_relations_no_origin,
-    compute_mori_cone_cap_rays, compute_origin_circuit_curve_diagnostics,
-    compute_regular_triangulation, compute_toric_curve_gv_diagnostics,
-    compute_toric_two_face_curve_gv_invariants, compute_w0_from_terms,
-    curve_basis_matrix_without_origin_i64, effective_prime_divisors_from_curve_basis,
-    generate_scaled_kklt_branch_initializations, heights_to_kahler, intersection_in_basis,
-    is_unimodular, kahler_to_heights, map_basis_gv_invariants_to_ambient,
+    CurvePruningStrategy, DivisorBasis, GvDivisorBasisData, Point, Polytope, ToricCurveCandidate,
+    Triangulation, basis_change_matrix, build_racetrack_terms, compute_curve_basis_matrix,
+    compute_glsm_and_linrels, compute_grading_vector, compute_intersection_cytools,
+    compute_linear_relations_no_origin, compute_mori_cone_cap_rays,
+    compute_origin_circuit_curve_diagnostics, compute_regular_triangulation,
+    compute_toric_curve_gv_diagnostics, compute_toric_two_face_curve_gv_invariants,
+    compute_w0_from_terms, effective_prime_divisors_from_curve_basis,
+    generate_scaled_kklt_branch_initializations, gv_divisor_basis_data, heights_to_kahler,
+    intersection_in_basis, is_unimodular, kahler_to_heights, map_basis_gv_invariants_to_ambient,
     project_ambient_curve_to_basis, prune_decomposable_curve_candidates,
     scale_mixed_basis_kklt_branch_initialization_to_target, solve_mixed_basis_path_following,
     solve_mixed_basis_path_following_branch_candidates, solve_racetrack,
@@ -455,6 +452,16 @@ fn basis_indices_or_exit(override_value: &BasisOverride, context: &str) -> Vec<u
         },
         <[usize]>::to_vec,
     )
+}
+
+fn vector_gv_basis_data(
+    ambient_mori_rays: &[Vec<i64>],
+    linrels: &[Vec<malachite::Integer>],
+    basis: &[usize],
+    context: &str,
+) -> Result<GvDivisorBasisData, String> {
+    gv_divisor_basis_data(ambient_mori_rays, linrels, DivisorBasis::Indices(basis))
+        .map_err(|e| format!("failed to build {context} GV divisor-basis data: {e}"))
 }
 
 #[derive(Debug, Deserialize)]
@@ -1576,23 +1583,27 @@ fn stage_gv(
     max_deg: Option<u32>,
     t0: &Instant,
 ) -> Vec<(Vec<i32>, malachite::Integer)> {
-    let rays = compute_mori_cone_cap_rays(
+    let ambient_rays = compute_mori_cone_cap_rays(
         &flat.dual_triangulation,
         &flat.dual_triangulation_points,
         &flat.dual_polytope,
-        true,
         false,
-        Some(&flat.dual_basis),
+        false,
+        None,
     )
-    .expect("Failed mori cone cap rays");
-    let grading = compute_grading_vector(&rays).expect("No grading vector found");
-    let curve_basis = compute_curve_basis_matrix(&flat.dual_linrels, &flat.dual_basis)
-        .expect("Failed curve basis matrix");
-    let q_matrix = curve_basis_matrix_without_origin_i64(&curve_basis).expect("q entries fit i64");
+    .expect("Failed ambient mori cone cap rays");
+    let gv_basis = vector_gv_basis_data(
+        &ambient_rays,
+        &flat.dual_linrels,
+        &flat.dual_basis,
+        "dual mirror",
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    let grading = compute_grading_vector(&gv_basis.mori_rays).expect("No grading vector found");
     let invariants = cyrus_core::compute_gv_invariants(
-        &rays,
+        &gv_basis.mori_rays,
         &grading,
-        &q_matrix,
+        &gv_basis.q_matrix,
         &flat.dual_kappa,
         min_points,
         max_deg,
@@ -1703,10 +1714,14 @@ fn compute_branch_gv_coverages(
         .map(|item| (item.class, item.gv))
         .collect();
     let required_degree_grading = if include_required_degree_summary {
-        let basis_rays = project_mori_cone_cap_rays_to_basis(&ambient_rays, &intersection.basis)
-            .map_err(|e| format!("failed to project primal Mori-cap rays to basis: {e}"))?;
+        let gv_basis_data = vector_gv_basis_data(
+            &ambient_rays,
+            &intersection.linrels,
+            &intersection.basis,
+            "branch GV coverage",
+        )?;
         Some(
-            compute_grading_vector(&basis_rays)
+            compute_grading_vector(&gv_basis_data.mori_rays)
                 .ok_or_else(|| "failed to compute branch GV degree grading vector".to_string())?,
         )
     } else {
@@ -1886,7 +1901,7 @@ fn compute_primal_general_gv_by_ambient_class(
     geom: &PrimalGeom,
     intersection: &PrimalIntersection,
     required_ambient_classes: &[Vec<i64>],
-    basis_rays: Option<&[Vec<i64>]>,
+    ambient_mori_rays: Option<&[Vec<i64>]>,
     min_points: Option<u32>,
     max_deg: Option<u32>,
 ) -> Result<HashMap<Vec<i64>, malachite::Integer>, String> {
@@ -1897,21 +1912,28 @@ fn compute_primal_general_gv_by_ambient_class(
         );
     }
 
-    let computed_rays;
-    let rays = if let Some(basis_rays) = basis_rays {
-        basis_rays
+    let computed_ambient_rays;
+    let ambient_rays = if let Some(ambient_mori_rays) = ambient_mori_rays {
+        ambient_mori_rays
     } else {
-        computed_rays = compute_mori_cone_cap_rays(
+        computed_ambient_rays = compute_mori_cone_cap_rays(
             &geom.triangulation,
             &geom.triangulation_points,
             &geom.polytope,
-            true,
             false,
-            Some(&intersection.basis),
+            false,
+            None,
         )
-        .map_err(|e| format!("failed to compute primal basis Mori-cap rays: {e}"))?;
-        &computed_rays
+        .map_err(|e| format!("failed to compute primal ambient Mori-cap rays: {e}"))?;
+        &computed_ambient_rays
     };
+    let gv_basis_data = vector_gv_basis_data(
+        ambient_rays,
+        &intersection.linrels,
+        &intersection.basis,
+        "primal",
+    )?;
+    let rays = &gv_basis_data.mori_rays;
     let grading = compute_grading_vector(&rays)
         .ok_or_else(|| "failed to compute primal GV grading vector".to_string())?;
     let degree_summary = summarize_required_gv_degrees(
@@ -1937,21 +1959,18 @@ fn compute_primal_general_gv_by_ambient_class(
             degree_summary.first_over_max
         ));
     }
-    let curve_basis = compute_curve_basis_matrix(&intersection.linrels, &intersection.basis)
-        .map_err(|e| format!("failed to compute primal curve basis matrix: {e}"))?;
-    let q_matrix = curve_basis_matrix_without_origin_i64(&curve_basis)
-        .map_err(|e| format!("failed to build primal q-matrix: {e}"))?;
     let general_gvs = cyrus_core::compute_gv_invariants(
         &rays,
         &grading,
-        &q_matrix,
+        &gv_basis_data.q_matrix,
         &intersection.kappa_basis,
         min_points,
         max_deg,
     )
     .map_err(|e| format!("failed to compute primal general GV invariants: {e}"))?;
-    let ambient_gvs = map_basis_gv_invariants_to_ambient(&general_gvs, &curve_basis)
-        .map_err(|e| format!("failed to map primal general GV invariants to ambient: {e}"))?;
+    let ambient_gvs =
+        map_basis_gv_invariants_to_ambient(&general_gvs, &gv_basis_data.curve_basis_matrix)
+            .map_err(|e| format!("failed to map primal general GV invariants to ambient: {e}"))?;
 
     let mut out = HashMap::with_capacity(ambient_gvs.len());
     for (class, gv) in ambient_gvs {
@@ -3212,22 +3231,28 @@ fn report_corrected_chamber_top_toric_local_gv_diagnostics(
             return;
         }
     };
-    let basis_rays = match project_mori_cone_cap_rays_to_basis(&ambient_rays, &intersection.basis) {
-        Ok(rays) => rays,
+    let gv_basis_data = match vector_gv_basis_data(
+        &ambient_rays,
+        &intersection.linrels,
+        &intersection.basis,
+        "checkpoint-t corrected-chamber top-toric local GV diagnostic",
+    ) {
+        Ok(data) => data,
         Err(e) => {
             eprintln!(
-                "[COMPARE] checkpoint-t corrected-chamber top-toric local GV diagnostic failed to project Mori-cap rays: {e}"
+                "[COMPARE] checkpoint-t corrected-chamber top-toric local GV diagnostic failed to build GV basis data: {e}"
             );
             return;
         }
     };
-    let Some(grading) = compute_grading_vector(&basis_rays) else {
+    let basis_rays = &gv_basis_data.mori_rays;
+    let Some(grading) = compute_grading_vector(basis_rays) else {
         eprintln!(
             "[COMPARE] checkpoint-t corrected-chamber top-toric local GV diagnostic failed to compute grading vector"
         );
         return;
     };
-    match non_positive_basis_generator_degrees(&basis_rays, &grading) {
+    match non_positive_basis_generator_degrees(basis_rays, &grading) {
         Ok((non_positive_count, Some((idx, degree, ray)))) => {
             eprintln!(
                 "[COMPARE] checkpoint-t corrected-chamber top-toric local GV diagnostic skipped: grading has {non_positive_count}/{} non-positive Mori generator degrees; first index={idx} degree={degree} ray={ray:?}",
@@ -3243,24 +3268,6 @@ fn report_corrected_chamber_top_toric_local_gv_diagnostics(
             return;
         }
     }
-    let curve_basis = match compute_curve_basis_matrix(&intersection.linrels, &intersection.basis) {
-        Ok(curve_basis) => curve_basis,
-        Err(e) => {
-            eprintln!(
-                "[COMPARE] checkpoint-t corrected-chamber top-toric local GV diagnostic failed to compute curve basis matrix: {e}"
-            );
-            return;
-        }
-    };
-    let q_matrix = match curve_basis_matrix_without_origin_i64(&curve_basis) {
-        Ok(q_matrix) => q_matrix,
-        Err(e) => {
-            eprintln!(
-                "[COMPARE] checkpoint-t corrected-chamber top-toric local GV diagnostic failed to build q-matrix: {e}"
-            );
-            return;
-        }
-    };
     let corrected_kappa_basis = match chamber_intersection_in_basis(
         tri,
         &geom.triangulation_points,
@@ -3287,10 +3294,10 @@ fn report_corrected_chamber_top_toric_local_gv_diagnostics(
         attempted += 1;
         report_single_top_toric_local_gv_diagnostic(
             target,
-            &basis_rays,
+            basis_rays,
             &intersection.basis,
             &grading,
-            &q_matrix,
+            &gv_basis_data.q_matrix,
             &corrected_kappa_basis,
             witness_limit,
         );
@@ -5997,6 +6004,7 @@ fn diagnose_chamber_gv_volume_correction(
 
     let mut basis_ray_stats = None;
     let mut basis_rays_for_missing = None;
+    let mut gv_basis_data_for_missing = None;
     let mut grading_for_missing = None;
     let mut degree_summary = None;
     let mut missing_target_stats = None;
@@ -6007,10 +6015,13 @@ fn diagnose_chamber_gv_volume_correction(
             .iter()
             .position(|point| point.coords().iter().all(|&coord| coord == 0))
             .ok_or_else(|| "failed to find origin in corrected-chamber points".to_string())?;
-        let basis_rays = project_mori_cone_cap_rays_to_basis(&ambient_rays, &intersection.basis)
-            .map_err(|e| {
-                format!("failed to project corrected-chamber Mori-cap rays to basis: {e}")
-            })?;
+        let gv_basis_data = vector_gv_basis_data(
+            &ambient_rays,
+            &intersection.linrels,
+            &intersection.basis,
+            "corrected-chamber",
+        )?;
+        let basis_rays = gv_basis_data.mori_rays.clone();
         let origin_circuits = compute_origin_circuit_curve_diagnostics(
             tri,
             &geom.triangulation_points,
@@ -6060,6 +6071,7 @@ fn diagnose_chamber_gv_volume_correction(
             10,
         )?;
         basis_rays_for_missing = Some(basis_rays);
+        gv_basis_data_for_missing = Some(gv_basis_data);
         grading_for_missing = Some(grading);
         degree_summary = Some(summary);
         basis_ray_stats = Some(ray_stats);
@@ -6125,10 +6137,9 @@ fn diagnose_chamber_gv_volume_correction(
                 ray_targets.skipped_decomposable_generators
             );
         }
-        let curve_basis = compute_curve_basis_matrix(&intersection.linrels, &intersection.basis)
-            .map_err(|e| format!("failed to compute corrected-chamber curve basis matrix: {e}"))?;
-        let q_matrix = curve_basis_matrix_without_origin_i64(&curve_basis)
-            .map_err(|e| format!("failed to build corrected-chamber q-matrix: {e}"))?;
+        let gv_basis_data = gv_basis_data_for_missing
+            .as_ref()
+            .expect("GV basis data computed for corrected-chamber missing curves");
         let corrected_kappa_basis =
             chamber_intersection_in_basis(tri, &geom.triangulation_points, &intersection.basis)?;
         eprintln!(
@@ -6138,7 +6149,7 @@ fn diagnose_chamber_gv_volume_correction(
             &ray_targets.candidates,
             &intersection.basis,
             grading,
-            &q_matrix,
+            &gv_basis_data.q_matrix,
             &corrected_kappa_basis,
         )?;
         for (ambient_class, gv, _) in &ray_gvs {
@@ -6202,10 +6213,9 @@ fn diagnose_chamber_gv_volume_correction(
                 basis_rays.len()
             ));
         }
-        let curve_basis = compute_curve_basis_matrix(&intersection.linrels, &intersection.basis)
-            .map_err(|e| format!("failed to compute corrected-chamber curve basis matrix: {e}"))?;
-        let q_matrix = curve_basis_matrix_without_origin_i64(&curve_basis)
-            .map_err(|e| format!("failed to build corrected-chamber q-matrix: {e}"))?;
+        let gv_basis_data = gv_basis_data_for_missing
+            .as_ref()
+            .expect("GV basis data computed for corrected-chamber missing curves");
         let corrected_kappa_basis =
             chamber_intersection_in_basis(tri, &geom.triangulation_points, &intersection.basis)?;
         eprintln!(
@@ -6216,7 +6226,7 @@ fn diagnose_chamber_gv_volume_correction(
             basis_rays,
             &intersection.basis,
             grading,
-            &q_matrix,
+            &gv_basis_data.q_matrix,
             &corrected_kappa_basis,
         )?;
         let covered_count = face_gvs.iter().filter(|result| result.gv.is_some()).count();
@@ -6354,10 +6364,9 @@ fn diagnose_chamber_gv_volume_correction(
             general_min_points,
             general_max_deg
         );
-        let curve_basis = compute_curve_basis_matrix(&intersection.linrels, &intersection.basis)
-            .map_err(|e| format!("failed to compute corrected-chamber curve basis matrix: {e}"))?;
-        let q_matrix = curve_basis_matrix_without_origin_i64(&curve_basis)
-            .map_err(|e| format!("failed to build corrected-chamber q-matrix: {e}"))?;
+        let gv_basis_data = gv_basis_data_for_missing
+            .as_ref()
+            .expect("GV basis data computed for corrected-chamber missing curves");
         let corrected_kappa_basis =
             chamber_intersection_in_basis(tri, &geom.triangulation_points, &intersection.basis)?;
         let general_gvs = if provided_generators_only {
@@ -6384,7 +6393,7 @@ fn diagnose_chamber_gv_volume_correction(
             cyrus_core::compute_gv_invariants_with_provided_generators(
                 &provided_rays,
                 grading,
-                &q_matrix,
+                &gv_basis_data.q_matrix,
                 &corrected_kappa_basis,
                 general_min_points,
                 general_max_deg,
@@ -6393,7 +6402,7 @@ fn diagnose_chamber_gv_volume_correction(
             cyrus_core::compute_gv_invariants(
                 basis_rays,
                 grading,
-                &q_matrix,
+                &gv_basis_data.q_matrix,
                 &corrected_kappa_basis,
                 general_min_points,
                 general_max_deg,
@@ -6401,9 +6410,10 @@ fn diagnose_chamber_gv_volume_correction(
         }
         .map_err(|e| format!("failed to compute corrected-chamber general GV invariants: {e}"))?;
         let ambient_gvs =
-            map_basis_gv_invariants_to_ambient(&general_gvs, &curve_basis).map_err(|e| {
-                format!("failed to map corrected-chamber general GV invariants to ambient: {e}")
-            })?;
+            map_basis_gv_invariants_to_ambient(&general_gvs, &gv_basis_data.curve_basis_matrix)
+                .map_err(|e| {
+                    format!("failed to map corrected-chamber general GV invariants to ambient: {e}")
+                })?;
         let missing_set: HashSet<Vec<i64>> = missing_gv_classes.iter().cloned().collect();
         let mut newly_covered = 0usize;
         for (class, gv) in ambient_gvs {
@@ -8695,17 +8705,11 @@ fn stage_volume(
                 primal_gv_min_points,
                 primal_gv_max_deg
             );
-            let basis_rays =
-                project_mori_cone_cap_rays_to_basis(&ambient_rays, &intersection.basis)
-                    .unwrap_or_else(|e| {
-                        eprintln!("[ERROR] failed to project primal Mori-cap rays to basis: {e}");
-                        std::process::exit(2);
-                    });
             let general_gvs = compute_primal_general_gv_by_ambient_class(
                 geom,
                 intersection,
                 &missing_gv_classes,
-                Some(&basis_rays),
+                Some(&ambient_rays),
                 primal_gv_min_points,
                 primal_gv_max_deg,
             )
