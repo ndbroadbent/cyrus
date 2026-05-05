@@ -7056,6 +7056,25 @@ fn compare_corrected_chamber_target_volume_checkpoint(
     );
 }
 
+fn corrected_divisor_values_from_parts(
+    classical_tau: &[F64<Finite>],
+    chi_divisor: &[I64<Finite>],
+    gv_correction: &[F64<Finite>],
+) -> Option<Vec<F64<Finite>>> {
+    if classical_tau.len() != chi_divisor.len() || classical_tau.len() != gv_correction.len() {
+        return None;
+    }
+    let twenty_four = F64::<Pos>::new(24.0).expect("24 is positive");
+    Some(
+        classical_tau
+            .iter()
+            .zip(chi_divisor.iter())
+            .zip(gv_correction.iter())
+            .map(|((classical, chi), gv)| *classical - chi.to_f64() / twenty_four + *gv)
+            .collect(),
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 fn compare_checkpoint_t_corrected_chamber_gv_target(
     data_dir: Option<&str>,
@@ -7116,6 +7135,18 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
         eprintln!("[ERROR] failed to compute checkpoint-t corrected-chamber intersections: {e}");
         std::process::exit(2);
     });
+    let checkpoint_chamber_kappa_basis =
+        intersection_in_basis(&checkpoint_chamber_kappa_full, &intersection.basis);
+    let Some(checkpoint_chamber_classical_tau) = cyrus_core::kklt::compute_kklt_divisor_volumes(
+        &checkpoint_chamber_kappa_basis,
+        &checkpoint_chamber_kappa_full,
+        &intersection.basis,
+        kklt_basis,
+        checkpoint_t,
+    ) else {
+        eprintln!("[ERROR] failed to compute checkpoint-t corrected-chamber classical tau");
+        std::process::exit(2);
+    };
     let checkpoint_chamber_chi = cyrus_core::compute_kklt_divisor_chi(
         &geom.polytope,
         &geom.triangulation_points,
@@ -7227,6 +7258,56 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
         selection.filtered_count,
         selection.toric_gv_covered_count,
         selection.toric_gv_missing_count
+    );
+    let raw_kklt_target = c_i
+        .iter()
+        .map(|ci| {
+            let value = (ci.to_f64() / c_tau).get();
+            F64::<Finite>::new(value).expect("raw KKLT target is finite")
+        })
+        .collect::<Vec<_>>();
+    let checkpoint_equation_values = corrected_divisor_values_from_parts(
+        &checkpoint_chamber_classical_tau,
+        &checkpoint_chamber_chi,
+        &checkpoint_chamber_implied_gv,
+    )
+    .unwrap_or_else(|| {
+        eprintln!("[ERROR] failed to compute checkpoint-implied corrected divisor values");
+        std::process::exit(2);
+    });
+    let checkpoint_equation_summary =
+        target_correction_delta_summary(&raw_kklt_target, &checkpoint_equation_values)
+            .unwrap_or_else(|e| {
+                eprintln!(
+                    "[ERROR] failed to compare checkpoint-implied corrected divisor equation: {e}"
+                );
+                std::process::exit(2);
+            });
+    let toric_equation_values = corrected_divisor_values_from_parts(
+        &checkpoint_chamber_classical_tau,
+        &checkpoint_chamber_chi,
+        &covered_gv_target,
+    )
+    .unwrap_or_else(|| {
+        eprintln!("[ERROR] failed to compute toric-covered corrected divisor values");
+        std::process::exit(2);
+    });
+    let toric_equation_summary = target_correction_delta_summary(
+        &raw_kklt_target,
+        &toric_equation_values,
+    )
+    .unwrap_or_else(|e| {
+        eprintln!("[ERROR] failed to compare toric-covered corrected divisor equation: {e}");
+        std::process::exit(2);
+    });
+    eprintln!(
+        "[COMPARE] checkpoint-t corrected divisor equation: checkpoint_implied_max_abs={} checkpoint_implied_relative_l2={} toric_covered_max_abs={} toric_covered_relative_l2={} max_abs_raw_target={} max_abs_toric_corrected_T={}",
+        checkpoint_equation_summary.max_abs_delta,
+        checkpoint_equation_summary.relative_l2_delta,
+        toric_equation_summary.max_abs_delta,
+        toric_equation_summary.relative_l2_delta,
+        toric_equation_summary.max_abs_reference,
+        toric_equation_summary.max_abs_candidate
     );
     let corrected_chi_summary =
         target_correction_delta_summary(&checkpoint_chamber_implied_gv, &covered_gv_target)
