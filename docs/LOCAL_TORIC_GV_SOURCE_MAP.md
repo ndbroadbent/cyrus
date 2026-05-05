@@ -264,7 +264,7 @@ This is validated against the local `P^2` table, the start of the `F0` and
 and polygon-5 checks are important because the finite-limit cover weights are
 not always the printed `C1` coefficients: `F1` uses `[2, 1]`, while polygon 5
 uses `[1, 1, 1]` rather than `[3, 2, 2]`. The gated McAllister tests now
-reconstruct the first three saved GV entries for all 395 rank-two CKYZ
+reconstruct the first four saved GV entries for all 395 rank-two CKYZ
 potent-ray rows from source data, and all ten saved entries for the canonical
 F0 source directions `[1,1]`/`[1,2]` and F1 source directions `[2,1]`/`[3,1]`.
 They do not yet reproduce all ten entries across every rank-two row: the

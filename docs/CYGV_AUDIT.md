@@ -998,7 +998,7 @@ cygv instanton-data layer for the CKYZ local surface examples:
 - apply the `instbase` multiple-cover inversion with finite-limit cover weights.
 
 The new targeted API truncates by requested source degrees instead of a single
-total degree. That is enough to validate the first three `potent_rays_gv.dat`
+total degree. That is enough to validate the first four `potent_rays_gv.dat`
 entries for all 395 rank-two CKYZ McAllister potent-ray rows without using
 those GV rows as inputs. Polygon 5 is included with finite-limit cover weights
 `[1, 1, 1]`; the printed `C1 = 3J1 + 2J2 + 2J3` weights are intentionally
@@ -1007,21 +1007,22 @@ is not yet enough for all ten entries: the current multivariable series still
 becomes too slow on the largest source directions, so the remaining work is
 coefficient-level extraction rather than a new physics shortcut.
 
-The gated McAllister CKYZ test defaults to the first three multiples. Setting
+The gated McAllister CKYZ test defaults to the first four multiples. Setting
 `CYRUS_CKYZ_MULTIPLES_TO_CHECK=N` raises that assertion count explicitly for
 diagnostics. Before dense monomial indexing, guarded addition tables, and the
-target-downset domain, unfiltered `N=3` and polygon-5 direction `[4,3,2]` were
+target-downset domain, unfiltered `N=4` and polygon-5 direction `[4,3,2]` were
 the first clear performance blockers. With those source-preserving domain
-improvements, the full rank-two `N=3` gate passes in about 50 seconds. A later
+improvements, the full rank-two `N=4` gate passes in about 110 seconds. A later
 flattened addition table, followed by sparse valid-pair multiplication, also
 makes the narrowed polygon-5 `[4,3,2]` `N=4` gate complete in about 149 seconds.
 Higher all-row/all-ten validation remains a finite-domain construction problem
 rather than a known coefficient mismatch.
-The same test can be narrowed with `CYRUS_CKYZ_TARGET_DIRECTION=a,b,...`. With
-`N=3`, the F0 direction `[1,1]` passes quickly and the F1 direction `[5,4]`
-passes in seconds; polygon-5 direction `[4,3,2]` now passes through `N=4` when
-narrowed but remains the first slow family. The immediate coefficient-domain
-work should therefore focus on the rank-three polygon-5 local model first.
+The same test can be narrowed with `CYRUS_CKYZ_TARGET_DIRECTION=a,b,...`.
+Focused all-ten checks now pass for the F0 directions `[1,1]`/`[1,2]` and F1
+directions `[2,1]`/`[3,1]`; polygon-5 direction `[4,3,2]` passes through `N=4`
+when narrowed but remains the first slow family. The immediate
+coefficient-domain work should therefore focus on the rank-three polygon-5
+local model first.
 
 ## May 2026 CYTools/cygv Porting Gaps
 
@@ -1081,7 +1082,7 @@ degree classes and on the order in which they are subtracted.
 
 Third, the current all-ten CKYZ blocker is domain shape, not arithmetic alone.
 Dense indexing and guarded addition tables fixed the obvious multiplication
-overhead, and the first-three checks now run for all 395 rank-two CKYZ
+overhead, and the first-four checks now run for all 395 rank-two CKYZ
 rows. Cyrus' targeted extractor now uses the union of componentwise past
 downsets of the requested degrees instead of the single box of coordinate
 maxima, so incomparable target degrees no longer force irrelevant mixed
@@ -1160,7 +1161,7 @@ small guardrail tests currently prove:
 - local `P^2` causal-domain extraction reproduces the known degree-1 through
   degree-10 table;
 - the standard-generator F0 ray causal-domain extraction agrees with the
-  existing `target_downset` extractor for the first three diagonal targets;
+  existing `target_downset` extractor for the first four diagonal targets;
 - explicit CKYZ domains drop products whose summed degree is absent from the
   monomial map, matching the cygv polynomial-domain contract.
 
@@ -1174,7 +1175,7 @@ choice for guardrail computations and passes the F1 ray equivalence check
 against the existing targeted extractor.
 
 That source-derived causal domain is still not narrow enough to become the
-default all-row McAllister gate. A full rank-two `N=3` run through the
+default all-row McAllister gate. A full rank-two `N=4` run through the
 source-weighted causal helper was stopped after several minutes, while the
 targeted first-principles F0 directions `[1,1]`/`[1,2]` and F1 directions
 `[2,1]`/`[3,1]` now have explicit all-ten regressions against saved rows and
@@ -1194,4 +1195,4 @@ source-derived path can reach complete saved rows for multiple non-`P^2`
 families, but the missing step is still to derive the local generator set and
 grading for each normalized support signature from geometry, then use a
 narrower coefficient/history domain to raise the larger rank-two CKYZ families
-beyond the first three multiples.
+beyond the first four multiples.

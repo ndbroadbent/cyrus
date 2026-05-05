@@ -853,7 +853,7 @@ fn first_mcallister_local_p2_potent_ray_gvs_are_reconstructed() {
 fn mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed() {
     assert_mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed(
         ckyz_target_direction_filter(),
-        ckyz_multiples_to_check(3),
+        ckyz_multiples_to_check(4),
         None,
     );
 }
