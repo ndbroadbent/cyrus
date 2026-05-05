@@ -270,6 +270,33 @@ toric two-face/origin-circuit formula values for selected small curves, then use
 local one-dimensional ray or LP-witness face HKTY diagnostics only for misses.
 That is not equivalent to CYTools' full `cy.compute_gvs(min_points=N)` call.
 
+A pass over the current Cyrus call sites separates the GV code into three
+different trust levels:
+
+- Production-computed for the current 4-214 checkpoint: the selected small
+  toric-curve classes and their `1/-2` GV values, via
+  `compute_toric_two_face_curve_gv_invariants` and
+  `compute_toric_curve_gv_diagnostics`.
+- Validation-only: `potent_rays.dat`, `potent_rays_gv.dat`,
+  `corrected_kahler_param.dat`, `corrected_target_volumes.dat`, and
+  `corrected_cy_vol.dat`. These files may be loaded by tests or optional
+  comparison paths, but they are not production inputs for GA evaluation.
+- Diagnostic-only: `compute_one_dimensional_ray_gv_series`,
+  `compute_ray_gv_series_with_provided_generators`,
+  `compute_gv_invariants_with_explicit_semigroup`, and the
+  `mcallister_first_principles` LP-witness/lattice-saturation retries. These
+  are useful for isolating possible low-dimensional face contexts, but they are
+  not promoted to production unless the supporting face and semigroup context
+  are independently reconstructed and certified.
+
+One additional audit caveat: the main runner paths that call `cygv` remove the
+origin/canonical column from `compute_curve_basis_matrix` before building the
+`q` matrix, matching `CYTools`' `curve_basis(include_origin=False)`. The ignored
+`stage5_first_potent_ray_one_generator_gv_diagnostic` currently builds its
+diagnostic `q` matrix from the full curve-basis rows. That makes its printed
+one-generator sequence even less suitable as physics evidence; it should only
+be read as a guard that the saved potent-ray row has not been regenerated.
+
 For potent-ray convergence, Cyrus can now compute the exact span rank, corrected
 Kähler volumes, and `log xi_n = log|N_{nq}| - 2π n q.t` decay slopes for a
 supplied ray/GV sample. This makes `potent_rays*.dat` checkable rather than

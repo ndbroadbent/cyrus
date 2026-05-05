@@ -123,6 +123,11 @@ face/phase reconstruction, not a lookup against the current FRST.
   sequences to make the checkpoint pass.
 - Do not expect a one-generator `cygv` call to reproduce `potent_rays_gv.dat`;
   it asks a different semigroup question.
+- Do not overinterpret the existing ignored one-generator test sequence. Its
+  current `q`-matrix construction includes the origin/canonical column, whereas
+  the CYTools GV path uses `curve_basis(include_origin=False)`. The mismatch
+  strengthens the conclusion that the test is diagnostic-only; it does not
+  provide a trusted local model.
 - Do not keep expanding final-volume fitting diagnostics until the face/ray GV
   source problem is solved.
 
