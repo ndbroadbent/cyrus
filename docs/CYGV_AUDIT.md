@@ -782,6 +782,10 @@ nilpotent.
 origin on the half-cutoff and full-cutoff degree slices used by the subsequent
 distance comparison. It does not choose the affine lattice basis or measure
 distance to the potent cone.
+`nilpotent_ray_slice_comparison_points` reduces the finite comparison charges
+to primitive rays and enumerates the integer points where those rays land on a
+given slice, producing offsets from the nilpotent-ray origin. It still stops
+before the LLL-reduced infinity-norm distance test.
 
 This reinforces the production boundary above: the corrected-chamber fix should
 be a chamber/`M_infinity`/nop continuation implementation or a current-chamber

@@ -483,6 +483,21 @@ pub struct NilpotentRayDegreeSlice {
     pub slice_origin: Vec<i64>,
 }
 
+/// Integer point where a comparison ray intersects a nilpotent degree slice.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NilpotentRaySliceComparisonPoint {
+    /// Primitive comparison ray.
+    pub primitive_ray: Vec<i64>,
+    /// Positive grading degree of `primitive_ray`.
+    pub primitive_degree: i128,
+    /// Positive multiple that places this ray on the slice.
+    pub slice_multiple: i128,
+    /// Curve class on the slice.
+    pub slice_point: Vec<i64>,
+    /// `slice_point - slice_origin`.
+    pub offset_from_origin: Vec<i64>,
+}
+
 /// Exact certificate that an integer normal cuts out a supporting Mori face.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SupportingMoriFaceCertificate {
@@ -4286,6 +4301,21 @@ fn checked_ray_multiple(ray: &[i64], multiple: i128, context: &str) -> Result<Ve
         .collect()
 }
 
+fn checked_i64_vector_difference(lhs: &[i64], rhs: &[i64], context: &str) -> Result<Vec<i64>> {
+    if lhs.len() != rhs.len() {
+        return Err(Error::InvalidInput(format!(
+            "{context} vector dimensions do not match"
+        )));
+    }
+    lhs.iter()
+        .zip(rhs.iter())
+        .map(|(&left, &right)| {
+            left.checked_sub(right)
+                .ok_or_else(|| Error::InvalidInput(format!("{context} subtraction overflow")))
+        })
+        .collect()
+}
+
 fn primitive_i64_gcd(ray: &[i64], context: &str) -> Result<i64> {
     let mut gcd = 0i64;
     for &entry in ray {
@@ -4616,6 +4646,74 @@ pub fn nilpotent_ray_degree_slice_for_cutoff_fraction(
         slice_degree,
         slice_origin,
     }))
+}
+
+/// Enumerate comparison-ray integer points on a nilpotent degree slice.
+///
+/// For each supplied comparison charge, this reduces to its primitive ray and
+/// keeps it only if an integer positive multiple lands exactly on
+/// `slice.slice_degree`. Duplicate slice points are merged. The returned
+/// offsets are the inputs to the later LLL-reduced infinity-norm distance
+/// calculation; this helper does not compute that distance.
+pub fn nilpotent_ray_slice_comparison_points(
+    slice: &NilpotentRayDegreeSlice,
+    comparison_charges: &[Vec<i64>],
+    grading_vector: &[i64],
+) -> Result<Vec<NilpotentRaySliceComparisonPoint>> {
+    if slice.primitive_ray.len() != grading_vector.len()
+        || slice.slice_origin.len() != grading_vector.len()
+    {
+        return Err(Error::InvalidInput(
+            "nilpotent-ray slice dimension does not match grading dimension".into(),
+        ));
+    }
+    if slice.slice_degree <= 0 {
+        return Err(Error::InvalidInput(
+            "nilpotent-ray slice degree must be positive".into(),
+        ));
+    }
+
+    let mut by_point = BTreeMap::new();
+    for charge in comparison_charges {
+        if charge.len() != grading_vector.len() {
+            return Err(Error::InvalidInput(
+                "nilpotent-ray comparison charge dimension does not match grading dimension".into(),
+            ));
+        }
+        let primitive = primitive_ray_from_curve_class(charge, "nilpotent-ray comparison charge")?;
+        let primitive_degree = checked_i128_dot(
+            &primitive,
+            grading_vector,
+            "nilpotent-ray comparison grading",
+        )?;
+        if primitive_degree <= 0 {
+            return Err(Error::InvalidInput(format!(
+                "nilpotent-ray comparison charge has non-positive grading degree {primitive_degree}"
+            )));
+        }
+        if slice.slice_degree % primitive_degree != 0 {
+            continue;
+        }
+        let slice_multiple = slice.slice_degree / primitive_degree;
+        let slice_point =
+            checked_ray_multiple(&primitive, slice_multiple, "nilpotent-ray comparison point")?;
+        let offset_from_origin = checked_i64_vector_difference(
+            &slice_point,
+            &slice.slice_origin,
+            "nilpotent-ray comparison offset",
+        )?;
+        by_point
+            .entry(slice_point.clone())
+            .or_insert_with(|| NilpotentRaySliceComparisonPoint {
+                primitive_ray: primitive,
+                primitive_degree,
+                slice_multiple,
+                slice_point,
+                offset_from_origin,
+            });
+    }
+
+    Ok(by_point.into_values().collect())
 }
 
 /// Compute the paper's potent-ray convergence terms.
@@ -8022,7 +8120,7 @@ mod tests {
         find_semigroup_decomposition, gv_divisor_basis_data, gv_lattice_search_request,
         load_grading_cache, local_p2_inverse_mirror_map, local_p2_mirror_correction,
         map_basis_gv_invariants_to_ambient, nilpotent_ray_degree_slice_for_cutoff_fraction,
-        origin_circuit_diagnostic_from_class_and_witnesses,
+        nilpotent_ray_slice_comparison_points, origin_circuit_diagnostic_from_class_and_witnesses,
         partition_finite_cutoff_gv_charges_by_nilpotence, potent_ray_convergence,
         potent_ray_log_xi_terms, project_ambient_curve_to_basis,
         project_ambient_curve_to_basis_matrix, project_mori_cone_cap_rays_for_divisor_basis,
@@ -10031,6 +10129,53 @@ mod tests {
 
         let bad_degree =
             nilpotent_ray_degree_slice_for_cutoff_fraction(&[1, 0], &[0, 1], 4, 1, 1).unwrap_err();
+        assert!(bad_degree.to_string().contains("non-positive grading"));
+    }
+
+    #[test]
+    fn nilpotent_ray_slice_comparison_points_land_on_slice_and_deduplicate() {
+        let slice = nilpotent_ray_degree_slice_for_cutoff_fraction(&[1, 0], &[1, 1], 4, 1, 1)
+            .unwrap()
+            .unwrap();
+        let points = nilpotent_ray_slice_comparison_points(
+            &slice,
+            &[vec![0, 1], vec![0, 2], vec![1, 1]],
+            &[1, 1],
+        )
+        .unwrap();
+
+        assert_eq!(points.len(), 2);
+        assert_eq!(points[0].primitive_ray, vec![0, 1]);
+        assert_eq!(points[0].slice_multiple, 4);
+        assert_eq!(points[0].slice_point, vec![0, 4]);
+        assert_eq!(points[0].offset_from_origin, vec![-4, 4]);
+        assert_eq!(points[1].primitive_ray, vec![1, 1]);
+        assert_eq!(points[1].slice_multiple, 2);
+        assert_eq!(points[1].slice_point, vec![2, 2]);
+        assert_eq!(points[1].offset_from_origin, vec![-2, 2]);
+    }
+
+    #[test]
+    fn nilpotent_ray_slice_comparison_points_skip_nonintegral_slice_hits() {
+        let slice = nilpotent_ray_degree_slice_for_cutoff_fraction(&[1, 0], &[3, 1], 3, 1, 1)
+            .unwrap()
+            .unwrap();
+        let points = nilpotent_ray_slice_comparison_points(&slice, &[vec![1, 1]], &[3, 1]).unwrap();
+
+        assert!(points.is_empty());
+    }
+
+    #[test]
+    fn nilpotent_ray_slice_comparison_points_reject_bad_comparison_charges() {
+        let slice = nilpotent_ray_degree_slice_for_cutoff_fraction(&[1, 0], &[1, 1], 4, 1, 1)
+            .unwrap()
+            .unwrap();
+
+        let dim = nilpotent_ray_slice_comparison_points(&slice, &[vec![1]], &[1, 1]).unwrap_err();
+        assert!(dim.to_string().contains("dimension"));
+
+        let bad_degree =
+            nilpotent_ray_slice_comparison_points(&slice, &[vec![1, 0]], &[0, 1]).unwrap_err();
         assert!(bad_degree.to_string().contains("non-positive grading"));
     }
 
