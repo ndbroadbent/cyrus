@@ -396,6 +396,8 @@ pub enum LocalToricCircuitKind {
 pub struct AffineToricCircuitDiagnostic {
     /// Nonzero relation points in ambient index order.
     pub relation_points: Vec<AffineCircuitRelationPoint>,
+    /// Counts of nonzero coefficients in the affine relation.
+    pub coefficient_counts: BTreeMap<i64, usize>,
     /// Sum of the relation coefficients. This is zero for an affine relation.
     pub coefficient_sum: i128,
     /// Weighted sum of lattice coordinates. This is zero for an affine relation.
@@ -527,6 +529,7 @@ pub fn diagnose_affine_toric_circuit(
     }
 
     let mut relation_points = Vec::new();
+    let mut coefficient_counts = BTreeMap::new();
     let mut coefficient_sum = 0i128;
     let mut coordinate_sum = vec![0i128; dim];
     for (point_index, (&coefficient, point)) in ambient_curve.iter().zip(points.iter()).enumerate()
@@ -534,6 +537,7 @@ pub fn diagnose_affine_toric_circuit(
         if coefficient == 0 {
             continue;
         }
+        *coefficient_counts.entry(coefficient).or_insert(0) += 1;
         coefficient_sum += i128::from(coefficient);
         for (acc, &coord) in coordinate_sum.iter_mut().zip(point.coords().iter()) {
             *acc += i128::from(coefficient) * i128::from(coord);
@@ -555,6 +559,7 @@ pub fn diagnose_affine_toric_circuit(
     let kind = classify_local_toric_circuit(&relation_points);
     Ok(Some(AffineToricCircuitDiagnostic {
         relation_points,
+        coefficient_counts,
         coefficient_sum,
         coordinate_sum,
         kind,
@@ -3834,6 +3839,10 @@ mod tests {
         assert_eq!(diagnostic.coefficient_sum, 0);
         assert_eq!(diagnostic.coordinate_sum, vec![0, 0, 0, 0]);
         assert_eq!(
+            diagnostic.coefficient_counts,
+            BTreeMap::from([(-3, 1), (1, 3)])
+        );
+        assert_eq!(
             diagnostic.kind,
             Some(LocalToricCircuitKind::LocalP2Triangle {
                 interior_point: 2,
@@ -3857,6 +3866,10 @@ mod tests {
             .unwrap()
             .expect("opposite orientation is still an affine circuit");
 
+        assert_eq!(
+            diagnostic.coefficient_counts,
+            BTreeMap::from([(-1, 3), (3, 1)])
+        );
         assert_eq!(
             diagnostic.kind,
             Some(LocalToricCircuitKind::LocalP2Triangle {

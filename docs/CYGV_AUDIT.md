@@ -470,7 +470,11 @@ quadrilateral flip.
 This is not a proof that every saved potent ray is local `P^2`, but it is a
 strong source-derived clue about the right implementation shape. The 411 saved
 potent rays collapse to only 24 unique GV sequences; 337 of the rays have 5
-nonzero ambient entries and 56 have 4. The next Cyrus test should therefore
+nonzero ambient entries and 56 have 4. A direct coefficient/point audit shows
+that all 411 saved rows are affine relations in the triangulation-point
+configuration. The most common patterns are local toric-surface-like sparse
+charge vectors, e.g. `(-3,1,1,1)` for local `P^2`, `(-5,1,1,1,2)`,
+`(-8,1,1,3,3)`, and `(-10,2,2,3,3)`. The next Cyrus test should therefore
 identify the low-dimensional toric face or local surface model behind one saved
 ray, construct the full local charge/semigroup context, and reproduce the saved
 `N_q, ..., N_10q` values without reading `potent_rays_gv.dat` except as the
