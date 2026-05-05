@@ -4424,8 +4424,40 @@ fn report_corrected_chamber_gv_branch_buckets(
                     );
                     std::process::exit(2);
                 });
+        let Some(target_with_flipped_bucket) = f64_target_vector(
+            covered_target
+                .iter()
+                .zip(report.correction.iter())
+                .map(|(covered, bucket)| covered.get() - 2.0 * bucket),
+        ) else {
+            eprintln!(
+                "[COMPARE] checkpoint-t corrected-chamber GV branch bucket parity_mod2={} qdot_bin={} unavailable: non-finite flip vector",
+                report.parity_mod2, report.q_dot_bucket
+            );
+            continue;
+        };
+        let input_flip_summary = target_correction_delta_summary(
+            input_chi_reference,
+            &target_with_flipped_bucket,
+        )
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "[ERROR] failed to compare input-chi corrected-chamber GV branch bucket flip: {e}"
+            );
+            std::process::exit(2);
+        });
+        let corrected_flip_summary = target_correction_delta_summary(
+            corrected_chi_reference,
+            &target_with_flipped_bucket,
+        )
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "[ERROR] failed to compare corrected-chi corrected-chamber GV branch bucket flip: {e}"
+            );
+            std::process::exit(2);
+        });
         eprintln!(
-            "[COMPARE] checkpoint-t corrected-chamber GV branch bucket parity_mod2={} qdot_bin={} count={} qdot_min={} qdot_max={} bucket_max_abs={} bucket_l2={} drop_input_chi_max_abs={} drop_input_chi_relative_l2={} drop_corrected_chi_max_abs={} drop_corrected_chi_relative_l2={}",
+            "[COMPARE] checkpoint-t corrected-chamber GV branch bucket parity_mod2={} qdot_bin={} count={} qdot_min={} qdot_max={} bucket_max_abs={} bucket_l2={} drop_input_chi_max_abs={} drop_input_chi_relative_l2={} drop_corrected_chi_max_abs={} drop_corrected_chi_relative_l2={} flip_input_chi_max_abs={} flip_input_chi_relative_l2={} flip_corrected_chi_max_abs={} flip_corrected_chi_relative_l2={}",
             report.parity_mod2,
             report.q_dot_bucket,
             report.count,
@@ -4436,7 +4468,11 @@ fn report_corrected_chamber_gv_branch_buckets(
             input_drop_summary.max_abs_delta,
             input_drop_summary.relative_l2_delta,
             corrected_drop_summary.max_abs_delta,
-            corrected_drop_summary.relative_l2_delta
+            corrected_drop_summary.relative_l2_delta,
+            input_flip_summary.max_abs_delta,
+            input_flip_summary.relative_l2_delta,
+            corrected_flip_summary.max_abs_delta,
+            corrected_flip_summary.relative_l2_delta
         );
     }
 }
