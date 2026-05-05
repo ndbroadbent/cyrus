@@ -424,7 +424,37 @@ struct TargetVolumesInput {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct BasisOverride {
-    indices: Vec<usize>,
+    #[serde(default)]
+    indices: Option<Vec<usize>>,
+    #[serde(default)]
+    matrix: Option<Vec<Vec<i64>>>,
+}
+
+impl BasisOverride {
+    fn indices(&self, context: &str) -> std::result::Result<&[usize], String> {
+        match (&self.indices, &self.matrix) {
+            (Some(indices), None) => Ok(indices),
+            (None, Some(_)) => Err(format!(
+                "{context} supplied a matrix divisor basis, but this runner path is still vector-basis only; use an `indices` basis or route through the matrix-basis APIs"
+            )),
+            (Some(_), Some(_)) => Err(format!(
+                "{context} supplied both `indices` and `matrix`; exactly one basis representation is allowed"
+            )),
+            (None, None) => Err(format!(
+                "{context} did not supply a basis; expected an `indices` vector"
+            )),
+        }
+    }
+}
+
+fn basis_indices_or_exit(override_value: &BasisOverride, context: &str) -> Vec<usize> {
+    override_value.indices(context).map_or_else(
+        |err| {
+            eprintln!("[ERROR] {err}");
+            std::process::exit(2);
+        },
+        <[usize]>::to_vec,
+    )
 }
 
 #[derive(Debug, Deserialize)]
@@ -1341,7 +1371,10 @@ fn load_kklt_inputs(data_dir: Option<&str>, manifest_dir: &PathBuf) -> (Vec<I64<
                         .unwrap_or_else(|| panic!("target_volumes c_i must be positive: {v}"))
                 })
                 .collect();
-            (c_i, kklt_basis.indices)
+            (
+                c_i,
+                basis_indices_or_exit(&kklt_basis, "KKLT basis fixture"),
+            )
         },
         |dir| {
             let dir = PathBuf::from(dir);
@@ -1434,7 +1467,7 @@ fn select_dual_basis(override_opt: Option<&BasisOverride>, computed: Vec<usize>)
         },
         |explicit| {
             eprintln!("[INFO] using explicit dual basis from --dual-basis");
-            explicit.indices.clone()
+            basis_indices_or_exit(explicit, "--dual-basis")
         },
     )
 }
@@ -1480,7 +1513,7 @@ fn stage_flat_direction(
         },
         |basis| {
             eprintln!("[INFO] using explicit flux source basis from --dual-basis");
-            basis.indices.clone()
+            basis_indices_or_exit(basis, "--dual-basis")
         },
     );
     let dual_points_i64: Vec<Vec<i64>> = dual_points_vec
@@ -9656,15 +9689,47 @@ mod tests {
     }
 
     #[test]
-    fn basis_override_rejects_matrix_basis_shape() {
-        let err = serde_json::from_str::<BasisOverride>(
-            r#"{"indices":[3,4],"matrix":[[1,0,0],[0,1,0]]}"#,
-        )
-        .expect_err("index-basis override must reject matrix-basis fields");
+    fn basis_override_accepts_index_basis() {
+        let basis =
+            serde_json::from_str::<BasisOverride>(r#"{"indices":[3,4]}"#).expect("valid basis");
 
         assert!(
-            err.to_string().contains("unknown field `matrix`"),
-            "unexpected serde error: {err}"
+            basis.indices("--dual-basis").expect("index basis") == [3, 4],
+            "index basis should be available"
+        );
+    }
+
+    #[test]
+    fn basis_override_rejects_matrix_basis_shape_explicitly() {
+        let basis = serde_json::from_str::<BasisOverride>(r#"{"matrix":[[1,0,0],[0,1,0]]}"#)
+            .expect("matrix basis JSON should parse for a deliberate error");
+        let err = basis
+            .indices("--dual-basis")
+            .expect_err("runner must reject unsupported matrix basis explicitly");
+
+        assert!(
+            err.contains("matrix divisor basis"),
+            "unexpected basis error: {err}"
+        );
+        assert!(
+            err.contains("vector-basis only"),
+            "unexpected basis error: {err}"
+        );
+    }
+
+    #[test]
+    fn basis_override_rejects_ambiguous_basis_shape() {
+        let basis = serde_json::from_str::<BasisOverride>(
+            r#"{"indices":[3,4],"matrix":[[1,0,0],[0,1,0]]}"#,
+        )
+        .expect("ambiguous basis JSON should parse for validation");
+        let err = basis
+            .indices("--dual-basis")
+            .expect_err("basis override must reject ambiguous representations");
+
+        assert!(
+            err.contains("both `indices` and `matrix`"),
+            "unexpected basis error: {err}"
         );
     }
 

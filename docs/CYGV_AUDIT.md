@@ -1044,12 +1044,14 @@ matrix divisor-basis to dual curve-basis constructor,
 branch. The `curve_basis_matrix_without_origin_i64` helper also centralizes the
 `curve_basis(include_origin=False, as_matrix=True)` q-matrix boundary for direct
 cygv calls, so the origin column is not hand-dropped at each GV call site. The
-`mcallister_first_principles --dual-basis` JSON override is now strict about
-being an index-basis override, so an accidental `matrix` field is rejected
-instead of ignored. The remaining gap is higher-level basis typing: APIs that
-still only accept vector basis indices need to either accept a matrix basis
-end-to-end or reject it loudly at every GA-facing boundary. Silently treating
-every basis as a vector of indices is not GA-ready.
+`mcallister_first_principles --dual-basis` JSON override now distinguishes index
+and matrix basis shapes. Index overrides continue through the current
+vector-basis path, while matrix overrides parse and then fail with an explicit
+unsupported-vector-path error instead of being ignored or misinterpreted as
+indices. The remaining gap is higher-level basis typing: APIs that still only
+accept vector basis indices need to either accept a matrix basis end-to-end or
+reject it loudly at every GA-facing boundary. Silently treating every basis as a
+vector of indices is not GA-ready.
 
 Second, cygv's final GV values are history-dependent. In
 `series_inversion.rs`, the threefold path chooses a candidate value from the
