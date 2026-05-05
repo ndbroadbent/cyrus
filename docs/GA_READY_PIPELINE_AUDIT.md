@@ -165,7 +165,12 @@ to make the remaining GV layer more first-principles:
    target degree, degree-bounded projected Mori rays, exact active-generator
    decompositions, q-matrix, curve-basis matrix, grading vector, and sparse
    corrected-chamber intersection entries needed for a finite HKTY check
-   without reading `small_curves_gv.dat`. The next step is to consume that
-   artifact through a source-faithful cygv/HKTY reconstruction path.
+   without reading `small_curves_gv.dat`. `mcallister_gv_context` now consumes
+   that artifact and verifies the five integer-semigroup active-generator
+   diamonds, but those tiny domains are not valid fallback contexts: three
+   return `GV=0` and two produce non-integral cygv series-inversion output.
+   The next step is therefore to reconstruct the broader source-derived finite
+   semigroup/path history for the missing origin circuits, not to promote LP
+   active-generator diamonds.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.

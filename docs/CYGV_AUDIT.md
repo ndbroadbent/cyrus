@@ -1391,3 +1391,14 @@ the full set has `561596` projected rays, while the missing-target bound
 intersection entries, and complete diagnostics for all nine missing
 origin-circuit targets. This is still diagnostic input for HKTY reconstruction,
 not a promoted GV fallback.
+
+The first consumer for that export is `mcallister_gv_context`. In dry-run mode
+it validates the context shape and reconstructs the five integer-semigroup
+active-generator decompositions as explicit decomposition diamonds with only
+`6..8` elements. Running `--run-integer-diamonds` on the 4-214-647 context is
+fast, but it confirms the diamonds are not sufficient source contexts: three
+integer targets return `GV=0`, while two fail inside cygv series inversion with
+non-integral GV output. The four rational-cone-only targets are skipped. This
+rules out promoting the LP active-generator diamond as the missing GV fallback;
+the HKTY domain still needs the broader source-derived finite semigroup/path
+history.
