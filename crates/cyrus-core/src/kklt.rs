@@ -30,6 +30,7 @@ use rand::{Rng, SeedableRng};
 use rayon::prelude::*;
 
 use crate::f64_pos;
+use crate::integer_math::integer_kernel;
 use crate::intersection::Intersection;
 use crate::types::f64::F64;
 use crate::types::i64::I64;
@@ -361,6 +362,74 @@ pub fn weyl_reflection_matches_flop_transform(
     let reflected = transform_intersection_numbers_by_matrix(kappa, &reflection)?;
     let flopped = flop_transform_intersection_numbers(kappa, curve_class, gv_invariant)?;
     Some(intersection_numbers_equal(&reflected, &flopped))
+}
+
+/// Check whether a divisor volume vanishes identically on a curve facet.
+///
+/// This is the exact algebraic part of the McAllister stable-Weyl test:
+///
+/// ```text
+/// kappa_{abc} D^a t^b t^c == 0 for all t with C_a t^a = 0
+/// ```
+///
+/// It uses the integer kernel of the curve row `C` and checks the associated
+/// symmetric bilinear form on that hyperplane. It does not prove that the curve
+/// is an actual supporting Mori-facet generator; pair this with a supporting
+/// face certificate before treating the result as geometric.
+#[must_use]
+pub fn divisor_quadratic_vanishes_on_curve_facet(
+    kappa: &Intersection,
+    divisor: &[Integer],
+    curve_class: &[i64],
+) -> Option<bool> {
+    let dim = kappa.dim();
+    if divisor.len() != dim || curve_class.len() != dim {
+        return None;
+    }
+    if curve_class.iter().all(|&entry| entry == 0) {
+        return None;
+    }
+    if divisor.iter().all(|entry| *entry == 0) {
+        return Some(false);
+    }
+
+    let curve_row = vec![
+        curve_class
+            .iter()
+            .map(|&entry| Integer::from(entry))
+            .collect::<Vec<_>>(),
+    ];
+    let hyperplane_basis = integer_kernel(&curve_row);
+    for left in &hyperplane_basis {
+        for right in &hyperplane_basis {
+            if divisor_quadratic_bilinear_pairing(kappa, divisor, left, right) != 0 {
+                return Some(false);
+            }
+        }
+    }
+    Some(true)
+}
+
+fn divisor_quadratic_bilinear_pairing(
+    kappa: &Intersection,
+    divisor: &[Integer],
+    left: &[Integer],
+    right: &[Integer],
+) -> Rational {
+    let mut sum = Rational::from(0);
+    for (&(i, j, k), value) in kappa.iter() {
+        for [a, b, c] in unique_index_permutations(i, j, k) {
+            if divisor[a] == 0 || left[b] == 0 || right[c] == 0 {
+                continue;
+            }
+            let mut term = value.get().clone();
+            term *= Rational::from(&divisor[a]);
+            term *= Rational::from(&left[b]);
+            term *= Rational::from(&right[c]);
+            sum += term;
+        }
+    }
+    sum
 }
 
 fn unique_index_permutations(i: usize, j: usize, k: usize) -> Vec<[usize; 3]> {
@@ -2314,6 +2383,43 @@ mod tests {
     }
 
     #[test]
+    fn test_divisor_quadratic_vanishes_on_curve_facet_checks_hyperplane_identity() {
+        let divisor = vec![Integer::from(0), Integer::from(1)];
+        let curve = [1, 0];
+
+        let mut vanishing_kappa = Intersection::new(2);
+        vanishing_kappa.set(0, 0, 1, finite_rational(3));
+        assert_eq!(
+            divisor_quadratic_vanishes_on_curve_facet(&vanishing_kappa, &divisor, &curve),
+            Some(true)
+        );
+
+        let mut nonvanishing_kappa = vanishing_kappa.clone();
+        nonvanishing_kappa.set(1, 1, 1, finite_rational(5));
+        assert_eq!(
+            divisor_quadratic_vanishes_on_curve_facet(&nonvanishing_kappa, &divisor, &curve),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn test_divisor_quadratic_vanishes_on_curve_facet_rejects_invalid_inputs() {
+        let kappa = Intersection::new(2);
+        let divisor = vec![Integer::from(1), Integer::from(0)];
+
+        assert!(divisor_quadratic_vanishes_on_curve_facet(&kappa, &divisor, &[1]).is_none());
+        assert!(divisor_quadratic_vanishes_on_curve_facet(&kappa, &divisor, &[0, 0]).is_none());
+        assert_eq!(
+            divisor_quadratic_vanishes_on_curve_facet(
+                &kappa,
+                &[Integer::from(0), Integer::from(0)],
+                &[1, 0]
+            ),
+            Some(false)
+        );
+    }
+
+    #[test]
     fn test_flop_transform_rejects_dimension_mismatch() {
         let kappa = Intersection::new(2);
         let c2 = vec![Integer::from(1), Integer::from(2)];
@@ -2331,6 +2437,7 @@ mod tests {
         assert!(
             weyl_reflection_matches_flop_transform(&kappa, &c2, &[1], &Integer::from(1)).is_none()
         );
+        assert!(divisor_quadratic_vanishes_on_curve_facet(&kappa, &c2, &[1]).is_none());
     }
 
     #[test]

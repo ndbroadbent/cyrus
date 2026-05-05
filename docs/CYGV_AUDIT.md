@@ -1566,9 +1566,12 @@ does not justify fitting the corrected target-volume residual from the saved
 The moduli-space reconstruction source gives the chamber-continuation primitive
 that now has an exact algebraic Cyrus implementation in
 `flop_transform_intersection_numbers`, `flop_transform_c2_vector`, and
-`flop_reassign_gv_invariants`. Across a flop or stable Weyl reflection with
-shrinking class `C` and genus-zero invariant `n_C^0`, the classical data
-transforms as
+`flop_reassign_gv_invariants`. Cyrus also has the exact stable-Weyl reflection
+matrix, the exact tensor check comparing the Weyl-reflected intersection form to
+the flop-updated intersection form, and the exact check that
+`kappa_{abc} D^a t^b t^c` vanishes identically on the curve hyperplane
+`C_a t^a = 0`. Across a flop or stable Weyl reflection with shrinking class
+`C` and genus-zero invariant `n_C^0`, the classical data transforms as
 
 ```text
 kappa'_{abc} = kappa_{abc} - n_C^0 C_a C_b C_c
@@ -1576,9 +1579,12 @@ c'_a         = c_a + 2 n_C^0 C_a
 ```
 
 and the GV invariant is reassigned from `C` to `-C` in the adjacent chamber.
-That rule is source-derived and belongs in Cyrus, but it is not by itself the
-missing origin-circuit GV source: it needs the shrinking curve to be identified
-as a certified flop/Weyl curve with a certified `n_C^0`.
+Those rules are source-derived and belong in Cyrus, but they are not by
+themselves the missing origin-circuit GV source. A usable continuation step
+still needs the shrinking curve to be certified as a supporting Mori-facet
+generator, the divisor to be identified from geometry rather than a fitted
+candidate, and `n_C^0` to be computed or otherwise certified without reading the
+target GV row.
 
 The immediate implementation standard from this checkpoint is:
 
