@@ -1085,3 +1085,47 @@ This makes the next source-derived implementation boundary precise:
    by series inversion;
 4. compare to `potent_rays_gv.dat` only as an assertion after the local input
    and finite domain have been built from geometry.
+
+## May 2026 Polynomial Domain Source Read
+
+The next CKYZ/potent-ray work should be modeled on cygv's finite polynomial
+domain, not on another broad componentwise box.
+
+In `cygv-0.1.2`, `PolynomialProperties::new` builds `monomial_map` directly
+from the columns of the closed `Semigroup`. All polynomial operations then use
+that map as the truncation domain:
+
+- `Polynomial::mul` adds the two semigroup column vectors and silently drops the
+  product if the sum is absent from `monomial_map`.
+- `recipr`, `pow`, `exp_pos_neg`, and `li_2` all iterate only to
+  `semigroup.max_degree / min_degree`, with every intermediate product still
+  routed through the same semigroup map.
+- `series_inversion` processes distinct grading degrees in order, computes
+  `q_N` and `Li2(q_N)` for the nonzero classes at that degree, and subtracts
+  their contributions before advancing.
+
+This is stricter than saying "keep every monomial with coordinates below the
+target." The domain is an additive semigroup closed enough for the requested
+history, with a grading order that determines when lower classes are removed.
+The current Cyrus CKYZ `target_downset` is useful because it avoids unrelated
+incomparable targets, but it is still a formal componentwise past domain. For
+large ray multiples such as polygon-5 directions, that past is enormous even
+though the actual cygv-style computation only needs the semigroup elements that
+can participate in the target coefficient and its prior subtraction history.
+
+The next implementation should therefore introduce an explicit local
+`CkyzCausalDomain` or equivalent structure with:
+
+1. local charge-coordinate elements generated from the reconstructed CKYZ
+   relation rows and target ray direction;
+2. an integer grading vector and deterministic degree ordering;
+3. a monomial lookup/addition map where absent sums are intentionally outside
+   the finite domain;
+4. cover-closed target multiples plus all lower-degree classes whose
+   `Li2(q_N)` subtraction can affect those targets.
+
+That gives a concrete correctness test before performance tuning: for small
+targets where the current `target_downset` is affordable, the causal domain
+must reproduce the same extracted CKYZ GV values. Only after that equivalence
+holds should the domain be used to raise `CYRUS_CKYZ_MULTIPLES_TO_CHECK` toward
+the full ten-entry `potent_rays_gv.dat` rows.

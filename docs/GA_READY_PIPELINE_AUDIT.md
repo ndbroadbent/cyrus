@@ -91,10 +91,12 @@ to make the remaining GV layer more first-principles:
    `M_infinity(X)` and compute the ray `N_{nq}` series rather than reading
    `potent_rays*.dat`. Rank-two CKYZ rows now have first-three checks; next make
    the local extractor coefficient-targeted enough for complete rows where
-   feasible. The intended shape is a cygv-style finite monomial domain with an
-   addition map/past-light-cone closure, building on the current target-downset
-   domain rather than returning to a componentwise formal box. After that,
-   handle the rank-four affine supports.
+   feasible. The intended shape is a cygv-style causal semigroup domain: a
+   local grading, deterministic degree order, monomial lookup/addition map, and
+   cover-closed target multiples plus the lower classes needed for
+   `Li2(q_N)` subtraction. This builds on the current target-downset domain but
+   should not return to a componentwise formal box. After that, handle the
+   rank-four affine supports.
 2. Close the remaining CYTools basis contract gap for GA use: matrix-basis
    projection, dual curve-basis construction, and no-origin q-matrix
    construction now exist, but higher-level APIs still need to either accept a
