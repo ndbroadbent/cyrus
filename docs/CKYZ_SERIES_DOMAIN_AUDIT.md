@@ -401,6 +401,19 @@ support scales total. That makes an eager dense cache per scale unattractive.
 The next coefficient evaluator should stay sparse and source-ordered, or the
 history builder needs a sharper dependency criterion.
 
+After switching CKYZ extraction and the coefficient profile to the same
+cover-weight grading order, the McAllister `[4,3,2]`, N=10 profile finished in
+154.6 seconds and reported:
+
+```text
+[CKYZ_COEFFICIENT_WORK] kind=3 direction=[4, 3, 2] multiples=10 domain=21721 history=5235 residual_pairs=13475754 same_grading_skips=224241 componentwise_pairs=7154291 li2_terms=9042668 support_pairs=2620565 support_li2_terms=3219472 unique_scales=7065 unique_deltas=16750 unique_exp_states=7166981 support_unique_exp_states=2587631 support_scales=5235
+```
+
+The grading-level batch order removes 224,241 same-grading residual pairs from
+the profile, but it does not change the 2.59 million supported coefficient
+states. This confirms that the next real speedup still needs the indexed
+finite-polynomial evaluator described below, not just better pair ordering.
+
 ## Deeper cygv Source Pass
 
 The latest no-code source pass re-read the exact `cygv-0.1.2` internals that

@@ -823,8 +823,11 @@ pub struct CkyzZResidualCoefficientWorkProfile {
     pub domain_degree_count: usize,
     /// Number of selected residual-history degrees.
     pub path_history_degree_count: usize,
-    /// Number of ordered lower-to-higher residual degree pairs.
+    /// Number of ordered lower-grading residual degree pairs inspected by
+    /// extraction.
     pub residual_pair_count: usize,
+    /// Number of same-grading index pairs skipped by the cygv-style batch order.
+    pub same_grading_pair_skip_count: usize,
     /// Number of residual pairs that pass the componentwise divisibility gate.
     pub componentwise_pair_count: usize,
     /// Number of multiple-cover delta terms considered across those pairs.
@@ -1486,11 +1489,17 @@ fn ckyz_local_domain_profile_for_degrees_impl(
 pub fn ckyz_z_residual_coefficient_work_profile_for_degrees(
     relations: &[Vec<i64>],
     local_intersection_terms: &[CkyzLocalIntersectionTerm],
+    cover_weight_coefficients: &[i64],
     target_degrees: &[Vec<usize>],
 ) -> Result<CkyzZResidualCoefficientWorkProfile> {
     validate_ckyz_relations(relations)?;
     let rank = relations.len();
     validate_ckyz_target_degrees(target_degrees, rank)?;
+    if cover_weight_coefficients.len() != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ coefficient profile cover-weight rank does not match relation rank".into(),
+        ));
+    }
     for term in local_intersection_terms {
         if term.first >= rank || term.second >= rank {
             return Err(Error::InvalidInput(
@@ -1508,12 +1517,18 @@ pub fn ckyz_z_residual_coefficient_work_profile_for_degrees(
     let alpha = compute_ckyz_log_period_corrections_domain(relations, &domain)?;
     let path_history_degrees =
         ckyz_z_residual_dependency_degrees(&alpha, &extraction_degrees, &domain)?;
-    ckyz_z_residual_coefficient_work_profile(&path_history_degrees, &alpha, &domain)
+    ckyz_z_residual_coefficient_work_profile(
+        &path_history_degrees,
+        &alpha,
+        cover_weight_coefficients,
+        &domain,
+    )
 }
 
 fn ckyz_z_residual_coefficient_work_profile(
     extraction_degrees: &[Vec<usize>],
     alpha: &[BTreeMap<Vec<usize>, Rational>],
+    cover_weight_coefficients: &[i64],
     domain: &CkyzMonomialDomain,
 ) -> Result<CkyzZResidualCoefficientWorkProfile> {
     validate_ckyz_target_degrees(extraction_degrees, domain.rank)?;
@@ -1522,7 +1537,21 @@ fn ckyz_z_residual_coefficient_work_profile(
             "CKYZ residual coefficient profile alpha rank mismatch".into(),
         ));
     }
+    if cover_weight_coefficients.len() != domain.rank {
+        return Err(Error::InvalidInput(
+            "CKYZ residual coefficient profile cover-weight rank mismatch".into(),
+        ));
+    }
+    let grading_vector = ckyz_grading_vector_from_cover_weights(cover_weight_coefficients)?;
+    let mut extraction_degrees = extraction_degrees.to_vec();
+    ckyz_sort_degrees_for_extraction_with_grading(&mut extraction_degrees, &grading_vector)?;
+    extraction_degrees.dedup();
+    let extraction_gradings = extraction_degrees
+        .iter()
+        .map(|degree| ckyz_grading_degree(degree, &grading_vector))
+        .collect::<Result<Vec<_>>>()?;
     let mut residual_pair_count = 0usize;
+    let mut same_grading_pair_skip_count = 0usize;
     let mut componentwise_pair_count = 0usize;
     let mut li2_delta_term_count = 0usize;
     let mut support_pair_count = 0usize;
@@ -1539,7 +1568,13 @@ fn ckyz_z_residual_coefficient_work_profile(
     let mut exp_support_cache = HashMap::<Vec<usize>, BTreeSet<usize>>::new();
 
     for (degree_index, degree) in extraction_degrees.iter().enumerate() {
-        for target in extraction_degrees.iter().skip(degree_index + 1) {
+        let degree_grading = extraction_gradings[degree_index];
+        let first_later_grading_index =
+            extraction_gradings.partition_point(|&grading| grading <= degree_grading);
+        same_grading_pair_skip_count = same_grading_pair_skip_count
+            .checked_add(first_later_grading_index.saturating_sub(degree_index + 1))
+            .ok_or_else(|| Error::InvalidInput("CKYZ same-grading pair count overflowed".into()))?;
+        for target in extraction_degrees.iter().skip(first_later_grading_index) {
             residual_pair_count = residual_pair_count
                 .checked_add(1)
                 .ok_or_else(|| Error::InvalidInput("CKYZ residual pair count overflowed".into()))?;
@@ -1639,6 +1674,7 @@ fn ckyz_z_residual_coefficient_work_profile(
         domain_degree_count: domain.degrees.len(),
         path_history_degree_count: extraction_degrees.len(),
         residual_pair_count,
+        same_grading_pair_skip_count,
         componentwise_pair_count,
         li2_delta_term_count,
         support_pair_count,
@@ -11936,6 +11972,7 @@ mod tests {
         let profile = ckyz_z_residual_coefficient_work_profile_for_degrees(
             &relations,
             &local_intersection_terms,
+            &[1, 1, 1],
             &target_degrees,
         )
         .unwrap();
@@ -11943,7 +11980,8 @@ mod tests {
         assert_eq!(profile.rank, 3);
         assert_eq!(profile.domain_degree_count, 265);
         assert_eq!(profile.path_history_degree_count, 79);
-        assert_eq!(profile.residual_pair_count, 3_081);
+        assert_eq!(profile.residual_pair_count, 2_887);
+        assert_eq!(profile.same_grading_pair_skip_count, 194);
         assert!(profile.componentwise_pair_count < profile.residual_pair_count);
         assert!(profile.support_pair_count <= profile.componentwise_pair_count);
         assert!(profile.support_li2_delta_term_count <= profile.li2_delta_term_count);

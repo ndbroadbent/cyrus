@@ -1084,6 +1084,7 @@ fn mcallister_rank_two_ckyz_domain_profiles_are_inventoried() {
             let coefficient_profile = ckyz_z_residual_coefficient_work_profile_for_degrees(
                 &identification.source_relations,
                 &identification.local_intersection_terms,
+                ckyz_local_surface_cover_weight_coefficients(&identification.kind),
                 &target_degrees,
             )
             .expect("CKYZ local source should produce a coefficient-work profile");
@@ -1105,10 +1106,11 @@ fn mcallister_rank_two_ckyz_domain_profiles_are_inventoried() {
     if print_coefficient_work {
         for ((kind, direction), profile) in &coefficient_profiles_by_source {
             eprintln!(
-                "[CKYZ_COEFFICIENT_WORK] kind={kind} direction={direction:?} multiples={multiples_to_profile} domain={} history={} residual_pairs={} componentwise_pairs={} li2_terms={} support_pairs={} support_li2_terms={} unique_scales={} unique_deltas={} unique_exp_states={} support_unique_exp_states={} support_scales={}",
+                "[CKYZ_COEFFICIENT_WORK] kind={kind} direction={direction:?} multiples={multiples_to_profile} domain={} history={} residual_pairs={} same_grading_skips={} componentwise_pairs={} li2_terms={} support_pairs={} support_li2_terms={} unique_scales={} unique_deltas={} unique_exp_states={} support_unique_exp_states={} support_scales={}",
                 profile.domain_degree_count,
                 profile.path_history_degree_count,
                 profile.residual_pair_count,
+                profile.same_grading_pair_skip_count,
                 profile.componentwise_pair_count,
                 profile.li2_delta_term_count,
                 profile.support_pair_count,
