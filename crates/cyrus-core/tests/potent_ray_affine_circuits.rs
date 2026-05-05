@@ -5,7 +5,8 @@ use std::path::Path;
 
 use cyrus_core::{
     LocalToricCircuitKind, LocalToricCoordinate2D, Point, Polytope,
-    compute_local_toric_circuit_gv_series, diagnose_affine_toric_circuit,
+    compute_local_toric_circuit_gv_series, curve_in_rational_row_span,
+    diagnose_affine_toric_circuit,
 };
 use malachite::Integer;
 
@@ -126,6 +127,47 @@ fn mcallister_potent_rays_are_affine_toric_circuits() {
             ],
         })
     );
+}
+
+#[test]
+fn mcallister_potent_rays_have_local_affine_charge_contexts() {
+    if !first_principles_enabled() {
+        return;
+    }
+    let Some(data_dir) = mcallister_data_dir() else {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    };
+
+    let points_raw = read_csv_rows_i64(&data_dir.join("points.dat"));
+    let potent_rays = read_csv_rows_i64(&data_dir.join("potent_rays.dat"));
+    let all_points: Vec<Point> = points_raw.into_iter().map(Point::new).collect();
+    let polytope = Polytope::from_vertices(all_points).expect("failed to create polytope");
+    let triangulation_points = polytope
+        .points_not_interior_to_facets()
+        .expect("failed to filter triangulation points");
+
+    for ray in &potent_rays {
+        let diagnostic = diagnose_affine_toric_circuit(ray, &triangulation_points)
+            .expect("affine circuit diagnostic should accept McAllister dimensions")
+            .expect("saved potent ray should be an affine toric circuit");
+        let expected_relation_rank = diagnostic.relation_points.len() - diagnostic.affine_rank - 1;
+        assert_eq!(
+            diagnostic.local_charge_basis.len(),
+            expected_relation_rank,
+            "local charge-basis rank should match support affine rank"
+        );
+
+        let support_relation: Vec<i64> = diagnostic
+            .relation_points
+            .iter()
+            .map(|point| point.coefficient)
+            .collect();
+        assert!(
+            curve_in_rational_row_span(&support_relation, &diagnostic.local_charge_basis)
+                .expect("local charge-basis span check should be exact"),
+            "saved potent-ray relation must lie in the reconstructed local affine charge lattice"
+        );
+    }
 }
 
 #[test]

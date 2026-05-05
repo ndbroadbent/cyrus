@@ -415,6 +415,12 @@ pub struct AffineToricCircuitDiagnostic {
     pub coefficient_sum: i128,
     /// Weighted sum of lattice coordinates. This is zero for an affine relation.
     pub coordinate_sum: Vec<i128>,
+    /// Integer basis for affine charge relations among the support points.
+    ///
+    /// Rows are expressed in the same support order as `relation_points`. This
+    /// is the local toric charge context that must be used before assigning any
+    /// local mirror-symmetry GV values.
+    pub local_charge_basis: Vec<Vec<i64>>,
     /// Recognized local toric shape, when currently known.
     pub kind: Option<LocalToricCircuitKind>,
 }
@@ -570,6 +576,7 @@ pub fn diagnose_affine_toric_circuit(
     }
 
     let affine_rank = affine_relation_rank(&relation_points);
+    let local_charge_basis = local_affine_charge_basis(&relation_points)?;
     let kind = classify_local_toric_circuit(&relation_points, affine_rank);
     Ok(Some(AffineToricCircuitDiagnostic {
         relation_points,
@@ -577,8 +584,55 @@ pub fn diagnose_affine_toric_circuit(
         coefficient_counts,
         coefficient_sum,
         coordinate_sum,
+        local_charge_basis,
         kind,
     }))
+}
+
+fn local_affine_charge_basis(
+    relation_points: &[AffineCircuitRelationPoint],
+) -> Result<Vec<Vec<i64>>> {
+    let Some(first_point) = relation_points.first() else {
+        return Ok(Vec::new());
+    };
+    let dim = first_point.coordinates.len();
+    let support_len = relation_points.len();
+    let mut matrix = vec![vec![Integer::from(0); support_len]; dim + 1];
+    for (col, point) in relation_points.iter().enumerate() {
+        matrix[0][col] = Integer::from(1);
+        for (row, &coordinate) in point.coordinates.iter().enumerate() {
+            matrix[row + 1][col] = Integer::from(coordinate);
+        }
+    }
+
+    integer_kernel(&matrix)
+        .into_iter()
+        .map(|row| {
+            let mut converted = row
+                .iter()
+                .map(|value| {
+                    i64::try_from(value).map_err(|_| {
+                        Error::InvalidInput(
+                            "local affine charge basis entry does not fit in i64".into(),
+                        )
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            normalize_relation_orientation(&mut converted);
+            Ok(converted)
+        })
+        .collect()
+}
+
+fn normalize_relation_orientation(row: &mut [i64]) {
+    let Some(first_nonzero) = row.iter().find(|&&value| value != 0).copied() else {
+        return;
+    };
+    if first_nonzero < 0 {
+        for value in row {
+            *value = -*value;
+        }
+    }
 }
 
 fn affine_relation_rank(relation_points: &[AffineCircuitRelationPoint]) -> usize {
@@ -4189,6 +4243,7 @@ mod tests {
             diagnostic.coefficient_counts,
             BTreeMap::from([(-3, 1), (1, 3)])
         );
+        assert_eq!(diagnostic.local_charge_basis, vec![vec![1, 1, -3, 1]]);
         assert_eq!(
             diagnostic.kind,
             Some(LocalToricCircuitKind::LocalP2Triangle {
@@ -4285,6 +4340,7 @@ mod tests {
             BTreeMap::from([(-1, 3), (3, 1)])
         );
         assert_eq!(diagnostic.affine_rank, 2);
+        assert_eq!(diagnostic.local_charge_basis, vec![vec![1, 1, -3, 1]]);
         assert_eq!(
             diagnostic.kind,
             Some(LocalToricCircuitKind::LocalP2Triangle {
