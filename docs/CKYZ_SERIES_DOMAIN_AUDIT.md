@@ -307,3 +307,35 @@ stopped after about 2.5 minutes without reaching the final extraction trace. The
 next substantive change should therefore reduce the coefficient-history/domain
 itself. More cache reshaping may help constants, but it will not change the core
 5,235-history-degree workload.
+
+A coefficient-work profiler now measures that workload without computing or
+asserting GV values. It uses the same support-predicted domain and selected
+z-residual history, then counts the formal
+`Li2(q^d exp(d.alpha(z)))` coefficient states before doing any Malachite
+rational arithmetic. The first-principles McAllister audit command:
+
+```sh
+env CYRUS_FIRST_PRINCIPLES=1 \
+    CYRUS_CKYZ_MULTIPLES_TO_CHECK=10 \
+    CYRUS_CKYZ_TARGET_DIRECTION=4,3,2 \
+    CYRUS_PRINT_CKYZ_DOMAIN_PROFILES=1 \
+    CYRUS_PRINT_CKYZ_COEFFICIENT_WORK=1 \
+    CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 \
+    cargo test -p cyrus-core --test potent_ray_affine_circuits \
+    mcallister_rank_two_ckyz_domain_profiles_are_inventoried -- --nocapture
+```
+
+finished in 112.7 seconds and reported:
+
+```text
+[CKYZ_PROFILE] kind=3 direction=[4, 3, 2] multiples=10 target_downset=26691 predicted=21721 causal=Some(129766)
+[CKYZ_COEFFICIENT_WORK] kind=3 direction=[4, 3, 2] multiples=10 domain=21721 history=5235 residual_pairs=13699995 componentwise_pairs=7154291 li2_terms=9042668 unique_scales=7065 unique_deltas=16750 unique_exp_states=7166981
+```
+
+This explains why a whole-domain exponential cache is the wrong next move:
+even after z-history pruning, the current path asks for about 9.0 million
+multiple-cover delta terms and 7.16 million distinct exponential coefficient
+states. The next source-aligned optimization should build a coefficient-demand
+graph for the selected residual history, so Cyrus computes only the exponential
+coefficients actually read by the subtraction step rather than recursively
+probing the full predicted domain for each `(scale, delta)` state.

@@ -810,6 +810,33 @@ pub struct CkyzLocalDomainProfile {
     pub causal_semigroup_has_addition_table: Option<bool>,
 }
 
+/// Coefficient-work profile for CKYZ z-residual extraction.
+///
+/// This is a source-auditing object. It does not compute GV values; it counts
+/// the degree/scale states that the z-domain residual subtraction would need to
+/// inspect before rational coefficient arithmetic.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CkyzZResidualCoefficientWorkProfile {
+    /// Number of CKYZ flat coordinates.
+    pub rank: usize,
+    /// Size of the finite monomial domain used for alpha/potential data.
+    pub domain_degree_count: usize,
+    /// Number of selected residual-history degrees.
+    pub path_history_degree_count: usize,
+    /// Number of ordered lower-to-higher residual degree pairs.
+    pub residual_pair_count: usize,
+    /// Number of residual pairs that pass the componentwise divisibility gate.
+    pub componentwise_pair_count: usize,
+    /// Number of multiple-cover delta terms considered across those pairs.
+    pub li2_delta_term_count: usize,
+    /// Number of distinct scale degrees `m*d` appearing in those terms.
+    pub unique_scale_count: usize,
+    /// Number of distinct delta degrees `target - m*d` appearing in those terms.
+    pub unique_delta_count: usize,
+    /// Number of distinct `(scale, delta)` exponential coefficient states.
+    pub unique_exp_state_count: usize,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct CkyzLocalSurfaceSource {
     kind: CkyzLocalSurfaceKind,
@@ -1435,6 +1462,118 @@ fn ckyz_local_domain_profile_for_degrees_impl(
         causal_semigroup_has_addition_table: causal_semigroup
             .as_ref()
             .map(|domain| domain.addition_indices.is_some()),
+    })
+}
+
+/// Profile the coefficient states implied by CKYZ z-residual extraction.
+///
+/// This computes the support-predicted finite domain and selected z-residual
+/// history, then counts the formal `Li2(q^d exp(d.alpha))` scale/delta states
+/// that may need coefficient extraction. It intentionally stops before rational
+/// coefficient arithmetic and does not read or compare any GV table.
+///
+/// # Errors
+/// Returns an error for invalid CKYZ source data, invalid target degrees, or
+/// domain-construction overflow.
+pub fn ckyz_z_residual_coefficient_work_profile_for_degrees(
+    relations: &[Vec<i64>],
+    local_intersection_terms: &[CkyzLocalIntersectionTerm],
+    target_degrees: &[Vec<usize>],
+) -> Result<CkyzZResidualCoefficientWorkProfile> {
+    validate_ckyz_relations(relations)?;
+    let rank = relations.len();
+    validate_ckyz_target_degrees(target_degrees, rank)?;
+    for term in local_intersection_terms {
+        if term.first >= rank || term.second >= rank {
+            return Err(Error::InvalidInput(
+                "CKYZ local intersection term index is outside the relation rank".into(),
+            ));
+        }
+    }
+
+    let extraction_degrees = ckyz_cover_closed_target_degrees(target_degrees)?;
+    let domain = ckyz_predicted_support_domain_for_degrees(
+        relations,
+        local_intersection_terms,
+        &extraction_degrees,
+    )?;
+    let alpha = compute_ckyz_log_period_corrections_domain(relations, &domain)?;
+    let path_history_degrees =
+        ckyz_z_residual_dependency_degrees(&alpha, &extraction_degrees, &domain)?;
+    ckyz_z_residual_coefficient_work_profile(&path_history_degrees, &domain)
+}
+
+fn ckyz_z_residual_coefficient_work_profile(
+    extraction_degrees: &[Vec<usize>],
+    domain: &CkyzMonomialDomain,
+) -> Result<CkyzZResidualCoefficientWorkProfile> {
+    validate_ckyz_target_degrees(extraction_degrees, domain.rank)?;
+    let mut residual_pair_count = 0usize;
+    let mut componentwise_pair_count = 0usize;
+    let mut li2_delta_term_count = 0usize;
+    let mut unique_scales = BTreeSet::<Vec<usize>>::new();
+    let mut unique_deltas = BTreeSet::<Vec<usize>>::new();
+    let mut unique_exp_states = BTreeSet::<(Vec<usize>, Vec<usize>)>::new();
+
+    for (degree_index, degree) in extraction_degrees.iter().enumerate() {
+        for target in extraction_degrees.iter().skip(degree_index + 1) {
+            residual_pair_count = residual_pair_count
+                .checked_add(1)
+                .ok_or_else(|| Error::InvalidInput("CKYZ residual pair count overflowed".into()))?;
+            if !ckyz_componentwise_le(degree, target) {
+                continue;
+            }
+            componentwise_pair_count =
+                componentwise_pair_count.checked_add(1).ok_or_else(|| {
+                    Error::InvalidInput("CKYZ componentwise pair count overflowed".into())
+                })?;
+            let max_multiple = degree
+                .iter()
+                .zip(target.iter())
+                .filter_map(|(&degree_entry, &target_entry)| {
+                    (degree_entry != 0).then(|| target_entry / degree_entry)
+                })
+                .min()
+                .ok_or_else(|| {
+                    Error::InvalidInput("CKYZ residual profile degree must be nonzero".into())
+                })?;
+            for multiple in 1..=max_multiple {
+                let Some(delta) = ckyz_subtract_degree_multiple(target, degree, multiple) else {
+                    continue;
+                };
+                if !domain.contains(&delta) {
+                    continue;
+                }
+                let scale = degree
+                    .iter()
+                    .map(|entry| {
+                        entry.checked_mul(multiple).ok_or_else(|| {
+                            Error::InvalidInput(
+                                "CKYZ residual profile scale degree overflowed".into(),
+                            )
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                li2_delta_term_count = li2_delta_term_count.checked_add(1).ok_or_else(|| {
+                    Error::InvalidInput("CKYZ Li2 delta term count overflowed".into())
+                })?;
+                unique_scales.insert(scale.clone());
+                unique_deltas.insert(delta.clone());
+                unique_exp_states.insert((scale, delta));
+            }
+        }
+    }
+
+    Ok(CkyzZResidualCoefficientWorkProfile {
+        rank: domain.rank,
+        domain_degree_count: domain.degrees.len(),
+        path_history_degree_count: extraction_degrees.len(),
+        residual_pair_count,
+        componentwise_pair_count,
+        li2_delta_term_count,
+        unique_scale_count: unique_scales.len(),
+        unique_delta_count: unique_deltas.len(),
+        unique_exp_state_count: unique_exp_states.len(),
     })
 }
 
@@ -10498,7 +10637,8 @@ mod tests {
         ckyz_scaled_alpha_terms, ckyz_second_log_period_series_for_pair_domain,
         ckyz_second_log_period_support_indices_for_pair_domain, ckyz_series_li2_domain,
         ckyz_series_mul_domain, ckyz_series_support_indices, ckyz_support_exp_domain,
-        ckyz_support_exp_domain_by_powers, ckyz_z_residual_dependency_degrees,
+        ckyz_support_exp_domain_by_powers, ckyz_z_residual_coefficient_work_profile_for_degrees,
+        ckyz_z_residual_dependency_degrees,
         classify_nilpotent_rays_from_two_pass_divergence_checks,
         classify_nop_rays_from_finite_gv_table, compute_ambient_one_dimensional_ray_gv_series,
         compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
@@ -11554,6 +11694,29 @@ mod tests {
             "F0 [1,1] extraction needs the lower off-ray [0,1] subtraction"
         );
         assert!(history.contains(&vec![1, 1]));
+    }
+
+    #[test]
+    fn ckyz_z_residual_coefficient_work_profile_counts_polygon5_states() {
+        let relations = ckyz_polygon5_relations();
+        let local_intersection_terms = ckyz_polygon5_intersection_terms();
+        let target_degrees = [vec![4, 3, 2], vec![8, 6, 4]];
+
+        let profile = ckyz_z_residual_coefficient_work_profile_for_degrees(
+            &relations,
+            &local_intersection_terms,
+            &target_degrees,
+        )
+        .unwrap();
+
+        assert_eq!(profile.rank, 3);
+        assert_eq!(profile.domain_degree_count, 265);
+        assert_eq!(profile.path_history_degree_count, 79);
+        assert_eq!(profile.residual_pair_count, 3_081);
+        assert!(profile.componentwise_pair_count < profile.residual_pair_count);
+        assert!(profile.unique_delta_count <= profile.domain_degree_count);
+        assert!(profile.unique_scale_count <= profile.li2_delta_term_count);
+        assert!(profile.unique_exp_state_count <= profile.li2_delta_term_count);
     }
 
     #[test]

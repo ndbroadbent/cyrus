@@ -11,8 +11,11 @@ use cyrus_core::{
     ckyz_local_surface_domain_profile_for_multiples,
     compute_ckyz_local_gv_invariants_for_degrees_with_predicted_support_domain,
     compute_local_toric_circuit_gv_series, curve_in_rational_row_span,
-    diagnose_affine_toric_circuit, identify_ckyz_local_surface, rank_two_local_charge_model,
-    rank_two_local_support_signature,
+    diagnose_affine_toric_circuit,
+    gv::{
+        CkyzZResidualCoefficientWorkProfile, ckyz_z_residual_coefficient_work_profile_for_degrees,
+    },
+    identify_ckyz_local_surface, rank_two_local_charge_model, rank_two_local_support_signature,
 };
 use malachite::Integer;
 
@@ -1010,6 +1013,7 @@ fn mcallister_rank_two_ckyz_domain_profiles_are_inventoried() {
     let multiples_to_profile = ckyz_multiples_to_check(4);
     let target_direction_filter = ckyz_target_direction_filter();
     let print_profiles = std::env::var_os("CYRUS_PRINT_CKYZ_DOMAIN_PROFILES").is_some();
+    let print_coefficient_work = std::env::var_os("CYRUS_PRINT_CKYZ_COEFFICIENT_WORK").is_some();
     let points_raw = read_csv_rows_i64(&data_dir.join("points.dat"));
     let potent_rays = read_csv_rows_i64(&data_dir.join("potent_rays.dat"));
     let all_points: Vec<Point> = points_raw.into_iter().map(Point::new).collect();
@@ -1019,6 +1023,8 @@ fn mcallister_rank_two_ckyz_domain_profiles_are_inventoried() {
         .expect("failed to filter triangulation points");
 
     let mut profiles_by_source = BTreeMap::<(usize, Vec<i64>), CkyzLocalDomainProfile>::new();
+    let mut coefficient_profiles_by_source =
+        BTreeMap::<(usize, Vec<i64>), CkyzZResidualCoefficientWorkProfile>::new();
     let mut profiled_rows = 0usize;
     for ray in &potent_rays {
         let diagnostic = diagnose_affine_toric_circuit(ray, &triangulation_points)
@@ -1034,6 +1040,13 @@ fn mcallister_rank_two_ckyz_domain_profiles_are_inventoried() {
         let identification = identify_ckyz_local_surface(&model)
             .expect("CKYZ identification should run exactly")
             .expect("rank-two McAllister model should match a CKYZ source");
+        let source_target_direction = identification
+            .source_target_direction
+            .iter()
+            .map(|&entry| {
+                usize::try_from(entry).expect("CKYZ source target direction should be nonnegative")
+            })
+            .collect::<Vec<_>>();
         if let Some(filter) = &target_direction_filter {
             if *filter != identification.source_target_direction {
                 continue;
@@ -1051,7 +1064,7 @@ fn mcallister_rank_two_ckyz_domain_profiles_are_inventoried() {
                 multiples_to_profile,
             )
             .expect("CKYZ local source should produce a domain profile");
-            profiles_by_source.insert(key, profile.clone());
+            profiles_by_source.insert(key.clone(), profile.clone());
             profile
         };
 
@@ -1064,6 +1077,18 @@ fn mcallister_rank_two_ckyz_domain_profiles_are_inventoried() {
             profile.causal_semigroup_degree_count.is_some(),
             "matched CKYZ local surface should have a generated causal semigroup profile"
         );
+        if print_coefficient_work && !coefficient_profiles_by_source.contains_key(&key) {
+            let target_degrees = (1..=multiples_to_profile)
+                .map(|multiple| scale_ckyz_degree(&source_target_direction, multiple))
+                .collect::<Vec<_>>();
+            let coefficient_profile = ckyz_z_residual_coefficient_work_profile_for_degrees(
+                &identification.source_relations,
+                &identification.local_intersection_terms,
+                &target_degrees,
+            )
+            .expect("CKYZ local source should produce a coefficient-work profile");
+            coefficient_profiles_by_source.insert(key, coefficient_profile);
+        }
         profiled_rows += 1;
     }
 
@@ -1074,6 +1099,21 @@ fn mcallister_rank_two_ckyz_domain_profiles_are_inventoried() {
                 profile.target_downset_degree_count,
                 profile.predicted_support_degree_count,
                 profile.causal_semigroup_degree_count,
+            );
+        }
+    }
+    if print_coefficient_work {
+        for ((kind, direction), profile) in &coefficient_profiles_by_source {
+            eprintln!(
+                "[CKYZ_COEFFICIENT_WORK] kind={kind} direction={direction:?} multiples={multiples_to_profile} domain={} history={} residual_pairs={} componentwise_pairs={} li2_terms={} unique_scales={} unique_deltas={} unique_exp_states={}",
+                profile.domain_degree_count,
+                profile.path_history_degree_count,
+                profile.residual_pair_count,
+                profile.componentwise_pair_count,
+                profile.li2_delta_term_count,
+                profile.unique_scale_count,
+                profile.unique_delta_count,
+                profile.unique_exp_state_count,
             );
         }
     }
