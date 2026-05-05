@@ -52,18 +52,21 @@ pretending the charge vector `(-3,1,1,1)` is just a compact CYTools/cygv
 hypersurface input.
 
 The local CKYZ path Cyrus is building mirrors only the period-coefficient layer
-of that machinery. The new double-log/prepotential-period routine computes the
-source CKYZ `rho`-derivatives in B-model `z` coordinates, and the inverse
-mirror-map helper now composes those coefficients into flat `q` coordinates.
-The local instanton-potential helper now mirrors cygv's essential
-`beta - alpha alpha` conversion and applies the CKYZ `instbase`
-multiple-cover inversion for source weights supplied by the caller. This is
-validated for local `P^2`, `F0`, `F1`, and polygon 5, and all 395 McAllister
-rank-two CKYZ potent-ray rows now check their first two saved GV entries
-against source-derived CKYZ extraction. The saved `potent_rays_gv.dat` values
-remain validation targets only. The full ten-entry rows still need a sharper
-coefficient-targeted extractor; componentwise box truncation is correct but too
-slow for the largest target directions.
+of that machinery, then performs the local-surface steps that are absent from
+compact cygv. The double-log/prepotential-period routine computes the source
+CKYZ `rho`-derivatives in B-model `z` coordinates, and the inverse mirror-map
+helper composes those coefficients into flat `q` coordinates. The local
+instanton-potential helper mirrors cygv's essential `beta - alpha alpha`
+conversion and applies the CKYZ `instbase` multiple-cover inversion for
+source-derived finite-limit weights.
+
+This is now validated for local `P^2`, `F0`, `F1`, and polygon 5. The gated
+McAllister rank-two CKYZ test checks the first two saved GV entries for all 395
+rank-two CKYZ potent-ray rows from source relation data. The saved
+`potent_rays_gv.dat` values remain validation targets only. The full ten-entry
+rows still need a sharper coefficient-targeted extractor; componentwise box
+truncation is mathematically direct but too slow for the largest target
+directions.
 
 The computational-mirror paper explains the implementation boundary that this
 source code implies. Finite HKTY computations need a causally closed truncation:
@@ -181,27 +184,28 @@ solution.
 - Do not keep expanding final-volume fitting diagnostics until the face/ray GV
   source problem is solved.
 
-## Implemented First-Ray Reconstruction
+## Implemented Rank-Two CKYZ Reconstruction
 
-Cyrus now has a first non-replay potent-ray GV reconstruction for the leading
-4-214-647 local `P^2` ray:
+Cyrus now has non-replay potent-ray GV reconstruction for the rank-two CKYZ
+surface families in the 4-214-647 checkpoint:
 
 1. detect the affine circuit support of the first potent ray from
    `points.dat`/`potent_rays.dat`, without reading its GV row;
-2. classify the support as the rank-two local `P^2` triangle;
-3. compute the local `O(-3) -> P^2` genus-zero GV sequence from the
-   Picard-Fuchs mirror map, local Yukawa coupling, and multiple-cover
-   inversion;
-4. use row 0 of `potent_rays_gv.dat` only as the assertion.
+2. reconstruct rank-two local coordinates and the local affine charge lattice;
+3. identify local `P^2`, `F0`, `F1`, and CKYZ polygon-5 source relation systems
+   by point permutation and unimodular row transformation;
+4. compute CKYZ local period corrections, mirror-map substitution,
+   `beta - alpha alpha`, and multiple-cover extraction in source coordinates;
+5. use `potent_rays_gv.dat` only as the assertion.
 
 The gated test is
-`first_mcallister_local_p2_potent_ray_gvs_are_reconstructed` in
+`mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed` in
 `crates/cyrus-core/tests/potent_ray_affine_circuits.rs`.
 
-The remaining potent-ray target is to generalize this beyond the first local
-`P^2` row: reconstruct the local toric charge/face contexts for the other
-rank-two patterns, keep the rank-four cases explicit, and then generate the
-full 411-ray sample without treating `potent_rays*.dat` as production input.
+The remaining potent-ray target is to extend this from first-two rank-two
+checks to the complete saved rows where feasible, keep the rank-four cases
+explicit, and then generate the full 411-ray sample without treating
+`potent_rays*.dat` as production input.
 
 As a narrower checkpoint toward that target, Cyrus now reconstructs integral
 two-dimensional local coordinates for every rank-two saved potent-ray support
@@ -323,14 +327,17 @@ Executable evidence is now split by layer:
 - `mcallister_rank_four_local_affine_supports_are_inventoried` keeps the 16
   affine-rank-four rows explicit instead of projecting them into fake rank-two
   local coordinates;
-- `first_mcallister_local_p2_potent_ray_gvs_are_reconstructed` is the only test
-  that reaches GV values, and only for the already-derived local `P^2` model.
+- `mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed` reaches GV values
+  for all 395 rank-two CKYZ rows, currently checking the first two saved
+  entries from source-derived local mirror data.
 
-This is not yet a general potent-ray GV engine. For non-`P^2` rank-two supports,
-the reconstructed charge basis is usually multi-parameter. The saved potent ray
-is one direction inside that charge lattice, so the next source-derived object
-is the full local toric/HKTY input for the reflexive-polygon support, not a
-one-dimensional coefficient-pattern rule.
+This is not yet a general potent-ray GV engine. The rank-two CKYZ local-surface
+path is source-derived, but its current targeted extractor still expands a
+componentwise formal box. That is sufficient for first-two validation and small
+local tables, but it is not the right performance model for all ten saved
+entries across large target directions. The next source-derived object is a
+coefficient-targeted local-series extractor, not a one-dimensional
+coefficient-pattern rule.
 
 The rank-four checkpoint is deliberately separate from the CKYZ local-surface
 path. For 4-214-647, those 16 rows collapse to one seven-point affine-rank-four
@@ -365,9 +372,10 @@ puts the next work in this order:
    mirror formulas. Compact `cy.compute_gvs()` supplies a semigroup, grading,
    curve-basis `q` matrix, and intersection tensor to cygv; it is not itself the
    CKYZ local-surface formula.
-2. For rank-two CKYZ-matched families, derive the local mirror series from the
-   CKYZ relation rows, `c1` pairings, and local intersection expression already
-   returned by `identify_ckyz_local_surface`.
+2. For rank-two CKYZ-matched families, keep improving the source-derived local
+   mirror series from the CKYZ relation rows, finite-limit cover weights, and
+   local intersection expression already returned by
+   `identify_ckyz_local_surface`.
 3. For rank-four affine supports, derive the actual low-dimensional face
    semigroup context before calling cygv. These rows should not be projected into
    fake rank-two polygons.
@@ -378,10 +386,8 @@ This keeps the project from going in circles: the next code should be driven by
 one fully read source path, not by another diagnostic wrapper around the same
 saved data.
 
-The first part of item 2 is now implemented as
-`compute_ckyz_log_period_corrections`. It computes the CKYZ logarithmic-period
-correction coefficients from the local relation rows, with tests against local
-`P^2`, `F0`, and `F1` source systems. The remaining rank-two CKYZ work is the
-second-derivative/local-prepotential period and the multi-parameter
-multiple-cover extraction needed before comparing non-`P^2` potent-ray GV
-sequences.
+Item 2 now includes logarithmic periods, second-derivative/local-prepotential
+periods, inverse mirror-map substitution, local `beta - alpha alpha`
+conversion, and multiple-cover extraction. The remaining rank-two CKYZ work is
+coefficient-targeted extraction for larger requested degrees, plus broader
+validation beyond the first two saved entries.

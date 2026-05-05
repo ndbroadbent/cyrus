@@ -26,7 +26,7 @@ run pass. Any remaining mismatch must be explicit and localizable.
 | High-dimensional selected small toric curves | Cyrus computes Mori-cap rays, applies the input-chamber volume cutoff, and matches the 4-214-647 `small_curves.dat` checkpoint with pair pruning | Implemented for checkpoint rule |
 | Small-curve pruning semantics | `CurvePruningStrategy::{PairDecomposable, FiniteSemigroup}` exposes the checkpoint rule and stricter finite-set semigroup diagnostic separately | Implemented, with documented mismatch |
 | Small toric GV values | Toric two-face/origin-circuit formulas match `small_curves_gv.dat` for 4-214-647 | Implemented for covered selected-toric formulas |
-| Potent-ray convergence data | `curve_row_span_rank`, `potent_ray_convergence`, `diagnose_affine_toric_circuit`, `mcallister_potent_rays_are_affine_toric_circuits`, `compute_ray_gv_series_with_provided_generators`, `compute_one_dimensional_ray_gv_series`, and `stage5_mcallister_potent_ray_checkpoint_quantities_are_computed` compute rank, corrected-Kähler volumes, affine local-circuit structure, `log xi_n` slopes, and expose reusable cygv ray-series entry points | Partially implemented; ray sampling and 4-214-647 face-context ray-series regeneration still missing |
+| Potent-ray convergence data | `curve_row_span_rank`, `potent_ray_convergence`, `diagnose_affine_toric_circuit`, CKYZ local-surface identification, source-derived local CKYZ GV extraction, and the Stage 5 potent-ray diagnostics compute rank, corrected-Kähler volumes, affine local-circuit structure, `log xi_n` slopes, and first-two GV checks for all 395 rank-two CKYZ rows | Partially implemented; full ten-entry extraction, rank-four contexts, and generated low-dimensional-face ray sampling still missing |
 | Flop/corrected-chamber continuation | Negative small-curve volumes and real-axis dilog branch behavior are classified; even-parity branch-cut failures are explicit via `GvDilogFailure` | Diagnosed, not resolved |
 | KKLT corrected Kähler solve | Runner reaches a no-replay corrected Kähler vector and corrected volume without loading `corrected_kahler_param.dat` by default | Implemented but not exact |
 | Corrected target-volume / GV correction agreement | Diagnostics localize the residual to corrected-chamber GV target corrections, not classical geometry or file semantics | Open blocker |
@@ -40,12 +40,12 @@ run pass. Any remaining mismatch must be explicit and localizable.
    simple issue with divisor `chi`, gamma indexing, `q.t` branch aggregation,
    local toric formulas, or checkpoint-file semantics.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
-   supplied ray/GV samples, and Cyrus has a reusable one-dimensional cygv series
-   entry point. The first saved 4-214-647 potent ray is now regenerated from its
-   reconstructed local `P^2` circuit via a local mirror-map/Yukawa calculation,
-   with `potent_rays_gv.dat` used only as the assertion. Cyrus still does not
-   generate the full sampled low-dimensional-face ray set or handle the other
-   rank-two/rank-four local charge contexts.
+   supplied ray/GV samples. Cyrus also reconstructs the first two saved GV
+   entries for all 395 rank-two CKYZ potent-ray rows from CKYZ relation rows,
+   local period coefficients, mirror-map substitution, and multiple-cover
+   extraction, with `potent_rays_gv.dat` used only as the assertion. Cyrus still
+   does not generate the full sampled low-dimensional-face ray set, reproduce
+   all ten entries efficiently, or handle the rank-four local charge contexts.
 3. Pair-pruned selected curves match McAllister's `small_curves.dat`, while a
    stricter finite-semigroup diagnostic removes five additional curves. This is
    exposed as a policy choice, not hidden.
@@ -80,9 +80,9 @@ to make the remaining GV layer more first-principles:
 
 1. Generate potent-ray samples from low-dimensional faces of
    `M_infinity(X)` and compute the ray `N_{nq}` series rather than reading
-   `potent_rays*.dat`. The first local `P^2` row is now covered; next extend
-   the same source-backed reconstruction to the other rank-two charge patterns
-   and then to the rank-four affine supports.
+   `potent_rays*.dat`. Rank-two CKYZ rows now have first-two checks; next make
+   the local extractor coefficient-targeted enough for complete rows where
+   feasible, then handle the rank-four affine supports.
 2. Compare broader corrected-chamber per-curve cygv/general-GV values against
    toric formula values and missing non-toric contributions.
 3. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
