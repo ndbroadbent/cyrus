@@ -364,6 +364,46 @@ pub struct ToricCurveGvInvariant {
     pub gv: Integer,
 }
 
+/// A nonzero point in an affine toric circuit relation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AffineCircuitRelationPoint {
+    /// Index of the triangulation point.
+    pub point_index: usize,
+    /// Coefficient of the point in the affine relation.
+    pub coefficient: i64,
+    /// Lattice coordinates of the point.
+    pub coordinates: Vec<i64>,
+}
+
+/// Recognized local toric circuit shape.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LocalToricCircuitKind {
+    /// Local `P^2` / `O(-3) -> P^2` triangle relation.
+    LocalP2Triangle {
+        /// The interior point of the toric triangle.
+        interior_point: usize,
+        /// The three triangle vertices.
+        vertex_points: Vec<usize>,
+        /// Coefficient of the interior point in the supplied orientation.
+        interior_coefficient: i64,
+        /// Coefficient of each vertex in the supplied orientation.
+        vertex_coefficient: i64,
+    },
+}
+
+/// Diagnostic for an ambient curve row that is an affine toric circuit.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AffineToricCircuitDiagnostic {
+    /// Nonzero relation points in ambient index order.
+    pub relation_points: Vec<AffineCircuitRelationPoint>,
+    /// Sum of the relation coefficients. This is zero for an affine relation.
+    pub coefficient_sum: i128,
+    /// Weighted sum of lattice coordinates. This is zero for an affine relation.
+    pub coordinate_sum: Vec<i128>,
+    /// Recognized local toric shape, when currently known.
+    pub kind: Option<LocalToricCircuitKind>,
+}
+
 /// A nonzero point in an origin-circuit affine relation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OriginCircuitRelationPoint {
@@ -453,6 +493,126 @@ pub struct ToricCurveGvDiagnostic {
     pub gv: Integer,
     /// Local formulas/witnesses that produced the value.
     pub sources: Vec<ToricCurveGvSource>,
+}
+
+/// Diagnose whether an ambient curve row is an affine toric circuit.
+///
+/// The input curve uses the same ambient coordinate convention as
+/// McAllister's `potent_rays.dat`: one coefficient per triangulation point.
+/// This function only recognizes upstream toric geometry in the row; it does
+/// not assign any GV values.
+///
+/// # Errors
+/// Returns an error if the row length does not match the point list or if the
+/// points do not all live in the same lattice dimension.
+pub fn diagnose_affine_toric_circuit(
+    ambient_curve: &[i64],
+    points: &[Point],
+) -> Result<Option<AffineToricCircuitDiagnostic>> {
+    if ambient_curve.len() != points.len() {
+        return Err(Error::InvalidInput(format!(
+            "ambient curve dimension {} does not match point count {}",
+            ambient_curve.len(),
+            points.len()
+        )));
+    }
+    let Some(first_point) = points.first() else {
+        return Ok(None);
+    };
+    let dim = first_point.coords().len();
+    if points.iter().any(|point| point.coords().len() != dim) {
+        return Err(Error::InvalidInput(
+            "affine circuit points must have consistent lattice dimension".into(),
+        ));
+    }
+
+    let mut relation_points = Vec::new();
+    let mut coefficient_sum = 0i128;
+    let mut coordinate_sum = vec![0i128; dim];
+    for (point_index, (&coefficient, point)) in ambient_curve.iter().zip(points.iter()).enumerate()
+    {
+        if coefficient == 0 {
+            continue;
+        }
+        coefficient_sum += i128::from(coefficient);
+        for (acc, &coord) in coordinate_sum.iter_mut().zip(point.coords().iter()) {
+            *acc += i128::from(coefficient) * i128::from(coord);
+        }
+        relation_points.push(AffineCircuitRelationPoint {
+            point_index,
+            coefficient,
+            coordinates: point.coords().to_vec(),
+        });
+    }
+
+    if relation_points.is_empty() {
+        return Ok(None);
+    }
+    if coefficient_sum != 0 || coordinate_sum.iter().any(|&value| value != 0) {
+        return Ok(None);
+    }
+
+    let kind = classify_local_toric_circuit(&relation_points);
+    Ok(Some(AffineToricCircuitDiagnostic {
+        relation_points,
+        coefficient_sum,
+        coordinate_sum,
+        kind,
+    }))
+}
+
+fn classify_local_toric_circuit(
+    relation_points: &[AffineCircuitRelationPoint],
+) -> Option<LocalToricCircuitKind> {
+    for vertex_coefficient in [1, -1] {
+        let interior_coefficient = -3 * vertex_coefficient;
+        let mut vertices: Vec<&AffineCircuitRelationPoint> = relation_points
+            .iter()
+            .filter(|point| point.coefficient == vertex_coefficient)
+            .collect();
+        let interior: Vec<&AffineCircuitRelationPoint> = relation_points
+            .iter()
+            .filter(|point| point.coefficient == interior_coefficient)
+            .collect();
+        if vertices.len() != 3 || interior.len() != 1 {
+            continue;
+        }
+        if vertices.len() + interior.len() != relation_points.len() {
+            continue;
+        }
+
+        let interior = interior[0];
+        let dim = interior.coordinates.len();
+        if vertices
+            .iter()
+            .any(|vertex| vertex.coordinates.len() != dim)
+        {
+            continue;
+        }
+        let is_barycenter = (0..dim).all(|coord_idx| {
+            let vertex_sum: i128 = vertices
+                .iter()
+                .map(|vertex| i128::from(vertex.coordinates[coord_idx]))
+                .sum();
+            3 * i128::from(interior.coordinates[coord_idx]) == vertex_sum
+        });
+        if !is_barycenter {
+            continue;
+        }
+
+        vertices.sort_by_key(|point| point.point_index);
+        return Some(LocalToricCircuitKind::LocalP2Triangle {
+            interior_point: interior.point_index,
+            vertex_points: vertices
+                .into_iter()
+                .map(|point| point.point_index)
+                .collect(),
+            interior_coefficient,
+            vertex_coefficient,
+        });
+    }
+
+    None
 }
 
 /// Compute the volume of an ambient curve class from Kähler parameters in a divisor basis.
@@ -3588,15 +3748,15 @@ mod tests {
 
     use super::{
         BoundedCurveDecompositionIndex, CurveDecompositionTerm, CurvePruningStrategy,
-        GvLatticeAugmentation, OriginCircuitCurveWitness, OriginCircuitRelationPoint,
-        ToricCurveCandidate, check_supporting_mori_face_normal,
+        GvLatticeAugmentation, LocalToricCircuitKind, OriginCircuitCurveWitness,
+        OriginCircuitRelationPoint, ToricCurveCandidate, check_supporting_mori_face_normal,
         compute_ambient_one_dimensional_ray_gv_series, compute_grading_vector,
         compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_provided_generators, compute_one_dimensional_ray_gv_series,
         compute_ray_gv_series_with_provided_generators, curve_in_rational_row_span,
-        curve_row_span_rank, curve_volume_in_divisor_basis, dump_mori_rays_cdd,
-        find_pair_decomposition, find_semigroup_decomposition, gv_lattice_search_request,
-        load_grading_cache, map_basis_gv_invariants_to_ambient,
+        curve_row_span_rank, curve_volume_in_divisor_basis, diagnose_affine_toric_circuit,
+        dump_mori_rays_cdd, find_pair_decomposition, find_semigroup_decomposition,
+        gv_lattice_search_request, load_grading_cache, map_basis_gv_invariants_to_ambient,
         origin_circuit_diagnostic_from_class_and_witnesses, potent_ray_convergence,
         potent_ray_log_xi_terms, project_ambient_curve_to_basis,
         project_mori_cone_cap_rays_to_basis, prune_decomposable_curve_candidates,
@@ -3605,6 +3765,7 @@ mod tests {
         supporting_mori_face_from_normal, write_grading_cache,
     };
     use crate::Intersection;
+    use crate::lattice::Point;
     use crate::{f64_finite, f64_pos};
     use malachite::Integer;
 
@@ -3655,6 +3816,70 @@ mod tests {
         .unwrap_err();
 
         assert!(err.to_string().contains("q_matrix is empty"));
+    }
+
+    #[test]
+    fn affine_toric_circuit_detects_local_p2_triangle() {
+        let points = vec![
+            Point::new(vec![0, 1, -3, 6]),
+            Point::new(vec![-2, -1, -4, 5]),
+            Point::new(vec![-1, 0, -3, 5]),
+            Point::new(vec![-1, 0, -2, 4]),
+        ];
+
+        let diagnostic = diagnose_affine_toric_circuit(&[1, 1, -3, 1], &points)
+            .unwrap()
+            .expect("local P2 row is an affine circuit");
+
+        assert_eq!(diagnostic.coefficient_sum, 0);
+        assert_eq!(diagnostic.coordinate_sum, vec![0, 0, 0, 0]);
+        assert_eq!(
+            diagnostic.kind,
+            Some(LocalToricCircuitKind::LocalP2Triangle {
+                interior_point: 2,
+                vertex_points: vec![0, 1, 3],
+                interior_coefficient: -3,
+                vertex_coefficient: 1,
+            })
+        );
+    }
+
+    #[test]
+    fn affine_toric_circuit_detects_local_p2_triangle_opposite_orientation() {
+        let points = vec![
+            Point::new(vec![0, 1, -3, 6]),
+            Point::new(vec![-2, -1, -4, 5]),
+            Point::new(vec![-1, 0, -3, 5]),
+            Point::new(vec![-1, 0, -2, 4]),
+        ];
+
+        let diagnostic = diagnose_affine_toric_circuit(&[-1, -1, 3, -1], &points)
+            .unwrap()
+            .expect("opposite orientation is still an affine circuit");
+
+        assert_eq!(
+            diagnostic.kind,
+            Some(LocalToricCircuitKind::LocalP2Triangle {
+                interior_point: 2,
+                vertex_points: vec![0, 1, 3],
+                interior_coefficient: 3,
+                vertex_coefficient: -1,
+            })
+        );
+    }
+
+    #[test]
+    fn affine_toric_circuit_rejects_non_affine_row() {
+        let points = vec![
+            Point::new(vec![0, 1, -3, 6]),
+            Point::new(vec![-2, -1, -4, 5]),
+            Point::new(vec![-1, 0, -3, 5]),
+            Point::new(vec![-1, 0, -2, 4]),
+        ];
+
+        let diagnostic = diagnose_affine_toric_circuit(&[1, 1, -2, 1], &points).unwrap();
+
+        assert_eq!(diagnostic, None);
     }
 
     #[test]

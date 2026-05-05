@@ -217,6 +217,11 @@ Their boundaries are different:
   this function with `[q]` as the supplied context, so the API boundary no
   longer conflates "ray series extraction" with "the one-generator semigroup is
   the correct physics context."
+- `diagnose_affine_toric_circuit` recognizes when an ambient curve row is an
+  affine toric circuit and currently classifies the local `P^2` triangle
+  pattern without assigning any GV values. This is an upstream-geometry
+  diagnostic for reconstructing potent-ray face contexts, not a checkpoint
+  replay mechanism.
 
 But the McAllister corrected-chamber diagnostic path currently relies first on
 toric two-face/origin-circuit formula values for selected small curves, then uses

@@ -95,7 +95,8 @@ pub use glsm::compute_glsm_and_linrels;
 pub use glsm::compute_glsm_charge_matrix;
 pub use glsm::compute_glsm_linear_relations;
 pub use gv::{
-    CurveDecompositionTerm, CurvePruningStrategy, OneDimensionalRayGvSeries,
+    AffineCircuitRelationPoint, AffineToricCircuitDiagnostic, CurveDecompositionTerm,
+    CurvePruningStrategy, LocalToricCircuitKind, OneDimensionalRayGvSeries,
     OriginCircuitCurveDiagnostic, OriginCircuitCurveWitness, OriginCircuitRelationPoint,
     PotentRayConvergence, SupportingMoriFace, SupportingMoriFaceCertificate, ToricCurveCandidate,
     ToricCurveGvDiagnostic, ToricCurveGvInvariant, ToricCurveGvSource,
@@ -107,9 +108,9 @@ pub use gv::{
     compute_origin_circuit_curve_diagnostics, compute_ray_gv_series_with_provided_generators,
     compute_toric_curve_gv_diagnostics, compute_toric_two_face_curve_gv_invariants,
     curve_in_rational_row_span, curve_row_span_rank, curve_volume_in_divisor_basis,
-    find_pair_decomposition, find_semigroup_decomposition, map_basis_gv_invariants_to_ambient,
-    potent_ray_convergence, potent_ray_log_xi_slope, potent_ray_log_xi_terms,
-    project_ambient_curve_to_basis, project_mori_cone_cap_rays_to_basis,
+    diagnose_affine_toric_circuit, find_pair_decomposition, find_semigroup_decomposition,
+    map_basis_gv_invariants_to_ambient, potent_ray_convergence, potent_ray_log_xi_slope,
+    potent_ray_log_xi_terms, project_ambient_curve_to_basis, project_mori_cone_cap_rays_to_basis,
     prune_decomposable_curve_candidates, remove_pair_decomposable_curve_candidates,
     remove_semigroup_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
     supporting_mori_face_for_curve_from_normal, supporting_mori_face_from_normal,
