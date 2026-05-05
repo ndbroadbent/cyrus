@@ -12,7 +12,10 @@ use std::hash::{Hash, Hasher};
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 
-use good_lp::{Expression, ProblemVariables, Solution, SolverModel, default_solver, variable};
+use good_lp::{
+    Expression, ProblemVariables, ResolutionError, Solution, SolverModel, Variable, default_solver,
+    variable,
+};
 use malachite::Integer;
 use malachite::Rational;
 use malachite::num::arithmetic::traits::Abs;
@@ -273,6 +276,15 @@ pub struct ToricCurveCandidate {
     pub volume: F64<Pos>,
 }
 
+/// One term in a finite semigroup decomposition of a curve class.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CurveDecompositionTerm {
+    /// Summand curve class.
+    pub class: Vec<i64>,
+    /// Non-negative integer multiplicity of this summand.
+    pub multiplicity: u64,
+}
+
 /// A toric curve class with its genus-zero GV invariant.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ToricCurveGvInvariant {
@@ -477,6 +489,189 @@ pub fn remove_pair_decomposable_curve_candidates(
         })
         .cloned()
         .collect())
+}
+
+/// Find an exact finite-semigroup decomposition of `target` into other selected candidates.
+///
+/// This solves integer feasibility over the finite set of supplied candidates,
+/// excluding rows with the same class as `target`. It is stricter than the
+/// pair-only pruning helper: a returned decomposition can contain any
+/// non-negative integer multiplicities allowed by the target volume. The LP
+/// solver works over floating point constraints, so the candidate solution is
+/// always verified exactly in integer arithmetic before being returned.
+pub fn find_semigroup_decomposition(
+    target: &ToricCurveCandidate,
+    candidates: &[ToricCurveCandidate],
+) -> Result<Option<Vec<CurveDecompositionTerm>>> {
+    let dim = validate_semigroup_inputs(target, candidates)?;
+    let mut vars = ProblemVariables::new();
+    let solver_vars = semigroup_solver_variables(target, candidates, dim, &mut vars)?;
+
+    if solver_vars.is_empty() {
+        return Ok(None);
+    }
+
+    solve_semigroup_model(vars, &solver_vars, target, candidates, dim)
+}
+
+fn validate_semigroup_inputs(
+    target: &ToricCurveCandidate,
+    candidates: &[ToricCurveCandidate],
+) -> Result<usize> {
+    let dim = target.class.len();
+    if dim == 0 {
+        return Err(Error::InvalidInput("target curve dimension is zero".into()));
+    }
+    validate_exact_lp_class(&target.class)?;
+
+    for candidate in candidates {
+        if candidate.class.len() != dim {
+            return Err(Error::InvalidInput(
+                "candidate curve dimensions are inconsistent".into(),
+            ));
+        }
+        validate_exact_lp_class(&candidate.class)?;
+    }
+
+    Ok(dim)
+}
+
+fn semigroup_solver_variables(
+    target: &ToricCurveCandidate,
+    candidates: &[ToricCurveCandidate],
+    dim: usize,
+    vars: &mut ProblemVariables,
+) -> Result<Vec<(usize, Variable)>> {
+    let mut solver_vars = Vec::new();
+    let target_volume = target.volume.get();
+    for (idx, candidate) in candidates.iter().enumerate() {
+        debug_assert_eq!(candidate.class.len(), dim);
+        if candidate.class == target.class || candidate.volume >= target.volume {
+            continue;
+        }
+        let candidate_volume = candidate.volume.get();
+        let upper_bound = (target_volume / candidate_volume).ceil() + 1.0;
+        if upper_bound < 1.0 || !upper_bound.is_finite() {
+            return Err(Error::InvalidInput(
+                "invalid curve volume bound for semigroup decomposition".into(),
+            ));
+        }
+        let variable = vars.add(variable().integer().min(0.0).max(upper_bound));
+        solver_vars.push((idx, variable));
+    }
+    Ok(solver_vars)
+}
+
+fn semigroup_total_expression(solver_vars: &[(usize, Variable)]) -> Expression {
+    let mut expr = Expression::from(0.0);
+    for &(_, variable) in solver_vars {
+        expr.add_mul(1.0, variable);
+    }
+    expr
+}
+
+fn semigroup_coordinate_expression(
+    coord: usize,
+    solver_vars: &[(usize, Variable)],
+    candidates: &[ToricCurveCandidate],
+) -> Expression {
+    let mut expr = Expression::from(0.0);
+    for &(candidate_idx, variable) in solver_vars {
+        let coefficient = candidates[candidate_idx].class[coord];
+        if coefficient != 0 {
+            expr.add_mul(coefficient as f64, variable);
+        }
+    }
+    expr
+}
+
+fn solve_semigroup_model(
+    vars: ProblemVariables,
+    solver_vars: &[(usize, Variable)],
+    target: &ToricCurveCandidate,
+    candidates: &[ToricCurveCandidate],
+    dim: usize,
+) -> Result<Option<Vec<CurveDecompositionTerm>>> {
+    let mut model = vars
+        .minimise(semigroup_total_expression(solver_vars))
+        .using(default_solver)
+        .with(semigroup_total_expression(solver_vars).geq(2.0));
+
+    for coord in 0..dim {
+        let expr = semigroup_coordinate_expression(coord, solver_vars, candidates);
+        model = model.with(expr.eq(target.class[coord] as f64));
+    }
+
+    let solution = match model.solve() {
+        Ok(solution) => solution,
+        Err(ResolutionError::Infeasible) => return Ok(None),
+        Err(err) => {
+            return Err(Error::InvalidInput(format!(
+                "curve semigroup decomposition solver failed: {err}"
+            )));
+        }
+    };
+
+    let terms = collect_semigroup_solution_terms(&solution, solver_vars, candidates)?;
+    verify_semigroup_decomposition(target, &terms)?;
+    if terms.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(terms))
+    }
+}
+
+fn collect_semigroup_solution_terms<S: Solution>(
+    solution: &S,
+    solver_vars: &[(usize, Variable)],
+    candidates: &[ToricCurveCandidate],
+) -> Result<Vec<CurveDecompositionTerm>> {
+    let mut terms = Vec::new();
+    for &(candidate_idx, variable) in solver_vars {
+        let value = solution.value(variable);
+        if !value.is_finite() {
+            return Err(Error::InvalidInput(
+                "curve semigroup solver returned a non-finite multiplicity".into(),
+            ));
+        }
+        let rounded = value.round();
+        if (value - rounded).abs() > 1.0e-7 {
+            return Err(Error::InvalidInput(format!(
+                "curve semigroup solver returned non-integral multiplicity {value}"
+            )));
+        }
+        if rounded < 0.0 || rounded > u64::MAX as f64 {
+            return Err(Error::InvalidInput(format!(
+                "curve semigroup solver returned invalid multiplicity {value}"
+            )));
+        }
+        let multiplicity = rounded as u64;
+        if multiplicity > 0 {
+            terms.push(CurveDecompositionTerm {
+                class: candidates[candidate_idx].class.clone(),
+                multiplicity,
+            });
+        }
+    }
+    terms.sort_unstable_by(|lhs, rhs| lhs.class.cmp(&rhs.class));
+    Ok(terms)
+}
+
+/// Remove curve candidates that are finite-semigroup sums of other selected candidates.
+///
+/// This is the faithful finite-set version of the McAllister "sums of others"
+/// pruning rule. It is suitable for selected small-curve sets, not for proving a
+/// Hilbert basis of the full Mori cone when the candidate set is incomplete.
+pub fn remove_semigroup_decomposable_curve_candidates(
+    candidates: &[ToricCurveCandidate],
+) -> Result<Vec<ToricCurveCandidate>> {
+    let mut out = Vec::with_capacity(candidates.len());
+    for candidate in candidates {
+        if find_semigroup_decomposition(candidate, candidates)?.is_none() {
+            out.push(candidate.clone());
+        }
+    }
+    Ok(out)
 }
 
 /// Exact bounded semigroup-decomposition diagnostic for toric curve candidates.
@@ -1026,6 +1221,66 @@ fn find_pair_decomposition_with_set(
         }
     }
     None
+}
+
+fn validate_exact_lp_class(class: &[i64]) -> Result<()> {
+    const MAX_EXACT_F64_INTEGER: i128 = 1_i128 << 53;
+    for &value in class {
+        if i128::from(value).abs() > MAX_EXACT_F64_INTEGER {
+            return Err(Error::InvalidInput(
+                "curve class entry is too large for exact LP conversion".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn verify_semigroup_decomposition(
+    target: &ToricCurveCandidate,
+    terms: &[CurveDecompositionTerm],
+) -> Result<()> {
+    let dim = target.class.len();
+    let mut sum = vec![0_i128; dim];
+    let mut total_terms = 0_u64;
+    for term in terms {
+        if term.class.len() != dim {
+            return Err(Error::InvalidInput(
+                "semigroup decomposition term dimension mismatch".into(),
+            ));
+        }
+        if term.multiplicity == 0 {
+            return Err(Error::InvalidInput(
+                "semigroup decomposition contains zero multiplicity".into(),
+            ));
+        }
+        total_terms = total_terms.checked_add(term.multiplicity).ok_or_else(|| {
+            Error::InvalidInput("semigroup decomposition term count overflow".into())
+        })?;
+        let multiplicity = i128::from(term.multiplicity);
+        for (coord_sum, &coefficient) in sum.iter_mut().zip(term.class.iter()) {
+            let contribution = i128::from(coefficient)
+                .checked_mul(multiplicity)
+                .ok_or_else(|| {
+                    Error::InvalidInput("semigroup decomposition coefficient overflow".into())
+                })?;
+            *coord_sum = coord_sum.checked_add(contribution).ok_or_else(|| {
+                Error::InvalidInput("semigroup decomposition coordinate overflow".into())
+            })?;
+        }
+    }
+    if total_terms < 2 {
+        return Err(Error::InvalidInput(
+            "semigroup decomposition must use at least two terms".into(),
+        ));
+    }
+    for (actual, &expected) in sum.iter().zip(target.class.iter()) {
+        if *actual != i128::from(expected) {
+            return Err(Error::InvalidInput(
+                "semigroup decomposition failed exact integer verification".into(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn subtract_curve(lhs: &[i64], rhs: &[i64]) -> Vec<i64> {
@@ -2709,12 +2964,14 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        BoundedCurveDecompositionIndex, OriginCircuitCurveWitness, OriginCircuitRelationPoint,
-        ToricCurveCandidate, compute_grading_vector, compute_gv_invariants_with_explicit_semigroup,
+        BoundedCurveDecompositionIndex, CurveDecompositionTerm, OriginCircuitCurveWitness,
+        OriginCircuitRelationPoint, ToricCurveCandidate, compute_grading_vector,
+        compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_provided_generators, curve_volume_in_divisor_basis,
-        dump_mori_rays_cdd, find_pair_decomposition, gv_lattice_search_request, load_grading_cache,
-        map_basis_gv_invariants_to_ambient, origin_circuit_diagnostic_from_class_and_witnesses,
-        project_mori_cone_cap_rays_to_basis, remove_pair_decomposable_curve_candidates,
+        dump_mori_rays_cdd, find_pair_decomposition, find_semigroup_decomposition,
+        gv_lattice_search_request, load_grading_cache, map_basis_gv_invariants_to_ambient,
+        origin_circuit_diagnostic_from_class_and_witnesses, project_mori_cone_cap_rays_to_basis,
+        remove_pair_decomposable_curve_candidates, remove_semigroup_decomposable_curve_candidates,
         subcutoff_toric_curve_candidates, write_grading_cache,
     };
     use crate::Intersection;
@@ -3066,6 +3323,120 @@ mod tests {
             index.find_decomposition(&candidates[2], 4).unwrap(),
             Some(vec![vec![0, 1], vec![0, 1], vec![1, 0], vec![1, 0]])
         );
+    }
+
+    #[test]
+    fn semigroup_decomposition_finds_three_term_sums() {
+        let candidates = vec![
+            ToricCurveCandidate {
+                class: vec![1, 0, 0],
+                volume: f64_pos!(0.2),
+            },
+            ToricCurveCandidate {
+                class: vec![0, 1, 0],
+                volume: f64_pos!(0.3),
+            },
+            ToricCurveCandidate {
+                class: vec![0, 0, 1],
+                volume: f64_pos!(0.4),
+            },
+            ToricCurveCandidate {
+                class: vec![1, 1, 1],
+                volume: f64_pos!(0.9),
+            },
+        ];
+
+        let decomposition = find_semigroup_decomposition(&candidates[3], &candidates).unwrap();
+
+        assert_eq!(
+            decomposition,
+            Some(vec![
+                CurveDecompositionTerm {
+                    class: vec![0, 0, 1],
+                    multiplicity: 1,
+                },
+                CurveDecompositionTerm {
+                    class: vec![0, 1, 0],
+                    multiplicity: 1,
+                },
+                CurveDecompositionTerm {
+                    class: vec![1, 0, 0],
+                    multiplicity: 1,
+                },
+            ])
+        );
+    }
+
+    #[test]
+    fn semigroup_decomposition_uses_multiplicities() {
+        let candidates = vec![
+            ToricCurveCandidate {
+                class: vec![1, 0],
+                volume: f64_pos!(0.2),
+            },
+            ToricCurveCandidate {
+                class: vec![0, 1],
+                volume: f64_pos!(0.3),
+            },
+            ToricCurveCandidate {
+                class: vec![2, 2],
+                volume: f64_pos!(1.0),
+            },
+        ];
+
+        let decomposition = find_semigroup_decomposition(&candidates[2], &candidates).unwrap();
+
+        assert_eq!(
+            decomposition,
+            Some(vec![
+                CurveDecompositionTerm {
+                    class: vec![0, 1],
+                    multiplicity: 2,
+                },
+                CurveDecompositionTerm {
+                    class: vec![1, 0],
+                    multiplicity: 2,
+                },
+            ])
+        );
+    }
+
+    #[test]
+    fn semigroup_pruning_removes_multi_term_sums() {
+        let candidates = vec![
+            ToricCurveCandidate {
+                class: vec![1, 0, 0],
+                volume: f64_pos!(0.2),
+            },
+            ToricCurveCandidate {
+                class: vec![0, 1, 0],
+                volume: f64_pos!(0.3),
+            },
+            ToricCurveCandidate {
+                class: vec![0, 0, 1],
+                volume: f64_pos!(0.4),
+            },
+            ToricCurveCandidate {
+                class: vec![1, 1, 1],
+                volume: f64_pos!(0.9),
+            },
+        ];
+
+        let filtered = remove_semigroup_decomposable_curve_candidates(&candidates).unwrap();
+
+        assert_eq!(filtered, candidates[..3].to_vec());
+    }
+
+    #[test]
+    fn semigroup_decomposition_does_not_use_target_itself() {
+        let candidates = vec![ToricCurveCandidate {
+            class: vec![1, 0],
+            volume: f64_pos!(0.2),
+        }];
+
+        let decomposition = find_semigroup_decomposition(&candidates[0], &candidates).unwrap();
+
+        assert_eq!(decomposition, None);
     }
 
     #[test]
