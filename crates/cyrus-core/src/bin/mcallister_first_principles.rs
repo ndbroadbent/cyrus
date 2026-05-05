@@ -75,12 +75,13 @@ use cyrus_core::{
     compute_mori_cone_cap_rays, compute_origin_circuit_curve_diagnostics,
     compute_regular_triangulation, compute_toric_curve_gv_diagnostics,
     compute_toric_two_face_curve_gv_invariants, compute_w0_from_terms,
-    effective_prime_divisors_from_curve_basis, generate_scaled_kklt_branch_initializations,
-    heights_to_kahler, intersection_in_basis, is_unimodular, kahler_to_heights,
-    map_basis_gv_invariants_to_ambient, project_ambient_curve_to_basis,
-    prune_decomposable_curve_candidates, scale_mixed_basis_kklt_branch_initialization_to_target,
-    solve_mixed_basis_path_following, solve_mixed_basis_path_following_branch_candidates,
-    solve_racetrack, subcutoff_toric_curve_candidates,
+    curve_basis_matrix_without_origin_i64, effective_prime_divisors_from_curve_basis,
+    generate_scaled_kklt_branch_initializations, heights_to_kahler, intersection_in_basis,
+    is_unimodular, kahler_to_heights, map_basis_gv_invariants_to_ambient,
+    project_ambient_curve_to_basis, prune_decomposable_curve_candidates,
+    scale_mixed_basis_kklt_branch_initialization_to_target, solve_mixed_basis_path_following,
+    solve_mixed_basis_path_following_branch_candidates, solve_racetrack,
+    subcutoff_toric_curve_candidates,
 };
 
 const DEFAULT_MCALLISTER_GV_MIN_POINTS: u32 = 20_000;
@@ -1553,15 +1554,7 @@ fn stage_gv(
     let grading = compute_grading_vector(&rays).expect("No grading vector found");
     let curve_basis = compute_curve_basis_matrix(&flat.dual_linrels, &flat.dual_basis)
         .expect("Failed curve basis matrix");
-    let q_matrix: Vec<Vec<i64>> = curve_basis
-        .iter()
-        .map(|row| {
-            row.iter()
-                .skip(1)
-                .map(|v| i64::try_from(v).expect("q entry fits i64"))
-                .collect()
-        })
-        .collect();
+    let q_matrix = curve_basis_matrix_without_origin_i64(&curve_basis).expect("q entries fit i64");
     let invariants = cyrus_core::compute_gv_invariants(
         &rays,
         &grading,
@@ -1912,18 +1905,8 @@ fn compute_primal_general_gv_by_ambient_class(
     }
     let curve_basis = compute_curve_basis_matrix(&intersection.linrels, &intersection.basis)
         .map_err(|e| format!("failed to compute primal curve basis matrix: {e}"))?;
-    let q_matrix = curve_basis
-        .iter()
-        .map(|row| {
-            row.iter()
-                .skip(1)
-                .map(|value| {
-                    i64::try_from(value)
-                        .map_err(|_| "primal q-matrix entry does not fit in i64".to_string())
-                })
-                .collect::<Result<Vec<_>, _>>()
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let q_matrix = curve_basis_matrix_without_origin_i64(&curve_basis)
+        .map_err(|e| format!("failed to build primal q-matrix: {e}"))?;
     let general_gvs = cyrus_core::compute_gv_invariants(
         &rays,
         &grading,
@@ -3235,20 +3218,7 @@ fn report_corrected_chamber_top_toric_local_gv_diagnostics(
             return;
         }
     };
-    let q_matrix = match curve_basis
-        .iter()
-        .map(|row| {
-            row.iter()
-                .skip(1)
-                .map(|value| {
-                    i64::try_from(value).map_err(|_| {
-                        "corrected-chamber q-matrix entry does not fit in i64".to_string()
-                    })
-                })
-                .collect::<Result<Vec<_>, _>>()
-        })
-        .collect::<Result<Vec<_>, _>>()
-    {
+    let q_matrix = match curve_basis_matrix_without_origin_i64(&curve_basis) {
         Ok(q_matrix) => q_matrix,
         Err(e) => {
             eprintln!(
@@ -6059,19 +6029,8 @@ fn diagnose_chamber_gv_volume_correction(
         }
         let curve_basis = compute_curve_basis_matrix(&intersection.linrels, &intersection.basis)
             .map_err(|e| format!("failed to compute corrected-chamber curve basis matrix: {e}"))?;
-        let q_matrix = curve_basis
-            .iter()
-            .map(|row| {
-                row.iter()
-                    .skip(1)
-                    .map(|value| {
-                        i64::try_from(value).map_err(|_| {
-                            "corrected-chamber q-matrix entry does not fit in i64".to_string()
-                        })
-                    })
-                    .collect::<Result<Vec<_>, _>>()
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let q_matrix = curve_basis_matrix_without_origin_i64(&curve_basis)
+            .map_err(|e| format!("failed to build corrected-chamber q-matrix: {e}"))?;
         let corrected_kappa_basis =
             chamber_intersection_in_basis(tri, &geom.triangulation_points, &intersection.basis)?;
         eprintln!(
@@ -6147,19 +6106,8 @@ fn diagnose_chamber_gv_volume_correction(
         }
         let curve_basis = compute_curve_basis_matrix(&intersection.linrels, &intersection.basis)
             .map_err(|e| format!("failed to compute corrected-chamber curve basis matrix: {e}"))?;
-        let q_matrix = curve_basis
-            .iter()
-            .map(|row| {
-                row.iter()
-                    .skip(1)
-                    .map(|value| {
-                        i64::try_from(value).map_err(|_| {
-                            "corrected-chamber q-matrix entry does not fit in i64".to_string()
-                        })
-                    })
-                    .collect::<Result<Vec<_>, _>>()
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let q_matrix = curve_basis_matrix_without_origin_i64(&curve_basis)
+            .map_err(|e| format!("failed to build corrected-chamber q-matrix: {e}"))?;
         let corrected_kappa_basis =
             chamber_intersection_in_basis(tri, &geom.triangulation_points, &intersection.basis)?;
         eprintln!(
@@ -6310,19 +6258,8 @@ fn diagnose_chamber_gv_volume_correction(
         );
         let curve_basis = compute_curve_basis_matrix(&intersection.linrels, &intersection.basis)
             .map_err(|e| format!("failed to compute corrected-chamber curve basis matrix: {e}"))?;
-        let q_matrix = curve_basis
-            .iter()
-            .map(|row| {
-                row.iter()
-                    .skip(1)
-                    .map(|value| {
-                        i64::try_from(value).map_err(|_| {
-                            "corrected-chamber q-matrix entry does not fit in i64".to_string()
-                        })
-                    })
-                    .collect::<Result<Vec<_>, _>>()
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let q_matrix = curve_basis_matrix_without_origin_i64(&curve_basis)
+            .map_err(|e| format!("failed to build corrected-chamber q-matrix: {e}"))?;
         let corrected_kappa_basis =
             chamber_intersection_in_basis(tri, &geom.triangulation_points, &intersection.basis)?;
         let general_gvs = if provided_generators_only {

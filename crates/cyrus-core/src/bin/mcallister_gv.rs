@@ -13,7 +13,7 @@ use cyrus_core::{
     Point, Polytope, Triangulation, compute_curve_basis_matrix, compute_frst_heights,
     compute_glsm_and_linrels, compute_grading_vector, compute_gv_invariants,
     compute_intersection_cytools, compute_linear_relations_no_origin, compute_mori_cone_cap_rays,
-    intersection_in_basis,
+    curve_basis_matrix_without_origin_i64, intersection_in_basis,
 };
 
 const DEFAULT_MCALLISTER_GV_MIN_POINTS: u32 = 20_000;
@@ -239,15 +239,7 @@ fn main() {
     let grading = compute_grading_vector(&rays).expect("No grading vector found");
     eprintln!("[TIME] grading_vector: {:.2?}", t0.elapsed());
 
-    let q_matrix: Vec<Vec<i64>> = curve_basis
-        .iter()
-        .map(|row| {
-            row.iter()
-                .skip(1)
-                .map(|v| i64::try_from(v).expect("q entry fits i64"))
-                .collect()
-        })
-        .collect();
+    let q_matrix = curve_basis_matrix_without_origin_i64(&curve_basis).expect("q entries fit i64");
 
     let invariants = compute_gv_invariants(
         &rays,

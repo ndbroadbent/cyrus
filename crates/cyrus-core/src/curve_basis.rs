@@ -88,6 +88,52 @@ pub fn compute_curve_basis_matrix_from_divisor_basis_matrix(
     Ok(curve_basis)
 }
 
+/// Return a CYTools-style no-origin `q` matrix as `i64` rows.
+///
+/// CYTools passes `curve_basis(include_origin=False, as_matrix=True)` to
+/// `cygv`, which means the origin/canonical divisor column is omitted while the
+/// rows remain Kähler-basis curve rows. This helper centralizes that boundary
+/// so callers do not hand-roll `skip(1)` and accidentally keep the origin
+/// column in GV inputs.
+///
+/// # Errors
+/// Returns an error if the curve-basis matrix is empty, rows have inconsistent
+/// widths, the origin column is absent, or an entry does not fit in `i64`.
+pub fn curve_basis_matrix_without_origin_i64(
+    curve_basis: &[Vec<Integer>],
+) -> Result<Vec<Vec<i64>>> {
+    if curve_basis.is_empty() {
+        return Err(Error::InvalidInput("curve basis matrix is empty".into()));
+    }
+    let n_cols = curve_basis[0].len();
+    if n_cols < 2 {
+        return Err(Error::InvalidInput(
+            "curve basis matrix must include an origin column".into(),
+        ));
+    }
+    for row in curve_basis {
+        if row.len() != n_cols {
+            return Err(Error::InvalidInput(
+                "curve basis matrix rows have inconsistent length".into(),
+            ));
+        }
+    }
+
+    curve_basis
+        .iter()
+        .map(|row| {
+            row.iter()
+                .skip(1)
+                .map(|value| {
+                    i64::try_from(value).map_err(|_| {
+                        Error::InvalidInput("curve basis entry does not fit in i64".into())
+                    })
+                })
+                .collect()
+        })
+        .collect()
+}
+
 fn validate_linrels(linrels: &[Vec<Integer>]) -> Result<usize> {
     if linrels.is_empty() {
         return Err(Error::InvalidInput("linrels matrix is empty".into()));
@@ -360,5 +406,24 @@ mod tests {
         .expect_err("non-unimodular matrix basis should be rejected");
 
         assert!(err.to_string().contains("integral basis"));
+    }
+
+    #[test]
+    fn curve_basis_without_origin_drops_origin_column() {
+        let curve_basis = int_matrix(&[&[-3, 1, 2], &[4, -5, 6]]);
+
+        let q_matrix = curve_basis_matrix_without_origin_i64(&curve_basis).unwrap();
+
+        assert_eq!(q_matrix, vec![vec![1, 2], vec![-5, 6]]);
+    }
+
+    #[test]
+    fn curve_basis_without_origin_rejects_missing_origin_column() {
+        let curve_basis = int_matrix(&[&[1], &[2]]);
+
+        let err = curve_basis_matrix_without_origin_i64(&curve_basis)
+            .expect_err("single-column curve basis should be rejected");
+
+        assert!(err.to_string().contains("origin column"));
     }
 }
