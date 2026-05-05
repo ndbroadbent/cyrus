@@ -317,6 +317,22 @@ Two source details make this boundary explicit:
   truncation, while CYTools' wrapper independently augments generators with
   `mori.find_lattice_points(min_points=100*h11)`.
 
+The no-code read-through also confirms that
+`string_theory/mcallister_2107/full_pipeline_from_data.py` is still a
+checkpoint-driven scaffold, not a GA-ready computation. It loads
+`dual_curves.dat` and `dual_curves_gv.dat` as upstream GV data, projects those
+saved ambient curves to the current basis, and reads `cy_vol.dat` for the final
+volume with an explicit TODO to derive it. That script is useful for checking
+the racetrack algebra against McAllister's files, but Cyrus must replace those
+loaded objects with:
+
+- dual/mirror-side `compute_gvs` from the CYTools/cygv source contract;
+- primal high-`h11` selected toric/nilpotent curve construction;
+- potent-ray GV samples recomputed in their low-dimensional face semigroup
+  contexts;
+- the corrected Kahler volume from the KKLT fixed-point and chamber-continuation
+  data, not from `cy_vol.dat`.
+
 ## Paper Contract for Large h11 GVs
 
 The McAllister paper separates the large-`h11` Kähler-side GV problem into
