@@ -98,7 +98,17 @@ domain from those supports. The unit test
 domain recomputes the same targeted F0 skew-ray GV values and does not add
 terms outside the componentwise target downset.
 
-This is not the production dependency-domain builder yet, because it traces a
-broad computation. It is a regression guard for the next step: a forward
-source-derived builder should match this support-traced result on small local
-models before it is used to raise the McAllister potent-ray gate.
+Cyrus also has a test-only support-predicted domain path,
+`ckyz_predicted_support_domain_for_degrees`. It computes exact alpha/beta
+supports on the broad source-derived downset, then runs the inverse mirror-map
+and potential-composition steps at the support level rather than evaluating the
+full rational coefficient series. The test
+`ckyz_predicted_support_domain_covers_observed_f0_ray_support` verifies that
+this support-predicted domain covers the observed support and reproduces the
+same targeted F0 skew-ray GV values.
+
+This is not the production dependency-domain builder yet. It still enumerates
+alpha/beta supports on the broad downset, so it is a guardrail and staging
+point, not a completed coefficient-domain solution. A production builder should
+derive the needed alpha/beta supports directly enough to avoid the `N=5`
+McAllister rank-two timeout before it is used to raise the potent-ray gate.
