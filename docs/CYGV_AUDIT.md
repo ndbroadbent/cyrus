@@ -34,6 +34,26 @@ If `mcap_generators` is supplied, CYTools passes those rows directly as
 `generators`; otherwise it augments Mori-cap rays with lattice points before
 calling `cygv`.
 
+The `mori_cone_cap` source is also part of the contract, not a black box. It
+constructs ambient curve relations from two families:
+
+- adjacent 2-simplices inside each 2-face of the primal polytope;
+- origin circuits built from a 2-simplex plus one point from each of the two
+  facets containing that simplex.
+
+Each relation is normalized by the integer nullspace vector, sign-flipped so
+that the first coefficient is nonnegative, and then projected either by dropping
+the origin entry or by applying the divisor basis. This is the exact source of
+the "toric curve" candidates used by the high-dimensional Kähler-side
+selection.
+
+CYTools' `Cone.find_lattice_points` is a separate operation. It first checks
+that the grading vector has only the origin at nonpositive degree, then uses
+CP-SAT to enumerate integer points in degree windows sorted by degree and
+lexicographic order. This lattice enumeration is what the generic
+`compute_gvs()` wrapper uses to augment Mori-cap rays; it is not the same as
+the McAllister paper's selected-small-toric-curve cutoff.
+
 The matrix-orientation convention is easy to get wrong:
 
 - Python `cygv.compute_gv` receives `generators` as rows of curve coordinates and
@@ -66,6 +86,10 @@ Important details:
 
 - `Semigroup::with_min_elements` starts from the supplied generators and closes
   the semigroup under addition until at least `min_points` elements exist.
+- Before closure, `cygv` calls `find_generators`, which removes some supplied
+  elements that are sums of two others. The current crate implementation only
+  tests sums with `n = 2` because `max_sum_elements = 3` and the Rust range is
+  `2..max_sum_elements`.
 - `compute_omega` builds `q0` from GLSM charges by summing rows for the
   hypersurface nef partition, then groups semigroup elements by the number of
   negative GLSM intersections.
@@ -75,6 +99,11 @@ Important details:
 This means local face/ray HKTY checks can be correct for isolated classes while
 still not reproducing the global CYTools/cygv output. The global result depends
 on the full semigroup truncation and the degree-ordered subtraction history.
+
+It also means `cygv` should not be treated as the implementation of the paper's
+"remove curves that are sums of others" step. Its generator reduction is an
+internal heuristic for the supplied semigroup, not a documented Hilbert-basis
+extraction pass over the selected toric curves.
 
 ## Two Distinct GV Regimes
 
@@ -91,6 +120,23 @@ The McAllister pipeline uses GV data in two different regimes:
 
 The current Stage 5 residual is in the second regime. Treating it as a plain
 full-cone `cy.compute_gvs()` mismatch is therefore misleading.
+
+The paper's selected-curve method is more precise than several older Python
+notes in `string_theory/mcallister_2107`:
+
+- start from curves inherited from the toric ambient variety;
+- cut by volume in the approximate KKLT solution, with homogeneous scaling
+  corresponding to `c_tau = 1`;
+- remove curves that are sums of other selected curves, because those are not
+  Hilbert-basis elements;
+- compute GV values of the remainder, and separately probe potent rays in
+  low-dimensional Mori faces for convergence control.
+
+This is the method behind `small_curves.dat` and `small_curves_gv.dat`. The
+generic `cy.compute_gvs(min_points=...)` scripts in the Python reproduction are
+useful for the low-dimensional mirror/racetrack side and for experiments, but
+they are not a faithful production recipe for the 214-dimensional Kähler-side
+instanton correction.
 
 ## Current Cyrus Situation
 
