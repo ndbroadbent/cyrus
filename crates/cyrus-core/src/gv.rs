@@ -536,6 +536,23 @@ pub struct NilpotentRayDivergenceCheck {
     pub appears_divergent: Option<bool>,
 }
 
+/// Result of the paper's two-pass finite-cutoff nop classification once the
+/// required divergence checks have been computed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NilpotentRayTwoPassNopClassification {
+    /// Provisional nop rays `F0` from the first pass against `C \ N`.
+    pub initial_candidate_nop_rays: Vec<NilpotentRayCandidate>,
+    /// Final nop rays `F` that still diverge in the second pass against
+    /// `C \ F0`.
+    pub nop_rays: Vec<NilpotentRayCandidate>,
+    /// Nilpotent rays whose first-pass distance comparison had no definite
+    /// `d' > d` answer.
+    pub first_pass_inconclusive_rays: Vec<NilpotentRayCandidate>,
+    /// Provisional nop rays whose second-pass distance comparison had no
+    /// definite `d' > d` answer.
+    pub second_pass_inconclusive_rays: Vec<NilpotentRayCandidate>,
+}
+
 /// Exact certificate that an integer normal cuts out a supporting Mori face.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SupportingMoriFaceCertificate {
@@ -4429,6 +4446,28 @@ fn checked_i64_infinity_norm(vector: &[i64], context: &str) -> Result<i64> {
     })
 }
 
+fn collect_nilpotent_divergence_checks_by_ray<'a>(
+    checks: &'a [(Vec<i64>, NilpotentRayDivergenceCheck)],
+    context: &str,
+) -> Result<BTreeMap<Vec<i64>, &'a NilpotentRayDivergenceCheck>> {
+    let mut by_ray = BTreeMap::new();
+    for (ray, check) in checks {
+        if ray != &check.half_cutoff.slice.primitive_ray
+            || ray != &check.full_cutoff.slice.primitive_ray
+        {
+            return Err(Error::InvalidInput(format!(
+                "two-pass nop classification {context} check ray does not match its slices"
+            )));
+        }
+        if by_ray.insert(ray.clone(), check).is_some() {
+            return Err(Error::InvalidInput(format!(
+                "two-pass nop classification contains duplicate {context} checks"
+            )));
+        }
+    }
+    Ok(by_ray)
+}
+
 fn primitive_i64_gcd(ray: &[i64], context: &str) -> Result<i64> {
     let mut gcd = 0i64;
     for &entry in ray {
@@ -5149,6 +5188,110 @@ pub fn nilpotent_ray_divergence_check_with_explicit_slice_lattices(
         grading_vector,
     )?;
     nilpotent_ray_divergence_check_from_slice_distances(half_distance, full_distance).map(Some)
+}
+
+/// Apply the paper's two-pass nop classification to already-computed
+/// divergence checks.
+///
+/// The first pass is interpreted as comparison against `C \ N`, producing
+/// provisional nop rays `F0`. The second pass is interpreted as comparison
+/// against `C \ F0`, and is required exactly for the rays in `F0`.
+pub fn classify_nilpotent_rays_from_two_pass_divergence_checks(
+    nilpotent_rays: &[NilpotentRayCandidate],
+    first_pass_checks: &[(Vec<i64>, NilpotentRayDivergenceCheck)],
+    second_pass_checks: &[(Vec<i64>, NilpotentRayDivergenceCheck)],
+) -> Result<NilpotentRayTwoPassNopClassification> {
+    let mut nilpotent_by_ray = BTreeMap::new();
+    for candidate in nilpotent_rays {
+        let gcd = primitive_i64_gcd(
+            &candidate.primitive_ray,
+            "two-pass nop classification nilpotent ray",
+        )?;
+        if gcd == 0 {
+            return Err(Error::InvalidInput(
+                "two-pass nop classification nilpotent ray must not be zero".into(),
+            ));
+        }
+        if gcd != 1 {
+            return Err(Error::InvalidInput(format!(
+                "two-pass nop classification nilpotent ray must be co-prime, got gcd {gcd}"
+            )));
+        }
+        if nilpotent_by_ray
+            .insert(candidate.primitive_ray.clone(), candidate)
+            .is_some()
+        {
+            return Err(Error::InvalidInput(
+                "two-pass nop classification contains duplicate nilpotent rays".into(),
+            ));
+        }
+    }
+
+    let first_pass_by_ray =
+        collect_nilpotent_divergence_checks_by_ray(first_pass_checks, "first-pass")?;
+    for ray in first_pass_by_ray.keys() {
+        if !nilpotent_by_ray.contains_key(ray) {
+            return Err(Error::InvalidInput(
+                "two-pass nop classification first-pass check references a non-nilpotent ray"
+                    .into(),
+            ));
+        }
+    }
+
+    let mut initial_candidate_nop_rays = Vec::new();
+    let mut first_pass_inconclusive_rays = Vec::new();
+    for candidate in nilpotent_rays {
+        let check = first_pass_by_ray
+            .get(&candidate.primitive_ray)
+            .ok_or_else(|| {
+                Error::InvalidInput(
+                    "two-pass nop classification is missing a first-pass check".into(),
+                )
+            })?;
+        match check.appears_divergent {
+            Some(true) => initial_candidate_nop_rays.push(candidate.clone()),
+            Some(false) => {}
+            None => first_pass_inconclusive_rays.push(candidate.clone()),
+        }
+    }
+
+    let f0_by_ray: BTreeMap<Vec<i64>, &NilpotentRayCandidate> = initial_candidate_nop_rays
+        .iter()
+        .map(|candidate| (candidate.primitive_ray.clone(), candidate))
+        .collect();
+    let second_pass_by_ray =
+        collect_nilpotent_divergence_checks_by_ray(second_pass_checks, "second-pass")?;
+    for ray in second_pass_by_ray.keys() {
+        if !f0_by_ray.contains_key(ray) {
+            return Err(Error::InvalidInput(
+                "two-pass nop classification second-pass check references a non-F0 ray".into(),
+            ));
+        }
+    }
+
+    let mut nop_rays = Vec::new();
+    let mut second_pass_inconclusive_rays = Vec::new();
+    for candidate in &initial_candidate_nop_rays {
+        let check = second_pass_by_ray
+            .get(&candidate.primitive_ray)
+            .ok_or_else(|| {
+                Error::InvalidInput(
+                    "two-pass nop classification is missing a second-pass check".into(),
+                )
+            })?;
+        match check.appears_divergent {
+            Some(true) => nop_rays.push(candidate.clone()),
+            Some(false) => {}
+            None => second_pass_inconclusive_rays.push(candidate.clone()),
+        }
+    }
+
+    Ok(NilpotentRayTwoPassNopClassification {
+        initial_candidate_nop_rays,
+        nop_rays,
+        first_pass_inconclusive_rays,
+        second_pass_inconclusive_rays,
+    })
 }
 
 /// Compute the paper's potent-ray convergence terms.
@@ -8528,12 +8671,13 @@ mod tests {
         BoundedCurveDecompositionIndex, CkyzLocalIntersectionTerm, CkyzLocalSurfaceIdentification,
         CkyzLocalSurfaceKind, CkyzMonomialDomain, CurveDecompositionTerm, CurvePruningStrategy,
         GvLatticeAugmentation, LocalToricCircuitKind, LocalToricCoordinate2D,
-        NilpotentRaySliceDistance, OriginCircuitCurveWitness, OriginCircuitRelationPoint,
-        ToricCurveCandidate, certify_supporting_mori_face_by_exact_kernel,
-        check_supporting_mori_face_normal, ckyz_cover_closed_target_degrees,
-        ckyz_local_surface_causal_domain_spec, ckyz_local_surface_cover_weight_coefficients,
-        ckyz_local_surface_target_degrees, ckyz_observed_support_domain_for_degrees,
-        ckyz_predicted_support_domain_for_degrees, ckyz_series_mul_domain,
+        NilpotentRayCandidate, NilpotentRayDegreeSlice, NilpotentRaySliceDistance,
+        OriginCircuitCurveWitness, OriginCircuitRelationPoint, ToricCurveCandidate,
+        certify_supporting_mori_face_by_exact_kernel, check_supporting_mori_face_normal,
+        ckyz_cover_closed_target_degrees, ckyz_local_surface_causal_domain_spec,
+        ckyz_local_surface_cover_weight_coefficients, ckyz_local_surface_target_degrees,
+        ckyz_observed_support_domain_for_degrees, ckyz_predicted_support_domain_for_degrees,
+        ckyz_series_mul_domain, classify_nilpotent_rays_from_two_pass_divergence_checks,
         compute_ambient_one_dimensional_ray_gv_series,
         compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
         compute_ckyz_local_gv_invariants, compute_ckyz_local_gv_invariants_for_degrees,
@@ -10621,6 +10765,67 @@ mod tests {
         assert!(bad_degree.to_string().contains("non-positive grading"));
     }
 
+    fn synthetic_nilpotent_candidate(ray: &[i64]) -> NilpotentRayCandidate {
+        NilpotentRayCandidate {
+            primitive_ray: ray.to_vec(),
+            first_vanishing_multiple: 2,
+            first_vanishing_degree: 2,
+            weighted_lower_gv_sum: Integer::from(1),
+        }
+    }
+
+    fn synthetic_divergence_check(
+        ray: &[i64],
+        appears_divergent: Option<bool>,
+    ) -> (Vec<i64>, super::NilpotentRayDivergenceCheck) {
+        let half_norm = match appears_divergent {
+            Some(false) => Some(2),
+            Some(true) | None => Some(1),
+        };
+        let full_norm = match appears_divergent {
+            Some(true) => Some(2),
+            Some(false) => Some(1),
+            None => None,
+        };
+        let half_slice = NilpotentRayDegreeSlice {
+            primitive_ray: ray.to_vec(),
+            cutoff_numerator: 1,
+            cutoff_denominator: 2,
+            slice_multiple: 1,
+            slice_degree: 1,
+            slice_origin: ray.to_vec(),
+        };
+        let full_slice = NilpotentRayDegreeSlice {
+            primitive_ray: ray.to_vec(),
+            cutoff_numerator: 1,
+            cutoff_denominator: 1,
+            slice_multiple: 2,
+            slice_degree: 2,
+            slice_origin: ray.iter().map(|value| value * 2).collect(),
+        };
+        let half_cutoff = NilpotentRaySliceDistance {
+            slice: half_slice,
+            lattice_offsets: Vec::new(),
+            lll_transform: Vec::new(),
+            reduced_lattice_offsets: Vec::new(),
+            comparison_points: Vec::new(),
+            transformed_comparison_offsets: Vec::new(),
+            minimum_infinity_norm: half_norm,
+        };
+        let full_cutoff = NilpotentRaySliceDistance {
+            slice: full_slice,
+            lattice_offsets: Vec::new(),
+            lll_transform: Vec::new(),
+            reduced_lattice_offsets: Vec::new(),
+            comparison_points: Vec::new(),
+            transformed_comparison_offsets: Vec::new(),
+            minimum_infinity_norm: full_norm,
+        };
+        let check =
+            nilpotent_ray_divergence_check_from_slice_distances(half_cutoff, full_cutoff).unwrap();
+        (ray.to_vec(), check)
+    }
+
     #[test]
     fn nilpotent_ray_degree_slice_computes_half_and_full_cutoff_origins() {
         let half = nilpotent_ray_degree_slice_for_cutoff_fraction(&[1, 0], &[2, 5], 5, 1, 2)
@@ -10856,6 +11061,101 @@ mod tests {
         .unwrap();
 
         assert_eq!(check, None);
+    }
+
+    #[test]
+    fn two_pass_nop_classification_builds_f0_and_final_f() {
+        let candidates = vec![
+            synthetic_nilpotent_candidate(&[1, 0]),
+            synthetic_nilpotent_candidate(&[0, 1]),
+            synthetic_nilpotent_candidate(&[1, 1]),
+        ];
+        let classification = classify_nilpotent_rays_from_two_pass_divergence_checks(
+            &candidates,
+            &[
+                synthetic_divergence_check(&[1, 0], Some(true)),
+                synthetic_divergence_check(&[0, 1], Some(false)),
+                synthetic_divergence_check(&[1, 1], None),
+            ],
+            &[synthetic_divergence_check(&[1, 0], Some(true))],
+        )
+        .unwrap();
+
+        assert_eq!(
+            classification
+                .initial_candidate_nop_rays
+                .iter()
+                .map(|candidate| candidate.primitive_ray.clone())
+                .collect::<Vec<_>>(),
+            vec![vec![1, 0]]
+        );
+        assert_eq!(
+            classification
+                .nop_rays
+                .iter()
+                .map(|candidate| candidate.primitive_ray.clone())
+                .collect::<Vec<_>>(),
+            vec![vec![1, 0]]
+        );
+        assert_eq!(
+            classification.first_pass_inconclusive_rays[0].primitive_ray,
+            vec![1, 1]
+        );
+        assert!(classification.second_pass_inconclusive_rays.is_empty());
+    }
+
+    #[test]
+    fn two_pass_nop_classification_tracks_second_pass_inconclusive_rays() {
+        let candidates = vec![
+            synthetic_nilpotent_candidate(&[1, 0]),
+            synthetic_nilpotent_candidate(&[0, 1]),
+        ];
+        let classification = classify_nilpotent_rays_from_two_pass_divergence_checks(
+            &candidates,
+            &[
+                synthetic_divergence_check(&[1, 0], Some(true)),
+                synthetic_divergence_check(&[0, 1], Some(true)),
+            ],
+            &[
+                synthetic_divergence_check(&[1, 0], Some(false)),
+                synthetic_divergence_check(&[0, 1], None),
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(classification.initial_candidate_nop_rays.len(), 2);
+        assert!(classification.nop_rays.is_empty());
+        assert_eq!(
+            classification.second_pass_inconclusive_rays[0].primitive_ray,
+            vec![0, 1]
+        );
+    }
+
+    #[test]
+    fn two_pass_nop_classification_rejects_mismatched_or_missing_checks() {
+        let candidates = vec![synthetic_nilpotent_candidate(&[1, 0])];
+        let missing_first =
+            classify_nilpotent_rays_from_two_pass_divergence_checks(&candidates, &[], &[])
+                .unwrap_err();
+        assert!(missing_first.to_string().contains("missing a first-pass"));
+
+        let extra_second = classify_nilpotent_rays_from_two_pass_divergence_checks(
+            &candidates,
+            &[synthetic_divergence_check(&[1, 0], Some(false))],
+            &[synthetic_divergence_check(&[1, 0], Some(true))],
+        )
+        .unwrap_err();
+        assert!(extra_second.to_string().contains("non-F0"));
+
+        let mut mismatched = synthetic_divergence_check(&[1, 0], Some(true));
+        mismatched.0 = vec![0, 1];
+        let mismatched_err = classify_nilpotent_rays_from_two_pass_divergence_checks(
+            &candidates,
+            &[mismatched],
+            &[],
+        )
+        .unwrap_err();
+        assert!(mismatched_err.to_string().contains("does not match"));
     }
 
     #[test]
