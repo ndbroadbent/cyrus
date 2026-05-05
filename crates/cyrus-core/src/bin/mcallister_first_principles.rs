@@ -760,6 +760,7 @@ struct MissingGvTargetStats {
     origin_circuit_affine_rank_counts: BTreeMap<usize, usize>,
     branch_status_counts: BTreeMap<String, usize>,
     branch_bucket_counts: BTreeMap<String, usize>,
+    real_cone_decomposition_exact_kind_counts: BTreeMap<String, usize>,
     sample: Vec<MissingGvTargetSample>,
 }
 
@@ -778,6 +779,8 @@ struct MissingGvTargetSample {
     real_cone_decomposable_by_other_generators: bool,
     real_cone_decomposition_active_generators: Option<usize>,
     real_cone_decomposition_active_generator_basis_nonzero: Option<Vec<Vec<(usize, i64)>>>,
+    real_cone_decomposition_exact_coefficients: Option<Vec<String>>,
+    real_cone_decomposition_exact_kind: Option<&'static str>,
     ambient_nonzero: Vec<(usize, i64)>,
     basis_nonzero: Vec<(usize, i64)>,
 }
@@ -2238,6 +2241,7 @@ fn missing_gv_target_stats(
             origin_circuit_affine_rank_counts: BTreeMap::new(),
             branch_status_counts: BTreeMap::new(),
             branch_bucket_counts: BTreeMap::new(),
+            real_cone_decomposition_exact_kind_counts: BTreeMap::new(),
             sample: Vec::new(),
         });
     }
@@ -2286,6 +2290,7 @@ fn missing_gv_target_stats(
     let mut origin_circuit_affine_rank_counts = BTreeMap::new();
     let mut branch_status_counts = BTreeMap::new();
     let mut branch_bucket_counts = BTreeMap::new();
+    let mut real_cone_decomposition_exact_kind_counts = BTreeMap::new();
     let mut sample = Vec::new();
     for ambient_class in ambient_classes {
         let Some(&origin_coefficient) = ambient_class.get(origin_idx) else {
@@ -2354,6 +2359,26 @@ fn missing_gv_target_stats(
                     })
                     .collect::<Vec<_>>()
             });
+        let real_cone_decomposition_exact_coefficients = real_cone_decomposition
+            .as_ref()
+            .map(|witness| {
+                exact_active_generator_coefficients(
+                    &basis_class,
+                    basis_rays,
+                    &witness.active_generator_indices,
+                )
+            })
+            .transpose()?;
+        let real_cone_decomposition_exact_kind = real_cone_decomposition_exact_coefficients
+            .as_ref()
+            .map(|coefficients| classify_exact_active_generator_coefficients(coefficients));
+        if let Some(kind) = real_cone_decomposition_exact_kind {
+            *real_cone_decomposition_exact_kind_counts
+                .entry(kind.to_string())
+                .or_insert(0) += 1;
+        }
+        let real_cone_decomposition_exact_coefficients = real_cone_decomposition_exact_coefficients
+            .map(|coefficients| coefficients.iter().map(ToString::to_string).collect());
         if is_mori_generator && !real_cone_decomposable {
             targets_that_are_lp_extremal_mori_generators += 1;
         }
@@ -2434,6 +2459,8 @@ fn missing_gv_target_stats(
                 real_cone_decomposable_by_other_generators: real_cone_decomposable,
                 real_cone_decomposition_active_generators,
                 real_cone_decomposition_active_generator_basis_nonzero,
+                real_cone_decomposition_exact_coefficients,
+                real_cone_decomposition_exact_kind,
                 ambient_nonzero: ambient_class
                     .iter()
                     .enumerate()
@@ -2464,6 +2491,7 @@ fn missing_gv_target_stats(
         origin_circuit_affine_rank_counts,
         branch_status_counts,
         branch_bucket_counts,
+        real_cone_decomposition_exact_kind_counts,
         sample,
     })
 }
@@ -3154,6 +3182,92 @@ fn solve_rational_linear_system(
 
 fn rational_is_integer(value: &malachite::Rational) -> bool {
     value.denominator_ref() == &1u32
+}
+
+fn exact_active_generator_coefficients(
+    target: &[i64],
+    basis_rays: &[Vec<i64>],
+    active_generator_indices: &[usize],
+) -> Result<Vec<malachite::Rational>, String> {
+    if active_generator_indices.is_empty() {
+        return Err("exact active-generator decomposition has no active generators".to_string());
+    }
+    let dim = target.len();
+    let mut matrix = vec![Vec::with_capacity(active_generator_indices.len()); dim];
+    for &ray_idx in active_generator_indices {
+        let Some(ray) = basis_rays.get(ray_idx) else {
+            return Err(format!(
+                "active generator index {ray_idx} is out of bounds for {} basis rays",
+                basis_rays.len()
+            ));
+        };
+        if ray.len() != dim {
+            return Err(format!(
+                "active generator dimension {} does not match target dimension {dim}",
+                ray.len()
+            ));
+        }
+        for (coord, &value) in ray.iter().enumerate() {
+            matrix[coord].push(malachite::Rational::from(value));
+        }
+    }
+    let rhs = target
+        .iter()
+        .map(|&value| malachite::Rational::from(value))
+        .collect::<Vec<_>>();
+    let Some(coefficients) = solve_rational_linear_system(&matrix, &rhs)? else {
+        return Err("LP active generators have no exact rational decomposition".to_string());
+    };
+    verify_exact_active_generator_coefficients(
+        target,
+        basis_rays,
+        active_generator_indices,
+        &coefficients,
+    )?;
+    Ok(coefficients)
+}
+
+fn verify_exact_active_generator_coefficients(
+    target: &[i64],
+    basis_rays: &[Vec<i64>],
+    active_generator_indices: &[usize],
+    coefficients: &[malachite::Rational],
+) -> Result<(), String> {
+    if active_generator_indices.len() != coefficients.len() {
+        return Err(format!(
+            "active generator count {} does not match coefficient count {}",
+            active_generator_indices.len(),
+            coefficients.len()
+        ));
+    }
+    for coord in 0..target.len() {
+        let mut reconstructed = malachite::Rational::from(0);
+        for (&ray_idx, coefficient) in active_generator_indices.iter().zip(coefficients.iter()) {
+            reconstructed += coefficient * malachite::Rational::from(basis_rays[ray_idx][coord]);
+        }
+        if reconstructed != malachite::Rational::from(target[coord]) {
+            return Err(format!(
+                "exact active-generator decomposition failed at coordinate {coord}: reconstructed {reconstructed}, target {}",
+                target[coord]
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn classify_exact_active_generator_coefficients(
+    coefficients: &[malachite::Rational],
+) -> &'static str {
+    let zero = malachite::Rational::from(0);
+    if coefficients.iter().all(|value| value >= &zero) {
+        if coefficients.iter().all(rational_is_integer) {
+            "integer_semigroup"
+        } else {
+            "rational_cone"
+        }
+    } else {
+        "signed_rational"
+    }
 }
 
 fn cms_general_divisor_shape_candidates_for_witness(
@@ -9575,13 +9689,14 @@ fn stage_volume(
                 _ => "none".to_string(),
             };
             eprintln!(
-                "[INFO] corrected-chamber missing GV target reduction: targets={} targets_as_mori_generators={} targets_as_origin_circuits={} real_cone_decomposable_by_other_generators={} lp_extremal_mori_generators={} real_cone_active_generator_range={} origin_circuit_resolved_conifold={} origin_circuit_affine_ranks={:?} generators_le_target_degree_range={}..{} origin_coefficients={:?}",
+                "[INFO] corrected-chamber missing GV target reduction: targets={} targets_as_mori_generators={} targets_as_origin_circuits={} real_cone_decomposable_by_other_generators={} lp_extremal_mori_generators={} real_cone_active_generator_range={} exact_decomposition_kinds={:?} origin_circuit_resolved_conifold={} origin_circuit_affine_ranks={:?} generators_le_target_degree_range={}..{} origin_coefficients={:?}",
                 stats.target_count,
                 stats.targets_that_are_mori_generators,
                 stats.targets_that_are_origin_circuits,
                 stats.targets_real_cone_decomposable_by_other_generators,
                 stats.targets_that_are_lp_extremal_mori_generators,
                 active_generator_range,
+                stats.real_cone_decomposition_exact_kind_counts,
                 stats.origin_circuit_resolved_conifold_count,
                 stats.origin_circuit_affine_rank_counts,
                 stats.min_generators_le_target_degree,
@@ -10484,6 +10599,10 @@ mod tests {
         assert_eq!(stats.branch_status_counts, BTreeMap::new());
         assert_eq!(stats.branch_bucket_counts, BTreeMap::new());
         assert_eq!(
+            stats.real_cone_decomposition_exact_kind_counts,
+            BTreeMap::from([("integer_semigroup".to_string(), 2)])
+        );
+        assert_eq!(
             stats.sample,
             vec![
                 MissingGvTargetSample {
@@ -10503,6 +10622,11 @@ mod tests {
                         vec![(0, 1)],
                         vec![(1, 1)]
                     ]),
+                    real_cone_decomposition_exact_coefficients: Some(vec![
+                        "1".to_string(),
+                        "1".to_string()
+                    ]),
+                    real_cone_decomposition_exact_kind: Some("integer_semigroup"),
                     ambient_nonzero: vec![(1, 1), (2, 1)],
                     basis_nonzero: vec![(0, 1), (1, 1)]
                 },
@@ -10522,6 +10646,8 @@ mod tests {
                     real_cone_decomposition_active_generator_basis_nonzero: Some(vec![vec![(
                         0, 1
                     )]]),
+                    real_cone_decomposition_exact_coefficients: Some(vec!["2".to_string()]),
+                    real_cone_decomposition_exact_kind: Some("integer_semigroup"),
                     ambient_nonzero: vec![(1, 2)],
                     basis_nonzero: vec![(0, 2)]
                 }
@@ -10724,6 +10850,36 @@ mod tests {
         assert_eq!(
             solve_rational_linear_system(&matrix, &inconsistent_rhs).unwrap(),
             None
+        );
+    }
+
+    #[test]
+    fn exact_active_generator_coefficients_classify_semigroup_vs_rational_cone() {
+        let integer_coefficients =
+            exact_active_generator_coefficients(&[1, 1], &[vec![1, 0], vec![0, 1]], &[0, 1])
+                .unwrap();
+        assert_eq!(
+            integer_coefficients,
+            vec![malachite::Rational::from(1), malachite::Rational::from(1)]
+        );
+        assert_eq!(
+            classify_exact_active_generator_coefficients(&integer_coefficients),
+            "integer_semigroup"
+        );
+
+        let rational_coefficients =
+            exact_active_generator_coefficients(&[1, 1], &[vec![2, 0], vec![0, 2]], &[0, 1])
+                .unwrap();
+        assert_eq!(
+            rational_coefficients,
+            vec![
+                malachite::Rational::from(1) / malachite::Rational::from(2),
+                malachite::Rational::from(1) / malachite::Rational::from(2)
+            ]
+        );
+        assert_eq!(
+            classify_exact_active_generator_coefficients(&rational_coefficients),
+            "rational_cone"
         );
     }
 
