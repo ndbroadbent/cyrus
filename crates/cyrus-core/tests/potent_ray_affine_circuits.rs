@@ -356,6 +356,84 @@ fn rank_two_models_by_coefficient_pattern(
 }
 
 #[test]
+fn mcallister_rank_four_local_affine_supports_are_inventoried() {
+    if !first_principles_enabled() {
+        return;
+    }
+    let Some(data_dir) = mcallister_data_dir() else {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    };
+
+    let points_raw = read_csv_rows_i64(&data_dir.join("points.dat"));
+    let potent_rays = read_csv_rows_i64(&data_dir.join("potent_rays.dat"));
+    let all_points: Vec<Point> = points_raw.into_iter().map(Point::new).collect();
+    let polytope = Polytope::from_vertices(all_points).expect("failed to create polytope");
+    let triangulation_points = polytope
+        .points_not_interior_to_facets()
+        .expect("failed to filter triangulation points");
+
+    let mut inventory: BTreeMap<(Vec<usize>, Vec<Vec<i64>>), BTreeMap<Vec<i64>, usize>> =
+        BTreeMap::new();
+    for ray in &potent_rays {
+        let diagnostic = diagnose_affine_toric_circuit(ray, &triangulation_points)
+            .expect("affine circuit diagnostic should accept McAllister dimensions")
+            .expect("saved potent ray should be an affine toric circuit");
+        if diagnostic.affine_rank != 4 {
+            continue;
+        }
+        let support_indices = diagnostic
+            .relation_points
+            .iter()
+            .map(|point| point.point_index)
+            .collect::<Vec<_>>();
+        let relation = diagnostic
+            .relation_points
+            .iter()
+            .map(|point| point.coefficient)
+            .collect::<Vec<_>>();
+        *inventory
+            .entry((support_indices, diagnostic.local_charge_basis))
+            .or_default()
+            .entry(relation)
+            .or_insert(0usize) += 1;
+    }
+
+    assert_eq!(
+        inventory,
+        BTreeMap::from([
+            (
+                (vec![0, 3, 8, 9, 17, 23], vec![vec![1, 3, -1, -1, -1, -1]],),
+                BTreeMap::from([(vec![-1, -3, 1, 1, 1, 1], 1)]),
+            ),
+            (
+                (
+                    vec![0, 3, 8, 9, 17, 23, 60],
+                    vec![vec![1, 3, -1, -1, -1, -1, 0], vec![0, 1, -1, -1, 0, 0, 1],],
+                ),
+                BTreeMap::from([
+                    (vec![-9, -26, 8, 8, 9, 9, 1], 1),
+                    (vec![-8, -23, 7, 7, 8, 8, 1], 1),
+                    (vec![-7, -20, 6, 6, 7, 7, 1], 1),
+                    (vec![-7, -19, 5, 5, 7, 7, 2], 1),
+                    (vec![-7, -18, 4, 4, 7, 7, 3], 1),
+                    (vec![-6, -17, 5, 5, 6, 6, 1], 1),
+                    (vec![-5, -14, 4, 4, 5, 5, 1], 1),
+                    (vec![-5, -13, 3, 3, 5, 5, 2], 1),
+                    (vec![-5, -12, 2, 2, 5, 5, 3], 1),
+                    (vec![-5, -11, 1, 1, 5, 5, 4], 1),
+                    (vec![-4, -11, 3, 3, 4, 4, 1], 1),
+                    (vec![-4, -9, 1, 1, 4, 4, 3], 1),
+                    (vec![-3, -8, 2, 2, 3, 3, 1], 1),
+                    (vec![-3, -7, 1, 1, 3, 3, 2], 1),
+                    (vec![-2, -5, 1, 1, 2, 2, 1], 1),
+                ]),
+            ),
+        ]),
+        "rank-four potent-ray supports should remain explicit local affine charge contexts"
+    );
+}
+
+#[test]
 fn mcallister_potent_rays_are_affine_toric_circuits() {
     if !first_principles_enabled() {
         return;

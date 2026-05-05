@@ -179,3 +179,23 @@ As above, this is still not a GV computation. It only fixes the local mirror
 input coordinates from source relation data. The next missing algorithm is the
 CKYZ local mirror series and instanton-number extraction in these source
 coordinates.
+
+## Rank-Four Boundary
+
+The gated test
+`mcallister_rank_four_local_affine_supports_are_inventoried` records the 16
+saved potent-ray supports that are not rank-two local toric surfaces. It does
+not read `potent_rays_gv.dat`.
+
+For 4-214-647 these rank-four rows are concentrated in one local affine
+configuration:
+
+| Support indices | Local charge basis | Rows |
+|-----------------|--------------------|-----:|
+| `(0, 3, 8, 9, 17, 23)` | `(1, 3, -1, -1, -1, -1)` | 1 |
+| `(0, 3, 8, 9, 17, 23, 60)` | `(1, 3, -1, -1, -1, -1, 0)`, `(0, 1, -1, -1, 0, 0, 1)` | 15 |
+
+These supports should stay explicit. They are local affine charge contexts, but
+they are not two-dimensional reflexive polygons and should not be forced through
+the CKYZ local-surface matching path. Their GV source is the missing
+low-dimensional face/semigroup computation.

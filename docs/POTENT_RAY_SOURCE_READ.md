@@ -297,6 +297,9 @@ Executable evidence is now split by layer:
 - `mcallister_rank_two_local_charge_models_are_inventoried` pins the canonical
   charge bases and target charge-lattice directions for all 16 rank-two support
   families;
+- `mcallister_rank_four_local_affine_supports_are_inventoried` keeps the 16
+  affine-rank-four rows explicit instead of projecting them into fake rank-two
+  local coordinates;
 - `first_mcallister_local_p2_potent_ray_gvs_are_reconstructed` is the only test
   that reaches GV values, and only for the already-derived local `P^2` model.
 
@@ -305,6 +308,15 @@ the reconstructed charge basis is usually multi-parameter. The saved potent ray
 is one direction inside that charge lattice, so the next source-derived object
 is the full local toric/HKTY input for the reflexive-polygon support, not a
 one-dimensional coefficient-pattern rule.
+
+The rank-four checkpoint is deliberately separate from the CKYZ local-surface
+path. For 4-214-647, those 16 rows collapse to one seven-point affine-rank-four
+configuration with local charge basis
+`[(1,3,-1,-1,-1,-1,0), (0,1,-1,-1,0,0,1)]`, plus one six-point face with basis
+`(1,3,-1,-1,-1,-1)`. This proves the rows are structured local affine charge
+contexts, but not two-dimensional reflexive polygons. Their GV source therefore
+has to come from the low-dimensional face/semigroup construction, not from the
+rank-two CKYZ surface matching.
 
 The intended next code change should therefore be narrow:
 
