@@ -3795,6 +3795,13 @@ fn certify_supporting_mori_face(
         ));
     }
 
+    if let Some(lp_normal) = solve_supporting_face_normal_aggregate_lp(face_generators, basis_rays)?
+        && let Some(certificate) =
+            integer_supporting_face_certificate_from_lp(&lp_normal, face_generators, basis_rays)?
+    {
+        return Ok(Some(certificate));
+    }
+
     let anchors = supporting_face_anchor_candidates(face_generators, basis_rays)?;
     for anchor in anchors {
         let Some(lp_normal) =
@@ -3842,6 +3849,127 @@ fn supporting_face_anchor_candidates(
         }
     }
     Ok(anchors)
+}
+
+fn solve_supporting_face_normal_aggregate_lp(
+    face_generators: &[Vec<i64>],
+    basis_rays: &[Vec<i64>],
+) -> Result<Option<Vec<f64>>, String> {
+    let max_rounds = std::env::var("CYRUS_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE_CUTTING_ROUNDS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(DEFAULT_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE_CUTTING_ROUNDS);
+    let aggregate = aggregate_mori_ray_coefficients(basis_rays)?;
+    let mut enforced_ray_indices = Vec::new();
+    let mut enforced_ray_set = HashSet::new();
+    for _ in 0..max_rounds {
+        let Some(normal) = solve_supporting_face_normal_aggregate_lp_with_enforced_rays(
+            face_generators,
+            basis_rays,
+            &aggregate,
+            &enforced_ray_indices,
+        )?
+        else {
+            return Ok(None);
+        };
+        let Some(violating_idx) = most_negative_lp_normal_violation(&normal, basis_rays) else {
+            return Ok(Some(normal));
+        };
+        if !enforced_ray_set.insert(violating_idx) {
+            return Ok(None);
+        }
+        enforced_ray_indices.push(violating_idx);
+    }
+    Ok(None)
+}
+
+fn aggregate_mori_ray_coefficients(basis_rays: &[Vec<i64>]) -> Result<Vec<i128>, String> {
+    let Some(first_ray) = basis_rays.first() else {
+        return Err("supporting-face aggregate normal LP requires Mori generators".to_string());
+    };
+    let dim = first_ray.len();
+    let mut aggregate = vec![0_i128; dim];
+    for ray in basis_rays {
+        if ray.len() != dim {
+            return Err(
+                "supporting-face aggregate normal LP ray dimensions are inconsistent".to_string(),
+            );
+        }
+        for (slot, &coefficient) in aggregate.iter_mut().zip(ray) {
+            *slot = (*slot)
+                .checked_add(i128::from(coefficient))
+                .ok_or_else(|| {
+                    "supporting-face aggregate normal LP coefficient overflowed i128".to_string()
+                })?;
+        }
+    }
+    Ok(aggregate)
+}
+
+fn solve_supporting_face_normal_aggregate_lp_with_enforced_rays(
+    face_generators: &[Vec<i64>],
+    basis_rays: &[Vec<i64>],
+    aggregate: &[i128],
+    enforced_ray_indices: &[usize],
+) -> Result<Option<Vec<f64>>, String> {
+    let dim = aggregate.len();
+    let mut vars = ProblemVariables::new();
+    let bound = 1.0e9;
+    let normal_vars: Vec<_> = (0..dim)
+        .map(|_| vars.add(variable().min(-bound).max(bound)))
+        .collect();
+
+    let mut objective = Expression::from(0.0);
+    objective.add_mul(0.0, normal_vars[0]);
+    let mut model = vars.minimise(objective).using(default_solver);
+
+    for generator in face_generators {
+        let mut expr = Expression::from(0.0);
+        for (var, &coefficient) in normal_vars.iter().zip(generator) {
+            if coefficient != 0 {
+                expr.add_mul(coefficient as f64, *var);
+            }
+        }
+        model = model.with(expr.eq(0.0));
+    }
+
+    let mut aggregate_expr = Expression::from(0.0);
+    for (var, &coefficient) in normal_vars.iter().zip(aggregate) {
+        if coefficient != 0 {
+            aggregate_expr.add_mul(coefficient as f64, *var);
+        }
+    }
+    model = model.with(aggregate_expr.geq(1.0));
+
+    for &ray_idx in enforced_ray_indices {
+        let ray = basis_rays.get(ray_idx).ok_or_else(|| {
+            format!("supporting-face enforced ray index {ray_idx} is out of bounds")
+        })?;
+        let mut expr = Expression::from(0.0);
+        for (var, &coefficient) in normal_vars.iter().zip(ray) {
+            if coefficient != 0 {
+                expr.add_mul(coefficient as f64, *var);
+            }
+        }
+        model = model.with(expr.geq(0.0));
+    }
+
+    let solution = match model.solve() {
+        Ok(solution) => solution,
+        Err(ResolutionError::Infeasible) => return Ok(None),
+        Err(err) => {
+            return Err(format!("supporting-face aggregate normal LP failed: {err}"));
+        }
+    };
+    let normal = normal_vars
+        .iter()
+        .map(|var| solution.value(*var))
+        .collect::<Vec<_>>();
+    if normal.iter().all(|value| value.is_finite()) {
+        Ok(Some(normal))
+    } else {
+        Err("supporting-face aggregate normal LP returned a non-finite value".to_string())
+    }
 }
 
 fn solve_supporting_face_normal_lp(
@@ -10460,6 +10588,28 @@ mod tests {
                 .unwrap();
 
         assert!(certificate.is_none());
+    }
+
+    #[test]
+    fn supporting_mori_face_aggregate_lp_finds_higher_codimension_normal() {
+        let lp_normal = solve_supporting_face_normal_aggregate_lp(
+            &[vec![1, 0, 0]],
+            &[vec![1, 0, 0], vec![0, 1, 0], vec![0, 0, 1], vec![1, 1, 1]],
+        )
+        .unwrap()
+        .unwrap();
+
+        let certificate = integer_supporting_face_certificate_from_lp(
+            &lp_normal,
+            &[vec![1, 0, 0]],
+            &[vec![1, 0, 0], vec![0, 1, 0], vec![0, 0, 1], vec![1, 1, 1]],
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(integer_dot_for_test(&certificate.normal, &[1, 0, 0]), 0);
+        assert!(certificate.zero_generator_count >= 1);
+        assert!(certificate.positive_generator_count >= 1);
     }
 
     fn integer_dot_for_test(lhs: &[i64], rhs: &[i64]) -> i128 {
