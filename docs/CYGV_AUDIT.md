@@ -147,11 +147,11 @@ not an implementation strategy for the 214-dimensional Kähler correction.
 
 The paper warns that continuing the Kähler-coordinate formula through a flop is
 subtle. For curves with half-integral `B_2` field (`gamma dot q` odd), the
-polylog identity used in the paper is:
+relevant real-axis dilogarithm continuation is:
 
 ```text
 Li2(-exp(-2*pi*t))/(2*pi)^2
-  = -Li2(-exp(-2*pi*(-t)))/(2*pi)^2 + 1/2*t^2 - 1/24
+  = -Li2(-exp(-2*pi*(-t)))/(2*pi)^2 - 1/2*t^2 - 1/24
 ```
 
 This polynomial correction is tied to the transformations of `chi(D_i)` and
@@ -159,6 +159,18 @@ This polynomial correction is tied to the transformations of `chi(D_i)` and
 finite GV list at negative `q.t` is not a first-principles corrected-chamber
 implementation unless the associated chamber/topology transformation is handled
 explicitly.
+
+Executable checks now pin the boundary:
+
+- the real odd-parity negative branch satisfies the standard flop dilogarithm
+  identity used by Cyrus' `real_dilog_real_axis`;
+- among the 10 negative `small_curves.dat` classes at
+  `corrected_kahler_param.dat`, 8 have odd `gamma dot q` and can be evaluated
+  on the real `-exp` branch, while 2 have even parity and lie on the real
+  `Li2(exp(...))` branch cut.
+
+So the saved input-chamber small-curve set cannot be repaired by applying the
+simple odd-parity flop identity uniformly to all negative entries.
 
 ## Next Productive Step
 
@@ -183,10 +195,10 @@ toric/face GV method that generated the selected `small_curves_gv` values?
 The next code change should be one of these two narrow audits, not another broad
 GV fallback:
 
-1. Add a selected-small-curve checkpoint for the approximate chamber that must
-   reproduce the published 344 selected classes and their `1/-2` GV values
-   without reading `small_curves*.dat` except as assertions.
-2. Add an explicit corrected-chamber/flop-continuation diagnostic for the 10
-   selected classes whose corrected volumes are negative, verifying the
-   required `gamma dot q` parity and the polynomial terms before promoting any
-   continuation into the production KKLT correction.
+1. The selected-small-curve checkpoint now reproduces the published 344 selected
+   classes and their `1/-2` GV values, using `small_curves*.dat` only as
+   assertions.
+2. Continue the corrected-chamber/flop-continuation audit beyond the 10 saved
+   input-chamber negative curves: the simple odd-parity identity is verified,
+   but the two even-parity saved curves and the broader corrected-chamber
+   target-vector residual still need a first-principles treatment.

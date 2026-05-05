@@ -25,8 +25,9 @@ use cyrus_core::{
     compute_mori_cone_cap_rays, compute_regular_triangulation, compute_toric_curve_gv_diagnostics,
     compute_toric_two_face_curve_gv_invariants, effective_prime_divisors_from_curve_basis,
     heights_to_kahler, project_mori_cone_cap_rays_to_basis,
-    remove_pair_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
+    remove_pair_decomposable_curve_candidates, subcutoff_toric_curve_candidates, types::i64::I64,
 };
+use malachite::Integer;
 
 fn read_csv_rows_i64(path: &Path) -> Vec<Vec<i64>> {
     let content = std::fs::read_to_string(path)
@@ -85,6 +86,43 @@ fn require_first_principles() -> bool {
         return false;
     }
     true
+}
+
+fn o7_gamma_from_kklt_data(data_dir: &Path, ambient_dim: usize) -> Vec<i64> {
+    let kklt_basis = read_csv_usize(&data_dir.join("kklt_basis.dat"));
+    let c_i = read_csv_i64(&data_dir.join("target_volumes.dat"));
+    assert_eq!(
+        kklt_basis.len(),
+        c_i.len(),
+        "KKLT basis and c_i checkpoint length mismatch"
+    );
+
+    let mut gamma = vec![0_i64; ambient_dim];
+    for (&idx, &ci) in kklt_basis.iter().zip(c_i.iter()) {
+        assert!(
+            idx < ambient_dim,
+            "KKLT divisor index {idx} out of ambient dimension {ambient_dim}"
+        );
+        if ci == 6 {
+            gamma[idx] += 1;
+        }
+    }
+    gamma
+}
+
+fn typed_gamma(raw: &[i64]) -> Vec<I64<Finite>> {
+    raw.iter()
+        .copied()
+        .map(|value| I64::<Finite>::new(value))
+        .collect()
+}
+
+fn ambient_parity(curve: &[i64], gamma: &[i64]) -> i128 {
+    curve
+        .iter()
+        .zip(gamma.iter())
+        .map(|(&q_i, &gamma_i)| i128::from(q_i) * i128::from(gamma_i))
+        .sum::<i128>()
 }
 
 /// Test that cygv crate is properly linked and basic types work
@@ -380,6 +418,93 @@ fn stage5_mcallister_small_curve_volumes_are_corrected_kahler_projection() {
     assert_eq!(
         negative_count, 10,
         "corrected checkpoint should expose the known 10 flopped input-chamber small curves"
+    );
+}
+
+#[test]
+fn stage5_mcallister_flopped_small_curves_have_mixed_b_field_parity() {
+    if !require_first_principles() {
+        return;
+    }
+    let Some(data_dir) = crate::mcallister_data_dir() else {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    };
+
+    let curves = read_csv_rows_i64(&data_dir.join("small_curves.dat"));
+    let gvs = read_csv_i64(&data_dir.join("small_curves_gv.dat"));
+    let basis = read_csv_usize(&data_dir.join("basis.dat"));
+    let corrected_kahler = read_csv_finite(&data_dir.join("corrected_kahler_param.dat"));
+    let stored_volumes = read_csv_f64(&data_dir.join("small_curves_vols.dat"));
+    let gamma_raw = o7_gamma_from_kklt_data(&data_dir, curves[0].len());
+    let gamma = typed_gamma(&gamma_raw);
+    let kklt_basis = read_csv_usize(&data_dir.join("kklt_basis.dat"));
+
+    let mut negative_indices = Vec::new();
+    let mut odd_negative_indices = Vec::new();
+    let mut even_negative_indices = Vec::new();
+    for (idx, (curve, &stored_volume)) in curves.iter().zip(stored_volumes.iter()).enumerate() {
+        if stored_volume >= 0.0 {
+            continue;
+        }
+        negative_indices.push(idx);
+        let parity = ambient_parity(curve, &gamma_raw).rem_euclid(2);
+        if parity == 0 {
+            even_negative_indices.push(idx);
+        } else {
+            odd_negative_indices.push(idx);
+        }
+    }
+
+    assert_eq!(
+        negative_indices.len(),
+        10,
+        "expected the 10 flopped input-chamber small curves from the ancillary data"
+    );
+    assert_eq!(
+        odd_negative_indices.len(),
+        8,
+        "only odd B-field parity curves admit the simple real flop continuation"
+    );
+    assert_eq!(
+        even_negative_indices,
+        vec![1, 3],
+        "two flopped saved small curves are even-parity branch-cut cases"
+    );
+    assert!(
+        negative_indices.iter().all(|&idx| gvs[idx] == 1),
+        "all negative saved small curves are expected to have GV=1"
+    );
+
+    let odd_negative_gvs = odd_negative_indices
+        .iter()
+        .map(|&idx| (curves[idx].clone(), Integer::from(gvs[idx])))
+        .collect::<Vec<_>>();
+    assert!(
+        cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+            &odd_negative_gvs,
+            &basis,
+            &kklt_basis,
+            &corrected_kahler,
+            Some(&gamma),
+        )
+        .is_some(),
+        "odd-parity flopped curves should remain on the real -exp branch"
+    );
+
+    let even_negative_gvs = even_negative_indices
+        .iter()
+        .map(|&idx| (curves[idx].clone(), Integer::from(gvs[idx])))
+        .collect::<Vec<_>>();
+    assert!(
+        cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+            &even_negative_gvs,
+            &basis,
+            &kklt_basis,
+            &corrected_kahler,
+            Some(&gamma),
+        )
+        .is_none(),
+        "even-parity flopped curves cross the real Li2 branch cut and need a different treatment"
     );
 }
 

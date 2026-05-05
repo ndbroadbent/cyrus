@@ -1911,6 +1911,44 @@ mod tests {
     }
 
     #[test]
+    fn test_negative_branch_dilog_matches_flop_identity() {
+        // Real-axis dilog identity behind the McAllister eq. 4.12 flop
+        // discussion:
+        // Li2(-exp(-2*pi*t))/(2*pi)^2
+        //   = -Li2(-exp(-2*pi*(-t)))/(2*pi)^2 - t^2/2 - 1/24.
+        //
+        // This is the real continuation used only for odd B-field parity. It is
+        // not available for the even-parity branch, where Li2(exp(-2*pi*t))
+        // crosses the real branch cut when t < 0.
+        let negative_volumes = [
+            -0.000_382_290_665_584_150_7,
+            -0.004_962_235_018_865_613,
+            -0.026_097_455_603_348_862,
+            -0.033_333_428_454_170_644,
+        ];
+
+        for t in negative_volumes {
+            let left_arg = -(-2.0 * PI * t).exp();
+            let right_arg = -(-2.0 * PI * -t).exp();
+            let left = real_dilog_real_axis(left_arg).unwrap() / (4.0 * PI * PI);
+            let right = -real_dilog_real_axis(right_arg).unwrap() / (4.0 * PI * PI)
+                - 0.5 * t * t
+                - 1.0 / 24.0;
+
+            assert!(
+                (left - right).abs() < 2e-14,
+                "flop Li2 identity mismatch for t={t}: left={left}, right={right}"
+            );
+
+            let even_arg = (-2.0 * PI * t).exp();
+            assert!(
+                real_dilog_real_axis(even_arg).is_none(),
+                "even-parity negative curve should lie on the real Li2 branch cut"
+            );
+        }
+    }
+
+    #[test]
     fn test_compute_gv_target_correction_rejects_invalid_curve_volume() {
         let t = vec![finite_f64(1.0)];
         let zero_curve = vec![(vec![0], Integer::from(1))];
