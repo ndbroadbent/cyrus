@@ -24,6 +24,10 @@ use nalgebra::{DMatrix, DVector, RowDVector};
 use rug::Rational as RugRational;
 
 use crate::cone::Cone;
+use crate::curve_basis::{
+    DivisorBasis, compute_curve_basis_matrix_for_divisor_basis,
+    curve_basis_matrix_without_origin_i64,
+};
 use crate::error::{Error, Result};
 use crate::geometry::ConvexHull;
 use crate::integer_math::hermite_normal_form;
@@ -320,6 +324,77 @@ pub fn project_mori_cone_cap_rays_to_basis_matrix(
     }
     deduped.sort();
     Ok(deduped)
+}
+
+/// CYTools-style divisor-basis data needed by direct `cygv` calls.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GvDivisorBasisData {
+    /// Mori-cap rays projected to the selected divisor basis.
+    pub mori_rays: Vec<Vec<i64>>,
+    /// Dual curve-basis matrix in ambient coordinates, including the origin.
+    pub curve_basis_matrix: Vec<Vec<Integer>>,
+    /// No-origin `q` matrix passed to `cygv`.
+    pub q_matrix: Vec<Vec<i64>>,
+}
+
+/// Project ambient Mori-cap rays through either CYTools divisor-basis shape.
+///
+/// Vector bases use CYTools' column-selection path. Matrix bases use
+/// `mori_cap_matrix.dot(basis.T)`.
+///
+/// # Errors
+/// Returns an error if the selected basis is malformed, out of range, or cannot
+/// be represented as `i64` for Mori projection.
+pub fn project_mori_cone_cap_rays_for_divisor_basis(
+    ambient_rays: &[Vec<i64>],
+    basis: DivisorBasis<'_>,
+) -> Result<Vec<Vec<i64>>> {
+    match basis {
+        DivisorBasis::Indices(indices) => {
+            project_mori_cone_cap_rays_to_basis(ambient_rays, indices)
+        }
+        DivisorBasis::Matrix { basis_matrix, .. } => {
+            let basis_matrix = integer_matrix_to_i64(basis_matrix, "divisor basis matrix")?;
+            project_mori_cone_cap_rays_to_basis_matrix(ambient_rays, &basis_matrix)
+        }
+    }
+}
+
+/// Build projected Mori rays, ambient curve basis, and `cygv` q matrix together.
+///
+/// This is the source-shaped handoff for GA callers that may use either a
+/// CYTools vector basis or a generic matrix divisor basis.
+///
+/// # Errors
+/// Returns an error if Mori projection or dual curve-basis construction fails.
+pub fn gv_divisor_basis_data(
+    ambient_mori_rays: &[Vec<i64>],
+    linrels: &[Vec<Integer>],
+    basis: DivisorBasis<'_>,
+) -> Result<GvDivisorBasisData> {
+    let mori_rays = project_mori_cone_cap_rays_for_divisor_basis(ambient_mori_rays, basis)?;
+    let curve_basis_matrix = compute_curve_basis_matrix_for_divisor_basis(linrels, basis)?;
+    let q_matrix = curve_basis_matrix_without_origin_i64(&curve_basis_matrix)?;
+    Ok(GvDivisorBasisData {
+        mori_rays,
+        curve_basis_matrix,
+        q_matrix,
+    })
+}
+
+fn integer_matrix_to_i64(matrix: &[Vec<Integer>], context: &str) -> Result<Vec<Vec<i64>>> {
+    matrix
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|value| {
+                    i64::try_from(value).map_err(|_| {
+                        Error::InvalidInput(format!("{context} entry does not fit in i64"))
+                    })
+                })
+                .collect()
+        })
+        .collect()
 }
 
 /// A toric curve candidate with its volume at a specific point in Kähler moduli space.
@@ -6963,20 +7038,21 @@ mod tests {
         curve_row_span_rank, curve_volume_in_divisor_basis, diagnose_affine_toric_circuit,
         dump_mori_rays_cdd, extract_ckyz_local_gv_invariants_from_potential,
         extract_ckyz_local_gv_invariants_from_potential_for_degrees, find_pair_decomposition,
-        find_semigroup_decomposition, gv_lattice_search_request, load_grading_cache,
-        local_p2_inverse_mirror_map, local_p2_mirror_correction,
+        find_semigroup_decomposition, gv_divisor_basis_data, gv_lattice_search_request,
+        load_grading_cache, local_p2_inverse_mirror_map, local_p2_mirror_correction,
         map_basis_gv_invariants_to_ambient, origin_circuit_diagnostic_from_class_and_witnesses,
         potent_ray_convergence, potent_ray_log_xi_terms, project_ambient_curve_to_basis,
-        project_ambient_curve_to_basis_matrix, project_mori_cone_cap_rays_to_basis,
-        project_mori_cone_cap_rays_to_basis_matrix, prune_decomposable_curve_candidates,
-        rank_two_local_charge_model, rank_two_local_support_signature,
-        remove_pair_decomposable_curve_candidates, remove_semigroup_decomposable_curve_candidates,
-        subcutoff_toric_curve_candidates, supporting_mori_face_for_curve_from_normal,
-        supporting_mori_face_from_normal, write_grading_cache,
+        project_ambient_curve_to_basis_matrix, project_mori_cone_cap_rays_for_divisor_basis,
+        project_mori_cone_cap_rays_to_basis, project_mori_cone_cap_rays_to_basis_matrix,
+        prune_decomposable_curve_candidates, rank_two_local_charge_model,
+        rank_two_local_support_signature, remove_pair_decomposable_curve_candidates,
+        remove_semigroup_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
+        supporting_mori_face_for_curve_from_normal, supporting_mori_face_from_normal,
+        write_grading_cache,
     };
     use crate::Intersection;
     use crate::lattice::Point;
-    use crate::{f64_finite, f64_pos};
+    use crate::{DivisorBasis, f64_finite, f64_pos};
     use malachite::Integer;
     use malachite::Rational;
 
@@ -8825,6 +8901,111 @@ mod tests {
                 .expect_err("ambient Mori rays must have consistent dimensions");
 
         assert!(err.to_string().contains("inconsistent dimensions"));
+    }
+
+    #[test]
+    fn divisor_basis_projection_dispatches_vector_basis() {
+        let ambient = vec![vec![0, 2, 4], vec![0, 1, 2], vec![5, 0, 0]];
+
+        let projected =
+            project_mori_cone_cap_rays_for_divisor_basis(&ambient, DivisorBasis::Indices(&[1, 2]))
+                .unwrap();
+
+        assert_eq!(projected, vec![vec![1, 2]]);
+    }
+
+    #[test]
+    fn divisor_basis_projection_dispatches_matrix_basis() {
+        let ambient = vec![vec![2, -3, 5, 7], vec![4, -6, 10, 14], vec![0, 1, 0, 1]];
+        let basis_matrix = vec![
+            vec![
+                Integer::from(1),
+                Integer::from(0),
+                Integer::from(0),
+                Integer::from(0),
+            ],
+            vec![
+                Integer::from(0),
+                Integer::from(2),
+                Integer::from(-1),
+                Integer::from(1),
+            ],
+        ];
+
+        let projected = project_mori_cone_cap_rays_for_divisor_basis(
+            &ambient,
+            DivisorBasis::Matrix {
+                standard_basis: &[0, 1],
+                basis_matrix: &basis_matrix,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(projected, vec![vec![0, 1], vec![1, -2]]);
+    }
+
+    #[test]
+    fn gv_divisor_basis_data_builds_matrix_basis_cygv_inputs() {
+        let ambient = vec![vec![0, 0, 1, 0], vec![0, 0, 2, 2]];
+        let linrels = vec![
+            vec![
+                Integer::from(1),
+                Integer::from(0),
+                Integer::from(-1),
+                Integer::from(-1),
+            ],
+            vec![
+                Integer::from(0),
+                Integer::from(1),
+                Integer::from(-2),
+                Integer::from(-3),
+            ],
+        ];
+        let standard_basis = vec![2, 3];
+        let basis_matrix = vec![
+            vec![
+                Integer::from(0),
+                Integer::from(0),
+                Integer::from(1),
+                Integer::from(1),
+            ],
+            vec![
+                Integer::from(0),
+                Integer::from(0),
+                Integer::from(0),
+                Integer::from(1),
+            ],
+        ];
+
+        let data = gv_divisor_basis_data(
+            &ambient,
+            &linrels,
+            DivisorBasis::Matrix {
+                standard_basis: &standard_basis,
+                basis_matrix: &basis_matrix,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(data.mori_rays, vec![vec![1, 0], vec![2, 1]]);
+        assert_eq!(
+            data.curve_basis_matrix,
+            vec![
+                vec![
+                    Integer::from(1),
+                    Integer::from(2),
+                    Integer::from(1),
+                    Integer::from(0),
+                ],
+                vec![
+                    Integer::from(0),
+                    Integer::from(1),
+                    Integer::from(-1),
+                    Integer::from(1),
+                ],
+            ]
+        );
+        assert_eq!(data.q_matrix, vec![vec![2, 1, 0], vec![1, -1, 1]]);
     }
 
     #[test]

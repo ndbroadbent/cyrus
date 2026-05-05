@@ -1043,7 +1043,10 @@ matrix divisor-basis to dual curve-basis constructor,
 `compute_curve_basis_matrix_from_divisor_basis_matrix`, for the CYTools matrix
 branch. The public `DivisorBasis` enum and
 `compute_curve_basis_matrix_for_divisor_basis` helper now make this
-vector-vs-matrix dispatch explicit for callers. The
+vector-vs-matrix dispatch explicit for callers.
+`project_mori_cone_cap_rays_for_divisor_basis` and `gv_divisor_basis_data`
+now bundle the corresponding Mori-ray projection, ambient dual curve basis,
+and no-origin q-matrix construction for either basis shape. The
 `curve_basis_matrix_without_origin_i64` and
 `curve_basis_q_matrix_for_divisor_basis_i64` helpers also centralize the
 `curve_basis(include_origin=False, as_matrix=True)` q-matrix boundary for direct
@@ -1055,7 +1058,10 @@ unsupported-vector-path error instead of being ignored or misinterpreted as
 indices. The remaining gap is higher-level basis typing: APIs that still only
 accept vector basis indices need to either accept a matrix basis end-to-end or
 reject it loudly at every GA-facing boundary. Silently treating every basis as a
-vector of indices is not GA-ready.
+vector of indices is not GA-ready. The core cygv input handoff now accepts both
+basis shapes, but the current McAllister runner still stores its pipeline basis
+as `Vec<usize>` and remains intentionally vector-basis only until its flux and
+intersection-basis transforms are generalized.
 
 Second, cygv's final GV values are history-dependent. In
 `series_inversion.rs`, the threefold path chooses a candidate value from the
