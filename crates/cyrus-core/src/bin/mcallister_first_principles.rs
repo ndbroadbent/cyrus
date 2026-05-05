@@ -47,7 +47,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use good_lp::{
@@ -7090,6 +7090,130 @@ fn corrected_divisor_values_from_parts(
     )
 }
 
+fn corrected_chamber_gv_trace_json_path() -> Option<PathBuf> {
+    std::env::var_os("CYRUS_CORRECTED_CHAMBER_GV_TRACE_JSON").map(PathBuf::from)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_corrected_chamber_gv_trace_json(
+    path: &Path,
+    basis: &[usize],
+    kklt_basis: &[usize],
+    checkpoint_t: &[F64<Finite>],
+    gamma: &[I64<Finite>],
+    c_i: &[I64<Pos>],
+    c_tau: F64<Pos>,
+    corrected_target_volumes: &[F64<Finite>],
+    raw_kklt_target: &[F64<Finite>],
+    checkpoint_chamber_chi: &[I64<Finite>],
+    checkpoint_chamber_classical_tau: &[F64<Finite>],
+    checkpoint_implied_gv: &[F64<Finite>],
+    covered_gv_target: &[F64<Finite>],
+    selection: &ChamberToricGvSelection,
+) -> Result<(), String> {
+    #[derive(Serialize)]
+    struct TraceCurve {
+        class: Vec<i64>,
+        gv: String,
+        q_dot_t: f64,
+        parity_mod2: i8,
+    }
+
+    #[derive(Serialize)]
+    struct Trace {
+        basis: Vec<usize>,
+        kklt_basis: Vec<usize>,
+        checkpoint_t: Vec<f64>,
+        gamma: Vec<i64>,
+        c_i: Vec<i64>,
+        c_tau: f64,
+        corrected_target_volumes: Vec<f64>,
+        raw_kklt_target: Vec<f64>,
+        checkpoint_chamber_chi: Vec<i64>,
+        checkpoint_chamber_classical_tau: Vec<f64>,
+        checkpoint_implied_gv: Vec<f64>,
+        toric_covered_gv_target: Vec<f64>,
+        ambient_rays: usize,
+        subcutoff_count: usize,
+        pair_pruned_count: usize,
+        subcutoff_toric_covered_count: usize,
+        subcutoff_toric_missing_count: usize,
+        pair_pruned_toric_covered_count: usize,
+        pair_pruned_toric_missing_count: usize,
+        subcutoff_toric_curves: Vec<TraceCurve>,
+        pair_pruned_toric_curves: Vec<TraceCurve>,
+    }
+
+    fn trace_curves(
+        curves: &[(Vec<i64>, malachite::Integer)],
+        basis: &[usize],
+        t: &[F64<Finite>],
+        gamma: &[I64<Finite>],
+    ) -> Result<Vec<TraceCurve>, String> {
+        curves
+            .iter()
+            .map(|(class, gv)| {
+                let q_dot_t = basis
+                    .iter()
+                    .zip(t.iter())
+                    .map(|(&idx, ti)| class[idx] as f64 * ti.get())
+                    .sum::<f64>();
+                let parity = ambient_curve_b_field_parity_diagnostic(class, basis, gamma)
+                    .ok_or_else(|| "failed to compute trace curve B-field parity".to_string())?;
+                Ok(TraceCurve {
+                    class: class.clone(),
+                    gv: gv.to_string(),
+                    q_dot_t,
+                    parity_mod2: i8::try_from(parity.rem_euclid(2)).expect("mod-2 parity fits i8"),
+                })
+            })
+            .collect()
+    }
+
+    let trace = Trace {
+        basis: basis.to_vec(),
+        kklt_basis: kklt_basis.to_vec(),
+        checkpoint_t: finite_values(checkpoint_t),
+        gamma: gamma.iter().map(|entry| entry.get()).collect(),
+        c_i: c_i.iter().map(|entry| entry.get()).collect(),
+        c_tau: c_tau.get(),
+        corrected_target_volumes: finite_values(corrected_target_volumes),
+        raw_kklt_target: finite_values(raw_kklt_target),
+        checkpoint_chamber_chi: checkpoint_chamber_chi
+            .iter()
+            .map(|entry| entry.get())
+            .collect(),
+        checkpoint_chamber_classical_tau: finite_values(checkpoint_chamber_classical_tau),
+        checkpoint_implied_gv: finite_values(checkpoint_implied_gv),
+        toric_covered_gv_target: finite_values(covered_gv_target),
+        ambient_rays: selection.ambient_rays,
+        subcutoff_count: selection.subcutoff_count,
+        pair_pruned_count: selection.filtered_count,
+        subcutoff_toric_covered_count: selection.subcutoff_toric_gv_covered_count,
+        subcutoff_toric_missing_count: selection.subcutoff_toric_gv_missing_count,
+        pair_pruned_toric_covered_count: selection.toric_gv_covered_count,
+        pair_pruned_toric_missing_count: selection.toric_gv_missing_count,
+        subcutoff_toric_curves: trace_curves(
+            &selection.subcutoff_curve_gvs,
+            basis,
+            checkpoint_t,
+            gamma,
+        )?,
+        pair_pruned_toric_curves: trace_curves(
+            &selection.small_curve_gvs,
+            basis,
+            checkpoint_t,
+            gamma,
+        )?,
+    };
+
+    let content = serde_json::to_string_pretty(&trace)
+        .map_err(|e| format!("failed to serialize corrected-chamber GV trace: {e}"))?;
+    std::fs::write(path, content)
+        .map_err(|e| format!("failed to write {}: {e}", path.display()))?;
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn compare_checkpoint_t_corrected_chamber_gv_target(
     data_dir: Option<&str>,
@@ -7322,6 +7446,32 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
             F64::<Finite>::new(value).expect("raw KKLT target is finite")
         })
         .collect::<Vec<_>>();
+    if let Some(path) = corrected_chamber_gv_trace_json_path() {
+        write_corrected_chamber_gv_trace_json(
+            &path,
+            &intersection.basis,
+            kklt_basis,
+            checkpoint_t,
+            gamma,
+            c_i,
+            c_tau,
+            &checkpoint_target,
+            &raw_kklt_target,
+            &checkpoint_chamber_chi,
+            &checkpoint_chamber_classical_tau,
+            &checkpoint_chamber_implied_gv,
+            &covered_gv_target,
+            &selection,
+        )
+        .unwrap_or_else(|e| {
+            eprintln!("[ERROR] {e}");
+            std::process::exit(2);
+        });
+        eprintln!(
+            "[COMPARE] checkpoint-t corrected-chamber GV trace JSON written: {}",
+            path.display()
+        );
+    }
     let checkpoint_equation_values = corrected_divisor_values_from_parts(
         &checkpoint_chamber_classical_tau,
         &checkpoint_chamber_chi,
