@@ -70,6 +70,22 @@ So the correct Cyrus input shape for `q_matrix` is "basis curve rows", not
 "ambient divisor rows". A mismatch here would still type-check and can produce
 plausible-looking but wrong GV data.
 
+The `q` rows themselves come from the CYTools basis machinery:
+
+- `CalabiYau.glsm_charge_matrix(include_origin=True)` uses the origin plus the
+  prime toric divisors selected by the triangulation.
+- A vector divisor basis is sorted, checked as an integral GLSM column basis,
+  and stored with an identity block on the chosen basis columns.
+- The dual curve-basis matrix is then built from HNF-normalized GLSM linear
+  relations: rows are curve-basis elements, chosen basis columns form the
+  identity, and non-basis columns are solved in reverse order using the last
+  nonzero pivot in the corresponding linear relation.
+
+Cyrus' `compute_curve_basis_matrix` mirrors this vector-basis path. For `cygv`,
+therefore, the object to pass is the CYTools-style curve-basis matrix with
+origin removed, and the direct Rust call must transpose it to the crate's
+internal `n_divisors x h11` convention.
+
 ## cygv Semantics
 
 The `cygv` crate does not interpret `generators` as merely the list of curves to
