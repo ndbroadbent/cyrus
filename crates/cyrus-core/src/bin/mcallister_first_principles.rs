@@ -23,7 +23,7 @@
 //!   the required grading-degree range for missing classes.
 //! - `--branch-report-decomposition-depth N` to diagnose missing small-curve
 //!   classes that are sums of up to N selected raw candidates. Currently N
-//!   may be at most 3.
+//!   may be at most 4.
 //! - `--branch-report-only` to stop after writing that report.
 //! - `--branch-report-skip-gv-coverage` to omit the expensive per-branch
 //!   small-curve/GV coverage enrichment.
@@ -6388,13 +6388,13 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
                 .get(&row.class)
                 .and_then(|candidate| {
                     decomposition_index
-                        .find_decomposition(candidate, 3)
+                        .find_decomposition(candidate, 4)
                         .ok()
                         .flatten()
                 })
                 .map(|decomposition| decomposition.len());
             eprintln!(
-                "[COMPARE] checkpoint-t corrected-chamber GV target contribution kklt_idx={} point_idx={} contribution={} q_i={} q_dot_t={} parity_mod2={} gv={} decomp_terms_le3={:?} class={:?}",
+                "[COMPARE] checkpoint-t corrected-chamber GV target contribution kklt_idx={} point_idx={} contribution={} q_i={} q_dot_t={} parity_mod2={} gv={} decomp_terms_le4={:?} class={:?}",
                 idx,
                 divisor_idx,
                 row.contribution,
@@ -6472,8 +6472,8 @@ fn stage_volume(
         );
         std::process::exit(2);
     }
-    if branch_report_decomposition_depth > 3 {
-        eprintln!("[ERROR] --branch-report-decomposition-depth currently supports values 0..3");
+    if branch_report_decomposition_depth > 4 {
+        eprintln!("[ERROR] --branch-report-decomposition-depth currently supports values 0..4");
         std::process::exit(2);
     }
     if branch_report_skip_gv_coverage && branch_report_decomposition_depth > 0 {

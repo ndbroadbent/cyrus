@@ -444,7 +444,7 @@ pub fn remove_pair_decomposable_curve_candidates(
 /// Exact bounded semigroup-decomposition diagnostic for toric curve candidates.
 ///
 /// This is intentionally diagnostic-only. It can prove that a curve is a sum
-/// of up to three other selected candidates, which is useful for investigating
+/// of up to four other selected candidates, which is useful for investigating
 /// the remaining McAllister "sums of others" pruning gap. It does not replace
 /// a full Hilbert-basis computation.
 pub struct BoundedCurveDecompositionIndex<'a> {
@@ -494,7 +494,7 @@ impl<'a> BoundedCurveDecompositionIndex<'a> {
 
     /// Find a decomposition of `target` as a sum of up to `max_terms` indexed candidates.
     ///
-    /// Currently supports `max_terms <= 3`. Terms may repeat, matching
+    /// Currently supports `max_terms <= 4`. Terms may repeat, matching
     /// semigroup membership rather than a set partition.
     pub fn find_decomposition(
         &self,
@@ -509,9 +509,9 @@ impl<'a> BoundedCurveDecompositionIndex<'a> {
                 "target curve dimension does not match decomposition index".into(),
             ));
         }
-        if max_terms > 3 {
+        if max_terms > 4 {
             return Err(Error::InvalidInput(
-                "bounded curve decomposition currently supports max_terms <= 3".into(),
+                "bounded curve decomposition currently supports max_terms <= 4".into(),
             ));
         }
 
@@ -541,6 +541,39 @@ impl<'a> BoundedCurveDecompositionIndex<'a> {
                         first.class.clone(),
                         second.class.clone(),
                         summand.class.clone(),
+                    ];
+                    decomposition.sort();
+                    return Ok(Some(decomposition));
+                }
+            }
+        }
+
+        if max_terms < 4 {
+            return Ok(None);
+        }
+
+        for (first_pair_sum, first_pairs) in &self.pair_sums {
+            let remainder = subtract_curve(&target.class, first_pair_sum);
+            let Some(second_pairs) = self.pair_sums.get(&remainder) else {
+                continue;
+            };
+            for &(i, j) in first_pairs {
+                let first = &self.candidates[i];
+                let second = &self.candidates[j];
+                if first.volume >= target.volume || second.volume >= target.volume {
+                    continue;
+                }
+                for &(k, l) in second_pairs {
+                    let third = &self.candidates[k];
+                    let fourth = &self.candidates[l];
+                    if third.volume >= target.volume || fourth.volume >= target.volume {
+                        continue;
+                    }
+                    let mut decomposition = vec![
+                        first.class.clone(),
+                        second.class.clone(),
+                        third.class.clone(),
+                        fourth.class.clone(),
                     ];
                     decomposition.sort();
                     return Ok(Some(decomposition));
@@ -2808,6 +2841,31 @@ mod tests {
         assert_eq!(
             index.find_decomposition(&candidates[3], 3).unwrap(),
             Some(vec![vec![0, 0, 1], vec![0, 1, 0], vec![1, 0, 0]])
+        );
+    }
+
+    #[test]
+    fn bounded_decomposition_index_finds_four_term_sums() {
+        let candidates = vec![
+            ToricCurveCandidate {
+                class: vec![1, 0],
+                volume: f64_pos!(0.2),
+            },
+            ToricCurveCandidate {
+                class: vec![0, 1],
+                volume: f64_pos!(0.3),
+            },
+            ToricCurveCandidate {
+                class: vec![2, 2],
+                volume: f64_pos!(1.0),
+            },
+        ];
+        let index = BoundedCurveDecompositionIndex::new(&candidates).unwrap();
+
+        assert_eq!(index.find_decomposition(&candidates[2], 3).unwrap(), None);
+        assert_eq!(
+            index.find_decomposition(&candidates[2], 4).unwrap(),
+            Some(vec![vec![0, 1], vec![0, 1], vec![1, 0], vec![1, 0]])
         );
     }
 
