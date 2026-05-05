@@ -7,6 +7,25 @@ use crate::integer_math::{hermite_normal_form, invert_matrix, sublattice_index_s
 use malachite::Integer;
 use malachite::Rational;
 
+/// Divisor-basis representation accepted by CYTools-style curve-basis setup.
+///
+/// `Indices` is the ordinary CYTools path where the basis is a vector of ambient
+/// divisor column indices. `Matrix` is the generic divisor-basis path where each
+/// row is an ambient divisor linear combination and `standard_basis` is the
+/// ordinary GLSM basis used to reduce and invert the matrix block.
+#[derive(Clone, Copy, Debug)]
+pub enum DivisorBasis<'a> {
+    /// Ambient divisor column indices, matching CYTools' vector basis path.
+    Indices(&'a [usize]),
+    /// Ambient divisor linear-combination rows, matching CYTools' matrix path.
+    Matrix {
+        /// Standard GLSM column basis used to reduce the matrix block.
+        standard_basis: &'a [usize],
+        /// Divisor-basis rows in ambient divisor coordinates, including origin.
+        basis_matrix: &'a [Vec<Integer>],
+    },
+}
+
 /// Compute the curve basis matrix given GLSM linear relations and a divisor basis.
 ///
 /// - `linrels` is the GLSM linear relations matrix (including the origin column).
@@ -33,6 +52,32 @@ pub fn compute_curve_basis_matrix(
         &sublat_ind,
     )?;
     Ok(curve_basis)
+}
+
+/// Compute the dual curve-basis matrix for either supported divisor-basis shape.
+///
+/// This is the typed dispatch point for callers that may receive either a
+/// CYTools vector basis or a generic matrix basis. It avoids accidentally
+/// routing a matrix basis through index-column selection.
+///
+/// # Errors
+/// Returns an error if the selected basis representation is malformed or does
+/// not define an integral divisor basis.
+pub fn compute_curve_basis_matrix_for_divisor_basis(
+    linrels: &[Vec<Integer>],
+    basis: DivisorBasis<'_>,
+) -> Result<Vec<Vec<Integer>>> {
+    match basis {
+        DivisorBasis::Indices(indices) => compute_curve_basis_matrix(linrels, indices),
+        DivisorBasis::Matrix {
+            standard_basis,
+            basis_matrix,
+        } => compute_curve_basis_matrix_from_divisor_basis_matrix(
+            linrels,
+            standard_basis,
+            basis_matrix,
+        ),
+    }
 }
 
 /// Compute the dual curve-basis matrix for a matrix divisor basis.
@@ -87,6 +132,20 @@ pub fn compute_curve_basis_matrix_from_divisor_basis_matrix(
         &sublat_ind,
     )?;
     Ok(curve_basis)
+}
+
+/// Compute the no-origin `q` matrix passed to `cygv` for either divisor-basis
+/// shape.
+///
+/// # Errors
+/// Returns an error if curve-basis construction fails or if the no-origin matrix
+/// cannot be represented as `i64`.
+pub fn curve_basis_q_matrix_for_divisor_basis_i64(
+    linrels: &[Vec<Integer>],
+    basis: DivisorBasis<'_>,
+) -> Result<Vec<Vec<i64>>> {
+    let curve_basis = compute_curve_basis_matrix_for_divisor_basis(linrels, basis)?;
+    curve_basis_matrix_without_origin_i64(&curve_basis)
 }
 
 /// Return a CYTools-style no-origin `q` matrix as `i64` rows.
@@ -358,6 +417,61 @@ mod tests {
         rows.iter()
             .map(|row| row.iter().map(|&entry| Integer::from(entry)).collect())
             .collect()
+    }
+
+    #[test]
+    fn divisor_basis_dispatch_matches_vector_constructor() {
+        let linrels = int_matrix(&[&[1, 0, -1, -1], &[0, 1, -2, -3]]);
+        let basis = vec![2, 3];
+
+        let direct = compute_curve_basis_matrix(&linrels, &basis).unwrap();
+        let dispatched =
+            compute_curve_basis_matrix_for_divisor_basis(&linrels, DivisorBasis::Indices(&basis))
+                .unwrap();
+
+        assert_eq!(dispatched, direct);
+    }
+
+    #[test]
+    fn divisor_basis_dispatch_matches_matrix_constructor() {
+        let linrels = int_matrix(&[&[1, 0, -1, -1], &[0, 1, -2, -3]]);
+        let standard_basis = vec![2, 3];
+        let divisor_basis_matrix = int_matrix(&[&[0, 0, 1, 1], &[0, 0, 0, 1]]);
+
+        let direct = compute_curve_basis_matrix_from_divisor_basis_matrix(
+            &linrels,
+            &standard_basis,
+            &divisor_basis_matrix,
+        )
+        .unwrap();
+        let dispatched = compute_curve_basis_matrix_for_divisor_basis(
+            &linrels,
+            DivisorBasis::Matrix {
+                standard_basis: &standard_basis,
+                basis_matrix: &divisor_basis_matrix,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(dispatched, direct);
+    }
+
+    #[test]
+    fn divisor_basis_dispatch_builds_no_origin_q_matrix() {
+        let linrels = int_matrix(&[&[1, 0, -1, -1], &[0, 1, -2, -3]]);
+        let standard_basis = vec![2, 3];
+        let divisor_basis_matrix = int_matrix(&[&[0, 0, 1, 1], &[0, 0, 0, 1]]);
+
+        let q_matrix = curve_basis_q_matrix_for_divisor_basis_i64(
+            &linrels,
+            DivisorBasis::Matrix {
+                standard_basis: &standard_basis,
+                basis_matrix: &divisor_basis_matrix,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(q_matrix, vec![vec![2, 1, 0], vec![1, -1, 1]]);
     }
 
     #[test]

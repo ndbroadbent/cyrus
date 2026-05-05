@@ -1041,7 +1041,11 @@ columns. Cyrus now has explicit helpers for that projection:
 `project_mori_cone_cap_rays_to_basis_matrix`. Cyrus also has a source-derived
 matrix divisor-basis to dual curve-basis constructor,
 `compute_curve_basis_matrix_from_divisor_basis_matrix`, for the CYTools matrix
-branch. The `curve_basis_matrix_without_origin_i64` helper also centralizes the
+branch. The public `DivisorBasis` enum and
+`compute_curve_basis_matrix_for_divisor_basis` helper now make this
+vector-vs-matrix dispatch explicit for callers. The
+`curve_basis_matrix_without_origin_i64` and
+`curve_basis_q_matrix_for_divisor_basis_i64` helpers also centralize the
 `curve_basis(include_origin=False, as_matrix=True)` q-matrix boundary for direct
 cygv calls, so the origin column is not hand-dropped at each GV call site. The
 `mcallister_first_principles --dual-basis` JSON override now distinguishes index
