@@ -6043,7 +6043,7 @@ fn resolved_conifold_origin_circuit_gv(class: &[i64], origin_idx: usize) -> Opti
         }
     }
 
-    if non_origin_neg_ones == 2 && pos_ones == 3 {
+    if (non_origin_neg_ones == 1 && pos_ones == 2) || (non_origin_neg_ones == 2 && pos_ones == 3) {
         // An isolated resolved conifold curve has normal bundle
         // O(-1) + O(-1), so section 6 gives GV^0 = 1.
         Some(Integer::from(1))
@@ -7628,9 +7628,9 @@ mod tests {
         project_mori_cone_cap_rays_to_basis, project_mori_cone_cap_rays_to_basis_matrix,
         prune_decomposable_curve_candidates, rank_two_local_charge_model,
         rank_two_local_support_signature, remove_pair_decomposable_curve_candidates,
-        remove_semigroup_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
-        supporting_mori_face_for_curve_from_normal, supporting_mori_face_from_normal,
-        write_grading_cache,
+        remove_semigroup_decomposable_curve_candidates, resolved_conifold_origin_circuit_gv,
+        subcutoff_toric_curve_candidates, supporting_mori_face_for_curve_from_normal,
+        supporting_mori_face_from_normal, write_grading_cache,
     };
     use crate::Intersection;
     use crate::lattice::Point;
@@ -8962,6 +8962,27 @@ mod tests {
         );
         assert!(diagnostic.is_resolved_conifold_pattern);
         assert!(diagnostic.witnesses.is_empty());
+    }
+
+    #[test]
+    fn origin_circuit_diagnostic_marks_standard_resolved_conifold_charge() {
+        let diagnostic =
+            origin_circuit_diagnostic_from_class_and_witnesses(vec![-1, -1, 1, 1], 0, Vec::new());
+
+        assert_eq!(diagnostic.origin_coefficient, -1);
+        assert_eq!(
+            diagnostic.negative_coefficient_counts,
+            BTreeMap::from([(-1, 1)])
+        );
+        assert_eq!(
+            diagnostic.positive_coefficient_counts,
+            BTreeMap::from([(1, 2)])
+        );
+        assert!(diagnostic.is_resolved_conifold_pattern);
+        assert_eq!(
+            resolved_conifold_origin_circuit_gv(&diagnostic.class, 0),
+            Some(Integer::from(1))
+        );
     }
 
     #[test]

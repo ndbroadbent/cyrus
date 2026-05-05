@@ -203,11 +203,21 @@ assumption in the GV pipeline.
 
 The McAllister corrected-chamber LP-witness diagnostic confirms this boundary.
 With exact-kernel and aggregate-normal LP certificate attempts enabled, the
-current local face diagnostic computes values for 9 of the 10 toric-missing
-curves, but certifies 0 of those 9 as supporting Mori faces. The combined
-diagnostic improves the target-correction delta versus the input-chamber
-correction to max_abs ≈ 0.04718 and relative_l2 ≈ 0.59696, yet the values remain
+current local face diagnostic computes values for several toric-missing curves,
+but certifies none of them as supporting Mori faces. Those values remain
 unpromoted because the semigroup context is not proven to be a valid face.
+
+A separate source-derived correction is now promoted: the origin-circuit
+resolved-conifold detector accepts the sparse standard charge pattern
+`(-1,-1,1,1)`. This is not an LP witness. It is the ordinary isolated
+resolved-conifold normal bundle `O(-1) + O(-1)` case, exposed in McAllister
+diagnostics as an origin coefficient `-1`, one other negative unit coefficient,
+and two positive unit coefficients. After this change, the corrected-chamber
+diagnostic reports the checkpoint-t target correction as `toric_covered=412`
+and `toric_missing=8`, while the current solved-t diagnostic reports
+`toric_covered=410` and `toric_missing=9`. The remaining missing curves are
+still nonstandard origin-circuit patterns and must stay explicit until their
+actual semigroup/local-toric context is reconstructed from source.
 
 ## Computational Mirror Symmetry Source Read
 

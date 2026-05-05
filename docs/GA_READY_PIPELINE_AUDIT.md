@@ -25,7 +25,7 @@ run pass. Any remaining mismatch must be explicit and localizable.
 | Mirror-side racetrack GV data | `dual_curves*.dat` are classified as low-dimensional validation checkpoints; generic GV path maps basis curves back to ambient classes | Implemented path exists; full large check remains expensive |
 | High-dimensional selected small toric curves | Cyrus computes Mori-cap rays, applies the input-chamber volume cutoff, and matches the 4-214-647 `small_curves.dat` checkpoint with pair pruning | Implemented for checkpoint rule |
 | Small-curve pruning semantics | `CurvePruningStrategy::{PairDecomposable, FiniteSemigroup}` exposes the checkpoint rule and stricter finite-set semigroup diagnostic separately | Implemented, with documented mismatch |
-| Small toric GV values | Toric two-face/origin-circuit formulas match `small_curves_gv.dat` for 4-214-647 | Implemented for covered selected-toric formulas |
+| Small toric GV values | Toric two-face/origin-circuit formulas match `small_curves_gv.dat` for 4-214-647; the source-derived sparse resolved-conifold origin-circuit pattern `(-1,-1,1,1)` is now covered in corrected-chamber diagnostics | Implemented for covered selected-toric formulas |
 | Potent-ray convergence data | `curve_row_span_rank`, `potent_ray_convergence`, `diagnose_affine_toric_circuit`, CKYZ local-surface identification, source-derived local CKYZ GV extraction, and the Stage 5 potent-ray diagnostics compute rank, corrected-Kähler volumes, affine local-circuit structure, `log xi_n` slopes, first-four GV checks for all 395 rank-two CKYZ rows, and all-ten checks for the canonical F0 `[1,1]`/`[1,2]` and F1 `[2,1]`/`[3,1]` families; targeted CKYZ extraction now has the broad past-downset API, a cygv-style generated semigroup API, and a support-predicted API that is used by the McAllister rank-two CKYZ gate; `ckyz_local_surface_causal_domain_spec` derives coordinate generators and finite-limit grading from matched CKYZ source data for guardrail checks | Partially implemented; full ten-entry extraction across all families, rank-four contexts, direct coefficient-history domains for large McAllister supports, and generated low-dimensional-face ray sampling still missing |
 | Flop/corrected-chamber continuation | Negative small-curve volumes and real-axis dilog branch behavior are classified; even-parity branch-cut failures are explicit via `GvDilogFailure` | Diagnosed, not resolved |
 | KKLT corrected Kähler solve | Runner reaches a no-replay corrected Kähler vector and corrected volume without loading `corrected_kahler_param.dat` by default | Implemented but not exact |
@@ -39,11 +39,15 @@ run pass. Any remaining mismatch must be explicit and localizable.
    checkpoint-implied vector. The leading residual has been ruled out as a
    simple issue with divisor `chi`, gamma indexing, `q.t` branch aggregation,
    local toric formulas, or checkpoint-file semantics.
-   A focused LP-witness face diagnostic now covers 9 of the 10 toric-missing
-   corrected-chamber curves and reduces the target-correction delta versus the
-   input-chamber correction to max_abs ≈ 0.04718, relative_l2 ≈ 0.59696, but
-   exact supporting-face certification remains 0/9. Those values are therefore
-   still diagnostic evidence, not a reusable GV fallback.
+   A source-derived sparse resolved-conifold origin-circuit detector now covers
+   one previously missing standard `(-1,-1,1,1)` circuit. The latest short
+   corrected-chamber diagnostic reports checkpoint-t `toric_covered=412`,
+   `toric_missing=8`, and current solved-t `toric_covered=410`,
+   `toric_missing=9`; the remaining current missing targets are still
+   nonstandard origin-circuit patterns. Earlier LP-witness face diagnostics
+   reduced the target-correction delta but exact supporting-face certification
+   remained zero for those LP contexts, so those values are still diagnostic
+   evidence, not a reusable GV fallback.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for
@@ -95,6 +99,7 @@ CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/strin
 cargo build --release -p cyrus-core --bin mcallister_first_principles
 CARGO_PROFILE_RELEASE_PANIC=unwind cargo build --release -p cyrus-core --bin mcallister_first_principles
 CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 CYRUS_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE=1 timeout 600 ./target/release/mcallister_first_principles --stop-after volume --allow-invalid-ek0 --diagnose-corrected-chamber-gv --diagnose-corrected-chamber-lp-face-gv
+CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 timeout 300 ./target/release/mcallister_first_principles --stop-after volume --allow-invalid-ek0 --diagnose-corrected-chamber-gv
 CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_RUNNER_HEAVY=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 cargo test -p cyrus-core --test mcallister_e2e stage0_first_principles_runner_accepts_declared_inputs_only_data_dir -- --nocapture
 cargo check -p cyrus-core --bin mcallister_first_principles
 cargo fmt --check
