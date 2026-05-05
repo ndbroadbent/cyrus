@@ -400,3 +400,69 @@ The top scale has only about 2.5k supported deltas, while there are 5,235
 support scales total. That makes an eager dense cache per scale unattractive.
 The next coefficient evaluator should stay sparse and source-ordered, or the
 history builder needs a sharper dependency criterion.
+
+## Deeper cygv Source Pass
+
+The latest no-code source pass re-read the exact `cygv-0.1.2` internals that
+matter for the remaining CKYZ bottleneck:
+
+- `run_hkty` constructs one finite `Semigroup`, then creates
+  `PolynomialProperties` from that semigroup before any period coefficient is
+  computed.
+- `Semigroup::with_max_degree` trims supplied elements by grading degree,
+  derives a reduced generator set, starts from the trimmed supplied elements,
+  and closes under generator addition up to the maximum degree.
+- `Semigroup::with_min_elements` derives the generator set, starts from the
+  identity only, and increases the grading cutoff until the finite set is large
+  enough.
+- `Polynomial::mul`, `pow`, `exp_pos_neg`, and `li_2` all use the same
+  `PolynomialProperties::monomial_map`; products whose exponent sum is absent
+  from that map are discarded. This is the truncation contract.
+- `compute_instanton_data` computes `alpha`, `beta`, `beta - alpha alpha`, the
+  contracted instanton polynomials, and `exp(alpha_i)` / `exp(-alpha_i)` once.
+- `series_inversion::invert_series` batches candidate classes by grading
+  degree, reads all candidates at that grading before subtracting their
+  `Li2(q_N)` contributions, then rolls the `previous_qn` cache forward.
+
+This clarifies the remaining Cyrus divergence. The current CKYZ z-residual path
+is algebraically source-derived, but it is not mechanically shaped like cygv:
+
+- `CkyzMonomialDomain` stores an explicit finite monomial set and drops products
+  outside it, which matches cygv's truncation idea.
+- The support-predicted domain is not a cygv semigroup closure. It is generated
+  from a broad target downset by support propagation through the CKYZ local
+  operations. This is why it can be much smaller than the unit-generator causal
+  semigroup, but also why it must be validated as a coefficient-demand domain,
+  not described as the literal cygv domain.
+- Extraction is currently coefficient-recursive: for each supported
+  `(scale, delta)` it computes one coefficient of `exp(scale.alpha)` by a
+  recurrence. cygv instead stores finite polynomials and builds `q_N` from
+  cached `exp(alpha_i)` powers and recent `q_N` history.
+- Cyrus sorts CKYZ extraction by ordinary total degree. That is a valid
+  topological order for nonnegative local degrees, but cygv's source order is a
+  grading-vector order with same-degree candidates read as a batch before their
+  subtractions can affect later gradings.
+
+The next implementation should therefore be framed as a cygv-shaped indexed
+series evaluator, not as another broad-domain tweak:
+
+1. Give the CKYZ finite domain a source-style grading vector, grouped degree
+   levels, and index-addressed coefficient arrays.
+2. Compute `alpha`, `beta`, local `beta - alpha alpha`, and the contracted
+   instanton polynomial in that indexed domain.
+3. Precompute sparse `exp(alpha_i)` / `exp(-alpha_i)` over the retained domain,
+   or over a proven coefficient-demand subdomain with the same multiplication
+   semantics.
+4. Run a local analogue of `series_inversion::invert_series`: read all
+   candidates at a grading level, build `q_N` from cached exponentials and
+   recent history, subtract `Li2(q_N)` from later residual coefficients, then
+   advance to the next level.
+5. Keep `potent_rays_gv.dat` as an assertion-only comparison after the local
+   support, source relations, cover weights, and target direction have all been
+   reconstructed from geometry/source formulas.
+
+Until that structure exists, more small cache changes can improve N=4 timing
+but are unlikely to make the McAllister `[4,3,2]`, N=10 row robust. The source
+gap is now specific: Cyrus needs cygv's finite-polynomial, grading-level
+inversion mechanics in the local CKYZ setting, with the monomial set narrowed by
+proved coefficient demand rather than by saved GV data.
