@@ -583,6 +583,8 @@ struct ChamberToricGvSelection {
     toric_gv_covered_count: usize,
     toric_gv_missing_count: usize,
     first_missing_class: Option<Vec<i64>>,
+    subcutoff_missing_gv_classes: Vec<Vec<i64>>,
+    missing_gv_classes: Vec<Vec<i64>>,
     small_curve_candidates: Vec<ToricCurveCandidate>,
     small_curves: Vec<ToricCurveCandidate>,
     subcutoff_curve_gvs: Vec<(Vec<i64>, malachite::Integer)>,
@@ -6609,6 +6611,8 @@ fn compute_chamber_toric_gv_selection(
         toric_gv_covered_count: small_curve_gvs.len(),
         toric_gv_missing_count: missing_gv_classes.len(),
         first_missing_class: missing_gv_classes.first().cloned(),
+        subcutoff_missing_gv_classes,
+        missing_gv_classes,
         small_curve_candidates,
         small_curves,
         subcutoff_curve_gvs,
@@ -7120,6 +7124,13 @@ fn write_corrected_chamber_gv_trace_json(
     }
 
     #[derive(Serialize)]
+    struct TraceMissingCurve {
+        class: Vec<i64>,
+        q_dot_t: f64,
+        parity_mod2: i8,
+    }
+
+    #[derive(Serialize)]
     struct Trace {
         basis: Vec<usize>,
         kklt_basis: Vec<usize>,
@@ -7142,6 +7153,8 @@ fn write_corrected_chamber_gv_trace_json(
         pair_pruned_toric_missing_count: usize,
         subcutoff_toric_curves: Vec<TraceCurve>,
         pair_pruned_toric_curves: Vec<TraceCurve>,
+        subcutoff_toric_missing_curves: Vec<TraceMissingCurve>,
+        pair_pruned_toric_missing_curves: Vec<TraceMissingCurve>,
     }
 
     fn trace_curves(
@@ -7163,6 +7176,31 @@ fn write_corrected_chamber_gv_trace_json(
                 Ok(TraceCurve {
                     class: class.clone(),
                     gv: gv.to_string(),
+                    q_dot_t,
+                    parity_mod2: i8::try_from(parity.rem_euclid(2)).expect("mod-2 parity fits i8"),
+                })
+            })
+            .collect()
+    }
+
+    fn trace_missing_curves(
+        curves: &[Vec<i64>],
+        basis: &[usize],
+        t: &[F64<Finite>],
+        gamma: &[I64<Finite>],
+    ) -> Result<Vec<TraceMissingCurve>, String> {
+        curves
+            .iter()
+            .map(|class| {
+                let q_dot_t = basis
+                    .iter()
+                    .zip(t.iter())
+                    .map(|(&idx, ti)| class[idx] as f64 * ti.get())
+                    .sum::<f64>();
+                let parity = ambient_curve_b_field_parity_diagnostic(class, basis, gamma)
+                    .ok_or_else(|| "failed to compute trace curve B-field parity".to_string())?;
+                Ok(TraceMissingCurve {
+                    class: class.clone(),
                     q_dot_t,
                     parity_mod2: i8::try_from(parity.rem_euclid(2)).expect("mod-2 parity fits i8"),
                 })
@@ -7201,6 +7239,18 @@ fn write_corrected_chamber_gv_trace_json(
         )?,
         pair_pruned_toric_curves: trace_curves(
             &selection.small_curve_gvs,
+            basis,
+            checkpoint_t,
+            gamma,
+        )?,
+        subcutoff_toric_missing_curves: trace_missing_curves(
+            &selection.subcutoff_missing_gv_classes,
+            basis,
+            checkpoint_t,
+            gamma,
+        )?,
+        pair_pruned_toric_missing_curves: trace_missing_curves(
+            &selection.missing_gv_classes,
             basis,
             checkpoint_t,
             gamma,
