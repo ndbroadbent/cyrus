@@ -20,14 +20,17 @@
 
 use std::path::Path;
 
+use cyrus_core::intersection::compute_intersection_cytools;
 use cyrus_core::{
-    CurvePruningStrategy, F64, Finite, Point, Polytope, compute_curve_basis_matrix,
-    compute_glsm_and_linrels, compute_mori_cone_cap_rays, compute_regular_triangulation,
-    compute_toric_curve_gv_diagnostics, compute_toric_two_face_curve_gv_invariants,
-    curve_row_span_rank, effective_prime_divisors_from_curve_basis, find_semigroup_decomposition,
-    heights_to_kahler, potent_ray_convergence, project_mori_cone_cap_rays_to_basis,
-    prune_decomposable_curve_candidates, remove_pair_decomposable_curve_candidates,
-    subcutoff_toric_curve_candidates, types::i64::I64,
+    CurvePruningStrategy, F64, Finite, Point, Polytope,
+    compute_ambient_one_dimensional_ray_gv_series, compute_curve_basis_matrix,
+    compute_glsm_and_linrels, compute_grading_vector, compute_linear_relations_no_origin,
+    compute_mori_cone_cap_rays, compute_regular_triangulation, compute_toric_curve_gv_diagnostics,
+    compute_toric_two_face_curve_gv_invariants, curve_row_span_rank,
+    effective_prime_divisors_from_curve_basis, find_semigroup_decomposition, heights_to_kahler,
+    intersection_in_basis, potent_ray_convergence, project_ambient_curve_to_basis,
+    project_mori_cone_cap_rays_to_basis, prune_decomposable_curve_candidates,
+    remove_pair_decomposable_curve_candidates, subcutoff_toric_curve_candidates, types::i64::I64,
 };
 use malachite::Integer;
 
@@ -368,6 +371,122 @@ fn stage5_mcallister_potent_ray_checkpoint_quantities_are_computed() {
     assert_eq!(
         nondecaying_slopes, 0,
         "all checkpoint potent-ray log-xi slopes should decay at corrected t"
+    );
+}
+
+/// Diagnostic for the first saved potent ray.
+///
+/// This deliberately uses a one-generator cygv call, which is not the full
+/// low-dimensional-face method from the paper. It records that the simplest
+/// local semigroup is not enough for the first 4-214-647 potent ray: Cyrus must
+/// reconstruct the face context to regenerate the saved checkpoint row.
+#[test]
+#[ignore = "diagnostic; run manually with CYRUS_FIRST_PRINCIPLES and CYRUS_MCALLISTER_DATA_DIR"]
+fn stage5_first_potent_ray_one_generator_gv_diagnostic() {
+    if !require_first_principles() {
+        return;
+    }
+    let Some(data_dir) = crate::mcallister_data_dir() else {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    };
+
+    let points_raw = read_csv_rows_i64(&data_dir.join("points.dat"));
+    let heights = read_csv_f64(&data_dir.join("heights.dat"));
+    let basis = read_csv_usize(&data_dir.join("basis.dat"));
+    let potent_rays = read_csv_rows_i64(&data_dir.join("potent_rays.dat"));
+    let potent_gv = read_csv_rows_integer(&data_dir.join("potent_rays_gv.dat"));
+    let target_ray = potent_rays.first().expect("saved potent rays are nonempty");
+    let expected = potent_gv
+        .first()
+        .expect("saved potent-ray GV rows are nonempty");
+
+    let all_points: Vec<Point> = points_raw.into_iter().map(Point::new).collect();
+    let polytope = Polytope::from_vertices(all_points).expect("failed to create polytope");
+    let triangulation_points = polytope
+        .points_not_interior_to_facets()
+        .expect("failed to filter points");
+    let triangulation = compute_regular_triangulation(&triangulation_points, &heights)
+        .expect("failed to compute triangulation");
+    let ambient_rays = compute_mori_cone_cap_rays(
+        &triangulation,
+        &triangulation_points,
+        &polytope,
+        false,
+        false,
+        None,
+    )
+    .expect("failed to compute ambient Mori cap rays");
+    let basis_rays = project_mori_cone_cap_rays_to_basis(&ambient_rays, &basis)
+        .expect("failed to project Mori-cap rays to basis");
+    let grading = compute_grading_vector(&basis_rays).expect("failed to compute grading vector");
+    let basis_target =
+        project_ambient_curve_to_basis(target_ray, &basis).expect("failed to project potent ray");
+    let is_mori_cap_generator = basis_rays.iter().any(|ray| ray == &basis_target);
+
+    let points_i64 = triangulation_points
+        .iter()
+        .map(|point| point.coords().to_vec())
+        .collect::<Vec<_>>();
+    let linrels_reduced = compute_linear_relations_no_origin(&points_i64);
+    let linrels_i64 = linrels_reduced
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|value| i64::try_from(value).expect("linear relation fits in i64"))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let kappa_full =
+        compute_intersection_cytools(&triangulation, &triangulation_points, &linrels_i64)
+            .expect("failed to compute intersection numbers");
+    let kappa_basis = intersection_in_basis(&kappa_full, &basis);
+    let (_glsm, linrels, _computed_basis) =
+        compute_glsm_and_linrels(&triangulation_points).expect("failed to compute GLSM linrels");
+    let curve_basis =
+        compute_curve_basis_matrix(&linrels, &basis).expect("failed to compute curve basis");
+    let q_matrix = curve_basis
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|value| i64::try_from(value).expect("curve-basis entry fits in i64"))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+
+    let series = compute_ambient_one_dimensional_ray_gv_series(
+        target_ray,
+        &basis,
+        &grading,
+        &q_matrix,
+        &kappa_basis,
+        10,
+    )
+    .expect("failed to compute one-generator potent ray GV series");
+
+    assert!(
+        !is_mori_cap_generator,
+        "the first saved potent ray unexpectedly became a Mori-cap generator"
+    );
+    assert_ne!(
+        series.values, *expected,
+        "if this starts matching, revisit whether a one-generator semigroup is now sufficient"
+    );
+    assert_eq!(series.degree, 27);
+    assert_eq!(
+        series.values,
+        vec![
+            Integer::from(4),
+            Integer::from(-11),
+            Integer::from(60),
+            Integer::from(-478),
+            Integer::from(4588),
+            Integer::from(-49368),
+            Integer::from(575896),
+            Integer::from(-7131274),
+            Integer::from(92429484),
+            Integer::from(-1241983287),
+        ],
+        "direct one-generator diagnostic changed"
     );
 }
 

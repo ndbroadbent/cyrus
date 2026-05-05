@@ -382,6 +382,15 @@ first ten GV values, and compares them to the corresponding row of
 `potent_rays_gv.dat`. Only after that passes should Cyrus attempt to generate
 the full 411-ray 4-214-647 sample.
 
+A direct one-generator diagnostic has now been run for the first saved
+4-214-647 potent ray. The ray is not one of the projected Mori-cap generators,
+and `compute_ambient_one_dimensional_ray_gv_series(..., max_multiple=10)`
+returns `[4, -11, 60, -478, 4588, -49368, 575896, -7131274, 92429484,
+-1241983287]`, while the saved checkpoint row is `[3, -6, 27, -192, 1695,
+-17064, 188454, -2228160, 27748899, -360012150]`. Therefore the saved
+potent-ray GV sequence is not the one-generator `cygv` semigroup; Cyrus must
+reconstruct the local face/semigroup context.
+
 ### Corrected-Chamber Continuation
 
 The selected-small-curve checkpoint is an input-chamber construction. The
