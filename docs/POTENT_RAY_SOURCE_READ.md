@@ -116,6 +116,42 @@ four indices are not a current-phase adjacent two-face circuit in the
 McAllister `heights.dat` triangulation, so the missing operation is a local
 face/phase reconstruction, not a lookup against the current FRST.
 
+## Cross-Example Pattern Audit
+
+A source-reading pass over all five McAllister ancillary examples reinforces the
+same conclusion. The saved potent rays are highly structured, but the structure
+is a small family of local toric charge patterns, not a license to replay the
+saved GV rows.
+
+| Example | Potent rays | Coefficient patterns | GV-sequence starts |
+|---------|-------------|----------------------|--------------------|
+| `4-214-647` | 411 | 32 | 24 |
+| `5-113-4627-main` | 1729 | 136 | 51 |
+| `5-113-4627-alternative` | 1729 | 136 | 51 |
+| `5-81-3213` | 727 | 80 | 40 |
+| `7-51-13590` | 758 | 133 | 76 |
+
+Across the examples, the most common sorted nonzero coefficient patterns are
+sparse rank-two local-toric-looking relations:
+
+- `(-3, 1, 1, 1)`, whose GV sequence starts
+  `3, -6, 27, -192, 1695`;
+- `(-5, 1, 1, 1, 2)`, whose GV sequence starts
+  `5, -110, 6885, -672000, 83508575`;
+- `(-6, 1, 1, 2, 2)`, whose GV sequence starts
+  `-6, -288, -40338, -8757888, -2423174610`;
+- `(-7, 1, 1, 2, 3)`, whose GV sequence starts
+  `7, -644, 171801, -71340864, 37754196305`;
+- `(-8, 1, 1, 3, 3)` and `(-8, 1, 2, 2, 3)`;
+- `(-10, 1, 1, 4, 4)` and `(-10, 2, 2, 3, 3)`.
+
+This changes the next implementation target. We should not write a generic
+"coefficient pattern -> GV row" table. The next real port is a local toric
+surface/face reconstruction that derives the charge context and then computes
+the one-parameter or low-dimensional mirror series from that context. The local
+`P^2` implementation is one verified instance of that shape, not the general
+solution.
+
 ## What This Rules Out
 
 - Do not treat `potent_rays_gv.dat` as a runtime source for Cyrus.
