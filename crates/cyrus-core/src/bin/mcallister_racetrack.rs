@@ -15,11 +15,11 @@ use cyrus_core::types::f64::F64;
 use cyrus_core::types::i64::I64;
 use cyrus_core::types::tags::{Finite, Pos};
 use cyrus_core::{
-    Point, Polytope, Triangulation, basis_change_matrix, build_racetrack_terms,
-    compute_curve_basis_matrix, compute_glsm_and_linrels, compute_grading_vector,
-    compute_gv_invariants, compute_intersection_cytools, compute_linear_relations_no_origin,
-    compute_mori_cone_cap_rays, compute_w0_from_terms, curve_basis_matrix_without_origin_i64,
-    intersection_in_basis, is_unimodular, solve_racetrack,
+    DivisorBasis, Point, Polytope, Triangulation, basis_change_matrix, build_racetrack_terms,
+    compute_glsm_and_linrels, compute_grading_vector, compute_gv_invariants,
+    compute_intersection_cytools, compute_linear_relations_no_origin, compute_mori_cone_cap_rays,
+    compute_w0_from_terms, gv_divisor_basis_data, intersection_in_basis, is_unimodular,
+    solve_racetrack,
 };
 
 const DEFAULT_MCALLISTER_GV_MIN_POINTS: u32 = 20_000;
@@ -348,9 +348,6 @@ fn main() {
     let basis = basis_auto;
     eprintln!("[DEBUG] racetrack divisor basis: {basis:?}");
     eprintln!("[TIME] glsm/linrels: {:.2?}", t0.elapsed());
-    let curve_basis =
-        compute_curve_basis_matrix(&linrels, &basis).expect("Failed curve basis matrix");
-    eprintln!("[TIME] curve_basis: {:.2?}", t0.elapsed());
 
     let points_i64: Vec<Vec<i64>> = triangulation_points
         .iter()
@@ -378,30 +375,30 @@ fn main() {
     let k_typed: Vec<I64<Finite>> = k_raw.iter().map(|&x| I64::<Finite>::new(x)).collect();
     let m_typed: Vec<I64<Finite>> = m_raw.iter().map(|&x| I64::<Finite>::new(x)).collect();
 
-    let rays = compute_mori_cone_cap_rays(
+    let ambient_rays = compute_mori_cone_cap_rays(
         &triangulation,
         &triangulation_points,
         &polytope,
-        true,
         false,
-        Some(&basis),
+        false,
+        None,
     )
-    .expect("Failed mori cone cap rays");
+    .expect("Failed ambient mori cone cap rays");
+    let gv_basis = gv_divisor_basis_data(&ambient_rays, &linrels, DivisorBasis::Indices(&basis))
+        .expect("Failed GV divisor-basis data");
     eprintln!(
         "[DEBUG] mori_cone_cap rays: count={}, dim={}",
-        rays.len(),
-        rays.first().map_or(0, Vec::len)
+        gv_basis.mori_rays.len(),
+        gv_basis.mori_rays.first().map_or(0, Vec::len)
     );
     eprintln!("[TIME] mori_cone_cap: {:.2?}", t0.elapsed());
-    let grading = compute_grading_vector(&rays).expect("No grading vector found");
+    let grading = compute_grading_vector(&gv_basis.mori_rays).expect("No grading vector found");
     eprintln!("[TIME] grading_vector: {:.2?}", t0.elapsed());
 
-    let q_matrix = curve_basis_matrix_without_origin_i64(&curve_basis).expect("q entries fit i64");
-
     let invariants = compute_gv_invariants(
-        &rays,
+        &gv_basis.mori_rays,
         &grading,
-        &q_matrix,
+        &gv_basis.q_matrix,
         &intersection,
         min_points,
         max_deg,

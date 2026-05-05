@@ -1055,7 +1055,8 @@ ordinary vector-basis GV paths in `mcallister_first_principles` now route their
 Mori projection, curve-basis matrix, and q-matrix construction through
 `gv_divisor_basis_data`, so the runner no longer repeats those pieces by hand
 for the default mirror, primal fallback, branch-report degree summary, and
-corrected-chamber diagnostics.
+corrected-chamber diagnostics. The one-off `mcallister_gv` and
+`mcallister_racetrack` binaries use the same bundled handoff.
 `mcallister_first_principles --dual-basis` JSON override now distinguishes index
 and matrix basis shapes. Index overrides continue through the current
 vector-basis path, while matrix overrides parse and then fail with an explicit
