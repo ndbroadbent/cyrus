@@ -30,6 +30,22 @@ fn ckyz_multiples_to_check(default: usize) -> usize {
     })
 }
 
+fn ckyz_target_direction_filter() -> Option<Vec<i64>> {
+    std::env::var("CYRUS_CKYZ_TARGET_DIRECTION")
+        .ok()
+        .map(|raw| {
+            raw.split(',')
+                .map(|entry| {
+                    entry.trim().parse::<i64>().unwrap_or_else(|err| {
+                        panic!(
+                            "CYRUS_CKYZ_TARGET_DIRECTION must be comma-separated integers: {err}"
+                        )
+                    })
+                })
+                .collect()
+        })
+}
+
 fn read_csv_rows_i64(path: &Path) -> Vec<Vec<i64>> {
     std::fs::read_to_string(path)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()))
@@ -853,6 +869,7 @@ fn mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed() {
 
     let mut gv_cache: BTreeMap<(usize, Vec<usize>, usize), BTreeMap<Vec<usize>, Integer>> =
         BTreeMap::new();
+    let target_direction_filter = ckyz_target_direction_filter();
     let mut checked_rows = 0usize;
     for (row_index, (ray, expected_gvs)) in
         potent_rays.iter().zip(expected_gv_rows.iter()).enumerate()
@@ -878,6 +895,11 @@ fn mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed() {
                 usize::try_from(entry).expect("CKYZ source target direction should be nonnegative")
             })
             .collect::<Vec<_>>();
+        if let Some(filter) = &target_direction_filter {
+            if *filter != identification.source_target_direction {
+                continue;
+            }
+        }
         let multiples_to_check = expected_gvs.len().min(ckyz_multiples_to_check(2));
         assert!(
             multiples_to_check > 0,
@@ -915,10 +937,17 @@ fn mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed() {
         checked_rows += 1;
     }
 
-    assert_eq!(
-        checked_rows, 395,
-        "all rank-two CKYZ potent-ray rows should now have CKYZ-reconstructed first-two GV checks"
-    );
+    if target_direction_filter.is_none() {
+        assert_eq!(
+            checked_rows, 395,
+            "all rank-two CKYZ potent-ray rows should now have CKYZ-reconstructed first-two GV checks"
+        );
+    } else {
+        assert!(
+            checked_rows > 0,
+            "CYRUS_CKYZ_TARGET_DIRECTION did not match any rank-two CKYZ potent-ray row"
+        );
+    }
 }
 
 #[test]

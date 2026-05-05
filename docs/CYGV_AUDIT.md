@@ -1012,6 +1012,11 @@ The gated McAllister CKYZ test defaults to the first two multiples. Setting
 diagnostics. A trial with `N=3` was stopped after more than 90 seconds without
 reaching an assertion, which reinforces that the next blocker is finite-domain
 construction/performance, not a known third-coefficient mismatch.
+The same test can be narrowed with `CYRUS_CKYZ_TARGET_DIRECTION=a,b,...`. With
+`N=3`, the F0 direction `[1,1]` passes quickly and the F1 direction `[5,4]`
+passes in seconds, while polygon-5 direction `[4,3,2]` was still running past a
+minute. The immediate coefficient-domain work should therefore focus on the
+rank-three polygon-5 local model first.
 
 ## May 2026 CYTools/cygv Porting Gaps
 

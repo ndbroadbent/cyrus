@@ -51,8 +51,10 @@ run pass. Any remaining mismatch must be explicit and localizable.
    local domain is needed before the saved ten-entry rows are a fair comparison.
    The current CKYZ target-downset domain is a prerequisite, not the full
    history domain for ray-direction rows. The gated test can now be raised with
-   `CYRUS_CKYZ_MULTIPLES_TO_CHECK`; `N=3` currently remains a performance
-   diagnostic rather than a passing CI gate.
+   `CYRUS_CKYZ_MULTIPLES_TO_CHECK` and narrowed with
+   `CYRUS_CKYZ_TARGET_DIRECTION`; `N=3` currently remains a performance
+   diagnostic rather than a passing CI gate, with the polygon-5 `[4,3,2]`
+   direction identified as the first slow family.
 3. Pair-pruned selected curves match McAllister's `small_curves.dat`, while a
    stricter finite-semigroup diagnostic removes five additional curves. This is
    exposed as a policy choice, not hidden.
