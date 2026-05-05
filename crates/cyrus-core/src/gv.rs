@@ -1780,7 +1780,9 @@ fn ckyz_total_degree(degree: &[usize]) -> Result<usize> {
 #[derive(Clone, Debug)]
 struct CkyzMonomialDomain {
     rank: usize,
-    degrees: BTreeSet<Vec<usize>>,
+    degrees: Vec<Vec<usize>>,
+    degree_indices: BTreeMap<Vec<usize>, usize>,
+    addition_indices: Vec<Vec<Option<usize>>>,
     max_total_degree: usize,
 }
 
@@ -1816,15 +1818,38 @@ impl CkyzMonomialDomain {
             max_total_degree = max_total_degree.max(ckyz_total_degree(&degree)?);
             degree_set.insert(degree);
         }
+        let degrees = degree_set.into_iter().collect::<Vec<_>>();
+        let degree_indices = degrees
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(index, degree)| (degree, index))
+            .collect::<BTreeMap<_, _>>();
+        let mut addition_indices = vec![vec![None; degrees.len()]; degrees.len()];
+        for (lhs_index, lhs_degree) in degrees.iter().enumerate() {
+            for (rhs_index, rhs_degree) in degrees.iter().enumerate() {
+                let mut degree = Vec::with_capacity(rank);
+                for (&lhs_entry, &rhs_entry) in lhs_degree.iter().zip(rhs_degree.iter()) {
+                    degree.push(lhs_entry.checked_add(rhs_entry).ok_or_else(|| {
+                        Error::InvalidInput("CKYZ multidegree addition overflowed usize".into())
+                    })?);
+                }
+                if let Some(&sum_index) = degree_indices.get(&degree) {
+                    addition_indices[lhs_index][rhs_index] = Some(sum_index);
+                }
+            }
+        }
         Ok(Self {
             rank,
-            degrees: degree_set,
+            degrees,
+            degree_indices,
+            addition_indices,
             max_total_degree,
         })
     }
 
     fn contains(&self, degree: &[usize]) -> bool {
-        self.degrees.contains(degree)
+        self.degree_indices.contains_key(degree)
     }
 
     fn nonzero_degrees(&self) -> impl Iterator<Item = &Vec<usize>> {
@@ -1833,19 +1858,16 @@ impl CkyzMonomialDomain {
             .filter(|degree| degree.iter().any(|&entry| entry != 0))
     }
 
-    fn add_degrees(&self, lhs: &[usize], rhs: &[usize]) -> Result<Option<Vec<usize>>> {
-        if lhs.len() != self.rank || rhs.len() != self.rank {
-            return Err(Error::InvalidInput(
-                "CKYZ series multiplication rank mismatch".into(),
-            ));
-        }
-        let mut degree = Vec::with_capacity(self.rank);
-        for (&lhs_entry, &rhs_entry) in lhs.iter().zip(rhs.iter()) {
-            degree.push(lhs_entry.checked_add(rhs_entry).ok_or_else(|| {
-                Error::InvalidInput("CKYZ multidegree addition overflowed usize".into())
-            })?);
-        }
-        Ok(self.contains(&degree).then_some(degree))
+    fn index_of(&self, degree: &[usize]) -> Option<usize> {
+        self.degree_indices.get(degree).copied()
+    }
+
+    fn sum_index(&self, lhs_index: usize, rhs_index: usize) -> Option<usize> {
+        self.addition_indices
+            .get(lhs_index)
+            .and_then(|row| row.get(rhs_index))
+            .copied()
+            .flatten()
     }
 }
 
@@ -1952,27 +1974,48 @@ fn ckyz_series_mul_domain(
     rhs: &BTreeMap<Vec<usize>, Rational>,
     domain: &CkyzMonomialDomain,
 ) -> Result<BTreeMap<Vec<usize>, Rational>> {
-    let mut out = BTreeMap::new();
-    for (lhs_degree, lhs_coefficient) in lhs {
-        if *lhs_coefficient == 0 {
-            continue;
-        }
-        for (rhs_degree, rhs_coefficient) in rhs {
-            if *rhs_coefficient == 0 {
-                continue;
+    let lhs_terms = ckyz_indexed_domain_terms(lhs, domain)?;
+    let rhs_terms = ckyz_indexed_domain_terms(rhs, domain)?;
+    let mut out_by_index = BTreeMap::<usize, Rational>::new();
+    for (lhs_index, lhs_coefficient) in lhs_terms.iter().copied() {
+        for (rhs_index, rhs_coefficient) in rhs_terms.iter().copied() {
+            if let Some(product_index) = domain.sum_index(lhs_index, rhs_index) {
+                let entry = out_by_index
+                    .entry(product_index)
+                    .or_insert_with(|| Rational::from(0));
+                *entry += lhs_coefficient.clone() * rhs_coefficient.clone();
             }
-            let product_degree = domain.add_degrees(lhs_degree, rhs_degree)?;
-            let Some(product_degree) = product_degree else {
-                continue;
-            };
-            let entry = out
-                .entry(product_degree)
-                .or_insert_with(|| Rational::from(0));
-            *entry += lhs_coefficient.clone() * rhs_coefficient.clone();
         }
     }
+    let mut out = out_by_index
+        .into_iter()
+        .filter_map(|(index, coefficient)| {
+            (coefficient != 0).then(|| (domain.degrees[index].clone(), coefficient))
+        })
+        .collect::<BTreeMap<_, _>>();
     out.retain(|_, coefficient| *coefficient != 0);
     Ok(out)
+}
+
+fn ckyz_indexed_domain_terms<'a>(
+    series: &'a BTreeMap<Vec<usize>, Rational>,
+    domain: &CkyzMonomialDomain,
+) -> Result<Vec<(usize, &'a Rational)>> {
+    let mut terms = Vec::with_capacity(series.len());
+    for (degree, coefficient) in series {
+        if *coefficient == 0 {
+            continue;
+        }
+        if degree.len() != domain.rank {
+            return Err(Error::InvalidInput(
+                "CKYZ series multiplication rank mismatch".into(),
+            ));
+        }
+        if let Some(index) = domain.index_of(degree) {
+            terms.push((index, coefficient));
+        }
+    }
+    Ok(terms)
 }
 
 fn ckyz_add_degrees(

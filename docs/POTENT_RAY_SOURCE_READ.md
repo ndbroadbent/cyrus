@@ -346,7 +346,11 @@ that this is not only a polygon-5 problem: local `P2` and `F0` direction `[1,1]`
 finished, `F1` direction `[2,1]` finished, but `F0` direction `[1,2]` already
 took roughly 90 seconds and the run timed out shortly after starting `F1`
 direction `[3,1]`. The committed test must therefore remain at first-two checks
-until the finite monomial-domain extractor exists.
+until the finite monomial-domain extractor exists. A later indexed-domain
+multiplication refactor removed much of the per-product lookup overhead but
+still did not make all-ten validation finish under a 600 second timeout, so the
+remaining blocker is the monomial set being too broad, not only the arithmetic
+representation.
 
 ## Current Implementation Boundary
 
