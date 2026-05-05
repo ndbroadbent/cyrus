@@ -34,6 +34,22 @@ If `mcap_generators` is supplied, CYTools passes those rows directly as
 `generators`; otherwise it augments Mori-cap rays with lattice points before
 calling `cygv`.
 
+The matrix-orientation convention is easy to get wrong:
+
+- Python `cygv.compute_gv` receives `generators` as rows of curve coordinates and
+  `q = cy.curve_basis(include_origin=False, as_matrix=True)` as an `h11 x
+  n_divisors` row matrix.
+- The Rust/PyO3 extension then stores each Python outer row as a column. Thus
+  internally, `generators` becomes `h11 x n_generators` and `q` becomes
+  `n_divisors x h11`.
+- Cyrus' `cygv_q_matrix` mirrors that boundary by accepting the same `h11 x
+  n_divisors` curve-basis matrix and transposing it before calling the Rust
+  `cygv` API directly.
+
+So the correct Cyrus input shape for `q_matrix` is "basis curve rows", not
+"ambient divisor rows". A mismatch here would still type-check and can produce
+plausible-looking but wrong GV data.
+
 ## cygv Semantics
 
 The `cygv` crate does not interpret `generators` as merely the list of curves to
@@ -143,6 +159,15 @@ That generic `compute_gvs` call is not the paper's high-`h11` selected
 small-curve method. It can be useful as a small validation experiment, but it is
 not an implementation strategy for the 214-dimensional Kähler correction.
 
+Some older notes also describe `small_curves.dat` as if it were obtained by a
+plain `cy.compute_gvs(max_deg=N)` call. The paper and ancillary readme are more
+specific, and they take precedence: for the large-`h11` Kähler side, the method
+starts from toric ambient curves, cuts by approximate-vacuum volume, removes
+curves that are sums of others, and then computes the GV values of the retained
+small toric/nilpotent curves. The direct `cy.compute_gvs(min_points=20000)`
+validation applies cleanly to the low-dimensional mirror/racetrack
+`dual_curves` data, not to the high-dimensional `small_curves` data.
+
 ## Flop Continuation
 
 The paper warns that continuing the Kähler-coordinate formula through a flop is
@@ -202,3 +227,14 @@ GV fallback:
    input-chamber negative curves: the simple odd-parity identity is verified,
    but the two even-parity saved curves and the broader corrected-chamber
    target-vector residual still need a first-principles treatment.
+
+Concrete missing implementation pieces after the source read are:
+
+- a faithful "sums of others" reduction, ideally Hilbert-basis/semigroup based
+  rather than the current pair-only production pruning plus bounded diagnostic;
+- the low-dimensional face/ray GV computation path used for large-`h11` potent
+  and nilpotent curve checks, distinct from a full 214-dimensional global HKTY
+  run;
+- an explicit chamber/flop continuation rule for the Kähler-coordinate instanton
+  terms, including what to do with even-parity curves that hit the
+  `Li2(exp(...))` branch cut.
