@@ -1840,6 +1840,64 @@ mod tests {
     }
 
     #[test]
+    fn test_real_dilog_matches_reference_values_near_corrected_chamber_offenders() {
+        // Constants generated with scipy.special.spence(1-x) and cross-checked
+        // with mpmath polylog at 50 digits for the leading 4-214-647
+        // corrected-chamber GV target contributors.
+        let cases = [
+            (
+                0.004_802_446_698_931_817,
+                1.0,
+                0.970_276_047_871_194,
+                1.508_898_127_116_951_5,
+            ),
+            (
+                0.004_802_446_698_931_817,
+                -1.0,
+                -0.970_276_047_871_194,
+                -0.801_778_033_988_783_7,
+            ),
+            (
+                0.007_120_534_449_768_456,
+                1.0,
+                0.956_246_420_196_219_7,
+                1.460_693_889_455_684_6,
+            ),
+            (
+                0.007_120_534_449_768_456,
+                -1.0,
+                -0.956_246_420_196_219_7,
+                -0.791_952_557_502_26,
+            ),
+            (
+                0.115_371_353_115_733_65,
+                1.0,
+                0.484_373_202_055_804_45,
+                0.560_725_116_878_445_1,
+            ),
+            (
+                0.115_371_353_115_733_65,
+                -1.0,
+                -0.484_373_202_055_804_45,
+                -0.435_706_565_892_601_1,
+            ),
+        ];
+
+        for (q_dot_t, sign, expected_arg, expected_li2) in cases {
+            let arg = sign * (-2.0 * PI * q_dot_t).exp();
+            assert!(
+                (arg - expected_arg).abs() < 2e-16,
+                "arg mismatch for q.t={q_dot_t}, sign={sign}: {arg}"
+            );
+            let actual = real_dilog_real_axis(arg).unwrap();
+            assert!(
+                (actual - expected_li2).abs() < 2e-14,
+                "Li2 mismatch for q.t={q_dot_t}, sign={sign}: {actual}"
+            );
+        }
+    }
+
+    #[test]
     fn test_compute_gv_target_correction_accepts_real_negative_branch() {
         let t = vec![finite_f64(-2.0_f64.ln() / (2.0 * PI))];
         let invariants = vec![(vec![1], Integer::from(1))];
