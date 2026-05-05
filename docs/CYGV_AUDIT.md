@@ -769,10 +769,11 @@ explicit:
 Cyrus now has the first finite-cutoff primitive from this appendix:
 `detect_apparent_nilpotent_ray_from_gv_multiples` takes a co-prime ray, grading
 vector, cutoff, and finite GV table for its multiples and applies the
-`n^0_{k*C}=0` plus positive lower weighted-sum criterion exactly. This is only
-the initial `N` construction. It does not yet implement the later `nop`
-classification by divergence from the potent cone or certify that a ray is a
-floppable wall.
+`n^0_{k*C}=0` plus positive lower weighted-sum criterion exactly.
+`detect_apparent_nilpotent_rays_from_gv_table` applies that test to every
+primitive ray seeded by nonzero finite-cutoff GV data. This is only the initial
+`N` construction. It does not yet implement the later `nop` classification by
+divergence from the potent cone or certify that a ray is a floppable wall.
 
 This reinforces the production boundary above: the corrected-chamber fix should
 be a chamber/`M_infinity`/nop continuation implementation or a current-chamber
