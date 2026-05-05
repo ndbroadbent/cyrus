@@ -6,7 +6,8 @@ use std::path::Path;
 use cyrus_core::{
     AffineToricCircuitDiagnostic, LocalToricCircuitKind, LocalToricCoordinate2D, Point, Polytope,
     RankTwoLocalSupportSignature, compute_local_toric_circuit_gv_series,
-    curve_in_rational_row_span, diagnose_affine_toric_circuit, rank_two_local_support_signature,
+    curve_in_rational_row_span, diagnose_affine_toric_circuit, rank_two_local_charge_model,
+    rank_two_local_support_signature,
 };
 use malachite::Integer;
 
@@ -86,6 +87,43 @@ fn assert_rank_two_local_coordinates_satisfy_relation(diagnostic: &AffineToricCi
         rank_two_local_support_signature(diagnostic).is_some(),
         "rank-two affine support should have a normalized local signature"
     );
+    let signature = rank_two_local_support_signature(diagnostic)
+        .expect("rank-two affine support should have a normalized local signature");
+    let model = rank_two_local_charge_model(&signature)
+        .expect("rank-two affine support should produce a local charge model");
+    assert_eq!(
+        model.points.len(),
+        diagnostic.relation_points.len(),
+        "local charge-model point count should match affine support size"
+    );
+    assert_eq!(
+        model.charge_basis.len(),
+        diagnostic.relation_points.len() - 3,
+        "local charge-model rank should equal support size minus rank-two affine dimension plus one"
+    );
+    assert!(
+        curve_in_rational_row_span(&model.target_relation, &model.charge_basis)
+            .expect("local charge-model span check should be exact"),
+        "target potent-ray relation should lie in the local charge lattice"
+    );
+    for charge in &model.charge_basis {
+        let mut local_coordinate_sum = [0i128; 2];
+        let mut coefficient_sum = 0i128;
+        for (coefficient, point) in charge.iter().zip(model.points.iter()) {
+            coefficient_sum += i128::from(*coefficient);
+            local_coordinate_sum[0] += i128::from(*coefficient) * i128::from(point.coordinates[0]);
+            local_coordinate_sum[1] += i128::from(*coefficient) * i128::from(point.coordinates[1]);
+        }
+        assert_eq!(
+            coefficient_sum, 0,
+            "each local charge-model basis row should be affine"
+        );
+        assert_eq!(
+            local_coordinate_sum,
+            [0, 0],
+            "each local charge-model basis row should annihilate local coordinates"
+        );
+    }
 }
 
 fn rank_two_signature_coefficient_pattern(signature: &RankTwoLocalSupportSignature) -> Vec<i64> {

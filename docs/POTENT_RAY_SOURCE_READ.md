@@ -235,6 +235,14 @@ This still stops short of assigning GV sequences to the non-`P^2` patterns. The
 next missing source-derived object is the local mirror/HKTY input attached to
 each reconstructed support.
 
+As a step toward that input, Cyrus now constructs a canonical local charge
+model from each normalized rank-two support signature. The model recomputes the
+integer kernel of `[1; x; y]` in the canonical local coordinates and verifies
+that the saved potent-ray relation belongs to that local charge lattice. This
+removes another point-label and checkpoint-data dependency, but it deliberately
+does not decide which local mirror/HKTY series, if any, belongs to a non-`P^2`
+family.
+
 ## Deeper Internal Read Boundary
 
 A follow-up source pass confirms the boundary for the next code change:

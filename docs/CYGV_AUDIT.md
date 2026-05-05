@@ -834,3 +834,11 @@ signatures. The gated structural test records the coefficient-pattern counts
 for that inventory, but still does not use those patterns to assign any GV
 value. The next implementation step remains item 2: derive the local
 toric/mirror input for a non-`P^2` signature family.
+
+Cyrus now also derives the first part of item 2 for every normalized rank-two
+signature: a canonical local charge model. This model consists of the canonical
+support points, the target affine relation in that point order, and the integer
+kernel of the local `[1; x; y]` matrix. The gated potent-ray tests verify that
+the target relation lies in this reconstructed local charge lattice for every
+rank-two saved support. This is still pre-GV input construction; the remaining
+missing piece is the local mirror/HKTY series attached to those charge models.

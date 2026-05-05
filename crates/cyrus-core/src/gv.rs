@@ -407,6 +407,33 @@ pub struct RankTwoLocalSupportSignature {
     pub entries: Vec<RankTwoLocalSupportSignatureEntry>,
 }
 
+/// One point in the canonical local charge model for a rank-two support.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RankTwoLocalChargeModelPoint {
+    /// Coefficient of this point in the target potent-ray affine relation.
+    pub relation_coefficient: i64,
+    /// Local integral coordinate of this support point.
+    pub coordinates: [i64; 2],
+}
+
+/// Point-index-free local toric charge model for a rank-two support.
+///
+/// This is the source-derived input object before any local mirror/HKTY series
+/// is assigned: the canonical support points, the target relation in that point
+/// order, and an integer basis for the affine charge lattice of the local
+/// toric diagram.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RankTwoLocalChargeModel {
+    /// Canonical support points. The order is the same as
+    /// [`target_relation`](Self::target_relation) and the columns of
+    /// [`charge_basis`](Self::charge_basis).
+    pub points: Vec<RankTwoLocalChargeModelPoint>,
+    /// The target affine relation coefficients in canonical point order.
+    pub target_relation: Vec<i64>,
+    /// Integer basis for the kernel of `[1; x; y]`, in canonical point order.
+    pub charge_basis: Vec<Vec<i64>>,
+}
+
 /// Recognized local toric circuit shape.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LocalToricCircuitKind {
@@ -649,6 +676,75 @@ pub fn rank_two_local_support_signature(
 
     let entries = canonical_rank_two_signature_entries(&entries)?;
     Some(RankTwoLocalSupportSignature { entries })
+}
+
+/// Build the local toric charge model for a normalized rank-two support.
+///
+/// This reconstructs the integer kernel of the canonical matrix with rows
+/// `[1; x; y]`. It also verifies that the target potent-ray relation belongs
+/// to that reconstructed affine charge lattice. No GV value or local mirror
+/// series is assigned here.
+pub fn rank_two_local_charge_model(
+    signature: &RankTwoLocalSupportSignature,
+) -> Result<RankTwoLocalChargeModel> {
+    if signature.entries.is_empty() {
+        return Err(Error::InvalidInput(
+            "rank-two local charge model requires at least one support point".into(),
+        ));
+    }
+
+    let mut points = signature
+        .entries
+        .iter()
+        .map(|entry| RankTwoLocalChargeModelPoint {
+            relation_coefficient: entry.coefficient,
+            coordinates: entry.coordinates,
+        })
+        .collect::<Vec<_>>();
+    points.sort_unstable();
+
+    let support_len = points.len();
+    let mut matrix = vec![vec![Integer::from(0); support_len]; 3];
+    for (col, point) in points.iter().enumerate() {
+        matrix[0][col] = Integer::from(1);
+        matrix[1][col] = Integer::from(point.coordinates[0]);
+        matrix[2][col] = Integer::from(point.coordinates[1]);
+    }
+
+    let mut charge_basis = integer_kernel(&matrix)
+        .into_iter()
+        .map(|row| {
+            let mut converted = row
+                .iter()
+                .map(|value| {
+                    i64::try_from(value).map_err(|_| {
+                        Error::InvalidInput(
+                            "rank-two local charge-model basis entry does not fit in i64".into(),
+                        )
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            normalize_relation_orientation(&mut converted);
+            Ok(converted)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    charge_basis.sort_unstable();
+
+    let target_relation = points
+        .iter()
+        .map(|point| point.relation_coefficient)
+        .collect::<Vec<_>>();
+    if !curve_in_rational_row_span(&target_relation, &charge_basis)? {
+        return Err(Error::InvalidInput(
+            "rank-two local target relation is not in the reconstructed charge lattice".into(),
+        ));
+    }
+
+    Ok(RankTwoLocalChargeModel {
+        points,
+        target_relation,
+        charge_basis,
+    })
 }
 
 fn canonical_rank_two_signature_entries(
@@ -4379,10 +4475,10 @@ mod tests {
         origin_circuit_diagnostic_from_class_and_witnesses, potent_ray_convergence,
         potent_ray_log_xi_terms, project_ambient_curve_to_basis,
         project_mori_cone_cap_rays_to_basis, prune_decomposable_curve_candidates,
-        rank_two_local_support_signature, remove_pair_decomposable_curve_candidates,
-        remove_semigroup_decomposable_curve_candidates, subcutoff_toric_curve_candidates,
-        supporting_mori_face_for_curve_from_normal, supporting_mori_face_from_normal,
-        write_grading_cache,
+        rank_two_local_charge_model, rank_two_local_support_signature,
+        remove_pair_decomposable_curve_candidates, remove_semigroup_decomposable_curve_candidates,
+        subcutoff_toric_curve_candidates, supporting_mori_face_for_curve_from_normal,
+        supporting_mori_face_from_normal, write_grading_cache,
     };
     use crate::Intersection;
     use crate::lattice::Point;
@@ -4561,6 +4657,44 @@ mod tests {
             rank_two_local_support_signature(&positive),
             rank_two_local_support_signature(&negative)
         );
+    }
+
+    #[test]
+    fn rank_two_local_charge_model_recovers_affine_kernel() {
+        let points = vec![
+            Point::new(vec![0, 1, -3, 6]),
+            Point::new(vec![-2, -1, -4, 5]),
+            Point::new(vec![-1, 0, -3, 5]),
+            Point::new(vec![-1, 0, -2, 4]),
+        ];
+
+        let diagnostic = diagnose_affine_toric_circuit(&[1, 1, -3, 1], &points)
+            .unwrap()
+            .expect("local P2 row is an affine circuit");
+        let signature = rank_two_local_support_signature(&diagnostic)
+            .expect("local P2 row should have a signature");
+        let model =
+            rank_two_local_charge_model(&signature).expect("local P2 should have a charge model");
+
+        assert_eq!(model.points.len(), 4);
+        assert_eq!(model.charge_basis.len(), 1);
+        assert!(
+            curve_in_rational_row_span(&model.target_relation, &model.charge_basis)
+                .expect("charge span check should be exact")
+        );
+        for charge in &model.charge_basis {
+            let coefficient_sum: i64 = charge.iter().sum();
+            assert_eq!(coefficient_sum, 0);
+            let coordinate_sum = charge.iter().zip(model.points.iter()).fold(
+                [0i64; 2],
+                |mut sum, (&coefficient, point)| {
+                    sum[0] += coefficient * point.coordinates[0];
+                    sum[1] += coefficient * point.coordinates[1];
+                    sum
+                },
+            );
+            assert_eq!(coordinate_sum, [0, 0]);
+        }
     }
 
     #[test]
