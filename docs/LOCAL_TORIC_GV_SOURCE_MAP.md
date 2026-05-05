@@ -128,3 +128,43 @@ Before writing a local GV series for any non-`P^2` family, verify:
 
 The local `P^2` code is therefore a proof of approach, not a template for
 changing one charge vector and expecting correct GV values.
+
+## Current CKYZ Match Checkpoint
+
+The gated test
+`mcallister_five_point_rank_two_models_match_ckyz_hirzebruch_data` now verifies
+the first CKYZ identification layer for the 4-214-647 potent-ray checkpoint.
+It does not read `potent_rays_gv.dat`.
+
+For each normalized five-point rank-two family, the test:
+
+1. rebuilds the local charge model from `points.dat` and `potent_rays.dat`;
+2. applies an explicit column permutation to put the local points in CKYZ source
+   order;
+3. applies an explicit unimodular row transform;
+4. checks equality with the CKYZ `F0` or `F1` relation vectors;
+5. checks that the saved potent-ray target relation is reconstructed from the
+   source-basis target coordinates.
+
+The matched families are:
+
+| Coefficients | CKYZ surface | Source target direction |
+|--------------|--------------|-------------------------|
+| `(-4, 1, 1, 1, 1)` | `F0` | `(1, 1)` |
+| `(-5, 1, 1, 1, 2)` | `F1` | `(2, 1)` |
+| `(-6, 1, 1, 2, 2)` | `F0` | `(1, 2)` |
+| `(-7, 1, 1, 2, 3)` | `F1` | `(3, 1)` |
+| `(-8, 1, 1, 3, 3)` | `F0` | `(1, 3)` |
+| `(-8, 1, 2, 2, 3)` | `F1` | `(3, 2)` |
+| `(-9, 1, 1, 3, 4)` | `F1` | `(4, 1)` |
+| `(-10, 1, 1, 4, 4)` | `F0` | `(1, 4)` |
+| `(-10, 2, 2, 3, 3)` | `F0` | `(2, 3)` |
+| `(-11, 1, 1, 4, 5)` | `F1` | `(5, 1)` |
+| `(-11, 1, 3, 3, 4)` | `F1` | `(4, 3)` |
+| `(-12, 1, 1, 5, 5)` | `F0` | `(1, 5)` |
+| `(-14, 1, 4, 4, 5)` | `F1` | `(5, 4)` |
+
+This covers the common five-point families. The two six-point families,
+`(-7, 1, 1, 1, 2, 2)` and `(-9, 1, 1, 2, 2, 3)`, still need a separate CKYZ
+polygon-5/polygon-6 or non-simplicial-chamber identification before Cyrus can
+honestly attach local mirror data to them.

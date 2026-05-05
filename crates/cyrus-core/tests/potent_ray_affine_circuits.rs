@@ -286,6 +286,43 @@ fn assert_rank_two_signature_is_reflexive_polygon(signature: &RankTwoLocalSuppor
     }
 }
 
+fn permute_columns(matrix: &[Vec<i64>], permutation: &[usize]) -> Vec<Vec<i64>> {
+    matrix
+        .iter()
+        .map(|row| permutation.iter().map(|&idx| row[idx]).collect())
+        .collect()
+}
+
+fn permute_vector(vector: &[i64], permutation: &[usize]) -> Vec<i64> {
+    permutation.iter().map(|&idx| vector[idx]).collect()
+}
+
+fn transform_rows(transform: &[Vec<i64>], matrix: &[Vec<i64>]) -> Vec<Vec<i64>> {
+    transform
+        .iter()
+        .map(|row| {
+            (0..matrix[0].len())
+                .map(|col| {
+                    row.iter()
+                        .zip(matrix.iter())
+                        .map(|(coefficient, source_row)| coefficient * source_row[col])
+                        .sum()
+                })
+                .collect()
+        })
+        .collect()
+}
+
+fn combine_source_charges(coordinates: &[i64], source_relations: &[Vec<i64>]) -> Vec<i64> {
+    let mut out = vec![0; source_relations[0].len()];
+    for (coordinate, relation) in coordinates.iter().zip(source_relations.iter()) {
+        for (value, relation_value) in out.iter_mut().zip(relation.iter()) {
+            *value += coordinate * relation_value;
+        }
+    }
+    out
+}
+
 #[test]
 fn mcallister_potent_rays_are_affine_toric_circuits() {
     if !first_principles_enabled() {
@@ -744,4 +781,125 @@ fn mcallister_rank_two_local_charge_models_are_inventoried() {
         ]),
         "rank-two local charge models should be derived from supports before GV assignment"
     );
+}
+
+#[test]
+fn mcallister_five_point_rank_two_models_match_ckyz_hirzebruch_data() {
+    if !first_principles_enabled() {
+        return;
+    }
+    let Some(data_dir) = mcallister_data_dir() else {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    };
+
+    let points_raw = read_csv_rows_i64(&data_dir.join("points.dat"));
+    let potent_rays = read_csv_rows_i64(&data_dir.join("potent_rays.dat"));
+    let all_points: Vec<Point> = points_raw.into_iter().map(Point::new).collect();
+    let polytope = Polytope::from_vertices(all_points).expect("failed to create polytope");
+    let triangulation_points = polytope
+        .points_not_interior_to_facets()
+        .expect("failed to filter triangulation points");
+
+    let mut models_by_pattern = BTreeMap::new();
+    for ray in &potent_rays {
+        let diagnostic = diagnose_affine_toric_circuit(ray, &triangulation_points)
+            .expect("affine circuit diagnostic should accept McAllister dimensions")
+            .expect("saved potent ray should be an affine toric circuit");
+        if diagnostic.affine_rank != 2 {
+            continue;
+        }
+        let signature = rank_two_local_support_signature(&diagnostic)
+            .expect("rank-two diagnostic should have a local signature");
+        let coefficient_pattern = rank_two_signature_coefficient_pattern(&signature);
+        let model =
+            rank_two_local_charge_model(&signature).expect("rank-two support should have a model");
+        models_by_pattern
+            .entry(coefficient_pattern)
+            .and_modify(|existing| assert_eq!(existing, &model))
+            .or_insert(model);
+    }
+
+    let ckyz_f0 = vec![vec![-2, 1, 0, 1, 0], vec![-2, 0, 1, 0, 1]];
+    let ckyz_f1 = vec![vec![-2, 1, 0, 1, 0], vec![-1, 0, 1, -1, 1]];
+    let minus_identity = vec![vec![-1, 0], vec![0, -1]];
+    let swap_and_negate = vec![vec![0, -1], vec![-1, 0]];
+    let f1_shear = vec![vec![1, -1], vec![-1, 0]];
+
+    let expected = BTreeMap::from([
+        (
+            vec![-14, 1, 4, 4, 5],
+            (&ckyz_f1, vec![0, 4, 2, 1, 3], &swap_and_negate, vec![5, 4]),
+        ),
+        (
+            vec![-12, 1, 1, 5, 5],
+            (&ckyz_f0, vec![0, 1, 3, 2, 4], &minus_identity, vec![1, 5]),
+        ),
+        (
+            vec![-11, 1, 1, 4, 5],
+            (&ckyz_f1, vec![0, 4, 1, 3, 2], &f1_shear, vec![5, 1]),
+        ),
+        (
+            vec![-11, 1, 3, 3, 4],
+            (&ckyz_f1, vec![0, 4, 2, 1, 3], &swap_and_negate, vec![4, 3]),
+        ),
+        (
+            vec![-10, 1, 1, 4, 4],
+            (&ckyz_f0, vec![0, 1, 3, 2, 4], &minus_identity, vec![1, 4]),
+        ),
+        (
+            vec![-10, 2, 2, 3, 3],
+            (&ckyz_f0, vec![0, 1, 3, 2, 4], &minus_identity, vec![2, 3]),
+        ),
+        (
+            vec![-9, 1, 1, 3, 4],
+            (&ckyz_f1, vec![0, 4, 1, 3, 2], &f1_shear, vec![4, 1]),
+        ),
+        (
+            vec![-8, 1, 1, 3, 3],
+            (&ckyz_f0, vec![0, 1, 3, 2, 4], &minus_identity, vec![1, 3]),
+        ),
+        (
+            vec![-8, 1, 2, 2, 3],
+            (&ckyz_f1, vec![0, 4, 2, 1, 3], &swap_and_negate, vec![3, 2]),
+        ),
+        (
+            vec![-7, 1, 1, 2, 3],
+            (&ckyz_f1, vec![0, 4, 1, 3, 2], &f1_shear, vec![3, 1]),
+        ),
+        (
+            vec![-6, 1, 1, 2, 2],
+            (&ckyz_f0, vec![0, 1, 3, 2, 4], &minus_identity, vec![1, 2]),
+        ),
+        (
+            vec![-5, 1, 1, 1, 2],
+            (&ckyz_f1, vec![0, 4, 1, 2, 3], &swap_and_negate, vec![2, 1]),
+        ),
+        (
+            vec![-4, 1, 1, 1, 1],
+            (&ckyz_f0, vec![0, 1, 2, 4, 3], &minus_identity, vec![1, 1]),
+        ),
+    ]);
+
+    for (coefficient_pattern, (source_relations, permutation, transform, source_target)) in expected
+    {
+        let model = models_by_pattern
+            .get(&coefficient_pattern)
+            .expect("expected CKYZ-matched local charge model should be present");
+        assert_eq!(
+            model.points.len(),
+            5,
+            "CKYZ Hirzebruch comparison only covers five-point local polygons"
+        );
+        let permuted_charge_basis = permute_columns(&model.charge_basis, &permutation);
+        assert_eq!(
+            transform_rows(transform, &permuted_charge_basis),
+            *source_relations,
+            "local charge basis should match the CKYZ source relations for {coefficient_pattern:?}"
+        );
+        assert_eq!(
+            combine_source_charges(&source_target, source_relations),
+            permute_vector(&model.target_relation, &permutation),
+            "CKYZ target coordinates should reconstruct the potent-ray relation for {coefficient_pattern:?}"
+        );
+    }
 }
