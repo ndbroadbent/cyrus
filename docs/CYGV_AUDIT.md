@@ -1294,3 +1294,44 @@ families, but the missing step is still to derive the local generator set and
 grading for each normalized support signature from geometry, then use a
 narrower coefficient/history domain to raise the larger rank-two CKYZ families
 beyond the first four multiples.
+
+## May 2026 Corrected-Chamber Source Checkpoint
+
+A fresh read of the exact local `cygv-0.1.2` crate source and the CYTools
+`CalabiYau._compute_gvs_gws` wrapper confirms that the remaining
+corrected-chamber GV misses should not be chased with another per-curve formula.
+
+The CYTools wrapper supplies rows of Mori-cap generators, augments them with
+`mori.find_lattice_points(min_points=100*h11)` unless `mcap_generators` is
+explicitly supplied, and passes the no-origin curve-basis matrix as `q`.
+Inside cygv, those rows are not just a list of requested output classes:
+`Semigroup::{with_max_degree,with_min_elements}` derives generators, closes the
+semigroup under addition, sorts by grading degree, and then the HKTY pipeline
+builds the fundamental period, instanton data, and degree-ordered series
+inversion. `series_inversion` subtracts lower-degree `Li2(q_N)` contributions
+before later degrees are read. Therefore the GV assigned to a class is a
+function of the finite semigroup/chamber context, not of the sparse relation
+alone.
+
+This matters for the nine current solved-t corrected-chamber misses. They are
+Mori generators and origin circuits, but their affine supports have ranks
+`{3: 4, 4: 5}`, not the rank-two CKYZ surface supports where Cyrus already has
+source-derived local formulas. They are also real-axis evaluable at the current
+point (`real_ok`, `q.t >= 0.1`), so the blocker is not the `Li2/Li3` real branch
+case. The next useful diagnostic is exact semigroup context reconstruction:
+record whether the LP active-generator witnesses are genuine integer-semigroup
+decompositions or only rational-cone decompositions, then use that to identify
+the smallest source-derived finite domain that can be passed through the HKTY
+path. Any value produced from an uncertified LP face or a sparse coefficient
+pattern must remain diagnostic, not a promoted GV value.
+
+The last 12 hours of commits did make progress, but they also show the danger
+of continuing with local diagnostics indefinitely. Completed work includes the
+CYTools-style GV basis handoff, matrix/vector basis separation, CKYZ local
+period and multiple-cover extraction, rank-two potent-ray checks through four
+multiples by default, all-ten checks for selected F0/F1 families, exact Mori
+face certificate machinery, sparse resolved-conifold origin-circuit coverage,
+and corrected-chamber missing-target branch/affine-support diagnostics. The
+unsolved core is narrower now, but still unsolved: reconstruct the missing
+higher-rank origin-circuit semigroup/chamber source, then run HKTY on that
+source-derived context.
