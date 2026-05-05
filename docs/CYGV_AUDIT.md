@@ -774,6 +774,10 @@ vector, cutoff, and finite GV table for its multiples and applies the
 primitive ray seeded by nonzero finite-cutoff GV data. This is only the initial
 `N` construction. It does not yet implement the later `nop` classification by
 divergence from the potent cone or certify that a ray is a floppable wall.
+`partition_finite_cutoff_gv_charges_by_nilpotence` exposes the corresponding
+finite `C \ N` charge partition for the next step, excluding every nonzero
+charge whose primitive ray has already been classified as apparently
+nilpotent.
 
 This reinforces the production boundary above: the corrected-chamber fix should
 be a chamber/`M_infinity`/nop continuation implementation or a current-chamber

@@ -455,6 +455,16 @@ pub struct NilpotentRayCandidate {
     pub weighted_lower_gv_sum: Integer,
 }
 
+/// Finite-cutoff partition of nonzero GV charges by apparent nilpotence.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FiniteCutoffGvChargePartition {
+    /// Primitive rays that pass the finite-cutoff nilpotence test.
+    pub nilpotent_rays: Vec<NilpotentRayCandidate>,
+    /// Nonzero charges up to the cutoff whose primitive ray is not in
+    /// `nilpotent_rays`.
+    pub potent_charges: Vec<(Vec<i64>, Integer)>,
+}
+
 /// Exact certificate that an integer normal cuts out a supporting Mori face.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SupportingMoriFaceCertificate {
@@ -4451,6 +4461,58 @@ pub fn detect_apparent_nilpotent_rays_from_gv_table(
     Ok(candidates)
 }
 
+/// Partition finite-cutoff GV charges into apparently nilpotent rays and
+/// apparently potent charges.
+///
+/// This prepares the appendix's `C \ N` input for the later nop-divergence
+/// test. A nonzero charge is treated as nilpotent if its primitive ray is in
+/// the detected nilpotent-ray set; otherwise it remains in `potent_charges`.
+pub fn partition_finite_cutoff_gv_charges_by_nilpotence(
+    grading_vector: &[i64],
+    cutoff_degree: i128,
+    gv_invariants: &[(Vec<i64>, Integer)],
+) -> Result<FiniteCutoffGvChargePartition> {
+    let nilpotent_rays =
+        detect_apparent_nilpotent_rays_from_gv_table(grading_vector, cutoff_degree, gv_invariants)?;
+    let nilpotent_primitive_rays: BTreeSet<Vec<i64>> = nilpotent_rays
+        .iter()
+        .map(|candidate| candidate.primitive_ray.clone())
+        .collect();
+
+    let zero = Integer::from(0);
+    let mut gv_by_class: HashMap<Vec<i64>, Integer> = HashMap::with_capacity(gv_invariants.len());
+    let mut potent_charges = Vec::new();
+    for (class, gv) in gv_invariants {
+        if let Some(existing) = gv_by_class.get(class) {
+            if existing != gv {
+                return Err(Error::InvalidInput(
+                    "nilpotent-ray GV table contains conflicting duplicate classes".into(),
+                ));
+            }
+            continue;
+        }
+        gv_by_class.insert(class.clone(), gv.clone());
+
+        if gv == &zero {
+            continue;
+        }
+        let degree = checked_i128_dot(class, grading_vector, "nilpotent-ray table grading")?;
+        if degree > cutoff_degree {
+            continue;
+        }
+        let primitive = primitive_ray_from_curve_class(class, "nilpotent-ray nonzero GV class")?;
+        if !nilpotent_primitive_rays.contains(&primitive) {
+            potent_charges.push((class.clone(), gv.clone()));
+        }
+    }
+    potent_charges.sort_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
+
+    Ok(FiniteCutoffGvChargePartition {
+        nilpotent_rays,
+        potent_charges,
+    })
+}
+
 /// Compute the paper's potent-ray convergence terms.
 ///
 /// For a ray `q` with volume `q.t`, the paper defines
@@ -7855,7 +7917,8 @@ mod tests {
         find_semigroup_decomposition, gv_divisor_basis_data, gv_lattice_search_request,
         load_grading_cache, local_p2_inverse_mirror_map, local_p2_mirror_correction,
         map_basis_gv_invariants_to_ambient, origin_circuit_diagnostic_from_class_and_witnesses,
-        potent_ray_convergence, potent_ray_log_xi_terms, project_ambient_curve_to_basis,
+        partition_finite_cutoff_gv_charges_by_nilpotence, potent_ray_convergence,
+        potent_ray_log_xi_terms, project_ambient_curve_to_basis,
         project_ambient_curve_to_basis_matrix, project_mori_cone_cap_rays_for_divisor_basis,
         project_mori_cone_cap_rays_to_basis, project_mori_cone_cap_rays_to_basis_matrix,
         prune_decomposable_curve_candidates, rank_two_local_charge_model,
@@ -9763,6 +9826,62 @@ mod tests {
         )
         .unwrap_err();
         assert!(bad_degree.to_string().contains("non-positive grading"));
+    }
+
+    #[test]
+    fn finite_cutoff_gv_partition_excludes_charges_on_nilpotent_rays() {
+        let partition = partition_finite_cutoff_gv_charges_by_nilpotence(
+            &[1, 1],
+            6,
+            &[
+                (vec![1, 0], Integer::from(3)),
+                (vec![2, 0], Integer::from(4)),
+                (vec![0, 1], Integer::from(5)),
+                (vec![0, 2], Integer::from(5)),
+                (vec![0, 3], Integer::from(5)),
+                (vec![0, 4], Integer::from(5)),
+                (vec![0, 5], Integer::from(5)),
+                (vec![0, 6], Integer::from(5)),
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(partition.nilpotent_rays.len(), 1);
+        assert_eq!(partition.nilpotent_rays[0].primitive_ray, vec![1, 0]);
+        assert_eq!(
+            partition.potent_charges,
+            vec![
+                (vec![0, 1], Integer::from(5)),
+                (vec![0, 2], Integer::from(5)),
+                (vec![0, 3], Integer::from(5)),
+                (vec![0, 4], Integer::from(5)),
+                (vec![0, 5], Integer::from(5)),
+                (vec![0, 6], Integer::from(5)),
+            ]
+        );
+    }
+
+    #[test]
+    fn finite_cutoff_gv_partition_sorts_potent_charges_and_ignores_above_cutoff() {
+        let partition = partition_finite_cutoff_gv_charges_by_nilpotence(
+            &[1, 1],
+            1,
+            &[
+                (vec![1, 0], Integer::from(11)),
+                (vec![0, 1], Integer::from(5)),
+                (vec![5, 0], Integer::from(7)),
+            ],
+        )
+        .unwrap();
+
+        assert!(partition.nilpotent_rays.is_empty());
+        assert_eq!(
+            partition.potent_charges,
+            vec![
+                (vec![0, 1], Integer::from(5)),
+                (vec![1, 0], Integer::from(11)),
+            ]
+        );
     }
 
     #[test]
