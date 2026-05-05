@@ -340,3 +340,26 @@ The intended next code change should therefore be narrow:
 Anything that directly maps a coefficient pattern such as `(-5, 1, 1, 1, 2)`
 to a saved GV sequence would reintroduce the same cheating this audit is meant
 to avoid.
+
+## Immediate Source-Reading Priority
+
+Before writing more potent-ray GV code, the missing object has to be identified
+from source, not inferred from the ancillary arrays. The current read-through
+puts the next work in this order:
+
+1. Keep CYTools/cygv compact-GV orchestration separate from local toric-surface
+   mirror formulas. Compact `cy.compute_gvs()` supplies a semigroup, grading,
+   curve-basis `q` matrix, and intersection tensor to cygv; it is not itself the
+   CKYZ local-surface formula.
+2. For rank-two CKYZ-matched families, derive the local mirror series from the
+   CKYZ relation rows, `c1` pairings, and local intersection expression already
+   returned by `identify_ckyz_local_surface`.
+3. For rank-four affine supports, derive the actual low-dimensional face
+   semigroup context before calling cygv. These rows should not be projected into
+   fake rank-two polygons.
+4. Use `potent_rays_gv.dat` only after the above inputs are constructed, as an
+   assertion that the source-derived calculation produced the saved sequence.
+
+This keeps the project from going in circles: the next code should be driven by
+one fully read source path, not by another diagnostic wrapper around the same
+saved data.

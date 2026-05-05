@@ -913,3 +913,40 @@ For Cyrus, the actionable consequence is unchanged: a local non-`P^2` potent-ray
 implementation needs source-derived local semigroup generators, a grading vector,
 a local `q`/charge matrix, and the correct local Yukawa/intersection object before
 any comparison to `potent_rays_gv.dat` is meaningful.
+
+## May 2026 No-Code Source Read
+
+This pass deliberately read the source again before adding more Rust code. The
+important boundary is now sharper:
+
+- CYTools' public `CalabiYau.compute_gvs()` path is only a thin orchestration
+  layer. It prepares `intersection_numbers(in_basis=True)`,
+  `curve_basis(include_origin=False, as_matrix=True)`, `mori_cone_cap(in_basis=True)`,
+  a lattice-point augmentation of the Mori cap, and `mori.find_grading_vector()`;
+  then it calls `cygv.compute_gv`.
+- CYTools' `mori_cone_cap()` is not a generic cone-enumeration shortcut. It builds
+  candidate curve relations from adjacent two-simplices inside primal two-faces
+  and from origin circuits formed by a two-simplex plus one point from each
+  containing facet. Those relations are normalized integer kernel vectors before
+  any divisor-basis projection.
+- CYTools' `Cone.find_lattice_points()` is a CP-SAT enumeration by grading degree.
+  Before enumeration it checks that the grading vector leaves only the origin at
+  nonpositive degree. Results are sorted by degree, then lexicographically inside
+  each degree.
+- The `cygv` Rust Python boundary stores each outer Python row as a nalgebra
+  column. Thus the Python `generators` list is written as rows, while the Rust
+  `Semigroup` sees columns. The same row-to-column conversion applies to `q`.
+- The packaged `cygv` Python helper forwards `prec` positionally to the Rust
+  extension slot where the current signature has `n_threads`; CYTools does not
+  pass `prec`, so this is not on the current McAllister path, but precision-mode
+  Python cygv output should not be treated as source evidence without checking
+  this boundary first.
+- Cyrus links the Rust `cygv` crate directly, so for local-HKTY work the relevant
+  source is `cygv-0.1.2/src/{hkty,semigroup,fundamental_period,instanton,series_inversion}.rs`,
+  not the unavailable default `python3` import in this shell.
+
+The porting implication is that we should not expand Cyrus by guessing a local
+surface GV formula from the saved rows. The next non-documentation work should
+either port a specific CYTools pre-cygv input-construction step, or construct a
+single CKYZ/local-HKTY example all the way from source relations to GV extraction
+with `potent_rays_gv.dat` used only as the final assertion.
