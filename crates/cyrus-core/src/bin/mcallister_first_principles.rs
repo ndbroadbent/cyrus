@@ -5721,6 +5721,8 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
     geom: &PrimalGeom,
     intersection: &PrimalIntersection,
     kklt_basis: &[usize],
+    c_i: &[I64<Pos>],
+    c_tau: F64<Pos>,
     base_target_tau: &[F64<Pos>],
     checkpoint_t: &[F64<Finite>],
     gamma: &[I64<Finite>],
@@ -5765,6 +5767,55 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
                 std::process::exit(2);
             },
         );
+    let checkpoint_chamber_kappa_full = chamber_intersection_full(
+        &checkpoint_chamber,
+        &geom.triangulation_points,
+    )
+    .unwrap_or_else(|e| {
+        eprintln!("[ERROR] failed to compute checkpoint-t corrected-chamber intersections: {e}");
+        std::process::exit(2);
+    });
+    let checkpoint_chamber_chi = cyrus_core::compute_kklt_divisor_chi(
+        &geom.polytope,
+        &geom.triangulation_points,
+        &checkpoint_chamber_kappa_full,
+        kklt_basis,
+    )
+    .unwrap_or_else(|e| {
+        eprintln!("[ERROR] failed to compute checkpoint-t corrected-chamber divisor chi: {e}");
+        std::process::exit(2);
+    });
+    let Some(checkpoint_chamber_base_target) =
+        cyrus_core::kklt::compute_corrected_target_tau(c_i, &checkpoint_chamber_chi, c_tau)
+    else {
+        eprintln!("[ERROR] failed to compute checkpoint-t corrected-chamber base target tau");
+        std::process::exit(2);
+    };
+    let checkpoint_chamber_implied_gv = checkpoint_chamber_base_target
+        .iter()
+        .zip(checkpoint_target.iter())
+        .map(|(base, target)| {
+            F64::<Finite>::new(base.get() - target.get())
+                .expect("checkpoint corrected-chamber implied GV correction is finite")
+        })
+        .collect::<Vec<_>>();
+    let chi_shift_summary = target_correction_delta_summary(
+        &checkpoint_implied_gv,
+        &checkpoint_chamber_implied_gv,
+    )
+    .unwrap_or_else(|e| {
+        eprintln!(
+            "[ERROR] failed to compare input-vs-corrected-chamber implied GV target correction: {e}"
+        );
+        std::process::exit(2);
+    });
+    eprintln!(
+        "[COMPARE] checkpoint-t corrected-chamber implied GV correction chi-shift delta: max_abs={} relative_l2={} max_abs_input_chi_implied={} max_abs_corrected_chi_implied={}",
+        chi_shift_summary.max_abs_delta,
+        chi_shift_summary.relative_l2_delta,
+        chi_shift_summary.max_abs_reference,
+        chi_shift_summary.max_abs_candidate
+    );
     let corrected_heights_path = dir.join("corrected_heights.dat");
     let corrected_heights_chamber = if corrected_heights_path.exists() {
         let corrected_heights = read_csv_f64(&corrected_heights_path);
@@ -5835,6 +5886,21 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
         selection.filtered_count,
         selection.toric_gv_covered_count,
         selection.toric_gv_missing_count
+    );
+    let corrected_chi_summary =
+        target_correction_delta_summary(&checkpoint_chamber_implied_gv, &covered_gv_target)
+            .unwrap_or_else(|e| {
+                eprintln!(
+                    "[ERROR] failed to compare corrected-chi checkpoint-t corrected-chamber GV target correction: {e}"
+                );
+                std::process::exit(2);
+            });
+    eprintln!(
+        "[COMPARE] checkpoint-t corrected-chamber GV target correction delta (corrected_chamber_chi): max_abs={} relative_l2={} max_abs_checkpoint_implied={} max_abs_toric_covered={}",
+        corrected_chi_summary.max_abs_delta,
+        corrected_chi_summary.relative_l2_delta,
+        corrected_chi_summary.max_abs_reference,
+        corrected_chi_summary.max_abs_candidate
     );
     if let Some(height_chamber) = corrected_heights_chamber.as_ref() {
         let height_selection = compute_chamber_toric_gv_selection(
@@ -6824,6 +6890,8 @@ fn stage_volume(
                 geom,
                 intersection,
                 &kklt_basis,
+                &c_i,
+                c_tau,
                 &tau_target,
                 checkpoint_t,
                 &gamma,
