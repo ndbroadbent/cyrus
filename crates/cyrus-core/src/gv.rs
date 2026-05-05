@@ -4374,6 +4374,16 @@ fn checked_i128_dot(lhs: &[i64], rhs: &[i64], context: &str) -> Result<i128> {
         })
 }
 
+fn i128_vector_to_i64(vector: &[i128], context: &str) -> Result<Vec<i64>> {
+    vector
+        .iter()
+        .map(|&value| {
+            i64::try_from(value)
+                .map_err(|_| Error::InvalidInput(format!("{context} does not fit in i64")))
+        })
+        .collect()
+}
+
 fn checked_ray_multiple(ray: &[i64], multiple: i128, context: &str) -> Result<Vec<i64>> {
     ray.iter()
         .map(|&entry| {
@@ -5841,6 +5851,71 @@ pub fn check_extremal_mori_ray_separator(
         &target_primitive,
         mori_generators,
     )
+}
+
+/// Find an exact integer separator for a target extremal Mori ray.
+///
+/// This constructs the exact cone of candidate separators
+/// `{n | n.other >= 0, n.target <= 0}` using all Mori generators not on the
+/// same positive rational ray as `target_curve`, enumerates its rays via the
+/// double-description method, and returns the first ray with
+/// `n.target < 0` that passes [`check_extremal_mori_ray_separator`].
+///
+/// A successful result certifies extremality in the supplied finite
+/// generator cone. It does not certify that the generator set is the complete
+/// Mori cone, and it does not compute GV invariants or chamber data.
+pub fn find_extremal_mori_ray_separator(
+    target_curve: &[i64],
+    mori_generators: &[Vec<i64>],
+) -> Result<Option<ExtremalMoriRayCertificate>> {
+    if target_curve.is_empty() {
+        return Err(Error::InvalidInput(
+            "extremal Mori ray target is empty".into(),
+        ));
+    }
+    if mori_generators.is_empty() {
+        return Err(Error::InvalidInput(
+            "extremal Mori ray separator search requires Mori generators".into(),
+        ));
+    }
+
+    let target_primitive =
+        primitive_ray_from_curve_class(target_curve, "extremal Mori ray target")?;
+    let mut hyperplanes = Vec::with_capacity(mori_generators.len() + 1);
+    for generator in mori_generators {
+        validate_curve_dimension("Mori generator", generator, target_curve.len())?;
+        if same_positive_rational_ray(&target_primitive, generator)? {
+            continue;
+        }
+        hyperplanes.push(
+            generator
+                .iter()
+                .map(|&entry| i128::from(entry))
+                .collect::<Vec<_>>(),
+        );
+    }
+    hyperplanes.push(
+        target_curve
+            .iter()
+            .map(|&entry| -i128::from(entry))
+            .collect::<Vec<_>>(),
+    );
+
+    let mut separator_cone = Cone::from_hyperplanes(hyperplanes);
+    let separator_rays = separator_cone.rays().to_vec();
+    for ray in separator_rays {
+        let separator = i128_vector_to_i64(&ray, "extremal Mori ray separator")?;
+        if checked_i128_dot(&separator, target_curve, "extremal Mori ray separator")? >= 0 {
+            continue;
+        }
+        if let Some(certificate) =
+            check_extremal_mori_ray_separator(&separator, target_curve, mori_generators)?
+        {
+            return Ok(Some(certificate));
+        }
+    }
+
+    Ok(None)
 }
 
 fn check_extremal_mori_ray_separator_oriented(
@@ -9045,10 +9120,11 @@ mod tests {
         detect_apparent_nilpotent_ray_from_gv_multiples,
         detect_apparent_nilpotent_rays_from_gv_table, diagnose_affine_toric_circuit,
         dump_mori_rays_cdd, extract_ckyz_local_gv_invariants_from_potential,
-        extract_ckyz_local_gv_invariants_from_potential_for_degrees, find_pair_decomposition,
-        find_semigroup_decomposition, finite_cutoff_gv_charges_excluding_primitive_rays,
-        finite_gv_nonzero_degree_slice_points, gv_divisor_basis_data, gv_lattice_search_request,
-        load_grading_cache, local_p2_inverse_mirror_map, local_p2_mirror_correction,
+        extract_ckyz_local_gv_invariants_from_potential_for_degrees,
+        find_extremal_mori_ray_separator, find_pair_decomposition, find_semigroup_decomposition,
+        finite_cutoff_gv_charges_excluding_primitive_rays, finite_gv_nonzero_degree_slice_points,
+        gv_divisor_basis_data, gv_lattice_search_request, load_grading_cache,
+        local_p2_inverse_mirror_map, local_p2_mirror_correction,
         map_basis_gv_invariants_to_ambient, nilpotent_ray_degree_slice_for_cutoff_fraction,
         nilpotent_ray_divergence_check_from_slice_distances,
         nilpotent_ray_divergence_check_with_explicit_slice_lattices,
@@ -10846,6 +10922,39 @@ mod tests {
             &[vec![1, 0], vec![0, 1], vec![1, 1]],
         )
         .unwrap();
+
+        assert!(certificate.is_none());
+    }
+
+    #[test]
+    fn extremal_mori_ray_separator_finder_finds_exact_separator() {
+        let certificate =
+            find_extremal_mori_ray_separator(&[1, 0], &[vec![1, 0], vec![0, 1], vec![1, 1]])
+                .unwrap()
+                .unwrap();
+
+        assert_eq!(certificate.same_ray_generator_count, 1);
+        assert_eq!(certificate.zero_other_generator_count, 1);
+        assert_eq!(certificate.positive_other_generator_count, 1);
+        assert!(
+            certificate.separator_normal[0] < 0,
+            "separator must pair negatively with the target curve"
+        );
+    }
+
+    #[test]
+    fn extremal_mori_ray_separator_finder_rejects_decomposable_target() {
+        let certificate =
+            find_extremal_mori_ray_separator(&[1, 1], &[vec![1, 0], vec![0, 1], vec![1, 1]])
+                .unwrap();
+
+        assert!(certificate.is_none());
+    }
+
+    #[test]
+    fn extremal_mori_ray_separator_finder_requires_target_ray_in_generators() {
+        let certificate =
+            find_extremal_mori_ray_separator(&[1, 0], &[vec![0, 1], vec![1, 1]]).unwrap();
 
         assert!(certificate.is_none());
     }
