@@ -1336,12 +1336,7 @@ pub fn extract_ckyz_local_gv_invariants_from_potential(
     )?;
 
     let mut degrees = ckyz_multi_degrees(rank, max_total_degree);
-    degrees.sort_by(|lhs, rhs| {
-        ckyz_total_degree(lhs)
-            .expect("validated degree")
-            .cmp(&ckyz_total_degree(rhs).expect("validated degree"))
-            .then_with(|| lhs.cmp(rhs))
-    });
+    ckyz_sort_degrees_for_extraction(&mut degrees);
 
     let mut invariants = BTreeMap::new();
     for degree in degrees {
@@ -2718,13 +2713,17 @@ fn ckyz_cover_closed_target_degrees(target_degrees: &[Vec<usize>]) -> Result<Vec
         }
     }
     let mut degrees = out.into_iter().collect::<Vec<_>>();
+    ckyz_sort_degrees_for_extraction(&mut degrees);
+    Ok(degrees)
+}
+
+fn ckyz_sort_degrees_for_extraction(degrees: &mut [Vec<usize>]) {
     degrees.sort_by(|lhs, rhs| {
         ckyz_total_degree(lhs)
             .expect("validated degree")
             .cmp(&ckyz_total_degree(rhs).expect("validated degree"))
             .then_with(|| lhs.cmp(rhs))
     });
-    Ok(degrees)
 }
 
 fn compute_ckyz_log_period_corrections_domain(
@@ -2884,8 +2883,12 @@ fn extract_ckyz_local_gv_invariants_from_potential_for_degrees(
     )?;
     validate_ckyz_target_degrees(target_degrees, rank)?;
 
+    let mut extraction_degrees = target_degrees.to_vec();
+    ckyz_sort_degrees_for_extraction(&mut extraction_degrees);
+    extraction_degrees.dedup();
+
     let mut invariants = BTreeMap::new();
-    for degree in target_degrees {
+    for degree in &extraction_degrees {
         let mut residual = potential_coefficients
             .get(degree)
             .cloned()
@@ -6923,8 +6926,9 @@ mod tests {
         compute_ray_gv_series_with_provided_generators, curve_in_rational_row_span,
         curve_row_span_rank, curve_volume_in_divisor_basis, diagnose_affine_toric_circuit,
         dump_mori_rays_cdd, extract_ckyz_local_gv_invariants_from_potential,
-        find_pair_decomposition, find_semigroup_decomposition, gv_lattice_search_request,
-        load_grading_cache, local_p2_inverse_mirror_map, local_p2_mirror_correction,
+        extract_ckyz_local_gv_invariants_from_potential_for_degrees, find_pair_decomposition,
+        find_semigroup_decomposition, gv_lattice_search_request, load_grading_cache,
+        local_p2_inverse_mirror_map, local_p2_mirror_correction,
         map_basis_gv_invariants_to_ambient, origin_circuit_diagnostic_from_class_and_witnesses,
         potent_ray_convergence, potent_ray_log_xi_terms, project_ambient_curve_to_basis,
         project_ambient_curve_to_basis_matrix, project_mori_cone_cap_rays_to_basis,
@@ -7350,6 +7354,31 @@ mod tests {
         ]);
 
         assert_eq!(gvs, expected);
+    }
+
+    #[test]
+    fn ckyz_targeted_gv_extraction_is_independent_of_requested_degree_order() {
+        let potential = BTreeMap::from([
+            (vec![1], Rational::from(2)),
+            (vec![2], Rational::from_signeds(13, 2)),
+        ]);
+        let expected = BTreeMap::from([(vec![1], Integer::from(2)), (vec![2], Integer::from(3))]);
+
+        let sorted = extract_ckyz_local_gv_invariants_from_potential_for_degrees(
+            &potential,
+            &[-1],
+            &[vec![1], vec![2]],
+        )
+        .unwrap();
+        let shuffled = extract_ckyz_local_gv_invariants_from_potential_for_degrees(
+            &potential,
+            &[-1],
+            &[vec![2], vec![1]],
+        )
+        .unwrap();
+
+        assert_eq!(sorted, expected);
+        assert_eq!(shuffled, expected);
     }
 
     #[test]
