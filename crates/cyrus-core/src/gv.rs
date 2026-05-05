@@ -1261,6 +1261,9 @@ pub fn compute_ckyz_inverse_mirror_map(
                 max_total_degree,
             )?);
         }
+        if next == z_of_q {
+            break;
+        }
         z_of_q = next;
     }
     Ok(z_of_q)
@@ -2895,6 +2898,9 @@ fn compute_ckyz_inverse_mirror_map_domain(
                 &exp_negative_correction,
                 domain,
             )?);
+        }
+        if next == z_of_q {
+            break;
         }
         z_of_q = next;
     }
@@ -7381,6 +7387,15 @@ mod tests {
                 "CKYZ inverse mirror map should match local P2 at degree {degree}"
             );
         }
+    }
+
+    #[test]
+    fn ckyz_inverse_mirror_map_zero_corrections_is_identity() {
+        let corrections = vec![BTreeMap::new(), BTreeMap::new()];
+        let z_of_q = compute_ckyz_inverse_mirror_map(&corrections, 5).unwrap();
+
+        assert_eq!(z_of_q[0], super::ckyz_coordinate_series(2, 0, 5));
+        assert_eq!(z_of_q[1], super::ckyz_coordinate_series(2, 1, 5));
     }
 
     #[test]
