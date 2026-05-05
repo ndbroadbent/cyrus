@@ -355,6 +355,15 @@ representation. A 240 second instrumented run after indexing progressed through
 timed out after starting `F0` `[1,3]`. That profile is better than the
 pre-indexed run but still not acceptable as an all-ten validation path.
 
+Flattening the indexed addition table from nested `Option` rows into a sentinel
+array removes enough debug-build lookup overhead for the first hard polygon-5
+direction `[4,3,2]` to pass the `N=4` narrowed McAllister check in about 178
+seconds. A stack sample of that run still sits almost entirely in
+`compute_ckyz_inverse_mirror_map_domain`, especially composition and rational
+polynomial multiplication. This is progress on the source-derived path, but it
+does not change the conclusion: full ten-entry and all-row validation still need
+a coefficient-history domain rather than a broader downset.
+
 ## Current Implementation Boundary
 
 The current Cyrus potent-ray code has reached a useful stopping point for

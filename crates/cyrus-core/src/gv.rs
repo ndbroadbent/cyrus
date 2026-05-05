@@ -38,6 +38,7 @@ use crate::types::{F64, Finite, I64, Pos};
 const GRADING_CACHE_VERSION: &str = "grading-vector-cytools-lp-v1";
 const LATTICE_CACHE_VERSION: &str = "lattice-points-v2";
 const CKYZ_ADDITION_TABLE_MAX_ENTRIES: usize = 5_000_000;
+const CKYZ_ABSENT_ADDITION_INDEX: usize = usize::MAX;
 
 /// Compute the Mori cone cap generators (rays) using the CYTools algorithm.
 ///
@@ -2024,7 +2025,7 @@ struct CkyzMonomialDomain {
     rank: usize,
     degrees: Vec<Vec<usize>>,
     degree_indices: HashMap<Vec<usize>, usize>,
-    addition_indices: Option<Vec<Vec<Option<usize>>>>,
+    addition_indices: Option<Vec<usize>>,
     max_total_degree: usize,
 }
 
@@ -2079,12 +2080,14 @@ impl CkyzMonomialDomain {
             .collect::<HashMap<_, _>>();
         let addition_entries = degrees.len().saturating_mul(degrees.len());
         let addition_indices = if addition_entries <= CKYZ_ADDITION_TABLE_MAX_ENTRIES {
-            let mut addition_indices = vec![vec![None; degrees.len()]; degrees.len()];
+            let mut addition_indices = vec![CKYZ_ABSENT_ADDITION_INDEX; addition_entries];
+            let addition_stride = degrees.len();
             for (lhs_index, lhs_degree) in degrees.iter().enumerate() {
                 for (rhs_index, rhs_degree) in degrees.iter().enumerate() {
                     let sum_index =
                         ckyz_sum_degree_index(lhs_degree, rhs_degree, rank, &degree_indices)?;
-                    addition_indices[lhs_index][rhs_index] = sum_index;
+                    addition_indices[lhs_index * addition_stride + rhs_index] =
+                        sum_index.unwrap_or(CKYZ_ABSENT_ADDITION_INDEX);
                 }
             }
             Some(addition_indices)
@@ -2115,19 +2118,18 @@ impl CkyzMonomialDomain {
     }
 
     fn sum_index(&self, lhs_index: usize, rhs_index: usize) -> Result<Option<usize>> {
-        if let Some(addition_indices) = &self.addition_indices {
-            return Ok(addition_indices
-                .get(lhs_index)
-                .and_then(|row| row.get(rhs_index))
-                .copied()
-                .flatten());
+        if lhs_index >= self.degrees.len() || rhs_index >= self.degrees.len() {
+            return Err(Error::InvalidInput(
+                "CKYZ monomial addition index is outside the domain".into(),
+            ));
         }
-        let lhs_degree = self.degrees.get(lhs_index).ok_or_else(|| {
-            Error::InvalidInput("CKYZ left monomial index is outside the domain".into())
-        })?;
-        let rhs_degree = self.degrees.get(rhs_index).ok_or_else(|| {
-            Error::InvalidInput("CKYZ right monomial index is outside the domain".into())
-        })?;
+        if let Some(addition_indices) = &self.addition_indices {
+            let table_index = lhs_index * self.degrees.len() + rhs_index;
+            let sum_index = addition_indices[table_index];
+            return Ok((sum_index != CKYZ_ABSENT_ADDITION_INDEX).then_some(sum_index));
+        }
+        let lhs_degree = &self.degrees[lhs_index];
+        let rhs_degree = &self.degrees[rhs_index];
         ckyz_sum_degree_index(lhs_degree, rhs_degree, self.rank, &self.degree_indices)
     }
 }
