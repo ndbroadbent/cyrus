@@ -24,7 +24,7 @@ use cyrus_core::{
     F64, Finite, Point, Polytope, compute_curve_basis_matrix, compute_glsm_and_linrels,
     compute_mori_cone_cap_rays, compute_regular_triangulation, compute_toric_curve_gv_diagnostics,
     compute_toric_two_face_curve_gv_invariants, effective_prime_divisors_from_curve_basis,
-    heights_to_kahler, project_mori_cone_cap_rays_to_basis,
+    find_semigroup_decomposition, heights_to_kahler, project_mori_cone_cap_rays_to_basis,
     remove_pair_decomposable_curve_candidates, subcutoff_toric_curve_candidates, types::i64::I64,
 };
 use malachite::Integer;
@@ -349,6 +349,82 @@ fn stage5_mcallister_small_toric_curves_match_checkpoint() {
     assert_eq!(
         actual, expected,
         "Cyrus-computed filtered small toric curves must match McAllister checkpoint"
+    );
+}
+
+/// Diagnose whether McAllister's saved small-curve pruning needs more than pair sums.
+///
+/// The production checkpoint still uses the documented pair-decomposable rule
+/// above. This test is intentionally first-principles-only because it solves a
+/// finite integer feasibility problem over the selected 4-214-647 toric curve
+/// set to expose any multi-term sums that the pair shortcut misses.
+#[test]
+fn stage5_mcallister_small_toric_curve_finite_semigroup_diagnostic() {
+    if !require_first_principles() {
+        return;
+    }
+    let Some(data_dir) = crate::mcallister_data_dir() else {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    };
+
+    let points_raw = read_csv_rows_i64(&data_dir.join("points.dat"));
+    let heights = read_csv_f64(&data_dir.join("heights.dat"));
+    let basis = read_csv_usize(&data_dir.join("basis.dat"));
+    let kahler = read_csv_finite(&data_dir.join("kahler_param.dat"));
+    let cutoff = F64::<Finite>::new(read_csv_f64(&data_dir.join("small_curves_cutoff.dat"))[0])
+        .and_then(|value| value.try_to_pos())
+        .expect("small curve cutoff must be positive");
+
+    let all_points: Vec<Point> = points_raw.into_iter().map(Point::new).collect();
+    let polytope = Polytope::from_vertices(all_points).expect("failed to create polytope");
+    let triangulation_points = polytope
+        .points_not_interior_to_facets()
+        .expect("failed to filter points");
+    let triangulation = compute_regular_triangulation(&triangulation_points, &heights)
+        .expect("failed to compute triangulation");
+    let rays = compute_mori_cone_cap_rays(
+        &triangulation,
+        &triangulation_points,
+        &polytope,
+        false,
+        false,
+        None,
+    )
+    .expect("failed to compute ambient Mori cap rays");
+
+    let selected =
+        subcutoff_toric_curve_candidates(&rays, &basis, &kahler, cutoff).expect("curve selection");
+    let pair_filtered =
+        remove_pair_decomposable_curve_candidates(&selected).expect("pair-decomposable pruning");
+
+    let mut semigroup_decomposable = Vec::new();
+    for curve in &pair_filtered {
+        if let Some(decomposition) =
+            find_semigroup_decomposition(curve, &selected).expect("finite semigroup diagnostic")
+        {
+            semigroup_decomposable.push((curve.class.clone(), decomposition));
+        }
+    }
+
+    assert_eq!(
+        selected.len(),
+        419,
+        "raw sub-cutoff toric curve count changed"
+    );
+    assert_eq!(
+        pair_filtered.len(),
+        344,
+        "pair-pruned small toric curve count changed"
+    );
+    assert_eq!(
+        semigroup_decomposable.len(),
+        5,
+        "McAllister checkpoint is pair-pruned, not finite-semigroup-pruned"
+    );
+    assert_eq!(
+        pair_filtered.len() - semigroup_decomposable.len(),
+        339,
+        "full finite-semigroup pruning would retain 339 input-chamber candidates"
     );
 }
 

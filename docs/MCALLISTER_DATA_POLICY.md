@@ -106,9 +106,11 @@ contract for the GA-ready engine.
 
 This policy is not a completion certificate. The remaining known gaps are:
 
-- the high-dimensional selected-curve pruning is still pair-sum production
-  pruning plus bounded diagnostics, not a full faithful Hilbert-basis or
-  arbitrary "sums of others" implementation;
+- the high-dimensional selected-curve checkpoint is pair-pruned, not
+  finite-semigroup-pruned: a Cyrus finite integer-feasibility diagnostic finds
+  5 additional multi-term decompositions among the 344 retained input-chamber
+  curves, so full finite-semigroup pruning would retain 339 curves instead of
+  matching `small_curves.dat`;
 - corrected-chamber/flop continuation for the Kähler-coordinate instanton terms
   remains unresolved, especially for even-parity branch-cut cases;
 - corrected-chamber GV coverage still has a checkpoint-implied target residual;

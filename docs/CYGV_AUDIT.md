@@ -348,6 +348,10 @@ geometry:
 - 419 raw sub-cutoff toric curve candidates from `points.dat`, `heights.dat`,
   `basis.dat`, `kahler_param.dat`, and `small_curves_cutoff.dat`;
 - 344 retained curves after the currently verified pair-decomposable pruning;
+- 5 of those 344 pair-pruned checkpoint curves are still finite-semigroup
+  decomposable as multi-term sums of other selected raw candidates, so a full
+  finite-semigroup pruning of the selected input-chamber set would retain 339
+  curves and would no longer match `small_curves.dat`;
 - exact equality with `small_curves.dat`, using that file only as an assertion;
 - exact equality with all 344 `small_curves_gv.dat` values using Cyrus'
   toric two-face/origin-circuit local formulas, again using the file only as an
@@ -372,9 +376,10 @@ Stop expanding top-contributor local checks. The selected-small-curve
 approximate-chamber checkpoint is now reproduced, so the next useful comparisons
 are corrected-chamber and generality audits:
 
-1. Replace or certify the current pair-only "sums of others" pruning with a
-   faithful finite-semigroup/Hilbert-basis check. The 4-214 checkpoint happens
-   to match pair pruning, but the GA cannot assume that for arbitrary chambers.
+1. Certify the intended "sums of others" rule for production search. The
+   4-214 checkpoint matches pair pruning, while Cyrus' finite-semigroup
+   diagnostic proves that full finite-semigroup pruning would remove 5 more
+   input-chamber curves.
 2. Apply the selected-small-curve rule to the corrected chamber, or if the
    intended McAllister operation is analytic continuation through flops, port
    that transformation explicitly using the paper's polylog identities.
@@ -407,8 +412,10 @@ not reopen that loop unless a new source contradicts the current checkpoint.
 
 Concrete missing implementation pieces after the source read are:
 
-- a faithful "sums of others" reduction, ideally Hilbert-basis/semigroup based
-  rather than the current pair-only production pruning plus bounded diagnostic;
+- a decision and implementation contract for "sums of others": keep
+  checkpoint-faithful pair pruning for McAllister reproduction, or promote
+  finite-semigroup/Hilbert-basis pruning for GA search with intentionally
+  different selected-curve sets;
 - the low-dimensional face/ray GV computation path used for large-`h11` potent
   and nilpotent curve checks, distinct from a full 214-dimensional global HKTY
   run;
