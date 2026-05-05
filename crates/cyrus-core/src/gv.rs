@@ -2429,6 +2429,33 @@ fn ckyz_series_add_scaled_assign(
     }
 }
 
+fn ckyz_series_min_total_degree(
+    series: &BTreeMap<Vec<usize>, Rational>,
+    rank: usize,
+    context: &str,
+) -> Result<Option<usize>> {
+    let mut min_degree = None;
+    for (degree, coefficient) in series {
+        if *coefficient == 0 {
+            continue;
+        }
+        if degree.len() != rank {
+            return Err(Error::InvalidInput(format!(
+                "{context} monomial rank does not match coordinate rank"
+            )));
+        }
+        let total_degree = ckyz_total_degree(degree)?;
+        if total_degree == 0 {
+            return Err(Error::InvalidInput(format!(
+                "{context} must have zero constant term"
+            )));
+        }
+        min_degree =
+            Some(min_degree.map_or(total_degree, |current: usize| current.min(total_degree)));
+    }
+    Ok(min_degree)
+}
+
 fn ckyz_series_mul(
     lhs: &BTreeMap<Vec<usize>, Rational>,
     rhs: &BTreeMap<Vec<usize>, Rational>,
@@ -2593,12 +2620,14 @@ fn ckyz_series_exp(
     max_total_degree: usize,
 ) -> Result<BTreeMap<Vec<usize>, Rational>> {
     validate_ckyz_series_has_zero_constant(series, rank, "CKYZ exponential input")?;
+    let max_exponent = ckyz_series_min_total_degree(series, rank, "CKYZ exponential input")?
+        .map_or(0, |min_degree| max_total_degree / min_degree);
 
     let mut out = BTreeMap::new();
     out.insert(vec![0; rank], Rational::from(1));
     let mut power = out.clone();
     let mut factorial = Integer::from(1);
-    for exponent in 1..=max_total_degree {
+    for exponent in 1..=max_exponent {
         power = ckyz_series_mul(&power, series, rank, max_total_degree)?;
         if power.is_empty() {
             break;
@@ -2618,12 +2647,14 @@ fn ckyz_series_exp_domain(
     domain: &CkyzMonomialDomain,
 ) -> Result<BTreeMap<Vec<usize>, Rational>> {
     validate_ckyz_series_has_zero_constant(series, domain.rank, "CKYZ exponential input")?;
+    let max_exponent = ckyz_series_min_total_degree(series, domain.rank, "CKYZ exponential input")?
+        .map_or(0, |min_degree| domain.max_total_degree / min_degree);
 
     let mut out = BTreeMap::new();
     out.insert(vec![0; domain.rank], Rational::from(1));
     let mut power = out.clone();
     let mut factorial = Integer::from(1);
-    for exponent in 1..=domain.max_total_degree {
+    for exponent in 1..=max_exponent {
         power = ckyz_series_mul_domain(&power, series, domain)?;
         if power.is_empty() {
             break;
@@ -7207,6 +7238,22 @@ mod tests {
         assert!(
             !product.contains_key(&vec![1, 1]),
             "explicit CKYZ domains must mirror cygv monomial_map semantics by dropping absent sums"
+        );
+    }
+
+    #[test]
+    fn ckyz_exponential_uses_minimum_nonzero_degree_bound() {
+        let series = BTreeMap::from([(vec![2, 0], Rational::from(2))]);
+
+        let exponential = super::ckyz_series_exp(&series, 2, 5).unwrap();
+
+        assert_eq!(
+            exponential,
+            BTreeMap::from([
+                (vec![0, 0], Rational::from(1)),
+                (vec![2, 0], Rational::from(2)),
+                (vec![4, 0], Rational::from(2)),
+            ])
         );
     }
 
