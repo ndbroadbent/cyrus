@@ -1416,3 +1416,10 @@ well: one-hop overlap windows are already `48..227` rows, and four support
 closure layers reach `366..2814` generators with support sizes up to the full
 `214` coordinates. A naive support closure therefore explodes back toward the
 large corrected-chamber domain.
+
+One-hop support-overlap windows are now executable diagnostics too. With
+`--run-support-overlap-generators 4`, the 4-214-647 missing targets use `3..19`
+provided generators. This also fails as a source domain: seven targets panic in
+cygv with `NonIntegerGVError`, and the remaining two return `GV=0`. So the
+correct context is not just "rows sharing several active/target support
+coordinates" either.

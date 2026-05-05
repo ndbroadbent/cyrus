@@ -176,7 +176,8 @@ to make the remaining GV layer more first-principles:
    The context report also measures larger support-overlap/closure windows:
    one-hop overlap already gives `48..227` rows, and four closure layers reach
    `366..2814` rows, so naive support closure returns to the intractable broad
-   domain.
+   domain. Executing the small overlap-4 windows (`3..19` generators) also
+   fails as a source domain: seven `NonIntegerGVError` panics and two zeros.
    The next step is therefore to reconstruct the broader source-derived finite
    semigroup/path history for the missing origin circuits, not to promote LP
    active-generator diamonds.

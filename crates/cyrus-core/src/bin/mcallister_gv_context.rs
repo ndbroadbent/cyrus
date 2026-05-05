@@ -95,6 +95,11 @@ struct TargetReport {
     degree_bounded_candidate_count: usize,
     support_overlap_generator_counts: Vec<SupportOverlapCount>,
     support_closure_layer_counts: Vec<SupportClosureLayerCount>,
+    support_overlap_min_for_run: Option<usize>,
+    support_overlap_run_generator_count: Option<usize>,
+    support_overlap_run_status: Option<String>,
+    support_overlap_run_gv: Option<String>,
+    support_overlap_run_error: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -440,6 +445,7 @@ fn report_target(
     context: &ValidatedContext<'_>,
     run_integer_diamonds: bool,
     run_active_support_generators: bool,
+    support_overlap_min_for_run: Option<usize>,
     element_limit: usize,
 ) -> TargetReport {
     let exact_kind = sample.real_cone_decomposition_exact_kind.clone();
@@ -466,6 +472,11 @@ fn report_target(
         degree_bounded_candidate_count: 0,
         support_overlap_generator_counts: Vec::new(),
         support_closure_layer_counts: Vec::new(),
+        support_overlap_min_for_run,
+        support_overlap_run_generator_count: None,
+        support_overlap_run_status: None,
+        support_overlap_run_gv: None,
+        support_overlap_run_error: None,
     };
     let (
         degree_bounded_candidate_count,
@@ -495,6 +506,19 @@ fn report_target(
     } else {
         (None, None, None, None)
     };
+    let (
+        support_overlap_run_generator_count,
+        support_overlap_run_status,
+        support_overlap_run_gv,
+        support_overlap_run_error,
+    ) = if let Some(min_overlap) = support_overlap_min_for_run {
+        match support_overlap_generator_gv(sample, context, min_overlap) {
+            Ok((count, status, gv, error)) => (Some(count), Some(status), gv, error),
+            Err(error) => (None, Some("error".to_string()), None, Some(error)),
+        }
+    } else {
+        (None, None, None, None)
+    };
 
     match report_target_inner(sample, context, run_integer_diamonds, element_limit) {
         Ok((status, term_count, element_count, gv, error)) => TargetReport {
@@ -507,6 +531,10 @@ fn report_target(
             active_support_status,
             active_support_gv,
             active_support_error,
+            support_overlap_run_generator_count,
+            support_overlap_run_status,
+            support_overlap_run_gv,
+            support_overlap_run_error,
             degree_bounded_candidate_count,
             support_overlap_generator_counts,
             support_closure_layer_counts,
@@ -519,6 +547,10 @@ fn report_target(
             active_support_status,
             active_support_gv,
             active_support_error,
+            support_overlap_run_generator_count,
+            support_overlap_run_status,
+            support_overlap_run_gv,
+            support_overlap_run_error,
             degree_bounded_candidate_count,
             support_overlap_generator_counts,
             support_closure_layer_counts,
@@ -753,6 +785,120 @@ fn active_support_generator_gv(
     ))
 }
 
+fn support_overlap_generator_gv(
+    sample: &MissingGvTargetSample,
+    context: &ValidatedContext<'_>,
+    min_overlap: usize,
+) -> Result<(usize, String, Option<String>, Option<String>), String> {
+    if min_overlap == 0 {
+        return Err("support-overlap generator run requires min_overlap >= 1".to_string());
+    }
+    if cfg!(panic = "abort") {
+        return Ok((
+            0,
+            "skipped_panic_abort".to_string(),
+            None,
+            Some("cygv diagnostic requires a panic=unwind build".to_string()),
+        ));
+    }
+    let target = dense_from_sparse(&sample.basis_nonzero, context.dimension)?;
+    let support = target_active_support(sample, context.dimension)?;
+    let mut generators = Vec::new();
+    let mut seen = HashSet::new();
+    for ray in context.degree_bounded_rays {
+        let degree = curve_degree(ray, context.grading)?;
+        if degree <= 0 || degree > sample.degree {
+            continue;
+        }
+        let overlap = ray
+            .iter()
+            .enumerate()
+            .filter(|(idx, value)| **value != 0 && support.contains(idx))
+            .count();
+        if overlap >= min_overlap && seen.insert(ray.clone()) {
+            generators.push(ray.clone());
+        }
+    }
+    if !generators
+        .iter()
+        .any(|ray| ray.as_slice() == target.as_slice())
+    {
+        generators.push(target.clone());
+    }
+    generators.sort();
+    generators.dedup();
+    run_provided_generator_target_gv(
+        &generators,
+        &target,
+        sample.degree,
+        context,
+        "support_overlap_generators",
+    )
+}
+
+fn run_provided_generator_target_gv(
+    generators: &[Vec<i64>],
+    target: &[i64],
+    target_degree: i128,
+    context: &ValidatedContext<'_>,
+    label: &str,
+) -> Result<(usize, String, Option<String>, Option<String>), String> {
+    let max_deg = u32::try_from(target_degree)
+        .map_err(|_| format!("target degree {target_degree} does not fit in u32"))?;
+    let target_i32 = target
+        .iter()
+        .map(|&value| {
+            i32::try_from(value).map_err(|_| "target coordinate does not fit in i32".to_string())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let previous_panic_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let gvs_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        compute_gv_invariants_with_provided_generators(
+            generators,
+            context.grading,
+            context.q_matrix,
+            &context.intersection,
+            None,
+            Some(max_deg),
+        )
+    }));
+    std::panic::set_hook(previous_panic_hook);
+
+    let gvs = match gvs_result {
+        Ok(Ok(gvs)) => gvs,
+        Ok(Err(error)) => {
+            return Ok((
+                generators.len(),
+                "hkty_error".to_string(),
+                None,
+                Some(format!("{label} HKTY failed: {error}")),
+            ));
+        }
+        Err(payload) => {
+            return Ok((
+                generators.len(),
+                "hkty_panic".to_string(),
+                None,
+                Some(format!(
+                    "{label} HKTY panicked: {}",
+                    panic_payload_message(payload.as_ref())
+                )),
+            ));
+        }
+    };
+    let gv = gvs
+        .into_iter()
+        .find_map(|(curve, value)| (curve == target_i32).then(|| value.to_string()))
+        .unwrap_or_else(|| "0".to_string());
+    Ok((
+        generators.len(),
+        format!("computed_{label}"),
+        Some(gv),
+        None,
+    ))
+}
+
 fn curve_degree(curve: &[i64], grading: &[i64]) -> Result<i128, String> {
     if curve.len() != grading.len() {
         return Err(format!(
@@ -773,6 +919,7 @@ fn build_report(
     validated: &ValidatedContext<'_>,
     run_integer_diamonds: bool,
     run_active_support_generators: bool,
+    support_overlap_min_for_run: Option<usize>,
     element_limit: usize,
 ) -> ContextReport {
     let targets = validated
@@ -787,6 +934,7 @@ fn build_report(
                 validated,
                 run_integer_diamonds,
                 run_active_support_generators,
+                support_overlap_min_for_run,
                 element_limit,
             )
         })
@@ -815,12 +963,13 @@ fn build_report(
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--run-integer-diamonds] [--run-active-support-generators] [--element-limit N] [--out path]"
+            "[ERROR] usage: mcallister_gv_context --context path [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--element-limit N] [--out path]"
         );
         std::process::exit(2);
     };
     let run_integer_diamonds = parse_flag("--run-integer-diamonds");
     let run_active_support_generators = parse_flag("--run-active-support-generators");
+    let support_overlap_min_for_run = parse_arg_value::<usize>("--run-support-overlap-generators");
     let element_limit = parse_arg_value::<usize>("--element-limit").unwrap_or(256);
     let out_path = parse_arg_value::<PathBuf>("--out");
 
@@ -837,6 +986,7 @@ fn main() {
         &validated,
         run_integer_diamonds,
         run_active_support_generators,
+        support_overlap_min_for_run,
         element_limit,
     );
     let content = serde_json::to_string_pretty(&report).unwrap_or_else(|e| {
