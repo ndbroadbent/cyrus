@@ -106,6 +106,25 @@ fn assert_rank_two_local_coordinates_satisfy_relation(diagnostic: &AffineToricCi
             .expect("local charge-model span check should be exact"),
         "target potent-ray relation should lie in the local charge lattice"
     );
+    assert_eq!(
+        model.target_relation_in_charge_basis.len(),
+        model.charge_basis.len(),
+        "target charge coordinates should have one entry per local charge-basis row"
+    );
+    let mut reconstructed_target = vec![0i64; model.target_relation.len()];
+    for (coordinate, charge) in model
+        .target_relation_in_charge_basis
+        .iter()
+        .zip(model.charge_basis.iter())
+    {
+        for (out, charge_value) in reconstructed_target.iter_mut().zip(charge.iter()) {
+            *out += coordinate * charge_value;
+        }
+    }
+    assert_eq!(
+        reconstructed_target, model.target_relation,
+        "target charge coordinates should reconstruct the potent-ray relation exactly"
+    );
     for charge in &model.charge_basis {
         let mut local_coordinate_sum = [0i128; 2];
         let mut coefficient_sum = 0i128;

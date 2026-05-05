@@ -28,7 +28,7 @@ use crate::error::{Error, Result};
 use crate::geometry::ConvexHull;
 use crate::integer_math::hermite_normal_form;
 use crate::integer_math::matrix_rank;
-use crate::integer_math::{gcd_integer, integer_kernel};
+use crate::integer_math::{gcd_integer, integer_kernel, solve_linear_system_rational};
 use crate::intersection::Intersection;
 use crate::lattice::Point;
 use crate::polytope::Polytope;
@@ -430,6 +430,9 @@ pub struct RankTwoLocalChargeModel {
     pub points: Vec<RankTwoLocalChargeModelPoint>,
     /// The target affine relation coefficients in canonical point order.
     pub target_relation: Vec<i64>,
+    /// Integer coordinates of [`target_relation`](Self::target_relation) in
+    /// [`charge_basis`](Self::charge_basis).
+    pub target_relation_in_charge_basis: Vec<i64>,
     /// Integer basis for the kernel of `[1; x; y]`, in canonical point order.
     pub charge_basis: Vec<Vec<i64>>,
 }
@@ -739,12 +742,131 @@ pub fn rank_two_local_charge_model(
             "rank-two local target relation is not in the reconstructed charge lattice".into(),
         ));
     }
+    let target_relation_in_charge_basis =
+        relation_coordinates_in_row_basis(&target_relation, &charge_basis)?;
 
     Ok(RankTwoLocalChargeModel {
         points,
         target_relation,
+        target_relation_in_charge_basis,
         charge_basis,
     })
+}
+
+fn relation_coordinates_in_row_basis(target: &[i64], rows: &[Vec<i64>]) -> Result<Vec<i64>> {
+    if rows.is_empty() {
+        if target.iter().all(|&value| value == 0) {
+            return Ok(Vec::new());
+        }
+        return Err(Error::InvalidInput(
+            "nonzero target relation cannot be expressed in an empty row basis".into(),
+        ));
+    }
+
+    let dim = rows[0].len();
+    if target.len() != dim {
+        return Err(Error::InvalidInput(
+            "target relation dimension does not match row basis".into(),
+        ));
+    }
+    for row in rows {
+        if row.len() != dim {
+            return Err(Error::InvalidInput(
+                "row basis has inconsistent dimensions".into(),
+            ));
+        }
+    }
+
+    for columns in column_combinations(dim, rows.len()) {
+        let matrix = columns
+            .iter()
+            .map(|&col| {
+                rows.iter()
+                    .map(|row| Rational::from(Integer::from(row[col])))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let rhs = columns
+            .iter()
+            .map(|&col| Rational::from(Integer::from(target[col])))
+            .collect::<Vec<_>>();
+        let Some(coordinates) = solve_linear_system_rational(&matrix, &rhs) else {
+            continue;
+        };
+        if !row_basis_coordinates_match_target(&coordinates, target, rows) {
+            continue;
+        }
+        return coordinates
+            .into_iter()
+            .map(|coordinate| {
+                if coordinate.denominator_ref() != &1u32 {
+                    return Err(Error::InvalidInput(
+                        "target relation has non-integral row-basis coordinates".into(),
+                    ));
+                }
+                let integer = Integer::try_from(coordinate).map_err(|_| {
+                    Error::InvalidInput(
+                        "target relation row-basis coordinate is not integral".into(),
+                    )
+                })?;
+                i64::try_from(&integer).map_err(|_| {
+                    Error::InvalidInput(
+                        "target relation row-basis coordinate does not fit in i64".into(),
+                    )
+                })
+            })
+            .collect();
+    }
+
+    Err(Error::InvalidInput(
+        "target relation is not in the supplied row basis".into(),
+    ))
+}
+
+fn row_basis_coordinates_match_target(
+    coordinates: &[Rational],
+    target: &[i64],
+    rows: &[Vec<i64>],
+) -> bool {
+    for col in 0..target.len() {
+        let mut reconstructed = Rational::from(0);
+        for (coordinate, row) in coordinates.iter().zip(rows.iter()) {
+            reconstructed += coordinate * Rational::from(Integer::from(row[col]));
+        }
+        if reconstructed != Rational::from(Integer::from(target[col])) {
+            return false;
+        }
+    }
+    true
+}
+
+fn column_combinations(n_columns: usize, size: usize) -> Vec<Vec<usize>> {
+    let mut out = Vec::new();
+    let mut current = Vec::with_capacity(size);
+    push_column_combinations(0, n_columns, size, &mut current, &mut out);
+    out
+}
+
+fn push_column_combinations(
+    start: usize,
+    n_columns: usize,
+    size: usize,
+    current: &mut Vec<usize>,
+    out: &mut Vec<Vec<usize>>,
+) {
+    if current.len() == size {
+        out.push(current.clone());
+        return;
+    }
+    let remaining = size - current.len();
+    if remaining > n_columns.saturating_sub(start) {
+        return;
+    }
+    for col in start..=n_columns - remaining {
+        current.push(col);
+        push_column_combinations(col + 1, n_columns, size, current, out);
+        current.pop();
+    }
 }
 
 fn canonical_rank_two_signature_entries(
@@ -4678,10 +4800,16 @@ mod tests {
 
         assert_eq!(model.points.len(), 4);
         assert_eq!(model.charge_basis.len(), 1);
+        assert_eq!(model.target_relation_in_charge_basis, vec![-1]);
         assert!(
             curve_in_rational_row_span(&model.target_relation, &model.charge_basis)
                 .expect("charge span check should be exact")
         );
+        let reconstructed_target: Vec<i64> = model.charge_basis[0]
+            .iter()
+            .map(|&value| model.target_relation_in_charge_basis[0] * value)
+            .collect();
+        assert_eq!(reconstructed_target, model.target_relation);
         for charge in &model.charge_basis {
             let coefficient_sum: i64 = charge.iter().sum();
             assert_eq!(coefficient_sum, 0);

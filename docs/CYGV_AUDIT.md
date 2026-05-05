@@ -264,6 +264,11 @@ Their boundaries are different:
   pattern without assigning any GV values. This is an upstream-geometry
   diagnostic for reconstructing potent-ray face contexts, not a checkpoint
   replay mechanism.
+- `rank_two_local_charge_model` reconstructs the affine local charge lattice
+  of a normalized rank-two support signature and records the integer
+  coordinates of the target potent-ray relation in that lattice. This identifies
+  the one-parameter direction to feed into a future source-derived local
+  mirror/HKTY calculation without using the saved GV row as input.
 
 But the McAllister corrected-chamber diagnostic path currently relies first on
 toric two-face/origin-circuit formula values for selected small curves, then uses

@@ -243,6 +243,12 @@ removes another point-label and checkpoint-data dependency, but it deliberately
 does not decide which local mirror/HKTY series, if any, belongs to a non-`P^2`
 family.
 
+The local charge model now also records the integer coordinates of the target
+potent-ray relation in the reconstructed local charge basis. This is important
+for non-`P^2` supports, where the local charge lattice has rank greater than
+one and the saved ray is a specific one-parameter direction inside that
+lattice.
+
 ## Deeper Internal Read Boundary
 
 A follow-up source pass confirms the boundary for the next code change:
