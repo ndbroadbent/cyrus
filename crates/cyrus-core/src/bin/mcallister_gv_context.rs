@@ -10,7 +10,7 @@
 use malachite::Rational as MalachiteRational;
 use nalgebra::{DMatrix, RowDVector};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 
 use cyrus_core::types::rational::Rational;
@@ -51,11 +51,84 @@ struct MissingGvTargetStats {
 #[derive(Debug, Deserialize)]
 struct MissingGvTargetSample {
     degree: i128,
+    generators_le_degree: usize,
+    is_mori_generator: bool,
+    origin_circuit_pattern: Option<String>,
+    origin_circuit_witness_count: Option<usize>,
+    origin_circuit_first_witness: Option<OriginCircuitWitnessSample>,
+    origin_circuit_affine_support: Option<OriginCircuitAffineSupportSample>,
+    cms_general_divisor_shape_candidates: Option<Vec<CmsGeneralDivisorShapeCandidate>>,
+    cms_general_divisor_intersection_checks: Option<Vec<CmsGeneralDivisorIntersectionCheck>>,
+    branch_diagnostic: Option<MissingGvBranchDiagnostic>,
+    real_cone_decomposable_by_other_generators: bool,
+    real_cone_decomposition_active_generators: Option<usize>,
     real_cone_decomposition_active_generator_basis_nonzero: Option<Vec<Vec<(usize, i64)>>>,
     real_cone_decomposition_exact_coefficients: Option<Vec<String>>,
     real_cone_decomposition_exact_kind: Option<String>,
     ambient_nonzero: Vec<(usize, i64)>,
     basis_nonzero: Vec<(usize, i64)>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct MissingGvBranchDiagnostic {
+    q_dot_t: String,
+    parity: i128,
+    parity_mod2: i128,
+    q_dot_bucket: String,
+    dilog_status: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct OriginCircuitAffineSupportSample {
+    affine_rank: usize,
+    coefficient_counts: BTreeMap<i64, usize>,
+    local_charge_basis: Vec<Vec<i64>>,
+    local_coordinates_2d: Option<Vec<OriginCircuitLocalCoordinate2DSample>>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct OriginCircuitLocalCoordinate2DSample {
+    point_index: usize,
+    coordinates: [i64; 2],
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct CmsGeneralDivisorShapeCandidate {
+    shrinking_divisor_index: usize,
+    shrinking_divisor_coefficient: i64,
+    shrinking_divisor_coordinates: Vec<i64>,
+    inferred_other_normal_degree: i64,
+    toric_gv1_formula_value: Option<i64>,
+    all_non_origin_relation_points_are_two_face: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct CmsGeneralDivisorIntersectionCheck {
+    shrinking_divisor_index: usize,
+    has_rational_divisor_solution: bool,
+    solution_basis_support_len: Option<usize>,
+    solution_is_integral: Option<bool>,
+    computed_other_normal_degree: Option<String>,
+    matches_inferred_other_normal_degree: Option<bool>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct OriginCircuitWitnessSample {
+    first_facet_exclusive_point: usize,
+    second_facet_exclusive_point: usize,
+    shared_two_simplex: Vec<usize>,
+    first_facet_size: usize,
+    second_facet_size: usize,
+    sparse_relation: Vec<(usize, i64)>,
+    relation_points: Vec<OriginCircuitRelationPointSample>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct OriginCircuitRelationPointSample {
+    point_index: usize,
+    coefficient: i64,
+    coordinates: Vec<i64>,
+    face_dimension: Option<usize>,
 }
 
 #[derive(Debug, Serialize)]
@@ -80,6 +153,16 @@ struct ContextReport {
 struct TargetReport {
     index: usize,
     degree: i128,
+    generators_le_degree: usize,
+    is_mori_generator: bool,
+    origin_circuit_pattern: Option<String>,
+    origin_circuit_witness_count: Option<usize>,
+    origin_circuit_first_witness: Option<OriginCircuitWitnessSample>,
+    origin_circuit_affine_support: Option<OriginCircuitAffineSupportSample>,
+    cms_general_divisor_shape_candidates: Option<Vec<CmsGeneralDivisorShapeCandidate>>,
+    cms_general_divisor_intersection_checks: Option<Vec<CmsGeneralDivisorIntersectionCheck>>,
+    branch_diagnostic: Option<MissingGvBranchDiagnostic>,
+    real_cone_decomposable_by_other_generators: bool,
     ambient_nonzero: Vec<(usize, i64)>,
     basis_nonzero: Vec<(usize, i64)>,
     exact_kind: Option<String>,
@@ -422,6 +505,21 @@ fn validate_context<'a>(
             stats.target_count
         ));
     }
+    for (idx, sample) in stats.sample.iter().enumerate() {
+        if let (Some(declared), Some(active_generators)) = (
+            sample.real_cone_decomposition_active_generators,
+            sample
+                .real_cone_decomposition_active_generator_basis_nonzero
+                .as_ref(),
+        ) {
+            if declared != active_generators.len() {
+                return Err(format!(
+                    "missing target sample {idx} declares {declared} active generators but contains {} vectors",
+                    active_generators.len()
+                ));
+            }
+        }
+    }
     Ok(ValidatedContext {
         dimension,
         degree_bound,
@@ -461,10 +559,24 @@ fn report_target(
     let active_generator_count = sample
         .real_cone_decomposition_active_generator_basis_nonzero
         .as_ref()
-        .map(Vec::len);
+        .map(Vec::len)
+        .or(sample.real_cone_decomposition_active_generators);
     let base = TargetReport {
         index,
         degree: sample.degree,
+        generators_le_degree: sample.generators_le_degree,
+        is_mori_generator: sample.is_mori_generator,
+        origin_circuit_pattern: sample.origin_circuit_pattern.clone(),
+        origin_circuit_witness_count: sample.origin_circuit_witness_count,
+        origin_circuit_first_witness: sample.origin_circuit_first_witness.clone(),
+        origin_circuit_affine_support: sample.origin_circuit_affine_support.clone(),
+        cms_general_divisor_shape_candidates: sample.cms_general_divisor_shape_candidates.clone(),
+        cms_general_divisor_intersection_checks: sample
+            .cms_general_divisor_intersection_checks
+            .clone(),
+        branch_diagnostic: sample.branch_diagnostic.clone(),
+        real_cone_decomposable_by_other_generators: sample
+            .real_cone_decomposable_by_other_generators,
         ambient_nonzero: sample.ambient_nonzero.clone(),
         basis_nonzero: sample.basis_nonzero.clone(),
         exact_kind,
@@ -1204,6 +1316,17 @@ mod tests {
     fn target_active_support_merges_target_and_active_generator_supports() {
         let sample = MissingGvTargetSample {
             degree: 3,
+            generators_le_degree: 2,
+            is_mori_generator: false,
+            origin_circuit_pattern: None,
+            origin_circuit_witness_count: None,
+            origin_circuit_first_witness: None,
+            origin_circuit_affine_support: None,
+            cms_general_divisor_shape_candidates: None,
+            cms_general_divisor_intersection_checks: None,
+            branch_diagnostic: None,
+            real_cone_decomposable_by_other_generators: true,
+            real_cone_decomposition_active_generators: Some(2),
             real_cone_decomposition_active_generator_basis_nonzero: Some(vec![
                 vec![(0, 1), (2, -1)],
                 vec![(3, 0), (4, 2)],
@@ -1216,5 +1339,142 @@ mod tests {
         let support = target_active_support(&sample, 5).unwrap();
         assert_eq!(support, HashSet::from([0, 1, 2, 4]));
         assert!(target_active_support(&sample, 4).is_err());
+    }
+
+    #[test]
+    fn target_report_preserves_origin_circuit_context() {
+        let origin_witness = OriginCircuitWitnessSample {
+            first_facet_exclusive_point: 7,
+            second_facet_exclusive_point: 11,
+            shared_two_simplex: vec![2, 3, 5],
+            first_facet_size: 4,
+            second_facet_size: 4,
+            sparse_relation: vec![(7, 1), (11, 1), (0, -2)],
+            relation_points: vec![
+                OriginCircuitRelationPointSample {
+                    point_index: 7,
+                    coefficient: 1,
+                    coordinates: vec![1, 0, 0, 0],
+                    face_dimension: Some(3),
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 0,
+                    coefficient: -2,
+                    coordinates: vec![0, 0, 0, 0],
+                    face_dimension: None,
+                },
+            ],
+        };
+        let affine_support = OriginCircuitAffineSupportSample {
+            affine_rank: 3,
+            coefficient_counts: BTreeMap::from([(-2, 1), (1, 2)]),
+            local_charge_basis: vec![vec![1, -2, 1]],
+            local_coordinates_2d: None,
+        };
+        let branch_diagnostic = MissingGvBranchDiagnostic {
+            q_dot_t: "1/10".to_string(),
+            parity: 1,
+            parity_mod2: 1,
+            q_dot_bucket: "positive".to_string(),
+            dilog_status: "real_ok".to_string(),
+        };
+        let stats = MissingGvTargetStats {
+            target_count: 1,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: vec![MissingGvTargetSample {
+                degree: 1,
+                generators_le_degree: 1,
+                is_mori_generator: false,
+                origin_circuit_pattern: Some("-2:1,1:2".to_string()),
+                origin_circuit_witness_count: Some(1),
+                origin_circuit_first_witness: Some(origin_witness),
+                origin_circuit_affine_support: Some(affine_support),
+                cms_general_divisor_shape_candidates: Some(vec![CmsGeneralDivisorShapeCandidate {
+                    shrinking_divisor_index: 7,
+                    shrinking_divisor_coefficient: 1,
+                    shrinking_divisor_coordinates: vec![1, 0],
+                    inferred_other_normal_degree: 2,
+                    toric_gv1_formula_value: Some(4),
+                    all_non_origin_relation_points_are_two_face: true,
+                }]),
+                cms_general_divisor_intersection_checks: Some(vec![
+                    CmsGeneralDivisorIntersectionCheck {
+                        shrinking_divisor_index: 7,
+                        has_rational_divisor_solution: true,
+                        solution_basis_support_len: Some(2),
+                        solution_is_integral: Some(false),
+                        computed_other_normal_degree: Some("3/2".to_string()),
+                        matches_inferred_other_normal_degree: Some(false),
+                    },
+                ]),
+                branch_diagnostic: Some(branch_diagnostic),
+                real_cone_decomposable_by_other_generators: false,
+                real_cone_decomposition_active_generators: None,
+                real_cone_decomposition_active_generator_basis_nonzero: None,
+                real_cone_decomposition_exact_coefficients: None,
+                real_cone_decomposition_exact_kind: None,
+                ambient_nonzero: vec![(4, 1)],
+                basis_nonzero: vec![(0, 1)],
+            }],
+        };
+        let grading = vec![1, 1];
+        let q_matrix = vec![vec![1, 0], vec![0, 1]];
+        let degree_bounded_rays = vec![vec![1, 0]];
+        let intersection = Intersection::new(2);
+        let context = ValidatedContext {
+            dimension: 2,
+            degree_bound: 1,
+            q_cols: 2,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            intersection,
+            stats: &stats,
+        };
+
+        let report = report_target(
+            0,
+            &stats.sample[0],
+            &context,
+            false,
+            false,
+            None,
+            false,
+            None,
+            None,
+            256,
+        );
+
+        assert_eq!(report.origin_circuit_pattern.as_deref(), Some("-2:1,1:2"));
+        assert_eq!(report.origin_circuit_witness_count, Some(1));
+        assert_eq!(
+            report
+                .origin_circuit_first_witness
+                .as_ref()
+                .unwrap()
+                .sparse_relation,
+            vec![(7, 1), (11, 1), (0, -2)]
+        );
+        assert_eq!(
+            report
+                .origin_circuit_affine_support
+                .as_ref()
+                .unwrap()
+                .affine_rank,
+            3
+        );
+        assert_eq!(
+            report
+                .cms_general_divisor_intersection_checks
+                .as_ref()
+                .unwrap()[0]
+                .computed_other_normal_degree
+                .as_deref(),
+            Some("3/2")
+        );
+        assert_eq!(
+            report.branch_diagnostic.as_ref().unwrap().dilog_status,
+            "real_ok"
+        );
     }
 }
