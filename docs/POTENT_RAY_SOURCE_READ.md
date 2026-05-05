@@ -358,6 +358,9 @@ mirror-map stop, focused all-ten diagnostics complete for `F0` `[1,2]` in about
 29 seconds and `F1` `[3,1]` in about 50 seconds. `F0` `[1,3]` also completes
 under a 240 second cap, but at roughly 128 seconds it remains evidence for the
 domain-shape blocker rather than a default committed regression.
+After raising the committed all-row gate to `N=4`, an unfiltered `N=5`
+diagnostic exceeded a 600 second timeout, confirming that simply raising the
+componentwise past-downset validation is no longer the productive path.
 
 Flattening the indexed addition table from nested `Option` rows into a sentinel
 array removes enough debug-build lookup overhead for the first hard polygon-5

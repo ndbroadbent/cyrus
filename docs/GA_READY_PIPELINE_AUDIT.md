@@ -57,8 +57,9 @@ run pass. Any remaining mismatch must be explicit and localizable.
    `CYRUS_CKYZ_TARGET_DIRECTION`; `N=4` now passes as the default first-principles
    gate in about 110 seconds. The narrowed polygon-5 `[4,3,2]` direction now
    also completes at `N=4` after flattening the CKYZ addition table and using
-   sparse valid product pairs, but it remains the first slow family for higher
-   `N` and for all-ten all-row validation.
+   sparse valid product pairs. An unfiltered `N=5` run exceeded a 600 second
+   timeout, so the next step is the coefficient/path-history domain rather than
+   pushing the existing all-row gate higher.
 3. Pair-pruned selected curves match McAllister's `small_curves.dat`, while a
    stricter finite-semigroup diagnostic removes five additional curves. This is
    exposed as a policy choice, not hidden.

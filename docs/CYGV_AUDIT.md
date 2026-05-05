@@ -1015,8 +1015,9 @@ the first clear performance blockers. With those source-preserving domain
 improvements, the full rank-two `N=4` gate passes in about 110 seconds. A later
 flattened addition table, followed by sparse valid-pair multiplication, also
 makes the narrowed polygon-5 `[4,3,2]` `N=4` gate complete in about 149 seconds.
-Higher all-row/all-ten validation remains a finite-domain construction problem
-rather than a known coefficient mismatch.
+An unfiltered `N=5` diagnostic exceeded a 600 second timeout, so higher
+all-row/all-ten validation remains a finite-domain construction problem rather
+than a known coefficient mismatch.
 The same test can be narrowed with `CYRUS_CKYZ_TARGET_DIRECTION=a,b,...`.
 Focused all-ten checks now pass for the F0 directions `[1,1]`/`[1,2]` and F1
 directions `[2,1]`/`[3,1]`; polygon-5 direction `[4,3,2]` passes through `N=4`
@@ -1179,7 +1180,7 @@ default all-row McAllister gate. A full rank-two `N=4` run through the
 source-weighted causal helper was stopped after several minutes, while the
 targeted first-principles F0 directions `[1,1]`/`[1,2]` and F1 directions
 `[2,1]`/`[3,1]` now have explicit all-ten regressions against saved rows and
-the existing target-downset all-row gate remains the practical default.
+the existing `N=4` target-downset all-row gate remains the practical default.
 Flattening the target-downset addition table
 removes enough lookup overhead for the narrowed polygon-5 `[4,3,2]` `N=4` check
 to complete. Iterating only sparse valid product pairs improves that narrowed
