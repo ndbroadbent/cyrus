@@ -4702,6 +4702,24 @@ fn ckyz_subtract_degree_multiple(
         .collect()
 }
 
+fn ckyz_subtract_degree_multiple_into(
+    out: &mut Vec<usize>,
+    target: &[usize],
+    degree: &[usize],
+    multiple: usize,
+) -> Option<()> {
+    if target.len() != degree.len() {
+        return None;
+    }
+    out.clear();
+    out.reserve(target.len());
+    for (&target_entry, &degree_entry) in target.iter().zip(degree.iter()) {
+        let scaled = degree_entry.checked_mul(multiple)?;
+        out.push(target_entry.checked_sub(scaled)?);
+    }
+    Some(())
+}
+
 fn ckyz_q_degree_li2_support_intersects_indices_in_z_domain(
     degree: &[usize],
     alpha_supports: &[BTreeSet<usize>],
@@ -5028,10 +5046,11 @@ fn ckyz_q_degree_li2_coefficient_and_support_in_z_domain(
 
     let mut coefficient = Rational::from(0);
     let mut has_supported_delta = false;
+    let mut delta = Vec::with_capacity(domain.rank);
     for multiple in 1..=max_multiple {
-        let Some(delta) = ckyz_subtract_degree_multiple(target, degree, multiple) else {
+        if ckyz_subtract_degree_multiple_into(&mut delta, target, degree, multiple).is_none() {
             continue;
-        };
+        }
         if !domain.contains(&delta) {
             continue;
         }
