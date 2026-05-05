@@ -1792,13 +1792,33 @@ impl CkyzMonomialDomain {
             ));
         }
         let rank = max_degrees.len();
-        let mut degrees = BTreeSet::new();
-        degrees.insert(vec![0; rank]);
-        degrees.extend(ckyz_multi_degrees_box(max_degrees));
-        let max_total_degree = ckyz_total_degree(max_degrees)?;
+        Self::from_degrees(rank, ckyz_multi_degrees_box(max_degrees))
+    }
+
+    fn from_degrees<I>(rank: usize, degrees: I) -> Result<Self>
+    where
+        I: IntoIterator<Item = Vec<usize>>,
+    {
+        if rank == 0 {
+            return Err(Error::InvalidInput(
+                "CKYZ monomial domain requires at least one coordinate".into(),
+            ));
+        }
+        let mut degree_set = BTreeSet::new();
+        degree_set.insert(vec![0; rank]);
+        let mut max_total_degree = 0usize;
+        for degree in degrees {
+            if degree.len() != rank {
+                return Err(Error::InvalidInput(
+                    "CKYZ monomial domain degree rank mismatch".into(),
+                ));
+            }
+            max_total_degree = max_total_degree.max(ckyz_total_degree(&degree)?);
+            degree_set.insert(degree);
+        }
         Ok(Self {
             rank,
-            degrees,
+            degrees: degree_set,
             max_total_degree,
         })
     }
