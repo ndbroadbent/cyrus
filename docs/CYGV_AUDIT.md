@@ -1006,3 +1006,53 @@ rejected because they produce non-integral invariants in this extraction. This
 is not yet enough for all ten entries: the box-truncated multivariable series
 still becomes too slow on the largest source directions, so the remaining work
 is coefficient-level extraction rather than a new physics shortcut.
+
+## May 2026 CYTools/cygv Porting Gaps
+
+The deeper source read identifies three concrete gaps that should guide the
+next code, and none of them are fixed by broadening the existing Rust shortcut.
+
+First, the CYTools basis contract has two paths. Cyrus currently mirrors the
+ordinary vector divisor-basis path well enough for the 4-214 checkpoint:
+`set_divisor_basis([indices])` builds the dual curve-basis matrix by putting an
+identity block on the chosen GLSM columns and solving non-basis columns from
+HNF-normalized linear relations. But CYTools also has an experimental matrix
+basis path. In that path `curve_basis(as_matrix=True)` always returns the
+stored row matrix, and `mori_cone_cap(in_basis=True)` projects ambient Mori-cap
+rows with `mori_cap_matrix.dot(basis.T)` rather than by selecting basis
+columns. Cyrus' `compute_mori_cone_cap_rays(..., in_basis=true, basis=...)`
+should either implement that matrix projection and the corresponding dual
+curve-basis construction or explicitly reject generic matrix bases. Silently
+treating every basis as a vector of indices is not GA-ready.
+
+Second, cygv's final GV values are history-dependent. In
+`series_inversion.rs`, the threefold path chooses a candidate value from the
+first nonzero curve-coordinate component, checks integrality, records it, and
+then subtracts `GV * component * Li2(q_N)` from the remaining instanton
+polynomials for all affected coordinates. The `q_N` construction reuses a
+rolling cache of previous degrees. Therefore a saved ray row plus its first ten
+multiples is not enough input unless the surrounding local semigroup has also
+been reconstructed. The answer for a ray depends on the semigroup's lower
+degree classes and on the order in which they are subtracted.
+
+Third, the current all-ten CKYZ blocker is domain shape, not arithmetic alone.
+Dense indexing and guarded addition tables fixed the obvious multiplication
+overhead, and the first-two checks now run quickly for all 395 rank-two CKYZ
+rows. The all-ten run still stalls because the componentwise monomial boxes are
+far larger than the coefficients actually needed by the target ray direction
+and the lower-degree subtraction history. The next implementation should build
+a coefficient-targeted, past-closed local monomial domain for one canonical
+rank-two support family, then generalize across the 16 normalized support
+signatures. More box optimization would still be asking cygv/CKYZ the wrong
+finite-domain question.
+
+This makes the next source-derived implementation boundary precise:
+
+1. finish the CYTools basis projection gap, or reject unsupported matrix bases
+   loudly;
+2. for one non-`P^2` rank-two support signature, construct the local toric/HKTY
+   input from local coordinates and charge lattice without using saved GV rows;
+3. drive the extraction with a past-closed coefficient domain that contains the
+   target multiples and the lower-degree terms needed by series inversion;
+4. compare to `potent_rays_gv.dat` only as an assertion after the local input
+   and finite domain have been built from geometry.

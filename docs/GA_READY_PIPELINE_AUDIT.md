@@ -21,17 +21,17 @@ run pass. Any remaining mismatch must be explicit and localizable.
 | First-principles mode rejects fixture replay | `crates/cyrus-core/tests/mcallister_e2e.rs` rejects `CYRUS_ALLOW_FIXTURES` with `CYRUS_FIRST_PRINCIPLES`; runner `enforce_modes` rejects `--allow-fixtures` in first-principles mode | Implemented guard |
 | Runner can operate with declared inputs only | `stage0_first_principles_runner_accepts_declared_inputs_only_data_dir` copies only declared `.dat` inputs and checks the current no-replay result; this is heavy and opt-in via `CYRUS_MCALLISTER_RUNNER_HEAVY=1` | Implemented, opt-in verified path |
 | Polytope, dual polytope, triangulation, basis, intersections, Mori cap | `mcallister_first_principles` computes these and validates against checkpoints; Stage 2/3/5 tests cover component behavior | Largely implemented |
-| CYTools/cygv generic GV wrapper contract | `compute_gv_invariants` now uses CYTools-style `min_points=100*h11` lattice augmentation even when `max_deg` is supplied; bounded `max_deg` lattice enumeration is isolated in `compute_gv_invariants_with_degree_bounded_lattice` | Contract clarified and guarded |
+| CYTools/cygv generic GV wrapper contract | `compute_gv_invariants` now uses CYTools-style `min_points=100*h11` lattice augmentation even when `max_deg` is supplied; bounded `max_deg` lattice enumeration is isolated in `compute_gv_invariants_with_degree_bounded_lattice`; latest source read also records the remaining vector-basis-only projection gap for generic matrix bases | Contract clarified; matrix-basis support/rejection still needed |
 | Mirror-side racetrack GV data | `dual_curves*.dat` are classified as low-dimensional validation checkpoints; generic GV path maps basis curves back to ambient classes | Implemented path exists; full large check remains expensive |
 | High-dimensional selected small toric curves | Cyrus computes Mori-cap rays, applies the input-chamber volume cutoff, and matches the 4-214-647 `small_curves.dat` checkpoint with pair pruning | Implemented for checkpoint rule |
 | Small-curve pruning semantics | `CurvePruningStrategy::{PairDecomposable, FiniteSemigroup}` exposes the checkpoint rule and stricter finite-set semigroup diagnostic separately | Implemented, with documented mismatch |
 | Small toric GV values | Toric two-face/origin-circuit formulas match `small_curves_gv.dat` for 4-214-647 | Implemented for covered selected-toric formulas |
-| Potent-ray convergence data | `curve_row_span_rank`, `potent_ray_convergence`, `diagnose_affine_toric_circuit`, CKYZ local-surface identification, source-derived local CKYZ GV extraction, and the Stage 5 potent-ray diagnostics compute rank, corrected-Kähler volumes, affine local-circuit structure, `log xi_n` slopes, and first-two GV checks for all 395 rank-two CKYZ rows | Partially implemented; full ten-entry extraction, rank-four contexts, and generated low-dimensional-face ray sampling still missing |
+| Potent-ray convergence data | `curve_row_span_rank`, `potent_ray_convergence`, `diagnose_affine_toric_circuit`, CKYZ local-surface identification, source-derived local CKYZ GV extraction, and the Stage 5 potent-ray diagnostics compute rank, corrected-Kähler volumes, affine local-circuit structure, `log xi_n` slopes, and first-two GV checks for all 395 rank-two CKYZ rows; source read confirms full rows require a past-closed local semigroup/domain, not just the saved ray and multiples | Partially implemented; full ten-entry extraction, rank-four contexts, and generated low-dimensional-face ray sampling still missing |
 | Flop/corrected-chamber continuation | Negative small-curve volumes and real-axis dilog branch behavior are classified; even-parity branch-cut failures are explicit via `GvDilogFailure` | Diagnosed, not resolved |
 | KKLT corrected Kähler solve | Runner reaches a no-replay corrected Kähler vector and corrected volume without loading `corrected_kahler_param.dat` by default | Implemented but not exact |
 | Corrected target-volume / GV correction agreement | Diagnostics localize the residual to corrected-chamber GV target corrections, not classical geometry or file semantics | Open blocker |
 | Final corrected volume and V0 | Runner computes current no-replay `V_string` and `V0`; downstream comparisons are post-computation only | Computed, residual remains |
-| GA suitability on new candidates | Core paths accept upstream geometry/flux/moduli choices and do not require McAllister output files in first-principles mode | Partially ready; GV/corrected-chamber gaps remain |
+| GA suitability on new candidates | Core paths accept upstream geometry/flux/moduli choices and do not require McAllister output files in first-principles mode | Partially ready; GV/corrected-chamber gaps and matrix-basis/general-basis handling remain |
 
 ## Current Blocking Gaps
 
@@ -46,6 +46,10 @@ run pass. Any remaining mismatch must be explicit and localizable.
    extraction, with `potent_rays_gv.dat` used only as the assertion. Cyrus still
    does not generate the full sampled low-dimensional-face ray set, reproduce
    all ten entries efficiently, or handle the rank-four local charge contexts.
+   The source-level reason is now explicit: cygv's series inversion subtracts
+   lower-degree `Li2(q_N)` history from a semigroup, so a coefficient-targeted
+   past-closed local domain is needed before the saved ten-entry rows are a fair
+   comparison.
 3. Pair-pruned selected curves match McAllister's `small_curves.dat`, while a
    stricter finite-semigroup diagnostic removes five additional curves. This is
    exposed as a policy choice, not hidden.
@@ -85,7 +89,11 @@ to make the remaining GV layer more first-principles:
    feasible. The intended shape is a cygv-style finite monomial domain with an
    addition map/past-light-cone closure, not the current componentwise formal
    box. After that, handle the rank-four affine supports.
-2. Compare broader corrected-chamber per-curve cygv/general-GV values against
+2. Close the CYTools basis contract gap for GA use: implement generic matrix
+   basis projection for `curve_basis`/`mori_cone_cap(in_basis=True)`, matching
+   CYTools' `mori_cap_matrix.dot(basis.T)`, or reject that basis mode loudly
+   until it is ported.
+3. Compare broader corrected-chamber per-curve cygv/general-GV values against
    toric formula values and missing non-toric contributions.
-3. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
+4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.
