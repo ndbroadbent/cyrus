@@ -161,6 +161,7 @@ struct ContextReport {
     local_cygv_actual_call_readiness_counts: BTreeMap<String, usize>,
     local_cygv_missing_source_input_counts: BTreeMap<String, usize>,
     local_cygv_q_matrix_orientation_status_counts: BTreeMap<String, usize>,
+    local_cygv_q_matrix_layout_status_counts: BTreeMap<String, usize>,
     local_cygv_grading_vector_status_counts: BTreeMap<String, usize>,
     targets: Vec<TargetReport>,
 }
@@ -254,6 +255,9 @@ struct LocalCygvInputSkeleton {
     orientation_candidates: Vec<LocalCygvOrientationCandidate>,
     local_q_matrix_orientation_candidate: Option<i64>,
     local_q_matrix_orientation_status: String,
+    local_cygv_q_matrix_rows_candidate: Option<Vec<Vec<i64>>>,
+    local_cygv_wrapper_q_matrix_candidate: Option<Vec<Vec<i64>>>,
+    local_cygv_q_matrix_layout_status: String,
     local_grading_vector_candidate: Option<Vec<i64>>,
     local_grading_vector_status: String,
     remaining_uncertified_inputs: Vec<String>,
@@ -1182,6 +1186,14 @@ fn local_cygv_input_skeleton(
     );
     let (local_q_matrix_orientation_candidate, local_q_matrix_orientation_status) =
         local_cygv_q_matrix_orientation_candidate(&orientation_candidates);
+    let (
+        local_cygv_q_matrix_rows_candidate,
+        local_cygv_wrapper_q_matrix_candidate,
+        local_cygv_q_matrix_layout_status,
+    ) = local_cygv_q_matrix_layout_candidate(
+        &orientation_candidates,
+        local_q_matrix_orientation_candidate,
+    );
     let (local_grading_vector_candidate, local_grading_vector_status) =
         local_cygv_grading_vector_candidate(&orientation_candidates);
     let mut remaining_uncertified_inputs = vec!["local_semigroup_generators".to_string()];
@@ -1206,10 +1218,62 @@ fn local_cygv_input_skeleton(
         orientation_candidates,
         local_q_matrix_orientation_candidate,
         local_q_matrix_orientation_status,
+        local_cygv_q_matrix_rows_candidate,
+        local_cygv_wrapper_q_matrix_candidate,
+        local_cygv_q_matrix_layout_status,
         local_grading_vector_candidate,
         local_grading_vector_status,
         remaining_uncertified_inputs,
     }))
+}
+
+fn local_cygv_q_matrix_layout_candidate(
+    orientation_candidates: &[LocalCygvOrientationCandidate],
+    orientation_candidate: Option<i64>,
+) -> (Option<Vec<Vec<i64>>>, Option<Vec<Vec<i64>>>, String) {
+    let Some(sign) = orientation_candidate else {
+        return (
+            None,
+            None,
+            "local_q_matrix_layout_blocked_no_orientation".to_string(),
+        );
+    };
+    let Some(candidate) = orientation_candidates
+        .iter()
+        .find(|candidate| candidate.overall_charge_basis_sign == sign)
+    else {
+        return (
+            None,
+            None,
+            "local_q_matrix_layout_missing_selected_orientation".to_string(),
+        );
+    };
+    if candidate.local_q_matrix_rows.is_empty() {
+        return (None, None, "local_q_matrix_layout_empty".to_string());
+    }
+    let Some(width) = candidate.local_q_matrix_rows.first().map(Vec::len) else {
+        return (None, None, "local_q_matrix_layout_empty".to_string());
+    };
+    if width == 0 {
+        return (None, None, "local_q_matrix_layout_zero_rank".to_string());
+    }
+    if candidate
+        .local_q_matrix_rows
+        .iter()
+        .any(|row| row.len() != width)
+    {
+        return (
+            None,
+            None,
+            "local_q_matrix_layout_inconsistent_row_widths".to_string(),
+        );
+    }
+    let wrapper_q_matrix = transpose_local_charge_basis(&candidate.local_q_matrix_rows);
+    (
+        Some(candidate.local_q_matrix_rows.clone()),
+        Some(wrapper_q_matrix),
+        "source_derived_oriented_q_matrix_layout".to_string(),
+    )
 }
 
 fn local_cygv_q_matrix_orientation_candidate(
@@ -3328,6 +3392,11 @@ fn build_report(
                 .iter()
                 .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
         );
+    let local_cygv_q_matrix_layout_status_counts = local_cygv_q_matrix_layout_status_counts(
+        targets
+            .iter()
+            .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
+    );
     let local_cygv_grading_vector_status_counts = local_cygv_grading_vector_status_counts(
         targets
             .iter()
@@ -3355,6 +3424,7 @@ fn build_report(
         local_cygv_actual_call_readiness_counts,
         local_cygv_missing_source_input_counts,
         local_cygv_q_matrix_orientation_status_counts,
+        local_cygv_q_matrix_layout_status_counts,
         local_cygv_grading_vector_status_counts,
         targets,
     }
@@ -3435,6 +3505,18 @@ fn local_cygv_q_matrix_orientation_status_counts<'a>(
     for skeleton in skeletons {
         *counts
             .entry(skeleton.local_q_matrix_orientation_status.clone())
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_q_matrix_layout_status_counts<'a>(
+    skeletons: impl IntoIterator<Item = &'a LocalCygvInputSkeleton>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for skeleton in skeletons {
+        *counts
+            .entry(skeleton.local_cygv_q_matrix_layout_status.clone())
             .or_insert(0usize) += 1;
     }
     counts
@@ -3746,6 +3828,18 @@ mod tests {
             skeleton.local_q_matrix_orientation_status,
             "source_derived_target_positive_orientation"
         );
+        assert_eq!(
+            skeleton.local_cygv_q_matrix_rows_candidate,
+            Some(vec![vec![-1], vec![2], vec![1], vec![-3], vec![1]])
+        );
+        assert_eq!(
+            skeleton.local_cygv_wrapper_q_matrix_candidate,
+            Some(vec![vec![-1, 2, 1, -3, 1]])
+        );
+        assert_eq!(
+            skeleton.local_cygv_q_matrix_layout_status,
+            "source_derived_oriented_q_matrix_layout"
+        );
         assert_eq!(skeleton.local_grading_vector_candidate, Some(vec![1]));
         assert_eq!(
             skeleton.local_grading_vector_status,
@@ -3856,6 +3950,9 @@ mod tests {
             ),
             local_q_matrix_orientation_candidate: None,
             local_q_matrix_orientation_status: String::new(),
+            local_cygv_q_matrix_rows_candidate: None,
+            local_cygv_wrapper_q_matrix_candidate: None,
+            local_cygv_q_matrix_layout_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -3872,6 +3969,9 @@ mod tests {
             ),
             local_q_matrix_orientation_candidate: None,
             local_q_matrix_orientation_status: String::new(),
+            local_cygv_q_matrix_rows_candidate: None,
+            local_cygv_wrapper_q_matrix_candidate: None,
+            local_cygv_q_matrix_layout_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -3915,6 +4015,9 @@ mod tests {
             orientation_candidates: supported_candidate.clone(),
             local_q_matrix_orientation_candidate: None,
             local_q_matrix_orientation_status: String::new(),
+            local_cygv_q_matrix_rows_candidate: None,
+            local_cygv_wrapper_q_matrix_candidate: None,
+            local_cygv_q_matrix_layout_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: vec!["local_intersection_tensor".to_string()],
@@ -3928,6 +4031,9 @@ mod tests {
             orientation_candidates: supported_candidate,
             local_q_matrix_orientation_candidate: None,
             local_q_matrix_orientation_status: String::new(),
+            local_cygv_q_matrix_rows_candidate: None,
+            local_cygv_wrapper_q_matrix_candidate: None,
+            local_cygv_q_matrix_layout_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -3944,6 +4050,9 @@ mod tests {
             ),
             local_q_matrix_orientation_candidate: None,
             local_q_matrix_orientation_status: String::new(),
+            local_cygv_q_matrix_rows_candidate: None,
+            local_cygv_wrapper_q_matrix_candidate: None,
+            local_cygv_q_matrix_layout_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -3991,6 +4100,9 @@ mod tests {
             orientation_candidates: Vec::new(),
             local_q_matrix_orientation_candidate: None,
             local_q_matrix_orientation_status: String::new(),
+            local_cygv_q_matrix_rows_candidate: None,
+            local_cygv_wrapper_q_matrix_candidate: None,
+            local_cygv_q_matrix_layout_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: vec![
@@ -4007,6 +4119,9 @@ mod tests {
             orientation_candidates: Vec::new(),
             local_q_matrix_orientation_candidate: None,
             local_q_matrix_orientation_status: String::new(),
+            local_cygv_q_matrix_rows_candidate: None,
+            local_cygv_wrapper_q_matrix_candidate: None,
+            local_cygv_q_matrix_layout_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: vec![
@@ -4033,6 +4148,9 @@ mod tests {
             orientation_candidates: Vec::new(),
             local_q_matrix_orientation_candidate: None,
             local_q_matrix_orientation_status: String::new(),
+            local_cygv_q_matrix_rows_candidate: None,
+            local_cygv_wrapper_q_matrix_candidate: None,
+            local_cygv_q_matrix_layout_status: String::new(),
             local_grading_vector_candidate: Some(vec![1]),
             local_grading_vector_status: "source_derived_primitive_one_parameter_grading"
                 .to_string(),
@@ -4047,6 +4165,9 @@ mod tests {
             orientation_candidates: Vec::new(),
             local_q_matrix_orientation_candidate: None,
             local_q_matrix_orientation_status: String::new(),
+            local_cygv_q_matrix_rows_candidate: None,
+            local_cygv_wrapper_q_matrix_candidate: None,
+            local_cygv_q_matrix_layout_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: "local_grading_blocked_no_positive_primitive_target"
                 .to_string(),
@@ -4061,6 +4182,9 @@ mod tests {
             orientation_candidates: Vec::new(),
             local_q_matrix_orientation_candidate: None,
             local_q_matrix_orientation_status: String::new(),
+            local_cygv_q_matrix_rows_candidate: None,
+            local_cygv_wrapper_q_matrix_candidate: None,
+            local_cygv_q_matrix_layout_status: String::new(),
             local_grading_vector_candidate: Some(vec![1]),
             local_grading_vector_status: "source_derived_primitive_one_parameter_grading"
                 .to_string(),
@@ -4095,6 +4219,10 @@ mod tests {
             local_q_matrix_orientation_candidate: Some(-1),
             local_q_matrix_orientation_status: "source_derived_target_positive_orientation"
                 .to_string(),
+            local_cygv_q_matrix_rows_candidate: Some(vec![vec![-1], vec![2]]),
+            local_cygv_wrapper_q_matrix_candidate: Some(vec![vec![-1, 2]]),
+            local_cygv_q_matrix_layout_status: "source_derived_oriented_q_matrix_layout"
+                .to_string(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -4109,6 +4237,10 @@ mod tests {
             local_q_matrix_orientation_candidate: None,
             local_q_matrix_orientation_status:
                 "local_q_orientation_blocked_no_positive_primitive_target".to_string(),
+            local_cygv_q_matrix_rows_candidate: None,
+            local_cygv_wrapper_q_matrix_candidate: None,
+            local_cygv_q_matrix_layout_status: "local_q_matrix_layout_blocked_no_orientation"
+                .to_string(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -4122,6 +4254,10 @@ mod tests {
             orientation_candidates: Vec::new(),
             local_q_matrix_orientation_candidate: Some(-1),
             local_q_matrix_orientation_status: "source_derived_target_positive_orientation"
+                .to_string(),
+            local_cygv_q_matrix_rows_candidate: Some(vec![vec![-1], vec![1]]),
+            local_cygv_wrapper_q_matrix_candidate: Some(vec![vec![-1, 1]]),
+            local_cygv_q_matrix_layout_status: "source_derived_oriented_q_matrix_layout"
                 .to_string(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
@@ -4139,6 +4275,20 @@ mod tests {
         assert_eq!(
             counts
                 .get("local_q_orientation_blocked_no_positive_primitive_target")
+                .copied(),
+            Some(1)
+        );
+
+        let layout_counts = local_cygv_q_matrix_layout_status_counts([&first, &second, &third]);
+        assert_eq!(
+            layout_counts
+                .get("source_derived_oriented_q_matrix_layout")
+                .copied(),
+            Some(2)
+        );
+        assert_eq!(
+            layout_counts
+                .get("local_q_matrix_layout_blocked_no_orientation")
                 .copied(),
             Some(1)
         );

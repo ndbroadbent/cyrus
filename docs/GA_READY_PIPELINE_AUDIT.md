@@ -330,8 +330,10 @@ to make the remaining GV layer more first-principles:
    skeletons are still `blocked_missing_source_derived_inputs`. The primitive
    one-parameter grading vector is now source-derived as `[1]` for all nine
    skeletons, and the local `q` orientation is now source-derived as sign `-1`
-   for all nine skeletons. The missing source-input counts remain nine each for
-   `local_semigroup_generators`, `local_q_matrix_phase`,
+   for all nine skeletons. The oriented local `q` matrix is now serialized in
+   both cygv's divisor-row layout and Cyrus' wrapper layout, with
+   `source_derived_oriented_q_matrix_layout=9`. The missing source-input counts
+   remain nine each for `local_semigroup_generators`, `local_q_matrix_phase`,
    `local_intersection_tensor`, and `local_chamber_certificate`, so none is a
    valid actual-`cygv` call yet. The direct source read reinforces this: `cygv`
    obtains GV values from the full

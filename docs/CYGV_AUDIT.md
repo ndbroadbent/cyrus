@@ -1879,8 +1879,11 @@ The current `cygv` crate source sharpens the same boundary:
   `source_derived_primitive_one_parameter_grading=9`. The same target-coordinate
   check now source-derives the local `q` orientation as sign `-1` for all nine
   skeletons, with
-  `source_derived_target_positive_orientation=9`. The remaining missing inputs
-  are counted explicitly: each of the nine skeletons is still missing
+  `source_derived_target_positive_orientation=9`. The selected oriented local
+  `q` matrix is now serialized in both cygv's divisor-row layout and Cyrus'
+  wrapper layout, and the report aggregates
+  `source_derived_oriented_q_matrix_layout=9`. The remaining missing inputs are
+  counted explicitly: each of the nine skeletons is still missing
   `local_semigroup_generators`, `local_q_matrix_phase`,
   `local_intersection_tensor`, and `local_chamber_certificate`.
 
