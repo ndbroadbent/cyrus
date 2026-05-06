@@ -2913,6 +2913,229 @@ impl CkyzMonomialDomain {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CkyzIndexedSeries {
+    terms: Vec<(usize, Rational)>,
+}
+
+impl CkyzIndexedSeries {
+    fn one(domain: &CkyzMonomialDomain) -> Result<Self> {
+        let identity_index = ckyz_support_identity_index(domain)?;
+        Ok(Self {
+            terms: vec![(identity_index, Rational::from(1))],
+        })
+    }
+
+    fn from_btree(
+        series: &BTreeMap<Vec<usize>, Rational>,
+        domain: &CkyzMonomialDomain,
+        context: &str,
+    ) -> Result<Self> {
+        let mut terms = Vec::with_capacity(series.len());
+        for (degree, coefficient) in series {
+            if *coefficient == 0 {
+                continue;
+            }
+            if degree.len() != domain.rank {
+                return Err(Error::InvalidInput(format!(
+                    "{context} monomial rank does not match coordinate rank"
+                )));
+            }
+            if let Some(index) = domain.index_of(degree) {
+                terms.push((index, coefficient.clone()));
+            }
+        }
+        terms.sort_unstable_by_key(|(index, _)| *index);
+        Ok(Self { terms })
+    }
+
+    fn from_domain_coefficients(coefficients: Vec<Option<Rational>>) -> Self {
+        let terms = coefficients
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, coefficient)| {
+                coefficient
+                    .and_then(|coefficient| (coefficient != 0).then_some((index, coefficient)))
+            })
+            .collect();
+        Self { terms }
+    }
+
+    fn to_btree(&self, domain: &CkyzMonomialDomain) -> BTreeMap<Vec<usize>, Rational> {
+        self.terms
+            .iter()
+            .filter_map(|(index, coefficient)| {
+                (coefficient != &Rational::from(0))
+                    .then(|| (domain.degrees[*index].clone(), coefficient.clone()))
+            })
+            .collect()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.terms.is_empty()
+    }
+
+    fn min_total_degree(
+        &self,
+        domain: &CkyzMonomialDomain,
+        context: &str,
+    ) -> Result<Option<usize>> {
+        let mut min_degree = None;
+        for &(index, _) in &self.terms {
+            let Some(degree) = domain.degrees.get(index) else {
+                return Err(Error::InvalidInput(format!(
+                    "{context} monomial index is outside the domain"
+                )));
+            };
+            let total_degree = ckyz_total_degree(degree)?;
+            if total_degree == 0 {
+                return Err(Error::InvalidInput(format!(
+                    "{context} must have zero constant term"
+                )));
+            }
+            min_degree =
+                Some(min_degree.map_or(total_degree, |current: usize| current.min(total_degree)));
+        }
+        Ok(min_degree)
+    }
+
+    fn add_scaled_assign(&mut self, rhs: &Self, scalar: Rational) {
+        if scalar == 0 || rhs.terms.is_empty() {
+            return;
+        }
+
+        let lhs = std::mem::take(&mut self.terms);
+        let mut merged = Vec::with_capacity(lhs.len().max(rhs.terms.len()));
+        let mut lhs_iter = lhs.into_iter().peekable();
+        let mut rhs_iter = rhs.terms.iter().peekable();
+
+        loop {
+            match (lhs_iter.peek(), rhs_iter.peek()) {
+                (Some((lhs_index, _)), Some((rhs_index, _))) => {
+                    if lhs_index < rhs_index {
+                        merged.push(lhs_iter.next().expect("lhs term was peeked"));
+                    } else if rhs_index < lhs_index {
+                        let (index, coefficient) = rhs_iter.next().expect("rhs term was peeked");
+                        let scaled = coefficient.clone() * scalar.clone();
+                        if scaled != 0 {
+                            merged.push((*index, scaled));
+                        }
+                    } else {
+                        let (index, lhs_coefficient) =
+                            lhs_iter.next().expect("lhs term was peeked");
+                        let (_, rhs_coefficient) = rhs_iter.next().expect("rhs term was peeked");
+                        let coefficient =
+                            lhs_coefficient + rhs_coefficient.clone() * scalar.clone();
+                        if coefficient != 0 {
+                            merged.push((index, coefficient));
+                        }
+                    }
+                }
+                (Some(_), None) => {
+                    merged.extend(lhs_iter);
+                    break;
+                }
+                (None, Some(_)) => {
+                    for (index, coefficient) in rhs_iter {
+                        let scaled = coefficient.clone() * scalar.clone();
+                        if scaled != 0 {
+                            merged.push((*index, scaled));
+                        }
+                    }
+                    break;
+                }
+                (None, None) => break,
+            }
+        }
+
+        self.terms = merged;
+    }
+
+    fn mul(&self, rhs: &Self, domain: &CkyzMonomialDomain) -> Result<Self> {
+        let mut out_by_index = vec![None::<Rational>; domain.degrees.len()];
+        if let Some(addition_pairs_by_lhs) = &domain.addition_pairs_by_lhs {
+            let (outer_terms, inner_terms) = if self.terms.len() <= rhs.terms.len() {
+                (&self.terms, &rhs.terms)
+            } else {
+                (&rhs.terms, &self.terms)
+            };
+            let indexed_candidate_count = outer_terms
+                .iter()
+                .map(|(outer_index, _)| addition_pairs_by_lhs[*outer_index].len())
+                .sum::<usize>();
+            let direct_candidate_count = outer_terms
+                .len()
+                .checked_mul(inner_terms.len())
+                .ok_or_else(|| {
+                    Error::InvalidInput(
+                        "CKYZ sparse product candidate count overflowed usize".into(),
+                    )
+                })?;
+            if direct_candidate_count <= indexed_candidate_count {
+                for (outer_index, outer_coefficient) in outer_terms {
+                    for (inner_index, inner_coefficient) in inner_terms {
+                        if let Some(product_index) = domain.sum_index(*outer_index, *inner_index)? {
+                            let entry = out_by_index[product_index]
+                                .get_or_insert_with(|| Rational::from(0));
+                            *entry += outer_coefficient.clone() * inner_coefficient.clone();
+                        }
+                    }
+                }
+                return Ok(Self::from_domain_coefficients(out_by_index));
+            }
+
+            let mut inner_by_index = vec![None::<&Rational>; domain.degrees.len()];
+            for (inner_index, inner_coefficient) in inner_terms {
+                inner_by_index[*inner_index] = Some(inner_coefficient);
+            }
+            for (outer_index, outer_coefficient) in outer_terms {
+                for &(inner_index, product_index) in &addition_pairs_by_lhs[*outer_index] {
+                    let Some(inner_coefficient) = inner_by_index[inner_index] else {
+                        continue;
+                    };
+                    let entry =
+                        out_by_index[product_index].get_or_insert_with(|| Rational::from(0));
+                    *entry += outer_coefficient.clone() * inner_coefficient.clone();
+                }
+            }
+            return Ok(Self::from_domain_coefficients(out_by_index));
+        }
+
+        for (lhs_index, lhs_coefficient) in &self.terms {
+            for (rhs_index, rhs_coefficient) in &rhs.terms {
+                if let Some(product_index) = domain.sum_index(*lhs_index, *rhs_index)? {
+                    let entry =
+                        out_by_index[product_index].get_or_insert_with(|| Rational::from(0));
+                    *entry += lhs_coefficient.clone() * rhs_coefficient.clone();
+                }
+            }
+        }
+        Ok(Self::from_domain_coefficients(out_by_index))
+    }
+
+    fn exp(&self, domain: &CkyzMonomialDomain) -> Result<Self> {
+        let max_exponent = self
+            .min_total_degree(domain, "CKYZ exponential input")?
+            .map_or(0, |min_degree| domain.max_total_degree / min_degree);
+
+        let mut out = Self::one(domain)?;
+        let mut power = out.clone();
+        let mut factorial = Integer::from(1);
+        for exponent in 1..=max_exponent {
+            power = power.mul(self, domain)?;
+            if power.is_empty() {
+                break;
+            }
+            factorial *= Integer::from(exponent);
+            out.add_scaled_assign(
+                &power,
+                Rational::from(1) / Rational::from(factorial.clone()),
+            );
+        }
+        Ok(out)
+    }
+}
+
 fn ckyz_causal_monomial_domain(
     rank: usize,
     generators: &[Vec<usize>],
@@ -3923,99 +4146,9 @@ fn ckyz_series_mul_domain(
     rhs: &BTreeMap<Vec<usize>, Rational>,
     domain: &CkyzMonomialDomain,
 ) -> Result<BTreeMap<Vec<usize>, Rational>> {
-    let lhs_terms = ckyz_indexed_domain_terms(lhs, domain)?;
-    let rhs_terms = ckyz_indexed_domain_terms(rhs, domain)?;
-    let mut out_by_index = vec![None::<Rational>; domain.degrees.len()];
-    if let Some(addition_pairs_by_lhs) = &domain.addition_pairs_by_lhs {
-        let (outer_terms, inner_terms) = if lhs_terms.len() <= rhs_terms.len() {
-            (lhs_terms, rhs_terms)
-        } else {
-            (rhs_terms, lhs_terms)
-        };
-        let indexed_candidate_count = outer_terms
-            .iter()
-            .map(|(outer_index, _)| addition_pairs_by_lhs[*outer_index].len())
-            .sum::<usize>();
-        let direct_candidate_count = outer_terms
-            .len()
-            .checked_mul(inner_terms.len())
-            .ok_or_else(|| {
-                Error::InvalidInput("CKYZ sparse product candidate count overflowed usize".into())
-            })?;
-        if direct_candidate_count <= indexed_candidate_count {
-            for (outer_index, outer_coefficient) in outer_terms {
-                for (inner_index, inner_coefficient) in inner_terms.iter().copied() {
-                    if let Some(product_index) = domain.sum_index(outer_index, inner_index)? {
-                        let entry =
-                            out_by_index[product_index].get_or_insert_with(|| Rational::from(0));
-                        *entry += outer_coefficient.clone() * inner_coefficient.clone();
-                    }
-                }
-            }
-            return Ok(ckyz_series_from_domain_coefficients(out_by_index, domain));
-        }
-        let mut inner_by_index = vec![None; domain.degrees.len()];
-        for (inner_index, inner_coefficient) in inner_terms {
-            inner_by_index[inner_index] = Some(inner_coefficient);
-        }
-        for (outer_index, outer_coefficient) in outer_terms {
-            for &(inner_index, product_index) in &addition_pairs_by_lhs[outer_index] {
-                let Some(inner_coefficient) = inner_by_index[inner_index] else {
-                    continue;
-                };
-                let entry = out_by_index[product_index].get_or_insert_with(|| Rational::from(0));
-                *entry += outer_coefficient.clone() * inner_coefficient.clone();
-            }
-        }
-        return Ok(ckyz_series_from_domain_coefficients(out_by_index, domain));
-    }
-    for (lhs_index, lhs_coefficient) in lhs_terms.iter().copied() {
-        for (rhs_index, rhs_coefficient) in rhs_terms.iter().copied() {
-            if let Some(product_index) = domain.sum_index(lhs_index, rhs_index)? {
-                let entry = out_by_index[product_index].get_or_insert_with(|| Rational::from(0));
-                *entry += lhs_coefficient.clone() * rhs_coefficient.clone();
-            }
-        }
-    }
-    Ok(ckyz_series_from_domain_coefficients(out_by_index, domain))
-}
-
-fn ckyz_series_from_domain_coefficients(
-    coefficients: Vec<Option<Rational>>,
-    domain: &CkyzMonomialDomain,
-) -> BTreeMap<Vec<usize>, Rational> {
-    let mut out = coefficients
-        .into_iter()
-        .enumerate()
-        .filter_map(|(index, coefficient)| {
-            coefficient.and_then(|coefficient| {
-                (coefficient != 0).then(|| (domain.degrees[index].clone(), coefficient))
-            })
-        })
-        .collect::<BTreeMap<_, _>>();
-    out.retain(|_, coefficient| *coefficient != 0);
-    out
-}
-
-fn ckyz_indexed_domain_terms<'a>(
-    series: &'a BTreeMap<Vec<usize>, Rational>,
-    domain: &CkyzMonomialDomain,
-) -> Result<Vec<(usize, &'a Rational)>> {
-    let mut terms = Vec::with_capacity(series.len());
-    for (degree, coefficient) in series {
-        if *coefficient == 0 {
-            continue;
-        }
-        if degree.len() != domain.rank {
-            return Err(Error::InvalidInput(
-                "CKYZ series multiplication rank mismatch".into(),
-            ));
-        }
-        if let Some(index) = domain.index_of(degree) {
-            terms.push((index, coefficient));
-        }
-    }
-    Ok(terms)
+    let lhs = CkyzIndexedSeries::from_btree(lhs, domain, "CKYZ series multiplication")?;
+    let rhs = CkyzIndexedSeries::from_btree(rhs, domain, "CKYZ series multiplication")?;
+    Ok(lhs.mul(&rhs, domain)?.to_btree(domain))
 }
 
 fn ckyz_add_degrees(
@@ -4116,27 +4249,8 @@ fn ckyz_series_exp_domain(
     series: &BTreeMap<Vec<usize>, Rational>,
     domain: &CkyzMonomialDomain,
 ) -> Result<BTreeMap<Vec<usize>, Rational>> {
-    validate_ckyz_series_has_zero_constant(series, domain.rank, "CKYZ exponential input")?;
-    let max_exponent = ckyz_series_min_total_degree(series, domain.rank, "CKYZ exponential input")?
-        .map_or(0, |min_degree| domain.max_total_degree / min_degree);
-
-    let mut out = BTreeMap::new();
-    out.insert(vec![0; domain.rank], Rational::from(1));
-    let mut power = out.clone();
-    let mut factorial = Integer::from(1);
-    for exponent in 1..=max_exponent {
-        power = ckyz_series_mul_domain(&power, series, domain)?;
-        if power.is_empty() {
-            break;
-        }
-        factorial *= Integer::from(exponent);
-        ckyz_series_add_scaled_assign(
-            &mut out,
-            &power,
-            Rational::from(1) / Rational::from(factorial.clone()),
-        );
-    }
-    Ok(out)
+    let series = CkyzIndexedSeries::from_btree(series, domain, "CKYZ exponential input")?;
+    Ok(series.exp(domain)?.to_btree(domain))
 }
 
 fn ckyz_series_compose(
@@ -10888,15 +11002,16 @@ mod tests {
         ckyz_local_domain_profile_for_degrees_with_causal_domain,
         ckyz_local_surface_causal_domain_spec, ckyz_local_surface_cover_weight_coefficients,
         ckyz_local_surface_domain_profile_for_multiples, ckyz_local_surface_target_degrees,
-        ckyz_log_period_support_indices_domain, ckyz_observed_support_domain_for_degrees,
-        ckyz_predicted_support_domain_for_degrees, ckyz_q_degree_li2_coefficient_in_z_domain,
+        ckyz_log_period_support_indices_domain, ckyz_multi_degrees_box,
+        ckyz_observed_support_domain_for_degrees, ckyz_predicted_support_domain_for_degrees,
+        ckyz_q_degree_li2_coefficient_in_z_domain,
         ckyz_q_degree_series_from_expalpha_powers_in_z_domain, ckyz_q_degree_series_in_z_domain,
         ckyz_scaled_alpha_terms, ckyz_second_log_period_series_for_pair_domain,
-        ckyz_second_log_period_support_indices_for_pair_domain, ckyz_series_li2_domain,
-        ckyz_series_mul_domain, ckyz_series_support_indices,
-        ckyz_sort_degrees_for_extraction_with_grading, ckyz_support_exp_domain,
-        ckyz_support_exp_domain_by_powers, ckyz_z_residual_coefficient_work_profile_for_degrees,
-        ckyz_z_residual_dependency_degrees,
+        ckyz_second_log_period_support_indices_for_pair_domain, ckyz_series_exp,
+        ckyz_series_exp_domain, ckyz_series_li2_domain, ckyz_series_mul, ckyz_series_mul_domain,
+        ckyz_series_support_indices, ckyz_sort_degrees_for_extraction_with_grading,
+        ckyz_support_exp_domain, ckyz_support_exp_domain_by_powers, ckyz_total_degree,
+        ckyz_z_residual_coefficient_work_profile_for_degrees, ckyz_z_residual_dependency_degrees,
         classify_nilpotent_rays_from_two_pass_divergence_checks,
         classify_nop_rays_from_finite_gv_table, compute_ambient_one_dimensional_ray_gv_series,
         compute_ckyz_flat_prepotential_period_corrections, compute_ckyz_inverse_mirror_map,
@@ -12008,6 +12123,42 @@ mod tests {
                 .sum::<usize>(),
             profile.support_unique_exp_state_count
         );
+    }
+
+    #[test]
+    fn ckyz_indexed_domain_series_ops_match_total_degree_reference() {
+        let rank = 2;
+        let max_total_degree = 4;
+        let domain = CkyzMonomialDomain::from_degrees(
+            rank,
+            ckyz_multi_degrees_box(&vec![max_total_degree; rank])
+                .into_iter()
+                .filter(|degree| ckyz_total_degree(degree).unwrap() <= max_total_degree),
+        )
+        .unwrap();
+        let lhs = BTreeMap::from([
+            (vec![1, 0], Rational::from(2)),
+            (vec![0, 1], Rational::from(3)),
+            (vec![2, 0], Rational::from(-1)),
+        ]);
+        let rhs = BTreeMap::from([
+            (vec![0, 1], Rational::from(5)),
+            (vec![1, 1], Rational::from(7)),
+            (vec![0, 2], Rational::from(-2)),
+        ]);
+
+        let indexed_product = ckyz_series_mul_domain(&lhs, &rhs, &domain).unwrap();
+        let reference_product = ckyz_series_mul(&lhs, &rhs, rank, max_total_degree).unwrap();
+        assert_eq!(indexed_product, reference_product);
+
+        let exp_input = BTreeMap::from([
+            (vec![1, 0], Rational::from(2)),
+            (vec![0, 1], Rational::from(-1)),
+            (vec![1, 1], Rational::from(3)),
+        ]);
+        let indexed_exp = ckyz_series_exp_domain(&exp_input, &domain).unwrap();
+        let reference_exp = ckyz_series_exp(&exp_input, rank, max_total_degree).unwrap();
+        assert_eq!(indexed_exp, reference_exp);
     }
 
     #[test]
