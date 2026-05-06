@@ -386,6 +386,11 @@ Their boundaries are different:
 - `compute_gv_invariants_with_explicit_semigroup` bypasses cygv closure with
   `Semigroup::from_data`. This is a diagnostic-only shape for hand-constructed
   local semigroups, not a replacement for CYTools' public `compute_gvs()`.
+- The disk cache for compact GV wrapper outputs is versioned
+  (`gv-invariants-cygv-0.1.2-v1`) and can be disabled with
+  `CYRUS_GV_CACHE=0`. Use that setting for validation runs whose purpose is to
+  prove that the current code path actually executes `cygv` rather than reading
+  a prior result.
 - `compute_ray_gv_series_with_provided_generators` extracts
   `N_q, N_2q, ...` for a target ray from a caller-supplied local
   face/semigroup generator context. The older one-generator helper is now just
