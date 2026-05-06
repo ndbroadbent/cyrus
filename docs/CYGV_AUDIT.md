@@ -1656,6 +1656,12 @@ The current `cygv` crate source sharpens the same boundary:
   pre-reducing those seeds with cygv's own pair-sum rule lowered the direct
   input to `450` generators but still exceeded `900s`; the normal release
   profile is guarded off because it uses `panic=abort`.
+- The bounded source-level path-history probe reaches the same conclusion
+  without running GV. For both degree-10 missing targets, the target class is
+  present in the partial semigroup closure, but the closure still exceeds
+  `100000` elements before completion. The blocker is therefore the large
+  predecessor/subtraction history needed by cygv series inversion, not merely
+  membership of the target class in the generated semigroup.
 - `PolynomialProperties::new` creates the monomial lookup table from every
   semigroup element. Polynomial multiplication and series substitution drop
   terms whose sums are absent from this table. The finite semigroup therefore

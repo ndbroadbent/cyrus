@@ -224,6 +224,11 @@ to make the remaining GV layer more first-principles:
    and an unguarded cygv semigroup closure measurement did not finish within
    `120s`. The missing object is therefore the source-derived generated
    semigroup/chamber history, not a small visible-generator subset.
+   The bounded path-history probe reinforces this: with
+   `--element-limit 100000`, both degree-10 targets are already present in the
+   partial closure, but the closure still exceeds `100000` elements before
+   completing, so Cyrus cannot yet recover cygv's predecessor-subtraction
+   history from this broad domain.
    Cyrus now exposes cygv's private pair-sum seed-reduction stage via
    `cygv_pair_reduced_seed_generators`, and `mcallister_gv_context` reports raw
    seed counts, reduced seed counts, and whether each target survives that
