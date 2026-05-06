@@ -173,15 +173,16 @@ pub use kklt::{
     compute_c_tau as kklt_compute_c_tau, compute_corrected_target_tau,
     compute_divisor_volumes as kklt_compute_tau, compute_gv_target_correction_for_ambient_curves,
     compute_jacobian as kklt_compute_jacobian, compute_jacobian_diagnostics,
-    compute_kklt_divisor_volumes, compute_kklt_jacobian, compute_target_tau,
+    compute_kklt_divisor_volumes, compute_kklt_divisor_volumes_in_divisor_basis,
+    compute_kklt_jacobian, compute_kklt_jacobian_in_divisor_basis, compute_target_tau,
     divisor_quadratic_vanishes_on_curve_facet, find_stable_weyl_candidate_certificate,
     flop_reassign_gv_invariants, flop_transform_c2_vector, flop_transform_intersection_numbers,
     generate_scaled_kklt_branch_initializations, gv_dilog_from_curve_volume_checked,
-    scale_mixed_basis_kklt_branch_initialization_to_target, solve_mixed_basis_path_following,
-    solve_mixed_basis_path_following_branch_candidates, solve_path_following,
-    solve_two_phase_mixed_basis_path_following, solve_two_phase_path_following,
-    transform_intersection_numbers_by_matrix, weyl_reflection_matches_flop_transform,
-    weyl_reflection_matrix,
+    scale_mixed_basis_kklt_branch_initialization_to_target, solve_divisor_basis_path_following,
+    solve_mixed_basis_path_following, solve_mixed_basis_path_following_branch_candidates,
+    solve_path_following, solve_two_phase_mixed_basis_path_following,
+    solve_two_phase_path_following, transform_intersection_numbers_by_matrix,
+    weyl_reflection_matches_flop_transform, weyl_reflection_matrix,
 };
 pub use lattice::Point;
 pub use polytope::Polytope;

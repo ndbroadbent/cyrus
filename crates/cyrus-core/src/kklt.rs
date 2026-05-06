@@ -29,6 +29,7 @@ use malachite::{Integer, Rational};
 use rand::{Rng, SeedableRng};
 use rayon::prelude::*;
 
+use crate::curve_basis::DivisorBasis;
 use crate::error::Result as CyrusResult;
 use crate::f64_pos;
 use crate::gv::{
@@ -1262,6 +1263,146 @@ pub fn compute_kklt_jacobian(
     Some(jacobian)
 }
 
+/// Compute KKLT divisor volumes for Kähler coordinates in either a vector or
+/// matrix divisor basis.
+///
+/// This is the generic-basis counterpart of [`compute_kklt_divisor_volumes`].
+/// Matrix bases follow the CYTools convention that each row is an ambient
+/// divisor linear combination, so the Kähler point is first pulled back to
+/// ambient prime-divisor coordinates and then evaluated against `kappa_all`.
+#[must_use]
+pub fn compute_kklt_divisor_volumes_in_divisor_basis(
+    kappa_all: &Intersection,
+    basis: DivisorBasis<'_>,
+    kklt_basis: &[usize],
+    t: &[F64<Finite>],
+) -> Option<Vec<F64<Finite>>> {
+    let basis_matrix = divisor_basis_rows_as_finite(kappa_all.dim(), basis)?;
+    if basis_matrix.len() != t.len() || kklt_basis.iter().any(|&idx| idx >= kappa_all.dim()) {
+        return None;
+    }
+    let ambient_t = ambient_kahler_coordinates(&basis_matrix, t)?;
+    let half = F64::<Finite>::new(0.5).expect("0.5 is finite");
+    let target_rows = kklt_target_rows(kklt_basis);
+
+    let mut tau = vec![F64::<Finite>::ZERO; kklt_basis.len()];
+    for ((i_idx, j_idx, k_idx), val) in kappa_all.iter() {
+        let val_f = val.to_f64();
+        for (a, b, c) in unique_permutations(*i_idx, *j_idx, *k_idx) {
+            if let Some(rows) = target_rows.get(&a) {
+                let term = val_f * ambient_t[b] * ambient_t[c];
+                for &row in rows {
+                    tau[row] = tau[row] + term;
+                }
+            }
+        }
+    }
+    Some(tau.into_iter().map(|value| half * value).collect())
+}
+
+/// Compute the KKLT Jacobian for Kähler coordinates in either a vector or
+/// matrix divisor basis.
+#[must_use]
+pub fn compute_kklt_jacobian_in_divisor_basis(
+    kappa_all: &Intersection,
+    basis: DivisorBasis<'_>,
+    kklt_basis: &[usize],
+    t: &[F64<Finite>],
+) -> Option<Vec<Vec<F64<Finite>>>> {
+    let basis_matrix = divisor_basis_rows_as_finite(kappa_all.dim(), basis)?;
+    if basis_matrix.len() != t.len() || kklt_basis.iter().any(|&idx| idx >= kappa_all.dim()) {
+        return None;
+    }
+    let ambient_t = ambient_kahler_coordinates(&basis_matrix, t)?;
+    let half = F64::<Finite>::new(0.5).expect("0.5 is finite");
+    let target_rows = kklt_target_rows(kklt_basis);
+    let basis_dim = basis_matrix.len();
+
+    let mut jacobian = vec![vec![F64::<Finite>::ZERO; basis_dim]; kklt_basis.len()];
+    for ((i_idx, j_idx, k_idx), val) in kappa_all.iter() {
+        let val_f = val.to_f64();
+        for (a, b, c) in unique_permutations(*i_idx, *j_idx, *k_idx) {
+            if let Some(rows) = target_rows.get(&a) {
+                for (basis_idx, basis_row) in basis_matrix.iter().enumerate() {
+                    let term =
+                        half * val_f * (basis_row[b] * ambient_t[c] + ambient_t[b] * basis_row[c]);
+                    for &row in rows {
+                        jacobian[row][basis_idx] = jacobian[row][basis_idx] + term;
+                    }
+                }
+            }
+        }
+    }
+    Some(jacobian)
+}
+
+fn kklt_target_rows(kklt_basis: &[usize]) -> HashMap<usize, Vec<usize>> {
+    let mut out: HashMap<usize, Vec<usize>> = HashMap::new();
+    for (row, &divisor_idx) in kklt_basis.iter().enumerate() {
+        out.entry(divisor_idx).or_default().push(row);
+    }
+    out
+}
+
+fn divisor_basis_rows_as_finite(
+    ambient_dim: usize,
+    basis: DivisorBasis<'_>,
+) -> Option<Vec<Vec<F64<Finite>>>> {
+    match basis {
+        DivisorBasis::Indices(indices) => {
+            if indices.iter().any(|&idx| idx >= ambient_dim) {
+                return None;
+            }
+            let mut rows = vec![vec![F64::<Finite>::ZERO; ambient_dim]; indices.len()];
+            for (row, &idx) in rows.iter_mut().zip(indices.iter()) {
+                row[idx] = F64::<Finite>::new(1.0).expect("1.0 is finite");
+            }
+            Some(rows)
+        }
+        DivisorBasis::Matrix {
+            standard_basis,
+            basis_matrix,
+        } => {
+            if standard_basis.len() != basis_matrix.len() {
+                return None;
+            }
+            basis_matrix
+                .iter()
+                .map(|row| {
+                    if row.len() != ambient_dim {
+                        return None;
+                    }
+                    row.iter()
+                        .map(integer_to_finite_f64)
+                        .collect::<Option<Vec<_>>>()
+                })
+                .collect()
+        }
+    }
+}
+
+fn integer_to_finite_f64(value: &Integer) -> Option<F64<Finite>> {
+    let raw = value.to_string().parse::<f64>().ok()?;
+    F64::<Finite>::new(raw)
+}
+
+fn ambient_kahler_coordinates(
+    basis_matrix: &[Vec<F64<Finite>>],
+    t: &[F64<Finite>],
+) -> Option<Vec<F64<Finite>>> {
+    let ambient_dim = basis_matrix.first()?.len();
+    if basis_matrix.len() != t.len() || basis_matrix.iter().any(|row| row.len() != ambient_dim) {
+        return None;
+    }
+    let mut ambient = vec![F64::<Finite>::ZERO; ambient_dim];
+    for (basis_row, &coord) in basis_matrix.iter().zip(t.iter()) {
+        for (ambient_coord, &coefficient) in ambient.iter_mut().zip(basis_row.iter()) {
+            *ambient_coord = *ambient_coord + coord * coefficient;
+        }
+    }
+    Some(ambient)
+}
+
 /// Compute numerical rank and conditioning diagnostics for a KKLT Jacobian.
 ///
 /// The rank threshold follows the usual SVD scale-dependent convention
@@ -1528,6 +1669,62 @@ pub fn solve_mixed_basis_path_following(
         |t| compute_kklt_divisor_volumes(kappa_basis, kappa_all, basis, kklt_basis, t),
         |t| compute_kklt_jacobian(kappa_basis, kappa_all, basis, kklt_basis, t),
     )
+}
+
+/// Solve KKLT path-following with Kähler coordinates in either a vector or
+/// matrix divisor basis.
+///
+/// This is the generic-basis entry point needed when CYTools supplies a matrix
+/// divisor basis. The target divisor volumes remain ordered by ambient divisor
+/// indices in `kklt_basis`.
+pub fn solve_divisor_basis_path_following(
+    kappa_all: &Intersection,
+    basis: DivisorBasis<'_>,
+    kklt_basis: &[usize],
+    tau_target: &[DivisorVolume],
+    t_init: &[F64<Finite>],
+    steps: CheckedRange<usize>,
+) -> Option<KkltResult> {
+    let basis_dim = divisor_basis_dimension(kappa_all.dim(), basis)?;
+    if t_init.len() != basis_dim
+        || tau_target.len() != kklt_basis.len()
+        || kklt_basis.iter().any(|&idx| idx >= kappa_all.dim())
+        || steps.end <= steps.start
+    {
+        return None;
+    }
+
+    solve_path_following_core(
+        tau_target,
+        t_init,
+        steps,
+        |t| compute_kklt_divisor_volumes_in_divisor_basis(kappa_all, basis, kklt_basis, t),
+        |t| compute_kklt_jacobian_in_divisor_basis(kappa_all, basis, kklt_basis, t),
+    )
+}
+
+fn divisor_basis_dimension(ambient_dim: usize, basis: DivisorBasis<'_>) -> Option<usize> {
+    match basis {
+        DivisorBasis::Indices(indices) => {
+            if indices.iter().any(|&idx| idx >= ambient_dim) {
+                None
+            } else {
+                Some(indices.len())
+            }
+        }
+        DivisorBasis::Matrix {
+            standard_basis,
+            basis_matrix,
+        } => {
+            if standard_basis.len() != basis_matrix.len()
+                || basis_matrix.iter().any(|row| row.len() != ambient_dim)
+            {
+                None
+            } else {
+                Some(basis_matrix.len())
+            }
+        }
+    }
 }
 
 /// Evaluate explicit initial Kähler points as KKLT branch candidates.
@@ -3100,6 +3297,95 @@ mod tests {
         assert!((jacobian[0][1].get() - 0.0).abs() < 1e-10);
         assert!((jacobian[1][0].get() - 23.0).abs() < 1e-10);
         assert!((jacobian[1][1].get() - 10.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_compute_kklt_matrix_basis_tau_and_jacobian() {
+        // Kähler coordinates use the matrix basis B0=D0+D1, B1=D2.
+        // For t=(2,3), the ambient Kähler vector is (2,2,3).
+        let mut kappa_all = Intersection::new(3);
+        kappa_all.set(
+            0,
+            0,
+            0,
+            TypedRational::<Finite>::from_raw(Rational::from(2)),
+        );
+        kappa_all.set(
+            2,
+            0,
+            1,
+            TypedRational::<Finite>::from_raw(Rational::from(6)),
+        );
+        kappa_all.set(
+            2,
+            0,
+            2,
+            TypedRational::<Finite>::from_raw(Rational::from(8)),
+        );
+
+        let standard_basis = vec![0, 2];
+        let basis_matrix = vec![
+            vec![Integer::from(1), Integer::from(1), Integer::from(0)],
+            vec![Integer::from(0), Integer::from(0), Integer::from(1)],
+        ];
+        let kklt_basis = vec![2];
+        let t = vec![finite_f64(2.0), finite_f64(3.0)];
+        let basis = DivisorBasis::Matrix {
+            standard_basis: &standard_basis,
+            basis_matrix: &basis_matrix,
+        };
+
+        let tau = compute_kklt_divisor_volumes_in_divisor_basis(&kappa_all, basis, &kklt_basis, &t)
+            .unwrap();
+        assert!((tau[0].get() - 72.0).abs() < 1e-10);
+
+        let jacobian =
+            compute_kklt_jacobian_in_divisor_basis(&kappa_all, basis, &kklt_basis, &t).unwrap();
+        assert!((jacobian[0][0].get() - 48.0).abs() < 1e-10);
+        assert!((jacobian[0][1].get() - 16.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_divisor_basis_path_following_solves_matrix_basis() {
+        // τ_D1 = 3 x^2 with matrix coordinate x=D0+D1.
+        let mut kappa_all = Intersection::new(2);
+        kappa_all.set(
+            1,
+            0,
+            0,
+            TypedRational::<Finite>::from_raw(Rational::from(6)),
+        );
+        let standard_basis = vec![0];
+        let basis_matrix = vec![vec![Integer::from(1), Integer::from(1)]];
+        let kklt_basis = vec![1];
+        let tau_target = vec![f64_pos!(12.0)];
+        let t_init = vec![finite_f64(1.0)];
+        let basis = DivisorBasis::Matrix {
+            standard_basis: &standard_basis,
+            basis_matrix: &basis_matrix,
+        };
+
+        let result = solve_divisor_basis_path_following(
+            &kappa_all,
+            basis,
+            &kklt_basis,
+            &tau_target,
+            &t_init,
+            range!(0, 400),
+        )
+        .unwrap();
+
+        assert!(result.converged);
+        assert!(
+            (result.t[0].get() - 2.0).abs() < 1e-5,
+            "t = {}",
+            result.t[0].get()
+        );
+        assert!(
+            (result.tau[0].get() - 12.0).abs() < 1e-4,
+            "tau = {}",
+            result.tau[0].get()
+        );
     }
 
     #[test]
