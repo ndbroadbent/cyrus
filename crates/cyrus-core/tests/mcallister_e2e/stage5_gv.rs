@@ -1079,6 +1079,7 @@ fn stage5_gv_computation_roadmap() {
             "DDM quotient-rank checks run before full dense modular checks when a basis context exists, with their own modular true certificate and exact integer false path",
             "DDM preserves ray orientation when normalizing primitive integer rays; sign-flipping was a correctness bug and is now unit-tested",
             "compute_gv_invariants runs the upstream cygv HKTY modules and maps cygv construction/inversion failures and remaining unwind panics into Result errors",
+            "Cyrus' direct cygv HKTY call chain is regression-tested against cygv::compute_gv_rat_threefold on the quintic degree-one GV 2875 case",
             "McAllister 4-214-647 small toric curve classes are computed from Cyrus Mori-cap rays and verified pair-decomposable pruning",
             "McAllister 4-214-647 small toric curve GV values are computed from toric two-face/origin-circuit formulas and match small_curves_gv.dat as a checkpoint",
             "CYTools-style height projection from heights plus curve-basis effective-cone rows reproduces McAllister 4-214-647 kahler_param.dat exactly as an uncorrected-branch checkpoint",

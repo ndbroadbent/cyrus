@@ -18,7 +18,11 @@ intersection-preprocessing, fundamental-period, instanton, series-inversion,
 and non-integral-output failures into ordinary `Result` errors. The shared
 compact GV boundary also catches remaining upstream `cygv` panics in unwind
 builds. Bad candidate geometries should fail loudly without unwinding the whole
-search.
+search. The regression
+`cyrus_direct_cygv_chain_matches_upstream_quintic_wrapper` compares this direct
+module call chain against `cygv::compute_gv_rat_threefold` on the quintic
+degree-one `2875` case, so the error-handling wrapper stays pinned to upstream
+`cygv` behavior.
 
 ## CYTools Contract
 

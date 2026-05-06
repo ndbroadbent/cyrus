@@ -11910,6 +11910,7 @@ mod tests {
     use crate::{DivisorBasis, f64_finite, f64_pos};
     use malachite::Integer;
     use malachite::Rational;
+    use nalgebra::{DMatrix, RowDVector};
 
     #[test]
     fn cygv_pair_seed_reduction_mirrors_private_pair_pruning() {
@@ -15887,6 +15888,51 @@ mod tests {
                 .any(|(charge, value)| charge == &[1] && value == &Integer::from(2875)),
             "degree-one quintic GV 2875 missing from {gvs:?}"
         );
+    }
+
+    #[test]
+    fn cyrus_direct_cygv_chain_matches_upstream_quintic_wrapper() {
+        let mut cyrus_intnums = Intersection::new(1);
+        set_intersection_i64(&mut cyrus_intnums, 0, 0, 0, 5);
+
+        let cyrus_gvs = compute_gv_invariants_inner(
+            &[vec![1]],
+            &[1],
+            &[vec![1, 1, 1, 1, 1]],
+            &cyrus_intnums,
+            None,
+            Some(1),
+            GvLatticeAugmentation::None,
+            GvCachePolicy::Disabled,
+        )
+        .expect("Cyrus direct cygv chain should compute quintic GV");
+        let cyrus_map = cyrus_gvs
+            .into_iter()
+            .map(|(charge, value)| (charge, value.to_string()))
+            .collect::<BTreeMap<_, _>>();
+
+        let generators = DMatrix::from_column_slice(1, 1, &[1]);
+        let grading = RowDVector::from_row_slice(&[1]);
+        let q = DMatrix::from_column_slice(5, 1, &[1, 1, 1, 1, 1]);
+        let upstream_intnums = HashMap::from([((0usize, 0usize, 0usize), 5i32)]);
+        let upstream_gvs = cygv::compute_gv_rat_threefold(
+            generators,
+            grading,
+            Some(1),
+            None,
+            q,
+            Vec::new(),
+            upstream_intnums,
+            Some(1),
+            1000,
+        );
+        let upstream_map = upstream_gvs
+            .into_iter()
+            .map(|(charge, value)| (charge.as_slice().to_vec(), value.to_string()))
+            .collect::<BTreeMap<_, _>>();
+
+        assert_eq!(cyrus_map, upstream_map);
+        assert_eq!(cyrus_map.get(&vec![1]).map(String::as_str), Some("2875"));
     }
 
     #[test]
