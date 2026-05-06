@@ -498,7 +498,8 @@ periods, inverse mirror-map substitution, local `beta - alpha alpha`
 conversion, and multiple-cover extraction. The remaining rank-two CKYZ work is
 coefficient-targeted extraction for larger requested degrees, plus broader
 validation beyond the all-row first-four gate and the focused F0
-`[1,1]`/`[1,2]` and F1 `[2,1]`/`[3,1]` all-ten rows.
+`[1,1]`/`[1,2]`, F1 `[2,1]`/`[3,1]`, and polygon-5 `[4,3,2]`/`[3,2,2]`
+all-ten rows.
 
 ## Source-Derived Implementation Checklist
 
