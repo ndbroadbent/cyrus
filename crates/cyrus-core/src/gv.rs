@@ -2963,6 +2963,27 @@ impl CkyzIndexedSeries {
         Self { terms }
     }
 
+    #[cfg(test)]
+    fn monomial(
+        degree: &[usize],
+        coefficient: Rational,
+        domain: &CkyzMonomialDomain,
+        context: &str,
+    ) -> Result<Self> {
+        if degree.len() != domain.rank {
+            return Err(Error::InvalidInput(format!(
+                "{context} monomial rank does not match coordinate rank"
+            )));
+        }
+        if coefficient == 0 {
+            return Ok(Self { terms: Vec::new() });
+        }
+        let terms = domain
+            .index_of(degree)
+            .map_or_else(Vec::new, |index| vec![(index, coefficient)]);
+        Ok(Self { terms })
+    }
+
     fn from_btree(
         series: &BTreeMap<Vec<usize>, Rational>,
         domain: &CkyzMonomialDomain,
@@ -3236,6 +3257,33 @@ impl CkyzIndexedSeries {
             out.add_scaled_assign(
                 &power,
                 Rational::from(1) / Rational::from(factorial.clone()),
+            );
+        }
+        Ok(out)
+    }
+
+    #[cfg(test)]
+    fn li2(&self, domain: &CkyzMonomialDomain) -> Result<Self> {
+        let max_exponent = self
+            .min_total_degree(domain, "CKYZ Li2 input")?
+            .map_or(0, |min_degree| domain.max_total_degree / min_degree);
+        if max_exponent == 0 {
+            return Ok(Self { terms: Vec::new() });
+        }
+
+        let mut out = self.clone();
+        let mut power = self.clone();
+        for exponent in 2..=max_exponent {
+            power = power.mul(self, domain)?;
+            if power.is_empty() {
+                break;
+            }
+            let exponent_squared = exponent
+                .checked_mul(exponent)
+                .ok_or_else(|| Error::InvalidInput("CKYZ Li2 exponent overflowed usize".into()))?;
+            out.add_scaled_assign(
+                &power,
+                Rational::from(1) / Rational::from(Integer::from(exponent_squared)),
             );
         }
         Ok(out)
@@ -4868,6 +4916,142 @@ fn ckyz_q_degree_series_in_z_domain(
     let exp_exponent = ckyz_series_exp_domain(&exponent, domain)?;
     let monomial = BTreeMap::from([(degree.to_vec(), Rational::from(1))]);
     ckyz_series_mul_domain(&monomial, &exp_exponent, domain)
+}
+
+#[cfg(test)]
+fn ckyz_indexed_alpha_series(
+    alpha: &[BTreeMap<Vec<usize>, Rational>],
+    domain: &CkyzMonomialDomain,
+) -> Result<Vec<CkyzIndexedSeries>> {
+    if alpha.len() != domain.rank {
+        return Err(Error::InvalidInput(
+            "CKYZ indexed alpha rank does not match domain rank".into(),
+        ));
+    }
+    alpha
+        .iter()
+        .map(|series| {
+            validate_ckyz_series(series, domain.rank, "CKYZ log-period correction")?;
+            validate_ckyz_series_has_zero_constant(
+                series,
+                domain.rank,
+                "CKYZ log-period correction",
+            )?;
+            CkyzIndexedSeries::from_btree(series, domain, "CKYZ indexed log-period correction")
+        })
+        .collect()
+}
+
+#[cfg(test)]
+fn ckyz_indexed_q_delta_series_in_z_domain(
+    degree: &[usize],
+    indexed_alpha: &[CkyzIndexedSeries],
+    domain: &CkyzMonomialDomain,
+) -> Result<CkyzIndexedSeries> {
+    let rank = indexed_alpha.len();
+    if rank == 0 || degree.len() != rank || domain.rank != rank {
+        return Err(Error::InvalidInput(
+            "CKYZ indexed q-delta series rank mismatch".into(),
+        ));
+    }
+    if !domain.contains(degree) {
+        return Ok(CkyzIndexedSeries { terms: Vec::new() });
+    }
+
+    let mut exponent = CkyzIndexedSeries { terms: Vec::new() };
+    for (coordinate, &power) in degree.iter().enumerate() {
+        if power == 0 {
+            continue;
+        }
+        exponent.add_scaled_assign(
+            &indexed_alpha[coordinate],
+            Rational::from(Integer::from(power)),
+        );
+    }
+    let exp_exponent = exponent.exp(domain)?;
+    let monomial =
+        CkyzIndexedSeries::monomial(degree, Rational::from(1), domain, "CKYZ indexed q-delta")?;
+    monomial.mul(&exp_exponent, domain)
+}
+
+#[cfg(test)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CkyzIndexedQnBuild {
+    series: CkyzIndexedSeries,
+    reused_previous: bool,
+    delta_degree: Vec<usize>,
+}
+
+#[cfg(test)]
+fn ckyz_indexed_q_degree_series_with_previous_cache_in_z_domain(
+    degree_index: usize,
+    previous_qn: &VecDeque<HashMap<usize, CkyzIndexedSeries>>,
+    previous_qn_indices: &VecDeque<Vec<usize>>,
+    q_delta_cache: &mut HashMap<Vec<usize>, CkyzIndexedSeries>,
+    indexed_alpha: &[CkyzIndexedSeries],
+    domain: &CkyzMonomialDomain,
+) -> Result<CkyzIndexedQnBuild> {
+    let degree = domain
+        .degrees
+        .get(degree_index)
+        .ok_or_else(|| Error::InvalidInput("CKYZ q_N degree index is outside the domain".into()))?;
+    if degree.len() != domain.rank || indexed_alpha.len() != domain.rank {
+        return Err(Error::InvalidInput(
+            "CKYZ cached q_N series rank mismatch".into(),
+        ));
+    }
+
+    let mut closest_previous_index = None;
+    let mut closest_delta = degree.clone();
+    let mut closest_distance = ckyz_qn_history_distance_score(degree);
+    for (prev_indices, prev_qns) in previous_qn_indices.iter().zip(previous_qn.iter()) {
+        for &prev_index in prev_indices {
+            let previous_degree = domain.degrees.get(prev_index).ok_or_else(|| {
+                Error::InvalidInput("CKYZ previous q_N index is outside the domain".into())
+            })?;
+            let Some(delta) = ckyz_subtract_degree_multiple(degree, previous_degree, 1) else {
+                continue;
+            };
+            if !domain.contains(&delta) {
+                continue;
+            }
+            let distance = ckyz_qn_history_distance_score(&delta);
+            if distance < closest_distance {
+                if !prev_qns.contains_key(&prev_index) {
+                    return Err(Error::InvalidInput(
+                        "CKYZ previous q_N index is missing its polynomial".into(),
+                    ));
+                }
+                closest_distance = distance;
+                closest_delta = delta;
+                closest_previous_index = Some(prev_index);
+            }
+        }
+    }
+
+    if !q_delta_cache.contains_key(&closest_delta) {
+        let q_delta =
+            ckyz_indexed_q_delta_series_in_z_domain(&closest_delta, indexed_alpha, domain)?;
+        q_delta_cache.insert(closest_delta.clone(), q_delta);
+    }
+    let q_delta = q_delta_cache
+        .get(&closest_delta)
+        .expect("q-delta series was inserted above");
+    let series = if let Some(previous_index) = closest_previous_index {
+        let previous_series = previous_qn
+            .iter()
+            .find_map(|batch| batch.get(&previous_index))
+            .ok_or_else(|| Error::InvalidInput("CKYZ previous q_N polynomial vanished".into()))?;
+        previous_series.mul(q_delta, domain)?
+    } else {
+        q_delta.clone()
+    };
+
+    Ok(CkyzIndexedQnBuild {
+        series,
+        reused_previous: closest_previous_index.is_some(),
+        delta_degree: closest_delta,
+    })
 }
 
 #[cfg(test)]
@@ -11126,21 +11310,24 @@ fn is_strictly_dual(rays: &[Vec<i64>], v: &[i64]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
     use std::f64::consts::PI;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        BoundedCurveDecompositionIndex, CkyzExpCoefficientCache, CkyzLocalIntersectionTerm,
-        CkyzLocalSurfaceIdentification, CkyzLocalSurfaceKind, CkyzMonomialDomain,
-        CurveDecompositionTerm, CurvePruningStrategy, GvLatticeAugmentation, LocalToricCircuitKind,
-        LocalToricCoordinate2D, NilpotentRayCandidate, NilpotentRayDegreeSlice,
-        NilpotentRaySliceDistance, OriginCircuitCurveWitness, OriginCircuitRelationPoint,
-        ToricCurveCandidate, certify_supporting_mori_face_by_exact_kernel,
-        check_extremal_mori_ray_separator, check_supporting_mori_face_normal,
-        ckyz_cover_closed_target_degrees, ckyz_expalpha_power_caches_domain,
-        ckyz_grading_vector_from_cover_weights, ckyz_local_domain_profile_for_degrees,
+        BoundedCurveDecompositionIndex, CkyzExpCoefficientCache, CkyzIndexedSeries,
+        CkyzLocalIntersectionTerm, CkyzLocalSurfaceIdentification, CkyzLocalSurfaceKind,
+        CkyzMonomialDomain, CurveDecompositionTerm, CurvePruningStrategy, GvLatticeAugmentation,
+        LocalToricCircuitKind, LocalToricCoordinate2D, NilpotentRayCandidate,
+        NilpotentRayDegreeSlice, NilpotentRaySliceDistance, OriginCircuitCurveWitness,
+        OriginCircuitRelationPoint, ToricCurveCandidate,
+        certify_supporting_mori_face_by_exact_kernel, check_extremal_mori_ray_separator,
+        check_supporting_mori_face_normal, ckyz_cover_closed_target_degrees,
+        ckyz_cygv_previous_qn_level_count, ckyz_expalpha_power_caches_domain, ckyz_grading_degree,
+        ckyz_grading_vector_from_cover_weights, ckyz_indexed_alpha_series,
+        ckyz_indexed_q_degree_series_with_previous_cache_in_z_domain,
+        ckyz_local_domain_profile_for_degrees,
         ckyz_local_domain_profile_for_degrees_with_causal_domain,
         ckyz_local_surface_causal_domain_spec, ckyz_local_surface_cover_weight_coefficients,
         ckyz_local_surface_domain_profile_for_multiples, ckyz_local_surface_target_degrees,
@@ -12358,6 +12545,89 @@ mod tests {
             .unwrap();
             assert_eq!(cached, direct);
         }
+    }
+
+    #[test]
+    fn ckyz_previous_qn_indexed_series_matches_direct_exponentials() {
+        let relations = ckyz_polygon5_relations();
+        let local_intersection_terms = ckyz_polygon5_intersection_terms();
+        let target_degrees = [vec![4, 3, 2], vec![8, 6, 4]];
+        let extraction_degrees = ckyz_cover_closed_target_degrees(&target_degrees).unwrap();
+        let domain = ckyz_predicted_support_domain_for_degrees(
+            &relations,
+            &local_intersection_terms,
+            &extraction_degrees,
+        )
+        .unwrap();
+        let alpha = compute_ckyz_log_period_corrections_domain(&relations, &domain).unwrap();
+        let mut history_degrees =
+            ckyz_z_residual_dependency_degrees(&alpha, &extraction_degrees, &domain).unwrap();
+        let grading = ckyz_grading_vector_from_cover_weights(&[1, 1, 1]).unwrap();
+        ckyz_sort_degrees_for_extraction_with_grading(&mut history_degrees, &grading).unwrap();
+        history_degrees.dedup();
+        let history_gradings = history_degrees
+            .iter()
+            .map(|degree| ckyz_grading_degree(degree, &grading).unwrap())
+            .collect::<Vec<_>>();
+        let history_indices = history_degrees
+            .iter()
+            .map(|degree| domain.index_of(degree).unwrap())
+            .collect::<Vec<_>>();
+        let indexed_alpha = ckyz_indexed_alpha_series(&alpha, &domain).unwrap();
+
+        let previous_level_count = ckyz_cygv_previous_qn_level_count(domain.rank);
+        let mut previous_qn = VecDeque::from(vec![
+            HashMap::<usize, CkyzIndexedSeries>::new();
+            previous_level_count
+        ]);
+        let mut previous_qn_indices =
+            VecDeque::from(vec![Vec::<usize>::new(); previous_level_count]);
+        let mut q_delta_cache = HashMap::<Vec<usize>, CkyzIndexedSeries>::new();
+        let mut reused_previous_count = 0usize;
+        let mut selected_deltas = BTreeSet::new();
+
+        let mut batch_start = 0usize;
+        while batch_start < history_indices.len() {
+            let batch_grading = history_gradings[batch_start];
+            let batch_end = history_gradings.partition_point(|&grading| grading <= batch_grading);
+            let mut computed_qn = HashMap::new();
+            let mut computed_indices = Vec::new();
+            for (&degree_index, degree) in history_indices[batch_start..batch_end]
+                .iter()
+                .zip(history_degrees[batch_start..batch_end].iter())
+            {
+                let built = ckyz_indexed_q_degree_series_with_previous_cache_in_z_domain(
+                    degree_index,
+                    &previous_qn,
+                    &previous_qn_indices,
+                    &mut q_delta_cache,
+                    &indexed_alpha,
+                    &domain,
+                )
+                .unwrap();
+                let direct = ckyz_q_degree_series_in_z_domain(degree, &alpha, &domain).unwrap();
+                assert_eq!(built.series.to_btree(&domain), direct, "degree={degree:?}");
+                let indexed_li2 = built.series.li2(&domain).unwrap().to_btree(&domain);
+                let direct_li2 = ckyz_series_li2_domain(&direct, &domain).unwrap();
+                assert_eq!(indexed_li2, direct_li2, "Li2 degree={degree:?}");
+                if built.reused_previous {
+                    reused_previous_count += 1;
+                }
+                if built.delta_degree.iter().any(|&entry| entry != 0) {
+                    selected_deltas.insert(built.delta_degree);
+                }
+                computed_qn.insert(degree_index, built.series);
+                computed_indices.push(degree_index);
+            }
+            previous_qn.pop_front();
+            previous_qn_indices.pop_front();
+            previous_qn.push_back(computed_qn);
+            previous_qn_indices.push_back(computed_indices);
+            batch_start = batch_end;
+        }
+
+        assert!(reused_previous_count > 0);
+        assert!(selected_deltas.len() < history_degrees.len());
     }
 
     #[test]

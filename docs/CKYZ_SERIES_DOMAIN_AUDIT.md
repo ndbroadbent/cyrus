@@ -541,3 +541,14 @@ is the concrete next implementation target: build local CKYZ `q_N` and
 `Li2(q_N)` from recent indexed finite polynomials and tiny monomial deltas,
 instead of asking the recursive coefficient evaluator for millions of
 independent `(scale, delta)` states.
+
+The first implementation scaffold for that target is now in place behind
+focused tests. Cyrus can convert CKYZ `alpha` corrections into indexed finite
+series, build `q_delta = z^delta exp(delta.alpha)` in the indexed domain, and
+then build `q_N` from a cygv-shaped rolling previous-`q_N` cache. The regression
+`ckyz_previous_qn_indexed_series_matches_direct_exponentials` walks the
+polygon-5 selected z-history by grading batch and verifies that every
+history-built `q_N` and `Li2(q_N)` matches the direct exponential construction
+on the support-predicted domain. This keeps the next production switch
+mechanical: replace recursive per-coefficient Li2 subtraction with the tested
+indexed `q_N` builder, while preserving the current residual/integrality logic.
