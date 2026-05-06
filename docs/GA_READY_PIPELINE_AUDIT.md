@@ -311,8 +311,11 @@ to make the remaining GV layer more first-principles:
    cygv's `neg2` fundamental-period bucket, while sign `+1` leaves the target
    at `[-1]` and puts the positive unit generator in `ignored_gt2`. This
    removes the target-coordinate/orientation ambiguity for the compact-shaped
-   local supports, but it is still not a chamber certificate and supplies no
-   GV value by itself. The
+   local supports. The report now also records the target-coordinate gcd and
+   primitive direction; on the current saved context all nine origin-circuit
+   misses have primitive local target coordinate, with sign `-1` giving `[1]`
+   and sign `+1` giving `[-1]`. This is still not a chamber certificate and
+   supplies no GV value by itself. The
    direct source read reinforces this: `cygv` obtains GV values from the full
    finite semigroup, HKTY alpha/beta construction, and degree-ordered
    `Li2(q_N)` subtraction history, while the McAllister paper's small-curve

@@ -1849,6 +1849,13 @@ The current `cygv` crate source sharpens the same boundary:
   bucket, while sign `+1` gives target coordinate `[-1]` and puts the positive
   unit generator in `ignored_gt2`. This is still a diagnostic, not a chamber
   certificate, but it removes one ambiguity from the local `q`-shape analysis.
+- The orientation candidates now also report the gcd and primitive target
+  direction in the local charge lattice. On the current saved context all nine
+  origin-circuit misses have primitive local target coordinate, with sign `-1`
+  giving primitive direction `[1]` and sign `+1` giving `[-1]`. This only
+  certifies the target-coordinate arithmetic; the local semigroup generators,
+  grading, chamber certificate, and intersection tensor remain required before
+  an actual compact/local `cygv` call can be meaningful.
 
 The actionable consequence is that a Cyrus replacement for corrected-chamber
 or potent-ray GV values must recreate the finite semigroup and lower-degree

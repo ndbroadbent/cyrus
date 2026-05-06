@@ -18,7 +18,7 @@ use cyrus_core::types::tags::Finite;
 use cyrus_core::{
     Intersection, Point, compute_gv_invariants_with_explicit_semigroup,
     compute_gv_invariants_with_provided_generators, cygv_pair_reduced_seed_generators,
-    diagnose_affine_toric_circuit, integer_math::solve_linear_system_rational,
+    diagnose_affine_toric_circuit, integer_math::solve_linear_system_rational, utils::gcd_list_int,
 };
 
 #[derive(Debug, Deserialize)]
@@ -255,6 +255,9 @@ struct LocalCygvOrientationCandidate {
     local_q_matrix_rows: Vec<Vec<i64>>,
     target_coordinate: Option<Vec<i64>>,
     target_coordinate_is_nonnegative: Option<bool>,
+    target_coordinate_gcd: Option<i64>,
+    target_coordinate_is_primitive: Option<bool>,
+    target_primitive_direction: Option<Vec<i64>>,
     positive_unit_generator_negative_intersections: Option<usize>,
     positive_unit_generator_omega_bucket: Option<String>,
 }
@@ -1199,6 +1202,21 @@ fn local_cygv_orientation_candidates(
             let target_coordinate_is_nonnegative = target_coordinate
                 .as_ref()
                 .map(|coordinate: &Vec<i64>| coordinate.iter().all(|&entry| entry >= 0));
+            let target_coordinate_gcd = target_coordinate
+                .as_ref()
+                .map(|coordinate: &Vec<i64>| gcd_list_int(coordinate).abs());
+            let target_coordinate_is_primitive = target_coordinate_gcd.map(|gcd| gcd == 1);
+            let target_primitive_direction = target_coordinate
+                .as_ref()
+                .zip(target_coordinate_gcd)
+                .and_then(|(coordinate, gcd)| {
+                    (gcd > 0).then(|| {
+                        coordinate
+                            .iter()
+                            .map(|&entry| entry / gcd)
+                            .collect::<Vec<_>>()
+                    })
+                });
             let positive_unit_generator_negative_intersections =
                 (oriented_q.first().map_or(0, Vec::len) == 1)
                     .then(|| oriented_q.iter().filter(|row| row[0] < 0).count());
@@ -1209,6 +1227,9 @@ fn local_cygv_orientation_candidates(
                 local_q_matrix_rows: oriented_q,
                 target_coordinate,
                 target_coordinate_is_nonnegative,
+                target_coordinate_gcd,
+                target_coordinate_is_primitive,
+                target_primitive_direction,
                 positive_unit_generator_negative_intersections,
                 positive_unit_generator_omega_bucket,
             }
@@ -3486,6 +3507,9 @@ mod tests {
         assert_eq!(positive_target.overall_charge_basis_sign, -1);
         assert_eq!(positive_target.target_coordinate, Some(vec![1]));
         assert_eq!(positive_target.target_coordinate_is_nonnegative, Some(true));
+        assert_eq!(positive_target.target_coordinate_gcd, Some(1));
+        assert_eq!(positive_target.target_coordinate_is_primitive, Some(true));
+        assert_eq!(positive_target.target_primitive_direction, Some(vec![1]));
         assert_eq!(
             positive_target.positive_unit_generator_negative_intersections,
             Some(2)
@@ -3499,6 +3523,11 @@ mod tests {
         let original_orientation = &skeleton.orientation_candidates[1];
         assert_eq!(original_orientation.overall_charge_basis_sign, 1);
         assert_eq!(original_orientation.target_coordinate, Some(vec![-1]));
+        assert_eq!(original_orientation.target_coordinate_gcd, Some(1));
+        assert_eq!(
+            original_orientation.target_primitive_direction,
+            Some(vec![-1])
+        );
         assert_eq!(
             original_orientation.positive_unit_generator_negative_intersections,
             Some(3)
