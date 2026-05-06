@@ -1763,25 +1763,18 @@ The current `cygv` crate source sharpens the same boundary:
   do not replace the upstream cygv HKTY call.
 - Re-running that report on the saved 4-214-647 context with the same degree-10
   cap shows both low-degree missing targets reach partial previous degrees
-  `1..9` before the 20000-element cap. The predecessor counts remain unset
-  because the closure is incomplete, which is exactly the current blocker:
-  Cyrus can see the relevant lower grading slices, but not yet certify the full
-  cygv subtraction history cheaply.
-- The capped probe now also reports lower-bound predecessor counts separately
-  from certified counts. With the same 20000-element cap, target `7` sees
-  `15195` partial previous-window elements and already has two visible
-  predecessor/residual splits, with closest residual sparse support
-  `[(44,1),(53,-1),(203,1),(206,-1),(207,1)]`. Target `8` sees `15191`
-  partial previous-window elements but no visible predecessor split before the
-  cap. Both rows have `predecessor_counts_complete=false`, so this is only a
-  lower-bound diagnostic on the source history.
+  `1..9` before the 20000-element cap. The capped probe now reports lower-bound
+  predecessor counts separately from certified counts via
+  `predecessor_counts_complete`; incomplete closures must not be interpreted as
+  final cygv subtraction histories.
 - `mcallister_gv_context --target-index N` now narrows expensive source-history
   probes to one missing target. With `--target-index 7/8 --element-limit 50000`,
-  both degree-10 targets still exceed the cap but now show two visible
-  predecessor/residual splits each, and both closest residual distances improve
-  to `4.0`. This is evidence that the relevant cygv subtraction history is
-  present in the broad degree-bounded source domain, but still not cheap enough
-  to certify by naive bounded closure.
+  deterministic capped closure keeps the report reproducible: both degree-10
+  targets still exceed the cap, both see `34195` partial previous-window
+  elements, and neither has a visible predecessor/residual split in the
+  deterministic capped subset. This confirms that arbitrary capped subsets can
+  mislead; the remaining issue is certifying or replacing the full source
+  semigroup/history, not tuning a local sample.
 
 The actionable consequence is that a Cyrus replacement for corrected-chamber
 or potent-ray GV values must recreate the finite semigroup and lower-degree
