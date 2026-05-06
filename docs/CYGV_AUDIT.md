@@ -1481,16 +1481,16 @@ Those results are still diagnostic unless the generator set is promoted to a
 source-certified chamber semigroup.
 
 The direct provided-generator probe has now been run against the actual Rust
-`cygv` crate, not a local reimplementation. In the release profile the runner
-records `skipped_panic_abort`, because the guarded diagnostic cannot catch a
-crate panic when the binary is compiled with `panic=abort`. In an optimized
-release/unwind run, the degree-10 probe entered `cygv` with `720` supplied
+`cygv` crate, not a local reimplementation. The release profile now keeps
+`panic=unwind` so guarded cygv diagnostics can return explicit errors instead
+of aborting the whole search process if upstream cygv panics internally. In an
+optimized release run, the degree-10 probe entered `cygv` with `720` supplied
 generators and `max_deg=10`, then exceeded a `1200s` timeout without returning
 a GV value or a panic. The debug/unwind version of the same probe exceeded
 `600s`. The runner can also pass `--pair-reduce-support-overlap-generators` to
 mirror cygv's own pair-sum seed reduction before the crate call; that reduced
-the degree-10 input from `720` to `450` generators, but the optimized
-release/unwind probe still exceeded `900s`. This supports the same conclusion
+the degree-10 input from `720` to `450` generators, but the optimized release
+probe still exceeded `900s`. This supports the same conclusion
 as the semigroup-size diagnostics: the corrected-chamber blocker is the
 source/domain selection feeding cygv, not a missing hand-rolled replacement for
 cygv itself.
@@ -1678,11 +1678,10 @@ The current `cygv` crate source sharpens the same boundary:
   explained by cygv's initial decomposable-seed pruning.
 - Running the actual `cygv` provided-generator path with all positive
   degree-bounded rows through degree 10 confirms that this seed size is already
-  too broad for an interactive diagnostic: the optimized release/unwind run
-  entered cygv with `720` generators and exceeded `1200s` without returning;
+  too broad for an interactive diagnostic: the optimized release run entered
+  cygv with `720` generators and exceeded `1200s` without returning;
   pre-reducing those seeds with cygv's own pair-sum rule lowered the direct
-  input to `450` generators but still exceeded `900s`; the normal release
-  profile is guarded off because it uses `panic=abort`.
+  input to `450` generators but still exceeded `900s`.
 - The bounded source-level path-history probe reaches the same conclusion
   without running GV. For both degree-10 missing targets, the target class is
   present in the partial semigroup closure, but the closure still exceeds

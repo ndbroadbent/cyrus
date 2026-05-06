@@ -125,7 +125,6 @@ CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/strin
 CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 cargo test -p cyrus-core --test mcallister_e2e stage5_mcallister_small_toric_curves_match_checkpoint -- --nocapture
 CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 cargo test -p cyrus-core --test mcallister_e2e stage5_mcallister_small_toric_curve_gvs_match_checkpoint -- --nocapture
 cargo build --release -p cyrus-core --bin mcallister_first_principles
-CARGO_PROFILE_RELEASE_PANIC=unwind cargo build --release -p cyrus-core --bin mcallister_first_principles
 CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 CYRUS_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE=1 timeout 600 ./target/release/mcallister_first_principles --stop-after volume --allow-invalid-ek0 --diagnose-corrected-chamber-gv --diagnose-corrected-chamber-lp-face-gv
 CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 timeout 300 ./target/release/mcallister_first_principles --stop-after volume --allow-invalid-ek0 --diagnose-corrected-chamber-gv
 CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_RUNNER_HEAVY=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 cargo test -p cyrus-core --test mcallister_e2e stage0_first_principles_runner_accepts_declared_inputs_only_data_dir -- --nocapture
@@ -221,15 +220,16 @@ to make the remaining GV layer more first-principles:
    low-degree targets. This remains diagnostic because the exported rows are
    degree-bounded projected generators, not a certified full chamber semigroup
    or CYTools lattice-augmented Mori-cap context.
-   The actual Rust `cygv` crate has now been exercised on that bounded path:
-   the release build correctly refuses the guarded diagnostic under
-   `panic=abort`, the optimized release/unwind run with
+   The actual Rust `cygv` crate has now been exercised on that bounded path.
+   The release profile now uses `panic=unwind` so candidate-local cygv panic
+   guards can return explicit diagnostic errors instead of aborting a GA/search
+   process. The optimized release run with
    `--run-support-overlap-generators 0 --support-overlap-max-target-degree 10`
    entered `cygv` with `720` supplied degree-bounded generators and did not
    finish within `1200s`, and the debug/unwind run did not finish within
    `600s`. Passing `--pair-reduce-support-overlap-generators` mirrors cygv's
    own pair-sum seed pruning before the crate call and reduced the same
-   degree-10 input to `450` generators, but that optimized release/unwind run
+   degree-10 input to `450` generators, but that optimized release run
    still exceeded `900s`. These probes produced no GV value or panic. This is a
    measured runtime blocker, not a reason to reimplement compact cygv locally.
    A direct cygv semigroup-size diagnostic now confirms why: the degree-10

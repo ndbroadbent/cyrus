@@ -103,7 +103,10 @@ anyhow = "1"
 [profile.release]
 lto = "fat"
 codegen-units = 1
-panic = "abort"
+# GA searches evaluate many candidate geometries. Keep unwinding enabled so
+# candidate-local panic guards around third-party numerical code can return
+# explicit errors instead of aborting the whole run.
+panic = "unwind"
 
 [profile.bench]
 inherits = "release"

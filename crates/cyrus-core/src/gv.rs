@@ -8540,7 +8540,7 @@ pub fn compute_ray_gv_series_with_provided_generators(
 ) -> Result<OneDimensionalRayGvSeries> {
     if cfg!(panic = "abort") {
         return Err(Error::InvalidInput(
-            "one-dimensional ray GV series requires a panic=unwind build until cygv panics are converted to Result".into(),
+            "one-dimensional ray GV series requires a panic=unwind build because upstream cygv can still panic internally".into(),
         ));
     }
     if max_multiple == 0 {
