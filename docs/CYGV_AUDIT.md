@@ -1217,6 +1217,14 @@ stores its pipeline basis as `Vec<usize>` and remains vector-basis internally
 until its Kähler, KKLT, branch-volume, and production matrix-basis transforms
 are generalized.
 
+The compact matrix-basis handoff now has an actual upstream-cygv smoke test:
+`matrix_basis_quintic_handoff_runs_actual_cygv_degree_one` builds the quintic
+no-origin `q` matrix from a matrix divisor basis, calls the Rust `cygv` path
+through `compute_gv_invariants_with_provided_generators`, and checks the
+degree-one invariant `2875`. This is intentionally small, but it verifies the
+matrix-basis input construction reaches the real compact HKTY engine rather
+than stopping at local shape tests.
+
 Second, cygv's final GV values are history-dependent. In
 `series_inversion.rs`, the threefold path chooses a candidate value from the
 first nonzero curve-coordinate component, checks integrality, records it, and

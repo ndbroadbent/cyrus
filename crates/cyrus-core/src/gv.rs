@@ -15543,6 +15543,91 @@ mod tests {
     }
 
     #[test]
+    fn matrix_basis_quintic_handoff_runs_actual_cygv_degree_one() {
+        let linrels = vec![
+            vec![
+                Integer::from(1),
+                Integer::from(0),
+                Integer::from(0),
+                Integer::from(0),
+                Integer::from(0),
+                Integer::from(0),
+            ],
+            vec![
+                Integer::from(0),
+                Integer::from(1),
+                Integer::from(-1),
+                Integer::from(0),
+                Integer::from(0),
+                Integer::from(0),
+            ],
+            vec![
+                Integer::from(0),
+                Integer::from(1),
+                Integer::from(0),
+                Integer::from(-1),
+                Integer::from(0),
+                Integer::from(0),
+            ],
+            vec![
+                Integer::from(0),
+                Integer::from(1),
+                Integer::from(0),
+                Integer::from(0),
+                Integer::from(-1),
+                Integer::from(0),
+            ],
+            vec![
+                Integer::from(0),
+                Integer::from(1),
+                Integer::from(0),
+                Integer::from(0),
+                Integer::from(0),
+                Integer::from(-1),
+            ],
+        ];
+        let standard_basis = vec![1];
+        let basis_matrix = vec![vec![
+            Integer::from(0),
+            Integer::from(1),
+            Integer::from(0),
+            Integer::from(0),
+            Integer::from(0),
+            Integer::from(0),
+        ]];
+        let ambient_mori_rays = vec![vec![0, 1, 1, 1, 1, 1]];
+        let data = gv_divisor_basis_data(
+            &ambient_mori_rays,
+            &linrels,
+            DivisorBasis::Matrix {
+                standard_basis: &standard_basis,
+                basis_matrix: &basis_matrix,
+            },
+        )
+        .expect("matrix basis should build quintic cygv inputs");
+        assert_eq!(data.mori_rays, vec![vec![1]]);
+        assert_eq!(data.q_matrix, vec![vec![1, 1, 1, 1, 1]]);
+
+        let mut intnums = Intersection::new(1);
+        set_intersection_i64(&mut intnums, 0, 0, 0, 5);
+        let gvs = compute_gv_invariants_with_provided_generators(
+            &data.mori_rays,
+            &[1],
+            &data.q_matrix,
+            &intnums,
+            None,
+            Some(1),
+        )
+        .expect("actual cygv should compute quintic degree-one GV");
+
+        assert!(
+            gvs.iter()
+                .any(|(charge, value)| charge == &[1] && value == &Integer::from(2875)),
+            "degree-one quintic GV 2875 missing from {gvs:?}"
+        );
+    }
+
+    #[test]
     fn matrix_divisor_basis_intersection_matches_dense_tensor_pullback() {
         let mut kappa = Intersection::new(3);
         set_intersection_i64(&mut kappa, 0, 0, 0, 2);
