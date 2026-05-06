@@ -1842,6 +1842,13 @@ The current `cygv` crate source sharpens the same boundary:
   itself is now understood at the local charge-lattice level. The remaining
   blocker is still the certified semigroup/grading/chamber/intersection input
   needed before an actual `cygv` call can produce a compact GV value.
+- The same skeleton now records the two overall local charge-basis orientation
+  candidates. On the saved context, all four compact-threefold-shaped targets
+  have the same orientation behavior: sign `-1` gives target coordinate `[1]`
+  and places the positive unit generator in cygv's `neg2` fundamental-period
+  bucket, while sign `+1` gives target coordinate `[-1]` and puts the positive
+  unit generator in `ignored_gt2`. This is still a diagnostic, not a chamber
+  certificate, but it removes one ambiguity from the local `q`-shape analysis.
 
 The actionable consequence is that a Cyrus replacement for corrected-chamber
 or potent-ray GV values must recreate the finite semigroup and lower-degree

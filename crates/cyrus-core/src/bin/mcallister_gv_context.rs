@@ -245,7 +245,18 @@ struct LocalCygvInputSkeleton {
     target_relation_coefficients: Option<Vec<i64>>,
     target_relation_in_charge_basis: Option<Vec<i64>>,
     target_relation_status: String,
+    orientation_candidates: Vec<LocalCygvOrientationCandidate>,
     remaining_uncertified_inputs: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvOrientationCandidate {
+    overall_charge_basis_sign: i64,
+    local_q_matrix_rows: Vec<Vec<i64>>,
+    target_coordinate: Option<Vec<i64>>,
+    target_coordinate_is_nonnegative: Option<bool>,
+    positive_unit_generator_negative_intersections: Option<usize>,
+    positive_unit_generator_omega_bucket: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1150,12 +1161,17 @@ fn local_cygv_input_skeleton(
         (None, _) => "target_relation_unavailable",
     }
     .to_string();
+    let orientation_candidates = local_cygv_orientation_candidates(
+        &local_q_matrix_rows,
+        target_relation_in_charge_basis.as_deref(),
+    );
     Ok(Some(LocalCygvInputSkeleton {
         support_point_indices,
         local_q_matrix_rows,
         target_relation_coefficients,
         target_relation_in_charge_basis,
         target_relation_status,
+        orientation_candidates,
         remaining_uncertified_inputs: vec![
             "local_semigroup_generators".to_string(),
             "local_grading_vector".to_string(),
@@ -1163,6 +1179,39 @@ fn local_cygv_input_skeleton(
             "local_intersection_tensor".to_string(),
         ],
     }))
+}
+
+fn local_cygv_orientation_candidates(
+    local_q_matrix_rows: &[Vec<i64>],
+    target_relation_in_charge_basis: Option<&[i64]>,
+) -> Vec<LocalCygvOrientationCandidate> {
+    [-1, 1]
+        .into_iter()
+        .map(|sign| {
+            let oriented_q = local_q_matrix_rows
+                .iter()
+                .map(|row| row.iter().map(|&entry| sign * entry).collect::<Vec<_>>())
+                .collect::<Vec<_>>();
+            let target_coordinate = target_relation_in_charge_basis
+                .map(|coordinate| coordinate.iter().map(|&entry| sign * entry).collect());
+            let target_coordinate_is_nonnegative = target_coordinate
+                .as_ref()
+                .map(|coordinate: &Vec<i64>| coordinate.iter().all(|&entry| entry >= 0));
+            let positive_unit_generator_negative_intersections =
+                (oriented_q.first().map_or(0, Vec::len) == 1)
+                    .then(|| oriented_q.iter().filter(|row| row[0] < 0).count());
+            let positive_unit_generator_omega_bucket =
+                positive_unit_generator_negative_intersections.map(cygv_omega_bucket);
+            LocalCygvOrientationCandidate {
+                overall_charge_basis_sign: sign,
+                local_q_matrix_rows: oriented_q,
+                target_coordinate,
+                target_coordinate_is_nonnegative,
+                positive_unit_generator_negative_intersections,
+                positive_unit_generator_omega_bucket,
+            }
+        })
+        .collect()
 }
 
 fn transpose_local_charge_basis(local_charge_basis: &[Vec<i64>]) -> Vec<Vec<i64>> {
@@ -3428,6 +3477,34 @@ mod tests {
         assert_eq!(
             skeleton.target_relation_status,
             "target_relation_integral_in_local_charge_basis"
+        );
+        assert_eq!(skeleton.orientation_candidates.len(), 2);
+        let positive_target = &skeleton.orientation_candidates[0];
+        assert_eq!(positive_target.overall_charge_basis_sign, -1);
+        assert_eq!(positive_target.target_coordinate, Some(vec![1]));
+        assert_eq!(positive_target.target_coordinate_is_nonnegative, Some(true));
+        assert_eq!(
+            positive_target.positive_unit_generator_negative_intersections,
+            Some(2)
+        );
+        assert_eq!(
+            positive_target
+                .positive_unit_generator_omega_bucket
+                .as_deref(),
+            Some("neg2")
+        );
+        let original_orientation = &skeleton.orientation_candidates[1];
+        assert_eq!(original_orientation.overall_charge_basis_sign, 1);
+        assert_eq!(original_orientation.target_coordinate, Some(vec![-1]));
+        assert_eq!(
+            original_orientation.positive_unit_generator_negative_intersections,
+            Some(3)
+        );
+        assert_eq!(
+            original_orientation
+                .positive_unit_generator_omega_bucket
+                .as_deref(),
+            Some("ignored_gt2")
         );
     }
 
