@@ -260,6 +260,16 @@ open implementation target is their higher-rank origin-circuit GV source or
 supporting semigroup context, not a hidden branch-continuation choice for a
 near-wall curve.
 
+The corrected-chamber context export is now schema `3`. In addition to the
+full source-derived origin-circuit facet pairs from schema `2`, it records each
+degree-bounded Mori ray with both ambient sparse support and projected
+Kähler-basis support. The regenerated 4-214-647 report contains `2963` such
+source-derived ray-context rows and validates them against the exported grading
+degree bound. This is still an input audit, not a GV fallback: the same report
+continues to mark all nine unresolved targets as missing source-derived local
+semigroup generators, local `q` phase/chamber mapping, local intersection
+tensor, and chamber certificate before an actual local `cygv` call is valid.
+
 ## McAllister Paper Boundary
 
 The source paper itself gives a useful constraint on what may count as a

@@ -127,6 +127,11 @@ CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/strin
 cargo build --release -p cyrus-core --bin mcallister_first_principles
 CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 CYRUS_CORRECTED_CHAMBER_LP_FACE_CERTIFICATE=1 timeout 600 ./target/release/mcallister_first_principles --stop-after volume --allow-invalid-ek0 --diagnose-corrected-chamber-gv --diagnose-corrected-chamber-lp-face-gv
 CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 timeout 300 ./target/release/mcallister_first_principles --stop-after volume --allow-invalid-ek0 --diagnose-corrected-chamber-gv
+cargo test -p cyrus-core --bin mcallister_gv_context -- --nocapture
+cargo build -p cyrus-core --bin mcallister_first_principles
+CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 timeout 600 ./target/release/mcallister_first_principles --stop-after volume --allow-invalid-ek0 --diagnose-corrected-chamber-gv --dump-corrected-chamber-gv-context /tmp/cyrus_corrected_chamber_gv_context_schema3.json
+cargo build -p cyrus-core --bin mcallister_gv_context
+./target/debug/mcallister_gv_context --context /tmp/cyrus_corrected_chamber_gv_context_schema3.json --out /tmp/cyrus_gv_context_schema3_ray_context_report.json
 CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_RUNNER_HEAVY=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 cargo test -p cyrus-core --test mcallister_e2e stage0_first_principles_runner_accepts_declared_inputs_only_data_dir -- --nocapture
 cargo check -p cyrus-core --bin mcallister_first_principles
 cargo fmt --check
@@ -351,13 +356,15 @@ to make the remaining GV layer more first-principles:
    inputs. The exact supporting-face verifier also rejects those same windows
    as codimension-one chamber faces, with
    `active_support_not_certified_as_codimension_one_face=9`. The
-   corrected-chamber context export is now schema `2` and includes the full
-   source-derived facet pair for each origin-circuit witness; old schema-`1`
-   dumps are still readable and report
-   `origin_circuit_missing_full_facet_context=9`, while the regenerated
-   schema-`2` report verifies `source_derived_full_facet_context=9`. The next
-   step is to use those facet sets for chamber/semigroup certification. The
-   direct source
+   corrected-chamber context export is now schema `3` and includes the full
+   source-derived facet pair for each origin-circuit witness plus the
+   degree-bounded Mori-ray context needed to relate candidate local semigroups
+   back to ambient source curves. Old schema-`1` dumps are still readable and
+   report `origin_circuit_missing_full_facet_context=9`; the regenerated
+   schema-`3` report verifies `source_derived_full_facet_context=9` and records
+   `2963` source-derived ambient/basis ray-context rows. The next step is to
+   use those facet sets and ray supports for chamber/semigroup certification.
+   The direct source
    read reinforces this: `cygv`
    obtains GV values from the full
    finite semigroup, HKTY alpha/beta construction, and degree-ordered

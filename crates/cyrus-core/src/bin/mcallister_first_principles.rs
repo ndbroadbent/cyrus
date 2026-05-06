@@ -645,6 +645,7 @@ struct ChamberGvDiagnostic {
     missing_target_stats: Option<MissingGvTargetStats>,
     basis_mori_rays_for_missing_degree_bound: Option<i128>,
     basis_mori_rays_for_missing_degree_bounded: Option<Vec<Vec<i64>>>,
+    degree_bounded_mori_ray_context_for_missing: Option<Vec<DegreeBoundedMoriRayContextSample>>,
     gv_q_matrix_for_missing: Option<Vec<Vec<i64>>>,
     gv_curve_basis_matrix_for_missing: Option<Vec<Vec<String>>>,
     grading_for_missing: Option<Vec<i64>>,
@@ -660,6 +661,13 @@ struct ChamberGvDiagnostic {
 struct SparseIntersectionEntry {
     indices: [usize; 3],
     value: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+struct DegreeBoundedMoriRayContextSample {
+    degree: i128,
+    ambient_nonzero: Vec<(usize, i64)>,
+    basis_nonzero: Vec<(usize, i64)>,
 }
 
 #[derive(Serialize)]
@@ -683,6 +691,7 @@ struct CorrectedChamberGvContextExport<'a> {
     basis_mori_ray_degree_max: Option<i128>,
     basis_mori_rays_for_missing_degree_bound: Option<i128>,
     basis_mori_rays_for_missing_degree_bounded: Option<&'a Vec<Vec<i64>>>,
+    degree_bounded_mori_ray_context_for_missing: Option<&'a Vec<DegreeBoundedMoriRayContextSample>>,
     gv_q_matrix_for_missing: Option<&'a Vec<Vec<i64>>>,
     gv_curve_basis_matrix_for_missing: Option<&'a Vec<Vec<String>>>,
     grading_for_missing: Option<&'a Vec<i64>>,
@@ -5309,6 +5318,39 @@ fn sparse_i64(values: &[i64]) -> Vec<(usize, i64)> {
         .collect()
 }
 
+fn degree_bounded_mori_ray_context_samples(
+    ambient_rays: &[Vec<i64>],
+    basis: &[usize],
+    grading: &[i64],
+    max_degree: i128,
+) -> Result<Vec<DegreeBoundedMoriRayContextSample>, String> {
+    let mut samples = Vec::new();
+    for ambient_ray in ambient_rays {
+        let basis_ray =
+            project_ambient_curve_to_basis(ambient_ray, basis).map_err(|e| e.to_string())?;
+        if basis_ray.len() != grading.len() {
+            return Err(format!(
+                "projected Mori ray dimension {} does not match grading dimension {}",
+                basis_ray.len(),
+                grading.len()
+            ));
+        }
+        let degree = basis_ray
+            .iter()
+            .zip(grading.iter())
+            .map(|(&coefficient, &weight)| i128::from(coefficient) * i128::from(weight))
+            .sum::<i128>();
+        if degree <= max_degree {
+            samples.push(DegreeBoundedMoriRayContextSample {
+                degree,
+                ambient_nonzero: sparse_i64(ambient_ray),
+                basis_nonzero: sparse_i64(&basis_ray),
+            });
+        }
+    }
+    Ok(samples)
+}
+
 fn ambient_curve_b_field_parity_diagnostic(
     curve: &[i64],
     basis: &[usize],
@@ -6599,6 +6641,7 @@ fn diagnose_chamber_gv_volume_correction(
     let mut basis_rays_for_missing = None;
     let mut basis_rays_for_missing_degree_bound = None;
     let mut basis_rays_for_missing_degree_bounded = None;
+    let mut degree_bounded_mori_ray_context_for_missing = None;
     let mut gv_basis_data_for_missing = None;
     let mut grading_for_missing = None;
     let mut corrected_kappa_basis_for_missing = None;
@@ -6670,6 +6713,12 @@ fn diagnose_chamber_gv_volume_correction(
             })
             .cloned()
             .collect::<Vec<_>>();
+        let degree_bounded_ambient_ray_context = degree_bounded_mori_ray_context_samples(
+            &ambient_rays,
+            &intersection.basis,
+            &grading,
+            summary.max_degree,
+        )?;
         let ray_stats = graded_ray_stats(&basis_rays, &grading, general_max_deg)?;
         let target_stats = missing_gv_target_stats(
             &missing_gv_classes,
@@ -6686,6 +6735,7 @@ fn diagnose_chamber_gv_volume_correction(
         )?;
         basis_rays_for_missing_degree_bound = Some(summary.max_degree);
         basis_rays_for_missing_degree_bounded = Some(degree_bounded_basis_rays);
+        degree_bounded_mori_ray_context_for_missing = Some(degree_bounded_ambient_ray_context);
         basis_rays_for_missing = Some(basis_rays);
         gv_basis_data_for_missing = Some(gv_basis_data);
         grading_for_missing = Some(grading);
@@ -7200,6 +7250,7 @@ fn diagnose_chamber_gv_volume_correction(
         missing_target_stats,
         basis_mori_rays_for_missing_degree_bound: basis_rays_for_missing_degree_bound,
         basis_mori_rays_for_missing_degree_bounded: basis_rays_for_missing_degree_bounded,
+        degree_bounded_mori_ray_context_for_missing,
         gv_q_matrix_for_missing: gv_basis_data_for_missing
             .as_ref()
             .map(|data| data.q_matrix.clone()),
@@ -7947,7 +7998,7 @@ fn write_corrected_chamber_gv_context_export(
         .as_ref()
         .map(|stats| stats.sample.len() == stats.target_count);
     let export = CorrectedChamberGvContextExport {
-        schema_version: 2,
+        schema_version: 3,
         source: "mcallister_first_principles corrected-chamber GV diagnostic",
         small_curve_cutoff: small_curve_cutoff.get(),
         small_curve_pruning: small_curve_pruning.as_str(),
@@ -7967,6 +8018,9 @@ fn write_corrected_chamber_gv_context_export(
         basis_mori_rays_for_missing_degree_bound: diag.basis_mori_rays_for_missing_degree_bound,
         basis_mori_rays_for_missing_degree_bounded: diag
             .basis_mori_rays_for_missing_degree_bounded
+            .as_ref(),
+        degree_bounded_mori_ray_context_for_missing: diag
+            .degree_bounded_mori_ray_context_for_missing
             .as_ref(),
         gv_q_matrix_for_missing: diag.gv_q_matrix_for_missing.as_ref(),
         gv_curve_basis_matrix_for_missing: diag.gv_curve_basis_matrix_for_missing.as_ref(),

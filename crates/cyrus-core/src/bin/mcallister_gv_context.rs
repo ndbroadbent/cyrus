@@ -33,6 +33,7 @@ struct CorrectedChamberGvContext {
     basis_mori_ray_count: Option<usize>,
     basis_mori_rays_for_missing_degree_bound: Option<i128>,
     basis_mori_rays_for_missing_degree_bounded: Option<Vec<Vec<i64>>>,
+    degree_bounded_mori_ray_context_for_missing: Option<Vec<DegreeBoundedMoriRayContextSample>>,
     gv_q_matrix_for_missing: Option<Vec<Vec<i64>>>,
     grading_for_missing: Option<Vec<i64>>,
     corrected_kappa_basis_for_missing: Option<Vec<SparseIntersectionEntry>>,
@@ -43,6 +44,13 @@ struct CorrectedChamberGvContext {
 struct SparseIntersectionEntry {
     indices: [usize; 3],
     value: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct DegreeBoundedMoriRayContextSample {
+    degree: i128,
+    ambient_nonzero: Vec<(usize, i64)>,
+    basis_nonzero: Vec<(usize, i64)>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -155,6 +163,8 @@ struct ContextReport {
     basis_mori_ray_count: Option<usize>,
     degree_bound: i128,
     degree_bounded_ray_count: usize,
+    degree_bounded_mori_ray_context_count: Option<usize>,
+    degree_bounded_mori_ray_context_status: String,
     q_rows: usize,
     q_cols: usize,
     kappa_nonzero_entries: usize,
@@ -1653,7 +1663,7 @@ fn origin_circuit_affine_support_with_coordinates(
 fn validate_context<'a>(
     context: &'a CorrectedChamberGvContext,
 ) -> Result<ValidatedContext<'a>, String> {
-    if !matches!(context.schema_version, 1 | 2) {
+    if !matches!(context.schema_version, 1 | 2 | 3) {
         return Err(format!(
             "unsupported corrected-chamber GV context schema {}",
             context.schema_version
@@ -1698,6 +1708,46 @@ fn validate_context<'a>(
     let degree_bound = context
         .basis_mori_rays_for_missing_degree_bound
         .ok_or_else(|| "context is missing Mori-ray degree bound".to_string())?;
+    let degree_bounded_ray_context = context
+        .degree_bounded_mori_ray_context_for_missing
+        .as_deref();
+    if context.schema_version >= 3 && degree_bounded_ray_context.is_none() {
+        return Err("schema-3 context is missing degree-bounded Mori ray context".to_string());
+    }
+    if let Some(ray_context) = degree_bounded_ray_context {
+        for (idx, sample) in ray_context.iter().enumerate() {
+            let mut ambient_seen = HashSet::new();
+            for &(ambient_idx, _) in &sample.ambient_nonzero {
+                if !ambient_seen.insert(ambient_idx) {
+                    return Err(format!(
+                        "degree-bounded Mori ray context sample {idx} has duplicate ambient coordinate {ambient_idx}"
+                    ));
+                }
+            }
+            let basis_ray = dense_from_sparse(&sample.basis_nonzero, dimension).map_err(|e| {
+                format!(
+                    "degree-bounded Mori ray context sample {idx} has invalid basis support: {e}"
+                )
+            })?;
+            let computed_degree = curve_degree(&basis_ray, grading).map_err(|e| {
+                format!(
+                    "degree-bounded Mori ray context sample {idx} has invalid basis degree: {e}"
+                )
+            })?;
+            if computed_degree != sample.degree {
+                return Err(format!(
+                    "degree-bounded Mori ray context sample {idx} declares degree {} but computes {computed_degree}",
+                    sample.degree
+                ));
+            }
+            if sample.degree > degree_bound {
+                return Err(format!(
+                    "degree-bounded Mori ray context sample {idx} has degree {} above bound {degree_bound}",
+                    sample.degree
+                ));
+            }
+        }
+    }
     let kappa_entries = context
         .corrected_kappa_basis_for_missing
         .as_ref()
@@ -1736,6 +1786,7 @@ fn validate_context<'a>(
         grading,
         q_matrix,
         degree_bounded_rays,
+        degree_bounded_ray_context,
         intersection,
         stats,
     })
@@ -1748,6 +1799,7 @@ struct ValidatedContext<'a> {
     grading: &'a [i64],
     q_matrix: &'a [Vec<i64>],
     degree_bounded_rays: &'a [Vec<i64>],
+    degree_bounded_ray_context: Option<&'a [DegreeBoundedMoriRayContextSample]>,
     intersection: Intersection,
     stats: &'a MissingGvTargetStats,
 }
@@ -3513,6 +3565,10 @@ fn build_report(
         basis_mori_ray_count: context.basis_mori_ray_count,
         degree_bound: validated.degree_bound,
         degree_bounded_ray_count: validated.degree_bounded_rays.len(),
+        degree_bounded_mori_ray_context_count: validated
+            .degree_bounded_ray_context
+            .map(<[DegreeBoundedMoriRayContextSample]>::len),
+        degree_bounded_mori_ray_context_status: degree_bounded_mori_ray_context_status(validated),
         q_rows: validated.q_matrix.len(),
         q_cols: validated.q_cols,
         kappa_nonzero_entries: validated.intersection.num_nonzero(),
@@ -3536,6 +3592,16 @@ fn build_report(
         local_cytools_origin_circuit_status_counts,
         local_cygv_grading_vector_status_counts,
         targets,
+    }
+}
+
+fn degree_bounded_mori_ray_context_status(context: &ValidatedContext<'_>) -> String {
+    match context.degree_bounded_ray_context {
+        Some(samples) if samples.is_empty() => {
+            "source_derived_degree_bounded_mori_ray_context_empty".to_string()
+        }
+        Some(_) => "source_derived_ambient_and_basis_degree_bounded_mori_ray_context".to_string(),
+        None => "missing_degree_bounded_mori_ray_context".to_string(),
     }
 }
 
@@ -3826,6 +3892,86 @@ mod tests {
         assert_eq!(sparse_from_dense(&[2, 0, 0, -1]), vec![(0, 2), (3, -1)]);
         assert!(dense_from_sparse(&[(4, 1)], 4).is_err());
         assert!(dense_from_sparse(&[(1, 1), (1, 2)], 4).is_err());
+    }
+
+    fn minimal_corrected_context(
+        schema_version: u32,
+        ray_context: Option<Vec<DegreeBoundedMoriRayContextSample>>,
+    ) -> CorrectedChamberGvContext {
+        CorrectedChamberGvContext {
+            schema_version,
+            ambient_rays: 2,
+            toric_gv_missing_count: 0,
+            remaining_gv_missing_count: 0,
+            basis_mori_ray_count: Some(2),
+            basis_mori_rays_for_missing_degree_bound: Some(2),
+            basis_mori_rays_for_missing_degree_bounded: Some(vec![vec![1, 0], vec![0, 1]]),
+            degree_bounded_mori_ray_context_for_missing: ray_context,
+            gv_q_matrix_for_missing: Some(vec![vec![1, 0], vec![0, 1]]),
+            grading_for_missing: Some(vec![1, 1]),
+            corrected_kappa_basis_for_missing: Some(Vec::new()),
+            missing_target_stats: Some(MissingGvTargetStats {
+                target_count: 0,
+                real_cone_decomposition_exact_kind_counts: HashMap::new(),
+                sample: Vec::new(),
+            }),
+        }
+    }
+
+    #[test]
+    fn validate_context_accepts_schema3_degree_bounded_ray_context() {
+        let context = minimal_corrected_context(
+            3,
+            Some(vec![
+                DegreeBoundedMoriRayContextSample {
+                    degree: 1,
+                    ambient_nonzero: vec![(5, 1)],
+                    basis_nonzero: vec![(0, 1)],
+                },
+                DegreeBoundedMoriRayContextSample {
+                    degree: 1,
+                    ambient_nonzero: vec![(8, 1)],
+                    basis_nonzero: vec![(1, 1)],
+                },
+            ]),
+        );
+        let validated = validate_context(&context).unwrap();
+
+        assert_eq!(validated.degree_bounded_ray_context.unwrap().len(), 2);
+        assert_eq!(
+            degree_bounded_mori_ray_context_status(&validated),
+            "source_derived_ambient_and_basis_degree_bounded_mori_ray_context"
+        );
+    }
+
+    #[test]
+    fn validate_context_requires_schema3_degree_bounded_ray_context() {
+        let context = minimal_corrected_context(3, None);
+        let err = match validate_context(&context) {
+            Ok(_) => panic!("schema-3 context without ray context should be rejected"),
+            Err(err) => err,
+        };
+        assert!(
+            err.contains("schema-3 context is missing degree-bounded Mori ray context"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn validate_context_checks_degree_bounded_ray_context_degrees() {
+        let context = minimal_corrected_context(
+            3,
+            Some(vec![DegreeBoundedMoriRayContextSample {
+                degree: 2,
+                ambient_nonzero: vec![(5, 1)],
+                basis_nonzero: vec![(0, 1)],
+            }]),
+        );
+        let err = match validate_context(&context) {
+            Ok(_) => panic!("ray context with wrong degree should be rejected"),
+            Err(err) => err,
+        };
+        assert!(err.contains("declares degree 2 but computes 1"), "{err}");
     }
 
     #[test]
@@ -4638,6 +4784,7 @@ mod tests {
             grading: &grading,
             q_matrix: &q_matrix,
             degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: None,
             intersection: Intersection::new(2),
             stats: &stats,
         };
@@ -4693,6 +4840,7 @@ mod tests {
             grading: &grading,
             q_matrix: &q_matrix,
             degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: None,
             intersection: Intersection::new(2),
             stats: &stats,
         };
@@ -4869,6 +5017,7 @@ mod tests {
             grading: &grading,
             q_matrix: &q_matrix,
             degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: None,
             intersection: Intersection::new(2),
             stats: &stats,
         };
@@ -4925,6 +5074,7 @@ mod tests {
             grading: &grading,
             q_matrix: &q_matrix,
             degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: None,
             intersection: Intersection::new(2),
             stats: &stats,
         };
@@ -5066,6 +5216,7 @@ mod tests {
             grading: &grading,
             q_matrix: &q_matrix,
             degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: None,
             intersection,
             stats: &stats,
         };
@@ -5186,6 +5337,7 @@ mod tests {
             grading: &grading,
             q_matrix: &q_matrix,
             degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: None,
             intersection,
             stats: &stats,
         };
