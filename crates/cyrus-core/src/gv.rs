@@ -857,6 +857,25 @@ pub struct CkyzZResidualCoefficientWorkProfile {
     /// Number of distinct nonzero delta degrees selected by the source-shaped
     /// `q_N` history heuristic.
     pub qn_history_unique_delta_count: usize,
+    /// Restricted-domain sizes for the distinct nonzero `q_delta` degrees
+    /// selected by the source-shaped `q_N` history heuristic.
+    pub q_delta_domain_profiles: Vec<CkyzQDeltaDomainProfile>,
+}
+
+/// Size profile for a restricted `q_delta = z^delta exp(delta.alpha)` domain.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CkyzQDeltaDomainProfile {
+    /// Nonzero delta degree selected by the previous-`q_N` heuristic.
+    pub delta_degree: Vec<usize>,
+    /// Number of exponential monomials `e` for which `delta + e` is present in
+    /// the finite CKYZ domain.
+    pub shiftable_exp_degree_count: usize,
+    /// Number of monomials needed after closing those shiftable output
+    /// exponents under alpha-term predecessors.
+    pub predecessor_closure_degree_count: usize,
+    /// Whether that closure is small enough to build Cyrus' dense addition
+    /// table for indexed finite-polynomial products.
+    pub predecessor_closure_has_addition_table: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -865,6 +884,7 @@ struct CkyzQnHistoryReuseProfile {
     candidate_hit_count: usize,
     candidate_miss_count: usize,
     unique_delta_count: usize,
+    unique_delta_degrees: Vec<Vec<usize>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1709,6 +1729,98 @@ fn ckyz_z_residual_coefficient_work_profile(
         qn_history_candidate_hit_count: qn_history_profile.candidate_hit_count,
         qn_history_candidate_miss_count: qn_history_profile.candidate_miss_count,
         qn_history_unique_delta_count: qn_history_profile.unique_delta_count,
+        q_delta_domain_profiles: ckyz_q_delta_domain_profiles(
+            &qn_history_profile.unique_delta_degrees,
+            alpha,
+            domain,
+        )?,
+    })
+}
+
+fn ckyz_q_delta_domain_profiles(
+    delta_degrees: &[Vec<usize>],
+    alpha: &[BTreeMap<Vec<usize>, Rational>],
+    domain: &CkyzMonomialDomain,
+) -> Result<Vec<CkyzQDeltaDomainProfile>> {
+    if alpha.len() != domain.rank {
+        return Err(Error::InvalidInput(
+            "CKYZ q-delta domain profile alpha rank mismatch".into(),
+        ));
+    }
+    let alpha_support_indices = alpha
+        .iter()
+        .flat_map(|series| ckyz_series_support_indices(series, domain))
+        .collect::<BTreeSet<_>>();
+    let alpha_support_degrees = alpha_support_indices
+        .into_iter()
+        .map(|index| {
+            domain.degrees.get(index).cloned().ok_or_else(|| {
+                Error::InvalidInput("CKYZ q-delta alpha support index is outside the domain".into())
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    delta_degrees
+        .iter()
+        .map(|delta_degree| {
+            ckyz_q_delta_domain_profile(delta_degree, &alpha_support_degrees, domain)
+        })
+        .collect()
+}
+
+fn ckyz_q_delta_domain_profile(
+    delta_degree: &[usize],
+    alpha_support_degrees: &[Vec<usize>],
+    domain: &CkyzMonomialDomain,
+) -> Result<CkyzQDeltaDomainProfile> {
+    if delta_degree.len() != domain.rank {
+        return Err(Error::InvalidInput(
+            "CKYZ q-delta domain profile rank mismatch".into(),
+        ));
+    }
+    let Some(delta_index) = domain.index_of(delta_degree) else {
+        return Err(Error::InvalidInput(format!(
+            "CKYZ q-delta domain profile degree {delta_degree:?} is outside the monomial domain"
+        )));
+    };
+
+    let mut output_exp_indices = BTreeSet::new();
+    for exp_index in 0..domain.degrees.len() {
+        if domain.sum_index(delta_index, exp_index)?.is_some() {
+            output_exp_indices.insert(exp_index);
+        }
+    }
+    let shiftable_exp_degree_count = output_exp_indices.len();
+
+    let mut closure_indices = output_exp_indices;
+    let mut queue = VecDeque::from_iter(closure_indices.iter().copied());
+    while let Some(exp_index) = queue.pop_front() {
+        let exp_degree = &domain.degrees[exp_index];
+        for alpha_degree in alpha_support_degrees {
+            if !ckyz_componentwise_le(alpha_degree, exp_degree) {
+                continue;
+            }
+            let Some(remainder) = ckyz_subtract_degree_multiple(exp_degree, alpha_degree, 1) else {
+                continue;
+            };
+            let Some(remainder_index) = domain.index_of(&remainder) else {
+                continue;
+            };
+            if closure_indices.insert(remainder_index) {
+                queue.push_back(remainder_index);
+            }
+        }
+    }
+    let predecessor_closure_degree_count = closure_indices.len();
+    let predecessor_closure_has_addition_table = predecessor_closure_degree_count
+        .saturating_mul(predecessor_closure_degree_count)
+        <= CKYZ_ADDITION_TABLE_MAX_ENTRIES;
+
+    Ok(CkyzQDeltaDomainProfile {
+        delta_degree: delta_degree.to_vec(),
+        shiftable_exp_degree_count,
+        predecessor_closure_degree_count,
+        predecessor_closure_has_addition_table,
     })
 }
 
@@ -4685,6 +4797,7 @@ fn ckyz_qn_history_reuse_profile(
         candidate_hit_count,
         candidate_miss_count,
         unique_delta_count: unique_deltas.len(),
+        unique_delta_degrees: unique_deltas.into_iter().collect(),
     })
 }
 
@@ -12492,6 +12605,16 @@ mod tests {
         );
         assert!(profile.qn_history_candidate_hit_count > 0);
         assert!(profile.qn_history_unique_delta_count <= profile.path_history_degree_count);
+        assert_eq!(
+            profile.q_delta_domain_profiles.len(),
+            profile.qn_history_unique_delta_count
+        );
+        assert!(profile.q_delta_domain_profiles.iter().all(|delta_profile| {
+            delta_profile.shiftable_exp_degree_count <= profile.domain_degree_count
+                && delta_profile.predecessor_closure_degree_count <= profile.domain_degree_count
+                && delta_profile.shiftable_exp_degree_count
+                    <= delta_profile.predecessor_closure_degree_count
+        }));
         assert_eq!(
             profile
                 .support_exp_state_counts_by_scale

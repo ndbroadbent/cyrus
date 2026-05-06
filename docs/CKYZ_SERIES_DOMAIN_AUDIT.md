@@ -671,3 +671,42 @@ multiplication. So the first-batch blocker is now specifically direct
 domain. A useful next implementation needs demanded or factored construction of
 these first direct `q_delta` polynomials, or a smaller proven domain, before any
 Li2-level demand graph can matter.
+
+## q-Delta Domain Profile
+
+Cyrus now profiles the restricted finite domains that would be needed for the
+distinct `q_delta` values selected by the cygv-style previous-`q_N` heuristic.
+For each nonzero delta it counts:
+
+- `shiftable`: exponential monomials `e` with `delta + e` present in the CKYZ
+  finite domain;
+- `closure`: the predecessor closure of those shiftable monomials under
+  nonzero alpha support terms;
+- `closure_addition_table`: whether the closure is small enough for Cyrus'
+  indexed addition table.
+
+The focused profiler test still passes:
+
+```text
+cargo fmt --check
+cargo test -p cyrus-core ckyz_z_residual_coefficient_work_profile_counts_polygon5_states -- --nocapture
+```
+
+The McAllister `[4,3,2]`, N=10 inventory now reports:
+
+```text
+[CKYZ_COEFFICIENT_WORK] kind=3 direction=[4, 3, 2] multiples=10 domain=21721 history=5235 residual_pairs=13475754 same_grading_skips=224241 componentwise_pairs=7154291 li2_terms=9042668 support_pairs=2620565 support_li2_terms=3219472 unique_scales=7065 unique_deltas=16750 unique_exp_states=7166981 support_unique_exp_states=2587631 support_scales=5235 qn_history_levels=2 qn_history_hits=5232 qn_history_misses=3 qn_history_unique_deltas=4 q_delta_domains=4
+[CKYZ_Q_DELTA_DOMAIN] kind=3 direction=[4, 3, 2] delta=[0, 0, 1] shiftable=20450 closure=20840 closure_addition_table=false
+[CKYZ_Q_DELTA_DOMAIN] kind=3 direction=[4, 3, 2] delta=[0, 1, 0] shiftable=20860 closure=21070 closure_addition_table=false
+[CKYZ_Q_DELTA_DOMAIN] kind=3 direction=[4, 3, 2] delta=[1, 0, 0] shiftable=21070 closure=21070 closure_addition_table=false
+[CKYZ_Q_DELTA_DOMAIN] kind=3 direction=[4, 3, 2] delta=[1, 1, 0] shiftable=20440 closure=20440 closure_addition_table=false
+```
+
+This is a strong negative result for another per-delta restricted-domain
+implementation. The previous-`q_N` heuristic collapses to only four deltas,
+but each delta still needs about 20k monomials and cannot use the fast addition
+table. The next implementation should therefore not create separate
+restricted finite domains per delta. The remaining source-aligned options are
+to shrink the global CKYZ coefficient-demand domain itself, or to factor
+coordinate exponentials across the whole grading-level inversion in a way that
+reuses state globally rather than per delta.
