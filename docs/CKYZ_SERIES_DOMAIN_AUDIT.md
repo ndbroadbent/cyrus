@@ -627,3 +627,22 @@ progress trace, and the N=4 cost model regressed. The next attempt should
 profile and reduce the cost of constructing the direct `q_delta`/first-batch
 objects themselves, or change the finite domain/history selection, rather than
 adding another coefficient recurrence layer on top of the current direct path.
+
+Sampling the reverted production path during the N=10 first extraction batch
+confirmed that diagnosis. After the z-history trace, a 10-second macOS
+`sample` of the test process was dominated by:
+
+```text
+extract_ckyz_local_gv_invariants_from_z_potential_for_degrees
+  -> ckyz_indexed_q_degree_series_with_previous_cache_in_z_domain
+  -> ckyz_indexed_q_delta_series_in_z_domain
+  -> CkyzIndexedSeries::exp
+  -> CkyzIndexedSeries::mul
+```
+
+Most leaf time was Malachite rational arithmetic inside indexed sparse
+multiplication. So the first-batch blocker is now specifically direct
+`q_delta = z^delta exp(delta.alpha)` materialization over the 21,721-monomial
+domain. A useful next implementation needs demanded or factored construction of
+these first direct `q_delta` polynomials, or a smaller proven domain, before any
+Li2-level demand graph can matter.
