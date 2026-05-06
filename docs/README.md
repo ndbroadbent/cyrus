@@ -10,6 +10,8 @@ Current local notes:
   potent-ray rows.
 - [GA_READY_PIPELINE_AUDIT.md](GA_READY_PIPELINE_AUDIT.md): checklist mapping
   the GA-ready objective to current code/test evidence and unresolved blockers.
+- [GA_READY_COMPLETION_AUDIT.md](GA_READY_COMPLETION_AUDIT.md): prompt-to-artifact
+  completion audit for the active no-replay McAllister/DKMM objective.
 - [MCALLISTER_DATA_POLICY.md](MCALLISTER_DATA_POLICY.md): allowed ancillary
   inputs, validation checkpoints, replay-only artifacts, and current unresolved
   gaps for the no-replay McAllister runner.
