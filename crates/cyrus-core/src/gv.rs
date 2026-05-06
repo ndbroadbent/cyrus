@@ -2926,6 +2926,18 @@ impl CkyzIndexedSeries {
         })
     }
 
+    fn coordinate(rank: usize, coordinate: usize, domain: &CkyzMonomialDomain) -> Self {
+        if coordinate >= rank || rank != domain.rank {
+            return Self { terms: Vec::new() };
+        }
+        let mut degree = vec![0; rank];
+        degree[coordinate] = 1;
+        let terms = domain
+            .index_of(&degree)
+            .map_or_else(Vec::new, |index| vec![(index, Rational::from(1))]);
+        Self { terms }
+    }
+
     fn from_btree(
         series: &BTreeMap<Vec<usize>, Rational>,
         domain: &CkyzMonomialDomain,
@@ -3051,6 +3063,21 @@ impl CkyzIndexedSeries {
         self.terms = merged;
     }
 
+    fn scaled(&self, scalar: Rational) -> Self {
+        if scalar == 0 {
+            return Self { terms: Vec::new() };
+        }
+        let terms = self
+            .terms
+            .iter()
+            .filter_map(|(index, coefficient)| {
+                let scaled = coefficient.clone() * scalar.clone();
+                (scaled != 0).then_some((*index, scaled))
+            })
+            .collect();
+        Self { terms }
+    }
+
     fn mul(&self, rhs: &Self, domain: &CkyzMonomialDomain) -> Result<Self> {
         let mut out_by_index = vec![None::<Rational>; domain.degrees.len()];
         if let Some(addition_pairs_by_lhs) = &domain.addition_pairs_by_lhs {
@@ -3126,6 +3153,45 @@ impl CkyzIndexedSeries {
             powers.push(next);
         }
         Ok(powers)
+    }
+
+    fn compose(&self, arguments: &[Self], domain: &CkyzMonomialDomain) -> Result<Self> {
+        let rank = arguments.len();
+        if rank != domain.rank {
+            return Err(Error::InvalidInput(
+                "CKYZ series composition rank mismatch".into(),
+            ));
+        }
+
+        let mut max_exponents = vec![0usize; rank];
+        for (degree_index, _) in &self.terms {
+            let degree = &domain.degrees[*degree_index];
+            for (coordinate, &exponent) in degree.iter().enumerate() {
+                max_exponents[coordinate] = max_exponents[coordinate].max(exponent);
+            }
+        }
+        let power_caches = arguments
+            .iter()
+            .zip(max_exponents.iter())
+            .map(|(argument, &max_exponent)| argument.power_cache(max_exponent, domain))
+            .collect::<Result<Vec<_>>>()?;
+
+        let mut out = Self { terms: Vec::new() };
+        for (degree_index, coefficient) in &self.terms {
+            let degree = &domain.degrees[*degree_index];
+            let mut monomial = Self::one(domain)?;
+            for (coordinate, &exponent) in degree.iter().enumerate() {
+                if exponent == 0 {
+                    continue;
+                }
+                monomial = monomial.mul(&power_caches[coordinate][exponent], domain)?;
+                if monomial.is_empty() {
+                    break;
+                }
+            }
+            out.add_scaled_assign(&monomial, coefficient.clone());
+        }
+        Ok(out)
     }
 
     fn exp(&self, domain: &CkyzMonomialDomain) -> Result<Self> {
@@ -4045,22 +4111,6 @@ fn ckyz_coordinate_series(
     out
 }
 
-fn ckyz_coordinate_series_domain(
-    rank: usize,
-    coordinate: usize,
-    domain: &CkyzMonomialDomain,
-) -> BTreeMap<Vec<usize>, Rational> {
-    let mut out = BTreeMap::new();
-    if coordinate < rank && rank == domain.rank {
-        let mut degree = vec![0; rank];
-        degree[coordinate] = 1;
-        if domain.contains(&degree) {
-            out.insert(degree, Rational::from(1));
-        }
-    }
-    out
-}
-
 fn ckyz_series_scale(
     series: &BTreeMap<Vec<usize>, Rational>,
     scalar: Rational,
@@ -4253,6 +4303,7 @@ fn ckyz_series_exp(
     Ok(out)
 }
 
+#[cfg(test)]
 fn ckyz_series_exp_domain(
     series: &BTreeMap<Vec<usize>, Rational>,
     domain: &CkyzMonomialDomain,
@@ -4338,35 +4389,7 @@ fn ckyz_series_compose_domain(
             CkyzIndexedSeries::from_btree(argument, domain, "CKYZ series composition argument")
         })
         .collect::<Result<Vec<_>>>()?;
-    let mut max_exponents = vec![0usize; rank];
-    for (degree_index, _) in &series.terms {
-        let degree = &domain.degrees[*degree_index];
-        for (coordinate, &exponent) in degree.iter().enumerate() {
-            max_exponents[coordinate] = max_exponents[coordinate].max(exponent);
-        }
-    }
-    let power_caches = arguments
-        .iter()
-        .zip(max_exponents.iter())
-        .map(|(argument, &max_exponent)| argument.power_cache(max_exponent, domain))
-        .collect::<Result<Vec<_>>>()?;
-
-    let mut out = CkyzIndexedSeries { terms: Vec::new() };
-    for (degree_index, coefficient) in &series.terms {
-        let degree = &domain.degrees[*degree_index];
-        let mut monomial = CkyzIndexedSeries::one(domain)?;
-        for (coordinate, &exponent) in degree.iter().enumerate() {
-            if exponent == 0 {
-                continue;
-            }
-            monomial = monomial.mul(&power_caches[coordinate][exponent], domain)?;
-            if monomial.is_empty() {
-                break;
-            }
-        }
-        out.add_scaled_assign(&monomial, coefficient.clone());
-    }
-    Ok(out.to_btree(domain))
+    Ok(series.compose(&arguments, domain)?.to_btree(domain))
 }
 
 fn ckyz_nontrivial_covers(degree: &[usize]) -> Vec<usize> {
@@ -4547,28 +4570,34 @@ fn compute_ckyz_inverse_mirror_map_domain(
         validate_ckyz_series_has_zero_constant(correction, rank, "CKYZ log-period correction")?;
     }
 
+    let corrections = log_period_corrections
+        .iter()
+        .map(|correction| {
+            CkyzIndexedSeries::from_btree(correction, domain, "CKYZ log-period correction")
+        })
+        .collect::<Result<Vec<_>>>()?;
+
     let mut z_of_q = (0..rank)
-        .map(|coordinate| ckyz_coordinate_series_domain(rank, coordinate, domain))
+        .map(|coordinate| CkyzIndexedSeries::coordinate(rank, coordinate, domain))
         .collect::<Vec<_>>();
     for _ in 0..domain.max_total_degree {
         let mut next = Vec::with_capacity(rank);
-        for (coordinate, correction) in log_period_corrections.iter().enumerate() {
-            let correction_at_z = ckyz_series_compose_domain(correction, &z_of_q, domain)?;
-            let negative_correction = ckyz_series_scale(&correction_at_z, Rational::from(-1));
-            let exp_negative_correction = ckyz_series_exp_domain(&negative_correction, domain)?;
-            let q_coordinate = ckyz_coordinate_series_domain(rank, coordinate, domain);
-            next.push(ckyz_series_mul_domain(
-                &q_coordinate,
-                &exp_negative_correction,
-                domain,
-            )?);
+        for (coordinate, correction) in corrections.iter().enumerate() {
+            let correction_at_z = correction.compose(&z_of_q, domain)?;
+            let negative_correction = correction_at_z.scaled(Rational::from(-1));
+            let exp_negative_correction = negative_correction.exp(domain)?;
+            let q_coordinate = CkyzIndexedSeries::coordinate(rank, coordinate, domain);
+            next.push(q_coordinate.mul(&exp_negative_correction, domain)?);
         }
         if next == z_of_q {
             break;
         }
         z_of_q = next;
     }
-    Ok(z_of_q)
+    Ok(z_of_q
+        .into_iter()
+        .map(|coordinate| coordinate.to_btree(domain))
+        .collect())
 }
 
 fn substitute_ckyz_series_in_flat_coordinates_domain(

@@ -490,6 +490,8 @@ the existing domain addition table / dense degree index for multiplication. The
 domain multiplication, power-cache, composition, and exponential routines now
 convert from the public `BTreeMap<Vec<usize>, Rational>` representation once,
 perform the internal polynomial operation in indexed form, then convert back.
+The domain inverse mirror-map iteration also stays indexed internally and only
+converts its final coordinates back at the function boundary.
 
 This is not yet the full cygv inversion structure, but it moves the broad period
 and exponential operations onto the same representation cygv uses internally:
@@ -510,9 +512,9 @@ CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/strin
 ```
 
 The McAllister `[4,3,2]`, N=4 trace still reports the same selected history and
-coefficient counts, with z extraction at about 820 ms:
+coefficient counts, with z extraction at about 818 ms:
 
 ```text
-[CKYZ_Z_HISTORY] domain=1641 terminals=4 selected=434 candidate_evaluations=2842 exp_support_classes=6 elapsed=127.253208ms
-[CKYZ_Z_EXTRACT] degrees=434 nonzero_gvs=217 li2_coefficients=9443 li2_support_skips=22508 li2_support_classes=6 exp_coeff_cache=23529 scaled_alpha_cache=23529 predecessor_deltas=1061 elapsed=820.318625ms
+[CKYZ_Z_HISTORY] domain=1641 terminals=4 selected=434 candidate_evaluations=2842 exp_support_classes=6 elapsed=129.201625ms
+[CKYZ_Z_EXTRACT] degrees=434 nonzero_gvs=217 li2_coefficients=9443 li2_support_skips=22508 li2_support_classes=6 exp_coeff_cache=23529 scaled_alpha_cache=23529 predecessor_deltas=1061 elapsed=817.789625ms
 ```
