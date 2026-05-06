@@ -340,6 +340,168 @@ pub struct GvDivisorBasisData {
     pub q_matrix: Vec<Vec<i64>>,
 }
 
+/// Compute in-basis intersection numbers for either CYTools divisor-basis shape.
+///
+/// Vector bases match CYTools' `filter_tensor_indices` path. Matrix bases match
+/// CYTools' `symmetric_sparse_to_dense(tensor, basis)` contraction, where each
+/// matrix row is a divisor-basis vector in ambient divisor coordinates.
+///
+/// # Errors
+/// Returns an error if the selected basis is malformed for the ambient
+/// intersection tensor.
+pub fn intersection_in_divisor_basis(
+    kappa: &Intersection,
+    basis: DivisorBasis<'_>,
+) -> Result<Intersection> {
+    match basis {
+        DivisorBasis::Indices(indices) => {
+            validate_intersection_index_basis(kappa, indices)?;
+            Ok(crate::basis::intersection_in_basis(kappa, indices))
+        }
+        DivisorBasis::Matrix {
+            standard_basis,
+            basis_matrix,
+        } => {
+            if standard_basis.len() != basis_matrix.len() {
+                return Err(Error::InvalidInput(format!(
+                    "standard basis length {} does not match matrix divisor basis row count {}",
+                    standard_basis.len(),
+                    basis_matrix.len()
+                )));
+            }
+            intersection_in_matrix_divisor_basis(kappa, basis_matrix)
+        }
+    }
+}
+
+/// Transform ambient intersection numbers to a matrix divisor basis.
+///
+/// This is the rectangular version of the exact tensor pullback:
+///
+/// ```text
+/// kappa'_{abc} = kappa_{ijk} B^a_i B^b_j B^c_k
+/// ```
+///
+/// where `B` is the divisor-basis row matrix. The output dimension is the
+/// number of rows of `basis_matrix`.
+///
+/// # Errors
+/// Returns an error if the basis matrix is empty, ragged, or has a width that
+/// does not match `kappa.dim()`.
+pub fn intersection_in_matrix_divisor_basis(
+    kappa: &Intersection,
+    basis_matrix: &[Vec<Integer>],
+) -> Result<Intersection> {
+    validate_intersection_basis_matrix(kappa, basis_matrix)?;
+    let column_supports = intersection_basis_column_supports(basis_matrix, kappa.dim());
+
+    let mut entries: HashMap<(usize, usize, usize), Rational> = HashMap::new();
+    for (&(i, j, k), value) in kappa.iter() {
+        for [ambient_a, ambient_b, ambient_c] in unique_triple_permutations(i, j, k) {
+            for (basis_a, coeff_ai) in &column_supports[ambient_a] {
+                for (basis_b, coeff_bj) in &column_supports[ambient_b] {
+                    if basis_a > basis_b {
+                        continue;
+                    }
+                    for (basis_c, coeff_ck) in &column_supports[ambient_c] {
+                        if basis_b > basis_c {
+                            continue;
+                        }
+                        let mut term = value.get().clone();
+                        term *= Rational::from(coeff_ai);
+                        term *= Rational::from(coeff_bj);
+                        term *= Rational::from(coeff_ck);
+                        if term != 0 {
+                            *entries
+                                .entry((*basis_a, *basis_b, *basis_c))
+                                .or_insert_with(|| Rational::from(0)) += term;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut transformed = Intersection::new(basis_matrix.len());
+    for ((a, b, c), value) in entries {
+        if value != 0 {
+            transformed.set(
+                a,
+                b,
+                c,
+                crate::types::rational::Rational::<Finite>::from_raw(value),
+            );
+        }
+    }
+    Ok(transformed)
+}
+
+fn intersection_basis_column_supports(
+    basis_matrix: &[Vec<Integer>],
+    ambient_dim: usize,
+) -> Vec<Vec<(usize, Integer)>> {
+    let mut supports = vec![Vec::new(); ambient_dim];
+    for (basis_row, row) in basis_matrix.iter().enumerate() {
+        for (ambient_col, value) in row.iter().enumerate() {
+            if *value != 0 {
+                supports[ambient_col].push((basis_row, value.clone()));
+            }
+        }
+    }
+    supports
+}
+
+fn validate_intersection_index_basis(kappa: &Intersection, basis: &[usize]) -> Result<()> {
+    let mut seen = BTreeSet::new();
+    for &idx in basis {
+        if idx >= kappa.dim() {
+            return Err(Error::InvalidInput(format!(
+                "basis index {idx} is out of bounds for intersection dimension {}",
+                kappa.dim()
+            )));
+        }
+        if !seen.insert(idx) {
+            return Err(Error::InvalidInput(
+                "basis indices contain duplicates".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_intersection_basis_matrix(
+    kappa: &Intersection,
+    basis_matrix: &[Vec<Integer>],
+) -> Result<()> {
+    if basis_matrix.is_empty() {
+        return Err(Error::InvalidInput("matrix divisor basis is empty".into()));
+    }
+    for row in basis_matrix {
+        if row.len() != kappa.dim() {
+            return Err(Error::InvalidInput(format!(
+                "matrix divisor basis row width {} does not match intersection dimension {}",
+                row.len(),
+                kappa.dim()
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn unique_triple_permutations(i: usize, j: usize, k: usize) -> Vec<[usize; 3]> {
+    let mut permutations = vec![
+        [i, j, k],
+        [i, k, j],
+        [j, i, k],
+        [j, k, i],
+        [k, i, j],
+        [k, j, i],
+    ];
+    permutations.sort_unstable();
+    permutations.dedup();
+    permutations
+}
+
 /// Project ambient Mori-cap rays through either CYTools divisor-basis shape.
 ///
 /// Vector bases use CYTools' column-selection path. Matrix bases use
@@ -11519,9 +11681,10 @@ mod tests {
         extract_ckyz_local_gv_invariants_from_z_potential_for_degrees,
         find_extremal_mori_ray_separator, find_pair_decomposition, find_semigroup_decomposition,
         finite_cutoff_gv_charges_excluding_primitive_rays, finite_gv_nonzero_degree_slice_points,
-        gv_divisor_basis_data, gv_lattice_search_request, load_grading_cache,
-        local_p2_inverse_mirror_map, local_p2_mirror_correction,
-        map_basis_gv_invariants_to_ambient, nilpotent_ray_degree_slice_for_cutoff_fraction,
+        gv_divisor_basis_data, gv_lattice_search_request, intersection_in_divisor_basis,
+        intersection_in_matrix_divisor_basis, load_grading_cache, local_p2_inverse_mirror_map,
+        local_p2_mirror_correction, map_basis_gv_invariants_to_ambient,
+        nilpotent_ray_degree_slice_for_cutoff_fraction,
         nilpotent_ray_divergence_check_from_slice_distances,
         nilpotent_ray_divergence_check_with_explicit_slice_lattices,
         nilpotent_ray_lll_reduced_slice_distance, nilpotent_ray_slice_comparison_points,
@@ -15282,6 +15445,78 @@ mod tests {
             ]
         );
         assert_eq!(data.q_matrix, vec![vec![2, 1, 0], vec![1, -1, 1]]);
+    }
+
+    #[test]
+    fn matrix_divisor_basis_intersection_matches_dense_tensor_pullback() {
+        let mut kappa = Intersection::new(3);
+        set_intersection_i64(&mut kappa, 0, 0, 0, 2);
+        set_intersection_i64(&mut kappa, 0, 0, 1, 3);
+        set_intersection_i64(&mut kappa, 0, 1, 1, 5);
+        set_intersection_i64(&mut kappa, 1, 1, 1, 7);
+        set_intersection_i64(&mut kappa, 2, 2, 2, 11);
+        let basis_matrix = vec![
+            vec![Integer::from(1), Integer::from(1), Integer::from(0)],
+            vec![Integer::from(0), Integer::from(0), Integer::from(1)],
+        ];
+
+        let transformed = intersection_in_matrix_divisor_basis(&kappa, &basis_matrix).unwrap();
+
+        assert_eq!(transformed.dim(), 2);
+        assert_eq!(*transformed.get(0, 0, 0).get(), Rational::from(33));
+        assert_eq!(*transformed.get(1, 1, 1).get(), Rational::from(11));
+        assert_eq!(*transformed.get(0, 0, 1).get(), Rational::from(0));
+    }
+
+    #[test]
+    fn divisor_basis_intersection_dispatches_vector_and_matrix_shapes() {
+        let mut kappa = Intersection::new(3);
+        set_intersection_i64(&mut kappa, 0, 0, 2, 13);
+        let vector = intersection_in_divisor_basis(&kappa, DivisorBasis::Indices(&[0, 2]))
+            .expect("vector basis should dispatch to index filtering");
+        assert_eq!(vector.dim(), 2);
+        assert_eq!(*vector.get(0, 0, 1).get(), Rational::from(13));
+
+        let standard_basis = vec![0, 2];
+        let basis_matrix = vec![
+            vec![Integer::from(1), Integer::from(0), Integer::from(0)],
+            vec![Integer::from(0), Integer::from(0), Integer::from(1)],
+        ];
+        let matrix = intersection_in_divisor_basis(
+            &kappa,
+            DivisorBasis::Matrix {
+                standard_basis: &standard_basis,
+                basis_matrix: &basis_matrix,
+            },
+        )
+        .expect("matrix basis should dispatch to tensor pullback");
+
+        assert_eq!(matrix.dim(), 2);
+        assert_eq!(*matrix.get(0, 0, 1).get(), Rational::from(13));
+    }
+
+    #[test]
+    fn divisor_basis_intersection_rejects_malformed_shapes() {
+        let kappa = Intersection::new(3);
+        assert!(intersection_in_divisor_basis(&kappa, DivisorBasis::Indices(&[0, 0])).is_err());
+        let basis_matrix = vec![vec![Integer::from(1), Integer::from(0)]];
+        assert!(
+            intersection_in_matrix_divisor_basis(&kappa, &basis_matrix)
+                .expect_err("matrix width should match intersection dimension")
+                .to_string()
+                .contains("row width")
+        );
+    }
+
+    fn set_intersection_i64(kappa: &mut Intersection, i: usize, j: usize, k: usize, value: i64) {
+        kappa.set(
+            i,
+            j,
+            k,
+            crate::types::rational::Rational::<crate::types::tags::Finite>::from_raw(
+                Rational::from(value),
+            ),
+        );
     }
 
     #[test]
