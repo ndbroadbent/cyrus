@@ -2044,6 +2044,7 @@ fn report_target(
     certify_origin_support_domains: bool,
     origin_support_certificate_limit: usize,
     measure_cygv_semigroups: bool,
+    probe_cygv_path_history: bool,
     run_lower_seed_diamonds: bool,
     measure_cygv_degree_ladder: bool,
     cygv_degree_ladder_max_degree: Option<i128>,
@@ -2601,7 +2602,7 @@ fn report_target(
     } else {
         None
     };
-    let cygv_path_history_probe = if measure_cygv_semigroups {
+    let cygv_path_history_probe = if measure_cygv_semigroups || probe_cygv_path_history {
         if semigroup_measure_max_target_degree.is_some_and(|max_degree| sample.degree > max_degree)
         {
             None
@@ -3743,6 +3744,7 @@ fn build_report(
     certify_origin_support_domains: bool,
     origin_support_certificate_limit: usize,
     measure_cygv_semigroups: bool,
+    probe_cygv_path_history: bool,
     run_lower_seed_diamonds: bool,
     measure_cygv_degree_ladder: bool,
     cygv_degree_ladder_max_degree: Option<i128>,
@@ -3769,6 +3771,7 @@ fn build_report(
             certify_origin_support_domains,
             origin_support_certificate_limit,
             measure_cygv_semigroups,
+            probe_cygv_path_history,
             run_lower_seed_diamonds,
             measure_cygv_degree_ladder,
             cygv_degree_ladder_max_degree,
@@ -4120,7 +4123,7 @@ fn target_index_selected(index: usize, target_index_filter: Option<usize>) -> bo
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--origin-support-certificate-limit N] [--measure-cygv-semigroups] [--run-lower-seed-diamonds] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
+            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--origin-support-certificate-limit N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
         );
         std::process::exit(2);
     };
@@ -4136,6 +4139,7 @@ fn main() {
     let origin_support_certificate_limit =
         parse_arg_value::<usize>("--origin-support-certificate-limit").unwrap_or(256);
     let measure_cygv_semigroups = parse_flag("--measure-cygv-semigroups");
+    let probe_cygv_path_history = parse_flag("--probe-cygv-path-history");
     let run_lower_seed_diamonds = parse_flag("--run-lower-seed-diamonds");
     let measure_cygv_degree_ladder = parse_flag("--measure-cygv-degree-ladder");
     let cygv_degree_ladder_max_degree = parse_arg_value::<i128>("--cygv-degree-ladder-max-degree");
@@ -4166,6 +4170,7 @@ fn main() {
         certify_origin_support_domains,
         origin_support_certificate_limit,
         measure_cygv_semigroups,
+        probe_cygv_path_history,
         run_lower_seed_diamonds,
         measure_cygv_degree_ladder,
         cygv_degree_ladder_max_degree,
@@ -5669,6 +5674,7 @@ mod tests {
             false,
             false,
             false,
+            false,
             None,
             None,
             None,
@@ -5792,6 +5798,7 @@ mod tests {
             false,
             false,
             false,
+            false,
             None,
             None,
             None,
@@ -5805,5 +5812,36 @@ mod tests {
             Some("skipped_target_degree_limit")
         );
         assert_eq!(report.support_overlap_run_generator_count, None);
+
+        let path_report = report_target(
+            0,
+            &stats.sample[0],
+            &context,
+            false,
+            false,
+            None,
+            None,
+            false,
+            false,
+            256,
+            false,
+            true,
+            false,
+            false,
+            None,
+            None,
+            None,
+            &mut semigroup_measurement_cache,
+            &mut semigroup_ladder_cache,
+            256,
+        );
+
+        assert_eq!(path_report.cygv_semigroup_measure_status, None);
+        let path = path_report
+            .cygv_path_history_probe
+            .as_ref()
+            .expect("path-history flag should populate the bounded probe");
+        assert_eq!(path.status, "completed_bounded_closure");
+        assert_eq!(path.target_in_closure, Some(true));
     }
 }

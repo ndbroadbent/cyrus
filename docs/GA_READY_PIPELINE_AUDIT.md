@@ -254,7 +254,10 @@ to make the remaining GV layer more first-principles:
    `--element-limit 100000`, both degree-10 targets are already present in the
    partial closure, but the closure still exceeds `100000` elements before
    completing, so Cyrus cannot yet recover cygv's predecessor-subtraction
-   history from this broad domain.
+   history from this broad domain. This bounded probe can now be requested
+   directly with `mcallister_gv_context --probe-cygv-path-history`, which avoids
+   accidentally calling cygv's unbounded semigroup constructor before the
+   capped source-history diagnostic.
    Cyrus now exposes cygv's private pair-sum seed-reduction stage only as the
    hidden source-audit helper `cyrus_core::gv::cygv_pair_reduced_seed_generators`,
    and `mcallister_gv_context` reports raw seed counts, reduced seed counts, and

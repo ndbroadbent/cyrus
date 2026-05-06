@@ -1566,7 +1566,8 @@ ordinary compact-dual cygv input mismatch.
 
 `mcallister_gv_context` can now measure cygv's own finite semigroup closure
 size without running the full HKTY period/series computation, via
-`--measure-cygv-semigroups`. This is deliberately guarded by
+`--measure-cygv-semigroups`. This path still calls
+`cygv::Semigroup::with_max_degree`, so it is deliberately guarded by
 `--semigroup-measure-max-seeds` because the first corrected-chamber missing
 targets at degree `10` already have `720` seed rows at or below the target
 degree. An unguarded degree-10 measurement did not finish within `120s`; the
@@ -1576,6 +1577,10 @@ guarded run with `--semigroup-measure-max-target-degree 10
 origin-circuit misses as a tiny visible-generator problem: the source-shaped
 object is cygv's generated semigroup closure, not only the exported Mori rows
 or LP-active rows.
+For bounded source-history diagnostics that should not enter cygv's unbounded
+semigroup constructor first, use `--probe-cygv-path-history`. It runs the
+deterministic capped closure/predecessor probe directly and still obeys
+`--semigroup-measure-max-target-degree` and `--element-limit`.
 
 After rebuilding `mcallister_gv_context`, the dry-run report now preserves the
 origin-circuit provenance exported by `mcallister_first_principles`. A fresh
@@ -1778,7 +1783,9 @@ The current `cygv` crate source sharpens the same boundary:
   are `20,20,19,19,14,13,13,45,6` for targets `0..8`, respectively. Thus the
   remaining misses are not explained by a zero intersection row at cygv's
   selected series coordinate.
-- The report now has a bounded source-shaped path-history probe. It mirrors
+- The report now has a bounded source-shaped path-history probe, runnable
+  directly with `--probe-cygv-path-history` when an actual
+  `cygv::Semigroup::with_max_degree` measurement would be too broad. It mirrors
   cygv's degree-trimmed seed set, private pair-sum seed reduction, additive
   closure, and the `series_inversion` previous-`q_N` lookup rule
   `target - previous in monomial_map`, but it stops at an explicit element
