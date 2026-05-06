@@ -1767,6 +1767,14 @@ The current `cygv` crate source sharpens the same boundary:
   because the closure is incomplete, which is exactly the current blocker:
   Cyrus can see the relevant lower grading slices, but not yet certify the full
   cygv subtraction history cheaply.
+- The capped probe now also reports lower-bound predecessor counts separately
+  from certified counts. With the same 20000-element cap, target `7` sees
+  `15195` partial previous-window elements and already has two visible
+  predecessor/residual splits, with closest residual sparse support
+  `[(44,1),(53,-1),(203,1),(206,-1),(207,1)]`. Target `8` sees `15191`
+  partial previous-window elements but no visible predecessor split before the
+  cap. Both rows have `predecessor_counts_complete=false`, so this is only a
+  lower-bound diagnostic on the source history.
 
 The actionable consequence is that a Cyrus replacement for corrected-chamber
 or potent-ray GV values must recreate the finite semigroup and lower-degree
