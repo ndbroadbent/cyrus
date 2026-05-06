@@ -1790,6 +1790,15 @@ The current `cygv` crate source sharpens the same boundary:
   certified predecessor/residual split. Thus the target classes are not
   primitive obstructions; the unresolved piece is the broader monomial map and
   degree-ordered residual history used by cygv.
+- The context tool can now run an opt-in lower-seed decomposition-diamond check
+  with `--run-lower-seed-diamonds`. This still calls Cyrus' compact GV boundary
+  backed by the actual upstream `cygv` HKTY implementation; it does not
+  reimplement compact HKTY locally. On the saved context, target `7` has a
+  six-element lower-seed diamond and cygv returns GV `0`, while target `8` has
+  an eight-element diamond and cygv rejects the source domain because series
+  inversion produces a non-integral GV invariant. The short decompositions
+  therefore are not enough to reconstruct the McAllister/potent-ray source
+  domain.
 
 The actionable consequence is that a Cyrus replacement for corrected-chamber
 or potent-ray GV values must recreate the finite semigroup and lower-degree

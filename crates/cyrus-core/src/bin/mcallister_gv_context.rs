@@ -264,6 +264,10 @@ struct CygvPathHistoryProbe {
     lower_seed_decomposition_term_count: Option<usize>,
     lower_seed_decomposition_terms_nonzero: Option<Vec<Vec<(usize, i64)>>>,
     lower_seed_decomposition_error: Option<String>,
+    lower_seed_diamond_status: Option<String>,
+    lower_seed_diamond_element_count: Option<usize>,
+    lower_seed_diamond_gv: Option<String>,
+    lower_seed_diamond_error: Option<String>,
 }
 
 struct CygvPathPredecessorStats {
@@ -279,6 +283,14 @@ struct LowerSeedDecompositionProbe {
     status: String,
     term_count: Option<usize>,
     terms_nonzero: Option<Vec<Vec<(usize, i64)>>>,
+    terms: Option<Vec<Vec<i64>>>,
+    error: Option<String>,
+}
+
+struct LowerSeedDiamondProbe {
+    status: Option<String>,
+    element_count: Option<usize>,
+    gv: Option<String>,
     error: Option<String>,
 }
 
@@ -584,21 +596,136 @@ fn lower_seed_decomposition_probe(
                     .map(|term| sparse_from_dense(term))
                     .collect::<Vec<_>>(),
             ),
+            terms: Some(terms),
             error: None,
         },
         Ok(None) => LowerSeedDecompositionProbe {
             status: format!("not_found_up_to_{max_terms}"),
             term_count: None,
             terms_nonzero: None,
+            terms: None,
             error: None,
         },
         Err(error) => LowerSeedDecompositionProbe {
             status: "error".to_string(),
             term_count: None,
             terms_nonzero: None,
+            terms: None,
             error: Some(error),
         },
     }
+}
+
+fn lower_seed_diamond_probe(
+    target: &[i64],
+    lower_seed_decomposition: &LowerSeedDecompositionProbe,
+    context: &ValidatedContext<'_>,
+    run_lower_seed_diamonds: bool,
+    element_limit: usize,
+) -> LowerSeedDiamondProbe {
+    if !run_lower_seed_diamonds {
+        return LowerSeedDiamondProbe {
+            status: None,
+            element_count: None,
+            gv: None,
+            error: None,
+        };
+    }
+    let Some(terms) = lower_seed_decomposition.terms.as_deref() else {
+        return LowerSeedDiamondProbe {
+            status: Some("skipped_no_lower_seed_decomposition".to_string()),
+            element_count: None,
+            gv: None,
+            error: lower_seed_decomposition.error.clone(),
+        };
+    };
+    match lower_seed_diamond_probe_inner(target, terms, context, element_limit) {
+        Ok(probe) => probe,
+        Err(error) => LowerSeedDiamondProbe {
+            status: Some("error".to_string()),
+            element_count: None,
+            gv: None,
+            error: Some(error),
+        },
+    }
+}
+
+fn lower_seed_diamond_probe_inner(
+    target: &[i64],
+    terms: &[Vec<i64>],
+    context: &ValidatedContext<'_>,
+    element_limit: usize,
+) -> Result<LowerSeedDiamondProbe, String> {
+    let elements = decomposition_diamond_elements(terms, target)?;
+    if elements.len() > element_limit {
+        return Ok(LowerSeedDiamondProbe {
+            status: Some(format!("skipped_element_limit_{element_limit}")),
+            element_count: Some(elements.len()),
+            gv: None,
+            error: None,
+        });
+    }
+    if cfg!(panic = "abort") {
+        return Ok(LowerSeedDiamondProbe {
+            status: Some("hkty_unavailable_panic_abort".to_string()),
+            element_count: Some(elements.len()),
+            gv: None,
+            error: Some(
+                "running cygv explicit-semigroup HKTY requires a panic=unwind build for diagnostics"
+                    .to_string(),
+            ),
+        });
+    }
+    let target_i32 = target
+        .iter()
+        .map(|&value| {
+            i32::try_from(value).map_err(|_| "target coordinate does not fit in i32".to_string())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let previous_panic_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let gvs_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        compute_gv_invariants_with_explicit_semigroup(
+            &elements,
+            context.grading,
+            context.q_matrix,
+            &context.intersection,
+        )
+    }));
+    std::panic::set_hook(previous_panic_hook);
+
+    let gvs = match gvs_result {
+        Ok(Ok(gvs)) => gvs,
+        Ok(Err(error)) => {
+            return Ok(LowerSeedDiamondProbe {
+                status: Some("hkty_error".to_string()),
+                element_count: Some(elements.len()),
+                gv: None,
+                error: Some(format!("explicit-semigroup cygv HKTY failed: {error}")),
+            });
+        }
+        Err(payload) => {
+            return Ok(LowerSeedDiamondProbe {
+                status: Some("hkty_panic".to_string()),
+                element_count: Some(elements.len()),
+                gv: None,
+                error: Some(format!(
+                    "explicit-semigroup cygv HKTY panicked: {}",
+                    panic_payload_message(payload.as_ref())
+                )),
+            });
+        }
+    };
+    let gv = gvs
+        .into_iter()
+        .find_map(|(curve, value)| (curve == target_i32).then(|| value.to_string()))
+        .unwrap_or_else(|| "0".to_string());
+    Ok(LowerSeedDiamondProbe {
+        status: Some("computed_lower_seed_decomposition_diamond".to_string()),
+        element_count: Some(elements.len()),
+        gv: Some(gv),
+        error: None,
+    })
 }
 
 fn bounded_seed_decomposition(
@@ -951,6 +1078,7 @@ fn report_target(
     support_overlap_max_target_degree: Option<i128>,
     support_overlap_pair_reduce_for_run: bool,
     measure_cygv_semigroups: bool,
+    run_lower_seed_diamonds: bool,
     semigroup_measure_max_target_degree: Option<i128>,
     semigroup_measure_max_seed_count: Option<usize>,
     semigroup_measurement_cache: &mut HashMap<i128, Result<CygvSemigroupDegreeMeasurement, String>>,
@@ -1400,6 +1528,7 @@ fn report_target(
                 sample,
                 context,
                 &target,
+                run_lower_seed_diamonds,
                 element_limit,
             ))
         }
@@ -1724,9 +1853,16 @@ fn cygv_path_history_probe(
     sample: &MissingGvTargetSample,
     context: &ValidatedContext<'_>,
     target: &[i64],
+    run_lower_seed_diamonds: bool,
     element_limit: usize,
 ) -> CygvPathHistoryProbe {
-    match cygv_path_history_probe_inner(sample, context, target, element_limit) {
+    match cygv_path_history_probe_inner(
+        sample,
+        context,
+        target,
+        run_lower_seed_diamonds,
+        element_limit,
+    ) {
         Ok(probe) => probe,
         Err(error) => CygvPathHistoryProbe {
             status: format!("error: {error}"),
@@ -1750,6 +1886,10 @@ fn cygv_path_history_probe(
             lower_seed_decomposition_error: Some(
                 "path-history probe failed before seed decomposition".to_string(),
             ),
+            lower_seed_diamond_status: None,
+            lower_seed_diamond_element_count: None,
+            lower_seed_diamond_gv: None,
+            lower_seed_diamond_error: None,
         },
     }
 }
@@ -1758,6 +1898,7 @@ fn cygv_path_history_probe_inner(
     sample: &MissingGvTargetSample,
     context: &ValidatedContext<'_>,
     target: &[i64],
+    run_lower_seed_diamonds: bool,
     element_limit: usize,
 ) -> Result<CygvPathHistoryProbe, String> {
     let previous_level_count = cygv_previous_level_count(context.dimension);
@@ -1793,9 +1934,20 @@ fn cygv_path_history_probe_inner(
             lower_seed_decomposition_term_count: None,
             lower_seed_decomposition_terms_nonzero: None,
             lower_seed_decomposition_error: None,
+            lower_seed_diamond_status: None,
+            lower_seed_diamond_element_count: None,
+            lower_seed_diamond_gv: None,
+            lower_seed_diamond_error: None,
         });
     }
     let lower_seed_decomposition = lower_seed_decomposition_probe(target, &seeds, 4);
+    let lower_seed_diamond = lower_seed_diamond_probe(
+        target,
+        &lower_seed_decomposition,
+        context,
+        run_lower_seed_diamonds,
+        element_limit,
+    );
 
     let closure =
         bounded_cygv_semigroup_closure(&seeds, context.grading, sample.degree, element_limit)?;
@@ -1838,6 +1990,10 @@ fn cygv_path_history_probe_inner(
             lower_seed_decomposition_term_count: lower_seed_decomposition.term_count,
             lower_seed_decomposition_terms_nonzero: lower_seed_decomposition.terms_nonzero,
             lower_seed_decomposition_error: lower_seed_decomposition.error,
+            lower_seed_diamond_status: lower_seed_diamond.status,
+            lower_seed_diamond_element_count: lower_seed_diamond.element_count,
+            lower_seed_diamond_gv: lower_seed_diamond.gv,
+            lower_seed_diamond_error: lower_seed_diamond.error,
         });
     }
 
@@ -1869,6 +2025,10 @@ fn cygv_path_history_probe_inner(
         lower_seed_decomposition_term_count: lower_seed_decomposition.term_count,
         lower_seed_decomposition_terms_nonzero: lower_seed_decomposition.terms_nonzero,
         lower_seed_decomposition_error: lower_seed_decomposition.error,
+        lower_seed_diamond_status: lower_seed_diamond.status,
+        lower_seed_diamond_element_count: lower_seed_diamond.element_count,
+        lower_seed_diamond_gv: lower_seed_diamond.gv,
+        lower_seed_diamond_error: lower_seed_diamond.error,
     })
 }
 
@@ -2322,6 +2482,7 @@ fn build_report(
     support_overlap_max_target_degree: Option<i128>,
     support_overlap_pair_reduce_for_run: bool,
     measure_cygv_semigroups: bool,
+    run_lower_seed_diamonds: bool,
     semigroup_measure_max_target_degree: Option<i128>,
     semigroup_measure_max_seed_count: Option<usize>,
     element_limit: usize,
@@ -2342,6 +2503,7 @@ fn build_report(
             support_overlap_max_target_degree,
             support_overlap_pair_reduce_for_run,
             measure_cygv_semigroups,
+            run_lower_seed_diamonds,
             semigroup_measure_max_target_degree,
             semigroup_measure_max_seed_count,
             &mut semigroup_measurement_cache,
@@ -2376,7 +2538,7 @@ fn target_index_selected(index: usize, target_index_filter: Option<usize>) -> bo
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--support-overlap-max-target-degree N] [--measure-cygv-semigroups] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
+            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--support-overlap-max-target-degree N] [--measure-cygv-semigroups] [--run-lower-seed-diamonds] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
         );
         std::process::exit(2);
     };
@@ -2389,6 +2551,7 @@ fn main() {
     let support_overlap_max_target_degree =
         parse_arg_value::<i128>("--support-overlap-max-target-degree");
     let measure_cygv_semigroups = parse_flag("--measure-cygv-semigroups");
+    let run_lower_seed_diamonds = parse_flag("--run-lower-seed-diamonds");
     let semigroup_measure_max_target_degree =
         parse_arg_value::<i128>("--semigroup-measure-max-target-degree");
     let semigroup_measure_max_seed_count =
@@ -2414,6 +2577,7 @@ fn main() {
         support_overlap_max_target_degree,
         support_overlap_pair_reduce_for_run,
         measure_cygv_semigroups,
+        run_lower_seed_diamonds,
         semigroup_measure_max_target_degree,
         semigroup_measure_max_seed_count,
         element_limit,
@@ -2499,6 +2663,43 @@ mod tests {
             bounded_seed_decomposition(&[5, 1], &seeds, 4).unwrap(),
             Some(vec![vec![0, 1], vec![1, 0], vec![2, 0], vec![2, 0]])
         );
+    }
+
+    #[test]
+    fn lower_seed_diamond_probe_is_opt_in_and_respects_element_limit() {
+        let stats = MissingGvTargetStats {
+            target_count: 0,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: Vec::new(),
+        };
+        let grading = vec![1, 1];
+        let q_matrix = vec![vec![1, 0], vec![0, 1]];
+        let degree_bounded_rays = Vec::new();
+        let context = ValidatedContext {
+            dimension: 2,
+            degree_bound: 2,
+            q_cols: 2,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            intersection: Intersection::new(2),
+            stats: &stats,
+        };
+        let decomposition = LowerSeedDecompositionProbe {
+            status: "found_lower_seed_decomposition".to_string(),
+            term_count: Some(2),
+            terms_nonzero: Some(vec![vec![(0, 1)], vec![(1, 1)]]),
+            terms: Some(vec![vec![1, 0], vec![0, 1]]),
+            error: None,
+        };
+
+        let disabled = lower_seed_diamond_probe(&[1, 1], &decomposition, &context, false, 2);
+        assert_eq!(disabled.status, None);
+        assert_eq!(disabled.element_count, None);
+
+        let limited = lower_seed_diamond_probe(&[1, 1], &decomposition, &context, true, 2);
+        assert_eq!(limited.status.as_deref(), Some("skipped_element_limit_2"));
+        assert_eq!(limited.element_count, Some(4));
     }
 
     #[test]
@@ -2661,7 +2862,8 @@ mod tests {
         };
 
         let target = vec![1, 1];
-        let probe = cygv_path_history_probe_inner(&stats.sample[0], &context, &target, 16).unwrap();
+        let probe =
+            cygv_path_history_probe_inner(&stats.sample[0], &context, &target, false, 16).unwrap();
         assert_eq!(probe.status, "completed_bounded_closure");
         assert_eq!(probe.target_in_closure, Some(true));
         assert_eq!(probe.previous_level_count, 2);
@@ -2716,7 +2918,8 @@ mod tests {
         };
 
         let target = vec![1, 1];
-        let probe = cygv_path_history_probe_inner(&stats.sample[0], &context, &target, 2).unwrap();
+        let probe =
+            cygv_path_history_probe_inner(&stats.sample[0], &context, &target, false, 2).unwrap();
 
         assert_eq!(probe.status, "exceeded_element_limit_initial_2");
         assert_eq!(probe.previous_window_degrees, vec![1]);
@@ -2857,6 +3060,7 @@ mod tests {
             None,
             false,
             false,
+            false,
             None,
             None,
             &mut semigroup_measurement_cache,
@@ -2951,6 +3155,7 @@ mod tests {
             false,
             Some(0),
             Some(4),
+            false,
             false,
             false,
             None,
