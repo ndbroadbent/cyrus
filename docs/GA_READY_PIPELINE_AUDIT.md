@@ -342,7 +342,13 @@ to make the remaining GV layer more first-principles:
    `cygv` inputs. The missing source-input counts remain nine each for
    `local_semigroup_generators`, `local_q_matrix_phase`,
    `local_intersection_tensor`, and `local_chamber_certificate`, so none is a
-   valid actual-`cygv` call yet. The direct source read reinforces this: `cygv`
+   valid actual-`cygv` call yet. The opt-in active-support provided-generator
+   diagnostic now uses the actual Rust `cygv` crate and reports
+   `computed_active_support_generators=6`, `hkty_error=3`; all six successful
+   target lookups return `GV=0`, and the three errors are non-integral
+   series-inversion failures. This rules out the small active-support windows
+   as a valid replacement for the missing source-derived semigroup/chamber
+   inputs. The direct source read reinforces this: `cygv`
    obtains GV values from the full
    finite semigroup, HKTY alpha/beta construction, and degree-ordered
    `Li2(q_N)` subtraction history, while the McAllister paper's small-curve

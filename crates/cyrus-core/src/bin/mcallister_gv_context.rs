@@ -160,6 +160,7 @@ struct ContextReport {
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
     local_cygv_actual_call_readiness_counts: BTreeMap<String, usize>,
     local_cygv_missing_source_input_counts: BTreeMap<String, usize>,
+    active_support_status_counts: BTreeMap<String, usize>,
     local_cygv_q_matrix_orientation_status_counts: BTreeMap<String, usize>,
     local_cygv_q_matrix_layout_status_counts: BTreeMap<String, usize>,
     local_cygv_origin_point_status_counts: BTreeMap<String, usize>,
@@ -3435,6 +3436,12 @@ fn build_report(
             .iter()
             .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
     );
+    let active_support_status_counts = optional_status_counts(
+        targets
+            .iter()
+            .map(|target| target.active_support_status.as_deref()),
+        "not_run",
+    );
     let local_cygv_q_matrix_orientation_status_counts =
         local_cygv_q_matrix_orientation_status_counts(
             targets
@@ -3482,6 +3489,7 @@ fn build_report(
         local_cygv_target_candidate_status_counts,
         local_cygv_actual_call_readiness_counts,
         local_cygv_missing_source_input_counts,
+        active_support_status_counts,
         local_cygv_q_matrix_orientation_status_counts,
         local_cygv_q_matrix_layout_status_counts,
         local_cygv_origin_point_status_counts,
@@ -3543,6 +3551,19 @@ fn local_cygv_missing_source_input_counts<'a>(
         for input in &skeleton.remaining_uncertified_inputs {
             *counts.entry(input.clone()).or_insert(0usize) += 1;
         }
+    }
+    counts
+}
+
+fn optional_status_counts<'a>(
+    statuses: impl IntoIterator<Item = Option<&'a str>>,
+    missing_status: &str,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for status in statuses {
+        *counts
+            .entry(status.unwrap_or(missing_status).to_string())
+            .or_insert(0usize) += 1;
     }
     counts
 }
@@ -4258,6 +4279,28 @@ mod tests {
         assert_eq!(counts.get("local_semigroup_generators").copied(), Some(2));
         assert_eq!(counts.get("local_intersection_tensor").copied(), Some(1));
         assert_eq!(counts.get("local_chamber_certificate").copied(), Some(1));
+    }
+
+    #[test]
+    fn optional_status_counts_aggregates_missing_and_present_statuses() {
+        let computed = "computed_active_support_generators".to_string();
+        let hkty_error = "hkty_error".to_string();
+        let counts = optional_status_counts(
+            [
+                Some(computed.as_str()),
+                None,
+                Some(hkty_error.as_str()),
+                Some(computed.as_str()),
+            ],
+            "not_run",
+        );
+
+        assert_eq!(
+            counts.get("computed_active_support_generators").copied(),
+            Some(2)
+        );
+        assert_eq!(counts.get("hkty_error").copied(), Some(1));
+        assert_eq!(counts.get("not_run").copied(), Some(1));
     }
 
     #[test]

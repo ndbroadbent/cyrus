@@ -1895,6 +1895,13 @@ The current `cygv` crate source sharpens the same boundary:
   counted explicitly: each of the nine skeletons is still missing
   `local_semigroup_generators`, `local_q_matrix_phase`,
   `local_intersection_tensor`, and `local_chamber_certificate`.
+  The opt-in active-support provided-generator diagnostic now runs through the
+  actual Rust `cygv` crate and aggregates as
+  `computed_active_support_generators=6` and `hkty_error=3`; the six successful
+  target lookups are all `GV=0`, while the three errors are non-integral
+  series-inversion failures. This confirms that small active-support generator
+  windows are not a source-derived substitute for the missing semigroup and
+  chamber data.
 
 The actionable consequence is that a Cyrus replacement for corrected-chamber
 or potent-ray GV values must recreate the finite semigroup and lower-degree
