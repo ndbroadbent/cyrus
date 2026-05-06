@@ -290,6 +290,11 @@ to make the remaining GV layer more first-principles:
    fourfold-shaped (`cy_dim=4`), while the four five-point affine-rank-three
    rows are threefold-shaped (`cy_dim=3`) but still lack a source-derived
    semigroup, grading, intersection tensor, and chamber interpretation. The
+   same report now groups local charge-row permutation signatures: all four
+   compact-threefold-shaped misses share `[-2,-1,-1,1,3]` and are explicitly
+   marked `shape_only_missing_source_derived_cygv_inputs`, with the missing
+   local semigroup generators, grading vector, `q` orientation/phase,
+   intersection tensor, and target-coordinate map listed in the JSON. The
    direct source read reinforces this: `cygv` obtains GV values from the full
    finite semigroup, HKTY alpha/beta construction, and degree-ordered
    `Li2(q_N)` subtraction history, while the McAllister paper's small-curve

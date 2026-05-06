@@ -1810,6 +1810,17 @@ The current `cygv` crate source sharpens the same boundary:
   inversion produces a non-integral GV invariant. The short decompositions
   therefore are not enough to reconstruct the McAllister/potent-ray source
   domain.
+- The origin-circuit shape diagnostic now serializes local charge-row
+  permutation signatures and groups them at the report level. On the saved
+  corrected-chamber context the four compact-threefold-shaped affine-rank-three
+  targets all have the same signature `[-2,-1,-1,1,3]`, while the other five
+  rows are fourfold-shaped. The diagnostic labels those four as
+  `shape_only_missing_source_derived_cygv_inputs` and lists the missing inputs:
+  local semigroup generators, local grading vector, local `q` orientation and
+  phase, local intersection tensor, and the target-to-local semigroup
+  coordinate. This is a guardrail: a compact-looking charge row is not a GV
+  computation and is not a substitute for calling the actual `cygv` crate with
+  complete source-derived inputs.
 
 The actionable consequence is that a Cyrus replacement for corrected-chamber
 or potent-ray GV values must recreate the finite semigroup and lower-degree

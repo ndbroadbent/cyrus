@@ -146,6 +146,7 @@ struct ContextReport {
     remaining_gv_missing_count: usize,
     missing_target_count: usize,
     exact_kind_counts: HashMap<String, usize>,
+    local_cygv_charge_signature_counts: BTreeMap<String, usize>,
     targets: Vec<TargetReport>,
 }
 
@@ -213,8 +214,18 @@ struct LocalCygvHypersurfaceShape {
     ambient_dim: i64,
     cy_dim: i64,
     charge_sums: Vec<i64>,
+    charge_row_permutation_signatures: Vec<Vec<i64>>,
+    charge_row_multiplicities: Vec<Vec<LocalChargeMultiplicity>>,
     is_calabi_yau_charge: bool,
     is_compact_threefold_hypersurface_shape: bool,
+    cygv_compact_input_status: String,
+    cygv_compact_input_missing: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalChargeMultiplicity {
+    charge: i64,
+    count: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -965,7 +976,17 @@ fn local_cygv_hypersurface_shape(
         .iter()
         .map(|row| row.iter().sum())
         .collect::<Vec<i64>>();
+    let charge_row_permutation_signatures =
+        local_charge_row_permutation_signatures(&support.local_charge_basis);
+    let charge_row_multiplicities = support
+        .local_charge_basis
+        .iter()
+        .map(|row| local_charge_multiplicities(row))
+        .collect::<Vec<_>>();
     let is_calabi_yau_charge = charge_sums.iter().all(|&sum| sum == 0);
+    let is_compact_threefold_hypersurface_shape = is_calabi_yau_charge && cy_dim == 3;
+    let (cygv_compact_input_status, cygv_compact_input_missing) =
+        cygv_compact_input_readiness(is_compact_threefold_hypersurface_shape);
     Ok(Some(LocalCygvHypersurfaceShape {
         q_rows,
         q_cols,
@@ -973,9 +994,71 @@ fn local_cygv_hypersurface_shape(
         ambient_dim,
         cy_dim,
         charge_sums,
+        charge_row_permutation_signatures,
+        charge_row_multiplicities,
         is_calabi_yau_charge,
-        is_compact_threefold_hypersurface_shape: is_calabi_yau_charge && cy_dim == 3,
+        is_compact_threefold_hypersurface_shape,
+        cygv_compact_input_status,
+        cygv_compact_input_missing,
     }))
+}
+
+fn local_charge_row_permutation_signatures(local_charge_basis: &[Vec<i64>]) -> Vec<Vec<i64>> {
+    let mut rows = local_charge_basis
+        .iter()
+        .map(|row| {
+            let mut sorted = row.clone();
+            sorted.sort_unstable();
+            sorted
+        })
+        .collect::<Vec<_>>();
+    rows.sort();
+    rows
+}
+
+fn local_charge_signature_key(local_charge_basis: &[Vec<i64>]) -> String {
+    local_charge_row_permutation_signatures(local_charge_basis)
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .collect::<Vec<_>>()
+        .join("|")
+}
+
+fn local_charge_multiplicities(row: &[i64]) -> Vec<LocalChargeMultiplicity> {
+    let mut counts = BTreeMap::new();
+    for &charge in row {
+        *counts.entry(charge).or_insert(0usize) += 1;
+    }
+    counts
+        .into_iter()
+        .map(|(charge, count)| LocalChargeMultiplicity { charge, count })
+        .collect()
+}
+
+fn cygv_compact_input_readiness(
+    is_compact_threefold_hypersurface_shape: bool,
+) -> (String, Vec<String>) {
+    if !is_compact_threefold_hypersurface_shape {
+        return (
+            "not_compact_threefold_hypersurface_shape".to_string(),
+            Vec::new(),
+        );
+    }
+    (
+        "shape_only_missing_source_derived_cygv_inputs".to_string(),
+        vec![
+            "local_semigroup_generators".to_string(),
+            "local_grading_vector".to_string(),
+            "local_q_matrix_orientation_and_phase".to_string(),
+            "local_intersection_tensor".to_string(),
+            "target_class_to_local_semigroup_coordinate".to_string(),
+        ],
+    )
 }
 
 fn validate_context<'a>(
@@ -2732,6 +2815,8 @@ fn build_report(
             element_limit,
         ));
     }
+    let local_cygv_charge_signature_counts =
+        local_cygv_charge_signature_counts(&validated.stats.sample, target_index_filter);
     ContextReport {
         schema_version: context.schema_version,
         dimension: validated.dimension,
@@ -2749,8 +2834,27 @@ fn build_report(
             .stats
             .real_cone_decomposition_exact_kind_counts
             .clone(),
+        local_cygv_charge_signature_counts,
         targets,
     }
+}
+
+fn local_cygv_charge_signature_counts(
+    samples: &[MissingGvTargetSample],
+    target_index_filter: Option<usize>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for (idx, sample) in samples.iter().enumerate() {
+        if !target_index_selected(idx, target_index_filter) {
+            continue;
+        }
+        let Some(support) = sample.origin_circuit_affine_support.as_ref() else {
+            continue;
+        };
+        let key = local_charge_signature_key(&support.local_charge_basis);
+        *counts.entry(key).or_insert(0usize) += 1;
+    }
+    counts
 }
 
 fn target_index_selected(index: usize, target_index_filter: Option<usize>) -> bool {
@@ -2888,6 +2992,45 @@ mod tests {
         assert_eq!(
             bounded_seed_decomposition(&[5, 1], &seeds, 4).unwrap(),
             Some(vec![vec![0, 1], vec![1, 0], vec![2, 0], vec![2, 0]])
+        );
+    }
+
+    #[test]
+    fn local_charge_signature_groups_permuted_rows() {
+        let first = vec![vec![1, -2, -1, -1, 3]];
+        let second = vec![vec![1, -1, -1, -2, 3]];
+
+        assert_eq!(
+            local_charge_row_permutation_signatures(&first),
+            vec![vec![-2, -1, -1, 1, 3]]
+        );
+        assert_eq!(
+            local_charge_signature_key(&first),
+            local_charge_signature_key(&second)
+        );
+        assert_eq!(
+            local_charge_multiplicities(&first[0])
+                .into_iter()
+                .map(|entry| (entry.charge, entry.count))
+                .collect::<Vec<_>>(),
+            vec![(-2, 1), (-1, 2), (1, 1), (3, 1)]
+        );
+    }
+
+    #[test]
+    fn compact_threefold_shape_is_not_enough_for_cygv_input() {
+        let (status, missing) = cygv_compact_input_readiness(true);
+
+        assert_eq!(status, "shape_only_missing_source_derived_cygv_inputs");
+        assert_eq!(
+            missing,
+            vec![
+                "local_semigroup_generators",
+                "local_grading_vector",
+                "local_q_matrix_orientation_and_phase",
+                "local_intersection_tensor",
+                "target_class_to_local_semigroup_coordinate",
+            ]
         );
     }
 
@@ -3376,7 +3519,16 @@ mod tests {
         assert_eq!(shape.q_cols, 1);
         assert_eq!(shape.cy_dim, 1);
         assert_eq!(shape.charge_sums, vec![0]);
+        assert_eq!(
+            shape.charge_row_permutation_signatures,
+            vec![vec![-2, 1, 1]]
+        );
         assert!(!shape.is_compact_threefold_hypersurface_shape);
+        assert_eq!(
+            shape.cygv_compact_input_status,
+            "not_compact_threefold_hypersurface_shape"
+        );
+        assert!(shape.cygv_compact_input_missing.is_empty());
         assert_eq!(
             report
                 .cms_general_divisor_intersection_checks
