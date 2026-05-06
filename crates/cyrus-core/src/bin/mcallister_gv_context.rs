@@ -256,6 +256,8 @@ struct CygvPathHistoryProbe {
     predecessor_difference_count: Option<usize>,
     improving_predecessor_difference_count: Option<usize>,
     closest_series_distance: Option<String>,
+    closest_series_predecessor_nonzero: Option<Vec<(usize, i64)>>,
+    closest_series_difference_nonzero: Option<Vec<(usize, i64)>>,
 }
 
 struct CygvSemigroupMeasurement {
@@ -326,6 +328,14 @@ fn dense_from_sparse(entries: &[(usize, i64)], dimension: usize) -> Result<Vec<i
         *slot = value;
     }
     Ok(out)
+}
+
+fn sparse_from_dense(values: &[i64]) -> Vec<(usize, i64)> {
+    values
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, &value)| (value != 0).then_some((idx, value)))
+        .collect()
 }
 
 fn q_intersections(curve: &[i64], q_matrix: &[Vec<i64>]) -> Result<Vec<i128>, String> {
@@ -1591,6 +1601,8 @@ fn cygv_path_history_probe(
             predecessor_difference_count: None,
             improving_predecessor_difference_count: None,
             closest_series_distance: None,
+            closest_series_predecessor_nonzero: None,
+            closest_series_difference_nonzero: None,
         },
     }
 }
@@ -1626,6 +1638,8 @@ fn cygv_path_history_probe_inner(
             predecessor_difference_count: None,
             improving_predecessor_difference_count: None,
             closest_series_distance: None,
+            closest_series_predecessor_nonzero: None,
+            closest_series_difference_nonzero: None,
         });
     }
 
@@ -1645,6 +1659,8 @@ fn cygv_path_history_probe_inner(
             predecessor_difference_count: None,
             improving_predecessor_difference_count: None,
             closest_series_distance: None,
+            closest_series_predecessor_nonzero: None,
+            closest_series_difference_nonzero: None,
         });
     }
 
@@ -1667,7 +1683,11 @@ fn cygv_path_history_probe_inner(
     let mut predecessor_difference_count = 0usize;
     let mut improving_predecessor_difference_count = 0usize;
     let mut closest_distance = cygv_series_distance(target);
-    for element in &closure.elements {
+    let mut closest_predecessor = None;
+    let mut closest_difference = None;
+    let mut sorted_elements = closure.elements.iter().collect::<Vec<_>>();
+    sorted_elements.sort();
+    for element in sorted_elements {
         let degree = curve_degree(element, context.grading)?;
         if !selected_degrees.contains(&degree) {
             continue;
@@ -1682,6 +1702,8 @@ fn cygv_path_history_probe_inner(
         if distance < closest_distance {
             closest_distance = distance;
             improving_predecessor_difference_count += 1;
+            closest_predecessor = Some((*element).clone());
+            closest_difference = Some(difference);
         }
     }
 
@@ -1697,6 +1719,8 @@ fn cygv_path_history_probe_inner(
         predecessor_difference_count: Some(predecessor_difference_count),
         improving_predecessor_difference_count: Some(improving_predecessor_difference_count),
         closest_series_distance: Some(format!("{closest_distance:.6}")),
+        closest_series_predecessor_nonzero: closest_predecessor.as_deref().map(sparse_from_dense),
+        closest_series_difference_nonzero: closest_difference.as_deref().map(sparse_from_dense),
     })
 }
 
@@ -2199,6 +2223,7 @@ mod tests {
             dense_from_sparse(&[(0, 2), (3, -1)], 4).unwrap(),
             vec![2, 0, 0, -1]
         );
+        assert_eq!(sparse_from_dense(&[2, 0, 0, -1]), vec![(0, 2), (3, -1)]);
         assert!(dense_from_sparse(&[(4, 1)], 4).is_err());
         assert!(dense_from_sparse(&[(1, 1), (1, 2)], 4).is_err());
     }
@@ -2352,6 +2377,8 @@ mod tests {
         assert_eq!(probe.predecessor_difference_count, Some(2));
         assert_eq!(probe.improving_predecessor_difference_count, Some(1));
         assert_eq!(probe.closest_series_distance.as_deref(), Some("1.000000"));
+        assert_eq!(probe.closest_series_predecessor_nonzero, Some(vec![(1, 1)]));
+        assert_eq!(probe.closest_series_difference_nonzero, Some(vec![(0, 1)]));
     }
 
     #[test]
