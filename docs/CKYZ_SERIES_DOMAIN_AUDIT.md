@@ -569,3 +569,16 @@ now right, but full `Li2(q_N)` materialization is still too broad at 5,235
 history degrees. The next change should keep the same grading-batched `q_N`
 cache but update only demanded residual coefficients from `Li2(q_N)`, rather
 than expanding every Li2 monomial in the finite domain.
+
+An attempted recursive demanded-coefficient evaluator was rejected before
+commit. It computed `coeff[Li2(q_N), target]` from memoized coefficients of
+`q_N^m` and matched full Li2 on the polygon-5 history test, but it was the
+wrong cost model for the McAllister domain. On N=4 it increased extraction to
+about 2.3 seconds while touching roughly 50k memoized power states for 9,443
+updates. On the N=10 filtered gate, a 600 second run was stopped after
+z-history selection and before the first extraction progress batch. The issue
+is predecessor discovery: scanning `q_N` support separately for thousands of
+target/remainder states is as bad as full Li2 materialization on the broad
+support-predicted domain. The next attempt should precompute or index the
+coefficient-demand graph by target degree and shared predecessor structure,
+not perform per-target support scans.
