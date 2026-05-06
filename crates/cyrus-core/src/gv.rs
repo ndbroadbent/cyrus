@@ -5657,7 +5657,10 @@ impl CkyzExpCoefficientCache {
         let delta_total_degree = ckyz_total_degree(delta)?;
         let mut predecessors = Vec::new();
         for (term_index, term) in alpha_terms.iter().enumerate() {
-            if term.total_degree == 0 || term.total_degree > delta_total_degree {
+            if term.total_degree > delta_total_degree {
+                break;
+            }
+            if term.total_degree == 0 {
                 continue;
             }
             if !ckyz_componentwise_le(&term.degree, delta) {
@@ -5710,7 +5713,7 @@ fn ckyz_scaled_alpha_terms(
         }
     }
 
-    terms_by_degree
+    let mut terms = terms_by_degree
         .into_iter()
         .map(|(degree, coefficients)| {
             Ok(CkyzScaledAlphaTerm {
@@ -5719,7 +5722,13 @@ fn ckyz_scaled_alpha_terms(
                 coefficients,
             })
         })
-        .collect()
+        .collect::<Result<Vec<_>>>()?;
+    terms.sort_by(|lhs, rhs| {
+        lhs.total_degree
+            .cmp(&rhs.total_degree)
+            .then_with(|| lhs.degree.cmp(&rhs.degree))
+    });
+    Ok(terms)
 }
 
 fn ckyz_scaled_alpha_coefficient(scale_degree: &[usize], term: &CkyzScaledAlphaTerm) -> Rational {

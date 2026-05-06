@@ -87,9 +87,13 @@ run pass. Any remaining mismatch must be explicit and localizable.
    coefficient-level z-residual extraction avoids materializing full `Li2(q_N)`
    series for narrowed targets and makes focused polygon-5 `[4,3,2]`, `N=5`
    pass in about 6.4 seconds. Focused polygon-5 `[4,3,2]`, `N=10` still exceeds
-   a 300 second timeout, so the remaining task is the sharper source/history
-   domain needed for full rows and rank-four contexts, not a compact-`cygv`
-   reimplementation.
+   a 300 second timeout. A traced `N=10` run now shows support prediction is no
+   longer the slow step (`broad=26691`, `selected=21721`, about 9 seconds);
+   z-history selection produces `5235` residual degrees in about 17 seconds, and
+   the coefficient-level residual extraction still reaches only grading 4 before
+   a 180 second timeout. The remaining task is therefore the sharper live
+   residual/source-history domain needed for full rows and rank-four contexts,
+   not a compact-`cygv` reimplementation.
 3. Pair-pruned selected curves match McAllister's `small_curves.dat`, while a
    stricter finite-semigroup diagnostic removes five additional curves. This is
    exposed as a policy choice, not hidden.
