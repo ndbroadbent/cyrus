@@ -1650,10 +1650,14 @@ fn cygv_path_history_probe_inner(
         return Ok(CygvPathHistoryProbe {
             status: closure.status,
             closure_element_count: Some(closure.elements.len()),
+            previous_window_degrees: cygv_previous_window_degrees(
+                &closure.degree_counts,
+                sample.degree,
+                previous_level_count,
+            ),
             closure_degree_counts: closure.degree_counts,
             target_in_closure: Some(target_in_closure),
             previous_level_count,
-            previous_window_degrees: Vec::new(),
             previous_window_degree_count: None,
             previous_window_element_count: None,
             predecessor_difference_count: None,
@@ -1664,19 +1668,8 @@ fn cygv_path_history_probe_inner(
         });
     }
 
-    let mut lower_degrees = closure
-        .degree_counts
-        .keys()
-        .copied()
-        .filter(|degree| *degree > 0 && *degree < sample.degree)
-        .collect::<Vec<_>>();
-    lower_degrees.sort_unstable();
-    let mut selected_degree_vec = lower_degrees
-        .into_iter()
-        .rev()
-        .take(previous_level_count)
-        .collect::<Vec<_>>();
-    selected_degree_vec.sort_unstable();
+    let selected_degree_vec =
+        cygv_previous_window_degrees(&closure.degree_counts, sample.degree, previous_level_count);
     let selected_degrees = selected_degree_vec.iter().copied().collect::<HashSet<_>>();
 
     let mut previous_window_element_count = 0usize;
@@ -1722,6 +1715,22 @@ fn cygv_path_history_probe_inner(
         closest_series_predecessor_nonzero: closest_predecessor.as_deref().map(sparse_from_dense),
         closest_series_difference_nonzero: closest_difference.as_deref().map(sparse_from_dense),
     })
+}
+
+fn cygv_previous_window_degrees(
+    degree_counts: &BTreeMap<i128, usize>,
+    target_degree: i128,
+    previous_level_count: usize,
+) -> Vec<i128> {
+    let mut selected = degree_counts
+        .keys()
+        .copied()
+        .filter(|degree| *degree > 0 && *degree < target_degree)
+        .rev()
+        .take(previous_level_count)
+        .collect::<Vec<_>>();
+    selected.sort_unstable();
+    selected
 }
 
 fn cygv_previous_level_count(dimension: usize) -> usize {
@@ -2412,6 +2421,54 @@ mod tests {
         assert_eq!(probe.closest_series_distance.as_deref(), Some("1.000000"));
         assert_eq!(probe.closest_series_predecessor_nonzero, Some(vec![(1, 1)]));
         assert_eq!(probe.closest_series_difference_nonzero, Some(vec![(0, 1)]));
+    }
+
+    #[test]
+    fn path_history_probe_reports_previous_degrees_for_incomplete_closure() {
+        let stats = MissingGvTargetStats {
+            target_count: 1,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: vec![MissingGvTargetSample {
+                degree: 2,
+                generators_le_degree: 2,
+                is_mori_generator: false,
+                origin_circuit_pattern: None,
+                origin_circuit_witness_count: None,
+                origin_circuit_first_witness: None,
+                origin_circuit_affine_support: None,
+                cms_general_divisor_shape_candidates: None,
+                cms_general_divisor_intersection_checks: None,
+                branch_diagnostic: None,
+                real_cone_decomposable_by_other_generators: false,
+                real_cone_decomposition_active_generators: None,
+                real_cone_decomposition_active_generator_basis_nonzero: None,
+                real_cone_decomposition_exact_coefficients: None,
+                real_cone_decomposition_exact_kind: None,
+                ambient_nonzero: vec![(0, 1), (1, 1)],
+                basis_nonzero: vec![(0, 1), (1, 1)],
+            }],
+        };
+        let grading = vec![1, 1];
+        let q_matrix = vec![vec![1, 0], vec![0, 1]];
+        let degree_bounded_rays = vec![vec![1, 0], vec![0, 1]];
+        let context = ValidatedContext {
+            dimension: 2,
+            degree_bound: 2,
+            q_cols: 2,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            intersection: Intersection::new(2),
+            stats: &stats,
+        };
+
+        let target = vec![1, 1];
+        let probe = cygv_path_history_probe_inner(&stats.sample[0], &context, &target, 2).unwrap();
+
+        assert_eq!(probe.status, "exceeded_element_limit_initial_2");
+        assert_eq!(probe.previous_window_degrees, vec![1]);
+        assert_eq!(probe.previous_window_degree_count, None);
+        assert_eq!(probe.predecessor_difference_count, None);
     }
 
     #[test]
