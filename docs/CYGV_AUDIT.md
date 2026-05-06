@@ -269,6 +269,12 @@ degree bound. This is still an input audit, not a GV fallback: the same report
 continues to mark all nine unresolved targets as missing source-derived local
 semigroup generators, local `q` phase/chamber mapping, local intersection
 tensor, and chamber certificate before an actual local `cygv` call is valid.
+The first ambient-support filters are also explicit: relation-support-only
+domains contain exactly one degree-bounded generator for each target, the
+shared-facet neighborhoods contain `12..367`, and the full facet unions contain
+`458..2381`. Thus the valid chamber semigroup is neither the single sparse
+origin-circuit relation nor the whole facet union; it still needs a
+source-derived chamber/face certificate.
 
 ## McAllister Paper Boundary
 

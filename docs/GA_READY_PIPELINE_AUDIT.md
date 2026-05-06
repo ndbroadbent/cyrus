@@ -364,6 +364,11 @@ to make the remaining GV layer more first-principles:
    schema-`3` report verifies `source_derived_full_facet_context=9` and records
    `2963` source-derived ambient/basis ray-context rows. The next step is to
    use those facet sets and ray supports for chamber/semigroup certification.
+   The first source-support counts are now in the context report: the exact
+   sparse relation support gives one generator per missing target, shared
+   facet-pair neighborhoods give `12..367`, and full facet unions give
+   `458..2381`, so neither naive support restriction is a valid replacement for
+   the missing chamber semigroup.
    The direct source
    read reinforces this: `cygv`
    obtains GV values from the full

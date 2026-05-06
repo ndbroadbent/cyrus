@@ -222,6 +222,9 @@ struct TargetReport {
     active_support_gv: Option<String>,
     active_support_error: Option<String>,
     degree_bounded_candidate_count: usize,
+    origin_relation_support_generator_count: Option<usize>,
+    origin_shared_facet_generator_count: Option<usize>,
+    origin_facet_union_generator_count: Option<usize>,
     support_overlap_generator_counts: Vec<SupportOverlapCount>,
     support_closure_layer_counts: Vec<SupportClosureLayerCount>,
     support_overlap_min_for_run: Option<usize>,
@@ -1015,6 +1018,86 @@ fn support_window_stats(
         });
     }
     Ok((eligible_supports.len(), overlap_counts, closure_counts))
+}
+
+struct OriginCircuitAmbientGeneratorCounts {
+    relation_support: Option<usize>,
+    shared_facet: Option<usize>,
+    facet_union: Option<usize>,
+}
+
+fn origin_circuit_ambient_generator_counts(
+    sample: &MissingGvTargetSample,
+    context: &ValidatedContext<'_>,
+) -> OriginCircuitAmbientGeneratorCounts {
+    let Some(ray_context) = context.degree_bounded_ray_context else {
+        return OriginCircuitAmbientGeneratorCounts {
+            relation_support: None,
+            shared_facet: None,
+            facet_union: None,
+        };
+    };
+    let Some(witness) = sample.origin_circuit_first_witness.as_ref() else {
+        return OriginCircuitAmbientGeneratorCounts {
+            relation_support: None,
+            shared_facet: None,
+            facet_union: None,
+        };
+    };
+
+    let relation_support = witness
+        .relation_points
+        .iter()
+        .map(|point| point.point_index)
+        .collect::<HashSet<_>>();
+    let first_facet = witness.first_facet.iter().copied().collect::<HashSet<_>>();
+    let second_facet = witness.second_facet.iter().copied().collect::<HashSet<_>>();
+    let mut shared_facet = first_facet
+        .intersection(&second_facet)
+        .copied()
+        .collect::<HashSet<_>>();
+    shared_facet.insert(0);
+    shared_facet.insert(witness.first_facet_exclusive_point);
+    shared_facet.insert(witness.second_facet_exclusive_point);
+    let mut facet_union = first_facet
+        .union(&second_facet)
+        .copied()
+        .collect::<HashSet<_>>();
+    facet_union.insert(0);
+
+    OriginCircuitAmbientGeneratorCounts {
+        relation_support: Some(degree_bounded_ray_context_support_count(
+            ray_context,
+            sample.degree,
+            &relation_support,
+        )),
+        shared_facet: Some(degree_bounded_ray_context_support_count(
+            ray_context,
+            sample.degree,
+            &shared_facet,
+        )),
+        facet_union: Some(degree_bounded_ray_context_support_count(
+            ray_context,
+            sample.degree,
+            &facet_union,
+        )),
+    }
+}
+
+fn degree_bounded_ray_context_support_count(
+    ray_context: &[DegreeBoundedMoriRayContextSample],
+    max_degree: i128,
+    allowed_ambient_support: &HashSet<usize>,
+) -> usize {
+    ray_context
+        .iter()
+        .filter(|ray| ray.degree > 0 && ray.degree <= max_degree)
+        .filter(|ray| {
+            ray.ambient_nonzero
+                .iter()
+                .all(|(idx, _)| allowed_ambient_support.contains(idx))
+        })
+        .count()
 }
 
 fn local_cygv_hypersurface_shape(
@@ -1892,6 +1975,9 @@ fn report_target(
                 active_support_gv: None,
                 active_support_error: None,
                 degree_bounded_candidate_count: 0,
+                origin_relation_support_generator_count: None,
+                origin_shared_facet_generator_count: None,
+                origin_facet_union_generator_count: None,
                 support_overlap_generator_counts: Vec::new(),
                 support_closure_layer_counts: Vec::new(),
                 support_overlap_min_for_run,
@@ -1957,6 +2043,9 @@ fn report_target(
                 active_support_gv: None,
                 active_support_error: None,
                 degree_bounded_candidate_count: 0,
+                origin_relation_support_generator_count: None,
+                origin_shared_facet_generator_count: None,
+                origin_facet_union_generator_count: None,
                 support_overlap_generator_counts: Vec::new(),
                 support_closure_layer_counts: Vec::new(),
                 support_overlap_min_for_run,
@@ -2022,6 +2111,9 @@ fn report_target(
                 active_support_gv: None,
                 active_support_error: None,
                 degree_bounded_candidate_count: 0,
+                origin_relation_support_generator_count: None,
+                origin_shared_facet_generator_count: None,
+                origin_facet_union_generator_count: None,
                 support_overlap_generator_counts: Vec::new(),
                 support_closure_layer_counts: Vec::new(),
                 support_overlap_min_for_run,
@@ -2091,6 +2183,9 @@ fn report_target(
                 active_support_gv: None,
                 active_support_error: None,
                 degree_bounded_candidate_count: 0,
+                origin_relation_support_generator_count: None,
+                origin_shared_facet_generator_count: None,
+                origin_facet_union_generator_count: None,
                 support_overlap_generator_counts: Vec::new(),
                 support_closure_layer_counts: Vec::new(),
                 support_overlap_min_for_run,
@@ -2114,6 +2209,7 @@ fn report_target(
             };
         }
     };
+    let origin_counts = origin_circuit_ambient_generator_counts(sample, context);
     let base = TargetReport {
         index,
         degree: sample.degree,
@@ -2151,6 +2247,9 @@ fn report_target(
         active_support_gv: None,
         active_support_error: None,
         degree_bounded_candidate_count: 0,
+        origin_relation_support_generator_count: origin_counts.relation_support,
+        origin_shared_facet_generator_count: origin_counts.shared_facet,
+        origin_facet_union_generator_count: origin_counts.facet_union,
         support_overlap_generator_counts: Vec::new(),
         support_closure_layer_counts: Vec::new(),
         support_overlap_min_for_run,
@@ -3972,6 +4071,115 @@ mod tests {
             Err(err) => err,
         };
         assert!(err.contains("declares degree 2 but computes 1"), "{err}");
+    }
+
+    #[test]
+    fn origin_circuit_ambient_generator_counts_filter_source_supports() {
+        let stats = MissingGvTargetStats {
+            target_count: 0,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: Vec::new(),
+        };
+        let grading = vec![1, 1];
+        let q_matrix = vec![vec![1, 0], vec![0, 1]];
+        let degree_bounded_rays = Vec::new();
+        let ray_context = vec![
+            DegreeBoundedMoriRayContextSample {
+                degree: 1,
+                ambient_nonzero: vec![(0, -1), (1, 1), (4, 1), (5, -1)],
+                basis_nonzero: vec![(0, 1)],
+            },
+            DegreeBoundedMoriRayContextSample {
+                degree: 2,
+                ambient_nonzero: vec![(2, 1), (3, -1)],
+                basis_nonzero: vec![(1, 1)],
+            },
+            DegreeBoundedMoriRayContextSample {
+                degree: 2,
+                ambient_nonzero: vec![(6, 1)],
+                basis_nonzero: vec![(0, 1), (1, 1)],
+            },
+            DegreeBoundedMoriRayContextSample {
+                degree: 2,
+                ambient_nonzero: vec![(8, 1)],
+                basis_nonzero: vec![(0, 1)],
+            },
+            DegreeBoundedMoriRayContextSample {
+                degree: 3,
+                ambient_nonzero: vec![(0, -1), (1, 1), (4, 1), (5, -1)],
+                basis_nonzero: vec![(0, 2), (1, 1)],
+            },
+        ];
+        let context = ValidatedContext {
+            dimension: 2,
+            degree_bound: 3,
+            q_cols: 2,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: Some(&ray_context),
+            intersection: Intersection::new(2),
+            stats: &stats,
+        };
+        let sample = MissingGvTargetSample {
+            degree: 2,
+            generators_le_degree: 0,
+            is_mori_generator: true,
+            origin_circuit_pattern: None,
+            origin_circuit_witness_count: Some(1),
+            origin_circuit_first_witness: Some(OriginCircuitWitnessSample {
+                first_facet_exclusive_point: 4,
+                second_facet_exclusive_point: 5,
+                shared_two_simplex: vec![1, 2, 3],
+                first_facet: vec![1, 2, 3, 4, 6],
+                second_facet: vec![1, 2, 3, 5, 7],
+                first_facet_size: 5,
+                second_facet_size: 5,
+                sparse_relation: Vec::new(),
+                relation_points: vec![
+                    OriginCircuitRelationPointSample {
+                        point_index: 0,
+                        coefficient: -1,
+                        coordinates: vec![0, 0],
+                        face_dimension: None,
+                    },
+                    OriginCircuitRelationPointSample {
+                        point_index: 1,
+                        coefficient: -1,
+                        coordinates: vec![1, 0],
+                        face_dimension: None,
+                    },
+                    OriginCircuitRelationPointSample {
+                        point_index: 4,
+                        coefficient: 1,
+                        coordinates: vec![0, 1],
+                        face_dimension: None,
+                    },
+                    OriginCircuitRelationPointSample {
+                        point_index: 5,
+                        coefficient: 1,
+                        coordinates: vec![1, 1],
+                        face_dimension: None,
+                    },
+                ],
+            }),
+            origin_circuit_affine_support: None,
+            cms_general_divisor_shape_candidates: None,
+            cms_general_divisor_intersection_checks: None,
+            branch_diagnostic: None,
+            real_cone_decomposable_by_other_generators: false,
+            real_cone_decomposition_active_generators: None,
+            real_cone_decomposition_active_generator_basis_nonzero: None,
+            real_cone_decomposition_exact_coefficients: None,
+            real_cone_decomposition_exact_kind: None,
+            ambient_nonzero: vec![(0, -1), (1, 1), (4, 1), (5, -1)],
+            basis_nonzero: vec![(0, 1)],
+        };
+
+        let counts = origin_circuit_ambient_generator_counts(&sample, &context);
+        assert_eq!(counts.relation_support, Some(1));
+        assert_eq!(counts.shared_facet, Some(2));
+        assert_eq!(counts.facet_union, Some(3));
     }
 
     #[test]
