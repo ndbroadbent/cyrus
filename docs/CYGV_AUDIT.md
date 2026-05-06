@@ -1775,6 +1775,12 @@ The current `cygv` crate source sharpens the same boundary:
   deterministic capped subset. This confirms that arbitrary capped subsets can
   mislead; the remaining issue is certifying or replacing the full source
   semigroup/history, not tuning a local sample.
+- Allowing the context tool to call the actual `cygv::Semigroup::with_max_degree`
+  measurement for target `7` with the full degree-10 seed set (`720` raw rows,
+  `--semigroup-measure-max-seeds 1000`) did not return within an interactive
+  90-second window and was stopped manually. This was semigroup construction
+  only, not HKTY/GV inversion, so the bottleneck is already present at the
+  source-domain closure scale.
 
 The actionable consequence is that a Cyrus replacement for corrected-chamber
 or potent-ray GV values must recreate the finite semigroup and lower-degree
