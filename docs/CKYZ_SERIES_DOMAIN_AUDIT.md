@@ -519,6 +519,31 @@ coefficient counts, with z extraction at about 818 ms:
 [CKYZ_Z_EXTRACT] degrees=434 nonzero_gvs=217 li2_coefficients=9443 li2_support_skips=22508 li2_support_classes=6 exp_coeff_cache=23529 scaled_alpha_cache=23529 predecessor_deltas=1061 elapsed=817.789625ms
 ```
 
+## Rejected Shifted q-Delta Experiment
+
+A follow-up attempt replaced direct construction of
+`q_delta = z^delta exp(delta.alpha)` with a shifted exponential routine that
+computed only exponential monomials whose product with `z^delta` stayed inside
+the CKYZ finite domain. The algebra was checked against the old full
+exponential construction on a sparse domain and against the previous-`q_N`
+regression, but the implementation was slower in the McAllister gate and was
+not retained.
+
+Observed traces before reverting:
+
+```text
+N=4:  [CKYZ_Z_HISTORY] domain=1641 terminals=4 selected=434 candidate_evaluations=2842 exp_support_classes=6 elapsed=126.6805ms
+N=4:  [CKYZ_Z_EXTRACT] degrees=434 nonzero_gvs=217 li2_coefficients=9443 li2_materialized_terms=20569 previous_qns=217 qn_reuses=214 delta_q_cache=4 elapsed=7.80616475s
+N=10: [CKYZ_Z_HISTORY] domain=21721 terminals=10 selected=5235 candidate_evaluations=38195 exp_support_classes=6 elapsed=17.044196667s
+N=10: timed out after 180s before an extraction trace
+```
+
+This rejects the naive per-delta shifted-exponential shape. It recomputed
+predecessor closures and restricted powers separately for each delta, which
+lost to the existing indexed full-series path even at N=4. The next attempt
+should reuse cygv-style finite-polynomial state across the whole grading level,
+not build a separate shifted exponential for each cached `delta_q`.
+
 The N=10 coefficient-work profile is unchanged by the indexed representation
 and still finishes in about 156 seconds:
 
