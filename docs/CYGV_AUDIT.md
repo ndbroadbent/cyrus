@@ -1756,6 +1756,11 @@ The current `cygv` crate source sharpens the same boundary:
   degree support through degree 10, so the remaining blocker is still the
   source-defined finite semigroup/path history rather than a small local
   generator window.
+- The same path-history report now serializes the exact previous grading
+  degrees selected by the cygv-style rolling history window, plus the closest
+  predecessor/residual split found in the bounded monomial map. These are
+  diagnostics for reconstructing the source domain; they are not GV values and
+  do not replace the upstream cygv HKTY call.
 
 The actionable consequence is that a Cyrus replacement for corrected-chamber
 or potent-ray GV values must recreate the finite semigroup and lower-degree
