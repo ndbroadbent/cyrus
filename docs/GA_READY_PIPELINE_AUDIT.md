@@ -86,16 +86,17 @@ run pass. Any remaining mismatch must be explicit and localizable.
    gate through the support-predicted API in about 132 seconds. The newer
    coefficient-level z-residual extraction avoids materializing full `Li2(q_N)`
    series for narrowed targets and makes focused polygon-5 `[4,3,2]`, `N=7`
-   pass in about 46 seconds; `N=8` and `N=9` also pass as diagnostics in about
-   118 seconds and 274 seconds respectively. Focused polygon-5 `[4,3,2]`,
-   `N=10` still exceeds a 300 second timeout. A traced `N=10` run now shows
-   support prediction is no longer the
-   slow step (`broad=26691`, `selected=21721`, about 9 seconds); z-history
+   pass in about 46 seconds in debug; `N=8` and `N=9` also pass as debug
+   diagnostics in about 118 seconds and 274 seconds respectively. Focused
+   polygon-5 `[4,3,2]`, `N=10` still exceeds a 300 second debug timeout, but it
+   passes in release in about 62 seconds and now has an ignored full-row
+   regression. A traced debug `N=10` run shows support prediction is no longer
+   the slow step (`broad=26691`, `selected=21721`, about 9 seconds); z-history
    selection produces `5235` residual degrees in about 17 seconds, and the
    coefficient-level residual extraction still reaches only grading 4 before a
-   180 second timeout. The remaining task is therefore the sharper live
-   residual/source-history domain needed for full rows and rank-four contexts,
-   not a compact-`cygv` reimplementation.
+   180 second timeout. The remaining task is therefore making the live
+   residual/source-history path practical for broad all-row gates and rank-four
+   contexts, not a compact-`cygv` reimplementation.
 3. Pair-pruned selected curves match McAllister's `small_curves.dat`, while a
    stricter finite-semigroup diagnostic removes five additional curves. This is
    exposed as a policy choice, not hidden.
@@ -138,7 +139,8 @@ to make the remaining GV layer more first-principles:
    `potent_rays*.dat`. Rank-two CKYZ rows now have first-four checks, the F0
    `[1,1]`/`[1,2]` and F1 `[2,1]`/`[3,1]` families have explicit all-ten
    first-principles regressions, and the polygon-5 `[4,3,2]` family has a
-   focused first-seven regression using coefficient-level residual updates. Next
+   focused first-seven regression plus an ignored release-verified all-ten
+   regression using coefficient-level residual updates. Next
    make the local extractor source/history-targeted enough for complete rows
    across the larger directions.
    A first causal-domain extraction API now exists and is checked on local
@@ -146,9 +148,9 @@ to make the remaining GV layer more first-principles:
    generators and finite-limit grading for guardrail computations. That full
    source-weighted semigroup is still too broad for the default all-row gate, so
    the next step is the narrower source/history domain needed to raise the
-   rank-two potent-ray checks beyond the current first-four gate and the
-   polygon-5 first-seven checkpoint. After that, handle the rank-four affine
-   supports.
+   rank-two potent-ray checks beyond the current first-four all-row gate and
+   make full-row checks practical beyond targeted release diagnostics. After
+   that, handle the rank-four affine supports.
 2. Close the remaining CYTools basis contract gap for GA use: matrix-basis
    projection, dual curve-basis construction, no-origin q-matrix construction,
    and in-basis intersection tensor pullback now exist, and the current
