@@ -1814,6 +1814,84 @@ pub fn solve_mixed_basis_path_following_branch_candidates(
     out
 }
 
+/// Evaluate explicit KKLT branch candidates in either a vector or matrix
+/// divisor basis.
+#[must_use]
+pub fn solve_divisor_basis_path_following_branch_candidates(
+    kappa_all: &Intersection,
+    basis: DivisorBasis<'_>,
+    kklt_basis: &[usize],
+    tau_target: &[DivisorVolume],
+    t_initializations: &[Vec<F64<Finite>>],
+    steps: CheckedRange<usize>,
+) -> KkltBranchSearchResult {
+    enum BranchEvaluation {
+        NoResult,
+        NonConverged,
+        NonPositive,
+        Positive(KkltBranchSolution),
+    }
+
+    let evaluations: Vec<BranchEvaluation> = t_initializations
+        .par_iter()
+        .enumerate()
+        .map(|(init_index, t_init)| {
+            let Some(result) = solve_divisor_basis_path_following(
+                kappa_all, basis, kklt_basis, tau_target, t_init, steps,
+            ) else {
+                return BranchEvaluation::NoResult;
+            };
+            if !result.converged {
+                return BranchEvaluation::NonConverged;
+            }
+            let Some(classical_volume) =
+                classical_volume_for_divisor_basis(kappa_all, basis, &result.t)
+            else {
+                return BranchEvaluation::NonPositive;
+            };
+            let jacobian =
+                compute_kklt_jacobian_in_divisor_basis(kappa_all, basis, kklt_basis, &result.t)
+                    .expect("converged divisor-basis KKLT branch has a valid final Jacobian");
+            let jacobian_diagnostics = compute_jacobian_diagnostics(&jacobian)
+                .expect("converged divisor-basis KKLT branch has finite Jacobian diagnostics");
+            BranchEvaluation::Positive(KkltBranchSolution {
+                init_index,
+                result,
+                classical_volume,
+                jacobian_diagnostics,
+            })
+        })
+        .collect();
+
+    let mut out = KkltBranchSearchResult {
+        attempted: t_initializations.len(),
+        solved: 0,
+        non_converged: 0,
+        non_positive_volume: 0,
+        positive_volume: Vec::new(),
+    };
+
+    for evaluation in evaluations {
+        match evaluation {
+            BranchEvaluation::NoResult => {}
+            BranchEvaluation::NonConverged => {
+                out.solved += 1;
+                out.non_converged += 1;
+            }
+            BranchEvaluation::NonPositive => {
+                out.solved += 1;
+                out.non_positive_volume += 1;
+            }
+            BranchEvaluation::Positive(solution) => {
+                out.solved += 1;
+                out.positive_volume.push(solution);
+            }
+        }
+    }
+
+    out
+}
+
 /// Generate deterministic KKLT branch initializations from a random seed.
 ///
 /// The patterns mirror the Python branch-search experiments: one scaled
@@ -1903,6 +1981,77 @@ pub fn generate_scaled_kklt_branch_initializations(
     Some(out)
 }
 
+/// Generate deterministic KKLT branch initializations in either a vector or
+/// matrix divisor basis.
+#[must_use]
+pub fn generate_scaled_divisor_basis_branch_initializations(
+    kappa_all: &Intersection,
+    basis: DivisorBasis<'_>,
+    kklt_basis: &[usize],
+    tau_target: &[DivisorVolume],
+    count: usize,
+    seed: u64,
+) -> Option<Vec<Vec<F64<Finite>>>> {
+    let dim = divisor_basis_dimension(kappa_all.dim(), basis)?;
+    if dim == 0
+        || tau_target.len() != kklt_basis.len()
+        || kklt_basis.iter().any(|&idx| idx >= kappa_all.dim())
+    {
+        return None;
+    }
+
+    let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+    let mut out = Vec::with_capacity(count);
+    if count > 0 {
+        let raw = vec![F64::<Finite>::new(1.0).expect("finite scale"); dim];
+        out.push(scale_divisor_basis_branch_initialization_to_target(
+            kappa_all, basis, kklt_basis, tau_target, &raw,
+        )?);
+    }
+
+    while out.len() < count {
+        let pattern = rng.gen_range(0..4);
+        let raw = match pattern {
+            0 => {
+                let scale = 10.0_f64.powf(rng.gen_range(-0.5..1.5));
+                (0..dim)
+                    .map(|_| F64::<Finite>::new(standard_normal(&mut rng).abs() * scale + 0.1))
+                    .collect::<Option<Vec<_>>>()?
+            }
+            1 => {
+                let mut t = vec![F64::<Finite>::new(0.1).expect("finite"); dim];
+                let n_large = rng.gen_range(1..=usize::max(1, dim / 10));
+                for _ in 0..n_large {
+                    let idx = rng.gen_range(0..dim);
+                    t[idx] = F64::<Finite>::new(rng.gen_range(1.0..25.0))?;
+                }
+                t
+            }
+            2 => (0..dim)
+                .map(|_| F64::<Finite>::new(10.0_f64.powf(rng.gen_range(-0.5..1.5))))
+                .collect::<Option<Vec<_>>>()?,
+            _ => {
+                let mut t = vec![F64::<Finite>::new(0.5).expect("finite"); dim];
+                let cluster_size = usize::max(1, dim / 4);
+                let start = if cluster_size >= dim {
+                    0
+                } else {
+                    rng.gen_range(0..=(dim - cluster_size))
+                };
+                for entry in t.iter_mut().skip(start).take(cluster_size) {
+                    *entry = F64::<Finite>::new(rng.gen_range(5.0..20.0))?;
+                }
+                t
+            }
+        };
+        out.push(scale_divisor_basis_branch_initialization_to_target(
+            kappa_all, basis, kklt_basis, tau_target, &raw,
+        )?);
+    }
+
+    Some(out)
+}
+
 fn scale_branch_initialization_to_target(
     kappa_basis: &Intersection,
     kappa_all: &Intersection,
@@ -1912,6 +2061,25 @@ fn scale_branch_initialization_to_target(
     t: &[F64<Finite>],
 ) -> Option<Vec<F64<Finite>>> {
     let tau_init = compute_kklt_divisor_volumes(kappa_basis, kappa_all, basis, kklt_basis, t)?;
+    scale_initialization_by_tau_means(&tau_init, tau_target, t)
+}
+
+fn scale_divisor_basis_branch_initialization_to_target(
+    kappa_all: &Intersection,
+    basis: DivisorBasis<'_>,
+    kklt_basis: &[usize],
+    tau_target: &[DivisorVolume],
+    t: &[F64<Finite>],
+) -> Option<Vec<F64<Finite>>> {
+    let tau_init = compute_kklt_divisor_volumes_in_divisor_basis(kappa_all, basis, kklt_basis, t)?;
+    scale_initialization_by_tau_means(&tau_init, tau_target, t)
+}
+
+fn scale_initialization_by_tau_means(
+    tau_init: &[F64<Finite>],
+    tau_target: &[DivisorVolume],
+    t: &[F64<Finite>],
+) -> Option<Vec<F64<Finite>>> {
     let mean_tau_init =
         tau_init.iter().map(|entry| entry.get().abs()).sum::<f64>() / tau_init.len() as f64;
     let mean_tau_target = tau_target
@@ -1955,6 +2123,19 @@ pub fn scale_mixed_basis_kklt_branch_initialization_to_target(
     scale_branch_initialization_to_target(kappa_basis, kappa_all, basis, kklt_basis, tau_target, t)
 }
 
+/// Rescale an explicit divisor-basis KKLT branch initialization to the target
+/// divisor-volume scale.
+#[must_use]
+pub fn scale_divisor_basis_kklt_branch_initialization_to_target(
+    kappa_all: &Intersection,
+    basis: DivisorBasis<'_>,
+    kklt_basis: &[usize],
+    tau_target: &[DivisorVolume],
+    t: &[F64<Finite>],
+) -> Option<Vec<F64<Finite>>> {
+    scale_divisor_basis_branch_initialization_to_target(kappa_all, basis, kklt_basis, tau_target, t)
+}
+
 fn standard_normal<R: Rng + ?Sized>(rng: &mut R) -> f64 {
     let u1 = rng.gen_range(f64::MIN_POSITIVE..1.0);
     let u2 = rng.gen_range(0.0..1.0);
@@ -1963,6 +2144,16 @@ fn standard_normal<R: Rng + ?Sized>(rng: &mut R) -> f64 {
 
 fn classical_volume_for_branch(kappa_basis: &Intersection, t: &[F64<Finite>]) -> Option<F64<Pos>> {
     Some(kappa_basis.contract_triple_finite(t)? / f64_pos!(6.0))
+}
+
+fn classical_volume_for_divisor_basis(
+    kappa_all: &Intersection,
+    basis: DivisorBasis<'_>,
+    t: &[F64<Finite>],
+) -> Option<F64<Pos>> {
+    let basis_matrix = divisor_basis_rows_as_finite(kappa_all.dim(), basis)?;
+    let ambient_t = ambient_kahler_coordinates(&basis_matrix, t)?;
+    Some(kappa_all.contract_triple_finite(&ambient_t)? / f64_pos!(6.0))
 }
 
 fn solve_path_following_core<TauFn, JacobianFn>(
@@ -3571,6 +3762,47 @@ mod tests {
     }
 
     #[test]
+    fn test_matrix_basis_branch_candidates_report_positive_volume_solutions() {
+        let mut kappa_all = Intersection::new(2);
+        kappa_all.set(
+            1,
+            0,
+            0,
+            TypedRational::<Finite>::from_raw(Rational::from(6)),
+        );
+
+        let standard_basis = vec![0];
+        let basis_matrix = vec![vec![Integer::from(1), Integer::from(1)]];
+        let basis = DivisorBasis::Matrix {
+            standard_basis: &standard_basis,
+            basis_matrix: &basis_matrix,
+        };
+        let kklt_basis = vec![1];
+        let tau_target = vec![f64_pos!(12.0)];
+        let candidates = vec![vec![finite_f64(1.0)], vec![finite_f64(-1.0)]];
+
+        let search = solve_divisor_basis_path_following_branch_candidates(
+            &kappa_all,
+            basis,
+            &kklt_basis,
+            &tau_target,
+            &candidates,
+            range!(0, 4),
+        );
+
+        assert_eq!(search.attempted, 2);
+        assert_eq!(search.solved, 2);
+        assert_eq!(search.non_converged, 0);
+        assert_eq!(search.non_positive_volume, 1);
+        assert_eq!(search.positive_volume.len(), 1);
+        assert_eq!(search.positive_volume[0].init_index, 0);
+        assert!((search.positive_volume[0].result.t[0].get() - 2.0).abs() < 1e-4);
+        assert!((search.positive_volume[0].classical_volume.get() - 24.0).abs() < 1e-4);
+        assert_eq!(search.positive_volume[0].jacobian_diagnostics.rank, 1);
+        assert_eq!(search.positive_volume[0].jacobian_diagnostics.max_rank, 1);
+    }
+
+    #[test]
     fn test_branch_initialization_generation_is_seeded_and_scaled() {
         let mut kappa_basis = Intersection::new(1);
         kappa_basis.set(
@@ -3630,6 +3862,72 @@ mod tests {
                 &kappa_basis,
                 &kappa_all,
                 &basis,
+                &kklt_basis,
+                &candidate,
+            )
+            .unwrap();
+            assert!(
+                (tau[0].get().abs() - 12.0).abs() < 1e-8,
+                "tau = {}",
+                tau[0].get()
+            );
+        }
+    }
+
+    #[test]
+    fn test_matrix_basis_branch_initialization_generation_is_seeded_and_scaled() {
+        let mut kappa_all = Intersection::new(2);
+        kappa_all.set(
+            1,
+            0,
+            0,
+            TypedRational::<Finite>::from_raw(Rational::from(6)),
+        );
+
+        let standard_basis = vec![0];
+        let basis_matrix = vec![vec![Integer::from(1), Integer::from(1)]];
+        let basis = DivisorBasis::Matrix {
+            standard_basis: &standard_basis,
+            basis_matrix: &basis_matrix,
+        };
+        let kklt_basis = vec![1];
+        let tau_target = vec![f64_pos!(12.0)];
+        let scaled_explicit = scale_divisor_basis_kklt_branch_initialization_to_target(
+            &kappa_all,
+            basis,
+            &kklt_basis,
+            &tau_target,
+            &[finite_f64(1.0)],
+        )
+        .unwrap();
+        assert!((scaled_explicit[0].get() - 2.0).abs() < 1e-12);
+
+        let first = generate_scaled_divisor_basis_branch_initializations(
+            &kappa_all,
+            basis,
+            &kklt_basis,
+            &tau_target,
+            8,
+            123,
+        )
+        .unwrap();
+        let second = generate_scaled_divisor_basis_branch_initializations(
+            &kappa_all,
+            basis,
+            &kklt_basis,
+            &tau_target,
+            8,
+            123,
+        )
+        .unwrap();
+
+        assert_eq!(first, second);
+        assert_eq!(first.len(), 8);
+        assert!(first.iter().all(|candidate| candidate.len() == 1));
+        for candidate in first {
+            let tau = compute_kklt_divisor_volumes_in_divisor_basis(
+                &kappa_all,
+                basis,
                 &kklt_basis,
                 &candidate,
             )
