@@ -3113,6 +3113,21 @@ impl CkyzIndexedSeries {
         Ok(Self::from_domain_coefficients(out_by_index))
     }
 
+    fn power_cache(&self, max_exponent: usize, domain: &CkyzMonomialDomain) -> Result<Vec<Self>> {
+        let mut powers = Vec::with_capacity(max_exponent + 1);
+        powers.push(Self::one(domain)?);
+        for exponent in 1..=max_exponent {
+            let next = powers[exponent - 1].mul(self, domain)?;
+            if next.is_empty() {
+                powers.push(next);
+                powers.resize_with(max_exponent + 1, || Self { terms: Vec::new() });
+                break;
+            }
+            powers.push(next);
+        }
+        Ok(powers)
+    }
+
     fn exp(&self, domain: &CkyzMonomialDomain) -> Result<Self> {
         let max_exponent = self
             .min_total_degree(domain, "CKYZ exponential input")?
@@ -4196,25 +4211,18 @@ fn ckyz_series_power_cache(
     Ok(powers)
 }
 
+#[cfg(test)]
 fn ckyz_series_power_cache_domain(
     series: &BTreeMap<Vec<usize>, Rational>,
     max_exponent: usize,
     domain: &CkyzMonomialDomain,
 ) -> Result<Vec<BTreeMap<Vec<usize>, Rational>>> {
-    let mut powers = Vec::with_capacity(max_exponent + 1);
-    let mut identity = BTreeMap::new();
-    identity.insert(vec![0; domain.rank], Rational::from(1));
-    powers.push(identity);
-    for exponent in 1..=max_exponent {
-        let next = ckyz_series_mul_domain(&powers[exponent - 1], series, domain)?;
-        if next.is_empty() {
-            powers.push(next);
-            powers.resize_with(max_exponent + 1, BTreeMap::new);
-            break;
-        }
-        powers.push(next);
-    }
-    Ok(powers)
+    let series = CkyzIndexedSeries::from_btree(series, domain, "CKYZ power-cache input")?;
+    series
+        .power_cache(max_exponent, domain)?
+        .into_iter()
+        .map(|power| Ok(power.to_btree(domain)))
+        .collect()
 }
 
 fn ckyz_series_exp(
@@ -4323,16 +4331,16 @@ fn ckyz_series_compose_domain(
             "CKYZ series composition rank mismatch".into(),
         ));
     }
+    let series = CkyzIndexedSeries::from_btree(series, domain, "CKYZ series composition")?;
+    let arguments = arguments
+        .iter()
+        .map(|argument| {
+            CkyzIndexedSeries::from_btree(argument, domain, "CKYZ series composition argument")
+        })
+        .collect::<Result<Vec<_>>>()?;
     let mut max_exponents = vec![0usize; rank];
-    for (degree, coefficient) in series {
-        if *coefficient == 0 || !domain.contains(degree) {
-            continue;
-        }
-        if degree.len() != rank {
-            return Err(Error::InvalidInput(
-                "CKYZ series composition rank mismatch".into(),
-            ));
-        }
+    for (degree_index, _) in &series.terms {
+        let degree = &domain.degrees[*degree_index];
         for (coordinate, &exponent) in degree.iter().enumerate() {
             max_exponents[coordinate] = max_exponents[coordinate].max(exponent);
         }
@@ -4340,36 +4348,25 @@ fn ckyz_series_compose_domain(
     let power_caches = arguments
         .iter()
         .zip(max_exponents.iter())
-        .map(|(argument, &max_exponent)| {
-            ckyz_series_power_cache_domain(argument, max_exponent, domain)
-        })
+        .map(|(argument, &max_exponent)| argument.power_cache(max_exponent, domain))
         .collect::<Result<Vec<_>>>()?;
 
-    let mut out = BTreeMap::new();
-    for (degree, coefficient) in series {
-        if *coefficient == 0 || !domain.contains(degree) {
-            continue;
-        }
-        if degree.len() != rank {
-            return Err(Error::InvalidInput(
-                "CKYZ series composition rank mismatch".into(),
-            ));
-        }
-        let mut monomial = BTreeMap::new();
-        monomial.insert(vec![0; rank], Rational::from(1));
+    let mut out = CkyzIndexedSeries { terms: Vec::new() };
+    for (degree_index, coefficient) in &series.terms {
+        let degree = &domain.degrees[*degree_index];
+        let mut monomial = CkyzIndexedSeries::one(domain)?;
         for (coordinate, &exponent) in degree.iter().enumerate() {
             if exponent == 0 {
                 continue;
             }
-            monomial =
-                ckyz_series_mul_domain(&monomial, &power_caches[coordinate][exponent], domain)?;
+            monomial = monomial.mul(&power_caches[coordinate][exponent], domain)?;
             if monomial.is_empty() {
                 break;
             }
         }
-        ckyz_series_add_scaled_assign(&mut out, &monomial, coefficient.clone());
+        out.add_scaled_assign(&monomial, coefficient.clone());
     }
-    Ok(out)
+    Ok(out.to_btree(domain))
 }
 
 fn ckyz_nontrivial_covers(degree: &[usize]) -> Vec<usize> {
@@ -11007,8 +11004,9 @@ mod tests {
         ckyz_q_degree_li2_coefficient_in_z_domain,
         ckyz_q_degree_series_from_expalpha_powers_in_z_domain, ckyz_q_degree_series_in_z_domain,
         ckyz_scaled_alpha_terms, ckyz_second_log_period_series_for_pair_domain,
-        ckyz_second_log_period_support_indices_for_pair_domain, ckyz_series_exp,
-        ckyz_series_exp_domain, ckyz_series_li2_domain, ckyz_series_mul, ckyz_series_mul_domain,
+        ckyz_second_log_period_support_indices_for_pair_domain, ckyz_series_compose,
+        ckyz_series_compose_domain, ckyz_series_exp, ckyz_series_exp_domain,
+        ckyz_series_li2_domain, ckyz_series_mul, ckyz_series_mul_domain,
         ckyz_series_support_indices, ckyz_sort_degrees_for_extraction_with_grading,
         ckyz_support_exp_domain, ckyz_support_exp_domain_by_powers, ckyz_total_degree,
         ckyz_z_residual_coefficient_work_profile_for_degrees, ckyz_z_residual_dependency_degrees,
@@ -12159,6 +12157,27 @@ mod tests {
         let indexed_exp = ckyz_series_exp_domain(&exp_input, &domain).unwrap();
         let reference_exp = ckyz_series_exp(&exp_input, rank, max_total_degree).unwrap();
         assert_eq!(indexed_exp, reference_exp);
+
+        let composed_series = BTreeMap::from([
+            (vec![1, 0], Rational::from(2)),
+            (vec![0, 2], Rational::from(3)),
+            (vec![1, 1], Rational::from(-1)),
+        ]);
+        let arguments = vec![
+            BTreeMap::from([
+                (vec![1, 0], Rational::from(1)),
+                (vec![0, 1], Rational::from(2)),
+            ]),
+            BTreeMap::from([
+                (vec![0, 1], Rational::from(1)),
+                (vec![2, 0], Rational::from(-1)),
+            ]),
+        ];
+        let indexed_compose =
+            ckyz_series_compose_domain(&composed_series, &arguments, &domain).unwrap();
+        let reference_compose =
+            ckyz_series_compose(&composed_series, &arguments, max_total_degree).unwrap();
+        assert_eq!(indexed_compose, reference_compose);
     }
 
     #[test]
