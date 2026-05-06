@@ -15,8 +15,10 @@ For GA use, Cyrus now calls the upstream `cygv` modules directly rather than
 the convenience `cygv::compute_gv_rat_threefold` wrapper. This preserves
 `cygv`'s HKTY implementation while letting Cyrus convert semigroup,
 intersection-preprocessing, fundamental-period, instanton, series-inversion,
-and non-integral-output failures into ordinary `Result` errors. Bad candidate
-geometries should fail loudly without unwinding the whole search.
+and non-integral-output failures into ordinary `Result` errors. The shared
+compact GV boundary also catches remaining upstream `cygv` panics in unwind
+builds. Bad candidate geometries should fail loudly without unwinding the whole
+search.
 
 ## CYTools Contract
 

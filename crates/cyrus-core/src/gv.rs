@@ -10956,6 +10956,34 @@ fn compute_cygv_rat_threefold_from_semigroup(
     intnums_map: HashMap<(usize, usize, usize), i32>,
     context: &str,
 ) -> Result<Vec<(Vec<i32>, Integer)>> {
+    if cfg!(panic = "abort") {
+        return Err(Error::InvalidInput(format!(
+            "{context}: cygv HKTY execution requires a panic=unwind build because upstream cygv can still panic internally"
+        )));
+    }
+
+    let previous_panic_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        compute_cygv_rat_threefold_from_semigroup_unchecked(semigroup, q, intnums_map, context)
+    }));
+    std::panic::set_hook(previous_panic_hook);
+
+    match result {
+        Ok(result) => result,
+        Err(payload) => Err(Error::InvalidInput(format!(
+            "{context}: cygv HKTY execution panicked: {}",
+            panic_payload_message(payload.as_ref())
+        ))),
+    }
+}
+
+fn compute_cygv_rat_threefold_from_semigroup_unchecked(
+    semigroup: cygv::Semigroup,
+    q: &DMatrix<i32>,
+    intnums_map: HashMap<(usize, usize, usize), i32>,
+    context: &str,
+) -> Result<Vec<(Vec<i32>, Integer)>> {
     let zero_cutoff = RugRational::new();
     let poly_props = cygv::PolynomialProperties::new(&semigroup, &zero_cutoff);
     let (intnum_dict, intnum_idxpairs, n_indices) = cygv::misc::process_int_nums(intnums_map, true)
