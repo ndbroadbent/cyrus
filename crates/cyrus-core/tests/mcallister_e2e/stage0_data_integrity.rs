@@ -653,6 +653,97 @@ fn stage0_mcallister_binaries_do_not_use_validation_replay_artifacts() {
 }
 
 #[test]
+fn stage0_compact_gv_production_paths_use_upstream_cygv_boundary() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let gv_path = manifest_dir.join("src/gv.rs");
+    let gv_source = std::fs::read_to_string(&gv_path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", gv_path.display()));
+
+    for required in [
+        "Compact hypersurface GV computation must stay on the upstream `cygv` crate",
+        "cygv::Semigroup::with_max_degree",
+        "cygv::fundamental_period::compute_omega",
+        "cygv::instanton::compute_instanton_data",
+        "cygv::series_inversion::invert_series",
+    ] {
+        assert!(
+            gv_source.contains(required),
+            "compact GV wrapper must keep the upstream cygv HKTY boundary: missing {required}"
+        );
+    }
+
+    let first_principles_path = manifest_dir.join("src/bin/mcallister_first_principles.rs");
+    let first_principles = std::fs::read_to_string(&first_principles_path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", first_principles_path.display()));
+    let mirror_stage = source_region_before_fn(&first_principles, "stage_gv", "stage_racetrack");
+    assert!(
+        mirror_stage.contains("compute_gv_invariants("),
+        "mirror-side McAllister GV stage must use the default CYTools/cygv wrapper"
+    );
+    for diagnostic_call in [
+        "compute_gv_invariants_with_degree_bounded_lattice(",
+        "compute_gv_invariants_with_provided_generators(",
+        "compute_gv_invariants_with_explicit_semigroup(",
+    ] {
+        assert!(
+            !mirror_stage.contains(diagnostic_call),
+            "mirror-side production GV stage must not use diagnostic compact GV shortcut {diagnostic_call}"
+        );
+    }
+
+    let primal_general = source_region_before_fn(
+        &first_principles,
+        "compute_primal_general_gv_by_ambient_class",
+        "summarize_required_gv_degrees",
+    );
+    assert!(
+        primal_general.contains("compute_gv_invariants("),
+        "primal general GV fallback must use the default CYTools/cygv wrapper"
+    );
+    for diagnostic_call in [
+        "compute_gv_invariants_with_degree_bounded_lattice(",
+        "compute_gv_invariants_with_provided_generators(",
+        "compute_gv_invariants_with_explicit_semigroup(",
+    ] {
+        assert!(
+            !primal_general.contains(diagnostic_call),
+            "primal general GV fallback must not use diagnostic compact GV shortcut {diagnostic_call}"
+        );
+    }
+
+    for bin in ["mcallister_gv.rs", "mcallister_racetrack.rs"] {
+        let path = manifest_dir.join("src/bin").join(bin);
+        let source = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+        assert!(
+            source.contains("compute_gv_invariants("),
+            "{bin} must call the default CYTools/cygv GV wrapper"
+        );
+        assert!(
+            !source.contains("compute_gv_invariants_with_degree_bounded_lattice(")
+                && !source.contains("compute_gv_invariants_with_provided_generators(")
+                && !source.contains("compute_gv_invariants_with_explicit_semigroup("),
+            "{bin} must not use diagnostic compact GV shortcuts as its GV source"
+        );
+    }
+
+    assert!(
+        first_principles.contains("provided-generator GV diagnostic")
+            && first_principles.contains("not the exact corrected-chamber GV fallback"),
+        "provided-generator corrected-chamber cygv probes must stay labeled as diagnostics"
+    );
+
+    let context_path = manifest_dir.join("src/bin/mcallister_gv_context.rs");
+    let context_source = std::fs::read_to_string(&context_path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", context_path.display()));
+    assert!(
+        context_source.contains("opt-in diagnostic binary")
+            && context_source.contains("CYTools/cygv-shaped context"),
+        "mcallister_gv_context must remain an explicit diagnostic context consumer"
+    );
+}
+
+#[test]
 fn stage0_first_principles_runner_accepts_declared_inputs_only_data_dir() {
     if !crate::first_principles_enabled() || !runner_heavy_enabled() {
         return;
