@@ -1689,11 +1689,12 @@ The current `cygv` crate source sharpens the same boundary:
   `Semigroup::with_min_elements` instead increments the degree until the
   semigroup contains the requested number of elements. In both cases the zero
   element is inserted and the final elements are sorted by degree.
-- Cyrus now mirrors cygv's private pair-sum seed reduction explicitly via
-  `cygv_pair_reduced_seed_generators`. This is not a GV computation and does
-  not replace cygv closure; it exposes the first source-defined pruning stage so
-  corrected-chamber diagnostics can distinguish raw seed size from actual cygv
-  generator size before closure.
+- Cyrus now mirrors cygv's private pair-sum seed reduction explicitly only via
+  the hidden source-audit helper
+  `cyrus_core::gv::cygv_pair_reduced_seed_generators`. This is not a GV
+  computation and does not replace cygv closure; it exposes the first
+  source-defined pruning stage so corrected-chamber diagnostics can distinguish
+  raw seed size from actual cygv generator size before closure.
 - On the fresh 4-214-647 corrected-chamber context, running
   `mcallister_gv_context --measure-cygv-semigroups --semigroup-measure-max-seeds 1`
   with degree limits shows the remaining low/mid-degree missing targets remain

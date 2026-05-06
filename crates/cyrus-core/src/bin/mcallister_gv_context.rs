@@ -13,12 +13,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 
+use cyrus_core::gv::cygv_pair_reduced_seed_generators;
 use cyrus_core::types::rational::Rational;
 use cyrus_core::types::tags::Finite;
 use cyrus_core::{
     Intersection, Point, compute_gv_invariants_with_explicit_semigroup,
-    compute_gv_invariants_with_provided_generators, cygv_pair_reduced_seed_generators,
-    diagnose_affine_toric_circuit, integer_math::solve_linear_system_rational, utils::gcd_list_int,
+    compute_gv_invariants_with_provided_generators, diagnose_affine_toric_circuit,
+    integer_math::solve_linear_system_rational, utils::gcd_list_int,
 };
 
 #[derive(Debug, Deserialize)]

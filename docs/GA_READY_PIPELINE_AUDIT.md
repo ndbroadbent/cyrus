@@ -249,10 +249,11 @@ to make the remaining GV layer more first-principles:
    partial closure, but the closure still exceeds `100000` elements before
    completing, so Cyrus cannot yet recover cygv's predecessor-subtraction
    history from this broad domain.
-   Cyrus now exposes cygv's private pair-sum seed-reduction stage via
-   `cygv_pair_reduced_seed_generators`, and `mcallister_gv_context` reports raw
-   seed counts, reduced seed counts, and whether each target survives that
-   reduction. On the current corrected-chamber context, the measured
+   Cyrus now exposes cygv's private pair-sum seed-reduction stage only as the
+   hidden source-audit helper `cyrus_core::gv::cygv_pair_reduced_seed_generators`,
+   and `mcallister_gv_context` reports raw seed counts, reduced seed counts, and
+   whether each target survives that reduction. On the current corrected-chamber
+   context, the measured
    low/mid-degree targets all survive as cygv-reduced seeds: degree 10
    `720 -> 450`, degree 12 `905 -> 486`, degree 18 `1616 -> 702`, and degree 22
    `2212 -> 949`. So the missing targets are not artifacts of cygv's first

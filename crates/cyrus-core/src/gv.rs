@@ -10544,17 +10544,21 @@ pub fn compute_gv_invariants_with_provided_generators(
     )
 }
 
-/// Mirror the private `cygv::Semigroup::with_max_degree` seed-reduction step.
+/// Source-audit helper for the private `cygv::Semigroup::with_max_degree`
+/// seed-reduction step.
 ///
 /// In `cygv` 0.1.2, the supplied degree-trimmed seed elements are first
 /// converted to a set, the zero vector is removed, and any seed that can be
 /// written as a sum of two seeds is removed before the additive closure is
 /// generated. This function exposes that exact pair-sum pruning as a
-/// source-auditing primitive without running the expensive closure step.
+/// diagnostic primitive without running the expensive closure step. It is not
+/// a compact GV entry point; production GV computations should call
+/// [`compute_gv_invariants`] or another wrapper that runs upstream `cygv`.
 ///
 /// # Errors
 /// Returns an error if no elements are supplied, if the dimension is zero, if
 /// row dimensions are inconsistent, or if an intermediate sum overflows `i64`.
+#[doc(hidden)]
 pub fn cygv_pair_reduced_seed_generators(elements: &[Vec<i64>]) -> Result<Vec<Vec<i64>>> {
     let Some(first) = elements.first() else {
         return Err(Error::InvalidInput(
