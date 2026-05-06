@@ -87,7 +87,8 @@ pub use basis::{basis_change_matrix, compute_divisor_basis, intersection_in_basi
 pub use curve_basis::{
     DivisorBasis, compute_curve_basis_matrix, compute_curve_basis_matrix_for_divisor_basis,
     compute_curve_basis_matrix_from_divisor_basis_matrix, curve_basis_matrix_without_origin_i64,
-    curve_basis_q_matrix_for_divisor_basis_i64,
+    curve_basis_q_matrix_for_divisor_basis_i64, divisor_basis_change_matrix,
+    divisor_basis_glsm_coordinate_matrix,
 };
 pub use divisor::{compute_divisor_jacobian, compute_divisor_volumes, compute_kklt_divisor_chi};
 pub use error::{Error, Result};

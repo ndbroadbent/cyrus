@@ -1205,16 +1205,17 @@ corrected-chamber diagnostics. The one-off `mcallister_gv` and
 `mcallister_first_principles --dual-basis` JSON override now distinguishes index
 and matrix basis shapes. Index overrides continue through the existing
 validation-source path, and matrix overrides now build the GLSM coordinate
-matrix and transform K/M flux source coordinates into Cyrus' computed vector
-basis instead of being ignored or misinterpreted as indices. The remaining gap
-is higher-level basis typing: APIs that still only accept vector basis indices
-need to either accept a matrix basis end-to-end or reject it loudly at every
-GA-facing boundary. Silently treating every basis as a vector of indices is not
-GA-ready. The core cygv input handoff now accepts both basis shapes, including
-in-basis intersections, but the current McAllister runner still stores its
-pipeline basis as `Vec<usize>` and remains vector-basis internally until its
-Kähler, KKLT, branch-volume, and production matrix-basis transforms are
-generalized.
+matrix through the reusable `divisor_basis_change_matrix` API to transform K/M
+flux source coordinates into Cyrus' computed vector basis instead of being
+ignored or misinterpreted as indices. The remaining gap is higher-level basis
+typing: APIs that still only accept vector basis indices need to either accept a
+matrix basis end-to-end or reject it loudly at every GA-facing boundary.
+Silently treating every basis as a vector of indices is not GA-ready. The core
+cygv input handoff now accepts both basis shapes, including basis-coordinate
+transforms and in-basis intersections, but the current McAllister runner still
+stores its pipeline basis as `Vec<usize>` and remains vector-basis internally
+until its Kähler, KKLT, branch-volume, and production matrix-basis transforms
+are generalized.
 
 Second, cygv's final GV values are history-dependent. In
 `series_inversion.rs`, the threefold path chooses a candidate value from the

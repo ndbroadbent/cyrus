@@ -78,7 +78,7 @@ use cyrus_core::{
     compute_linear_relations_no_origin, compute_mori_cone_cap_rays,
     compute_origin_circuit_curve_diagnostics, compute_regular_triangulation,
     compute_toric_curve_gv_diagnostics, compute_toric_two_face_curve_gv_invariants,
-    compute_w0_from_terms, effective_prime_divisors_from_curve_basis,
+    compute_w0_from_terms, divisor_basis_change_matrix, effective_prime_divisors_from_curve_basis,
     generate_scaled_kklt_branch_initializations, gv_divisor_basis_data, heights_to_kahler,
     intersection_in_basis, is_unimodular, kahler_to_heights, map_basis_gv_invariants_to_ambient,
     project_ambient_curve_to_basis, prune_decomposable_curve_candidates,
@@ -1409,157 +1409,15 @@ fn transform_i64_coordinates_transpose(
         .collect()
 }
 
-fn glsm_coordinate_matrix_for_indices(
-    glsm: &[Vec<malachite::Integer>],
-    basis: &[usize],
-) -> std::result::Result<Vec<Vec<malachite::Integer>>, String> {
-    let h11 = validate_glsm_matrix(glsm)?;
-    let n_cols = glsm[0].len();
-    if basis.len() != h11 {
-        return Err(format!(
-            "basis length {} does not match h11={h11}",
-            basis.len()
-        ));
-    }
-    if let Some(&idx) = basis.iter().find(|&&idx| idx >= n_cols) {
-        return Err(format!(
-            "basis index {idx} is out of range for {n_cols} GLSM columns"
-        ));
-    }
-
-    let mut coords = vec![vec![malachite::Integer::from(0); h11]; h11];
-    for (basis_col, &ambient_col) in basis.iter().enumerate() {
-        for row in 0..h11 {
-            coords[row][basis_col] = glsm[row][ambient_col].clone();
-        }
-    }
-    Ok(coords)
-}
-
-fn glsm_coordinate_matrix_for_matrix_basis(
-    glsm: &[Vec<malachite::Integer>],
-    basis_matrix: &[Vec<i64>],
-) -> std::result::Result<Vec<Vec<malachite::Integer>>, String> {
-    let h11 = validate_glsm_matrix(glsm)?;
-    let n_cols = glsm[0].len();
-    if basis_matrix.len() != h11 {
-        return Err(format!(
-            "matrix divisor basis row count {} does not match h11={h11}",
-            basis_matrix.len()
-        ));
-    }
-    for row in basis_matrix {
-        if row.len() != n_cols {
-            return Err(format!(
-                "matrix divisor basis row width {} does not match GLSM column count {n_cols}",
-                row.len()
-            ));
-        }
-    }
-
-    let mut coords = vec![vec![malachite::Integer::from(0); h11]; h11];
-    for (basis_col, basis_row) in basis_matrix.iter().enumerate() {
-        for glsm_row in 0..h11 {
-            let mut acc = malachite::Integer::from(0);
-            for (ambient_col, coefficient) in basis_row.iter().enumerate() {
-                if *coefficient != 0 {
-                    acc += &glsm[glsm_row][ambient_col] * malachite::Integer::from(*coefficient);
-                }
-            }
-            coords[glsm_row][basis_col] = acc;
-        }
-    }
-    Ok(coords)
-}
-
-fn validate_glsm_matrix(glsm: &[Vec<malachite::Integer>]) -> std::result::Result<usize, String> {
-    if glsm.is_empty() {
-        return Err("GLSM matrix is empty".to_string());
-    }
-    let n_cols = glsm[0].len();
-    if n_cols == 0 {
-        return Err("GLSM matrix has no columns".to_string());
-    }
-    if glsm.iter().any(|row| row.len() != n_cols) {
-        return Err("GLSM matrix rows have inconsistent length".to_string());
-    }
-    Ok(glsm.len())
-}
-
-fn to_rational_matrix(matrix: &[Vec<malachite::Integer>]) -> Vec<Vec<malachite::Rational>> {
-    matrix
-        .iter()
-        .map(|row| row.iter().map(malachite::Rational::from).collect())
-        .collect()
-}
-
-fn multiply_rational_square(
-    left: &[Vec<malachite::Rational>],
-    right: &[Vec<malachite::Rational>],
-) -> Vec<Vec<malachite::Rational>> {
-    let n = left.len();
-    let mut out = vec![vec![malachite::Rational::from(0); n]; n];
-    for i in 0..n {
-        for j in 0..n {
-            let mut acc = malachite::Rational::from(0);
-            for k in 0..n {
-                acc += &left[i][k] * &right[k][j];
-            }
-            out[i][j] = acc;
-        }
-    }
-    out
-}
-
-fn rational_matrix_to_integer_exact(
-    matrix: &[Vec<malachite::Rational>],
-) -> std::result::Result<Vec<Vec<malachite::Integer>>, String> {
-    matrix
+fn basis_matrix_to_integer(basis_matrix: &[Vec<i64>]) -> Vec<Vec<malachite::Integer>> {
+    basis_matrix
         .iter()
         .map(|row| {
             row.iter()
-                .map(|value| {
-                    malachite::Integer::try_from(value.clone())
-                        .map_err(|_| "basis change matrix is not integral".to_string())
-                })
+                .map(|&value| malachite::Integer::from(value))
                 .collect()
         })
         .collect()
-}
-
-fn basis_change_matrix_from_coordinate_matrices(
-    from_coords: &[Vec<malachite::Integer>],
-    to_coords: &[Vec<malachite::Integer>],
-) -> std::result::Result<Vec<Vec<malachite::Integer>>, String> {
-    if from_coords.is_empty() || to_coords.is_empty() {
-        return Err("basis coordinate matrix is empty".to_string());
-    }
-    let h11 = from_coords.len();
-    if from_coords.iter().any(|row| row.len() != h11)
-        || to_coords.len() != h11
-        || to_coords.iter().any(|row| row.len() != h11)
-    {
-        return Err(
-            "basis coordinate matrices must be square with matching dimensions".to_string(),
-        );
-    }
-    let from_r = to_rational_matrix(from_coords);
-    let to_r = to_rational_matrix(to_coords);
-    let from_inv = cyrus_core::integer_math::invert_matrix(&from_r)
-        .ok_or_else(|| "failed to invert source basis coordinate matrix".to_string())?;
-    let transform_r = multiply_rational_square(&from_inv, &to_r);
-    rational_matrix_to_integer_exact(&transform_r)
-}
-
-fn basis_override_coordinate_matrix(
-    glsm: &[Vec<malachite::Integer>],
-    override_value: &BasisOverride,
-    context: &str,
-) -> std::result::Result<Vec<Vec<malachite::Integer>>, String> {
-    match override_value.representation(context)? {
-        BasisOverrideRef::Indices(indices) => glsm_coordinate_matrix_for_indices(glsm, indices),
-        BasisOverrideRef::Matrix(matrix) => glsm_coordinate_matrix_for_matrix_basis(glsm, matrix),
-    }
 }
 
 fn basis_change_matrix_from_indices_to_override(
@@ -1572,10 +1430,17 @@ fn basis_change_matrix_from_indices_to_override(
         BasisOverrideRef::Indices(indices) => {
             basis_change_matrix(glsm, from_basis, indices).map_err(|e| e.to_string())
         }
-        BasisOverrideRef::Matrix(_) => {
-            let from_coords = glsm_coordinate_matrix_for_indices(glsm, from_basis)?;
-            let to_coords = basis_override_coordinate_matrix(glsm, to_basis, context)?;
-            basis_change_matrix_from_coordinate_matrices(&from_coords, &to_coords)
+        BasisOverrideRef::Matrix(matrix) => {
+            let basis_matrix = basis_matrix_to_integer(matrix);
+            divisor_basis_change_matrix(
+                glsm,
+                DivisorBasis::Indices(from_basis),
+                DivisorBasis::Matrix {
+                    standard_basis: from_basis,
+                    basis_matrix: &basis_matrix,
+                },
+            )
+            .map_err(|e| e.to_string())
         }
     }
 }
@@ -1590,10 +1455,17 @@ fn basis_change_matrix_from_override_to_indices(
         BasisOverrideRef::Indices(indices) => {
             basis_change_matrix(glsm, indices, to_basis).map_err(|e| e.to_string())
         }
-        BasisOverrideRef::Matrix(_) => {
-            let from_coords = basis_override_coordinate_matrix(glsm, from_basis, context)?;
-            let to_coords = glsm_coordinate_matrix_for_indices(glsm, to_basis)?;
-            basis_change_matrix_from_coordinate_matrices(&from_coords, &to_coords)
+        BasisOverrideRef::Matrix(matrix) => {
+            let basis_matrix = basis_matrix_to_integer(matrix);
+            divisor_basis_change_matrix(
+                glsm,
+                DivisorBasis::Matrix {
+                    standard_basis: to_basis,
+                    basis_matrix: &basis_matrix,
+                },
+                DivisorBasis::Indices(to_basis),
+            )
+            .map_err(|e| e.to_string())
         }
     }
 }

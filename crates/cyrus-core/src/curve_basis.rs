@@ -26,6 +26,71 @@ pub enum DivisorBasis<'a> {
     },
 }
 
+/// Compute the GLSM-coordinate columns of a divisor basis.
+///
+/// The returned matrix has one column per basis divisor. For an index basis,
+/// this is `glsm[:, basis]`. For a matrix basis whose rows are ambient divisor
+/// combinations, column `a` is `glsm * basis_matrix[a]^T`.
+///
+/// # Errors
+/// Returns an error if the GLSM matrix or basis representation is malformed.
+pub fn divisor_basis_glsm_coordinate_matrix(
+    glsm: &[Vec<Integer>],
+    basis: DivisorBasis<'_>,
+) -> Result<Vec<Vec<Integer>>> {
+    let (h11, n_cols) = validate_glsm_matrix(glsm)?;
+    match basis {
+        DivisorBasis::Indices(indices) => {
+            validate_standard_basis(indices, h11, n_cols)?;
+            let mut coords = vec![vec![Integer::from(0); h11]; h11];
+            for (basis_col, &ambient_col) in indices.iter().enumerate() {
+                for row in 0..h11 {
+                    coords[row][basis_col] = glsm[row][ambient_col].clone();
+                }
+            }
+            Ok(coords)
+        }
+        DivisorBasis::Matrix {
+            standard_basis,
+            basis_matrix,
+        } => {
+            validate_standard_basis(standard_basis, h11, n_cols)?;
+            validate_matrix_basis_shape(basis_matrix, h11, n_cols)?;
+            let mut coords = vec![vec![Integer::from(0); h11]; h11];
+            for (basis_col, basis_row) in basis_matrix.iter().enumerate() {
+                for glsm_row in 0..h11 {
+                    let mut acc = Integer::from(0);
+                    for (ambient_col, coefficient) in basis_row.iter().enumerate() {
+                        if *coefficient != 0 {
+                            acc += &glsm[glsm_row][ambient_col] * coefficient;
+                        }
+                    }
+                    coords[glsm_row][basis_col] = acc;
+                }
+            }
+            Ok(coords)
+        }
+    }
+}
+
+/// Compute the integer change-of-basis matrix between divisor-basis shapes.
+///
+/// Returns `T` such that `to_coords = from_coords * T`, where coordinates are
+/// GLSM-coordinate columns from [`divisor_basis_glsm_coordinate_matrix`].
+///
+/// # Errors
+/// Returns an error if either basis is malformed, singular, or the transform is
+/// not integral.
+pub fn divisor_basis_change_matrix(
+    glsm: &[Vec<Integer>],
+    from_basis: DivisorBasis<'_>,
+    to_basis: DivisorBasis<'_>,
+) -> Result<Vec<Vec<Integer>>> {
+    let from_coords = divisor_basis_glsm_coordinate_matrix(glsm, from_basis)?;
+    let to_coords = divisor_basis_glsm_coordinate_matrix(glsm, to_basis)?;
+    basis_change_matrix_from_coordinate_matrices(&from_coords, &to_coords)
+}
+
 /// Compute the curve basis matrix given GLSM linear relations and a divisor basis.
 ///
 /// - `linrels` is the GLSM linear relations matrix (including the origin column).
@@ -212,6 +277,24 @@ fn validate_linrels(linrels: &[Vec<Integer>]) -> Result<usize> {
     Ok(n_cols)
 }
 
+fn validate_glsm_matrix(glsm: &[Vec<Integer>]) -> Result<(usize, usize)> {
+    if glsm.is_empty() {
+        return Err(Error::InvalidInput("GLSM matrix is empty".into()));
+    }
+    let n_cols = glsm[0].len();
+    if n_cols == 0 {
+        return Err(Error::InvalidInput("GLSM matrix has no columns".into()));
+    }
+    for row in glsm {
+        if row.len() != n_cols {
+            return Err(Error::InvalidInput(
+                "GLSM matrix rows have inconsistent length".into(),
+            ));
+        }
+    }
+    Ok((glsm.len(), n_cols))
+}
+
 fn validate_matrix_basis_shape(
     basis_matrix: &[Vec<Integer>],
     h11: usize,
@@ -314,6 +397,57 @@ fn rational_matrix_to_integer(matrix: &[Vec<Rational>]) -> Option<Vec<Vec<Intege
         out.push(out_row);
     }
     Some(out)
+}
+
+fn multiply_square(left: &[Vec<Rational>], right: &[Vec<Rational>]) -> Vec<Vec<Rational>> {
+    let n = left.len();
+    let mut out = vec![vec![Rational::from(0); n]; n];
+    for i in 0..n {
+        for j in 0..n {
+            let mut acc = Rational::from(0);
+            for k in 0..n {
+                acc += &left[i][k] * &right[k][j];
+            }
+            out[i][j] = acc;
+        }
+    }
+    out
+}
+
+fn to_rational_matrix(matrix: &[Vec<Integer>]) -> Vec<Vec<Rational>> {
+    matrix
+        .iter()
+        .map(|row| row.iter().map(Rational::from).collect())
+        .collect()
+}
+
+fn basis_change_matrix_from_coordinate_matrices(
+    from_coords: &[Vec<Integer>],
+    to_coords: &[Vec<Integer>],
+) -> Result<Vec<Vec<Integer>>> {
+    if from_coords.is_empty() || to_coords.is_empty() {
+        return Err(Error::InvalidInput(
+            "basis coordinate matrix is empty".into(),
+        ));
+    }
+    let h11 = from_coords.len();
+    if from_coords.iter().any(|row| row.len() != h11)
+        || to_coords.len() != h11
+        || to_coords.iter().any(|row| row.len() != h11)
+    {
+        return Err(Error::InvalidInput(
+            "basis coordinate matrices must be square with matching dimensions".into(),
+        ));
+    }
+
+    let from_r = to_rational_matrix(from_coords);
+    let to_r = to_rational_matrix(to_coords);
+    let from_inv = invert_matrix(&from_r).ok_or_else(|| {
+        Error::InvalidInput("failed to invert source basis coordinate matrix".into())
+    })?;
+    let transform_r = multiply_square(&from_inv, &to_r);
+    rational_matrix_to_integer(&transform_r)
+        .ok_or_else(|| Error::InvalidInput("basis change matrix is not integral".into()))
 }
 
 fn compute_nobasis(n_cols: usize, basis: &[usize]) -> Vec<usize> {
@@ -472,6 +606,57 @@ mod tests {
         .unwrap();
 
         assert_eq!(q_matrix, vec![vec![2, 1, 0], vec![1, -1, 1]]);
+    }
+
+    #[test]
+    fn divisor_basis_coordinate_matrix_dispatches_indices_and_matrix_basis() {
+        let glsm = int_matrix(&[&[1, 0, -1, -1], &[0, 1, -2, -3]]);
+        let standard_basis = vec![2, 3];
+        let divisor_basis_matrix = int_matrix(&[&[0, 0, 1, 1], &[0, 0, 0, 1]]);
+
+        let vector_coords =
+            divisor_basis_glsm_coordinate_matrix(&glsm, DivisorBasis::Indices(&standard_basis))
+                .unwrap();
+        let matrix_coords = divisor_basis_glsm_coordinate_matrix(
+            &glsm,
+            DivisorBasis::Matrix {
+                standard_basis: &standard_basis,
+                basis_matrix: &divisor_basis_matrix,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(vector_coords, int_matrix(&[&[-1, -1], &[-2, -3]]));
+        assert_eq!(matrix_coords, int_matrix(&[&[-2, -1], &[-5, -3]]));
+    }
+
+    #[test]
+    fn divisor_basis_change_matrix_supports_matrix_basis() {
+        let glsm = int_matrix(&[&[1, 0, -1, -1], &[0, 1, -2, -3]]);
+        let standard_basis = vec![2, 3];
+        let divisor_basis_matrix = int_matrix(&[&[0, 0, 1, 1], &[0, 0, 0, 1]]);
+
+        let computed_to_matrix = divisor_basis_change_matrix(
+            &glsm,
+            DivisorBasis::Indices(&standard_basis),
+            DivisorBasis::Matrix {
+                standard_basis: &standard_basis,
+                basis_matrix: &divisor_basis_matrix,
+            },
+        )
+        .unwrap();
+        let matrix_to_computed = divisor_basis_change_matrix(
+            &glsm,
+            DivisorBasis::Matrix {
+                standard_basis: &standard_basis,
+                basis_matrix: &divisor_basis_matrix,
+            },
+            DivisorBasis::Indices(&standard_basis),
+        )
+        .unwrap();
+
+        assert_eq!(computed_to_matrix, int_matrix(&[&[1, 0], &[1, 1]]));
+        assert_eq!(matrix_to_computed, int_matrix(&[&[1, 0], &[-1, 1]]));
     }
 
     #[test]
