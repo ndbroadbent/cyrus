@@ -12,6 +12,14 @@ Status: **not complete**. The current codebase has important no-replay guards
 and several source-derived stages, but the corrected GV/Kahler instanton layer
 and full potent-ray row generation are still open.
 
+Course correction: the compact GV implementation boundary is the existing
+`cygv` Rust crate. Cyrus should compute CYTools-equivalent inputs
+(`generators`, grading vector, curve-basis matrix, and intersection numbers)
+and call `cygv`; it should not reimplement `cygv`'s compact HKTY internals
+unless a concrete missing API or correctness bug is isolated. The local CKYZ
+rank-two surface code is a diagnostic/validation path for noncompact local
+models, not the production compact GV engine.
+
 ## Concrete Deliverables
 
 The objective breaks down into these success criteria:
@@ -45,8 +53,8 @@ The objective breaks down into these success criteria:
 | CYTools/cygv compact GV wrapper contract is understood and mirrored | `docs/CYGV_AUDIT.md`; direct source read of `reference/cytools/src/cytools/calabiyau.py::_compute_gvs_gws`; downloaded `cygv-0.1.2` source | Implemented for the generic compact handoff boundary. CYTools builds inputs, then delegates to `cygv.compute_gv`; no hidden Python GV algorithm remains. |
 | High-dimensional small toric curve selection is computed, not read | `docs/GA_READY_PIPELINE_AUDIT.md`; stage 5 small-curve tests | Implemented for the checkpoint rule. Pair pruning matches `small_curves.dat`; finite-semigroup pruning would remove five additional curves, so both policies remain explicit. |
 | High-dimensional small toric GV values are computed, not read | `docs/CYGV_AUDIT.md`; `docs/LOCAL_TORIC_GV_SOURCE_MAP.md`; stage 5 small-toric GV tests | Partially implemented. Covered toric two-face/origin-circuit formulas match the checkpoint, including the source-derived resolved-conifold `(-1,-1,1,1)` pattern. Remaining corrected-chamber misses are unresolved higher-rank origin circuits. |
-| Potent-ray GV rows are computed from local source data | `docs/POTENT_RAY_SOURCE_READ.md`; `docs/CKYZ_SERIES_DOMAIN_AUDIT.md`; `potent_ray_affine_circuits` tests | Partially implemented. Cyrus reconstructs rank/volume/slope diagnostics and first-four GV entries for 395 rank-two CKYZ rows. It also has all-ten checks for selected small F0/F1 families. It does not yet efficiently reproduce all ten entries for the larger McAllister rank-two directions, generate the low-dimensional-face ray sample, or handle rank-four contexts. |
-| cygv-style HKTY mechanics are ported where needed | `docs/CKYZ_SERIES_DOMAIN_AUDIT.md`; direct source read of `cygv-0.1.2/src/{semigroup,fundamental_period,instanton,series_inversion}.rs` | Partially implemented. Cyrus has a source-shaped z-residual extractor, indexed finite CKYZ domain operations, cover-weight grading batches, and rolling `previous_qn` history. The current blocker is direct `q_delta = z^delta exp(delta.alpha)` materialization over a 21,721-monomial domain. |
+| Potent-ray GV rows are computed from local source data | `docs/POTENT_RAY_SOURCE_READ.md`; `docs/CKYZ_SERIES_DOMAIN_AUDIT.md`; `potent_ray_affine_circuits` tests | Diagnostic only. Cyrus reconstructs rank/volume/slope diagnostics and first-four GV entries for 395 rank-two CKYZ rows. It also has all-ten checks for selected small F0/F1 families. The large rank-two CKYZ N=10 rows should not drive compact GV implementation work; they are local noncompact validation checks. |
+| Local CKYZ diagnostics stay separate from compact `cygv` | `docs/CYGV_AUDIT.md`; `docs/CKYZ_SERIES_DOMAIN_AUDIT.md`; direct source read of `cygv-0.1.2/src/{semigroup,fundamental_period,instanton,series_inversion}.rs` | Implemented as a bounded diagnostic path. Compact GV uses `compute_gv_invariants*` wrappers around `cygv`. The local CKYZ code exists because compact `cygv` rejects naive local surface charge matrices with effective CY dimension below three; it is not a replacement for the crate. |
 | Flux flat direction and `eK0` are computed | `docs/GA_READY_PIPELINE_AUDIT.md`; stage 4 tests | Implemented for the audited McAllister basis paths, with remaining general-basis work noted separately. |
 | Racetrack `g_s` and `W0` are computed | `mcallister_first_principles`; `mcallister_racetrack`; stage 5 racetrack tests | Implemented path exists. Checkpoints such as `g_s.dat` and `W_0.dat` are comparisons, not declared inputs. |
 | Corrected KKLT target and corrected Kahler solve are exact | `mcallister_first_principles` KKLT path; `docs/GA_READY_PIPELINE_AUDIT.md`; `docs/CYGV_AUDIT.md` | Not complete. Cyrus computes a no-replay corrected Kahler vector and volume, but the corrected-chamber GV target correction has an unresolved residual. |
@@ -78,11 +86,10 @@ The `cygv==0.1.2` HKTY path is:
    coefficients, materializing `q_N`, subtracting `Li2(q_N)`, and rolling the
    `previous_qn` cache.
 
-This confirms the current Cyrus CKYZ direction: stay in the z-domain, use a
-finite monomial map, batch by source grading, and update the residual by
-degree-ordered `Li2(q_N)` subtraction. It also identifies the remaining
-representation gap: Cyrus still materializes direct `q_delta` polynomials over
-too broad a domain for the ten-multiple McAllister `[4,3,2]` row.
+This confirms the production compact direction: keep using the actual `cygv`
+crate and focus Cyrus work on producing the correct inputs and basis
+transforms. The CKYZ z-domain machinery is useful only for local noncompact
+surface diagnostics where compact `cygv` is not the right model.
 
 ## Last-12-Hours Assessment
 
@@ -103,46 +110,47 @@ Useful progress:
 
 Churn that should not continue:
 
+- reimplementing compact `cygv` HKTY internals in Cyrus;
 - recursive per-coefficient Li2 demand;
 - hybrid direct/reused Li2 extraction;
 - shared direct-coordinate demand graph layered on the current domain.
 
-Each of those attempts passed small regressions but failed or regressed on the
-McAllister `[4,3,2]`, N=10 target. The conclusion is not "add another cache";
-it is "change the finite domain/history representation or factor direct
-`q_delta` construction in a source-proven way."
+Each CKYZ attempt passed small regressions but failed or regressed on the
+McAllister `[4,3,2]`, N=10 diagnostic. That diagnostic should stay bounded
+until the compact `cygv` handoff, corrected-chamber semigroup certification,
+and matrix-basis pipeline are no longer open.
 
 ## Open Blockers
 
-1. **Rank-two potent-ray N=10 rows.** The current `[4,3,2]` polygon-5 row has a
-   21,721-monomial predicted domain and 5,235 selected residual-history
-   degrees. The first extraction batch is dominated by
-   `CkyzIndexedSeries::exp -> mul` while building direct `q_delta` series.
-2. **Rank-four potent-ray contexts.** The remaining higher-rank local charge
-   contexts do not have a reusable HKTY/CKYZ implementation yet.
-3. **Corrected-chamber GV target corrections.** Nine current solved-t misses
+1. **Corrected-chamber GV target corrections.** Nine current solved-t misses
    remain higher-rank origin-circuit Mori generators; small active-support
    windows and LP witnesses are diagnostic only.
-4. **Exact corrected KKLT volume.** The no-replay path computes a corrected
+2. **Exact corrected KKLT volume.** The no-replay path computes a corrected
    volume but still has a documented instanton/chamber residual.
-5. **Generic matrix-basis pipeline.** Matrix divisor-basis primitives exist,
+3. **Generic matrix-basis pipeline.** Matrix divisor-basis primitives exist,
    but the McAllister runner still rejects matrix-basis override for the
    vector-specific path.
+4. **Compact GV semigroup/face certification.** Missing corrected-chamber GV
+   classes need a source-derived compact or certified face semigroup that can
+   be handed to `cygv`, not an unproven local CKYZ substitute.
+5. **Potent-ray local diagnostics.** Rank-two N=10 and rank-four potent-ray
+   rows are still incomplete, but they are validation diagnostics rather than
+   blockers for the compact GA-ready GV engine.
 
 ## Next Concrete Action
 
 The next implementation should be one of these, in order:
 
-1. Build a source-proven direct `q_delta` evaluator for CKYZ that avoids
-   materializing `exp(delta.alpha)` over the whole predicted domain. The output
-   must match current broad-domain values on P2/F0/F1/polygon-5 small tests
-   before raising the McAllister N gate.
-2. If that cannot be proven locally, derive a smaller finite CKYZ
-   coefficient-demand domain from cygv's semigroup/path-history mechanics and
-   prove it against the current broad domain on source models.
-3. Only after rank-two rows are robust, move to the higher-rank origin-circuit
-   semigroup/chamber contexts needed by corrected-chamber GV residuals and
-   rank-four potent rays.
+1. Finish the generic matrix-basis handoff in `mcallister_first_principles` so
+   Cyrus-computed bases, fluxes, intersections, Mori data, and `cygv` inputs can
+   flow through one production path.
+2. For corrected-chamber missing GV classes, construct a source-derived compact
+   semigroup or certified supporting-face semigroup and hand it to the existing
+   `cygv` wrappers. If the semigroup cannot be certified, keep the result
+   diagnostic-only.
+3. Keep local CKYZ/potent-ray checks bounded as source validation. Do not raise
+   the large local N gates or add more CKYZ performance machinery unless a
+   compact `cygv` call cannot express a required, certified input.
 
 Do not mark the objective complete until every checklist row above is either
 implemented with direct evidence or explicitly removed from the objective.
