@@ -325,8 +325,11 @@ to make the remaining GV layer more first-principles:
    The report now includes these as top-level status counts:
    `target_primitive_positive_supported_by_cygv_omega_bucket=4`,
    `target_positive_but_ignored_by_cygv_omega_bucket=5`, and
-   `target_not_in_nonnegative_local_semigroup=9`. The direct source read
-   reinforces this: `cygv` obtains GV values from the full
+   `target_not_in_nonnegative_local_semigroup=9`. The same report now keeps
+   actual-call readiness separate from target eligibility; all nine local
+   skeletons are still `blocked_missing_source_derived_inputs`, so none is a
+   valid actual-`cygv` call yet. The direct source read reinforces this: `cygv`
+   obtains GV values from the full
    finite semigroup, HKTY alpha/beta construction, and degree-ordered
    `Li2(q_N)` subtraction history, while the McAllister paper's small-curve
    discussion is a selected-toric-curve control argument rather than a closed

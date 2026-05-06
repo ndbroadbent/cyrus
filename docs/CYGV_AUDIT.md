@@ -1871,7 +1871,11 @@ The current `cygv` crate source sharpens the same boundary:
   `target_primitive_positive_supported_by_cygv_omega_bucket=4`,
   `target_positive_but_ignored_by_cygv_omega_bucket=5`, and
   `target_not_in_nonnegative_local_semigroup=9`. This narrows the plausible
-  compact-local cygv candidates without assigning any GV value.
+  compact-local cygv candidates without assigning any GV value. The report also
+  aggregates actual-call readiness separately; on this context all nine local
+  skeletons remain `blocked_missing_source_derived_inputs`, because a
+  cygv-supported target orientation still lacks the source-derived semigroup,
+  grading, chamber certificate, and intersection tensor.
 
 The actionable consequence is that a Cyrus replacement for corrected-chamber
 or potent-ray GV values must recreate the finite semigroup and lower-degree

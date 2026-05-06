@@ -158,6 +158,7 @@ struct ContextReport {
     exact_kind_counts: HashMap<String, usize>,
     local_cygv_charge_signature_counts: BTreeMap<String, usize>,
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
+    local_cygv_actual_call_readiness_counts: BTreeMap<String, usize>,
     targets: Vec<TargetReport>,
 }
 
@@ -3212,6 +3213,11 @@ fn build_report(
             .iter()
             .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
     );
+    let local_cygv_actual_call_readiness_counts = local_cygv_actual_call_readiness_counts(
+        targets
+            .iter()
+            .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
+    );
     ContextReport {
         schema_version: context.schema_version,
         dimension: validated.dimension,
@@ -3231,6 +3237,7 @@ fn build_report(
             .clone(),
         local_cygv_charge_signature_counts,
         local_cygv_target_candidate_status_counts,
+        local_cygv_actual_call_readiness_counts,
         targets,
     }
 }
@@ -3265,6 +3272,32 @@ fn local_cygv_target_candidate_status_counts<'a>(
         }
     }
     counts
+}
+
+fn local_cygv_actual_call_readiness_counts<'a>(
+    skeletons: impl IntoIterator<Item = &'a LocalCygvInputSkeleton>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for skeleton in skeletons {
+        *counts
+            .entry(local_cygv_actual_call_readiness(skeleton))
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_actual_call_readiness(skeleton: &LocalCygvInputSkeleton) -> String {
+    if !skeleton.remaining_uncertified_inputs.is_empty() {
+        return "blocked_missing_source_derived_inputs".to_string();
+    }
+    if skeleton.orientation_candidates.iter().any(|candidate| {
+        candidate.target_candidate_status
+            == "target_primitive_positive_supported_by_cygv_omega_bucket"
+    }) {
+        "ready_for_actual_cygv_call".to_string()
+    } else {
+        "blocked_no_supported_target_orientation".to_string()
+    }
 }
 
 fn target_index_selected(index: usize, target_index_filter: Option<usize>) -> bool {
@@ -3675,6 +3708,74 @@ mod tests {
                 .copied(),
             Some(2)
         );
+    }
+
+    #[test]
+    fn local_cygv_actual_call_readiness_requires_all_source_inputs() {
+        let supported_candidate = local_cygv_orientation_candidates(
+            &[vec![1], vec![-2], vec![-1], vec![3], vec![-1]],
+            Some(&[-1]),
+        );
+        let blocked_missing_inputs = LocalCygvInputSkeleton {
+            support_point_indices: Vec::new(),
+            local_q_matrix_rows: Vec::new(),
+            target_relation_coefficients: None,
+            target_relation_in_charge_basis: None,
+            target_relation_status: String::new(),
+            orientation_candidates: supported_candidate.clone(),
+            remaining_uncertified_inputs: vec!["local_intersection_tensor".to_string()],
+        };
+        let ready = LocalCygvInputSkeleton {
+            support_point_indices: Vec::new(),
+            local_q_matrix_rows: Vec::new(),
+            target_relation_coefficients: None,
+            target_relation_in_charge_basis: None,
+            target_relation_status: String::new(),
+            orientation_candidates: supported_candidate,
+            remaining_uncertified_inputs: Vec::new(),
+        };
+        let blocked_orientation = LocalCygvInputSkeleton {
+            support_point_indices: Vec::new(),
+            local_q_matrix_rows: Vec::new(),
+            target_relation_coefficients: None,
+            target_relation_in_charge_basis: None,
+            target_relation_status: String::new(),
+            orientation_candidates: local_cygv_orientation_candidates(
+                &[vec![2], vec![1], vec![2], vec![-1], vec![-2], vec![-2]],
+                Some(&[1]),
+            ),
+            remaining_uncertified_inputs: Vec::new(),
+        };
+
+        assert_eq!(
+            local_cygv_actual_call_readiness(&blocked_missing_inputs),
+            "blocked_missing_source_derived_inputs"
+        );
+        assert_eq!(
+            local_cygv_actual_call_readiness(&blocked_orientation),
+            "blocked_no_supported_target_orientation"
+        );
+        assert_eq!(
+            local_cygv_actual_call_readiness(&ready),
+            "ready_for_actual_cygv_call"
+        );
+
+        let counts = local_cygv_actual_call_readiness_counts([
+            &blocked_missing_inputs,
+            &ready,
+            &blocked_orientation,
+        ]);
+        assert_eq!(
+            counts.get("blocked_missing_source_derived_inputs").copied(),
+            Some(1)
+        );
+        assert_eq!(
+            counts
+                .get("blocked_no_supported_target_orientation")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(counts.get("ready_for_actual_cygv_call").copied(), Some(1));
     }
 
     #[test]
