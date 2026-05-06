@@ -250,6 +250,7 @@ struct CygvPathHistoryProbe {
     closure_degree_counts: BTreeMap<i128, usize>,
     target_in_closure: Option<bool>,
     previous_level_count: usize,
+    previous_window_degrees: Vec<i128>,
     previous_window_degree_count: Option<usize>,
     previous_window_element_count: Option<usize>,
     predecessor_difference_count: Option<usize>,
@@ -1584,6 +1585,7 @@ fn cygv_path_history_probe(
             closure_degree_counts: BTreeMap::new(),
             target_in_closure: None,
             previous_level_count: cygv_previous_level_count(context.dimension),
+            previous_window_degrees: Vec::new(),
             previous_window_degree_count: None,
             previous_window_element_count: None,
             predecessor_difference_count: None,
@@ -1618,6 +1620,7 @@ fn cygv_path_history_probe_inner(
             closure_degree_counts: BTreeMap::new(),
             target_in_closure: None,
             previous_level_count,
+            previous_window_degrees: Vec::new(),
             previous_window_degree_count: None,
             previous_window_element_count: None,
             predecessor_difference_count: None,
@@ -1636,6 +1639,7 @@ fn cygv_path_history_probe_inner(
             closure_degree_counts: closure.degree_counts,
             target_in_closure: Some(target_in_closure),
             previous_level_count,
+            previous_window_degrees: Vec::new(),
             previous_window_degree_count: None,
             previous_window_element_count: None,
             predecessor_difference_count: None,
@@ -1651,11 +1655,13 @@ fn cygv_path_history_probe_inner(
         .filter(|degree| *degree > 0 && *degree < sample.degree)
         .collect::<Vec<_>>();
     lower_degrees.sort_unstable();
-    let selected_degrees = lower_degrees
+    let mut selected_degree_vec = lower_degrees
         .into_iter()
         .rev()
         .take(previous_level_count)
-        .collect::<HashSet<_>>();
+        .collect::<Vec<_>>();
+    selected_degree_vec.sort_unstable();
+    let selected_degrees = selected_degree_vec.iter().copied().collect::<HashSet<_>>();
 
     let mut previous_window_element_count = 0usize;
     let mut predecessor_difference_count = 0usize;
@@ -1685,6 +1691,7 @@ fn cygv_path_history_probe_inner(
         closure_degree_counts: closure.degree_counts,
         target_in_closure: Some(target_in_closure),
         previous_level_count,
+        previous_window_degrees: selected_degree_vec,
         previous_window_degree_count: Some(selected_degrees.len()),
         previous_window_element_count: Some(previous_window_element_count),
         predecessor_difference_count: Some(predecessor_difference_count),
@@ -2339,6 +2346,7 @@ mod tests {
         assert_eq!(probe.status, "completed_bounded_closure");
         assert_eq!(probe.target_in_closure, Some(true));
         assert_eq!(probe.previous_level_count, 2);
+        assert_eq!(probe.previous_window_degrees, vec![1]);
         assert_eq!(probe.previous_window_degree_count, Some(1));
         assert_eq!(probe.previous_window_element_count, Some(2));
         assert_eq!(probe.predecessor_difference_count, Some(2));
