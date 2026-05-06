@@ -86,9 +86,10 @@ run pass. Any remaining mismatch must be explicit and localizable.
    gate through the support-predicted API in about 132 seconds. The newer
    coefficient-level z-residual extraction avoids materializing full `Li2(q_N)`
    series for narrowed targets and makes focused polygon-5 `[4,3,2]`, `N=7`
-   pass in about 46 seconds; `N=8` also passes as a diagnostic in about
-   118 seconds. Focused polygon-5 `[4,3,2]`, `N=10` still exceeds a 300 second
-   timeout. A traced `N=10` run now shows support prediction is no longer the
+   pass in about 46 seconds; `N=8` and `N=9` also pass as diagnostics in about
+   118 seconds and 274 seconds respectively. Focused polygon-5 `[4,3,2]`,
+   `N=10` still exceeds a 300 second timeout. A traced `N=10` run now shows
+   support prediction is no longer the
    slow step (`broad=26691`, `selected=21721`, about 9 seconds); z-history
    selection produces `5235` residual degrees in about 17 seconds, and the
    coefficient-level residual extraction still reaches only grading 4 before a
