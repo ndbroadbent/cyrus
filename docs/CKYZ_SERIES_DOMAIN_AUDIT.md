@@ -582,3 +582,14 @@ target/remainder states is as bad as full Li2 materialization on the broad
 support-predicted domain. The next attempt should precompute or index the
 coefficient-demand graph by target degree and shared predecessor structure,
 not perform per-target support scans.
+
+A second uncommitted hybrid attempt was also rejected. It kept the indexed
+`q_N` cache but routed only direct `q_N` cache misses through the older
+coefficient-recursive `Li2(q^d exp(d.alpha))` path, leaving reused `q_N`s on
+full indexed Li2 materialization. This passed local z-series tests and the
+N=4 McAllister gate, but it still timed out on the N=10 filtered gate before
+the first extraction progress batch. The first grading level has only the
+three direct coordinate candidates, so this shows the initial direct
+coefficient work is itself too broad at ten multiples. The next useful change
+needs a shared demand graph for those direct coordinate Li2 coefficients, not a
+per-candidate/per-target recursion.
