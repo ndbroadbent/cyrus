@@ -1845,8 +1845,10 @@ fn bounded_cygv_semigroup_closure(
                 completed: true,
             });
         }
-        if elements.len() + new_elements.len() > element_limit {
-            for element in new_elements {
+        let mut sorted_new_elements = new_elements.into_iter().collect::<Vec<_>>();
+        sorted_new_elements.sort();
+        if elements.len() + sorted_new_elements.len() > element_limit {
+            for element in sorted_new_elements {
                 if elements.len() >= element_limit {
                     break;
                 }
@@ -1860,10 +1862,10 @@ fn bounded_cygv_semigroup_closure(
                 completed: false,
             });
         }
-        for element in &new_elements {
+        for element in &sorted_new_elements {
             elements.insert(element.clone());
         }
-        starting_elements = new_elements;
+        starting_elements = sorted_new_elements.into_iter().collect();
     }
 }
 
@@ -2430,6 +2432,19 @@ mod tests {
             .collect::<HashSet<_>>();
 
         assert_eq!(closure.elements, actual);
+    }
+
+    #[test]
+    fn bounded_cygv_closure_truncates_new_elements_deterministically() {
+        let seeds = vec![vec![1, 0], vec![0, 1]];
+        let closure = bounded_cygv_semigroup_closure(&seeds, &[1, 1], 2, 4).unwrap();
+
+        assert_eq!(closure.status, "exceeded_element_limit_4");
+        assert!(!closure.completed);
+        assert_eq!(
+            closure.elements,
+            HashSet::from([vec![0, 0], vec![0, 1], vec![1, 0], vec![0, 2]])
+        );
     }
 
     #[test]
