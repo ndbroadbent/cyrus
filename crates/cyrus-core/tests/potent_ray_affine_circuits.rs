@@ -887,6 +887,11 @@ fn mcallister_f1_3_1_ckyz_potent_ray_all_ten_gvs_are_reconstructed() {
     assert_mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed(Some(vec![3, 1]), 10, None);
 }
 
+#[test]
+fn mcallister_polygon5_4_3_2_ckyz_potent_ray_first_five_gvs_are_reconstructed() {
+    assert_mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed(Some(vec![4, 3, 2]), 5, None);
+}
+
 fn assert_mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed(
     target_direction_filter: Option<Vec<i64>>,
     requested_multiples: usize,

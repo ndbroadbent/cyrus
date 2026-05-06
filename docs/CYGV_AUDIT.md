@@ -1104,15 +1104,17 @@ The targeted CKYZ APIs truncate by requested source degrees instead of a single
 total degree. The default McAllister rank-two gate now uses the
 support-predicted domain API, which computes alpha/beta supports on the broad
 source downset and performs inverse mirror-map/potential domain prediction at
-the support level before evaluating the final rational series. That is enough
-to validate the first four `potent_rays_gv.dat` entries for all 395 rank-two
-CKYZ McAllister potent-ray rows without using those GV rows as inputs. Polygon 5
-is included with finite-limit cover weights `[1, 1, 1]`; the printed
+the support level before evaluating the final rational series. The z-residual
+extractor now updates targets with coefficient-level `Li2(q_N)` probes instead
+of materializing each full `Li2(q_N)` series. That is enough to validate the
+first four `potent_rays_gv.dat` entries for all 395 rank-two CKYZ McAllister
+potent-ray rows without using those GV rows as inputs, and to make the narrowed
+polygon-5 `[4,3,2]` first-five regression practical. Polygon 5 is included with
+finite-limit cover weights `[1, 1, 1]`; the printed
 `C1 = 3J1 + 2J2 + 2J3` weights are intentionally rejected because they produce
 non-integral invariants in this extraction. This is not yet enough for all ten
-entries: the current multivariable series still becomes too slow on the largest
-source directions, so the remaining work is direct coefficient-support
-extraction rather than a new physics shortcut.
+entries: the largest source directions still need a sharper source/history
+domain, not a new physics shortcut or a compact-`cygv` reimplementation.
 
 The gated McAllister CKYZ test defaults to the first four multiples. Setting
 `CYRUS_CKYZ_MULTIPLES_TO_CHECK=N` raises that assertion count explicitly for
@@ -1125,19 +1127,16 @@ the same full rank-two `N=4` gate passes in about 132 seconds, so that change is
 a correctness/structure boundary rather than a performance breakthrough. A
 later flattened addition table, followed by sparse valid-pair multiplication,
 also made the narrowed polygon-5 `[4,3,2]` `N=4` gate complete in about 149
-seconds. A focused polygon-5 `[4,3,2]`, `N=5` diagnostic through the
-support-predicted API exceeded a 300 second timeout, and an earlier unfiltered
-`N=5` diagnostic exceeded a 600 second timeout, so higher all-row/all-ten
-validation remains a finite-domain construction problem rather than a known
-coefficient mismatch. A follow-up diagnostic that only constructed the
-support-predicted polygon-5 `[4,3,2]`, `N=5` domain also exceeded 300 seconds,
-so the bottleneck is already inside support-domain prediction rather than only
-the final rational potential extraction.
+seconds. Coefficient-level z-residual extraction then made the focused
+polygon-5 `[4,3,2]`, `N=5` regression pass in about 6.4 seconds. Focused
+polygon-5 `[4,3,2]`, `N=10` still exceeds a 300 second timeout, so higher
+all-row/all-ten validation remains a finite source/history construction problem
+rather than a known coefficient mismatch.
 The same test can be narrowed with `CYRUS_CKYZ_TARGET_DIRECTION=a,b,...`.
 Focused all-ten checks now pass for the F0 directions `[1,1]`/`[1,2]` and F1
-directions `[2,1]`/`[3,1]`; polygon-5 direction `[4,3,2]` passes through `N=4`
-when narrowed but remains the first slow family. The immediate
-coefficient-domain work should therefore focus on the rank-three polygon-5
+directions `[2,1]`/`[3,1]`; polygon-5 direction `[4,3,2]` passes through `N=5`
+when narrowed but remains the first slow family at `N=10`. The immediate
+source/history-domain work should therefore focus on the rank-three polygon-5
 local model first.
 
 ## May 2026 CYTools/cygv Porting Gaps
@@ -1200,19 +1199,20 @@ multiples is not enough input unless the surrounding local semigroup has also
 been reconstructed. The answer for a ray depends on the semigroup's lower
 degree classes and on the order in which they are subtracted.
 
-Third, the current all-ten CKYZ blocker is domain shape, not arithmetic alone.
-Dense indexing and guarded addition tables fixed the obvious multiplication
-overhead, and the first-four checks now run for all 395 rank-two CKYZ
-rows. Cyrus' targeted extractor now uses the union of componentwise past
+Third, the current all-ten CKYZ blocker is domain/history shape, not arithmetic
+alone. Dense indexing and guarded addition tables fixed the obvious
+multiplication overhead, and the first-four checks now run for all 395 rank-two
+CKYZ rows. Cyrus' targeted extractor now uses the union of componentwise past
 downsets of the requested degrees instead of the single box of coordinate
 maxima, so incomparable target degrees no longer force irrelevant mixed
-monomials. The all-ten ray-direction case still needs a sharper
-coefficient/path-history domain, because multiples of one positive direction
-have a large componentwise past even after this downset refinement. The next
-implementation should build that coefficient-targeted local monomial domain for
-one canonical rank-two support family, then generalize across the 16 normalized
-support signatures. More box optimization would still be asking cygv/CKYZ the
-wrong finite-domain question.
+monomials. Coefficient-level z-residual updates now avoid materializing full
+`Li2(q_N)` series and make the narrowed polygon-5 first-five case fast. The
+all-ten ray-direction case still needs a sharper source/history domain, because
+multiples of one positive direction have a large predecessor set even after this
+downset refinement. The next implementation should build that
+source/history-targeted local monomial domain for one canonical rank-two support
+family, then generalize across the 16 normalized support signatures. More box
+optimization would still be asking cygv/CKYZ the wrong finite-domain question.
 
 This makes the next source-derived implementation boundary precise:
 
@@ -1300,25 +1300,24 @@ source-weighted causal helper was stopped after several minutes, while the
 targeted first-principles F0 directions `[1,1]`/`[1,2]` and F1 directions
 `[2,1]`/`[3,1]` now have explicit all-ten regressions against saved rows and
 the existing `N=4` support-predicted all-row gate remains the practical default.
-Flattening the target-downset addition table
-removes enough lookup overhead for the narrowed polygon-5 `[4,3,2]` `N=4` check
-to complete. Iterating only sparse valid product pairs improves that narrowed
-run to about 149 seconds, but the sample still spends almost all time in inverse
-mirror-map composition and rational polynomial multiplication. The
-support-predicted API moves domain construction ahead of full rational
-composition, but the focused `[4,3,2]`, `N=5` run still timed out after 300
-seconds, and the domain-only diagnostic for the same target also timed out
-after 300 seconds. This confirms the next missing object more sharply: Cyrus
-needs direct coefficient/path-history support generation, not just the full
-semigroup generated by the CKYZ coordinate axes up to a source grading cutoff.
+Flattening the target-downset addition table removes enough lookup overhead for
+the narrowed polygon-5 `[4,3,2]` `N=4` check to complete. Iterating only sparse
+valid product pairs improves that narrowed run to about 149 seconds, and
+coefficient-level z-residual updates make the focused `[4,3,2]`, `N=5` run pass
+in about 6.4 seconds. The focused `[4,3,2]`, `N=10` run still times out after
+300 seconds. This confirms the next missing object more sharply: Cyrus needs a
+source/history domain for the full predecessor subtraction path, not just the
+full semigroup generated by the CKYZ coordinate axes up to a source grading
+cutoff.
 
 This is still not the full McAllister potent-ray solution. The F0
 `[1,1]`/`[1,2]` and F1 `[2,1]`/`[3,1]` all-ten checks prove the CKYZ
 source-derived path can reach complete saved rows for multiple non-`P^2`
-families, but the missing step is still to derive the local generator set and
-grading for each normalized support signature from geometry, then use a
-narrower coefficient/history domain to raise the larger rank-two CKYZ families
-beyond the first four multiples.
+families, and the polygon-5 first-five check shows the coefficient-level
+residual path is useful. The missing step is still to derive the local generator
+set and grading for each normalized support signature from geometry, then use a
+narrower source/history domain to raise the larger rank-two CKYZ families beyond
+the first four multiples and the focused polygon-5 first-five checkpoint.
 
 ## May 2026 Corrected-Chamber Source Checkpoint
 
