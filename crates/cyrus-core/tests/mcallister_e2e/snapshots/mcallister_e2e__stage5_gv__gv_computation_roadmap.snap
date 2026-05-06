@@ -81,7 +81,7 @@ expression: roadmap
     "mcallister_first_principles reports validation-only corrected_kahler_param.dat deltas; for 4-214-647 the computed corrected Kähler vector differs by relative_l2=0.0005603330179533605 and max_abs=0.18907322067627774",
     "optional supporting-face certificate diagnostics report certified and uncertified LP-witness face GV counts; the latest 4-214-647 sample certified 0/9 LP-witness faces",
     "mcallister_first_principles runs from declared inputs only with validation checkpoints absent, and can skip McAllister final assertions for generic candidate evaluation",
-    "generic no-assertion runs default K/M flux vectors to Cyrus' computed dual basis instead of the McAllister [3,4,5,8] source basis; --dual-basis remains available for validation-source flux files",
+    "generic no-assertion runs default K/M flux vectors to Cyrus' computed dual basis instead of the McAllister [3,4,5,8] source basis; --dual-basis now accepts index or matrix validation-source flux coordinate bases",
     "corrected-chamber general GV diagnostics report degree-bounded ray counts; for the 4-214-647 corrected chamber, max_deg=26 keeps 2963 of 561596 Mori generators"
   ],
   "remaining_gaps": [

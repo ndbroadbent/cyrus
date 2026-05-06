@@ -5,8 +5,9 @@
 //!
 //! Optional:
 //! - `--dual-basis path/to/dual_basis.json` to supply the source coordinate
-//!   basis for K/M flux vectors. Without this, McAllister validation mode uses
-//!   the paper basis `[3, 4, 5, 8]`; generic mode uses Cyrus' computed dual basis.
+//!   basis for K/M flux vectors. The JSON may contain either `indices` or a
+//!   divisor-basis `matrix`. Without this, McAllister validation mode uses the
+//!   paper basis `[3, 4, 5, 8]`; generic mode uses Cyrus' computed dual basis.
 //! - `--allow-fixtures` to permit JSON fixture fallback when no data dir is set.
 //! - `--skip-mcallister-assertions` to run the computed pipeline without
 //!   comparing final observables to the 4-214-647 validation target.
@@ -432,18 +433,30 @@ struct BasisOverride {
     matrix: Option<Vec<Vec<i64>>>,
 }
 
+enum BasisOverrideRef<'a> {
+    Indices(&'a [usize]),
+    Matrix(&'a [Vec<i64>]),
+}
+
 impl BasisOverride {
-    fn indices(&self, context: &str) -> std::result::Result<&[usize], String> {
+    fn representation(&self, context: &str) -> std::result::Result<BasisOverrideRef<'_>, String> {
         match (&self.indices, &self.matrix) {
-            (Some(indices), None) => Ok(indices),
-            (None, Some(_)) => Err(format!(
-                "{context} supplied a matrix divisor basis, but this runner path is still vector-basis only; use an `indices` basis or route through the matrix-basis APIs"
-            )),
+            (Some(indices), None) => Ok(BasisOverrideRef::Indices(indices)),
+            (None, Some(matrix)) => Ok(BasisOverrideRef::Matrix(matrix)),
             (Some(_), Some(_)) => Err(format!(
                 "{context} supplied both `indices` and `matrix`; exactly one basis representation is allowed"
             )),
             (None, None) => Err(format!(
-                "{context} did not supply a basis; expected an `indices` vector"
+                "{context} did not supply a basis; expected `indices` or `matrix`"
+            )),
+        }
+    }
+
+    fn indices(&self, context: &str) -> std::result::Result<&[usize], String> {
+        match self.representation(context)? {
+            BasisOverrideRef::Indices(indices) => Ok(indices),
+            BasisOverrideRef::Matrix(_) => Err(format!(
+                "{context} supplied a matrix divisor basis, but this runner path is still vector-basis only; use an `indices` basis or route through the matrix-basis APIs"
             )),
         }
     }
@@ -1396,6 +1409,195 @@ fn transform_i64_coordinates_transpose(
         .collect()
 }
 
+fn glsm_coordinate_matrix_for_indices(
+    glsm: &[Vec<malachite::Integer>],
+    basis: &[usize],
+) -> std::result::Result<Vec<Vec<malachite::Integer>>, String> {
+    let h11 = validate_glsm_matrix(glsm)?;
+    let n_cols = glsm[0].len();
+    if basis.len() != h11 {
+        return Err(format!(
+            "basis length {} does not match h11={h11}",
+            basis.len()
+        ));
+    }
+    if let Some(&idx) = basis.iter().find(|&&idx| idx >= n_cols) {
+        return Err(format!(
+            "basis index {idx} is out of range for {n_cols} GLSM columns"
+        ));
+    }
+
+    let mut coords = vec![vec![malachite::Integer::from(0); h11]; h11];
+    for (basis_col, &ambient_col) in basis.iter().enumerate() {
+        for row in 0..h11 {
+            coords[row][basis_col] = glsm[row][ambient_col].clone();
+        }
+    }
+    Ok(coords)
+}
+
+fn glsm_coordinate_matrix_for_matrix_basis(
+    glsm: &[Vec<malachite::Integer>],
+    basis_matrix: &[Vec<i64>],
+) -> std::result::Result<Vec<Vec<malachite::Integer>>, String> {
+    let h11 = validate_glsm_matrix(glsm)?;
+    let n_cols = glsm[0].len();
+    if basis_matrix.len() != h11 {
+        return Err(format!(
+            "matrix divisor basis row count {} does not match h11={h11}",
+            basis_matrix.len()
+        ));
+    }
+    for row in basis_matrix {
+        if row.len() != n_cols {
+            return Err(format!(
+                "matrix divisor basis row width {} does not match GLSM column count {n_cols}",
+                row.len()
+            ));
+        }
+    }
+
+    let mut coords = vec![vec![malachite::Integer::from(0); h11]; h11];
+    for (basis_col, basis_row) in basis_matrix.iter().enumerate() {
+        for glsm_row in 0..h11 {
+            let mut acc = malachite::Integer::from(0);
+            for (ambient_col, coefficient) in basis_row.iter().enumerate() {
+                if *coefficient != 0 {
+                    acc += &glsm[glsm_row][ambient_col] * malachite::Integer::from(*coefficient);
+                }
+            }
+            coords[glsm_row][basis_col] = acc;
+        }
+    }
+    Ok(coords)
+}
+
+fn validate_glsm_matrix(glsm: &[Vec<malachite::Integer>]) -> std::result::Result<usize, String> {
+    if glsm.is_empty() {
+        return Err("GLSM matrix is empty".to_string());
+    }
+    let n_cols = glsm[0].len();
+    if n_cols == 0 {
+        return Err("GLSM matrix has no columns".to_string());
+    }
+    if glsm.iter().any(|row| row.len() != n_cols) {
+        return Err("GLSM matrix rows have inconsistent length".to_string());
+    }
+    Ok(glsm.len())
+}
+
+fn to_rational_matrix(matrix: &[Vec<malachite::Integer>]) -> Vec<Vec<malachite::Rational>> {
+    matrix
+        .iter()
+        .map(|row| row.iter().map(malachite::Rational::from).collect())
+        .collect()
+}
+
+fn multiply_rational_square(
+    left: &[Vec<malachite::Rational>],
+    right: &[Vec<malachite::Rational>],
+) -> Vec<Vec<malachite::Rational>> {
+    let n = left.len();
+    let mut out = vec![vec![malachite::Rational::from(0); n]; n];
+    for i in 0..n {
+        for j in 0..n {
+            let mut acc = malachite::Rational::from(0);
+            for k in 0..n {
+                acc += &left[i][k] * &right[k][j];
+            }
+            out[i][j] = acc;
+        }
+    }
+    out
+}
+
+fn rational_matrix_to_integer_exact(
+    matrix: &[Vec<malachite::Rational>],
+) -> std::result::Result<Vec<Vec<malachite::Integer>>, String> {
+    matrix
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|value| {
+                    malachite::Integer::try_from(value.clone())
+                        .map_err(|_| "basis change matrix is not integral".to_string())
+                })
+                .collect()
+        })
+        .collect()
+}
+
+fn basis_change_matrix_from_coordinate_matrices(
+    from_coords: &[Vec<malachite::Integer>],
+    to_coords: &[Vec<malachite::Integer>],
+) -> std::result::Result<Vec<Vec<malachite::Integer>>, String> {
+    if from_coords.is_empty() || to_coords.is_empty() {
+        return Err("basis coordinate matrix is empty".to_string());
+    }
+    let h11 = from_coords.len();
+    if from_coords.iter().any(|row| row.len() != h11)
+        || to_coords.len() != h11
+        || to_coords.iter().any(|row| row.len() != h11)
+    {
+        return Err(
+            "basis coordinate matrices must be square with matching dimensions".to_string(),
+        );
+    }
+    let from_r = to_rational_matrix(from_coords);
+    let to_r = to_rational_matrix(to_coords);
+    let from_inv = cyrus_core::integer_math::invert_matrix(&from_r)
+        .ok_or_else(|| "failed to invert source basis coordinate matrix".to_string())?;
+    let transform_r = multiply_rational_square(&from_inv, &to_r);
+    rational_matrix_to_integer_exact(&transform_r)
+}
+
+fn basis_override_coordinate_matrix(
+    glsm: &[Vec<malachite::Integer>],
+    override_value: &BasisOverride,
+    context: &str,
+) -> std::result::Result<Vec<Vec<malachite::Integer>>, String> {
+    match override_value.representation(context)? {
+        BasisOverrideRef::Indices(indices) => glsm_coordinate_matrix_for_indices(glsm, indices),
+        BasisOverrideRef::Matrix(matrix) => glsm_coordinate_matrix_for_matrix_basis(glsm, matrix),
+    }
+}
+
+fn basis_change_matrix_from_indices_to_override(
+    glsm: &[Vec<malachite::Integer>],
+    from_basis: &[usize],
+    to_basis: &BasisOverride,
+    context: &str,
+) -> std::result::Result<Vec<Vec<malachite::Integer>>, String> {
+    match to_basis.representation(context)? {
+        BasisOverrideRef::Indices(indices) => {
+            basis_change_matrix(glsm, from_basis, indices).map_err(|e| e.to_string())
+        }
+        BasisOverrideRef::Matrix(_) => {
+            let from_coords = glsm_coordinate_matrix_for_indices(glsm, from_basis)?;
+            let to_coords = basis_override_coordinate_matrix(glsm, to_basis, context)?;
+            basis_change_matrix_from_coordinate_matrices(&from_coords, &to_coords)
+        }
+    }
+}
+
+fn basis_change_matrix_from_override_to_indices(
+    glsm: &[Vec<malachite::Integer>],
+    from_basis: &BasisOverride,
+    to_basis: &[usize],
+    context: &str,
+) -> std::result::Result<Vec<Vec<malachite::Integer>>, String> {
+    match from_basis.representation(context)? {
+        BasisOverrideRef::Indices(indices) => {
+            basis_change_matrix(glsm, indices, to_basis).map_err(|e| e.to_string())
+        }
+        BasisOverrideRef::Matrix(_) => {
+            let from_coords = basis_override_coordinate_matrix(glsm, from_basis, context)?;
+            let to_coords = glsm_coordinate_matrix_for_indices(glsm, to_basis)?;
+            basis_change_matrix_from_coordinate_matrices(&from_coords, &to_coords)
+        }
+    }
+}
+
 fn transform_m_flux_to_computed_basis(
     glsm: &[Vec<malachite::Integer>],
     computed_basis: &[usize],
@@ -1421,6 +1623,31 @@ fn transform_m_flux_to_computed_basis(
     transform_i64_coordinates(&transform, values, label)
 }
 
+fn transform_m_flux_from_override_to_computed_basis(
+    glsm: &[Vec<malachite::Integer>],
+    computed_basis: &[usize],
+    flux_basis: &BasisOverride,
+    values: &[i64],
+    label: &str,
+) -> Vec<i64> {
+    let transform = basis_change_matrix_from_indices_to_override(
+        glsm,
+        computed_basis,
+        flux_basis,
+        "--dual-basis",
+    )
+    .unwrap_or_else(|e| {
+        eprintln!("[ERROR] failed to compute {label} basis transform: {e}");
+        std::process::exit(2);
+    });
+    if !is_unimodular(&transform) {
+        eprintln!("[ERROR] {label} basis transform is not unimodular");
+        std::process::exit(2);
+    }
+    eprintln!("[INFO] transforming {label} from --dual-basis source coordinates to computed basis");
+    transform_i64_coordinates(&transform, values, label)
+}
+
 fn transform_k_flux_to_computed_basis(
     glsm: &[Vec<malachite::Integer>],
     computed_basis: &[usize],
@@ -1442,6 +1669,30 @@ fn transform_k_flux_to_computed_basis(
         "[INFO] transforming K from flux basis {:?} to computed basis {:?}",
         flux_basis, computed_basis
     );
+    transform_i64_coordinates_transpose(&transform, values, "K")
+}
+
+fn transform_k_flux_from_override_to_computed_basis(
+    glsm: &[Vec<malachite::Integer>],
+    computed_basis: &[usize],
+    flux_basis: &BasisOverride,
+    values: &[i64],
+) -> Vec<i64> {
+    let transform = basis_change_matrix_from_override_to_indices(
+        glsm,
+        flux_basis,
+        computed_basis,
+        "--dual-basis",
+    )
+    .unwrap_or_else(|e| {
+        eprintln!("[ERROR] failed to compute K basis transform: {e}");
+        std::process::exit(2);
+    });
+    if !is_unimodular(&transform) {
+        eprintln!("[ERROR] K basis transform is not unimodular");
+        std::process::exit(2);
+    }
+    eprintln!("[INFO] transforming K from --dual-basis source coordinates to computed basis");
     transform_i64_coordinates_transpose(&transform, values, "K")
 }
 
@@ -1591,21 +1842,18 @@ fn stage_flat_direction(
     let (dual_glsm, dual_linrel, dual_basis_auto) =
         compute_glsm_and_linrels(&dual_points_vec).expect("Failed dual GLSM");
     let dual_basis = select_dual_basis(None, dual_basis_auto);
-    let flux_basis = dual_basis_override.map_or_else(
-        || {
-            if use_mcallister_flux_basis_default {
-                eprintln!("[INFO] using McAllister flux source basis [3, 4, 5, 8]");
-                vec![3, 4, 5, 8]
-            } else {
-                eprintln!("[INFO] using computed dual basis as flux coordinate basis");
-                dual_basis.clone()
-            }
-        },
-        |basis| {
-            eprintln!("[INFO] using explicit flux source basis from --dual-basis");
-            basis_indices_or_exit(basis, "--dual-basis")
-        },
-    );
+    let flux_basis = if dual_basis_override.is_none() {
+        if use_mcallister_flux_basis_default {
+            eprintln!("[INFO] using McAllister flux source basis [3, 4, 5, 8]");
+            Some(vec![3, 4, 5, 8])
+        } else {
+            eprintln!("[INFO] using computed dual basis as flux coordinate basis");
+            Some(dual_basis.clone())
+        }
+    } else {
+        eprintln!("[INFO] using explicit flux source basis from --dual-basis");
+        None
+    };
     let dual_points_i64: Vec<Vec<i64>> = dual_points_vec
         .iter()
         .map(|p| p.coords().to_vec())
@@ -1624,9 +1872,39 @@ fn stage_flat_direction(
             .expect("Failed dual intersection numbers");
     let dual_kappa = intersection_in_basis(&dual_kappa_full, &dual_basis);
     let (k_raw, m_raw) = load_flux_vectors(data_dir, manifest_dir);
-    let k_raw = transform_k_flux_to_computed_basis(&dual_glsm, &dual_basis, &flux_basis, &k_raw);
-    let m_raw =
-        transform_m_flux_to_computed_basis(&dual_glsm, &dual_basis, &flux_basis, &m_raw, "M");
+    let k_raw = dual_basis_override.map_or_else(
+        || {
+            transform_k_flux_to_computed_basis(
+                &dual_glsm,
+                &dual_basis,
+                flux_basis.as_deref().expect("default flux basis"),
+                &k_raw,
+            )
+        },
+        |basis| {
+            transform_k_flux_from_override_to_computed_basis(&dual_glsm, &dual_basis, basis, &k_raw)
+        },
+    );
+    let m_raw = dual_basis_override.map_or_else(
+        || {
+            transform_m_flux_to_computed_basis(
+                &dual_glsm,
+                &dual_basis,
+                flux_basis.as_deref().expect("default flux basis"),
+                &m_raw,
+                "M",
+            )
+        },
+        |basis| {
+            transform_m_flux_from_override_to_computed_basis(
+                &dual_glsm,
+                &dual_basis,
+                basis,
+                &m_raw,
+                "M",
+            )
+        },
+    );
     let k_flux: Vec<I64<Finite>> = k_raw.iter().map(|&v| I64::<Finite>::new(v)).collect();
     let m_flux: Vec<I64<Finite>> = m_raw.iter().map(|&v| I64::<Finite>::new(v)).collect();
     let (flat_p, ek0_opt) = match compute_flat_direction_full(&dual_kappa, &k_flux, &m_flux) {
@@ -10251,6 +10529,16 @@ fn run_pipeline(args: PipelineArgs) {
 mod tests {
     use super::*;
 
+    fn int_matrix(rows: &[&[i64]]) -> Vec<Vec<malachite::Integer>> {
+        rows.iter()
+            .map(|row| {
+                row.iter()
+                    .map(|&value| malachite::Integer::from(value))
+                    .collect()
+            })
+            .collect()
+    }
+
     #[test]
     fn branch_selection_parser_accepts_all_declared_policies() {
         for name in [
@@ -10349,6 +10637,59 @@ mod tests {
             err.contains("both `indices` and `matrix`"),
             "unexpected basis error: {err}"
         );
+    }
+
+    #[test]
+    fn matrix_dual_basis_override_builds_m_flux_transform() {
+        let glsm = int_matrix(&[&[1, 0, -1, -1], &[0, 1, -2, -3]]);
+        let computed_basis = vec![2, 3];
+        let matrix_basis =
+            serde_json::from_str::<BasisOverride>(r#"{"matrix":[[0,0,1,1],[0,0,0,1]]}"#)
+                .expect("matrix basis JSON should parse");
+
+        let transform = basis_change_matrix_from_indices_to_override(
+            &glsm,
+            &computed_basis,
+            &matrix_basis,
+            "--dual-basis",
+        )
+        .expect("matrix source basis should be equivalent to computed basis");
+        assert_eq!(transform, int_matrix(&[&[1, 0], &[1, 1]]));
+
+        let transformed = transform_m_flux_from_override_to_computed_basis(
+            &glsm,
+            &computed_basis,
+            &matrix_basis,
+            &[5, 7],
+            "M",
+        );
+        assert_eq!(transformed, vec![5, 12]);
+    }
+
+    #[test]
+    fn matrix_dual_basis_override_builds_k_flux_transform() {
+        let glsm = int_matrix(&[&[1, 0, -1, -1], &[0, 1, -2, -3]]);
+        let computed_basis = vec![2, 3];
+        let matrix_basis =
+            serde_json::from_str::<BasisOverride>(r#"{"matrix":[[0,0,1,1],[0,0,0,1]]}"#)
+                .expect("matrix basis JSON should parse");
+
+        let transform = basis_change_matrix_from_override_to_indices(
+            &glsm,
+            &matrix_basis,
+            &computed_basis,
+            "--dual-basis",
+        )
+        .expect("matrix source basis should be equivalent to computed basis");
+        assert_eq!(transform, int_matrix(&[&[1, 0], &[-1, 1]]));
+
+        let transformed = transform_k_flux_from_override_to_computed_basis(
+            &glsm,
+            &computed_basis,
+            &matrix_basis,
+            &[5, 7],
+        );
+        assert_eq!(transformed, vec![-2, 7]);
     }
 
     #[test]

@@ -1203,17 +1203,18 @@ for the default mirror, primal fallback, branch-report degree summary, and
 corrected-chamber diagnostics. The one-off `mcallister_gv` and
 `mcallister_racetrack` binaries use the same bundled handoff.
 `mcallister_first_principles --dual-basis` JSON override now distinguishes index
-and matrix basis shapes. Index overrides continue through the current
-vector-basis path, while matrix overrides parse and then fail with an explicit
-unsupported-vector-path error instead of being ignored or misinterpreted as
-indices. The remaining gap is higher-level basis typing: APIs that still only
-accept vector basis indices need to either accept a matrix basis end-to-end or
-reject it loudly at every GA-facing boundary. Silently treating every basis as a
-vector of indices is not GA-ready. The core cygv input handoff now accepts both
-basis shapes, including in-basis intersections, but the current McAllister
-runner still stores its pipeline basis as `Vec<usize>` and remains
-intentionally vector-basis only until its flux, Kähler, and branch-volume
-transforms are generalized.
+and matrix basis shapes. Index overrides continue through the existing
+validation-source path, and matrix overrides now build the GLSM coordinate
+matrix and transform K/M flux source coordinates into Cyrus' computed vector
+basis instead of being ignored or misinterpreted as indices. The remaining gap
+is higher-level basis typing: APIs that still only accept vector basis indices
+need to either accept a matrix basis end-to-end or reject it loudly at every
+GA-facing boundary. Silently treating every basis as a vector of indices is not
+GA-ready. The core cygv input handoff now accepts both basis shapes, including
+in-basis intersections, but the current McAllister runner still stores its
+pipeline basis as `Vec<usize>` and remains vector-basis internally until its
+Kähler, KKLT, branch-volume, and production matrix-basis transforms are
+generalized.
 
 Second, cygv's final GV values are history-dependent. In
 `series_inversion.rs`, the threefold path chooses a candidate value from the
@@ -1243,8 +1244,9 @@ optimization would still be asking cygv/CKYZ the wrong finite-domain question.
 This makes the next source-derived implementation boundary precise:
 
 1. wire the CYTools generic matrix-basis construction path through higher-level
-   GA-facing APIs, or reject unsupported matrix bases loudly at APIs that still
-   accept only index bases;
+   GA-facing APIs beyond the now-supported K/M source-coordinate transform, or
+   reject unsupported matrix production bases loudly at APIs that still accept
+   only index bases;
 2. for one non-`P^2` rank-two support signature, construct the local toric/HKTY
    input from local coordinates and charge lattice without using saved GV rows;
 3. refine the current target-downset domain into a coefficient/path-history
