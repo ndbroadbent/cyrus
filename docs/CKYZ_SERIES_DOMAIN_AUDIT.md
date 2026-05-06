@@ -710,3 +710,43 @@ restricted finite domains per delta. The remaining source-aligned options are
 to shrink the global CKYZ coefficient-demand domain itself, or to factor
 coordinate exponentials across the whole grading-level inversion in a way that
 reuses state globally rather than per delta.
+
+## Rejected Exponential Recurrence Switch
+
+Another exact-but-rejected attempt replaced `CkyzIndexedSeries::exp` inside
+`q_delta = z^delta exp(delta.alpha)` with the standard total-degree recurrence
+for formal exponentials:
+
+```text
+|d| E_d = sum_{a+b=d} |a| A_a E_b
+```
+
+This recurrence matched the existing power-series exponential on a full
+total-degree domain and on the polygon-5 support-predicted domain for the four
+`q_delta` exponents selected by the McAllister-style previous-`q_N` heuristic:
+
+```text
+cargo test -p cyrus-core ckyz_indexed_exponential_recurrence_matches -- --nocapture
+cargo test -p cyrus-core ckyz_previous_qn_indexed_series_matches_direct_exponentials -- --nocapture
+cargo test -p cyrus-core ckyz_z_series_inversion_matches -- --nocapture
+cargo test -p cyrus-core ckyz_local_gv -- --nocapture
+```
+
+It was not retained because it regressed the actual McAllister gate. The N=4
+filtered `[4,3,2]` run stayed correct but slowed down:
+
+```text
+[CKYZ_Z_HISTORY] domain=1641 terminals=4 selected=434 candidate_evaluations=2842 exp_support_classes=6 elapsed=128.052208ms
+[CKYZ_Z_EXTRACT] degrees=434 nonzero_gvs=217 li2_coefficients=9443 li2_materialized_terms=20569 previous_qns=217 qn_reuses=214 delta_q_cache=4 elapsed=1.075920875s
+```
+
+The N=10 filtered gate reached the same history and then timed out after 240
+seconds without an extraction progress batch:
+
+```text
+[CKYZ_Z_HISTORY] domain=21721 terminals=10 selected=5235 candidate_evaluations=38195 exp_support_classes=6 elapsed=17.284536166s
+```
+
+This rules out merely changing the full-domain exponential algorithm. The
+problem is still the amount of finite-domain state being constructed before
+the first N=10 extraction batch can finish.
