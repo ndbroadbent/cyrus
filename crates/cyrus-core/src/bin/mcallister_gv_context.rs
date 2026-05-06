@@ -2328,6 +2328,39 @@ mod tests {
     }
 
     #[test]
+    fn bounded_cygv_closure_matches_actual_cygv_after_pair_seed_reduction() {
+        let seeds = vec![vec![1, 0], vec![0, 1], vec![1, 1], vec![2, 0]];
+        let reduced = cygv_pair_reduced_seed_generators(&seeds).unwrap();
+        assert_eq!(reduced, vec![vec![0, 1], vec![1, 0]]);
+
+        let closure = bounded_cygv_semigroup_closure(&seeds, &[1, 1], 2, 16).unwrap();
+        assert!(closure.completed);
+
+        let dim = 2;
+        let mut generator_data = Vec::new();
+        for seed in &seeds {
+            for &entry in seed {
+                generator_data.push(i32::try_from(entry).unwrap());
+            }
+        }
+        let generators = DMatrix::from_column_slice(dim, seeds.len(), &generator_data);
+        let grading = RowDVector::from_row_slice(&[1, 1]);
+        let semigroup = cygv::Semigroup::with_max_degree(generators, grading, 2).unwrap();
+        let actual = (0..semigroup.elements.ncols())
+            .map(|col| {
+                semigroup
+                    .elements
+                    .column(col)
+                    .iter()
+                    .map(|&entry| i64::from(entry))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<HashSet<_>>();
+
+        assert_eq!(closure.elements, actual);
+    }
+
+    #[test]
     fn path_history_probe_counts_cygv_monomial_map_predecessors() {
         let stats = MissingGvTargetStats {
             target_count: 1,
