@@ -750,3 +750,42 @@ seconds without an extraction progress batch:
 This rules out merely changing the full-domain exponential algorithm. The
 problem is still the amount of finite-domain state being constructed before
 the first N=10 extraction batch can finish.
+
+## Rejected Degree-Ordered Product Truncation
+
+A source read of `cygv`'s `Polynomial::mul` showed one multiplication detail
+that Cyrus did not mirror: cygv keeps nonzero monomial indices ordered by
+semigroup degree and breaks the inner product loop once `deg(lhs)+deg(rhs)`
+exceeds the finite semigroup cutoff. An exact Cyrus patch added cached total
+degrees to `CkyzMonomialDomain`, sorted the two sparse factor term lists by
+total degree on the no-addition-table path, and skipped the remaining inner
+terms once the product total degree exceeded the CKYZ domain maximum.
+
+The focused source-shape regressions passed:
+
+```text
+cargo fmt --check
+cargo test -p cyrus-core ckyz_previous_qn_indexed_series_matches_direct_exponentials -- --nocapture
+cargo test -p cyrus-core ckyz_z_series_inversion_matches_predicted_support_domain -- --nocapture
+```
+
+But it was not retained. The McAllister `[4,3,2]`, N=4 first-principles gate
+stayed correct but did not improve:
+
+```text
+[CKYZ_Z_HISTORY] domain=1641 terminals=4 selected=434 candidate_evaluations=2842 exp_support_classes=6 elapsed=127.440125ms
+[CKYZ_Z_EXTRACT] degrees=434 nonzero_gvs=217 li2_coefficients=9443 li2_materialized_terms=20569 previous_qns=217 qn_reuses=214 delta_q_cache=4 elapsed=870.761833ms
+```
+
+The `[4,3,2]`, N=10 filtered gate reached the same z-history and then timed
+out after 120 seconds before the first extraction progress batch:
+
+```text
+[CKYZ_Z_HISTORY] domain=21721 terminals=10 selected=5235 candidate_evaluations=38195 exp_support_classes=6 elapsed=17.287080625s
+```
+
+This tells us the large-domain product loop is not dominated by pairs whose
+total degree exceeds the target cutoff, at least not enough to overcome the
+new sorting overhead. The remaining blocker is still the breadth of exact
+finite-domain state needed for the first `q_delta`/`q_N` objects, not a missing
+degree-cutoff check inside multiplication.
