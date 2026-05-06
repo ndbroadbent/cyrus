@@ -276,11 +276,18 @@ shared-facet neighborhoods contain `12..367`, and the full facet unions contain
 origin-circuit relation nor the whole facet union; it still needs a
 source-derived chamber/face certificate.
 An opt-in exact-kernel certificate probe now makes the same point algebraically:
-the nine relation-support domains are all
-`origin_support_not_certified_as_codimension_one_face`; the four shared-facet
-domains under the 256-row guard are also not certified; and the broader
+the guarded domains now report their exact row-span rank before attempting a
+codimension-one supporting-face certificate. Non-codimension-one domains are
+reported as `origin_support_not_codimension_one_rank_*_dim_*`; true
+codimension-one domains that fail the support inequalities are reported
+separately as `origin_support_codimension_one_but_not_supporting`; and broader
 shared/facet-union domains are reported as skipped with their actual generator
-counts rather than sent into an unbounded integer-kernel computation.
+counts rather than sent into an unbounded integer-kernel computation. On the
+4-214-647 schema-`3` context, the relation supports are all rank `1` in
+dimension `214`. Under the 256-row guard, the checked shared-facet domains have
+ranks `9`, `13`, and `26` in dimension `214` (`rank 9` twice, `rank 13` once,
+and `rank 26` once). No checked origin-support domain is a codimension-one
+supporting face.
 
 ## McAllister Paper Boundary
 

@@ -372,9 +372,13 @@ to make the remaining GV layer more first-principles:
    the missing chamber semigroup.
    The opt-in exact-kernel certificate probe keeps this conservative: all nine
    relation-support domains and the four shared-facet domains below the
-   256-generator guard are not certified as codimension-one faces, while the
-   broader shared/facet-union domains are explicitly skipped with their actual
-   row counts.
+   256-generator guard now report their exact row-span rank before any
+   codimension-one certificate attempt, while the broader shared/facet-union
+   domains are explicitly skipped with their actual row counts. In the
+   schema-`3` 4-214-647 report, all nine relation supports are rank `1` in
+   dimension `214`; the checked shared-facet domains have ranks `9`, `13`, and
+   `26` in dimension `214`, so none of the checked source-support domains is a
+   codimension-one chamber face.
    The direct source
    read reinforces this: `cygv`
    obtains GV values from the full

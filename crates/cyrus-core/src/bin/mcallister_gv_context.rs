@@ -20,8 +20,8 @@ use cyrus_core::types::rational::Rational;
 use cyrus_core::types::tags::Finite;
 use cyrus_core::{
     Intersection, Point, compute_gv_invariants_with_explicit_semigroup,
-    compute_gv_invariants_with_provided_generators, diagnose_affine_toric_circuit,
-    integer_math::solve_linear_system_rational, utils::gcd_list_int,
+    compute_gv_invariants_with_provided_generators, curve_row_span_rank,
+    diagnose_affine_toric_circuit, integer_math::solve_linear_system_rational, utils::gcd_list_int,
 };
 
 #[derive(Debug, Deserialize)]
@@ -1200,9 +1200,19 @@ fn origin_circuit_ambient_support_face_certificate_status(
             generators.len()
         );
     }
+    let rank = match curve_row_span_rank(&generators) {
+        Ok(rank) => rank,
+        Err(_) => return "origin_support_certificate_error".to_string(),
+    };
+    if rank != context.dimension.saturating_sub(1) {
+        return format!(
+            "origin_support_not_codimension_one_rank_{rank}_dim_{}",
+            context.dimension
+        );
+    }
     match certify_supporting_mori_face_by_exact_kernel(&generators, context.degree_bounded_rays) {
         Ok(Some(_)) => "origin_support_certified_codimension_one_face".to_string(),
-        Ok(None) => "origin_support_not_certified_as_codimension_one_face".to_string(),
+        Ok(None) => "origin_support_codimension_one_but_not_supporting".to_string(),
         Err(_) => "origin_support_certificate_error".to_string(),
     }
 }
@@ -4388,7 +4398,7 @@ mod tests {
         );
         assert_eq!(
             certificates.shared_facet.as_deref(),
-            Some("origin_support_not_certified_as_codimension_one_face")
+            Some("origin_support_not_codimension_one_rank_2_dim_2")
         );
         assert_eq!(
             certificates.facet_union.as_deref(),
