@@ -85,7 +85,9 @@ pub use types::{F64, Finite, H11, H21, I32, I64, Neg, Pos};
 
 pub use basis::{basis_change_matrix, compute_divisor_basis, intersection_in_basis, is_unimodular};
 pub use curve_basis::{
-    DivisorBasis, compute_curve_basis_matrix, compute_curve_basis_matrix_for_divisor_basis,
+    DivisorBasis, apply_finite_f64_basis_transform, apply_integer_basis_transform,
+    apply_integer_basis_transform_transpose, compute_curve_basis_matrix,
+    compute_curve_basis_matrix_for_divisor_basis,
     compute_curve_basis_matrix_from_divisor_basis_matrix, curve_basis_matrix_without_origin_i64,
     curve_basis_q_matrix_for_divisor_basis_i64, divisor_basis_change_matrix,
     divisor_basis_glsm_coordinate_matrix,

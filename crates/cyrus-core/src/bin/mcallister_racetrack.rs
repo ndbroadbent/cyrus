@@ -15,7 +15,8 @@ use cyrus_core::types::f64::F64;
 use cyrus_core::types::i64::I64;
 use cyrus_core::types::tags::{Finite, Pos};
 use cyrus_core::{
-    DivisorBasis, Point, Polytope, Triangulation, basis_change_matrix, build_racetrack_terms,
+    DivisorBasis, Point, Polytope, Triangulation, apply_integer_basis_transform,
+    apply_integer_basis_transform_transpose, basis_change_matrix, build_racetrack_terms,
     compute_glsm_and_linrels, compute_grading_vector, compute_gv_invariants,
     compute_intersection_cytools, compute_linear_relations_no_origin, compute_mori_cone_cap_rays,
     compute_w0_from_terms, gv_divisor_basis_data, intersection_in_divisor_basis, is_unimodular,
@@ -142,55 +143,6 @@ fn simplex_point_count(simplices: &[Vec<usize>]) -> usize {
         .map_or(0, |idx| idx + 1)
 }
 
-fn transform_i64_coordinates(
-    transform: &[Vec<malachite::Integer>],
-    values: &[i64],
-    label: &str,
-) -> Vec<i64> {
-    if transform.len() != values.len() || transform.iter().any(|row| row.len() != values.len()) {
-        eprintln!("[ERROR] {label} basis transform shape does not match vector length");
-        std::process::exit(2);
-    }
-
-    transform
-        .iter()
-        .map(|row| {
-            let mut acc = malachite::Integer::from(0);
-            for (coeff, &value) in row.iter().zip(values.iter()) {
-                acc += coeff * malachite::Integer::from(value);
-            }
-            i64::try_from(&acc).unwrap_or_else(|_| {
-                eprintln!("[ERROR] transformed {label} coordinate does not fit in i64");
-                std::process::exit(2);
-            })
-        })
-        .collect()
-}
-
-fn transform_i64_coordinates_transpose(
-    transform: &[Vec<malachite::Integer>],
-    values: &[i64],
-    label: &str,
-) -> Vec<i64> {
-    if transform.len() != values.len() || transform.iter().any(|row| row.len() != values.len()) {
-        eprintln!("[ERROR] {label} basis transform shape does not match vector length");
-        std::process::exit(2);
-    }
-
-    (0..values.len())
-        .map(|col| {
-            let mut acc = malachite::Integer::from(0);
-            for (row, &value) in transform.iter().zip(values.iter()) {
-                acc += &row[col] * malachite::Integer::from(value);
-            }
-            i64::try_from(&acc).unwrap_or_else(|_| {
-                eprintln!("[ERROR] transformed {label} coordinate does not fit in i64");
-                std::process::exit(2);
-            })
-        })
-        .collect()
-}
-
 fn transform_m_flux_to_computed_basis(
     glsm: &[Vec<malachite::Integer>],
     computed_basis: &[usize],
@@ -213,7 +165,10 @@ fn transform_m_flux_to_computed_basis(
         "[INFO] transforming {label} from flux basis {:?} to computed basis {:?}",
         flux_basis, computed_basis
     );
-    transform_i64_coordinates(&transform, values, label)
+    apply_integer_basis_transform(&transform, values, label).unwrap_or_else(|e| {
+        eprintln!("[ERROR] failed to apply {label} basis transform: {e}");
+        std::process::exit(2);
+    })
 }
 
 fn transform_k_flux_to_computed_basis(
@@ -237,7 +192,10 @@ fn transform_k_flux_to_computed_basis(
         "[INFO] transforming K from flux basis {:?} to computed basis {:?}",
         flux_basis, computed_basis
     );
-    transform_i64_coordinates_transpose(&transform, values, "K")
+    apply_integer_basis_transform_transpose(&transform, values, "K").unwrap_or_else(|e| {
+        eprintln!("[ERROR] failed to apply K basis transform: {e}");
+        std::process::exit(2);
+    })
 }
 
 #[derive(Debug, Serialize)]

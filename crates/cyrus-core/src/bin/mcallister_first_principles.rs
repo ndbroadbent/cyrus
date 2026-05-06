@@ -73,9 +73,10 @@ use cyrus_core::vacuum::compute_vacuum;
 use cyrus_core::volume::bbhl_correction;
 use cyrus_core::{
     CurvePruningStrategy, DivisorBasis, GvDivisorBasisData, Point, Polytope, ToricCurveCandidate,
-    Triangulation, basis_change_matrix, build_racetrack_terms, compute_curve_basis_matrix,
-    compute_glsm_and_linrels, compute_grading_vector, compute_intersection_cytools,
-    compute_linear_relations_no_origin, compute_mori_cone_cap_rays,
+    Triangulation, apply_finite_f64_basis_transform, apply_integer_basis_transform,
+    apply_integer_basis_transform_transpose, basis_change_matrix, build_racetrack_terms,
+    compute_curve_basis_matrix, compute_glsm_and_linrels, compute_grading_vector,
+    compute_intersection_cytools, compute_linear_relations_no_origin, compute_mori_cone_cap_rays,
     compute_origin_circuit_curve_diagnostics, compute_regular_triangulation,
     compute_toric_curve_gv_diagnostics, compute_toric_two_face_curve_gv_invariants,
     compute_w0_from_terms, divisor_basis_change_matrix, effective_prime_divisors_from_curve_basis,
@@ -1263,60 +1264,6 @@ fn load_flux_vectors(data_dir: Option<&str>, manifest_dir: &PathBuf) -> (Vec<i64
     )
 }
 
-fn transform_i64_coordinates(
-    transform: &[Vec<malachite::Integer>],
-    values: &[i64],
-    label: &str,
-) -> Vec<i64> {
-    if transform.len() != values.len() || transform.iter().any(|row| row.len() != values.len()) {
-        eprintln!("[ERROR] {label} basis transform shape does not match vector length");
-        std::process::exit(2);
-    }
-
-    transform
-        .iter()
-        .map(|row| {
-            let mut acc = malachite::Integer::from(0);
-            for (coeff, &value) in row.iter().zip(values.iter()) {
-                acc += coeff * malachite::Integer::from(value);
-            }
-            i64::try_from(&acc).unwrap_or_else(|_| {
-                eprintln!("[ERROR] transformed {label} coordinate does not fit in i64");
-                std::process::exit(2);
-            })
-        })
-        .collect()
-}
-
-fn transform_f64_coordinates(
-    transform: &[Vec<malachite::Integer>],
-    values: &[F64<Finite>],
-    label: &str,
-) -> Vec<F64<Finite>> {
-    if transform.len() != values.len() || transform.iter().any(|row| row.len() != values.len()) {
-        eprintln!("[ERROR] {label} basis transform shape does not match vector length");
-        std::process::exit(2);
-    }
-
-    transform
-        .iter()
-        .map(|row| {
-            let value = row
-                .iter()
-                .zip(values.iter())
-                .map(|(coeff, value)| {
-                    let coeff_f = coeff
-                        .to_string()
-                        .parse::<f64>()
-                        .expect("basis transform coefficient fits in f64");
-                    coeff_f * value.get()
-                })
-                .sum::<f64>();
-            F64::<Finite>::new(value).expect("transformed coordinate is finite")
-        })
-        .collect()
-}
-
 fn transform_kahler_to_computed_basis(
     glsm: &[Vec<malachite::Integer>],
     computed_basis: &[usize],
@@ -1356,7 +1303,10 @@ fn transform_kahler_to_computed_basis_with_logging(
             source_basis, computed_basis
         );
     }
-    transform_f64_coordinates(&transform, values, "Kähler")
+    apply_finite_f64_basis_transform(&transform, values, "Kähler").unwrap_or_else(|e| {
+        eprintln!("[ERROR] failed to apply Kähler basis transform: {e}");
+        std::process::exit(2);
+    })
 }
 
 fn compute_b_field_gamma_for_o7_divisors(
@@ -1383,30 +1333,6 @@ fn compute_b_field_gamma_for_o7_divisors(
     }
 
     gamma.into_iter().map(I64::<Finite>::new).collect()
-}
-
-fn transform_i64_coordinates_transpose(
-    transform: &[Vec<malachite::Integer>],
-    values: &[i64],
-    label: &str,
-) -> Vec<i64> {
-    if transform.len() != values.len() || transform.iter().any(|row| row.len() != values.len()) {
-        eprintln!("[ERROR] {label} basis transform shape does not match vector length");
-        std::process::exit(2);
-    }
-
-    (0..values.len())
-        .map(|col| {
-            let mut acc = malachite::Integer::from(0);
-            for (row, &value) in transform.iter().zip(values.iter()) {
-                acc += &row[col] * malachite::Integer::from(value);
-            }
-            i64::try_from(&acc).unwrap_or_else(|_| {
-                eprintln!("[ERROR] transformed {label} coordinate does not fit in i64");
-                std::process::exit(2);
-            })
-        })
-        .collect()
 }
 
 fn basis_matrix_to_integer(basis_matrix: &[Vec<i64>]) -> Vec<Vec<malachite::Integer>> {
@@ -1492,7 +1418,10 @@ fn transform_m_flux_to_computed_basis(
         "[INFO] transforming {label} from flux basis {:?} to computed basis {:?}",
         flux_basis, computed_basis
     );
-    transform_i64_coordinates(&transform, values, label)
+    apply_integer_basis_transform(&transform, values, label).unwrap_or_else(|e| {
+        eprintln!("[ERROR] failed to apply {label} basis transform: {e}");
+        std::process::exit(2);
+    })
 }
 
 fn transform_m_flux_from_override_to_computed_basis(
@@ -1517,7 +1446,10 @@ fn transform_m_flux_from_override_to_computed_basis(
         std::process::exit(2);
     }
     eprintln!("[INFO] transforming {label} from --dual-basis source coordinates to computed basis");
-    transform_i64_coordinates(&transform, values, label)
+    apply_integer_basis_transform(&transform, values, label).unwrap_or_else(|e| {
+        eprintln!("[ERROR] failed to apply {label} basis transform: {e}");
+        std::process::exit(2);
+    })
 }
 
 fn transform_k_flux_to_computed_basis(
@@ -1541,7 +1473,10 @@ fn transform_k_flux_to_computed_basis(
         "[INFO] transforming K from flux basis {:?} to computed basis {:?}",
         flux_basis, computed_basis
     );
-    transform_i64_coordinates_transpose(&transform, values, "K")
+    apply_integer_basis_transform_transpose(&transform, values, "K").unwrap_or_else(|e| {
+        eprintln!("[ERROR] failed to apply K basis transform: {e}");
+        std::process::exit(2);
+    })
 }
 
 fn transform_k_flux_from_override_to_computed_basis(
@@ -1565,7 +1500,10 @@ fn transform_k_flux_from_override_to_computed_basis(
         std::process::exit(2);
     }
     eprintln!("[INFO] transforming K from --dual-basis source coordinates to computed basis");
-    transform_i64_coordinates_transpose(&transform, values, "K")
+    apply_integer_basis_transform_transpose(&transform, values, "K").unwrap_or_else(|e| {
+        eprintln!("[ERROR] failed to apply K basis transform: {e}");
+        std::process::exit(2);
+    })
 }
 
 fn load_kklt_inputs(data_dir: Option<&str>, manifest_dir: &PathBuf) -> (Vec<I64<Pos>>, Vec<usize>) {

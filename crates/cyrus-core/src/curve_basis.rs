@@ -4,6 +4,8 @@
 
 use crate::error::{Error, Result};
 use crate::integer_math::{hermite_normal_form, invert_matrix, sublattice_index_snf};
+use crate::types::f64::F64;
+use crate::types::tags::Finite;
 use malachite::Integer;
 use malachite::Rational;
 
@@ -89,6 +91,105 @@ pub fn divisor_basis_change_matrix(
     let from_coords = divisor_basis_glsm_coordinate_matrix(glsm, from_basis)?;
     let to_coords = divisor_basis_glsm_coordinate_matrix(glsm, to_basis)?;
     basis_change_matrix_from_coordinate_matrices(&from_coords, &to_coords)
+}
+
+/// Apply an integer basis transform to integer coordinates.
+///
+/// Given a transform `T` and coordinate vector `v`, returns `T v`. This is the
+/// convention used for M-flux and Kähler-coordinate style transforms in the
+/// McAllister pipeline.
+///
+/// # Errors
+/// Returns an error if the transform is not square, the vector length is
+/// inconsistent, or an output coordinate does not fit in `i64`.
+pub fn apply_integer_basis_transform(
+    transform: &[Vec<Integer>],
+    values: &[i64],
+    context: &str,
+) -> Result<Vec<i64>> {
+    validate_basis_transform_shape(transform, values.len(), context)?;
+    transform
+        .iter()
+        .map(|row| {
+            let mut acc = Integer::from(0);
+            for (coeff, &value) in row.iter().zip(values.iter()) {
+                acc += coeff * Integer::from(value);
+            }
+            i64::try_from(&acc).map_err(|_| {
+                Error::InvalidInput(format!(
+                    "{context} transformed coordinate does not fit in i64"
+                ))
+            })
+        })
+        .collect()
+}
+
+/// Apply the transpose of an integer basis transform to integer coordinates.
+///
+/// Given a transform `T` and coordinate vector `v`, returns `T^T v`. This is
+/// the convention used for K-flux/source-coordinate transforms.
+///
+/// # Errors
+/// Returns an error if the transform is not square, the vector length is
+/// inconsistent, or an output coordinate does not fit in `i64`.
+pub fn apply_integer_basis_transform_transpose(
+    transform: &[Vec<Integer>],
+    values: &[i64],
+    context: &str,
+) -> Result<Vec<i64>> {
+    let len = validate_basis_transform_shape(transform, values.len(), context)?;
+    (0..len)
+        .map(|col| {
+            let mut acc = Integer::from(0);
+            for (row, &value) in transform.iter().zip(values.iter()) {
+                acc += &row[col] * Integer::from(value);
+            }
+            i64::try_from(&acc).map_err(|_| {
+                Error::InvalidInput(format!(
+                    "{context} transformed coordinate does not fit in i64"
+                ))
+            })
+        })
+        .collect()
+}
+
+/// Apply an integer basis transform to finite floating-point coordinates.
+///
+/// Given a transform `T` and coordinate vector `v`, returns `T v`, preserving
+/// the `F64<Finite>` boundary for Kähler-style coordinates.
+///
+/// # Errors
+/// Returns an error if the transform shape is inconsistent, a transform
+/// coefficient cannot be represented as finite `f64`, or an output coordinate
+/// is not finite.
+pub fn apply_finite_f64_basis_transform(
+    transform: &[Vec<Integer>],
+    values: &[F64<Finite>],
+    context: &str,
+) -> Result<Vec<F64<Finite>>> {
+    validate_basis_transform_shape(transform, values.len(), context)?;
+    transform
+        .iter()
+        .map(|row| {
+            let mut out = F64::<Finite>::ZERO;
+            for (coeff, value) in row.iter().zip(values.iter()) {
+                let raw_coeff = coeff.to_string().parse::<f64>().map_err(|_| {
+                    Error::InvalidInput(format!(
+                        "{context} basis transform coefficient does not fit in f64"
+                    ))
+                })?;
+                let coeff_f = F64::<Finite>::new(raw_coeff).ok_or_else(|| {
+                    Error::InvalidInput(format!(
+                        "{context} basis transform coefficient is not finite"
+                    ))
+                })?;
+                out = out + coeff_f * *value;
+            }
+            F64::<Finite>::new(out.get()).ok_or_else(|| {
+                Error::InvalidInput(format!("{context} transformed coordinate is not finite"))
+            })
+        })
+        .collect()
 }
 
 /// Compute the curve basis matrix given GLSM linear relations and a divisor basis.
@@ -293,6 +394,32 @@ fn validate_glsm_matrix(glsm: &[Vec<Integer>]) -> Result<(usize, usize)> {
         }
     }
     Ok((glsm.len(), n_cols))
+}
+
+fn validate_basis_transform_shape(
+    transform: &[Vec<Integer>],
+    value_len: usize,
+    context: &str,
+) -> Result<usize> {
+    if transform.is_empty() {
+        return Err(Error::InvalidInput(format!(
+            "{context} basis transform is empty"
+        )));
+    }
+    let len = transform.len();
+    if value_len != len {
+        return Err(Error::InvalidInput(format!(
+            "{context} basis transform shape does not match vector length"
+        )));
+    }
+    for row in transform {
+        if row.len() != len {
+            return Err(Error::InvalidInput(format!(
+                "{context} basis transform is not square"
+            )));
+        }
+    }
+    Ok(len)
 }
 
 fn validate_matrix_basis_shape(
@@ -657,6 +784,37 @@ mod tests {
 
         assert_eq!(computed_to_matrix, int_matrix(&[&[1, 0], &[1, 1]]));
         assert_eq!(matrix_to_computed, int_matrix(&[&[1, 0], &[-1, 1]]));
+    }
+
+    #[test]
+    fn basis_transform_helpers_apply_integer_and_finite_coordinates() {
+        let transform = int_matrix(&[&[1, 0], &[1, 1]]);
+        let values = vec![5, 7];
+        let finite_values = vec![
+            F64::<Finite>::new(5.0).unwrap(),
+            F64::<Finite>::new(7.0).unwrap(),
+        ];
+
+        let integer = apply_integer_basis_transform(&transform, &values, "unit").unwrap();
+        let transpose =
+            apply_integer_basis_transform_transpose(&transform, &values, "unit").unwrap();
+        let finite = apply_finite_f64_basis_transform(&transform, &finite_values, "unit").unwrap();
+
+        assert_eq!(integer, vec![5, 12]);
+        assert_eq!(transpose, vec![12, 7]);
+        assert_eq!(
+            finite.iter().map(|value| value.get()).collect::<Vec<_>>(),
+            vec![5.0, 12.0]
+        );
+    }
+
+    #[test]
+    fn basis_transform_helpers_reject_bad_shapes() {
+        let transform = int_matrix(&[&[1, 0, 0], &[0, 1, 0]]);
+        let err = apply_integer_basis_transform(&transform, &[1, 2], "unit")
+            .expect_err("non-square transform should fail");
+
+        assert!(err.to_string().contains("not square"));
     }
 
     #[test]
