@@ -335,7 +335,11 @@ to make the remaining GV layer more first-principles:
    `source_derived_oriented_q_matrix_layout=9`. The same report records
    `local_gkz_relation_includes_origin_point_requires_phase_mapping=9`, so the
    remaining local `q` phase/chamber mapping is source data, not a matrix
-   transpose issue. The missing source-input counts remain nine each for
+   transpose issue. It also records CYTools' `mori_cone_cap` origin-circuit
+   retention rule: all nine candidates have negative origin coefficient and
+   aggregate as `source_cytools_retains_negative_origin_coefficient=9`, so they
+   are source-derived Mori-cap origin-circuit rows but not complete local
+   `cygv` inputs. The missing source-input counts remain nine each for
    `local_semigroup_generators`, `local_q_matrix_phase`,
    `local_intersection_tensor`, and `local_chamber_certificate`, so none is a
    valid actual-`cygv` call yet. The direct source read reinforces this: `cygv`

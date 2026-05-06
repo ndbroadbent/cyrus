@@ -163,6 +163,7 @@ struct ContextReport {
     local_cygv_q_matrix_orientation_status_counts: BTreeMap<String, usize>,
     local_cygv_q_matrix_layout_status_counts: BTreeMap<String, usize>,
     local_cygv_origin_point_status_counts: BTreeMap<String, usize>,
+    local_cytools_origin_circuit_status_counts: BTreeMap<String, usize>,
     local_cygv_grading_vector_status_counts: BTreeMap<String, usize>,
     targets: Vec<TargetReport>,
 }
@@ -251,6 +252,8 @@ struct LocalCygvInputSkeleton {
     support_point_indices: Vec<usize>,
     support_contains_origin_point: bool,
     local_cygv_origin_point_status: String,
+    origin_point_relation_coefficient: Option<i64>,
+    local_cytools_origin_circuit_status: String,
     local_q_matrix_rows: Vec<Vec<i64>>,
     target_relation_coefficients: Option<Vec<i64>>,
     target_relation_in_charge_basis: Option<Vec<i64>>,
@@ -1174,6 +1177,11 @@ fn local_cygv_input_skeleton(
                         .collect::<Vec<_>>()
                 })
             });
+    let (origin_point_relation_coefficient, local_cytools_origin_circuit_status) =
+        local_cytools_origin_circuit_status(
+            &support_point_indices,
+            target_relation_coefficients.as_deref(),
+        );
     let target_relation_in_charge_basis = target_relation_coefficients
         .as_ref()
         .map(|target| {
@@ -1223,6 +1231,8 @@ fn local_cygv_input_skeleton(
         support_point_indices,
         support_contains_origin_point,
         local_cygv_origin_point_status,
+        origin_point_relation_coefficient,
+        local_cytools_origin_circuit_status,
         local_q_matrix_rows,
         target_relation_coefficients,
         target_relation_in_charge_basis,
@@ -1286,6 +1296,33 @@ fn local_cygv_q_matrix_layout_candidate(
         Some(wrapper_q_matrix),
         "source_derived_oriented_q_matrix_layout".to_string(),
     )
+}
+
+fn local_cytools_origin_circuit_status(
+    support_point_indices: &[usize],
+    target_relation_coefficients: Option<&[i64]>,
+) -> (Option<i64>, String) {
+    let Some(origin_position) = support_point_indices.iter().position(|&point| point == 0) else {
+        return (None, "not_cytools_origin_circuit_support".to_string());
+    };
+    let Some(coefficients) = target_relation_coefficients else {
+        return (None, "origin_relation_coefficients_unavailable".to_string());
+    };
+    if coefficients.len() != support_point_indices.len() {
+        return (
+            None,
+            "origin_relation_coefficients_support_mismatch".to_string(),
+        );
+    }
+    let origin_coefficient = coefficients[origin_position];
+    let status = if origin_coefficient < 0 {
+        "source_cytools_retains_negative_origin_coefficient"
+    } else if origin_coefficient == 0 {
+        "source_cytools_skips_zero_origin_coefficient"
+    } else {
+        "source_cytools_rejects_positive_origin_coefficient"
+    };
+    (Some(origin_coefficient), status.to_string())
 }
 
 fn local_cygv_q_matrix_orientation_candidate(
@@ -3414,6 +3451,11 @@ fn build_report(
             .iter()
             .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
     );
+    let local_cytools_origin_circuit_status_counts = local_cytools_origin_circuit_status_counts(
+        targets
+            .iter()
+            .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
+    );
     let local_cygv_grading_vector_status_counts = local_cygv_grading_vector_status_counts(
         targets
             .iter()
@@ -3443,6 +3485,7 @@ fn build_report(
         local_cygv_q_matrix_orientation_status_counts,
         local_cygv_q_matrix_layout_status_counts,
         local_cygv_origin_point_status_counts,
+        local_cytools_origin_circuit_status_counts,
         local_cygv_grading_vector_status_counts,
         targets,
     }
@@ -3547,6 +3590,18 @@ fn local_cygv_origin_point_status_counts<'a>(
     for skeleton in skeletons {
         *counts
             .entry(skeleton.local_cygv_origin_point_status.clone())
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cytools_origin_circuit_status_counts<'a>(
+    skeletons: impl IntoIterator<Item = &'a LocalCygvInputSkeleton>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for skeleton in skeletons {
+        *counts
+            .entry(skeleton.local_cytools_origin_circuit_status.clone())
             .or_insert(0usize) += 1;
     }
     counts
@@ -3845,6 +3900,11 @@ mod tests {
             skeleton.local_cygv_origin_point_status,
             "local_gkz_relation_includes_origin_point_requires_phase_mapping"
         );
+        assert_eq!(skeleton.origin_point_relation_coefficient, Some(-1));
+        assert_eq!(
+            skeleton.local_cytools_origin_circuit_status,
+            "source_cytools_retains_negative_origin_coefficient"
+        );
         assert_eq!(
             skeleton.local_q_matrix_rows,
             vec![vec![1], vec![-2], vec![-1], vec![3], vec![-1]]
@@ -3977,6 +4037,8 @@ mod tests {
             support_point_indices: Vec::new(),
             support_contains_origin_point: false,
             local_cygv_origin_point_status: String::new(),
+            origin_point_relation_coefficient: None,
+            local_cytools_origin_circuit_status: String::new(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -3998,6 +4060,8 @@ mod tests {
             support_point_indices: Vec::new(),
             support_contains_origin_point: false,
             local_cygv_origin_point_status: String::new(),
+            origin_point_relation_coefficient: None,
+            local_cytools_origin_circuit_status: String::new(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4049,6 +4113,8 @@ mod tests {
             support_point_indices: Vec::new(),
             support_contains_origin_point: false,
             local_cygv_origin_point_status: String::new(),
+            origin_point_relation_coefficient: None,
+            local_cytools_origin_circuit_status: String::new(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4067,6 +4133,8 @@ mod tests {
             support_point_indices: Vec::new(),
             support_contains_origin_point: false,
             local_cygv_origin_point_status: String::new(),
+            origin_point_relation_coefficient: None,
+            local_cytools_origin_circuit_status: String::new(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4085,6 +4153,8 @@ mod tests {
             support_point_indices: Vec::new(),
             support_contains_origin_point: false,
             local_cygv_origin_point_status: String::new(),
+            origin_point_relation_coefficient: None,
+            local_cytools_origin_circuit_status: String::new(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4140,6 +4210,8 @@ mod tests {
             support_point_indices: Vec::new(),
             support_contains_origin_point: false,
             local_cygv_origin_point_status: String::new(),
+            origin_point_relation_coefficient: None,
+            local_cytools_origin_circuit_status: String::new(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4161,6 +4233,8 @@ mod tests {
             support_point_indices: Vec::new(),
             support_contains_origin_point: false,
             local_cygv_origin_point_status: String::new(),
+            origin_point_relation_coefficient: None,
+            local_cytools_origin_circuit_status: String::new(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4192,6 +4266,8 @@ mod tests {
             support_point_indices: Vec::new(),
             support_contains_origin_point: false,
             local_cygv_origin_point_status: String::new(),
+            origin_point_relation_coefficient: None,
+            local_cytools_origin_circuit_status: String::new(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4211,6 +4287,8 @@ mod tests {
             support_point_indices: Vec::new(),
             support_contains_origin_point: false,
             local_cygv_origin_point_status: String::new(),
+            origin_point_relation_coefficient: None,
+            local_cytools_origin_circuit_status: String::new(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4230,6 +4308,8 @@ mod tests {
             support_point_indices: Vec::new(),
             support_contains_origin_point: false,
             local_cygv_origin_point_status: String::new(),
+            origin_point_relation_coefficient: None,
+            local_cytools_origin_circuit_status: String::new(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4269,6 +4349,9 @@ mod tests {
             support_contains_origin_point: true,
             local_cygv_origin_point_status:
                 "local_gkz_relation_includes_origin_point_requires_phase_mapping".to_string(),
+            origin_point_relation_coefficient: Some(-1),
+            local_cytools_origin_circuit_status:
+                "source_cytools_retains_negative_origin_coefficient".to_string(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4289,6 +4372,8 @@ mod tests {
             support_point_indices: Vec::new(),
             support_contains_origin_point: false,
             local_cygv_origin_point_status: "local_support_has_no_origin_point".to_string(),
+            origin_point_relation_coefficient: None,
+            local_cytools_origin_circuit_status: "not_cytools_origin_circuit_support".to_string(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4310,6 +4395,9 @@ mod tests {
             support_contains_origin_point: true,
             local_cygv_origin_point_status:
                 "local_gkz_relation_includes_origin_point_requires_phase_mapping".to_string(),
+            origin_point_relation_coefficient: Some(-1),
+            local_cytools_origin_circuit_status:
+                "source_cytools_retains_negative_origin_coefficient".to_string(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4366,6 +4454,21 @@ mod tests {
         assert_eq!(
             origin_counts
                 .get("local_support_has_no_origin_point")
+                .copied(),
+            Some(1)
+        );
+
+        let cytools_origin_counts =
+            local_cytools_origin_circuit_status_counts([&first, &second, &third]);
+        assert_eq!(
+            cytools_origin_counts
+                .get("source_cytools_retains_negative_origin_coefficient")
+                .copied(),
+            Some(2)
+        );
+        assert_eq!(
+            cytools_origin_counts
+                .get("not_cytools_origin_circuit_support")
                 .copied(),
             Some(1)
         );

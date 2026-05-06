@@ -1886,8 +1886,13 @@ The current `cygv` crate source sharpens the same boundary:
   nine local relations include the lattice origin point, aggregated as
   `local_gkz_relation_includes_origin_point_requires_phase_mapping=9`. This is
   why the local `q` phase/chamber mapping remains a real source input rather
-  than a formatting detail. The remaining missing inputs are counted explicitly:
-  each of the nine skeletons is still missing
+  than a formatting detail. The same report now checks the CYTools
+  `mori_cone_cap` origin-circuit retention rule: all nine skeletons have
+  negative origin coefficient and aggregate as
+  `source_cytools_retains_negative_origin_coefficient=9`. Thus the rows are
+  source-derived Mori-cap origin-circuit rays, but that is still not enough to
+  make them complete local `cygv` inputs. The remaining missing inputs are
+  counted explicitly: each of the nine skeletons is still missing
   `local_semigroup_generators`, `local_q_matrix_phase`,
   `local_intersection_tensor`, and `local_chamber_certificate`.
 
