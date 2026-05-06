@@ -26,7 +26,7 @@ run pass. Any remaining mismatch must be explicit and localizable.
 | High-dimensional selected small toric curves | Cyrus computes Mori-cap rays, applies the input-chamber volume cutoff, and matches the 4-214-647 `small_curves.dat` checkpoint with pair pruning | Implemented for checkpoint rule |
 | Small-curve pruning semantics | `CurvePruningStrategy::{PairDecomposable, FiniteSemigroup}` exposes the checkpoint rule and stricter finite-set semigroup diagnostic separately | Implemented, with documented mismatch |
 | Small toric GV values | Toric two-face/origin-circuit formulas match `small_curves_gv.dat` for 4-214-647; the source-derived sparse resolved-conifold origin-circuit pattern `(-1,-1,1,1)` is now covered in corrected-chamber diagnostics | Implemented for covered selected-toric formulas |
-| Potent-ray convergence data | `curve_row_span_rank`, `potent_ray_convergence`, `diagnose_affine_toric_circuit`, CKYZ local-surface identification, source-derived local CKYZ GV extraction, and the Stage 5 potent-ray diagnostics compute rank, corrected-Kähler volumes, affine local-circuit structure, `log xi_n` slopes, first-four GV checks for all 395 rank-two CKYZ rows, all-ten checks for the canonical F0 `[1,1]`/`[1,2]` and F1 `[2,1]`/`[3,1]` families, and a first-five regression for polygon-5 `[4,3,2]`; targeted CKYZ extraction now has the broad past-downset API, a cygv-style generated semigroup API, a support-predicted API used by the McAllister rank-two CKYZ gate, and coefficient-level z-residual `Li2(q_N)` updates for narrowed targets; `ckyz_local_surface_causal_domain_spec` derives coordinate generators and finite-limit grading from matched CKYZ source data for guardrail checks | Partially implemented; full ten-entry extraction across all families, rank-four contexts, direct coefficient-history domains for large McAllister supports, and generated low-dimensional-face ray sampling still missing |
+| Potent-ray convergence data | `curve_row_span_rank`, `potent_ray_convergence`, `diagnose_affine_toric_circuit`, CKYZ local-surface identification, source-derived local CKYZ GV extraction, and the Stage 5 potent-ray diagnostics compute rank, corrected-Kähler volumes, affine local-circuit structure, `log xi_n` slopes, first-four GV checks for all 395 rank-two CKYZ rows, all-ten checks for the canonical F0 `[1,1]`/`[1,2]` and F1 `[2,1]`/`[3,1]` families, and a first-seven regression for polygon-5 `[4,3,2]`; targeted CKYZ extraction now has the broad past-downset API, a cygv-style generated semigroup API, a support-predicted API used by the McAllister rank-two CKYZ gate, and coefficient-level z-residual `Li2(q_N)` updates for narrowed targets; `ckyz_local_surface_causal_domain_spec` derives coordinate generators and finite-limit grading from matched CKYZ source data for guardrail checks | Partially implemented; full ten-entry extraction across all families, rank-four contexts, direct coefficient-history domains for large McAllister supports, and generated low-dimensional-face ray sampling still missing |
 | Finite-cutoff nilpotent-ray preclassification | `detect_apparent_nilpotent_ray_from_gv_multiples` ports the McAllister appendix criterion for adding a primitive ray to the apparently nilpotent set from finite GV multiples; `detect_apparent_nilpotent_rays_from_gv_table` scans a finite GV table for primitive seed rays and builds the initial `N` set; `partition_finite_cutoff_gv_charges_by_nilpotence` exposes the resulting finite `C \ N` charge partition; `finite_cutoff_gv_charges_excluding_primitive_rays` builds finite-table complements such as `C \ F0` for the second nop pass; `finite_gv_nonzero_degree_slice_points` extracts exact-degree nonzero charges from a finite GV table for diagnostics; `nilpotent_ray_degree_slice_for_cutoff_fraction` computes the half/full cutoff `k*C` slice origins; `nilpotent_ray_slice_comparison_points` enumerates comparison-ray integer points on those slices; `nilpotent_ray_lll_reduced_slice_distance` applies the CYTools-style LLL transform to an explicit same-degree slice lattice and computes the comparison-ray infinity norm; `nilpotent_ray_divergence_check_from_slice_distances` and `nilpotent_ray_divergence_check_with_explicit_slice_lattices` perform the paper's `d' > d` comparison once half/full slice lattices are supplied; `classify_nilpotent_rays_from_two_pass_divergence_checks` maps first-pass and second-pass checks to provisional `F0` and final `F`; `classify_nop_rays_from_finite_gv_table` applies the finite-cutoff algorithm to an already-computed finite GV table; `check_extremal_mori_ray_separator` verifies exact separator certificates for primitive Mori-ray extremality, and `find_extremal_mori_ray_separator` enumerates exact DDM separators for a supplied finite generator cone | Finite-table `N`/`C \ N`, complements/slice extraction, slice construction, LLL/norm comparison, two-pass classification control flow, and exact finite-generator ray-extremality verification/search exist; the reusable blocker is still upstream: producing/certifying the finite GV table and chamber/slice source without replay, plus proving the supplied generator set is the relevant Mori/chamber context and deriving flop data |
 | Flop/corrected-chamber continuation | Negative small-curve volumes and real-axis dilog branch behavior are classified; even-parity branch-cut failures are explicit via `GvDilogFailure`; exact flop transforms for `kappa`, `c2`, GV reassignment, the stable-Weyl reflection matrix, the Weyl-vs-flop tensor equality check, the exact divisor-quadratic vanishing check on a curve hyperplane, `check_stable_weyl_candidate_certificate`, and finder-backed `find_stable_weyl_candidate_certificate` are now exposed as algebraic primitives | Diagnosed, not resolved |
 | KKLT corrected Kähler solve | Runner reaches a no-replay corrected Kähler vector and corrected volume without loading `corrected_kahler_param.dat` by default | Implemented but not exact |
@@ -85,13 +85,14 @@ run pass. Any remaining mismatch must be explicit and localizable.
    `CYRUS_CKYZ_TARGET_DIRECTION`; `N=4` now passes as the default first-principles
    gate through the support-predicted API in about 132 seconds. The newer
    coefficient-level z-residual extraction avoids materializing full `Li2(q_N)`
-   series for narrowed targets and makes focused polygon-5 `[4,3,2]`, `N=5`
-   pass in about 6.4 seconds. Focused polygon-5 `[4,3,2]`, `N=10` still exceeds
-   a 300 second timeout. A traced `N=10` run now shows support prediction is no
-   longer the slow step (`broad=26691`, `selected=21721`, about 9 seconds);
-   z-history selection produces `5235` residual degrees in about 17 seconds, and
-   the coefficient-level residual extraction still reaches only grading 4 before
-   a 180 second timeout. The remaining task is therefore the sharper live
+   series for narrowed targets and makes focused polygon-5 `[4,3,2]`, `N=7`
+   pass in about 46 seconds; `N=8` also passes as a diagnostic in about
+   118 seconds. Focused polygon-5 `[4,3,2]`, `N=10` still exceeds a 300 second
+   timeout. A traced `N=10` run now shows support prediction is no longer the
+   slow step (`broad=26691`, `selected=21721`, about 9 seconds); z-history
+   selection produces `5235` residual degrees in about 17 seconds, and the
+   coefficient-level residual extraction still reaches only grading 4 before a
+   180 second timeout. The remaining task is therefore the sharper live
    residual/source-history domain needed for full rows and rank-four contexts,
    not a compact-`cygv` reimplementation.
 3. Pair-pruned selected curves match McAllister's `small_curves.dat`, while a
@@ -136,7 +137,7 @@ to make the remaining GV layer more first-principles:
    `potent_rays*.dat`. Rank-two CKYZ rows now have first-four checks, the F0
    `[1,1]`/`[1,2]` and F1 `[2,1]`/`[3,1]` families have explicit all-ten
    first-principles regressions, and the polygon-5 `[4,3,2]` family has a
-   focused first-five regression using coefficient-level residual updates. Next
+   focused first-seven regression using coefficient-level residual updates. Next
    make the local extractor source/history-targeted enough for complete rows
    across the larger directions.
    A first causal-domain extraction API now exists and is checked on local
@@ -145,7 +146,7 @@ to make the remaining GV layer more first-principles:
    source-weighted semigroup is still too broad for the default all-row gate, so
    the next step is the narrower source/history domain needed to raise the
    rank-two potent-ray checks beyond the current first-four gate and the
-   polygon-5 first-five checkpoint. After that, handle the rank-four affine
+   polygon-5 first-seven checkpoint. After that, handle the rank-four affine
    supports.
 2. Close the remaining CYTools basis contract gap for GA use: matrix-basis
    projection, dual curve-basis construction, no-origin q-matrix construction,
