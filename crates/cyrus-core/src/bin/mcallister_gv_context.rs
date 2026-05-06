@@ -1087,6 +1087,7 @@ fn cygv_compact_input_readiness(
             "local_grading_vector".to_string(),
             "local_q_matrix_orientation_and_phase".to_string(),
             "local_intersection_tensor".to_string(),
+            "local_chamber_certificate".to_string(),
             "target_class_to_local_semigroup_coordinate".to_string(),
         ],
     )
@@ -1177,6 +1178,7 @@ fn local_cygv_input_skeleton(
             "local_grading_vector".to_string(),
             "local_q_matrix_orientation_and_phase".to_string(),
             "local_intersection_tensor".to_string(),
+            "local_chamber_certificate".to_string(),
         ],
     }))
 }
@@ -3364,6 +3366,7 @@ mod tests {
                 "local_grading_vector",
                 "local_q_matrix_orientation_and_phase",
                 "local_intersection_tensor",
+                "local_chamber_certificate",
                 "target_class_to_local_semigroup_coordinate",
             ]
         );
