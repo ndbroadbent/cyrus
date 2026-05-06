@@ -558,12 +558,14 @@ z-series tests still match the flat-coordinate extractor, and the McAllister
 `[4,3,2]`, N=4 first-principles gate reports:
 
 ```text
-[CKYZ_Z_EXTRACT] degrees=434 nonzero_gvs=217 li2_coefficients=9443 previous_qns=217 qn_reuses=214 delta_q_cache=4 elapsed=858.176958ms
+[CKYZ_Z_EXTRACT] degrees=434 nonzero_gvs=217 li2_coefficients=9443 li2_materialized_terms=20569 previous_qns=217 qn_reuses=214 delta_q_cache=4 elapsed=851.432209ms
 ```
 
-The N=10 filtered gate still did not finish; it was stopped after about five
-minutes after completing z-history selection but before the extraction trace.
-So the source-shape is now right, but full `Li2(q_N)` materialization is still
-too broad at 5,235 history degrees. The next change should keep the same
-grading-batched `q_N` cache but update only demanded residual coefficients from
-`Li2(q_N)`, rather than expanding every Li2 monomial in the finite domain.
+With opt-in progress tracing, the same N=4 run materialized 20,569 Li2 terms
+to update 9,443 selected residual coefficients. The N=10 filtered gate still
+did not finish: under a 180 second timeout it completed z-history selection
+but did not finish the first extraction progress batch. So the source-shape is
+now right, but full `Li2(q_N)` materialization is still too broad at 5,235
+history degrees. The next change should keep the same grading-batched `q_N`
+cache but update only demanded residual coefficients from `Li2(q_N)`, rather
+than expanding every Li2 monomial in the finite domain.

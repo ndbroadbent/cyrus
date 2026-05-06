@@ -5749,9 +5749,11 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
 
     let mut invariants = BTreeMap::new();
     let trace_timing = env::var_os("CYRUS_TRACE_CKYZ_Z_HISTORY").is_some();
+    let trace_progress = env::var_os("CYRUS_TRACE_CKYZ_Z_EXTRACT_PROGRESS").is_some();
     let extraction_start = trace_timing.then(std::time::Instant::now);
     let mut nonzero_gv_count = 0usize;
     let mut li2_coefficient_evaluations = 0usize;
+    let mut li2_materialized_term_count = 0usize;
     let indexed_alpha = ckyz_indexed_alpha_series(alpha, domain)?;
     let previous_level_count = ckyz_cygv_previous_qn_level_count(rank);
     let mut previous_qn = VecDeque::from(vec![
@@ -5830,6 +5832,11 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
                     .ok_or_else(|| Error::InvalidInput("CKYZ q_N reuse count overflowed".into()))?;
             }
             let li2_qn = built.series.li2(domain)?;
+            li2_materialized_term_count = li2_materialized_term_count
+                .checked_add(li2_qn.terms.len())
+                .ok_or_else(|| {
+                    Error::InvalidInput("CKYZ materialized Li2 term count overflowed".into())
+                })?;
             let subtraction_scale =
                 -Rational::from(candidate.weight) * Rational::from(candidate.gv);
             for (target_index, li2_coefficient) in &li2_qn.terms {
@@ -5856,6 +5863,18 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
             computed_qn.insert(candidate.domain_index, built.series);
             computed_qn_indices.push(candidate.domain_index);
         }
+        if trace_progress && !computed_qn_indices.is_empty() {
+            eprintln!(
+                "[CKYZ_Z_EXTRACT_PROGRESS] grading={} batch_qns={} total_qns={} li2_materialized_terms={} li2_updates={} qn_reuses={} delta_q_cache={}",
+                batch_grading,
+                computed_qn_indices.len(),
+                nonzero_gv_count,
+                li2_materialized_term_count,
+                li2_coefficient_evaluations,
+                qn_reuse_count,
+                q_delta_cache.len(),
+            );
+        }
 
         previous_qn.pop_front();
         previous_qn_indices.pop_front();
@@ -5865,10 +5884,11 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
     }
     if let Some(start) = extraction_start {
         eprintln!(
-            "[CKYZ_Z_EXTRACT] degrees={} nonzero_gvs={} li2_coefficients={} previous_qns={} qn_reuses={} delta_q_cache={} elapsed={:?}",
+            "[CKYZ_Z_EXTRACT] degrees={} nonzero_gvs={} li2_coefficients={} li2_materialized_terms={} previous_qns={} qn_reuses={} delta_q_cache={} elapsed={:?}",
             extraction_degrees.len(),
             nonzero_gv_count,
             li2_coefficient_evaluations,
+            li2_materialized_term_count,
             nonzero_gv_count,
             qn_reuse_count,
             q_delta_cache.len(),
