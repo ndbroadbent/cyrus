@@ -1781,6 +1781,17 @@ The current `cygv` crate source sharpens the same boundary:
   90-second window and was stopped manually. This was semigroup construction
   only, not HKTY/GV inversion, so the bottleneck is already present at the
   source-domain closure scale.
+- The same actual-cygv source-domain measurement can now be run as a guarded
+  degree ladder with `--measure-cygv-degree-ladder
+  --cygv-degree-ladder-max-degree N`. For the two degree-10 targets, the
+  release build completes degrees `1..5` with element counts
+  `9, 291, 2412, 42228, 324773` from effective seed counts
+  `8, 254, 293, 380, 397` and cygv-pair-reduced counts
+  `8, 254, 289, 311, 321`. Degree `6` already exceeded a 180-second release
+  runtime cap, while degree `7` exceeded the same cap and degree `8/9` exceeded
+  longer debug/release caps in earlier attempts. This is still only cygv
+  semigroup construction, so the degree-10 obstruction is a source-domain scale
+  problem before fundamental-period or series-inversion work starts.
 - The path-history probe now also checks whether a target is an exact sum of up
   to four lower-degree cygv seed rows before any closure truncation. This is
   separate from predecessor counting: it answers whether the target is primitive

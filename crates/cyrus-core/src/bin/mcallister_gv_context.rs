@@ -201,6 +201,7 @@ struct TargetReport {
     cygv_semigroup_element_count: Option<usize>,
     cygv_semigroup_max_degree: Option<u32>,
     cygv_semigroup_error: Option<String>,
+    cygv_semigroup_degree_ladder: Option<Vec<CygvSemigroupDegreeLadderStep>>,
     cygv_path_history_probe: Option<CygvPathHistoryProbe>,
 }
 
@@ -304,6 +305,17 @@ struct CygvSemigroupMeasurement {
     reduced_seed_negative_histogram: CygvNegativeIntersectionHistogram,
     max_degree: u32,
     element_count: Option<usize>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CygvSemigroupDegreeLadderStep {
+    degree: i128,
+    effective_seed_count: usize,
+    reduced_seed_count: Option<usize>,
+    status: String,
+    element_count: Option<usize>,
+    elapsed_ms: Option<u128>,
+    error: Option<String>,
 }
 
 struct CygvSemigroupDegreeMeasurement {
@@ -1079,9 +1091,15 @@ fn report_target(
     support_overlap_pair_reduce_for_run: bool,
     measure_cygv_semigroups: bool,
     run_lower_seed_diamonds: bool,
+    measure_cygv_degree_ladder: bool,
+    cygv_degree_ladder_max_degree: Option<i128>,
     semigroup_measure_max_target_degree: Option<i128>,
     semigroup_measure_max_seed_count: Option<usize>,
     semigroup_measurement_cache: &mut HashMap<i128, Result<CygvSemigroupDegreeMeasurement, String>>,
+    semigroup_ladder_cache: &mut HashMap<
+        (i128, i128, Option<usize>),
+        Result<Vec<CygvSemigroupDegreeLadderStep>, String>,
+    >,
     element_limit: usize,
 ) -> TargetReport {
     let exact_kind = sample.real_cone_decomposition_exact_kind.clone();
@@ -1149,6 +1167,7 @@ fn report_target(
                 cygv_semigroup_element_count: None,
                 cygv_semigroup_max_degree: None,
                 cygv_semigroup_error: None,
+                cygv_semigroup_degree_ladder: None,
                 cygv_path_history_probe: None,
             };
         }
@@ -1212,6 +1231,7 @@ fn report_target(
                 cygv_semigroup_element_count: None,
                 cygv_semigroup_max_degree: None,
                 cygv_semigroup_error: None,
+                cygv_semigroup_degree_ladder: None,
                 cygv_path_history_probe: None,
             };
         }
@@ -1275,6 +1295,7 @@ fn report_target(
                 cygv_semigroup_element_count: None,
                 cygv_semigroup_max_degree: None,
                 cygv_semigroup_error: None,
+                cygv_semigroup_degree_ladder: None,
                 cygv_path_history_probe: None,
             };
         }
@@ -1342,6 +1363,7 @@ fn report_target(
                 cygv_semigroup_element_count: None,
                 cygv_semigroup_max_degree: None,
                 cygv_semigroup_error: None,
+                cygv_semigroup_degree_ladder: None,
                 cygv_path_history_probe: None,
             };
         }
@@ -1400,6 +1422,7 @@ fn report_target(
         cygv_semigroup_element_count: None,
         cygv_semigroup_max_degree: None,
         cygv_semigroup_error: None,
+        cygv_semigroup_degree_ladder: None,
         cygv_path_history_probe: None,
     };
     let (
@@ -1519,6 +1542,44 @@ fn report_target(
     } else {
         (None, None, None, None, None, None, None, None, None, None)
     };
+    let cygv_semigroup_degree_ladder = if measure_cygv_degree_ladder {
+        if semigroup_measure_max_target_degree.is_some_and(|max_degree| sample.degree > max_degree)
+        {
+            Some(vec![CygvSemigroupDegreeLadderStep {
+                degree: sample.degree,
+                effective_seed_count: 0,
+                reduced_seed_count: None,
+                status: "skipped_target_degree_limit".to_string(),
+                element_count: None,
+                elapsed_ms: None,
+                error: None,
+            }])
+        } else {
+            match cygv_degree_ladder_max_degree {
+                Some(max_ladder_degree) => Some(measure_cygv_semigroup_degree_ladder(
+                    sample,
+                    context,
+                    max_ladder_degree,
+                    semigroup_measure_max_seed_count,
+                    semigroup_ladder_cache,
+                )),
+                None => Some(vec![CygvSemigroupDegreeLadderStep {
+                    degree: sample.degree,
+                    effective_seed_count: 0,
+                    reduced_seed_count: None,
+                    status: "skipped_missing_ladder_max_degree".to_string(),
+                    element_count: None,
+                    elapsed_ms: None,
+                    error: Some(
+                        "--measure-cygv-degree-ladder requires --cygv-degree-ladder-max-degree"
+                            .to_string(),
+                    ),
+                }]),
+            }
+        }
+    } else {
+        None
+    };
     let cygv_path_history_probe = if measure_cygv_semigroups {
         if semigroup_measure_max_target_degree.is_some_and(|max_degree| sample.degree > max_degree)
         {
@@ -1561,6 +1622,7 @@ fn report_target(
             cygv_semigroup_element_count,
             cygv_semigroup_max_degree,
             cygv_semigroup_error,
+            cygv_semigroup_degree_ladder,
             cygv_path_history_probe,
             degree_bounded_candidate_count,
             support_overlap_generator_counts,
@@ -1588,6 +1650,7 @@ fn report_target(
             cygv_semigroup_element_count,
             cygv_semigroup_max_degree,
             cygv_semigroup_error,
+            cygv_semigroup_degree_ladder,
             cygv_path_history_probe,
             degree_bounded_candidate_count,
             support_overlap_generator_counts,
@@ -1749,6 +1812,159 @@ fn measure_cygv_semigroup(
         max_degree: degree_measurement.max_degree,
         element_count: degree_measurement.element_count,
     })
+}
+
+fn measure_cygv_semigroup_degree_ladder(
+    sample: &MissingGvTargetSample,
+    context: &ValidatedContext<'_>,
+    max_ladder_degree: i128,
+    max_seed_count: Option<usize>,
+    cache: &mut HashMap<
+        (i128, i128, Option<usize>),
+        Result<Vec<CygvSemigroupDegreeLadderStep>, String>,
+    >,
+) -> Vec<CygvSemigroupDegreeLadderStep> {
+    if max_ladder_degree <= 0 {
+        return vec![CygvSemigroupDegreeLadderStep {
+            degree: max_ladder_degree,
+            effective_seed_count: 0,
+            reduced_seed_count: None,
+            status: "error".to_string(),
+            element_count: None,
+            elapsed_ms: None,
+            error: Some("cygv degree ladder max degree must be positive".to_string()),
+        }];
+    }
+    let effective_max = sample.degree.min(max_ladder_degree);
+    let key = (sample.degree, effective_max, max_seed_count);
+    if !cache.contains_key(&key) {
+        let measurement = measure_cygv_semigroup_degree_ladder_uncached(
+            sample.degree,
+            effective_max,
+            context,
+            max_seed_count,
+        );
+        cache.insert(key, measurement);
+    }
+    cache
+        .get(&key)
+        .expect("ladder measurement was inserted above")
+        .clone()
+        .unwrap_or_else(|error| {
+            vec![CygvSemigroupDegreeLadderStep {
+                degree: effective_max,
+                effective_seed_count: 0,
+                reduced_seed_count: None,
+                status: "error".to_string(),
+                element_count: None,
+                elapsed_ms: None,
+                error: Some(error),
+            }]
+        })
+}
+
+fn measure_cygv_semigroup_degree_ladder_uncached(
+    target_degree: i128,
+    max_ladder_degree: i128,
+    context: &ValidatedContext<'_>,
+    max_seed_count: Option<usize>,
+) -> Result<Vec<CygvSemigroupDegreeLadderStep>, String> {
+    let mut all_seeds = Vec::new();
+    let mut seen = HashSet::new();
+    for ray in context.degree_bounded_rays {
+        let degree = curve_degree(ray, context.grading)?;
+        if degree <= 0 || degree > target_degree {
+            continue;
+        }
+        if seen.insert(ray.clone()) {
+            all_seeds.push((degree, ray.clone()));
+        }
+    }
+
+    let mut steps = Vec::new();
+    for degree in 1..=max_ladder_degree {
+        let seeds = all_seeds
+            .iter()
+            .filter_map(|(seed_degree, seed)| (*seed_degree <= degree).then(|| seed.clone()))
+            .collect::<Vec<_>>();
+        let effective_seed_count = seeds.len();
+        if effective_seed_count == 0 {
+            steps.push(CygvSemigroupDegreeLadderStep {
+                degree,
+                effective_seed_count,
+                reduced_seed_count: None,
+                status: "skipped_empty_seed_set".to_string(),
+                element_count: None,
+                elapsed_ms: None,
+                error: None,
+            });
+            continue;
+        }
+        let reduced_seed_count = match cygv_pair_reduced_seed_generators(&seeds) {
+            Ok(reduced) => Some(reduced.len()),
+            Err(error) => {
+                steps.push(CygvSemigroupDegreeLadderStep {
+                    degree,
+                    effective_seed_count,
+                    reduced_seed_count: None,
+                    status: "error".to_string(),
+                    element_count: None,
+                    elapsed_ms: None,
+                    error: Some(format!("cygv seed reduction failed: {error}")),
+                });
+                continue;
+            }
+        };
+        if max_seed_count.is_some_and(|limit| effective_seed_count > limit) {
+            steps.push(CygvSemigroupDegreeLadderStep {
+                degree,
+                effective_seed_count,
+                reduced_seed_count,
+                status: "skipped_seed_limit".to_string(),
+                element_count: None,
+                elapsed_ms: None,
+                error: None,
+            });
+            continue;
+        }
+        let max_deg = match u32::try_from(degree) {
+            Ok(max_deg) => max_deg,
+            Err(_) => {
+                steps.push(CygvSemigroupDegreeLadderStep {
+                    degree,
+                    effective_seed_count,
+                    reduced_seed_count,
+                    status: "error".to_string(),
+                    element_count: None,
+                    elapsed_ms: None,
+                    error: Some(format!("degree {degree} does not fit in u32")),
+                });
+                continue;
+            }
+        };
+        let started = std::time::Instant::now();
+        match measure_cygv_semigroup_size(&seeds, context.grading, max_deg) {
+            Ok(element_count) => steps.push(CygvSemigroupDegreeLadderStep {
+                degree,
+                effective_seed_count,
+                reduced_seed_count,
+                status: "measured_cygv_semigroup".to_string(),
+                element_count: Some(element_count),
+                elapsed_ms: Some(started.elapsed().as_millis()),
+                error: None,
+            }),
+            Err(error) => steps.push(CygvSemigroupDegreeLadderStep {
+                degree,
+                effective_seed_count,
+                reduced_seed_count,
+                status: "error".to_string(),
+                element_count: None,
+                elapsed_ms: Some(started.elapsed().as_millis()),
+                error: Some(error),
+            }),
+        }
+    }
+    Ok(steps)
 }
 
 fn measure_cygv_semigroup_degree(
@@ -2483,11 +2699,14 @@ fn build_report(
     support_overlap_pair_reduce_for_run: bool,
     measure_cygv_semigroups: bool,
     run_lower_seed_diamonds: bool,
+    measure_cygv_degree_ladder: bool,
+    cygv_degree_ladder_max_degree: Option<i128>,
     semigroup_measure_max_target_degree: Option<i128>,
     semigroup_measure_max_seed_count: Option<usize>,
     element_limit: usize,
 ) -> ContextReport {
     let mut semigroup_measurement_cache = HashMap::new();
+    let mut semigroup_ladder_cache = HashMap::new();
     let mut targets = Vec::with_capacity(validated.stats.sample.len());
     for (idx, sample) in validated.stats.sample.iter().enumerate() {
         if !target_index_selected(idx, target_index_filter) {
@@ -2504,9 +2723,12 @@ fn build_report(
             support_overlap_pair_reduce_for_run,
             measure_cygv_semigroups,
             run_lower_seed_diamonds,
+            measure_cygv_degree_ladder,
+            cygv_degree_ladder_max_degree,
             semigroup_measure_max_target_degree,
             semigroup_measure_max_seed_count,
             &mut semigroup_measurement_cache,
+            &mut semigroup_ladder_cache,
             element_limit,
         ));
     }
@@ -2538,7 +2760,7 @@ fn target_index_selected(index: usize, target_index_filter: Option<usize>) -> bo
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--support-overlap-max-target-degree N] [--measure-cygv-semigroups] [--run-lower-seed-diamonds] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
+            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--support-overlap-max-target-degree N] [--measure-cygv-semigroups] [--run-lower-seed-diamonds] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
         );
         std::process::exit(2);
     };
@@ -2552,6 +2774,8 @@ fn main() {
         parse_arg_value::<i128>("--support-overlap-max-target-degree");
     let measure_cygv_semigroups = parse_flag("--measure-cygv-semigroups");
     let run_lower_seed_diamonds = parse_flag("--run-lower-seed-diamonds");
+    let measure_cygv_degree_ladder = parse_flag("--measure-cygv-degree-ladder");
+    let cygv_degree_ladder_max_degree = parse_arg_value::<i128>("--cygv-degree-ladder-max-degree");
     let semigroup_measure_max_target_degree =
         parse_arg_value::<i128>("--semigroup-measure-max-target-degree");
     let semigroup_measure_max_seed_count =
@@ -2578,6 +2802,8 @@ fn main() {
         support_overlap_pair_reduce_for_run,
         measure_cygv_semigroups,
         run_lower_seed_diamonds,
+        measure_cygv_degree_ladder,
+        cygv_degree_ladder_max_degree,
         semigroup_measure_max_target_degree,
         semigroup_measure_max_seed_count,
         element_limit,
@@ -2700,6 +2926,62 @@ mod tests {
         let limited = lower_seed_diamond_probe(&[1, 1], &decomposition, &context, true, 2);
         assert_eq!(limited.status.as_deref(), Some("skipped_element_limit_2"));
         assert_eq!(limited.element_count, Some(4));
+    }
+
+    #[test]
+    fn cygv_degree_ladder_uses_actual_semigroup_counts() {
+        let stats = MissingGvTargetStats {
+            target_count: 1,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: vec![MissingGvTargetSample {
+                degree: 3,
+                generators_le_degree: 3,
+                is_mori_generator: false,
+                origin_circuit_pattern: None,
+                origin_circuit_witness_count: None,
+                origin_circuit_first_witness: None,
+                origin_circuit_affine_support: None,
+                cms_general_divisor_shape_candidates: None,
+                cms_general_divisor_intersection_checks: None,
+                branch_diagnostic: None,
+                real_cone_decomposable_by_other_generators: false,
+                real_cone_decomposition_active_generators: None,
+                real_cone_decomposition_active_generator_basis_nonzero: None,
+                real_cone_decomposition_exact_coefficients: None,
+                real_cone_decomposition_exact_kind: None,
+                ambient_nonzero: vec![(0, 2), (1, 1)],
+                basis_nonzero: vec![(0, 2), (1, 1)],
+            }],
+        };
+        let grading = vec![1, 1];
+        let q_matrix = vec![vec![1, 0], vec![0, 1]];
+        let degree_bounded_rays = vec![vec![1, 0], vec![0, 1], vec![1, 1]];
+        let context = ValidatedContext {
+            dimension: 2,
+            degree_bound: 3,
+            q_cols: 2,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            intersection: Intersection::new(2),
+            stats: &stats,
+        };
+        let mut cache = HashMap::new();
+
+        let steps =
+            measure_cygv_semigroup_degree_ladder(&stats.sample[0], &context, 2, None, &mut cache);
+
+        assert_eq!(steps.len(), 2);
+        assert_eq!(steps[0].degree, 1);
+        assert_eq!(steps[0].effective_seed_count, 2);
+        assert_eq!(steps[0].reduced_seed_count, Some(2));
+        assert_eq!(steps[0].status, "measured_cygv_semigroup");
+        assert_eq!(steps[0].element_count, Some(3));
+        assert_eq!(steps[1].degree, 2);
+        assert_eq!(steps[1].effective_seed_count, 3);
+        assert_eq!(steps[1].reduced_seed_count, Some(2));
+        assert_eq!(steps[1].status, "measured_cygv_semigroup");
+        assert_eq!(steps[1].element_count, Some(6));
     }
 
     #[test]
@@ -3050,6 +3332,7 @@ mod tests {
         };
 
         let mut semigroup_measurement_cache = HashMap::new();
+        let mut semigroup_ladder_cache = HashMap::new();
         let report = report_target(
             0,
             &stats.sample[0],
@@ -3061,9 +3344,12 @@ mod tests {
             false,
             false,
             false,
+            false,
+            None,
             None,
             None,
             &mut semigroup_measurement_cache,
+            &mut semigroup_ladder_cache,
             256,
         );
 
@@ -3146,6 +3432,7 @@ mod tests {
             stats: &stats,
         };
         let mut semigroup_measurement_cache = HashMap::new();
+        let mut semigroup_ladder_cache = HashMap::new();
 
         let report = report_target(
             0,
@@ -3158,9 +3445,12 @@ mod tests {
             false,
             false,
             false,
+            false,
+            None,
             None,
             None,
             &mut semigroup_measurement_cache,
+            &mut semigroup_ladder_cache,
             256,
         );
 

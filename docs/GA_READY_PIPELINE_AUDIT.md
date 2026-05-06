@@ -239,6 +239,11 @@ to make the remaining GV layer more first-principles:
    and an unguarded cygv semigroup closure measurement did not finish within
    `120s`. The missing object is therefore the source-derived generated
    semigroup/chamber history, not a small visible-generator subset.
+   A guarded actual-cygv degree ladder now sharpens that scale estimate without
+   reimplementing the compact semigroup: in release mode the degree-10 target
+   seed set reaches `9, 291, 2412, 42228, 324773` cygv semigroup elements by
+   ladder degrees `1..5`, from effective seed counts
+   `8, 254, 293, 380, 397`; degree `6` already exceeded a `180s` release cap.
    The bounded path-history probe reinforces this: with
    `--element-limit 100000`, both degree-10 targets are already present in the
    partial closure, but the closure still exceeds `100000` elements before
