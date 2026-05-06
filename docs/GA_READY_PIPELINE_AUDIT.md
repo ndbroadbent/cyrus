@@ -258,6 +258,10 @@ to make the remaining GV layer more first-principles:
    directly with `mcallister_gv_context --probe-cygv-path-history`, which avoids
    accidentally calling cygv's unbounded semigroup constructor before the
    capped source-history diagnostic.
+   Running the visible lower-seed diamonds for the two degree-10 targets does
+   not provide a fallback: target `7` returns `GV=0` from a 6-element diamond,
+   and target `8` fails cygv series inversion with a non-integral GV from an
+   8-element diamond.
    Cyrus now exposes cygv's private pair-sum seed-reduction stage only as the
    hidden source-audit helper `cyrus_core::gv::cygv_pair_reduced_seed_generators`,
    and `mcallister_gv_context` reports raw seed counts, reduced seed counts, and

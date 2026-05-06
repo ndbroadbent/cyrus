@@ -1802,6 +1802,13 @@ The current `cygv` crate source sharpens the same boundary:
   predecessor/residual split found in the bounded monomial map. These are
   diagnostics for reconstructing the source domain; they are not GV values and
   do not replace the upstream cygv HKTY call.
+- The path-history probe can also try the exact lower-seed decomposition
+  diamond with `--run-lower-seed-diamonds`. On the two degree-10 misses this
+  remains a negative diagnostic: target `7` has a 6-element diamond and returns
+  `GV=0`, while target `8` has an 8-element diamond and cygv fails series
+  inversion with a non-integral GV invariant. Thus the visible lower-seed
+  diamonds are not valid replacement semigroups for the missing chamber
+  history.
 - Re-running that report on the saved 4-214-647 context with the same degree-10
   cap shows both low-degree missing targets reach partial previous degrees
   `1..9` before the 20000-element cap. The capped probe now reports lower-bound
