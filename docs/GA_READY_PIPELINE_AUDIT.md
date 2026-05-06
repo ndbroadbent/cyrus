@@ -208,6 +208,13 @@ to make the remaining GV layer more first-principles:
    low-degree targets. This remains diagnostic because the exported rows are
    degree-bounded projected generators, not a certified full chamber semigroup
    or CYTools lattice-augmented Mori-cap context.
+   The actual Rust `cygv` crate has now been exercised on that bounded path:
+   the release build correctly refuses the guarded diagnostic under
+   `panic=abort`, and the debug/unwind run with
+   `--run-support-overlap-generators 0 --support-overlap-max-target-degree 10`
+   entered `cygv` with `720` supplied degree-bounded generators and did not
+   finish within `600s`. It produced no GV value or panic. This is a measured
+   runtime blocker, not a reason to reimplement compact cygv locally.
    A direct cygv semigroup-size diagnostic now confirms why: the degree-10
    missing targets already have `720` seed rows at or below the target degree,
    and an unguarded cygv semigroup closure measurement did not finish within

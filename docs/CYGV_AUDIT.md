@@ -1453,6 +1453,16 @@ generator up to each low-degree target through cygv's provided-generator path.
 Those results are still diagnostic unless the generator set is promoted to a
 source-certified chamber semigroup.
 
+The direct provided-generator probe has now been run against the actual Rust
+`cygv` crate, not a local reimplementation. In the release profile the runner
+records `skipped_panic_abort`, because the guarded diagnostic cannot catch a
+crate panic when the binary is compiled with `panic=abort`. In a debug/unwind
+run, the degree-10 probe entered `cygv` with `720` supplied generators and
+`max_deg=10`, then exceeded a `600s` timeout without returning a GV value or a
+panic. This supports the same conclusion as the semigroup-size diagnostics: the
+corrected-chamber blocker is the source/domain selection feeding cygv, not a
+missing hand-rolled replacement for cygv itself.
+
 The compact dual-polytope CYTools-to-cygv handoff is now checked at the source
 boundary for 4-214-647. A Cyrus dump from
 `CYRUS_GV_DUMP_INPUTS=/tmp/cyrus_gv_handoff_4_214_647.json
@@ -1634,6 +1644,11 @@ The current `cygv` crate source sharpens the same boundary:
   `2212 -> 949`. In all measured cases the missing target is present in the raw
   seed set and survives the pair-sum reduction. Thus these misses are not
   explained by cygv's initial decomposable-seed pruning.
+- Running the actual `cygv` provided-generator path with all positive
+  degree-bounded rows through degree 10 confirms that this seed size is already
+  too broad for an interactive diagnostic: the debug/unwind run entered cygv
+  with `720` generators and exceeded `600s` without returning; the release
+  profile is guarded off because it uses `panic=abort`.
 - `PolynomialProperties::new` creates the monomial lookup table from every
   semigroup element. Polynomial multiplication and series substitution drop
   terms whose sums are absent from this table. The finite semigroup therefore
