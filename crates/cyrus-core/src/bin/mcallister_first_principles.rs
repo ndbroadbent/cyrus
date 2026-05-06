@@ -11,6 +11,8 @@
 //! - `--production-dual-basis path/to/dual_basis.json` to set the internal dual
 //!   divisor basis used for flat-direction intersections and compact GV inputs.
 //!   This is separate from the K/M flux source basis above.
+//! - `--production-primal-basis path/to/primal_basis.json` to set the internal
+//!   primal divisor basis used for KKLT path following.
 //! - `--allow-fixtures` to permit JSON fixture fallback when no data dir is set.
 //! - `--skip-mcallister-assertions` to run the computed pipeline without
 //!   comparing final observables to the 4-214-647 validation target.
@@ -83,12 +85,12 @@ use cyrus_core::{
     compute_origin_circuit_curve_diagnostics, compute_regular_triangulation,
     compute_toric_curve_gv_diagnostics, compute_toric_two_face_curve_gv_invariants,
     compute_w0_from_terms, divisor_basis_change_matrix, effective_prime_divisors_from_curve_basis,
-    generate_scaled_kklt_branch_initializations, gv_divisor_basis_data, heights_to_kahler,
-    intersection_in_basis, is_unimodular, kahler_to_heights, map_basis_gv_invariants_to_ambient,
-    project_ambient_curve_to_basis, prune_decomposable_curve_candidates,
-    scale_mixed_basis_kklt_branch_initialization_to_target, solve_mixed_basis_path_following,
-    solve_mixed_basis_path_following_branch_candidates, solve_racetrack,
-    subcutoff_toric_curve_candidates,
+    generate_scaled_divisor_basis_branch_initializations, gv_divisor_basis_data, heights_to_kahler,
+    intersection_in_basis, intersection_in_divisor_basis, is_unimodular, kahler_to_heights,
+    map_basis_gv_invariants_to_ambient, project_ambient_curve_to_basis,
+    prune_decomposable_curve_candidates, scale_divisor_basis_kklt_branch_initialization_to_target,
+    solve_divisor_basis_path_following, solve_divisor_basis_path_following_branch_candidates,
+    solve_mixed_basis_path_following, solve_racetrack, subcutoff_toric_curve_candidates,
 };
 
 const DEFAULT_MCALLISTER_GV_MIN_POINTS: u32 = 20_000;
@@ -1161,6 +1163,7 @@ struct PipelineArgs {
     dump_corrected_chamber_gv_context_path: Option<String>,
     diagnose_chamber_updated_kklt: bool,
     diagnose_chamber_updated_kklt_iterations: usize,
+    production_primal_basis_override: Option<BasisOverride>,
     dual_basis_override: Option<BasisOverride>,
     production_dual_basis_override: Option<BasisOverride>,
 }
@@ -1259,6 +1262,8 @@ fn parse_args() -> PipelineArgs {
     let diagnose_chamber_updated_kklt = parse_flag("--diagnose-chamber-updated-kklt");
     let diagnose_chamber_updated_kklt_iterations =
         parse_arg_value::<usize>("--diagnose-chamber-updated-kklt-iterations").unwrap_or(6);
+    let production_primal_basis_override = parse_arg_value::<String>("--production-primal-basis")
+        .map(|path| load_json::<BasisOverride>(&PathBuf::from(path)));
     let dual_basis_override = parse_arg_value::<String>("--dual-basis")
         .map(|path| load_json::<BasisOverride>(&PathBuf::from(path)));
     let production_dual_basis_override = parse_arg_value::<String>("--production-dual-basis")
@@ -1296,6 +1301,7 @@ fn parse_args() -> PipelineArgs {
         dump_corrected_chamber_gv_context_path,
         diagnose_chamber_updated_kklt,
         diagnose_chamber_updated_kklt_iterations,
+        production_primal_basis_override,
         dual_basis_override,
         production_dual_basis_override,
     }
@@ -1411,6 +1417,72 @@ fn transform_kahler_to_computed_basis_with_logging(
         eprintln!("[ERROR] failed to apply Kähler basis transform: {e}");
         std::process::exit(2);
     })
+}
+
+fn transform_kahler_between_owned_divisor_bases(
+    glsm: &[Vec<malachite::Integer>],
+    target_basis: &OwnedDivisorBasis,
+    source_basis: &OwnedDivisorBasis,
+    values: &[F64<Finite>],
+    label: &str,
+    log_transform: bool,
+) -> Result<Vec<F64<Finite>>, String> {
+    if target_basis == source_basis {
+        return Ok(values.to_vec());
+    }
+    let transform = basis_change_matrix_between_owned(glsm, target_basis, source_basis)
+        .map_err(|e| format!("failed to compute {label} basis transform: {e}"))?;
+    if !is_unimodular(&transform) {
+        return Err(format!("{label} basis transform is not unimodular"));
+    }
+    if log_transform {
+        eprintln!(
+            "[INFO] transforming {label} from {} source coordinates to {} target coordinates",
+            source_basis.description(),
+            target_basis.description()
+        );
+    }
+    apply_finite_f64_basis_transform(&transform, values, label).map_err(|e| e.to_string())
+}
+
+fn computed_primal_basis(intersection: &PrimalIntersection) -> OwnedDivisorBasis {
+    OwnedDivisorBasis::Indices(intersection.basis.clone())
+}
+
+fn transform_production_primal_kahler_to_computed(
+    intersection: &PrimalIntersection,
+    production_basis: &OwnedDivisorBasis,
+    values: &[F64<Finite>],
+    label: &str,
+) -> Vec<F64<Finite>> {
+    transform_kahler_between_owned_divisor_bases(
+        &intersection.glsm,
+        &computed_primal_basis(intersection),
+        production_basis,
+        values,
+        label,
+        true,
+    )
+    .unwrap_or_else(|e| {
+        eprintln!("[ERROR] {e}");
+        std::process::exit(2);
+    })
+}
+
+fn transform_computed_primal_kahler_to_production(
+    intersection: &PrimalIntersection,
+    production_basis: &OwnedDivisorBasis,
+    values: &[F64<Finite>],
+    label: &str,
+) -> Result<Vec<F64<Finite>>, String> {
+    transform_kahler_between_owned_divisor_bases(
+        &intersection.glsm,
+        production_basis,
+        &computed_primal_basis(intersection),
+        values,
+        label,
+        true,
+    )
 }
 
 fn compute_b_field_gamma_for_o7_divisors(
@@ -1880,6 +1952,7 @@ fn sparse_intersection_entries(kappa: &cyrus_core::Intersection) -> Vec<SparseIn
 fn compute_branch_gv_coverages(
     geom: &PrimalGeom,
     intersection: &PrimalIntersection,
+    production_basis: &OwnedDivisorBasis,
     branches_by_volume: &[cyrus_core::KkltBranchSolution],
     small_curve_cutoff: F64<Pos>,
     small_curve_pruning: CurvePruningStrategy,
@@ -1925,10 +1998,18 @@ fn compute_branch_gv_coverages(
     branches_by_volume
         .iter()
         .map(|branch| {
+            let branch_t_computed = transform_kahler_between_owned_divisor_bases(
+                &intersection.glsm,
+                &computed_primal_basis(intersection),
+                production_basis,
+                &branch.result.t,
+                "branch Kähler point",
+                false,
+            )?;
             let small_curve_candidates = subcutoff_toric_curve_candidates(
                 &ambient_rays,
                 &intersection.basis,
-                &branch.result.t,
+                &branch_t_computed,
                 small_curve_cutoff,
             )
             .map_err(|e| format!("failed to select branch small toric curve candidates: {e}"))?;
@@ -3955,6 +4036,38 @@ fn report_single_top_toric_local_gv_diagnostic(
                 e,
                 sparse_i64(&target.class)
             );
+        }
+    }
+}
+
+fn select_production_primal_basis(
+    override_opt: Option<&BasisOverride>,
+    computed_standard_basis: &[usize],
+) -> OwnedDivisorBasis {
+    match override_opt {
+        None => {
+            eprintln!(
+                "[INFO] using computed primal production basis (len={}, basis={:?})",
+                computed_standard_basis.len(),
+                computed_standard_basis
+            );
+            OwnedDivisorBasis::Indices(computed_standard_basis.to_vec())
+        }
+        Some(override_value) => {
+            let basis = owned_divisor_basis_from_override(
+                override_value,
+                computed_standard_basis,
+                "--production-primal-basis",
+            )
+            .unwrap_or_else(|e| {
+                eprintln!("[ERROR] {e}");
+                std::process::exit(2);
+            });
+            eprintln!(
+                "[INFO] using explicit {} from --production-primal-basis",
+                basis.description()
+            );
+            basis
         }
     }
 }
@@ -6473,6 +6586,7 @@ fn write_branch_report_jsonl(
 fn height_projected_branch_initialization(
     geom: &PrimalGeom,
     intersection: &PrimalIntersection,
+    production_basis: &OwnedDivisorBasis,
     kklt_basis: &[usize],
     tau_phase1: &[F64<Pos>],
 ) -> Result<Vec<F64<Finite>>, String> {
@@ -6490,13 +6604,18 @@ fn height_projected_branch_initialization(
         .ok_or_else(|| "failed to extract effective-cone prime divisor rows".to_string())?;
     let raw = heights_to_kahler(&geom.heights, &basis_non_origin, &prime_divisors)
         .ok_or_else(|| "failed to project triangulation heights to Kähler basis".to_string())?;
-    scale_mixed_basis_kklt_branch_initialization_to_target(
-        &intersection.kappa_basis,
+    let production_raw = transform_computed_primal_kahler_to_production(
+        intersection,
+        production_basis,
+        &raw,
+        "height-projected Kähler",
+    )?;
+    scale_divisor_basis_kklt_branch_initialization_to_target(
         &intersection.kappa_full,
-        &intersection.basis,
+        production_basis.as_divisor_basis(),
         kklt_basis,
         tau_phase1,
-        &raw,
+        &production_raw,
     )
     .ok_or_else(|| "failed to scale height-projected Kähler point to phase-1 target".to_string())
 }
@@ -8833,6 +8952,7 @@ fn stage_volume(
     dump_corrected_chamber_gv_context_path: Option<&str>,
     diagnose_chamber_updated_kklt: bool,
     diagnose_chamber_updated_kklt_iterations: usize,
+    production_primal_basis_override: Option<&BasisOverride>,
     small_curve_cutoff: F64<Pos>,
     small_curve_pruning: CurvePruningStrategy,
     h21: usize,
@@ -8893,6 +9013,26 @@ fn stage_volume(
         "[INFO] selected toric curve pruning strategy: {}",
         small_curve_pruning.as_str()
     );
+    let production_primal_basis =
+        select_production_primal_basis(production_primal_basis_override, &intersection.basis);
+    let production_primal_kappa_basis = intersection_in_divisor_basis(
+        &intersection.kappa_full,
+        production_primal_basis.as_divisor_basis(),
+    )
+    .unwrap_or_else(|e| {
+        eprintln!("[ERROR] failed to compute primal production-basis intersections: {e}");
+        std::process::exit(2);
+    });
+    if production_primal_kappa_basis.dim() != production_primal_basis.dimension() {
+        eprintln!("[ERROR] primal production-basis intersection dimension mismatch");
+        std::process::exit(2);
+    }
+    if allow_downstream_kahler && production_primal_basis != computed_primal_basis(intersection) {
+        eprintln!(
+            "[ERROR] --production-primal-basis is only supported for first-principles KKLT solves, not downstream Kähler replay"
+        );
+        std::process::exit(2);
+    }
     if (diagnose_corrected_chamber_gv
         || diagnose_corrected_chamber_provided_generators_gv
         || diagnose_corrected_chamber_ray_gv
@@ -8969,11 +9109,14 @@ fn stage_volume(
             eprintln!("[ERROR] corrected KKLT target construction failed");
             std::process::exit(2);
         };
-        let (zeroth_order, small_curve_selection_t) = if branch_candidates == 0 {
+        let (zeroth_order, small_curve_selection_t, gv_iteration_source_t) = if branch_candidates
+            == 0
+        {
             let tau_phase1: Vec<F64<Pos>> = c_i.iter().map(|ci| ci.to_f64()).collect();
             let height_init = height_projected_branch_initialization(
                 geom,
                 intersection,
+                &production_primal_basis,
                 &kklt_basis,
                 &tau_phase1,
             )
@@ -8984,16 +9127,15 @@ fn stage_volume(
                 std::process::exit(2);
             });
             eprintln!("[INFO] using height-projected KKLT branch initialization");
-            let Some(phase1) = cyrus_core::kklt::solve_mixed_basis_path_following(
-                &intersection.kappa_basis,
+            let Some(phase1) = solve_divisor_basis_path_following(
                 &intersection.kappa_full,
-                &intersection.basis,
+                production_primal_basis.as_divisor_basis(),
                 &kklt_basis,
                 &tau_phase1,
                 &height_init,
                 CheckedRange::new(0, kklt_steps),
             ) else {
-                eprintln!("[ERROR] phase-1 mixed-basis KKLT path-following failed");
+                eprintln!("[ERROR] phase-1 divisor-basis KKLT path-following failed");
                 std::process::exit(2);
             };
             if !phase1.converged {
@@ -9003,16 +9145,15 @@ fn stage_volume(
                 );
                 std::process::exit(2);
             }
-            let Some(result) = cyrus_core::kklt::solve_mixed_basis_path_following(
-                &intersection.kappa_basis,
+            let Some(result) = solve_divisor_basis_path_following(
                 &intersection.kappa_full,
-                &intersection.basis,
+                production_primal_basis.as_divisor_basis(),
                 &kklt_basis,
                 &tau_target,
                 &phase1.t,
                 CheckedRange::new(0, kklt_steps),
             ) else {
-                eprintln!("[ERROR] zeroth-order mixed-basis KKLT path-following failed");
+                eprintln!("[ERROR] zeroth-order divisor-basis KKLT path-following failed");
                 std::process::exit(2);
             };
             if !result.converged {
@@ -9022,14 +9163,18 @@ fn stage_volume(
                 );
                 std::process::exit(2);
             }
-            let small_curve_selection_t = phase1.t.clone();
-            (result, small_curve_selection_t)
+            let small_curve_selection_t = transform_production_primal_kahler_to_computed(
+                intersection,
+                &production_primal_basis,
+                &phase1.t,
+                "phase-1 Kähler point",
+            );
+            (result, small_curve_selection_t, phase1.t.clone())
         } else {
             let tau_phase1: Vec<F64<Pos>> = c_i.iter().map(|ci| ci.to_f64()).collect();
-            let Some(mut t_initializations) = generate_scaled_kklt_branch_initializations(
-                &intersection.kappa_basis,
+            let Some(mut t_initializations) = generate_scaled_divisor_basis_branch_initializations(
                 &intersection.kappa_full,
-                &intersection.basis,
+                production_primal_basis.as_divisor_basis(),
                 &kklt_basis,
                 &tau_phase1,
                 branch_candidates,
@@ -9043,6 +9188,7 @@ fn stage_volume(
                 let height_init = height_projected_branch_initialization(
                     geom,
                     intersection,
+                    &production_primal_basis,
                     &kklt_basis,
                     &tau_phase1,
                 )
@@ -9056,10 +9202,9 @@ fn stage_volume(
                 t_initialization_sources.insert(0, "height_projected");
                 eprintln!("[INFO] inserted height-projected KKLT branch initialization at init=0");
             }
-            let branch_search = solve_mixed_basis_path_following_branch_candidates(
-                &intersection.kappa_basis,
+            let branch_search = solve_divisor_basis_path_following_branch_candidates(
                 &intersection.kappa_full,
-                &intersection.basis,
+                production_primal_basis.as_divisor_basis(),
                 &kklt_basis,
                 &tau_phase1,
                 &t_initializations,
@@ -9107,6 +9252,7 @@ fn stage_volume(
                 let coverages = compute_branch_gv_coverages(
                     geom,
                     intersection,
+                    &production_primal_basis,
                     &positive_branches,
                     small_curve_cutoff,
                     small_curve_pruning,
@@ -9233,7 +9379,12 @@ fn stage_volume(
                 }
             };
             let best_branch = positive_branches[selected_rank_by_volume].clone();
-            let small_curve_selection_t = best_branch.result.t.clone();
+            let small_curve_selection_t = transform_production_primal_kahler_to_computed(
+                intersection,
+                &production_primal_basis,
+                &best_branch.result.t,
+                "selected branch Kähler point",
+            );
             if let Some(path) = branch_report_path {
                 let report_path = PathBuf::from(path);
                 let ctx = BranchReportContext {
@@ -9276,6 +9427,7 @@ fn stage_volume(
                         compute_branch_gv_coverages(
                             geom,
                             intersection,
+                            &production_primal_basis,
                             &positive_branches,
                             small_curve_cutoff,
                             small_curve_pruning,
@@ -9341,16 +9493,15 @@ fn stage_volume(
                     coverage.filtered_count
                 );
             }
-            let Some(result) = solve_mixed_basis_path_following(
-                &intersection.kappa_basis,
+            let Some(result) = solve_divisor_basis_path_following(
                 &intersection.kappa_full,
-                &intersection.basis,
+                production_primal_basis.as_divisor_basis(),
                 &kklt_basis,
                 &tau_target,
                 &best_branch.result.t,
                 CheckedRange::new(0, kklt_steps),
             ) else {
-                eprintln!("[ERROR] corrected mixed-basis KKLT solve failed after branch search");
+                eprintln!("[ERROR] corrected divisor-basis KKLT solve failed after branch search");
                 std::process::exit(2);
             };
             if !result.converged {
@@ -9360,7 +9511,11 @@ fn stage_volume(
                 );
                 std::process::exit(2);
             }
-            (result, small_curve_selection_t)
+            (
+                result,
+                small_curve_selection_t,
+                best_branch.result.t.clone(),
+            )
         };
         eprintln!(
             "[INFO] zeroth-order mixed-basis KKLT converged={} rel_err={}",
@@ -9492,13 +9647,14 @@ fn stage_volume(
             small_curve_gvs.len()
         );
 
-        let mut corrected = zeroth_order;
         let mut correction_source_t = small_curve_selection_t;
+        let mut correction_source_t_production = gv_iteration_source_t;
         let max_gv_iterations = 20usize;
         let gv_tolerance = 1e-10f64;
         let mut gv_converged = false;
         for iter in 0..max_gv_iterations {
             let previous_t = correction_source_t.clone();
+            let previous_t_production = correction_source_t_production.clone();
             let Some(gv_correction) =
                 cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
                     &small_curve_gvs,
@@ -9524,16 +9680,17 @@ fn stage_volume(
                 );
                 std::process::exit(2);
             };
-            let Some(next) = solve_mixed_basis_path_following(
-                &intersection.kappa_basis,
+            let Some(next) = solve_divisor_basis_path_following(
                 &intersection.kappa_full,
-                &intersection.basis,
+                production_primal_basis.as_divisor_basis(),
                 &kklt_basis,
                 &tau_target,
-                &previous_t,
+                &previous_t_production,
                 CheckedRange::new(0, kklt_steps),
             ) else {
-                eprintln!("[ERROR] GV-corrected mixed-basis KKLT solve failed at iteration {iter}");
+                eprintln!(
+                    "[ERROR] GV-corrected divisor-basis KKLT solve failed at iteration {iter}"
+                );
                 std::process::exit(2);
             };
             if !next.converged {
@@ -9543,8 +9700,13 @@ fn stage_volume(
                 );
                 std::process::exit(2);
             }
-            let max_relative_step = next
-                .t
+            let next_computed_t = transform_production_primal_kahler_to_computed(
+                intersection,
+                &production_primal_basis,
+                &next.t,
+                "GV-corrected Kähler point",
+            );
+            let max_relative_step = next_computed_t
                 .iter()
                 .zip(previous_t.iter())
                 .map(|(new, old)| (new.get() - old.get()).abs() / (old.get().abs() + 1e-12))
@@ -9554,8 +9716,8 @@ fn stage_volume(
                 max_relative_step,
                 next.relative_error.get()
             );
-            corrected = next;
-            correction_source_t = corrected.t.clone();
+            correction_source_t_production = next.t.clone();
+            correction_source_t = next_computed_t;
             if max_relative_step <= gv_tolerance {
                 gv_converged = true;
                 break;
@@ -9571,7 +9733,7 @@ fn stage_volume(
             cyrus_core::kklt::compute_gv_volume_correction_for_ambient_curves(
                 &small_curve_gvs,
                 &intersection.basis,
-                &corrected.t,
+                &correction_source_t,
                 Some(&gamma),
             )
         else {
@@ -9587,7 +9749,7 @@ fn stage_volume(
                 &small_curve_gvs,
                 &intersection.basis,
                 &kklt_basis,
-                &corrected.t,
+                &correction_source_t,
                 Some(&gamma),
             )
         else {
@@ -9599,7 +9761,7 @@ fn stage_volume(
                 &small_curve_gvs,
                 &intersection.basis,
                 &kklt_basis,
-                &corrected.t,
+                &correction_source_t,
                 None,
             );
         if input_chamber_gv_target_correction_no_gamma.is_none() {
@@ -9678,7 +9840,7 @@ fn stage_volume(
                 &c_i,
                 c_tau,
                 &gamma,
-                &corrected.t,
+                &correction_source_t,
                 small_curve_cutoff,
                 small_curve_pruning,
                 kklt_steps,
@@ -9691,7 +9853,7 @@ fn stage_volume(
             let max_relative_t_delta = diagnostic
                 .final_t
                 .iter()
-                .zip(corrected.t.iter())
+                .zip(correction_source_t.iter())
                 .map(|(new, old)| (new.get() - old.get()).abs() / (old.get().abs() + 1e-12))
                 .fold(0.0f64, f64::max);
             let h11_raw = i32::try_from(intersection.basis.len()).unwrap_or_else(|_| {
@@ -9710,7 +9872,8 @@ fn stage_volume(
             let diagnostic_v_string = diagnostic.final_classical_volume - bbhl.get()
                 + diagnostic.final_gv_volume_correction.get();
             let production_v_string =
-                classical_volume_from_t(&intersection.kappa_basis, &corrected.t) - bbhl.get()
+                classical_volume_from_t(&intersection.kappa_basis, &correction_source_t)
+                    - bbhl.get()
                     + gv_volume_correction.get();
             let final_first_missing_sparse = diagnostic
                 .final_first_missing_class
@@ -9731,7 +9894,7 @@ fn stage_volume(
             );
         }
         (
-            corrected.t,
+            correction_source_t,
             Some(gv_volume_correction),
             Some(gamma),
             Some(kklt_basis),
@@ -10373,6 +10536,7 @@ fn run_pipeline(args: PipelineArgs) {
         args.dump_corrected_chamber_gv_context_path.as_deref(),
         args.diagnose_chamber_updated_kklt,
         args.diagnose_chamber_updated_kklt_iterations,
+        args.production_primal_basis_override.as_ref(),
         small_curve_cutoff,
         args.small_curve_pruning,
         flat.dual_divisor_basis.dimension(),
@@ -10602,6 +10766,44 @@ mod tests {
             .expect("matrix production basis should build cygv inputs");
         assert_eq!(data.mori_rays, vec![vec![1, 0], vec![2, 1]]);
         assert_eq!(data.q_matrix, vec![vec![2, 1, 0], vec![1, -1, 1]]);
+    }
+
+    #[test]
+    fn matrix_production_primal_basis_transforms_kahler_coordinates() {
+        let glsm = int_matrix(&[&[1, 0, -1, -1], &[0, 1, -2, -3]]);
+        let computed_basis = OwnedDivisorBasis::Indices(vec![2, 3]);
+        let matrix_basis =
+            serde_json::from_str::<BasisOverride>(r#"{"matrix":[[0,0,1,1],[0,0,0,1]]}"#)
+                .expect("matrix basis JSON should parse");
+        let production_basis =
+            owned_divisor_basis_from_override(&matrix_basis, &[2, 3], "--production-primal-basis")
+                .expect("matrix production basis should parse");
+        let computed_t = vec![
+            F64::<Finite>::new(5.0).expect("finite"),
+            F64::<Finite>::new(7.0).expect("finite"),
+        ];
+
+        let production_t = transform_kahler_between_owned_divisor_bases(
+            &glsm,
+            &production_basis,
+            &computed_basis,
+            &computed_t,
+            "test Kähler",
+            false,
+        )
+        .expect("computed Kähler coordinates should transform to production basis");
+        assert_eq!(finite_values(&production_t), vec![5.0, 2.0]);
+
+        let round_trip = transform_kahler_between_owned_divisor_bases(
+            &glsm,
+            &computed_basis,
+            &production_basis,
+            &production_t,
+            "test Kähler",
+            false,
+        )
+        .expect("production Kähler coordinates should transform back");
+        assert_eq!(finite_values(&round_trip), vec![5.0, 7.0]);
     }
 
     #[test]
