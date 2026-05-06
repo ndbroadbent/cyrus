@@ -1832,6 +1832,16 @@ The current `cygv` crate source sharpens the same boundary:
   source-derived local support points needed to build a valid compact/local
   `cygv` input, but it still does not supply the semigroup generators, grading,
   chamber orientation, or intersection tensor by itself.
+- The context report now also serializes a local `cygv` input skeleton: support
+  point order, the transposed local charge rows as a candidate `q` matrix shape,
+  the witness relation coefficients, and the exact coordinate of that relation
+  in the local charge basis. On the saved 4-214-647 context, all four
+  compact-threefold-shaped targets have
+  `target_relation_status=target_relation_integral_in_local_charge_basis` and
+  `target_relation_in_charge_basis=[-1]`. This means the sparse affine relation
+  itself is now understood at the local charge-lattice level. The remaining
+  blocker is still the certified semigroup/grading/chamber/intersection input
+  needed before an actual `cygv` call can produce a compact GV value.
 
 The actionable consequence is that a Cyrus replacement for corrected-chamber
 or potent-ray GV values must recreate the finite semigroup and lower-degree

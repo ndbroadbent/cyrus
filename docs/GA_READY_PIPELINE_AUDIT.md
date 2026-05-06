@@ -301,7 +301,11 @@ to make the remaining GV layer more first-principles:
    relation points in older dumps; on the saved 4-214-647 context the four
    compact-threefold-shaped misses now expose five rank-three local points
    each. This gives the next source-derived construction actual local support
-   points to work from. The
+   points to work from. The context report also now emits a local `cygv` input
+   skeleton for these supports. For all four compact-threefold-shaped misses,
+   the witness relation is integral in the one-row local charge basis with
+   coordinate `[-1]`, and the transposed local charge rows are recorded as the
+   candidate local `q` matrix shape. The
    direct source read reinforces this: `cygv` obtains GV values from the full
    finite semigroup, HKTY alpha/beta construction, and degree-ordered
    `Li2(q_N)` subtraction history, while the McAllister paper's small-curve

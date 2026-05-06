@@ -7,7 +7,7 @@
 //! semigroup HKTY checks for missing targets whose exact active-generator
 //! decomposition is an integer semigroup.
 
-use malachite::Rational as MalachiteRational;
+use malachite::{Integer, Rational as MalachiteRational};
 use nalgebra::{DMatrix, RowDVector};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -18,7 +18,7 @@ use cyrus_core::types::tags::Finite;
 use cyrus_core::{
     Intersection, Point, compute_gv_invariants_with_explicit_semigroup,
     compute_gv_invariants_with_provided_generators, cygv_pair_reduced_seed_generators,
-    diagnose_affine_toric_circuit,
+    diagnose_affine_toric_circuit, integer_math::solve_linear_system_rational,
 };
 
 #[derive(Debug, Deserialize)]
@@ -170,6 +170,7 @@ struct TargetReport {
     origin_circuit_first_witness: Option<OriginCircuitWitnessSample>,
     origin_circuit_affine_support: Option<OriginCircuitAffineSupportSample>,
     local_cygv_hypersurface_shape: Option<LocalCygvHypersurfaceShape>,
+    local_cygv_input_skeleton: Option<LocalCygvInputSkeleton>,
     cms_general_divisor_shape_candidates: Option<Vec<CmsGeneralDivisorShapeCandidate>>,
     cms_general_divisor_intersection_checks: Option<Vec<CmsGeneralDivisorIntersectionCheck>>,
     branch_diagnostic: Option<MissingGvBranchDiagnostic>,
@@ -235,6 +236,16 @@ struct LocalCygvHypersurfaceShape {
 struct LocalChargeMultiplicity {
     charge: i64,
     count: usize,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvInputSkeleton {
+    support_point_indices: Vec<usize>,
+    local_q_matrix_rows: Vec<Vec<i64>>,
+    target_relation_coefficients: Option<Vec<i64>>,
+    target_relation_in_charge_basis: Option<Vec<i64>>,
+    target_relation_status: String,
+    remaining_uncertified_inputs: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1070,6 +1081,198 @@ fn cygv_compact_input_readiness(
     )
 }
 
+fn local_cygv_input_skeleton(
+    sample: &MissingGvTargetSample,
+    support: Option<&OriginCircuitAffineSupportSample>,
+) -> Result<Option<LocalCygvInputSkeleton>, String> {
+    let Some(support) = support else {
+        return Ok(None);
+    };
+    let Some(first_row) = support.local_charge_basis.first() else {
+        return Ok(None);
+    };
+    let support_len = first_row.len();
+    if support_len == 0 {
+        return Ok(None);
+    }
+    if support
+        .local_charge_basis
+        .iter()
+        .any(|row| row.len() != support_len)
+    {
+        return Err("local charge basis rows have inconsistent lengths".to_string());
+    }
+    let local_q_matrix_rows = transpose_local_charge_basis(&support.local_charge_basis);
+    let support_point_indices = sample
+        .origin_circuit_first_witness
+        .as_ref()
+        .map(|witness| {
+            witness
+                .relation_points
+                .iter()
+                .map(|point| point.point_index)
+                .collect::<Vec<_>>()
+        })
+        .filter(|indices| indices.len() == support_len)
+        .unwrap_or_else(|| {
+            support
+                .local_coordinates
+                .iter()
+                .map(|point| point.point_index)
+                .collect()
+        });
+    let target_relation_coefficients =
+        sample
+            .origin_circuit_first_witness
+            .as_ref()
+            .and_then(|witness| {
+                (witness.relation_points.len() == support_len).then(|| {
+                    witness
+                        .relation_points
+                        .iter()
+                        .map(|point| point.coefficient)
+                        .collect::<Vec<_>>()
+                })
+            });
+    let target_relation_in_charge_basis = target_relation_coefficients
+        .as_ref()
+        .map(|target| {
+            relation_coordinates_in_local_charge_basis(target, &support.local_charge_basis)
+        })
+        .transpose()?
+        .flatten();
+    let target_relation_status = match (
+        target_relation_coefficients.as_ref(),
+        target_relation_in_charge_basis.as_ref(),
+    ) {
+        (Some(_), Some(_)) => "target_relation_integral_in_local_charge_basis",
+        (Some(_), None) => "target_relation_not_in_local_charge_basis",
+        (None, _) => "target_relation_unavailable",
+    }
+    .to_string();
+    Ok(Some(LocalCygvInputSkeleton {
+        support_point_indices,
+        local_q_matrix_rows,
+        target_relation_coefficients,
+        target_relation_in_charge_basis,
+        target_relation_status,
+        remaining_uncertified_inputs: vec![
+            "local_semigroup_generators".to_string(),
+            "local_grading_vector".to_string(),
+            "local_q_matrix_orientation_and_phase".to_string(),
+            "local_intersection_tensor".to_string(),
+        ],
+    }))
+}
+
+fn transpose_local_charge_basis(local_charge_basis: &[Vec<i64>]) -> Vec<Vec<i64>> {
+    let Some(width) = local_charge_basis.first().map(Vec::len) else {
+        return Vec::new();
+    };
+    (0..width)
+        .map(|row| local_charge_basis.iter().map(|basis| basis[row]).collect())
+        .collect()
+}
+
+fn relation_coordinates_in_local_charge_basis(
+    target: &[i64],
+    rows: &[Vec<i64>],
+) -> Result<Option<Vec<i64>>, String> {
+    if rows.is_empty() {
+        return Ok(target.iter().all(|&value| value == 0).then(Vec::new));
+    }
+    let dim = rows[0].len();
+    if target.len() != dim {
+        return Err("target relation dimension does not match local charge basis".to_string());
+    }
+    if rows.iter().any(|row| row.len() != dim) {
+        return Err("local charge basis rows have inconsistent dimensions".to_string());
+    }
+    for columns in column_combinations(dim, rows.len()) {
+        let matrix = columns
+            .iter()
+            .map(|&col| {
+                rows.iter()
+                    .map(|row| MalachiteRational::from(Integer::from(row[col])))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let rhs = columns
+            .iter()
+            .map(|&col| MalachiteRational::from(Integer::from(target[col])))
+            .collect::<Vec<_>>();
+        let Some(coordinates) = solve_linear_system_rational(&matrix, &rhs) else {
+            continue;
+        };
+        if !local_charge_coordinates_match_target(&coordinates, target, rows) {
+            continue;
+        }
+        let coordinates = coordinates
+            .into_iter()
+            .map(|coordinate| {
+                if coordinate.denominator_ref() != &1u32 {
+                    return Err(
+                        "target relation has non-integral local charge coordinates".to_string()
+                    );
+                }
+                let integer = Integer::try_from(coordinate).map_err(|_| {
+                    "target relation local charge coordinate is not integral".to_string()
+                })?;
+                i64::try_from(&integer).map_err(|_| {
+                    "target relation local charge coordinate does not fit in i64".to_string()
+                })
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        return Ok(Some(coordinates));
+    }
+    Ok(None)
+}
+
+fn local_charge_coordinates_match_target(
+    coordinates: &[MalachiteRational],
+    target: &[i64],
+    rows: &[Vec<i64>],
+) -> bool {
+    (0..target.len()).all(|col| {
+        let reconstructed = coordinates.iter().zip(rows.iter()).fold(
+            MalachiteRational::from(0),
+            |acc, (coordinate, row)| {
+                acc + coordinate * MalachiteRational::from(Integer::from(row[col]))
+            },
+        );
+        reconstructed == MalachiteRational::from(Integer::from(target[col]))
+    })
+}
+
+fn column_combinations(n_columns: usize, size: usize) -> Vec<Vec<usize>> {
+    let mut out = Vec::new();
+    let mut current = Vec::with_capacity(size);
+    push_column_combinations(0, n_columns, size, &mut current, &mut out);
+    out
+}
+
+fn push_column_combinations(
+    start: usize,
+    n_columns: usize,
+    size: usize,
+    current: &mut Vec<usize>,
+    out: &mut Vec<Vec<usize>>,
+) {
+    if current.len() == size {
+        out.push(current.clone());
+        return;
+    }
+    let remaining = size - current.len();
+    if remaining > n_columns.saturating_sub(start) {
+        return;
+    }
+    for col in start..=n_columns - remaining {
+        current.push(col);
+        push_column_combinations(col + 1, n_columns, size, current, out);
+        current.pop();
+    }
+}
+
 fn origin_circuit_affine_support_with_coordinates(
     sample: &MissingGvTargetSample,
 ) -> Result<Option<OriginCircuitAffineSupportSample>, String> {
@@ -1261,6 +1464,14 @@ fn report_target(
             sample.origin_circuit_affine_support.clone()
         }
     };
+    let local_cygv_input_skeleton =
+        match local_cygv_input_skeleton(sample, origin_circuit_affine_support.as_ref()) {
+            Ok(skeleton) => skeleton,
+            Err(error) => {
+                eprintln!("[WARN] target {index}: {error}; omitting local cygv input skeleton");
+                None
+            }
+        };
     let local_cygv_hypersurface_shape = match local_cygv_hypersurface_shape(sample) {
         Ok(shape) => shape,
         Err(error) => {
@@ -1274,6 +1485,7 @@ fn report_target(
                 origin_circuit_first_witness: sample.origin_circuit_first_witness.clone(),
                 origin_circuit_affine_support,
                 local_cygv_hypersurface_shape: None,
+                local_cygv_input_skeleton,
                 cms_general_divisor_shape_candidates: sample
                     .cms_general_divisor_shape_candidates
                     .clone(),
@@ -1338,6 +1550,7 @@ fn report_target(
                 origin_circuit_first_witness: sample.origin_circuit_first_witness.clone(),
                 origin_circuit_affine_support,
                 local_cygv_hypersurface_shape,
+                local_cygv_input_skeleton,
                 cms_general_divisor_shape_candidates: sample
                     .cms_general_divisor_shape_candidates
                     .clone(),
@@ -1402,6 +1615,7 @@ fn report_target(
                 origin_circuit_first_witness: sample.origin_circuit_first_witness.clone(),
                 origin_circuit_affine_support,
                 local_cygv_hypersurface_shape,
+                local_cygv_input_skeleton,
                 cms_general_divisor_shape_candidates: sample
                     .cms_general_divisor_shape_candidates
                     .clone(),
@@ -1470,6 +1684,7 @@ fn report_target(
                 origin_circuit_first_witness: sample.origin_circuit_first_witness.clone(),
                 origin_circuit_affine_support,
                 local_cygv_hypersurface_shape,
+                local_cygv_input_skeleton,
                 cms_general_divisor_shape_candidates: sample
                     .cms_general_divisor_shape_candidates
                     .clone(),
@@ -1531,6 +1746,7 @@ fn report_target(
         origin_circuit_first_witness: sample.origin_circuit_first_witness.clone(),
         origin_circuit_affine_support,
         local_cygv_hypersurface_shape,
+        local_cygv_input_skeleton,
         cms_general_divisor_shape_candidates: sample.cms_general_divisor_shape_candidates.clone(),
         cms_general_divisor_intersection_checks: sample
             .cms_general_divisor_intersection_checks
@@ -3195,6 +3411,24 @@ mod tests {
                 .sum();
             assert_eq!(weighted_sum, 0);
         }
+
+        let skeleton = local_cygv_input_skeleton(&sample, Some(&support))
+            .unwrap()
+            .expect("local skeleton should be present");
+        assert_eq!(skeleton.support_point_indices, vec![0, 46, 208, 211, 214]);
+        assert_eq!(
+            skeleton.local_q_matrix_rows,
+            vec![vec![1], vec![-2], vec![-1], vec![3], vec![-1]]
+        );
+        assert_eq!(
+            skeleton.target_relation_coefficients,
+            Some(vec![-1, 2, 1, -3, 1])
+        );
+        assert_eq!(skeleton.target_relation_in_charge_basis, Some(vec![-1]));
+        assert_eq!(
+            skeleton.target_relation_status,
+            "target_relation_integral_in_local_charge_basis"
+        );
     }
 
     #[test]
