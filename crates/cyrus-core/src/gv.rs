@@ -5289,19 +5289,26 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
         .iter()
         .map(|degree| ckyz_grading_degree(degree, &grading_vector))
         .collect::<Result<Vec<_>>>()?;
-
-    let mut residual = extraction_degrees
+    let extraction_indices = extraction_degrees
         .iter()
         .map(|degree| {
-            (
-                degree.clone(),
-                potential_z_coefficients
-                    .get(degree)
-                    .cloned()
-                    .unwrap_or_else(|| Rational::from(0)),
-            )
+            domain.index_of(degree).ok_or_else(|| {
+                Error::InvalidInput(format!(
+                    "CKYZ z-series extraction degree {degree:?} is outside the monomial domain"
+                ))
+            })
         })
-        .collect::<BTreeMap<_, _>>();
+        .collect::<Result<Vec<_>>>()?;
+
+    let mut residual_by_index = vec![None::<Rational>; domain.degrees.len()];
+    for (&degree_index, degree) in extraction_indices.iter().zip(extraction_degrees.iter()) {
+        residual_by_index[degree_index] = Some(
+            potential_z_coefficients
+                .get(degree)
+                .cloned()
+                .unwrap_or_else(|| Rational::from(0)),
+        );
+    }
     let mut invariants = BTreeMap::new();
     let trace_timing = env::var_os("CYRUS_TRACE_CKYZ_Z_HISTORY").is_some();
     let extraction_start = trace_timing.then(std::time::Instant::now);
@@ -5316,8 +5323,9 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
     let mut exp_support_cache = HashMap::<Vec<usize>, BTreeSet<usize>>::new();
     let mut exp_coefficient_cache = CkyzExpCoefficientCache::default();
     for (degree_index, degree) in extraction_degrees.iter().enumerate() {
-        let coefficient = residual
-            .get(degree)
+        let domain_degree_index = extraction_indices[degree_index];
+        let coefficient = residual_by_index[domain_degree_index]
+            .as_ref()
             .cloned()
             .unwrap_or_else(|| Rational::from(0));
         if coefficient == 0 {
@@ -5364,7 +5372,11 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
         let exp_support = exp_support_cache
             .get(&coordinate_key)
             .expect("exponential support was inserted above");
-        for target in extraction_degrees.iter().skip(first_later_grading_index) {
+        for (target_position, target) in extraction_degrees
+            .iter()
+            .enumerate()
+            .skip(first_later_grading_index)
+        {
             let (li2_coefficient, has_supported_delta) =
                 ckyz_q_degree_li2_coefficient_and_support_in_z_domain(
                     degree,
@@ -5384,9 +5396,8 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
                 continue;
             }
             li2_coefficient_evaluations += 1;
-            let entry = residual
-                .get_mut(target)
-                .expect("target residual was initialized above");
+            let target_index = extraction_indices[target_position];
+            let entry = residual_by_index[target_index].get_or_insert_with(|| Rational::from(0));
             *entry += subtraction_scale.clone() * li2_coefficient;
         }
     }
