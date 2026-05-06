@@ -3,13 +3,13 @@
 //! Integrates geometry, topology, and physics to evaluate a single (K, M) pair
 //! against the Demirtas-McAllister criteria.
 
+use crate::f64_pos;
 use crate::flat_direction::{compute_ek0, compute_n_matrix, solve_linear_system_faer};
 use crate::intersection::Intersection;
 use crate::kahler::MoriCone;
 use crate::racetrack::{
-    GvInvariant, RacetrackResult, build_racetrack_terms, compute_w0, solve_racetrack,
+    GvInvariant, RacetrackResult, build_racetrack_terms, compute_w0_from_terms, solve_racetrack,
 };
-use crate::f64_pos;
 use crate::types::f64::F64;
 use crate::types::i32::I32;
 use crate::types::i64::I64;
@@ -119,7 +119,10 @@ pub fn evaluate_vacuum(
     };
 
     // 6. Calculation: W₀ and V₀
-    let w0 = compute_w0(&rt_res, &terms[0], &terms[1]);
+    let Some(w0) = compute_w0_from_terms(&rt_res, &terms) else {
+        res.reason = Some("Racetrack W0 computation failed or cancelled exactly".into());
+        return Ok(res);
+    };
     let Ok(ek0) = compute_ek0(req.kappa, &p) else {
         res.reason = Some("Invalid flat direction (e^K₀ not positive)".into());
         return Ok(res);

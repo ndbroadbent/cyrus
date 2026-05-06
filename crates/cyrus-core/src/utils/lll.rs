@@ -51,60 +51,23 @@ pub struct LllResult {
 /// ```
 pub fn lll_reduce(pts: &[Vec<i64>], transform: bool) -> LllResult {
     if pts.is_empty() {
-        return LllResult {
-            reduced: Vec::new(),
-            transform: if transform { Some(Vec::new()) } else { None },
-            transform_inv: if transform { Some(Vec::new()) } else { None },
-        };
+        return empty_lll_result(transform);
     }
 
     let n_rows = pts.len();
     let n_cols = pts[0].len();
 
-    // Transpose: LLL operates on column vectors
-    // pts[i][j] -> basis[j][i]
-    let mut basis: Vec<Vec<Integer>> = (0..n_cols)
-        .map(|j| pts.iter().map(|row| Integer::from(row[j])).collect())
-        .collect();
-
-    // Initialize transformation matrix as identity
-    let mut trans: Vec<Vec<Integer>> = (0..n_cols)
-        .map(|i| {
-            (0..n_cols)
-                .map(|j| {
-                    if i == j {
-                        Integer::from(1)
-                    } else {
-                        Integer::from(0)
-                    }
-                })
-                .collect()
-        })
-        .collect();
+    let mut basis = transpose_to_columns(pts, n_cols);
+    let mut trans = identity_matrix(n_cols);
 
     // Run LLL algorithm
     lll_algorithm(&mut basis, &mut trans);
 
-    // Transpose back to row format
-    let reduced: Vec<Vec<i64>> = (0..n_rows)
-        .map(|i| {
-            basis
-                .iter()
-                .map(|col| i64::try_from(&col[i]).unwrap_or(0))
-                .collect()
-        })
-        .collect();
+    let reduced = transpose_to_rows(&basis, n_rows);
 
     if transform {
-        // Convert transformation matrix
-        let a: Vec<Vec<i64>> = trans
-            .iter()
-            .map(|row| row.iter().map(|x| i64::try_from(x).unwrap_or(0)).collect())
-            .collect();
-
-        // Compute inverse
+        let a = to_i64_matrix(&trans);
         let a_inv = invert_integer_matrix(&a);
-
         LllResult {
             reduced,
             transform: Some(a),
@@ -117,6 +80,54 @@ pub fn lll_reduce(pts: &[Vec<i64>], transform: bool) -> LllResult {
             transform_inv: None,
         }
     }
+}
+
+const fn empty_lll_result(transform: bool) -> LllResult {
+    LllResult {
+        reduced: Vec::new(),
+        transform: if transform { Some(Vec::new()) } else { None },
+        transform_inv: if transform { Some(Vec::new()) } else { None },
+    }
+}
+
+fn transpose_to_columns(pts: &[Vec<i64>], n_cols: usize) -> Vec<Vec<Integer>> {
+    (0..n_cols)
+        .map(|j| pts.iter().map(|row| Integer::from(row[j])).collect())
+        .collect()
+}
+
+fn identity_matrix(n: usize) -> Vec<Vec<Integer>> {
+    (0..n)
+        .map(|i| {
+            (0..n)
+                .map(|j| {
+                    if i == j {
+                        Integer::from(1)
+                    } else {
+                        Integer::from(0)
+                    }
+                })
+                .collect()
+        })
+        .collect()
+}
+
+fn transpose_to_rows(basis: &[Vec<Integer>], n_rows: usize) -> Vec<Vec<i64>> {
+    (0..n_rows)
+        .map(|i| {
+            basis
+                .iter()
+                .map(|col| i64::try_from(&col[i]).unwrap_or(0))
+                .collect()
+        })
+        .collect()
+}
+
+fn to_i64_matrix(trans: &[Vec<Integer>]) -> Vec<Vec<i64>> {
+    trans
+        .iter()
+        .map(|row| row.iter().map(|x| i64::try_from(x).unwrap_or(0)).collect())
+        .collect()
 }
 
 /// Core LLL algorithm implementation.
@@ -279,13 +290,17 @@ fn invert_integer_matrix(a: &[Vec<i64>]) -> Option<Vec<Vec<i64>>> {
         return Some(Vec::new());
     }
 
-    // Convert to rationals and perform Gaussian elimination
-    let mut aug: Vec<Vec<Rational>> = a
-        .iter()
+    let mut aug = build_augmented_matrix(a, n);
+    gaussian_elimination(&mut aug, n)?;
+    let inv = extract_integer_inverse(&aug, n)?;
+    verify_unimodular_inverse(a, inv)
+}
+
+fn build_augmented_matrix(a: &[Vec<i64>], n: usize) -> Vec<Vec<Rational>> {
+    a.iter()
         .enumerate()
         .map(|(i, row)| {
             let mut r: Vec<Rational> = row.iter().map(|&x| Rational::from(x)).collect();
-            // Append identity
             for j in 0..n {
                 r.push(if i == j {
                     Rational::from(1)
@@ -295,29 +310,19 @@ fn invert_integer_matrix(a: &[Vec<i64>]) -> Option<Vec<Vec<i64>>> {
             }
             r
         })
-        .collect();
+        .collect()
+}
 
-    // Gaussian elimination with partial pivoting
+fn gaussian_elimination(aug: &mut [Vec<Rational>], n: usize) -> Option<()> {
     for col in 0..n {
-        // Find pivot
-        let mut pivot_row = None;
-        for row in col..n {
-            if aug[row][col] != 0 {
-                pivot_row = Some(row);
-                break;
-            }
-        }
-
-        let pivot_row = pivot_row?;
+        let pivot_row = find_pivot_row(aug, col, n)?;
         aug.swap(col, pivot_row);
 
-        // Scale pivot row
         let pivot = aug[col][col].clone();
         for j in 0..2 * n {
             aug[col][j] /= &pivot;
         }
 
-        // Eliminate column
         for row in 0..n {
             if row != col {
                 let factor = aug[row][col].clone();
@@ -328,27 +333,34 @@ fn invert_integer_matrix(a: &[Vec<i64>]) -> Option<Vec<Vec<i64>>> {
             }
         }
     }
+    Some(())
+}
 
-    // Extract inverse and convert to integers
+fn find_pivot_row(aug: &[Vec<Rational>], col: usize, n: usize) -> Option<usize> {
+    (col..n).find(|&row| aug[row][col] != 0)
+}
+
+fn extract_integer_inverse(aug: &[Vec<Rational>], n: usize) -> Option<Vec<Vec<i64>>> {
     let mut inv: Vec<Vec<i64>> = Vec::with_capacity(n);
-    for row in &aug {
+    for row in aug {
         let mut inv_row = Vec::with_capacity(n);
         for j in n..2 * n {
-            // Check if it's an integer
             use malachite::num::conversion::traits::RoundingFrom;
             use malachite::rounding_modes::RoundingMode;
             let val = &row[j];
             let int_val = Integer::rounding_from(val, RoundingMode::Floor).0;
             if Rational::from(&int_val) != *val {
-                return None; // Not an integer matrix
+                return None;
             }
             inv_row.push(i64::try_from(&int_val).ok()?);
         }
         inv.push(inv_row);
     }
+    Some(inv)
+}
 
-    // Verify: A * A_inv should be identity
-    // (Handle sign ambiguity as in CYTools)
+fn verify_unimodular_inverse(a: &[Vec<i64>], inv: Vec<Vec<i64>>) -> Option<Vec<Vec<i64>>> {
+    let n = a.len();
     let mut product_is_id = true;
     let mut product_is_neg_id = true;
 
@@ -371,7 +383,6 @@ fn invert_integer_matrix(a: &[Vec<i64>]) -> Option<Vec<Vec<i64>>> {
     if product_is_id {
         Some(inv)
     } else if product_is_neg_id {
-        // Negate the inverse
         Some(
             inv.iter()
                 .map(|row| row.iter().map(|&x| -x).collect())

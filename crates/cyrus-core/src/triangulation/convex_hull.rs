@@ -52,14 +52,7 @@ pub fn convex_hull(points: &LiftedPoints) -> Vec<Facet> {
         return vec![(0..n).collect()];
     }
 
-    // 1. Find initial simplex (first dim points + 1)
-    let mut current_facets: Vec<Facet> = Vec::new();
-
-    // Create initial facets from the first dim+1 points
-    for i in 0..=dim {
-        let face: Vec<usize> = (0..=dim).filter(|&idx| idx != i).collect();
-        current_facets.push(face);
-    }
+    let mut current_facets = initial_facets(dim);
 
     let all_points = points.as_slice();
 
@@ -67,66 +60,90 @@ pub fn convex_hull(points: &LiftedPoints) -> Vec<Facet> {
     for i in (dim + 1)..n {
         let p = &all_points[i];
 
-        // Parallel visibility check for all facets
-        let visibility: Vec<(usize, bool, Vec<Vec<usize>>)> = current_facets
-            .par_iter()
-            .enumerate()
-            .map(|(f_idx, facet)| {
-                let visible = is_visible(facet, p, all_points);
-                let ridges = if visible {
-                    // Compute ridges for this facet
-                    (0..facet.len())
-                        .map(|j| {
-                            let mut ridge = facet.clone();
-                            ridge.remove(j);
-                            ridge.sort_unstable();
-                            ridge
-                        })
-                        .collect()
-                } else {
-                    Vec::new()
-                };
-                (f_idx, visible, ridges)
-            })
-            .collect();
-
-        // Collect visible facets and ridges (sequential reduction)
-        let mut visible_facets = Vec::new();
-        let mut horizon_ridges = HashSet::new();
-
-        for (f_idx, visible, ridges) in visibility {
-            if visible {
-                visible_facets.push(f_idx);
-                for ridge in ridges {
-                    if !horizon_ridges.insert(ridge.clone()) {
-                        horizon_ridges.remove(&ridge);
-                    }
-                }
-            }
-        }
-
+        let visibility = compute_visibility(&current_facets, p, all_points);
+        let (visible_facets, horizon_ridges) = collect_horizon(visibility);
         if visible_facets.is_empty() {
             continue;
         }
 
-        // Build new facet list
-        let mut new_facets = Vec::with_capacity(current_facets.len());
-        for (idx, facet) in current_facets.iter().enumerate() {
-            if !visible_facets.contains(&idx) {
-                new_facets.push(facet.clone());
-            }
-        }
-
-        for ridge in horizon_ridges {
-            let mut new_facet = ridge;
-            new_facet.push(i);
-            new_facets.push(new_facet);
-        }
-
-        current_facets = new_facets;
+        current_facets = rebuild_facets(&current_facets, &visible_facets, horizon_ridges, i);
     }
 
     current_facets
+}
+
+fn initial_facets(dim: usize) -> Vec<Facet> {
+    let mut facets = Vec::new();
+    for i in 0..=dim {
+        let face: Vec<usize> = (0..=dim).filter(|&idx| idx != i).collect();
+        facets.push(face);
+    }
+    facets
+}
+
+fn compute_visibility(
+    facets: &[Facet],
+    point: &[Integer],
+    all_points: &[Vec<Integer>],
+) -> Vec<(usize, bool, Vec<Vec<usize>>)> {
+    facets
+        .par_iter()
+        .enumerate()
+        .map(|(f_idx, facet)| {
+            let visible = is_visible(facet, point, all_points);
+            let ridges = if visible {
+                (0..facet.len())
+                    .map(|j| {
+                        let mut ridge = facet.clone();
+                        ridge.remove(j);
+                        ridge.sort_unstable();
+                        ridge
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            (f_idx, visible, ridges)
+        })
+        .collect()
+}
+
+fn collect_horizon(
+    visibility: Vec<(usize, bool, Vec<Vec<usize>>)>,
+) -> (Vec<usize>, HashSet<Vec<usize>>) {
+    let mut visible_facets = Vec::new();
+    let mut horizon_ridges = HashSet::new();
+    for (f_idx, visible, ridges) in visibility {
+        if visible {
+            visible_facets.push(f_idx);
+            for ridge in ridges {
+                if !horizon_ridges.insert(ridge.clone()) {
+                    horizon_ridges.remove(&ridge);
+                }
+            }
+        }
+    }
+    (visible_facets, horizon_ridges)
+}
+
+fn rebuild_facets(
+    current_facets: &[Facet],
+    visible_facets: &[usize],
+    horizon_ridges: HashSet<Vec<usize>>,
+    new_point: usize,
+) -> Vec<Facet> {
+    let mut new_facets = Vec::with_capacity(current_facets.len());
+    for (idx, facet) in current_facets.iter().enumerate() {
+        if !visible_facets.contains(&idx) {
+            new_facets.push(facet.clone());
+        }
+    }
+    for ridge in horizon_ridges {
+        let mut new_facet = ridge;
+        new_facet.push(new_point);
+        new_facets.push(new_facet);
+    }
+    new_facets
 }
 
 /// Check if a point p is "visible" from the outside of a facet.

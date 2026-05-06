@@ -37,13 +37,29 @@ pub fn solve_normal_equations(
     n_rows: usize,
     n_cols: usize,
 ) -> Result<Vec<f64>> {
-    // Group triplets by row for efficient M^T M computation
+    let rows_data = group_triplets_by_row(triplets);
+    let mtm_triplets = build_mtm_triplets(&rows_data, n_cols);
+    let mtm_sparse = build_mtm_sparse(n_cols, &mtm_triplets)?;
+    let mtc = build_mtc(triplets, c_vec, n_cols);
+
+    let sol = solve_cholesky(&mtm_sparse, &mtc, n_cols)?;
+    validate_solution(&sol)?;
+    log_residual(&rows_data, &sol, c_vec, n_rows);
+    Ok(sol)
+}
+
+fn group_triplets_by_row(triplets: &[(usize, usize, f64)]) -> HashMap<usize, Vec<(usize, f64)>> {
     let mut rows_data: HashMap<usize, Vec<(usize, f64)>> = HashMap::new();
     for &(row, col, val) in triplets {
         rows_data.entry(row).or_default().push((col, val));
     }
+    rows_data
+}
 
-    // Build M^T M as sparse triplets
+fn build_mtm_triplets(
+    rows_data: &HashMap<usize, Vec<(usize, f64)>>,
+    n_cols: usize,
+) -> Vec<(usize, usize, f64)> {
     let mut mtm_map: HashMap<(usize, usize), f64> = HashMap::new();
     for entries in rows_data.values() {
         for &(col_i, val_i) in entries {
@@ -52,44 +68,55 @@ pub fn solve_normal_equations(
             }
         }
     }
-
-    // Add regularization to diagonal
     for i in 0..n_cols {
         *mtm_map.entry((i, i)).or_insert(0.0) += 1e-12;
     }
+    mtm_map.into_iter().map(|((i, j), v)| (i, j, v)).collect()
+}
 
-    // Convert to triplets for sparse matrix construction
-    let mtm_triplets: Vec<(usize, usize, f64)> =
-        mtm_map.into_iter().map(|((i, j), v)| (i, j, v)).collect();
+fn build_mtm_sparse(
+    n_cols: usize,
+    mtm_triplets: &[(usize, usize, f64)],
+) -> Result<SparseColMat<usize, f64>> {
+    SparseColMat::<usize, f64>::try_new_from_triplets(n_cols, n_cols, mtm_triplets)
+        .map_err(|e| Error::SingularMatrix(format!("Failed to build sparse M^T M: {e:?}")))
+}
 
-    // Build sparse M^T M matrix
-    let mtm_sparse =
-        SparseColMat::<usize, f64>::try_new_from_triplets(n_cols, n_cols, &mtm_triplets)
-            .map_err(|e| Error::SingularMatrix(format!("Failed to build sparse M^T M: {e:?}")))?;
-
-    // Build M^T C as dense vector
+fn build_mtc(triplets: &[(usize, usize, f64)], c_vec: &[f64], n_cols: usize) -> faer::Mat<f64> {
     let mut mtc = faer::Mat::<f64>::zeros(n_cols, 1);
     for &(row, col, val) in triplets {
         mtc[(col, 0)] += val * c_vec[row];
     }
+    mtc
+}
 
-    // Solve using sparse Cholesky
+fn solve_cholesky(
+    mtm_sparse: &SparseColMat<usize, f64>,
+    mtc: &faer::Mat<f64>,
+    n_cols: usize,
+) -> Result<Vec<f64>> {
     let chol = mtm_sparse
         .sp_cholesky(faer::Side::Lower)
         .map_err(|_| Error::SingularMatrix("Sparse Cholesky factorization failed".into()))?;
-
     let solution = chol.solve(&mtc);
+    Ok((0..n_cols).map(|i| solution[(i, 0)]).collect())
+}
 
-    // Extract solution
-    let sol: Vec<f64> = (0..n_cols).map(|i| solution[(i, 0)]).collect();
-
+fn validate_solution(sol: &[f64]) -> Result<()> {
     if sol.iter().any(|&x| !x.is_finite()) {
         return Err(Error::SingularMatrix(
             "Solution contains non-finite values".into(),
         ));
     }
+    Ok(())
+}
 
-    // Compute residual: ||Mx - c||
+fn log_residual(
+    rows_data: &HashMap<usize, Vec<(usize, f64)>>,
+    sol: &[f64],
+    c_vec: &[f64],
+    n_rows: usize,
+) {
     let mut residual_sq = 0.0;
     for row in 0..n_rows {
         let mut mx_row = 0.0;
@@ -111,8 +138,6 @@ pub fn solve_normal_equations(
     eprintln!(
         "[DEBUG] Residual: {residual:.6}, RHS norm: {rhs_norm:.6}, Relative: {rel_residual:.6}"
     );
-
-    Ok(sol)
 }
 
 /// Convert f64 to a rational number.

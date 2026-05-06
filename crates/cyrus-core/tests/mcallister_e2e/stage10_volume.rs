@@ -211,8 +211,8 @@ fn stage10_compute_v_string() {
     }
 
     let points_raw = if let Some(dir) = crate::mcallister_data_dir() {
-        let content = std::fs::read_to_string(dir.join("points.dat"))
-            .expect("Failed to read points.dat");
+        let content =
+            std::fs::read_to_string(dir.join("points.dat")).expect("Failed to read points.dat");
         content
             .lines()
             .filter(|l| !l.trim().is_empty())
@@ -227,8 +227,7 @@ fn stage10_compute_v_string() {
             panic!("Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures");
         }
         let input_path = manifest_dir.join("tests/mcallister_e2e/inputs/polytope.json");
-        let content =
-            std::fs::read_to_string(&input_path).expect("Failed to read polytope.json");
+        let content = std::fs::read_to_string(&input_path).expect("Failed to read polytope.json");
         let input: PolytopeInput =
             serde_json::from_str(&content).expect("Failed to parse polytope.json");
         input.points
@@ -245,8 +244,8 @@ fn stage10_compute_v_string() {
         .expect("Failed to filter points");
 
     let heights = if let Some(dir) = crate::mcallister_data_dir() {
-        let content = std::fs::read_to_string(dir.join("heights.dat"))
-            .expect("Failed to read heights.dat");
+        let content =
+            std::fs::read_to_string(dir.join("heights.dat")).expect("Failed to read heights.dat");
         content
             .split(|c| c == ',' || c == '\n' || c == '\r')
             .filter(|s| !s.trim().is_empty())
@@ -372,8 +371,14 @@ fn stage10_compute_v_string() {
 
     let v_string = classical_volume_corrected - bbhl.get();
 
-    eprintln!("Classical volume (uncorrected): {}", classical_volume_uncorrected);
-    eprintln!("Classical volume (corrected): {}", classical_volume_corrected);
+    eprintln!(
+        "Classical volume (uncorrected): {}",
+        classical_volume_uncorrected
+    );
+    eprintln!(
+        "Classical volume (corrected): {}",
+        classical_volume_corrected
+    );
     eprintln!("BBHL correction: {}", bbhl.get());
     eprintln!("V_string (computed): {}", v_string);
 

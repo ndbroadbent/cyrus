@@ -1,13 +1,13 @@
 //! Reproduce the Cicoli et al. 2407.03405 numerical example scales.
 
-use cyrus_core::{f64_pos, i64_pos};
+use cyrus_core::cosmology::{CosmologyParams, solve_cosmology};
 use cyrus_core::quintessence::{
-    axion_masses, derive_cicoli_2407, late_time_gradient_2d, late_time_potential_2d,
-    AxionPotential1D, Cicoli2407Params,
+    AxionPotential1D, Cicoli2407Params, axion_masses, derive_cicoli_2407, late_time_gradient_2d,
+    late_time_potential_2d,
 };
-use cyrus_core::cosmology::{solve_cosmology, CosmologyParams};
 use cyrus_core::types::f64::F64;
 use cyrus_core::types::tags::Finite;
+use cyrus_core::{f64_pos, i64_pos};
 
 fn assert_rel_close(actual: f64, expected: f64, rel_tol: f64, label: &str) {
     let denom = expected.abs().max(1.0);
@@ -56,7 +56,12 @@ fn cicoli_2407_example_matches_paper_scales() {
     assert_in_range(derived.lambda_1_4.get(), 1.0e-123, 1.0e-120, "lambda_1_4");
     assert_in_range(derived.lambda_2_4.get(), 1.0e-119, 1.0e-116, "lambda_2_4");
 
-    let (m1, m2) = axion_masses(derived.lambda_1_4, derived.lambda_2_4, derived.f1, derived.f2);
+    let (m1, m2) = axion_masses(
+        derived.lambda_1_4,
+        derived.lambda_2_4,
+        derived.f1,
+        derived.f2,
+    );
     assert_in_range(m1.get(), 1.0e-60, 2.0e-59, "m1");
     assert_in_range(m2.get(), 1.0e-57, 3.0e-56, "m2");
 }
@@ -90,8 +95,14 @@ fn axion_potential_2d_minimum_checks() {
     let v0 = late_time_potential_2d(phi_0, phi_0, f1, f2, lambda_1_4, lambda_2_4).get();
     let (dphi1, dphi2) = late_time_gradient_2d(phi_0, phi_0, f1, f2, lambda_1_4, lambda_2_4);
     assert!(v0.abs() < 1e-14, "V(0,0) should be ~0");
-    assert!(dphi1.get().abs() < 1e-14, "dV/dphi1 at minimum should be ~0");
-    assert!(dphi2.get().abs() < 1e-14, "dV/dphi2 at minimum should be ~0");
+    assert!(
+        dphi1.get().abs() < 1e-14,
+        "dV/dphi1 at minimum should be ~0"
+    );
+    assert!(
+        dphi2.get().abs() < 1e-14,
+        "dV/dphi2 at minimum should be ~0"
+    );
 
     let phi2_pi = F64::<Finite>::new(f2.get() * std::f64::consts::PI).unwrap();
     let v_pi = late_time_potential_2d(phi_0, phi2_pi, f1, f2, lambda_1_4, lambda_2_4).get();
@@ -111,8 +122,8 @@ fn axion_potential_cosmology_w_is_minus_one() {
         f,
     };
     let phi_i = f.get() * std::f64::consts::PI;
-    let result = solve_cosmology(&params, &pot, phi_i, 0.0, 10.0)
-        .expect("cosmology solver should succeed");
+    let result =
+        solve_cosmology(&params, &pot, phi_i, 0.0, 10.0).expect("cosmology solver should succeed");
 
     let w_start = result.w_z.first().copied().unwrap_or(0.0);
     let w_end = result.w_z.last().copied().unwrap_or(0.0);

@@ -61,16 +61,18 @@ fn load_stage2_fixture() -> Stage2Fixture {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
     let data_dir = crate::mcallister_data_dir();
-    if crate::first_principles_enabled() && data_dir.is_none() {
-        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
-    }
+    assert!(
+        !(crate::first_principles_enabled() && data_dir.is_none()),
+        "CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests"
+    );
 
     let points_raw = if let Some(dir) = data_dir {
         read_csv_rows_i64(&dir.join("points.dat"))
     } else {
-        if !crate::fixtures_enabled() {
-            panic!("Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures");
-        }
+        assert!(
+            crate::fixtures_enabled(),
+            "Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures"
+        );
         let input_path = manifest_dir.join("tests/mcallister_e2e/inputs/polytope.json");
         let content = std::fs::read_to_string(&input_path)
             .unwrap_or_else(|e| panic!("Failed to read {}: {e}", input_path.display()));
@@ -257,15 +259,17 @@ struct HeightsInput {
 fn load_mcallister_heights() -> Vec<f64> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data_dir = crate::mcallister_data_dir();
-    if crate::first_principles_enabled() && data_dir.is_none() {
-        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
-    }
+    assert!(
+        !(crate::first_principles_enabled() && data_dir.is_none()),
+        "CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests"
+    );
     if let Some(dir) = data_dir {
         return read_csv_f64(&dir.join("heights.dat"));
     }
-    if !crate::fixtures_enabled() {
-        panic!("Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures");
-    }
+    assert!(
+        crate::fixtures_enabled(),
+        "Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures"
+    );
     let path = manifest_dir.join("tests/mcallister_e2e/inputs/heights.json");
     let content = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));

@@ -25,7 +25,9 @@ fn main() {
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("CYRUS_MCALLISTER_DATA_DIR").map(PathBuf::from))
         .unwrap_or_else(|| {
-            eprintln!("Usage: dump_triangulation_points <data_dir> (or set CYRUS_MCALLISTER_DATA_DIR)");
+            eprintln!(
+                "Usage: dump_triangulation_points <data_dir> (or set CYRUS_MCALLISTER_DATA_DIR)"
+            );
             std::process::exit(2);
         });
 
@@ -39,7 +41,7 @@ fn main() {
         let coords = p
             .coords()
             .iter()
-            .map(|v| v.to_string())
+            .map(std::string::ToString::to_string)
             .collect::<Vec<_>>()
             .join(",");
         println!("{i},{coords}");

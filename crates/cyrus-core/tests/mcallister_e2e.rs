@@ -3,9 +3,7 @@
 #![allow(clippy::cast_possible_wrap)]
 #![allow(clippy::uninlined_format_args)]
 #![allow(clippy::items_after_statements)]
-#![allow(clippy::too_many_lines)]
 #![allow(clippy::needless_range_loop)]
-#![allow(clippy::cognitive_complexity)]
 #![allow(clippy::redundant_closure_for_method_calls)]
 #![allow(clippy::unnecessary_sort_by)]
 #![allow(clippy::needless_for_each)]
@@ -52,8 +50,9 @@ pub(crate) fn mcallister_data_dir() -> Option<std::path::PathBuf> {
         return Some(std::path::PathBuf::from(dir));
     }
 
-    let default =
-        std::path::PathBuf::from("/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647");
+    let default = std::path::PathBuf::from(
+        "/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647",
+    );
     if default.exists() {
         Some(default)
     } else {

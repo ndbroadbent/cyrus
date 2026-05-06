@@ -29,9 +29,10 @@ fn round_to_decimals(value: f64, decimals: u32) -> f64 {
 
 fn require_data_dir() -> Option<PathBuf> {
     let Some(dir) = crate::mcallister_data_dir() else {
-        if crate::first_principles_enabled() {
-            panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
-        }
+        assert!(
+            !crate::first_principles_enabled(),
+            "CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests"
+        );
         eprintln!("Skipping racetrack data checks (set CYRUS_MCALLISTER_DATA_DIR)");
         return None;
     };
@@ -150,7 +151,7 @@ fn stage10_bbhl_correction_4_214() {
 
 /// Load dual curves from McAllister's data files
 /// Note: GV invariants are arbitrary precision integers (10^50+), returned as strings
-fn load_dual_curves(data_dir: &PathBuf) -> (Vec<Vec<i64>>, Vec<String>) {
+fn load_dual_curves(data_dir: &std::path::Path) -> (Vec<Vec<i64>>, Vec<String>) {
     use std::fs;
 
     // Load dual curves (5177 curves, 9 elements each)
@@ -222,7 +223,7 @@ fn stage5_load_dual_curves() {
 
 /// Load primal curves from McAllister's data files
 /// These are the 344 curves used for the racetrack superpotential
-fn load_primal_curves(data_dir: &PathBuf) -> (Vec<Vec<i64>>, Vec<i64>) {
+fn load_primal_curves(data_dir: &std::path::Path) -> (Vec<Vec<i64>>, Vec<i64>) {
     use std::fs;
 
     // Load primal curves (344 curves, 219 elements each)
@@ -256,12 +257,12 @@ fn load_primal_curves(data_dir: &PathBuf) -> (Vec<Vec<i64>>, Vec<i64>) {
 }
 
 /// Load KKLT basis and target volumes
-fn load_kklt_data(data_dir: &PathBuf) -> (Vec<usize>, Vec<i64>) {
+fn load_kklt_data(data_dir: &std::path::Path) -> (Vec<usize>, Vec<i64>) {
     use std::fs;
 
     // Load KKLT basis indices (213 divisors that contribute to superpotential)
-    let basis_content = fs::read_to_string(data_dir.join("kklt_basis.dat"))
-        .expect("Failed to read kklt_basis.dat");
+    let basis_content =
+        fs::read_to_string(data_dir.join("kklt_basis.dat")).expect("Failed to read kklt_basis.dat");
 
     let kklt_basis: Vec<usize> = basis_content
         .trim()

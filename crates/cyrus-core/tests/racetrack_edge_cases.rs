@@ -1,9 +1,9 @@
 #![allow(missing_docs)]
+use cyrus_core::f64_pos;
 use cyrus_core::racetrack::{
     GvInvariant, RacetrackResult, RacetrackTerm, ZETA_3, build_racetrack_terms, compute_w0,
-    solve_racetrack,
+    compute_w0_from_terms, solve_racetrack,
 };
-use cyrus_core::f64_pos;
 use cyrus_core::types::f64::F64;
 use cyrus_core::types::i64::I64;
 use cyrus_core::types::tags::{Finite, NonNeg, Pos};
@@ -30,7 +30,7 @@ fn test_zeta_value() {
 
 #[test]
 fn test_solve_racetrack_same_sign_coefficients() {
-    // Both coefficients positive - no solution
+    // Same-sign coefficients are valid on the complex branch when |δ| < 1.
     let terms = vec![
         RacetrackTerm {
             curve: i64_vec(&[1]),
@@ -39,16 +39,18 @@ fn test_solve_racetrack_same_sign_coefficients() {
         },
         RacetrackTerm {
             curve: i64_vec(&[2]),
-            coefficient: f64_finite(2.0), // Same sign as first
+            coefficient: f64_finite(1000.0),
             exponent: f64_finite(2.0),
         },
     ];
-    assert!(solve_racetrack(&terms).is_none());
+    let res = solve_racetrack(&terms).expect("same-sign racetrack should use Re(tau) branch");
+    assert!(res.g_s.get() > 0.0 && res.g_s.get() <= 1.0);
+    assert!((res.re_tau.get() - 0.5).abs() < 1e-12);
 }
 
 #[test]
 fn test_solve_racetrack_both_negative() {
-    // Both coefficients negative - no solution
+    // Both coefficients negative are also same-sign and use the complex branch.
     let terms = vec![
         RacetrackTerm {
             curve: i64_vec(&[1]),
@@ -57,7 +59,28 @@ fn test_solve_racetrack_both_negative() {
         },
         RacetrackTerm {
             curve: i64_vec(&[2]),
-            coefficient: f64_finite(-2.0),
+            coefficient: f64_finite(-1000.0),
+            exponent: f64_finite(2.0),
+        },
+    ];
+    let res = solve_racetrack(&terms).expect("same-sign racetrack should use Re(tau) branch");
+    assert!(res.g_s.get() > 0.0 && res.g_s.get() <= 1.0);
+    assert!((res.re_tau.get() - 0.5).abs() < 1e-12);
+}
+
+#[test]
+fn test_solve_racetrack_same_sign_weak_hierarchy_rejected() {
+    // Same-sign is not enough: the hierarchy must still give positive Im(tau)
+    // in the perturbative regime.
+    let terms = vec![
+        RacetrackTerm {
+            curve: i64_vec(&[1]),
+            coefficient: f64_finite(1.0),
+            exponent: f64_finite(1.0),
+        },
+        RacetrackTerm {
+            curve: i64_vec(&[2]),
+            coefficient: f64_finite(2.0),
             exponent: f64_finite(2.0),
         },
     ];
@@ -202,6 +225,7 @@ fn test_build_racetrack_terms_rounding() {
 fn test_compute_w0() {
     let result = RacetrackResult {
         g_s: F64::<Pos>::new(0.1).unwrap(),
+        re_tau: F64::<NonNeg>::ZERO,
         im_tau: F64::<Pos>::new(10.0).unwrap(),
         delta: F64::<NonNeg>::new(0.0).unwrap(),
         epsilon: F64::<NonNeg>::new(0.0).unwrap(),
@@ -224,15 +248,55 @@ fn test_compute_w0() {
 }
 
 #[test]
+fn test_compute_w0_from_all_terms() {
+    let result = RacetrackResult {
+        g_s: F64::<Pos>::new(0.1).unwrap(),
+        re_tau: F64::<NonNeg>::ZERO,
+        im_tau: F64::<Pos>::new(10.0).unwrap(),
+        delta: F64::<NonNeg>::ZERO,
+        epsilon: F64::<NonNeg>::ZERO,
+    };
+
+    let terms = vec![
+        RacetrackTerm {
+            curve: i64_vec(&[1]),
+            coefficient: f64_finite(1.0),
+            exponent: f64_finite(0.01),
+        },
+        RacetrackTerm {
+            curve: i64_vec(&[2]),
+            coefficient: f64_finite(-2.0),
+            exponent: f64_finite(0.02),
+        },
+        RacetrackTerm {
+            curve: i64_vec(&[3]),
+            coefficient: f64_finite(3.0),
+            exponent: f64_finite(0.03),
+        },
+    ];
+
+    let all_terms = compute_w0_from_terms(&result, &terms).expect("nonzero all-term W0");
+    let two_terms = compute_w0(&result, &terms[0], &terms[1]);
+
+    assert!(all_terms.get().is_finite());
+    assert!(
+        (all_terms.get() - two_terms.get()).abs() > 1e-20,
+        "third term should contribute to all-term W0"
+    );
+}
+
+#[test]
 fn test_racetrack_result_fields() {
     // Construct a valid result and verify fields are accessible
     let result = RacetrackResult {
         g_s: F64::<Pos>::new(0.5).unwrap(),
+        re_tau: F64::<NonNeg>::new(0.25).unwrap(),
         im_tau: F64::<Pos>::new(2.0).unwrap(),
         delta: F64::<NonNeg>::new(0.001).unwrap(),
         epsilon: F64::<NonNeg>::new(0.002).unwrap(),
     };
     assert!((result.g_s.get() - 0.5).abs() < f64::EPSILON);
+    assert!((result.re_tau.get() - 0.25).abs() < f64::EPSILON);
     assert!((result.im_tau.get() - 2.0).abs() < f64::EPSILON);
     assert!((result.delta.get() - 0.001).abs() < f64::EPSILON);
     assert!((result.epsilon.get() - 0.002).abs() < f64::EPSILON);

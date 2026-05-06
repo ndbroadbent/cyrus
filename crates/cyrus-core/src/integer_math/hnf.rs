@@ -19,87 +19,108 @@ pub fn hermite_normal_form(matrix: &[Vec<Integer>]) -> Vec<Vec<Integer>> {
         return Vec::new();
     }
 
-    let m = matrix.len();
-    let n = matrix[0].len();
-    let mut h = matrix.to_vec();
+    let row_count = matrix.len();
+    let col_count = matrix[0].len();
+    let mut hnf_rows = matrix.to_vec();
 
     let mut row = 0usize;
-    for col in 0..n {
-        if row >= m {
+    for col in 0..col_count {
+        if row >= row_count {
             break;
         }
 
-        // Find a pivot row with minimal absolute value in this column.
-        let mut pivot_row: Option<usize> = None;
-        let mut pivot_abs: Option<Integer> = None;
-        for r in row..m {
-            if h[r][col] != 0 {
-                let abs = h[r][col].clone().abs();
-                let better = match &pivot_abs {
-                    Some(best) => abs < *best,
-                    None => true,
-                };
-                if better {
-                    pivot_abs = Some(abs);
-                    pivot_row = Some(r);
-                }
-            }
-        }
-
-        let Some(pr) = pivot_row else {
+        let Some(pr) = find_pivot_row(&hnf_rows, row, col, row_count) else {
             continue;
         };
         if pr != row {
-            h.swap(pr, row);
+            hnf_rows.swap(pr, row);
         }
 
-        // Clear entries *below* the pivot using extended gcd row operations.
-        // We must not disturb previously established pivots above `row`.
-        for r in (row + 1)..m {
-            if h[r][col] == 0 {
-                continue;
-            }
-            let (g, u, v) = extended_gcd_int(&h[row][col], &h[r][col]);
-            let row_i = h[row].clone();
-            let row_r = h[r].clone();
-            let ai = h[row][col].clone();
-            let ar = h[r][col].clone();
-            let g_i = g.clone();
-            let factor_i = ai / &g_i;
-            let factor_r = ar / &g_i;
+        clear_below_pivot(&mut hnf_rows, row, col, row_count, col_count);
 
-            for c in 0..n {
-                h[row][c] = &u * &row_i[c] + &v * &row_r[c];
-                h[r][c] = -&factor_r * &row_i[c] + &factor_i * &row_r[c];
-            }
-        }
-
-        if h[row][col] == 0 {
+        if hnf_rows[row][col] == 0 {
             continue;
         }
 
-        // Ensure pivot is positive.
-        if h[row][col] < 0 {
-            for c in 0..n {
-                h[row][c] = -h[row][c].clone();
-            }
-        }
+        ensure_positive_pivot(&mut hnf_rows, row, col, col_count);
 
-        // Reduce entries above the pivot into [0, pivot).
-        for r in 0..row {
-            if h[r][col] != 0 {
-                let q = div_floor(&h[r][col], &h[row][col]);
-                let pivot_row = h[row].clone();
-                for c in 0..n {
-                    h[r][c] -= &q * &pivot_row[c];
-                }
-            }
-        }
+        reduce_above_pivot(&mut hnf_rows, row, col, col_count);
 
         row += 1;
     }
 
-    h
+    hnf_rows
+}
+
+fn find_pivot_row(
+    hnf_rows: &[Vec<Integer>],
+    start_row: usize,
+    col: usize,
+    row_count: usize,
+) -> Option<usize> {
+    let mut pivot_row: Option<usize> = None;
+    let mut pivot_abs: Option<Integer> = None;
+    for r in start_row..row_count {
+        if hnf_rows[r][col] != 0 {
+            let abs = hnf_rows[r][col].clone().abs();
+            let better = match &pivot_abs {
+                Some(best) => abs < *best,
+                None => true,
+            };
+            if better {
+                pivot_abs = Some(abs);
+                pivot_row = Some(r);
+            }
+        }
+    }
+    pivot_row
+}
+
+fn clear_below_pivot(
+    hnf_rows: &mut [Vec<Integer>],
+    row: usize,
+    col: usize,
+    row_count: usize,
+    col_count: usize,
+) {
+    for r in (row + 1)..row_count {
+        if hnf_rows[r][col] == 0 {
+            continue;
+        }
+        let (gcd, coeff_u, coeff_v) = extended_gcd_int(&hnf_rows[row][col], &hnf_rows[r][col]);
+        let row_i = hnf_rows[row].clone();
+        let row_r = hnf_rows[r].clone();
+        let pivot_val = hnf_rows[row][col].clone();
+        let row_val = hnf_rows[r][col].clone();
+        let gcd_val = gcd.clone();
+        let factor_i = pivot_val / &gcd_val;
+        let factor_r = row_val / &gcd_val;
+
+        for c in 0..col_count {
+            hnf_rows[row][c] = &coeff_u * &row_i[c] + &coeff_v * &row_r[c];
+            hnf_rows[r][c] = -&factor_r * &row_i[c] + &factor_i * &row_r[c];
+        }
+    }
+}
+
+fn ensure_positive_pivot(hnf_rows: &mut [Vec<Integer>], row: usize, col: usize, col_count: usize) {
+    if hnf_rows[row][col] < 0 {
+        for c in 0..col_count {
+            hnf_rows[row][c] = -hnf_rows[row][c].clone();
+        }
+    }
+}
+
+fn reduce_above_pivot(hnf_rows: &mut [Vec<Integer>], row: usize, col: usize, col_count: usize) {
+    let pivot_row = hnf_rows[row].clone();
+    for r in 0..row {
+        if hnf_rows[r][col] != 0 {
+            let q = div_floor(&hnf_rows[r][col], &pivot_row[col]);
+            for c in 0..col_count {
+                hnf_rows[r][c] -= &q * &pivot_row[c];
+            }
+        }
+    }
 }
 
 /// Validate that a matrix is in row Hermite normal form.
@@ -118,10 +139,10 @@ pub fn is_row_hnf(matrix: &[Vec<Integer>]) -> bool {
         let Some(pivot_col) = pivot_col else {
             continue;
         };
-        if let Some(prev) = last_pivot {
-            if pivot_col <= prev {
-                return false;
-            }
+        if let Some(prev) = last_pivot
+            && pivot_col <= prev
+        {
+            return false;
         }
         let pivot = &row[pivot_col];
         if *pivot <= 0 {
@@ -199,7 +220,7 @@ fn div_floor(a: &Integer, b: &Integer) -> Integer {
     }
 }
 
-fn extended_gcd_int(a: &Integer, b: &Integer) -> (Integer, Integer, Integer) {
-    let (g, x, y) = a.extended_gcd(b);
-    (Integer::from(g), x, y)
+fn extended_gcd_int(lhs: &Integer, rhs: &Integer) -> (Integer, Integer, Integer) {
+    let (gcd, coeff_x, coeff_y) = lhs.extended_gcd(rhs);
+    (Integer::from(gcd), coeff_x, coeff_y)
 }

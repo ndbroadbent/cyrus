@@ -20,6 +20,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 
+const HYPERPLANE_CACHE_VERSION: &str = "hyperplanes-exact-v2";
+
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
 enum LatticeC {
@@ -175,77 +177,20 @@ impl Cone {
     pub fn hyperplanes(&mut self) -> &[Vec<i128>] {
         if self.hyperplanes.is_none() {
             // Compute from rays using DDM (with cache)
-            let rays_ref = self.rays.as_ref().unwrap();
-            let mut hasher = std::collections::hash_map::DefaultHasher::new();
-            let mut key_rays = canonicalize_vectors(rays_ref);
-            key_rays.sort();
-            key_rays.hash(&mut hasher);
-            let key = hasher.finish();
-            let cache_dir = std::env::var("CYRUS_CACHE_DIR")
-                .map(PathBuf::from)
-                .unwrap_or_else(|_| PathBuf::from("target/cyrus-cache"));
-            let cache_path = cache_dir.join(format!("hyperplanes_{key:x}.json"));
-
-            if cache_path.exists() {
-                if let Ok(data) = std::fs::read_to_string(&cache_path) {
-                    if let Ok(h) = serde_json::from_str::<Vec<Vec<i128>>>(&data) {
-                        eprintln!(
-                            "[DEBUG] hyperplanes: cache hit (count={})",
-                            h.len()
-                        );
-                        self.hyperplanes = Some(h);
-                    }
-                }
+            let rays_ref = self.rays.as_ref().unwrap().clone();
+            let (cache_dir, cache_path) = hyperplane_cache_paths(&rays_ref);
+            if let Some(h) = load_hyperplanes_cache(&cache_path) {
+                eprintln!("[DEBUG] hyperplanes: cache hit (count={})", h.len());
+                self.hyperplanes = Some(h);
             }
 
             if self.hyperplanes.is_none() {
-                if let Some(h) = load_compatible_hyperplanes(&cache_dir, rays_ref) {
-                    eprintln!(
-                        "[DEBUG] hyperplanes: reused compatible cache (count={})",
-                        h.len()
-                    );
-                    self.hyperplanes = Some(h.clone());
-                    if let Err(e) = std::fs::create_dir_all(&cache_dir) {
-                        eprintln!(
-                            "[WARN] failed to create hyperplane cache dir {}: {}",
-                            cache_dir.display(),
-                            e
-                        );
-                    } else if let Ok(json) = serde_json::to_string(&h) {
-                        if let Err(e) = std::fs::write(&cache_path, json) {
-                            eprintln!(
-                                "[WARN] failed to write hyperplane cache {}: {}",
-                                cache_path.display(),
-                                e
-                            );
-                        }
-                    }
-                }
-            }
-
-            if self.hyperplanes.is_none() {
-                eprintln!(
-                    "[DEBUG] hyperplanes: reducing rays (input count={})",
-                    rays_ref.len()
+                let hyperplanes = compute_hyperplanes_from_rays(
+                    &rays_ref,
+                    self.ambient_dim,
+                    &cache_dir,
+                    &cache_path,
                 );
-                let rays = self.extremal_rays();
-                eprintln!("[DEBUG] hyperplanes: extremal rays count={}", rays.len());
-                let hyperplanes = ddm::dualize(&rays, self.ambient_dim);
-                if let Err(e) = std::fs::create_dir_all(&cache_dir) {
-                    eprintln!(
-                        "[WARN] failed to create hyperplane cache dir {}: {}",
-                        cache_dir.display(),
-                        e
-                    );
-                } else if let Ok(json) = serde_json::to_string(&hyperplanes) {
-                    if let Err(e) = std::fs::write(&cache_path, json) {
-                        eprintln!(
-                            "[WARN] failed to write hyperplane cache {}: {}",
-                            cache_path.display(),
-                            e
-                        );
-                    }
-                }
                 self.hyperplanes = Some(hyperplanes);
             }
         }
@@ -279,11 +224,7 @@ impl Cone {
     pub fn contains_with_tolerance(&mut self, point: &[f64], eps: f64) -> bool {
         let h = self.hyperplanes();
         for row in h {
-            let dot: f64 = row
-                .iter()
-                .zip(point)
-                .map(|(&a, &b)| a as f64 * b)
-                .sum();
+            let dot: f64 = row.iter().zip(point).map(|(&a, &b)| a as f64 * b).sum();
             if dot < -eps {
                 return false;
             }
@@ -297,11 +238,7 @@ impl Cone {
     pub fn contains_interior(&mut self, point: &[f64], eps: f64) -> bool {
         let h = self.hyperplanes();
         for row in h {
-            let dot: f64 = row
-                .iter()
-                .zip(point)
-                .map(|(&a, &b)| a as f64 * b)
-                .sum();
+            let dot: f64 = row.iter().zip(point).map(|(&a, &b)| a as f64 * b).sum();
             if dot <= eps {
                 return false;
             }
@@ -376,90 +313,32 @@ impl Cone {
         max_coord: i64,
         deg_window: i64,
     ) -> Result<Vec<Vec<i64>>> {
-        if (min_points.is_some() && max_deg.is_some()) || (min_points.is_none() && max_deg.is_none())
-        {
-            return Err(Error::InvalidInput(
-                "Either min_points or max_deg must be set (exclusively)".into(),
-            ));
-        }
-        if grading_vector.is_empty() {
-            return Err(Error::InvalidInput("grading vector is empty".into()));
-        }
+        validate_lattice_args(min_points, max_deg, grading_vector)?;
 
         eprintln!("[DEBUG] lattice_points: computing hyperplanes...");
         let hyperplanes = self.hyperplanes().to_vec();
         eprintln!(
             "[DEBUG] lattice_points: hyperplanes count={}, dim={}",
             hyperplanes.len(),
-            hyperplanes.first().map(Vec::len).unwrap_or(0)
+            hyperplanes.first().map_or(0, Vec::len)
         );
-        let mut hyperplanes_i64 = Vec::with_capacity(hyperplanes.len());
-        for row in hyperplanes {
-            let mut out = Vec::with_capacity(row.len());
-            for v in row {
-                let v64 = i64::try_from(v).map_err(|_| {
-                    Error::InvalidInput("hyperplane coefficient does not fit in i64".into())
-                })?;
-                out.push(v64);
-            }
-            hyperplanes_i64.push(out);
-        }
+        let hyperplanes_i64 = hyperplanes_to_i64(hyperplanes)?;
 
-        let max_time_sec = env::var("CYRUS_LATTICE_MAX_TIME_SEC")
-            .ok()
-            .and_then(|v| v.parse::<f64>().ok());
-        let max_solutions = env::var("CYRUS_LATTICE_MAX_SOLUTIONS")
-            .ok()
-            .and_then(|v| v.parse::<usize>().ok());
-        let max_deg_limit = env::var("CYRUS_LATTICE_MAX_DEG")
-            .ok()
-            .and_then(|v| v.parse::<i64>().ok());
-        let num_search_workers = env::var("CYRUS_LATTICE_THREADS")
-            .ok()
-            .and_then(|v| v.parse::<i32>().ok());
-        let max_coord = env::var("CYRUS_LATTICE_MAX_COORD")
-            .ok()
-            .and_then(|v| v.parse::<i64>().ok())
-            .unwrap_or(max_coord);
-        let deg_window = env::var("CYRUS_LATTICE_DEG_WINDOW")
-            .ok()
-            .and_then(|v| v.parse::<i64>().ok())
-            .unwrap_or(deg_window);
-        let strict = env::var("CYRUS_LATTICE_STRICT")
-            .map(|v| v != "0")
-            .unwrap_or(true);
-        if max_time_sec.is_some()
-            || max_solutions.is_some()
-            || max_deg_limit.is_some()
-            || num_search_workers.is_some()
-            || max_coord != 1000
-            || deg_window != 0
-            || !strict
-        {
-            eprintln!(
-                "[DEBUG] lattice_points overrides: max_time_sec={:?}, max_solutions={:?}, max_deg_limit={:?}, num_search_workers={:?}, max_coord={}, deg_window={}, strict={}",
-                max_time_sec,
-                max_solutions,
-                max_deg_limit,
-                num_search_workers,
-                max_coord,
-                deg_window,
-                strict
-            );
-        }
+        let overrides = LatticeOverrides::from_env(max_coord, deg_window);
+        overrides.log_if_overridden();
 
         let req = LatticeRequest {
             hyperplanes: hyperplanes_i64,
             grading_vector: grading_vector.to_vec(),
             min_points,
             max_deg,
-            max_coord,
-            deg_window,
-            max_deg_limit,
-            max_time_sec,
-            max_solutions,
-            num_search_workers,
-            strict,
+            max_coord: overrides.max_coord,
+            deg_window: overrides.deg_window,
+            max_deg_limit: overrides.max_deg_limit,
+            max_time_sec: overrides.max_time_sec,
+            max_solutions: overrides.max_solutions,
+            num_search_workers: overrides.num_search_workers,
+            strict: overrides.strict,
             c: LatticeC::Scalar(0.0),
             check_grading: true,
         };
@@ -472,81 +351,10 @@ impl Cone {
             return Ok(sort_lattice_points(points, grading_vector));
         }
 
-        let script = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("scripts")
-            .join("find_lattice_points_ortools.py");
-        if !script.exists() {
-            return Err(Error::InvalidInput(format!(
-                "Missing lattice-point helper script: {}",
-                script.display()
-            )));
-        }
-
-        let python = std::env::var("CYRUS_PYTHON").unwrap_or_else(|_| "python3".to_string());
-        let mut child = Command::new(python)
-            .arg(script)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| Error::InvalidInput(format!("Failed to spawn python3: {e}")))?;
-
-        {
-            let stdin = child
-                .stdin
-                .as_mut()
-                .ok_or_else(|| Error::InvalidInput("Failed to open python stdin".into()))?;
-            let payload = serde_json::to_vec(&req)
-                .map_err(|e| Error::InvalidInput(format!("JSON encode failed: {e}")))?;
-            stdin
-                .write_all(&payload)
-                .map_err(|e| Error::InvalidInput(format!("Write to python stdin failed: {e}")))?;
-        }
-
-        let output = child
-            .wait_with_output()
-            .map_err(|e| Error::InvalidInput(format!("Failed to run python: {e}")))?;
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(Error::InvalidInput(format!(
-                "Lattice-point helper failed: {stderr}"
-            )));
-        }
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let mut points: Vec<Vec<i64>> = Vec::new();
-        for line in stdout.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-            let pt: Vec<i64> = serde_json::from_str(line).map_err(|e| {
-                Error::InvalidInput(format!("Failed to parse lattice-point line: {e}"))
-            })?;
-            points.push(pt);
-        }
-
-        // Sort by degree, then lexicographically (CYTools behavior).
-        let degs: Vec<i64> = points
-            .iter()
-            .map(|p| {
-                p.iter()
-                    .zip(grading_vector.iter())
-                    .map(|(&x, &g)| x * g)
-                    .sum()
-            })
-            .collect();
-        let mut idx: Vec<usize> = (0..points.len()).collect();
-        idx.sort_by(|&a, &b| {
-            let da = degs[a];
-            let db = degs[b];
-            da.cmp(&db).then_with(|| points[a].cmp(&points[b]))
-        });
-        let mut sorted = Vec::with_capacity(points.len());
-        for i in idx {
-            sorted.push(std::mem::take(&mut points[i]));
-        }
-        Ok(sorted)
+        let script = lattice_helper_script()?;
+        let stdout = run_lattice_helper(&req, &script)?;
+        let points = parse_lattice_points(&stdout)?;
+        Ok(sort_lattice_points(points, grading_vector))
     }
 
     /// Compute extremal rays (minimal generating set).
@@ -583,6 +391,170 @@ impl Cone {
         h1.extend(h2.iter().cloned());
         Self::from_hyperplanes(h1)
     }
+}
+
+fn validate_lattice_args(
+    min_points: Option<usize>,
+    max_deg: Option<i64>,
+    grading_vector: &[i64],
+) -> Result<()> {
+    if (min_points.is_some() && max_deg.is_some()) || (min_points.is_none() && max_deg.is_none()) {
+        return Err(Error::InvalidInput(
+            "Either min_points or max_deg must be set (exclusively)".into(),
+        ));
+    }
+    if grading_vector.is_empty() {
+        return Err(Error::InvalidInput("grading vector is empty".into()));
+    }
+    Ok(())
+}
+
+fn hyperplanes_to_i64(hyperplanes: Vec<Vec<i128>>) -> Result<Vec<Vec<i64>>> {
+    let mut hyperplanes_i64 = Vec::with_capacity(hyperplanes.len());
+    for row in hyperplanes {
+        let mut out = Vec::with_capacity(row.len());
+        for v in row {
+            let v64 = i64::try_from(v).map_err(|_| {
+                Error::InvalidInput("hyperplane coefficient does not fit in i64".into())
+            })?;
+            out.push(v64);
+        }
+        hyperplanes_i64.push(out);
+    }
+    Ok(hyperplanes_i64)
+}
+
+struct LatticeOverrides {
+    max_time_sec: Option<f64>,
+    max_solutions: Option<usize>,
+    max_deg_limit: Option<i64>,
+    num_search_workers: Option<i32>,
+    max_coord: i64,
+    deg_window: i64,
+    strict: bool,
+    has_overrides: bool,
+}
+
+impl LatticeOverrides {
+    fn from_env(default_max_coord: i64, default_deg_window: i64) -> Self {
+        let max_time_sec = env::var("CYRUS_LATTICE_MAX_TIME_SEC")
+            .ok()
+            .and_then(|v| v.parse::<f64>().ok());
+        let max_solutions = env::var("CYRUS_LATTICE_MAX_SOLUTIONS")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok());
+        let max_deg_limit = env::var("CYRUS_LATTICE_MAX_DEG")
+            .ok()
+            .and_then(|v| v.parse::<i64>().ok());
+        let num_search_workers = env::var("CYRUS_LATTICE_THREADS")
+            .ok()
+            .and_then(|v| v.parse::<i32>().ok());
+        let max_coord = env::var("CYRUS_LATTICE_MAX_COORD")
+            .ok()
+            .and_then(|v| v.parse::<i64>().ok())
+            .unwrap_or(default_max_coord);
+        let deg_window = env::var("CYRUS_LATTICE_DEG_WINDOW")
+            .ok()
+            .and_then(|v| v.parse::<i64>().ok())
+            .unwrap_or(default_deg_window);
+        let strict = env::var("CYRUS_LATTICE_STRICT")
+            .map(|v| v != "0")
+            .unwrap_or(true);
+        let has_overrides = max_time_sec.is_some()
+            || max_solutions.is_some()
+            || max_deg_limit.is_some()
+            || num_search_workers.is_some()
+            || max_coord != default_max_coord
+            || deg_window != default_deg_window
+            || !strict;
+        Self {
+            max_time_sec,
+            max_solutions,
+            max_deg_limit,
+            num_search_workers,
+            max_coord,
+            deg_window,
+            strict,
+            has_overrides,
+        }
+    }
+
+    fn log_if_overridden(&self) {
+        if !self.has_overrides {
+            return;
+        }
+        eprintln!(
+            "[DEBUG] lattice_points overrides: max_time_sec={:?}, max_solutions={:?}, max_deg_limit={:?}, num_search_workers={:?}, max_coord={}, deg_window={}, strict={}",
+            self.max_time_sec,
+            self.max_solutions,
+            self.max_deg_limit,
+            self.num_search_workers,
+            self.max_coord,
+            self.deg_window,
+            self.strict
+        );
+    }
+}
+
+fn lattice_helper_script() -> Result<PathBuf> {
+    let script = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("scripts")
+        .join("find_lattice_points_ortools.py");
+    if !script.exists() {
+        return Err(Error::InvalidInput(format!(
+            "Missing lattice-point helper script: {}",
+            script.display()
+        )));
+    }
+    Ok(script)
+}
+
+fn run_lattice_helper(req: &LatticeRequest, script: &PathBuf) -> Result<String> {
+    let python = env::var("CYRUS_PYTHON").unwrap_or_else(|_| "python3".to_string());
+    let mut child = Command::new(python)
+        .arg(script)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| Error::InvalidInput(format!("Failed to spawn python3: {e}")))?;
+
+    {
+        let stdin = child
+            .stdin
+            .as_mut()
+            .ok_or_else(|| Error::InvalidInput("Failed to open python stdin".into()))?;
+        let payload = serde_json::to_vec(req)
+            .map_err(|e| Error::InvalidInput(format!("JSON encode failed: {e}")))?;
+        stdin
+            .write_all(&payload)
+            .map_err(|e| Error::InvalidInput(format!("Write to python stdin failed: {e}")))?;
+    }
+
+    let output = child
+        .wait_with_output()
+        .map_err(|e| Error::InvalidInput(format!("Failed to run python: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(Error::InvalidInput(format!(
+            "Lattice-point helper failed: {stderr}"
+        )));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+fn parse_lattice_points(stdout: &str) -> Result<Vec<Vec<i64>>> {
+    let mut points: Vec<Vec<i64>> = Vec::new();
+    for line in stdout.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let pt: Vec<i64> = serde_json::from_str(line)
+            .map_err(|e| Error::InvalidInput(format!("Failed to parse lattice-point line: {e}")))?;
+        points.push(pt);
+    }
+    Ok(points)
 }
 
 fn find_lattice_points_native(req: &LatticeRequest) -> Result<Option<Vec<Vec<i64>>>> {
@@ -895,49 +867,61 @@ fn canonicalize_vectors(vectors: &[Vec<i128>]) -> Vec<Vec<i128>> {
         .collect()
 }
 
-fn load_compatible_hyperplanes(
-    cache_dir: &PathBuf,
-    rays: &[Vec<i128>],
-) -> Option<Vec<Vec<i128>>> {
-    let entries = std::fs::read_dir(cache_dir).ok()?;
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path
-            .file_name()
-            .and_then(|s| s.to_str())
-            .map(|s| s.starts_with("hyperplanes_") && s.ends_with(".json"))
-            .unwrap_or(false)
-        {
-            continue;
-        }
-        let data = std::fs::read_to_string(&path).ok()?;
-        let h: Vec<Vec<i128>> = serde_json::from_str(&data).ok()?;
-        if h.is_empty() {
-            continue;
-        }
-        if h[0].len() != rays[0].len() {
-            continue;
-        }
-        if hyperplanes_compatible(&h, rays) {
-            return Some(h);
-        }
-    }
-    None
+fn hyperplane_cache_paths(rays: &[Vec<i128>]) -> (PathBuf, PathBuf) {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    HYPERPLANE_CACHE_VERSION.hash(&mut hasher);
+    let mut key_rays = canonicalize_vectors(rays);
+    key_rays.sort();
+    let key_len = key_rays.len();
+    key_rays.hash(&mut hasher);
+    let key = hasher.finish() ^ (key_len as u64);
+    let cache_dir = env::var("CYRUS_CACHE_DIR")
+        .map_or_else(|_| PathBuf::from("target/cyrus-cache"), PathBuf::from);
+    let cache_path = cache_dir.join(format!("hyperplanes_{key:x}.json"));
+    (cache_dir, cache_path)
 }
 
-fn hyperplanes_compatible(h: &[Vec<i128>], rays: &[Vec<i128>]) -> bool {
-    for ray in rays {
-        for row in h {
-            let mut dot: i128 = 0;
-            for (a, b) in row.iter().zip(ray.iter()) {
-                dot += a * b;
-            }
-            if dot < 0 {
-                return false;
-            }
-        }
+fn load_hyperplanes_cache(cache_path: &PathBuf) -> Option<Vec<Vec<i128>>> {
+    if !cache_path.exists() {
+        return None;
     }
-    true
+    let data = std::fs::read_to_string(cache_path).ok()?;
+    serde_json::from_str::<Vec<Vec<i128>>>(&data).ok()
+}
+
+fn write_hyperplanes_cache(cache_dir: &PathBuf, cache_path: &PathBuf, h: &[Vec<i128>]) {
+    if let Err(e) = std::fs::create_dir_all(cache_dir) {
+        eprintln!(
+            "[WARN] failed to create hyperplane cache dir {}: {}",
+            cache_dir.display(),
+            e
+        );
+        return;
+    }
+    if let Ok(json) = serde_json::to_string(h)
+        && let Err(e) = std::fs::write(cache_path, json)
+    {
+        eprintln!(
+            "[WARN] failed to write hyperplane cache {}: {}",
+            cache_path.display(),
+            e
+        );
+    }
+}
+
+fn compute_hyperplanes_from_rays(
+    rays_ref: &[Vec<i128>],
+    ambient_dim: usize,
+    cache_dir: &PathBuf,
+    cache_path: &PathBuf,
+) -> Vec<Vec<i128>> {
+    eprintln!(
+        "[DEBUG] hyperplanes: dualizing rays (input count={})",
+        rays_ref.len()
+    );
+    let hyperplanes = ddm::dualize(rays_ref, ambient_dim);
+    write_hyperplanes_cache(cache_dir, cache_path, &hyperplanes);
+    hyperplanes
 }
 
 /// GCD of a vector of integers.

@@ -53,7 +53,7 @@ fn read_csv_f64(path: &PathBuf) -> Vec<f64> {
     let content = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
     content
-        .split(|c| c == ',' || c == '\n' || c == '\r')
+        .split([',', '\n', '\r'])
         .filter(|s| !s.trim().is_empty())
         .map(|s| s.trim().parse::<f64>().expect("invalid float"))
         .collect()
@@ -63,7 +63,7 @@ fn read_csv_i64(path: &PathBuf) -> Vec<i64> {
     let content = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
     content
-        .split(|c| c == ',' || c == '\n' || c == '\r')
+        .split([',', '\n', '\r'])
         .filter(|s| !s.trim().is_empty())
         .map(|s| s.trim().parse::<i64>().expect("invalid integer"))
         .collect()
@@ -81,23 +81,26 @@ fn load_fixture() -> Stage3Fixture {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
     let data_dir = crate::mcallister_data_dir();
-    if crate::first_principles_enabled() && data_dir.is_none() {
-        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
-    }
+    assert!(
+        !(crate::first_principles_enabled() && data_dir.is_none()),
+        "CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests"
+    );
 
-    let points_raw = if let Some(dir) = data_dir {
-        read_csv_rows_i64(&dir.join("points.dat"))
-    } else {
-        if !crate::fixtures_enabled() {
-            panic!("Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures");
-        }
-        let input_path = manifest_dir.join("tests/mcallister_e2e/inputs/polytope.json");
-        let content = std::fs::read_to_string(&input_path)
-            .unwrap_or_else(|e| panic!("Failed to read {}: {e}", input_path.display()));
-        let input: PolytopeInput = serde_json::from_str(&content)
-            .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", input_path.display()));
-        input.points
-    };
+    let points_raw = data_dir.map_or_else(
+        || {
+            assert!(
+                crate::fixtures_enabled(),
+                "Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures"
+            );
+            let input_path = manifest_dir.join("tests/mcallister_e2e/inputs/polytope.json");
+            let content = std::fs::read_to_string(&input_path)
+                .unwrap_or_else(|e| panic!("Failed to read {}: {e}", input_path.display()));
+            let input: PolytopeInput = serde_json::from_str(&content)
+                .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", input_path.display()));
+            input.points
+        },
+        |dir| read_csv_rows_i64(&dir.join("points.dat")),
+    );
 
     let all_points: Vec<Point> = points_raw
         .iter()
@@ -124,15 +127,17 @@ fn load_fixture() -> Stage3Fixture {
 fn load_mcallister_heights() -> Vec<f64> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data_dir = crate::mcallister_data_dir();
-    if crate::first_principles_enabled() && data_dir.is_none() {
-        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
-    }
+    assert!(
+        !(crate::first_principles_enabled() && data_dir.is_none()),
+        "CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests"
+    );
     if let Some(dir) = data_dir {
         return read_csv_f64(&dir.join("heights.dat"));
     }
-    if !crate::fixtures_enabled() {
-        panic!("Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures");
-    }
+    assert!(
+        crate::fixtures_enabled(),
+        "Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures"
+    );
     let path = manifest_dir.join("tests/mcallister_e2e/inputs/heights.json");
     let content = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
@@ -152,9 +157,8 @@ fn stage3_primal_basis_matches_dat() {
     };
 
     let fixture = load_fixture();
-    let (glsm, _linrel, basis) =
-        compute_glsm_and_linrels(&fixture.triangulation_points)
-            .expect("Failed to compute GLSM/basis");
+    let (glsm, _linrel, basis) = compute_glsm_and_linrels(&fixture.triangulation_points)
+        .expect("Failed to compute GLSM/basis");
 
     let basis_path = data_dir.join("basis.dat");
     let basis_i64 = read_csv_i64(&basis_path);
@@ -182,9 +186,7 @@ fn stage3_primal_basis_matches_dat() {
         "Basis differs from McAllister, and change-of-basis is not unimodular"
     );
 
-    eprintln!(
-        "Basis differs from McAllister; unimodular change-of-basis confirmed."
-    );
+    eprintln!("Basis differs from McAllister; unimodular change-of-basis confirmed.");
 }
 
 // =============================================================================

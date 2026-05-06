@@ -20,13 +20,15 @@ use serde_json::json;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use cyrus_core::flat_direction::{compute_flat_direction, compute_n_matrix, solve_linear_system_faer};
+use cyrus_core::flat_direction::{
+    compute_flat_direction, compute_n_matrix, solve_linear_system_faer,
+};
 use cyrus_core::types::f64::F64;
 use cyrus_core::types::i64::I64;
 use cyrus_core::types::tags::Finite;
 use cyrus_core::{
-    compute_frst_heights, compute_glsm_and_linrels, compute_intersection_cytools,
-    compute_linear_relations_no_origin, intersection_in_basis, Point, Polytope, Triangulation,
+    Intersection, Point, Polytope, Triangulation, compute_frst_heights, compute_glsm_and_linrels,
+    compute_intersection_cytools, compute_linear_relations_no_origin, intersection_in_basis,
 };
 
 #[derive(Debug, Deserialize)]
@@ -70,9 +72,12 @@ fn read_csv_i64(path: &PathBuf) -> Vec<i64> {
         .lines()
         .filter(|line| !line.trim().is_empty())
         .flat_map(|line| line.split(','))
-        .map(|s| s.trim())
+        .map(str::trim)
         .filter(|s| !s.is_empty())
-        .map(|s| s.parse::<i64>().unwrap_or_else(|e| panic!("Invalid int {s} in {}: {e}", path.display())))
+        .map(|s| {
+            s.parse::<i64>()
+                .unwrap_or_else(|e| panic!("Invalid int {s} in {}: {e}", path.display()))
+        })
         .collect()
 }
 
@@ -84,7 +89,11 @@ fn read_points(path: &PathBuf) -> Vec<Vec<i64>> {
         .filter(|line| !line.trim().is_empty())
         .map(|line| {
             line.split(',')
-                .map(|s| s.trim().parse::<i64>().unwrap_or_else(|e| panic!("Invalid point entry {s} in {}: {e}", path.display())))
+                .map(|s| {
+                    s.trim().parse::<i64>().unwrap_or_else(|e| {
+                        panic!("Invalid point entry {s} in {}: {e}", path.display())
+                    })
+                })
                 .collect::<Vec<i64>>()
         })
         .collect()
@@ -99,23 +108,29 @@ fn read_csv_usize(path: &PathBuf) -> Vec<usize> {
 
 fn parse_basis_indices(arg: &str) -> Vec<usize> {
     arg.split(',')
-        .map(|s| s.trim())
+        .map(str::trim)
         .filter(|s| !s.is_empty())
-        .map(|s| s.parse::<usize>().unwrap_or_else(|e| panic!("Invalid basis index {s}: {e}")))
+        .map(|s| {
+            s.parse::<usize>()
+                .unwrap_or_else(|e| panic!("Invalid basis index {s}: {e}"))
+        })
         .collect()
 }
 
 fn parse_usize_list(arg: &str) -> Vec<usize> {
     arg.split(',')
-        .map(|s| s.trim())
+        .map(str::trim)
         .filter(|s| !s.is_empty())
-        .map(|s| s.parse::<usize>().unwrap_or_else(|e| panic!("Invalid value {s}: {e}")))
+        .map(|s| {
+            s.parse::<usize>()
+                .unwrap_or_else(|e| panic!("Invalid value {s}: {e}"))
+        })
         .collect()
 }
 
 fn parse_pair_list(arg: &str) -> Vec<(usize, usize)> {
     arg.split(';')
-        .map(|pair| pair.trim())
+        .map(str::trim)
         .filter(|pair| !pair.is_empty())
         .map(|pair| {
             let mut parts = pair.split(':');
@@ -200,7 +215,7 @@ fn print_terms(label: &str, summary: &TermSummary, top_terms: usize) {
     );
     eprintln!("[INFO] {label} top κ p^3 contributions:");
     for (idx, (contrib, key)) in summary.terms.iter().take(top_terms).enumerate() {
-        eprintln!("  {:>2}. κ_{} = {:>14.6e}", idx + 1, format!("{:?}", key), contrib);
+        eprintln!("  {:>2}. κ_{:?} = {:>14.6e}", idx + 1, key, contrib);
     }
 }
 
@@ -222,6 +237,73 @@ fn summary_json(summary: &TermSummary, top_terms: usize) -> serde_json::Value {
         "total": summary.total,
         "top_terms": top,
     })
+}
+
+struct FlatArgs {
+    data_dir: Option<String>,
+    allow_fixtures: bool,
+    top_terms: usize,
+    basis_indices_arg: Option<String>,
+    basis_file_arg: Option<String>,
+    compare_basis_indices_arg: Option<String>,
+    compare_basis_file_arg: Option<String>,
+    allow_nonpositive: bool,
+    sweep_swaps: usize,
+    sweep_replace_from: Option<String>,
+    sweep_replace_to: Option<String>,
+    sweep_pairs_arg: Option<String>,
+    sweep_max_attempts: usize,
+    sweep_report_path: Option<String>,
+    sweep_two: bool,
+    sweep_two_max_attempts: usize,
+    sweep_two_report_path: Option<String>,
+    out_path: Option<String>,
+}
+
+fn parse_args() -> FlatArgs {
+    let data_dir = parse_arg_value::<String>("--data-dir")
+        .or_else(|| std::env::var("CYRUS_MCALLISTER_DATA_DIR").ok());
+    FlatArgs {
+        data_dir,
+        allow_fixtures: parse_flag("--allow-fixtures"),
+        top_terms: parse_arg_value::<usize>("--top-terms").unwrap_or(12),
+        basis_indices_arg: parse_arg_value::<String>("--basis-indices"),
+        basis_file_arg: parse_arg_value::<String>("--basis-file"),
+        compare_basis_indices_arg: parse_arg_value::<String>("--compare-basis-indices"),
+        compare_basis_file_arg: parse_arg_value::<String>("--compare-basis-file"),
+        allow_nonpositive: parse_flag("--allow-nonpositive"),
+        sweep_swaps: parse_arg_value::<usize>("--sweep-swaps").unwrap_or(0),
+        sweep_replace_from: parse_arg_value::<String>("--sweep-replace-from"),
+        sweep_replace_to: parse_arg_value::<String>("--sweep-replace-to"),
+        sweep_pairs_arg: parse_arg_value::<String>("--sweep-pairs"),
+        sweep_max_attempts: parse_arg_value::<usize>("--sweep-max-attempts").unwrap_or(5000),
+        sweep_report_path: parse_arg_value::<String>("--sweep-report"),
+        sweep_two: parse_flag("--sweep-two-swaps"),
+        sweep_two_max_attempts: parse_arg_value::<usize>("--sweep-two-max-attempts")
+            .unwrap_or(10000),
+        sweep_two_report_path: parse_arg_value::<String>("--sweep-two-report"),
+        out_path: parse_arg_value::<String>("--out"),
+    }
+}
+
+fn enforce_modes(data_dir: Option<&str>, allow_fixtures: bool) {
+    let first_principles_env = std::env::var_os("CYRUS_FIRST_PRINCIPLES").is_some();
+    if allow_fixtures && first_principles_env {
+        eprintln!("[ERROR] --allow-fixtures cannot be used with CYRUS_FIRST_PRINCIPLES");
+        std::process::exit(2);
+    }
+    if data_dir.is_none() && !allow_fixtures {
+        eprintln!("[ERROR] No McAllister data dir set. Refusing to fall back to JSON fixtures.");
+        eprintln!("[ERROR] Set CYRUS_MCALLISTER_DATA_DIR or pass --allow-fixtures.");
+        std::process::exit(2);
+    }
+    if data_dir.is_none() && allow_fixtures {
+        eprintln!("[MODE] fixtures (JSON)");
+        eprintln!("[WARN] using JSON fixtures (not a first-principles run)");
+    }
+    if data_dir.is_some() {
+        eprintln!("[MODE] first-principles (.dat)");
+    }
 }
 
 fn load_primal_points(data_dir: Option<&str>, manifest_dir: &PathBuf) -> Vec<Vec<i64>> {
@@ -318,6 +400,72 @@ fn validate_dual_checkpoint(
     }
 }
 
+fn compute_dual_kappa_full(
+    dual_points_vec: &[Point],
+    dual_triangulation: &Triangulation,
+) -> Intersection {
+    let dual_points_i64: Vec<Vec<i64>> = dual_points_vec
+        .iter()
+        .map(|p| p.coords().to_vec())
+        .collect();
+    let dual_linrels = compute_linear_relations_no_origin(&dual_points_i64);
+    let dual_linrels_i64: Vec<Vec<i64>> = dual_linrels
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|x| i64::try_from(x).expect("dual linrel fits in i64"))
+                .collect()
+        })
+        .collect();
+    compute_intersection_cytools(dual_triangulation, dual_points_vec, &dual_linrels_i64)
+        .expect("Failed dual intersection numbers")
+}
+
+fn resolve_basis_indices(
+    basis_indices_arg: &Option<String>,
+    basis_file_arg: &Option<String>,
+    dual_points_vec: &[Point],
+) -> Vec<usize> {
+    basis_indices_arg.as_ref().map_or_else(
+        || {
+            if let Some(file) = basis_file_arg.as_ref() {
+                read_csv_usize(&PathBuf::from(file))
+            } else {
+                let (_glsm, _linrel, basis) =
+                    compute_glsm_and_linrels(dual_points_vec).expect("Failed dual GLSM");
+                basis
+            }
+        },
+        |indices| parse_basis_indices(indices),
+    )
+}
+
+fn load_flux_vectors(
+    data_dir: Option<&str>,
+    manifest_dir: &PathBuf,
+) -> (Vec<I64<Finite>>, Vec<I64<Finite>>) {
+    let (k_raw, m_raw) = data_dir.map_or_else(
+        || {
+            let flux_path = manifest_dir.join("tests/mcallister_e2e/inputs/flux.json");
+            let flux: FluxInput = load_json(&flux_path);
+            (flux.k, flux.m)
+        },
+        |dir| {
+            let dir = PathBuf::from(dir);
+            let k = read_csv_i64(&dir.join("K_vec.dat"));
+            let m = read_csv_i64(&dir.join("M_vec.dat"));
+            (k, m)
+        },
+    );
+    let k_flux: Vec<I64<Finite>> = k_raw.iter().map(|&v| I64::<Finite>::new(v)).collect();
+    let m_flux: Vec<I64<Finite>> = m_raw.iter().map(|&v| I64::<Finite>::new(v)).collect();
+    (k_flux, m_flux)
+}
+
+fn contract_ppp(kappa: &Intersection, p: &[F64<Finite>]) -> f64 {
+    kappa.contract_triple_finite(p).map_or(0.0, F64::get)
+}
+
 fn main() {
     let t0 = Instant::now();
     let data_dir = parse_arg_value::<String>("--data-dir")
@@ -345,9 +493,7 @@ fn main() {
         std::process::exit(2);
     }
     if data_dir.is_none() && !allow_fixtures {
-        eprintln!(
-            "[ERROR] No McAllister data dir set. Refusing to fall back to JSON fixtures."
-        );
+        eprintln!("[ERROR] No McAllister data dir set. Refusing to fall back to JSON fixtures.");
         eprintln!("[ERROR] Set CYRUS_MCALLISTER_DATA_DIR or pass --allow-fixtures.");
         std::process::exit(2);
     }
@@ -420,14 +566,13 @@ fn main() {
         let kappa_cmp = intersection_in_basis(&dual_kappa_full, basis);
         let n_cmp = compute_n_matrix(&kappa_cmp, &m_flux);
         let p_cmp = solve_linear_system_faer(&n_cmp, &k_flux)?;
-        kappa_cmp
-            .contract_triple_finite(&p_cmp)
-            .map(|v| v.get())
+        kappa_cmp.contract_triple_finite(&p_cmp).map(|v| v.get())
     };
 
     let n_mat = compute_n_matrix(&dual_kappa, &m_flux);
     let p = solve_linear_system_faer(&n_mat, &k_flux).expect("N matrix solve failed");
-    let p_alt = compute_flat_direction(&dual_kappa, &k_flux, &m_flux).expect("flat direction failed");
+    let p_alt =
+        compute_flat_direction(&dual_kappa, &k_flux, &m_flux).expect("flat direction failed");
 
     let kappa_ppp = dual_kappa
         .contract_triple_finite(&p)
@@ -443,7 +588,10 @@ fn main() {
     eprintln!("[INFO] basis indices: {:?}", basis_indices);
     eprintln!("[INFO] kappa dim: {}", dual_kappa.dim());
     eprintln!("[INFO] kappa nonzero: {}", dual_kappa.num_nonzero());
-    eprintln!("[INFO] p (first 4): {:?}", &p.iter().take(4).map(|v| v.get()).collect::<Vec<_>>());
+    eprintln!(
+        "[INFO] p (first 4): {:?}",
+        &p.iter().take(4).map(|v| v.get()).collect::<Vec<_>>()
+    );
     eprintln!("[INFO] kappa ppp: {}", kappa_ppp);
     eprintln!("[INFO] kappa ppp alt: {}", kappa_ppp_alt);
 
@@ -511,7 +659,12 @@ fn main() {
         diffs.sort_by(|a, b| b.0.abs().partial_cmp(&a.0.abs()).unwrap());
         eprintln!("[INFO] top term diffs (primary - compare):");
         for (idx, (diff, key)) in diffs.iter().take(top_terms).enumerate() {
-            eprintln!("  {:>2}. Δκ_{} = {:>14.6e}", idx + 1, format!("{:?}", key), diff);
+            eprintln!(
+                "  {:>2}. Δκ_{} = {:>14.6e}",
+                idx + 1,
+                format!("{:?}", key),
+                diff
+            );
         }
 
         compare_report = Some(json!({
@@ -590,7 +743,9 @@ fn main() {
                 }
 
                 attempts += 1;
-                let Some(kappa_ppp_cmp) = compute_ppp(&candidate) else { continue; };
+                let Some(kappa_ppp_cmp) = compute_ppp(&candidate) else {
+                    continue;
+                };
                 if kappa_ppp_cmp > 0.0 {
                     eprintln!(
                         "[FOUND] swap {} -> {} yields kappa ppp = {} (attempt {})",
@@ -622,7 +777,10 @@ fn main() {
             }
         }
         if !found {
-            eprintln!("[INFO] sweep completed: no positive kappa p^3 found (attempts={})", attempts);
+            eprintln!(
+                "[INFO] sweep completed: no positive kappa p^3 found (attempts={})",
+                attempts
+            );
         }
 
         sweep_report = Some(json!({
@@ -679,7 +837,9 @@ fn main() {
                             continue;
                         };
                         attempts += 1;
-                        let Some(kappa_ppp_cmp) = compute_ppp(&candidate) else { continue; };
+                        let Some(kappa_ppp_cmp) = compute_ppp(&candidate) else {
+                            continue;
+                        };
                         hits.push(SweepHit {
                             swap1: (out1, in1),
                             swap2: (out2, in2),
@@ -709,7 +869,10 @@ fn main() {
                 best.swap1, best.swap2, best.kappa_ppp, attempts
             );
         } else {
-            eprintln!("[INFO] sweep-two: no viable candidates (attempts={})", attempts);
+            eprintln!(
+                "[INFO] sweep-two: no viable candidates (attempts={})",
+                attempts
+            );
         }
         if let Some(path) = sweep_two_report_path.as_ref() {
             let report = json!({

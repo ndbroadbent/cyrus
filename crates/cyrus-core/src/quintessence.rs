@@ -13,11 +13,13 @@ use std::f64::consts::PI;
 use crate::f64_pos;
 use crate::types::f64::F64;
 use crate::types::i64::I64;
-use crate::types::physics::{DivisorVolume, SmallCycleModulus, StringCoupling, Superpotential, Volume, XiCorrection};
+use crate::types::physics::{
+    DivisorVolume, SmallCycleModulus, StringCoupling, Superpotential, Volume, XiCorrection,
+};
 use crate::types::tags::{Finite, Pos};
 
 const TWO_PI: F64<Pos> = f64_pos!(2.0 * PI);
-const SQRT_TWO: F64<Pos> = f64_pos!(1.414_213_562_373_095_1);
+const SQRT_TWO: F64<Pos> = f64_pos!(std::f64::consts::SQRT_2);
 
 /// Input parameters for the Cicoli 2407.03405 numerical example.
 #[derive(Debug, Clone)]
@@ -194,11 +196,13 @@ impl AxionPotential1D {
 
 impl crate::cosmology::Potential for AxionPotential1D {
     fn value(&self, phi: f64) -> f64 {
-        self.value_typed(F64::<Finite>::new(phi).expect("phi must be finite")).get()
+        self.value_typed(F64::<Finite>::new(phi).expect("phi must be finite"))
+            .get()
     }
 
     fn deriv(&self, phi: f64) -> f64 {
-        self.deriv_typed(F64::<Finite>::new(phi).expect("phi must be finite")).get()
+        self.deriv_typed(F64::<Finite>::new(phi).expect("phi must be finite"))
+            .get()
     }
 }
 

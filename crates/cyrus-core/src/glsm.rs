@@ -12,8 +12,8 @@ use crate::integer_math::{
 use crate::utils::lll_reduce;
 use malachite::Integer;
 use malachite::num::arithmetic::traits::Abs;
-use rand::seq::SliceRandom;
 use rand::SeedableRng;
+use rand::seq::SliceRandom;
 
 /// Compute the GLSM charge matrix for a set of lattice points.
 ///
@@ -59,7 +59,7 @@ pub fn compute_glsm_and_linrels(
     let (pts, _origin_idx) = ensure_origin_first(points)?;
     let dim = pts[0].dim();
     let n_pts = pts.len();
-    eprintln!("[DEBUG] glsm dim={}, n_pts={}", dim, n_pts);
+    eprintln!("[DEBUG] glsm dim={dim}, n_pts={n_pts}");
 
     // Build linrel = points.T (dim x n)
     let mut linrel: Vec<Vec<Integer>> = vec![vec![Integer::from(0); n_pts]; dim];
@@ -81,10 +81,7 @@ pub fn compute_glsm_and_linrels(
         for d in &snf_diag {
             snf_prod *= d.clone();
         }
-        eprintln!(
-            "[DEBUG] glsm sublat_ind: hnf={}, snf_prod={}",
-            sublat_ind, snf_prod
-        );
+        eprintln!("[DEBUG] glsm sublat_ind: hnf={sublat_ind}, snf_prod={snf_prod}");
     }
 
     // Column norms (L1)
@@ -93,9 +90,8 @@ pub fn compute_glsm_and_linrels(
         let mut acc: i64 = 0;
         for row in &linrel {
             let v = row[col].clone().abs();
-            let vi = i64::try_from(&v).map_err(|_| {
-                Error::InvalidInput("GLSM norm overflow".into())
-            })?;
+            let vi =
+                i64::try_from(&v).map_err(|_| Error::InvalidInput("GLSM norm overflow".into()))?;
             acc = acc.saturating_add(vi);
         }
         norms.push((col, acc));
@@ -134,9 +130,10 @@ pub fn compute_glsm_and_linrels(
                 for row in &linrel {
                     let mut r = Vec::with_capacity(n_pts);
                     for v in row {
-                        r.push(i64::try_from(v).map_err(|_| {
-                            Error::InvalidInput("GLSM LLL overflow".into())
-                        })?);
+                        r.push(
+                            i64::try_from(v)
+                                .map_err(|_| Error::InvalidInput("GLSM LLL overflow".into()))?,
+                        );
                     }
                     linrel_rows.push(r);
                 }
@@ -153,9 +150,7 @@ pub fn compute_glsm_and_linrels(
                 indices = lll_norms.iter().map(|&(i, _)| i).collect();
             }
             3 => {
-                indices = std::iter::once(0)
-                    .chain((1..n_pts).rev())
-                    .collect();
+                indices = std::iter::once(0).chain((1..n_pts).rev()).collect();
             }
             _ if n_try > 3 => {
                 indices[1..].shuffle(&mut rng);
@@ -165,7 +160,7 @@ pub fn compute_glsm_and_linrels(
 
         indices[..linrel_aug.len()].sort_unstable();
 
-        for _ctr in 0..max_ctr {
+        for ctr in 0..max_ctr {
             // CYTools rotates on every iteration (ctr is incremented before the check).
             let st = good_exclusions.max(1);
             indices[st..].rotate_left(1);
@@ -191,14 +186,9 @@ pub fn compute_glsm_and_linrels(
 
             for row in &linrel_hnf {
                 let pivot = if pivot_mode == "last" {
-                    row.iter()
-                        .rposition(|v| *v != 0)
-                        .map(|i| (i, &row[i]))
+                    row.iter().rposition(|v| *v != 0).map(|i| (i, &row[i]))
                 } else {
-                    row.iter()
-                        .enumerate()
-                        .find(|(_, v)| **v != 0)
-                        .map(|(i, v)| (i, v))
+                    row.iter().enumerate().find(|(_, v)| **v != 0)
                 };
                 if let Some((i, val)) = pivot {
                     tmp_sublat *= val.clone().abs();
@@ -230,26 +220,23 @@ pub fn compute_glsm_and_linrels(
                     basis_candidate.len(),
                     n_try
                 );
-                eprintln!("[DEBUG] glsm indices: {:?}", indices);
-                eprintln!("[DEBUG] glsm basis_exc (perm): {:?}", basis_exc_perm);
-                eprintln!("[DEBUG] glsm basis (orig): {:?}", basis_candidate);
+                eprintln!("[DEBUG] glsm indices: {indices:?}");
+                eprintln!("[DEBUG] glsm basis_exc (perm): {basis_exc_perm:?}");
+                eprintln!("[DEBUG] glsm basis (orig): {basis_candidate:?}");
             }
 
             if !first_basis_recorded {
-                chosen_indices = indices.clone();
-                chosen_linrel_rand = linrel_hnf.clone();
-                chosen_basis_exc = basis_exc_perm.clone();
+                chosen_indices.clone_from(&indices);
+                chosen_linrel_rand.clone_from(&linrel_hnf);
+                chosen_basis_exc.clone_from(&basis_exc_perm);
                 first_basis_recorded = true;
             }
 
-            if let Some(expected) = expected_basis.as_ref() {
-                if basis_candidate == *expected {
-                    expected_found = true;
-                    eprintln!(
-                        "[DEBUG] glsm expected basis found at n_try={}, ctr={}",
-                        n_try, _ctr
-                    );
-                }
+            if let Some(expected) = expected_basis.as_ref()
+                && basis_candidate == *expected
+            {
+                expected_found = true;
+                eprintln!("[DEBUG] glsm expected basis found at n_try={n_try}, ctr={ctr}");
             }
 
             if !scan_expected {
@@ -267,10 +254,8 @@ pub fn compute_glsm_and_linrels(
     }
 
     if !first_basis_recorded {
-        return Err(Error::InvalidInput(
-            "Integral GLSM basis not found".into(),
-        ));
-    };
+        return Err(Error::InvalidInput("Integral GLSM basis not found".into()));
+    }
 
     // Map columns back to original order.
     let mut linrel_dict = vec![0usize; n_pts];
@@ -310,8 +295,7 @@ pub fn compute_glsm_and_linrels(
         };
         if (&sublat_ind % &ii) != 0 {
             return Err(Error::InvalidInput(format!(
-                "Problem with linear relations (sublat_ind={}, ii={})",
-                sublat_ind, ii
+                "Problem with linear relations (sublat_ind={sublat_ind}, ii={ii})"
             )));
         }
         for r in 0..glsm_rows {
@@ -333,11 +317,7 @@ pub fn compute_glsm_and_linrels(
     Ok((glsm, linrel_reordered, basis))
 }
 
-fn glsm_relations_ok(
-    glsm: &[Vec<Integer>],
-    linrel: &[Vec<Integer>],
-    points: &[Point],
-) -> bool {
+fn glsm_relations_ok(glsm: &[Vec<Integer>], linrel: &[Vec<Integer>], points: &[Point]) -> bool {
     if glsm.is_empty() {
         return false;
     }
@@ -388,7 +368,7 @@ fn ensure_origin_first(points: &[Point]) -> Result<(Vec<Point>, usize)> {
         return Ok((points.to_vec(), 0));
     }
 
-    let mut pts = Vec::with_capacity(points.len() + if origin_idx == usize::MAX { 1 } else { 0 });
+    let mut pts = Vec::with_capacity(points.len() + usize::from(origin_idx == usize::MAX));
     pts.push(Point::origin(dim));
     for (idx, p) in points.iter().enumerate() {
         if idx == origin_idx {
@@ -408,7 +388,7 @@ fn parse_expected_basis() -> Option<Vec<usize>> {
         raw
     };
     let mut out = Vec::new();
-    for part in text.split(|c| c == ',' || c == '\n' || c == '\r') {
+    for part in text.split([',', '\n', '\r']) {
         let trimmed = part.trim();
         if trimmed.is_empty() {
             continue;
@@ -416,13 +396,8 @@ fn parse_expected_basis() -> Option<Vec<usize>> {
         let val: usize = trimmed.parse().ok()?;
         out.push(val);
     }
-    if out.is_empty() {
-        None
-    } else {
-        Some(out)
-    }
+    if out.is_empty() { None } else { Some(out) }
 }
-
 
 #[cfg(test)]
 mod tests {

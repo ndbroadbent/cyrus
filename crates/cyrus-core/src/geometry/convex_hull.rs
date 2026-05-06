@@ -25,16 +25,7 @@ impl ConvexHull {
     ///
     /// Returns None if the points are degenerate (< d+1 affinely independent points).
     pub fn compute(points: &[Vec<i64>]) -> Option<Self> {
-        if points.is_empty() {
-            return None;
-        }
-
-        let d = points[0].len();
-        let n = points.len();
-
-        if n <= d {
-            return None; // Not enough points for a d-dimensional hull
-        }
+        let (d, _n) = validate_points(points)?;
 
         // Find d+1 affinely independent points for initial simplex
         let initial_simplex = find_initial_simplex(points, d)?;
@@ -52,12 +43,7 @@ impl ConvexHull {
             }
 
             // Find visible facets
-            let visible: Vec<usize> = facets
-                .iter()
-                .enumerate()
-                .filter(|(_, f)| f.is_visible(point))
-                .map(|(i, _)| i)
-                .collect();
+            let visible = visible_facets(&facets, point);
 
             if visible.is_empty() {
                 // Point is inside or on the hull, skip
@@ -65,70 +51,27 @@ impl ConvexHull {
             }
 
             // Find horizon ridges (shared by exactly one visible facet)
-            let mut ridge_count: HashMap<Vec<usize>, (usize, usize)> = HashMap::new();
-            for &fi in &visible {
-                for ridge in facets[fi].ridges() {
-                    ridge_count
-                        .entry(ridge)
-                        .and_modify(|(count, _)| *count += 1)
-                        .or_insert((1, fi));
-                }
-            }
-
-            let horizon_ridges: Vec<(Vec<usize>, usize)> = ridge_count
-                .into_iter()
-                .filter(|(_, (count, _))| *count == 1)
-                .map(|(ridge, (_, fi))| (ridge, fi))
-                .collect();
+            let horizon_ridges = horizon_ridges(&facets, &visible);
 
             // Remove visible facets (in reverse order to maintain indices)
-            let mut visible_sorted = visible;
-            visible_sorted.sort_unstable();
-            for &fi in visible_sorted.iter().rev() {
-                facets.swap_remove(fi);
-            }
+            remove_visible_facets(&mut facets, &visible);
 
             // Create new facets from horizon ridges to new point
             let (interior_sum, interior_count) = compute_centroid_sum(points, &in_hull);
-
-            for (ridge, _parent_facet) in horizon_ridges {
-                let mut vertices = ridge.clone();
-                vertices.push(idx);
-
-                // Compute hyperplane for new facet
-                let facet_points: Vec<&[i64]> =
-                    vertices.iter().map(|&i| points[i].as_slice()).collect();
-
-                if let Some(hp) = Hyperplane::from_points(&facet_points) {
-                    // Orient normal outward (away from interior)
-                    // Use centroid of existing hull vertices as interior point
-                    let (normal, constant) = orient_outward_exact(
-                        hp.normal,
-                        hp.constant,
-                        &interior_sum,
-                        &interior_count,
-                    );
-
-                    facets.push(Facet {
-                        vertices,
-                        normal,
-                        constant,
-                    });
-                }
-            }
+            add_new_facets(
+                &mut facets,
+                points,
+                idx,
+                horizon_ridges,
+                &interior_sum,
+                &interior_count,
+            );
 
             in_hull.insert(idx);
         }
 
         // Collect vertex indices
-        let mut vertex_indices: HashSet<usize> = HashSet::new();
-        for facet in &facets {
-            for &v in &facet.vertices {
-                vertex_indices.insert(v);
-            }
-        }
-        let mut vertex_indices: Vec<usize> = vertex_indices.into_iter().collect();
-        vertex_indices.sort_unstable();
+        let vertex_indices = collect_vertex_indices(&facets);
 
         Some(Self {
             points: points.to_vec(),
@@ -136,6 +79,89 @@ impl ConvexHull {
             vertex_indices,
         })
     }
+}
+
+fn validate_points(points: &[Vec<i64>]) -> Option<(usize, usize)> {
+    if points.is_empty() {
+        return None;
+    }
+    let d = points[0].len();
+    let n = points.len();
+    if n <= d {
+        return None;
+    }
+    Some((d, n))
+}
+
+fn visible_facets(facets: &[Facet], point: &[i64]) -> Vec<usize> {
+    facets
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| f.is_visible(point))
+        .map(|(i, _)| i)
+        .collect()
+}
+
+fn horizon_ridges(facets: &[Facet], visible: &[usize]) -> Vec<(Vec<usize>, usize)> {
+    let mut ridge_count: HashMap<Vec<usize>, (usize, usize)> = HashMap::new();
+    for &fi in visible {
+        for ridge in facets[fi].ridges() {
+            ridge_count
+                .entry(ridge)
+                .and_modify(|(count, _)| *count += 1)
+                .or_insert((1, fi));
+        }
+    }
+    ridge_count
+        .into_iter()
+        .filter(|(_, (count, _))| *count == 1)
+        .map(|(ridge, (_, fi))| (ridge, fi))
+        .collect()
+}
+
+fn remove_visible_facets(facets: &mut Vec<Facet>, visible: &[usize]) {
+    let mut visible_sorted = visible.to_vec();
+    visible_sorted.sort_unstable();
+    for &fi in visible_sorted.iter().rev() {
+        facets.swap_remove(fi);
+    }
+}
+
+fn add_new_facets(
+    facets: &mut Vec<Facet>,
+    points: &[Vec<i64>],
+    point_idx: usize,
+    horizon_ridges: Vec<(Vec<usize>, usize)>,
+    interior_sum: &[Integer],
+    interior_count: &Integer,
+) {
+    for (ridge, _parent_facet) in horizon_ridges {
+        let mut vertices = ridge.clone();
+        vertices.push(point_idx);
+
+        let facet_points: Vec<&[i64]> = vertices.iter().map(|&i| points[i].as_slice()).collect();
+        if let Some(hp) = Hyperplane::from_points(&facet_points) {
+            let (normal, constant) =
+                orient_outward_exact(hp.normal, hp.constant, interior_sum, interior_count);
+            facets.push(Facet {
+                vertices,
+                normal,
+                constant,
+            });
+        }
+    }
+}
+
+fn collect_vertex_indices(facets: &[Facet]) -> Vec<usize> {
+    let mut vertex_indices: HashSet<usize> = HashSet::new();
+    for facet in facets {
+        for &v in &facet.vertices {
+            vertex_indices.insert(v);
+        }
+    }
+    let mut vertex_indices: Vec<usize> = vertex_indices.into_iter().collect();
+    vertex_indices.sort_unstable();
+    vertex_indices
 }
 
 /// Find d+1 affinely independent points for initial simplex.

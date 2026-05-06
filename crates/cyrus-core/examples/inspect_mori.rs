@@ -3,8 +3,8 @@
 use std::path::PathBuf;
 
 use cyrus_core::{
-    compute_frst_heights, compute_glsm_and_linrels, compute_grading_vector,
-    compute_mori_cone_cap_rays, Cone, Point, Polytope,
+    Cone, Point, Polytope, compute_frst_heights, compute_glsm_and_linrels, compute_grading_vector,
+    compute_mori_cone_cap_rays,
 };
 use serde::Deserialize;
 
@@ -35,9 +35,8 @@ fn main() {
         .position(|p| p.coords().iter().all(|&x| x == 0))
         .expect("Origin not found");
 
-    let (_heights, triangulation) =
-        compute_frst_heights(&triangulation_points, origin_idx)
-            .expect("Failed to compute FRST triangulation");
+    let (_heights, triangulation) = compute_frst_heights(&triangulation_points, origin_idx)
+        .expect("Failed to compute FRST triangulation");
 
     let (_glsm, _linrels, basis) =
         compute_glsm_and_linrels(&triangulation_points).expect("Failed GLSM/linrels");
@@ -79,10 +78,8 @@ fn main() {
                 break;
             }
         }
-        if ok {
-            if let Some(i) = idx {
-                unit_hits[i] = true;
-            }
+        if ok && let Some(i) = idx {
+            unit_hits[i] = true;
         }
     }
     let unit_count = unit_hits.iter().filter(|&&v| v).count();
@@ -97,14 +94,14 @@ fn main() {
     );
     let rays_i128: Vec<Vec<i128>> = rays
         .iter()
-        .map(|r| r.iter().map(|&x| x as i128).collect())
+        .map(|r| r.iter().map(|&x| i128::from(x)).collect())
         .collect();
     let mut cone = Cone::from_rays(rays_i128);
     let h = cone.hyperplanes().to_vec();
     println!(
         "hyperplanes: count={}, dim={}",
         h.len(),
-        h.first().map(Vec::len).unwrap_or(0)
+        h.first().map_or(0, Vec::len)
     );
     let grading = compute_grading_vector(&rays).expect("No grading vector found");
     let mut min_g = i64::MAX;
@@ -133,7 +130,10 @@ fn main() {
         grading.len(),
         min_g,
         max_g,
-        neg_g
-        ,g1,g2,g3,g4
+        neg_g,
+        g1,
+        g2,
+        g3,
+        g4
     );
 }

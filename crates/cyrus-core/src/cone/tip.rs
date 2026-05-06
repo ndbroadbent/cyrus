@@ -10,7 +10,7 @@
 //! Reference: CYTools cone.py tip_of_stretched_cone()
 
 use super::Cone;
-use good_lp::{default_solver, variable, Expression, ProblemVariables, Solution, SolverModel};
+use good_lp::{Expression, ProblemVariables, Solution, SolverModel, default_solver, variable};
 
 /// Find the tip of a stretched cone.
 ///
@@ -88,77 +88,81 @@ pub fn find_interior_point_lp(cone: &mut Cone) -> Option<Vec<f64>> {
         return Some(vec![1.0; dim]);
     }
 
-    // Objective vector: average of hyperplane normals (CYTools feasibility)
-    let mut obj_vec = vec![0.0f64; dim];
-    for row in &h {
-        for i in 0..dim {
-            obj_vec[i] += row[i] as f64;
-        }
+    let obj_vec = average_hyperplane_normals(&h, dim);
+    if let Some(candidate) = heuristic_interior_point(&h, dim, cone) {
+        return Some(candidate);
     }
-    let denom = h.len() as f64;
-    if denom > 0.0 {
-        for v in &mut obj_vec {
-            *v /= denom;
-        }
+    if should_try_full_lp(h.len())
+        && let Some(candidate) = solve_full_feasibility_lp(&h, dim, &obj_vec)
+    {
+        return Some(candidate);
     }
+    cutting_plane_interior(&h, dim, &obj_vec, cone)
+}
 
-    // Fast heuristic: try constructive interior point first for smaller systems.
-    if h.len() <= 10_000 {
-        if let Some(candidate) = find_initial_point(&h, dim, 1.0) {
-            if cone.contains_interior(&candidate, 1e-10) {
-                return Some(candidate);
-            }
-        }
-    }
+fn should_try_full_lp(n_constraints: usize) -> bool {
+    let threshold = std::env::var("CYRUS_INTERIOR_FULL_LP_THRESHOLD")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(50_000);
+    n_constraints >= threshold
+}
 
-    // Cutting-plane: start with a subset, add violated constraints.
-    let mut active: Vec<usize> = (0..h.len().min(64)).collect();
-    let mut active_set: std::collections::HashSet<usize> = active.iter().copied().collect();
-
-    for iter in 0..200 {
-        if iter % 10 == 0 {
-            eprintln!(
-                "[DEBUG] interior lp iter={}, active_constraints={}",
-                iter,
-                active.len()
-            );
-        }
-        let candidate = solve_feasibility_lp(&h, &active, dim, &obj_vec)?;
-
-        let mut violations: Vec<(usize, f64)> = Vec::new();
-        for (idx, row) in h.iter().enumerate() {
-            let dot: f64 = row
-                .iter()
-                .zip(candidate.iter())
-                .map(|(&a, &x)| a as f64 * x)
-                .sum();
-            if dot < 1.0 - 1e-9 {
-                violations.push((idx, 1.0 - dot));
-            }
-        }
-
-        if violations.is_empty() && cone.contains_interior(&candidate, 1e-10) {
-            return Some(candidate);
-        }
-
-        violations.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        let mut added = 0usize;
-        for (idx, _) in violations {
-            if active_set.insert(idx) {
-                active.push(idx);
-                added += 1;
-            }
-            if added >= 256 {
-                break;
-            }
-        }
-
-        if added == 0 && iter > 0 {
-            break;
-        }
+fn scaled_constraint(row: &[i128], x: &[good_lp::Variable]) -> Option<(Expression, f64)> {
+    let max_abs = row.iter().map(|v| v.abs()).max().unwrap_or(0) as f64;
+    if max_abs == 0.0 {
+        eprintln!("[WARN] interior lp constraint has zero row");
+        return None;
     }
 
-    None
+    let scale = max_abs;
+    let mut expr = Expression::from(0.0);
+    for (i, &coeff) in row.iter().enumerate() {
+        if coeff != 0 {
+            expr.add_mul((coeff as f64) / scale, x[i]);
+        }
+    }
+    Some((expr, 1.0 / scale))
+}
+
+fn solve_full_feasibility_lp(h: &[Vec<i128>], dim: usize, obj_vec: &[f64]) -> Option<Vec<f64>> {
+    eprintln!(
+        "[DEBUG] interior full lp: constraints={}, dim={}",
+        h.len(),
+        dim
+    );
+
+    let mut vars = ProblemVariables::new();
+    let bound = 1.0e6;
+    let x: Vec<_> = (0..dim)
+        .map(|_| vars.add(variable().min(-bound).max(bound)))
+        .collect();
+
+    let mut obj_expr = Expression::from(0.0);
+    for i in 0..dim {
+        obj_expr.add_mul(obj_vec[i], x[i]);
+    }
+    let mut model = vars.minimise(obj_expr).using(default_solver);
+    for row in h {
+        let (expr, rhs) = scaled_constraint(row, &x)?;
+        model = model.with(expr.geq(rhs));
+    }
+
+    let solution = match model.solve() {
+        Ok(sol) => sol,
+        Err(err) => {
+            eprintln!("[WARN] interior full lp solve failed: {err}");
+            return None;
+        }
+    };
+
+    let out: Vec<f64> = x.iter().map(|var| solution.value(*var)).collect();
+    if collect_violations(h, &out, 1.0).is_empty() {
+        Some(out)
+    } else {
+        eprintln!("[WARN] interior full lp solution failed feasibility check");
+        None
+    }
 }
 
 fn solve_feasibility_lp(
@@ -181,23 +185,14 @@ fn solve_feasibility_lp(
 
     for &row_idx in active {
         let row = &h[row_idx];
-        let max_abs = row.iter().map(|v| v.abs()).max().unwrap_or(0) as f64;
-        if max_abs == 0.0 {
-            eprintln!("[WARN] interior lp constraint has zero row");
-            return None;
-        }
-        let scale = max_abs;
-        let mut expr = Expression::from(0.0);
-        for i in 0..dim {
-            expr.add_mul((row[i] as f64) / scale, x[i]);
-        }
-        model = model.with(expr.geq(1.0 / scale));
+        let (expr, rhs) = scaled_constraint(row, &x)?;
+        model = model.with(expr.geq(rhs));
     }
 
     let solution = match model.solve() {
         Ok(sol) => sol,
         Err(err) => {
-            eprintln!("[WARN] interior lp solve failed: {}", err);
+            eprintln!("[WARN] interior lp solve failed: {err}");
             return None;
         }
     };
@@ -214,40 +209,148 @@ fn find_initial_point(h: &[Vec<i128>], dim: usize, c: f64) -> Option<Vec<f64>> {
         return Some(vec![c; dim]);
     }
 
-    // Strategy: Start with sum of hyperplane normals
-    // This tends to point towards the interior of the cone
+    let mut x = sum_hyperplane_normals(h, dim);
+    normalize_or_unit(&mut x);
+    scale_to_feasible(h, &mut x, c);
+
+    let (feasible, violations) = check_feasibility(h, &x, c);
+    if feasible {
+        return Some(x);
+    }
+
+    if let Some(refined) = refine_from_violations(h, x, c, &violations) {
+        return Some(refined);
+    }
+
+    large_scale_fallback(h, dim, c)
+}
+
+fn average_hyperplane_normals(h: &[Vec<i128>], dim: usize) -> Vec<f64> {
+    let mut obj_vec = vec![0.0f64; dim];
+    for row in h {
+        for i in 0..dim {
+            obj_vec[i] += row[i] as f64;
+        }
+    }
+    let denom = h.len() as f64;
+    if denom > 0.0 {
+        for v in &mut obj_vec {
+            *v /= denom;
+        }
+    }
+    obj_vec
+}
+
+fn heuristic_interior_point(h: &[Vec<i128>], dim: usize, cone: &mut Cone) -> Option<Vec<f64>> {
+    if h.len() > 10_000 {
+        return None;
+    }
+    let candidate = find_initial_point(h, dim, 1.0)?;
+    if cone.contains_interior(&candidate, 1e-10) {
+        Some(candidate)
+    } else {
+        None
+    }
+}
+
+fn cutting_plane_interior(
+    h: &[Vec<i128>],
+    dim: usize,
+    obj_vec: &[f64],
+    cone: &mut Cone,
+) -> Option<Vec<f64>> {
+    let mut active: Vec<usize> = (0..h.len().min(64)).collect();
+    let mut active_set: std::collections::HashSet<usize> = active.iter().copied().collect();
+
+    for iter in 0..200 {
+        if iter % 10 == 0 {
+            eprintln!(
+                "[DEBUG] interior lp iter={}, active_constraints={}",
+                iter,
+                active.len()
+            );
+        }
+        let candidate = solve_feasibility_lp(h, &active, dim, obj_vec)?;
+        let mut violations = collect_violations(h, &candidate, 1.0);
+        if violations.is_empty() && cone.contains_interior(&candidate, 1e-10) {
+            return Some(candidate);
+        }
+
+        violations.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        let added = extend_active_set(&mut active, &mut active_set, &violations);
+        if added == 0 && iter > 0 {
+            break;
+        }
+    }
+
+    None
+}
+
+fn collect_violations(h: &[Vec<i128>], candidate: &[f64], c: f64) -> Vec<(usize, f64)> {
+    let mut violations: Vec<(usize, f64)> = Vec::new();
+    for (idx, row) in h.iter().enumerate() {
+        let dot: f64 = row
+            .iter()
+            .zip(candidate.iter())
+            .map(|(&a, &x)| a as f64 * x)
+            .sum();
+        if dot < c - 1e-9 {
+            violations.push((idx, c - dot));
+        }
+    }
+    violations
+}
+
+fn extend_active_set(
+    active: &mut Vec<usize>,
+    active_set: &mut std::collections::HashSet<usize>,
+    violations: &[(usize, f64)],
+) -> usize {
+    let mut added = 0usize;
+    for (idx, _) in violations {
+        if active_set.insert(*idx) {
+            active.push(*idx);
+            added += 1;
+        }
+        if added >= 256 {
+            break;
+        }
+    }
+    added
+}
+
+fn sum_hyperplane_normals(h: &[Vec<i128>], dim: usize) -> Vec<f64> {
     let mut x = vec![0.0; dim];
     for row in h {
         for (i, &hi) in row.iter().enumerate() {
             x[i] += hi as f64;
         }
     }
+    x
+}
 
-    // Normalize
+fn normalize_or_unit(x: &mut [f64]) {
     let norm: f64 = x.iter().map(|&xi| xi * xi).sum::<f64>().sqrt();
     if norm < 1e-10 {
-        // Degenerate case - try each dimension
-        for i in 0..dim {
-            x[i] = 1.0;
+        for xi in x.iter_mut() {
+            *xi = 1.0;
         }
     } else {
-        for xi in &mut x {
+        for xi in x.iter_mut() {
             *xi /= norm;
         }
     }
+}
 
-    // Scale to satisfy constraints
-    scale_to_feasible(h, &mut x, c);
-
-    // Verify and refine
-    let (feasible, violations) = check_feasibility(h, &x, c);
-    if feasible {
-        return Some(x);
-    }
-
-    // Refinement: push away from violated constraints
+fn refine_from_violations(
+    h: &[Vec<i128>],
+    mut x: Vec<f64>,
+    c: f64,
+    violations: &[(usize, f64)],
+) -> Option<Vec<f64>> {
+    let mut current_violations = violations.to_vec();
     for _ in 0..100 {
-        for &(i, violation) in &violations {
+        for &(i, violation) in &current_violations {
             let row = &h[i];
             let norm_sq: f64 = row.iter().map(|&hi| (hi as f64).powi(2)).sum();
             if norm_sq > 1e-10 {
@@ -262,26 +365,20 @@ fn find_initial_point(h: &[Vec<i128>], dim: usize, c: f64) -> Option<Vec<f64>> {
         if feasible {
             return Some(x);
         }
-
         if new_violations.is_empty() {
             break;
         }
+        current_violations = new_violations;
     }
+    None
+}
 
-    // Try a different approach: large scaling
-    let mut x = vec![0.0; dim];
-    for row in h {
-        for (i, &hi) in row.iter().enumerate() {
-            x[i] += hi as f64;
-        }
-    }
-
-    // Large scale to ensure we're well inside
+fn large_scale_fallback(h: &[Vec<i128>], dim: usize, c: f64) -> Option<Vec<f64>> {
+    let mut x = sum_hyperplane_normals(h, dim);
     let scale = 1000.0 * c;
     for xi in &mut x {
         *xi *= scale;
     }
-
     let (feasible, _) = check_feasibility(h, &x, c);
     if feasible { Some(x) } else { None }
 }
@@ -381,6 +478,24 @@ mod tests {
         let p = interior.unwrap();
         assert!(p[0] > 0.0);
         assert!(p[1] > 0.0);
+    }
+
+    #[test]
+    fn test_full_feasibility_lp_sparse_constraints() {
+        let h = vec![
+            vec![1, 0, 0],
+            vec![0, 1, 0],
+            vec![0, 0, 1],
+            vec![1, 1, 0],
+            vec![0, 1, 1],
+        ];
+
+        let obj_vec = average_hyperplane_normals(&h, 3);
+        let point =
+            solve_full_feasibility_lp(&h, 3, &obj_vec).expect("full LP should find interior point");
+        let (feasible, violations) = check_feasibility(&h, &point, 1.0);
+
+        assert!(feasible, "violations: {violations:?}");
     }
 
     #[test]

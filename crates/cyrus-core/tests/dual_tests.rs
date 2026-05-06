@@ -20,7 +20,6 @@
 #![allow(clippy::cast_possible_wrap)]
 #![allow(clippy::uninlined_format_args)]
 #![allow(clippy::items_after_statements)]
-#![allow(clippy::too_many_lines)]
 #![allow(clippy::float_cmp)]
 #![allow(dead_code)]
 
