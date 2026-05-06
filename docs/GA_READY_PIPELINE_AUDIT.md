@@ -292,9 +292,9 @@ to make the remaining GV layer more first-principles:
    semigroup, grading, intersection tensor, and chamber interpretation. The
    same report now groups local charge-row permutation signatures: all four
    compact-threefold-shaped misses share `[-2,-1,-1,1,3]` and are explicitly
-   marked `shape_only_missing_source_derived_cygv_inputs`, with the missing
-   local semigroup generators, grading vector, `q` orientation/phase,
-   intersection tensor, and target-coordinate map listed in the JSON. The core
+   marked `shape_only_missing_source_derived_cygv_inputs`, with the remaining
+   uncertified local semigroup generators, grading vector, `q` phase,
+   intersection tensor, and chamber interpretation listed in the JSON. The core
    affine-circuit diagnostic and McAllister context export now preserve
    full-rank local affine coordinates for these rank-three/four supports rather
    than only rank-two coordinates. The context tool also reconstructs them from
@@ -305,7 +305,14 @@ to make the remaining GV layer more first-principles:
    skeleton for these supports. For all four compact-threefold-shaped misses,
    the witness relation is integral in the one-row local charge basis with
    coordinate `[-1]`, and the transposed local charge rows are recorded as the
-   candidate local `q` matrix shape. The
+   candidate local `q` matrix shape. The same skeleton now records the two
+   overall local charge-basis orientation candidates: sign `-1` turns the
+   target coordinate into `[1]` and places the positive unit generator in
+   cygv's `neg2` fundamental-period bucket, while sign `+1` leaves the target
+   at `[-1]` and puts the positive unit generator in `ignored_gt2`. This
+   removes the target-coordinate/orientation ambiguity for the compact-shaped
+   local supports, but it is still not a chamber certificate and supplies no
+   GV value by itself. The
    direct source read reinforces this: `cygv` obtains GV values from the full
    finite semigroup, HKTY alpha/beta construction, and degree-ordered
    `Li2(q_N)` subtraction history, while the McAllister paper's small-curve
