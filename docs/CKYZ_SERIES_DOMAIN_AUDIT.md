@@ -451,16 +451,18 @@ is algebraically source-derived, but it is not mechanically shaped like cygv:
   `(scale, delta)` it computes one coefficient of `exp(scale.alpha)` by a
   recurrence. cygv instead stores finite polynomials and builds `q_N` from
   cached `exp(alpha_i)` powers and recent `q_N` history.
-- Cyrus sorts CKYZ extraction by ordinary total degree. That is a valid
-  topological order for nonnegative local degrees, but cygv's source order is a
-  grading-vector order with same-degree candidates read as a batch before their
-  subtractions can affect later gradings.
+- Cyrus now sorts CKYZ extraction by the cover-weight grading vector and reads
+  a full grading level before applying its subtractions to later gradings. The
+  remaining divergence is representation: residuals and coefficients still need
+  to move further toward cygv's indexed finite-polynomial mechanics.
 
 The next implementation should therefore be framed as a cygv-shaped indexed
 series evaluator, not as another broad-domain tweak:
 
 1. Give the CKYZ finite domain a source-style grading vector, grouped degree
-   levels, and index-addressed coefficient arrays.
+   levels, and index-addressed coefficient arrays. The z-residual state is now
+   domain-indexed; the broader finite-polynomial operations still need the same
+   treatment.
 2. Compute `alpha`, `beta`, local `beta - alpha alpha`, and the contracted
    instanton polynomial in that indexed domain.
 3. Precompute sparse `exp(alpha_i)` / `exp(-alpha_i)` over the retained domain,
