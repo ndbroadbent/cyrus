@@ -49,7 +49,7 @@ The objective breaks down into these success criteria:
 | First-principles mode rejects JSON fixture fallback | `crates/cyrus-core/tests/mcallister_e2e.rs`; `enforce_modes` in `crates/cyrus-core/src/bin/mcallister_first_principles.rs` | Implemented guard. `CYRUS_ALLOW_FIXTURES` is rejected with `CYRUS_FIRST_PRINCIPLES`; the runner refuses silent fixture fallback. |
 | Replay-only corrected Kahler parameters are not loaded in the normal solve | `mcallister_first_principles` volume path around `--allow-downstream-kahler`; warning that `corrected_kahler_param.dat` remains validation-only replay | Implemented guard. Replay is behind an explicit flag, and corrected-chamber diagnostics are rejected when replay is enabled. |
 | Replay-only volumes are not production inputs | `compare_against_dat` reads `corrected_cy_vol.dat` only after computing `V_string`; `docs/MCALLISTER_DATA_POLICY.md` | Mostly implemented. Comparison is post-computation, but the runner still tolerates a residual up to `0.1`, so this is a diagnostic gate, not proof of exact reproduction. |
-| Geometry, basis, intersections, Mori/Kahler data are computed from upstream inputs | `docs/GA_READY_PIPELINE_AUDIT.md`; `mcallister_first_principles`; stage 2/3/5 tests referenced there | Largely implemented, but not a final completion certificate. Generic matrix-basis GV inputs now include Mori projection, q-matrix construction, curve-basis construction, and in-basis intersection tensor pullback. `mcallister_first_principles --dual-basis` now accepts index or matrix source bases for K/M flux-coordinate transforms. Full production matrix-basis handling is still open because the runner stores its internal primal/dual/KKLT basis as vector indices and Kähler/branch-volume transforms remain vector-basis paths. |
+| Geometry, basis, intersections, Mori/Kahler data are computed from upstream inputs | `docs/GA_READY_PIPELINE_AUDIT.md`; `mcallister_first_principles`; stage 2/3/5 tests referenced there | Largely implemented, but not a final completion certificate. Generic matrix-basis GV inputs now include Mori projection, q-matrix construction, curve-basis construction, and in-basis intersection tensor pullback. `mcallister_first_principles --dual-basis` accepts index or matrix source bases for K/M flux-coordinate transforms, and `--production-dual-basis` now carries an index or matrix internal dual divisor basis through flat-direction intersections and compact GV inputs. Full production matrix-basis handling is still open because the primal Kähler, KKLT, and branch-volume paths remain vector-basis paths. |
 | CYTools/cygv compact GV wrapper contract is understood and mirrored | `docs/CYGV_AUDIT.md`; direct source read of `reference/cytools/src/cytools/calabiyau.py::_compute_gvs_gws`; downloaded `cygv-0.1.2` source | Implemented for the generic compact handoff boundary. CYTools builds inputs, then delegates to `cygv.compute_gv`; no hidden Python GV algorithm remains. |
 | High-dimensional small toric curve selection is computed, not read | `docs/GA_READY_PIPELINE_AUDIT.md`; stage 5 small-curve tests | Implemented for the checkpoint rule. Pair pruning matches `small_curves.dat`; finite-semigroup pruning would remove five additional curves, so both policies remain explicit. |
 | High-dimensional small toric GV values are computed, not read | `docs/CYGV_AUDIT.md`; `docs/LOCAL_TORIC_GV_SOURCE_MAP.md`; stage 5 small-toric GV tests | Partially implemented. Covered toric two-face/origin-circuit formulas match the checkpoint, including the source-derived resolved-conifold `(-1,-1,1,1)` pattern. Remaining corrected-chamber misses are unresolved higher-rank origin circuits. |
@@ -128,11 +128,12 @@ and matrix-basis pipeline are no longer open.
 2. **Exact corrected KKLT volume.** The no-replay path computes a corrected
    volume but still has a documented instanton/chamber residual.
 3. **Generic matrix-basis pipeline.** Matrix divisor-basis primitives now cover
-   compact `cygv` inputs including intersections, and `--dual-basis` matrix
-   source coordinates can now transform K/M fluxes into the computed vector
-   basis. The McAllister runner still stores its production basis as vector
-   indices, so Kähler, KKLT, branch-volume, and internal matrix-basis execution
-   are not fully generalized.
+   compact `cygv` inputs including intersections, `--dual-basis` matrix source
+   coordinates can transform K/M fluxes into the production dual basis, and
+   `--production-dual-basis` can carry a matrix internal dual basis through
+   flat-direction and compact-GV handoff. The primal Kähler, KKLT, and
+   branch-volume paths still store basis data as vector indices, so the
+   end-to-end production pipeline is not fully matrix-basis generalized.
 4. **Compact GV semigroup/face certification.** Missing corrected-chamber GV
    classes need a source-derived compact or certified face semigroup that can
    be handed to `cygv`, not an unproven local CKYZ substitute.
@@ -145,9 +146,9 @@ and matrix-basis pipeline are no longer open.
 The next implementation should be one of these, in order:
 
 1. Continue the generic matrix-basis handoff in `mcallister_first_principles`:
-   K/M source-coordinate transforms now handle matrix overrides, but
-   Cyrus-computed bases, Kähler coordinates, KKLT/branch-volume logic, and
-   compact `cygv` inputs still need one typed production basis path.
+   the dual flat/GV side now has one typed production basis path, but primal
+   Kähler coordinates and KKLT/branch-volume logic still need the same owned
+   basis representation or explicit stage-local rejection.
 2. For corrected-chamber missing GV classes, construct a source-derived compact
    semigroup or certified supporting-face semigroup and hand it to the existing
    `cygv` wrappers. If the semigroup cannot be certified, keep the result

@@ -8,6 +8,9 @@
 //!   basis for K/M flux vectors. The JSON may contain either `indices` or a
 //!   divisor-basis `matrix`. Without this, McAllister validation mode uses the
 //!   paper basis `[3, 4, 5, 8]`; generic mode uses Cyrus' computed dual basis.
+//! - `--production-dual-basis path/to/dual_basis.json` to set the internal dual
+//!   divisor basis used for flat-direction intersections and compact GV inputs.
+//!   This is separate from the K/M flux source basis above.
 //! - `--allow-fixtures` to permit JSON fixture fallback when no data dir is set.
 //! - `--skip-mcallister-assertions` to run the computed pipeline without
 //!   comparing final observables to the 4-214-647 validation target.
@@ -439,6 +442,44 @@ enum BasisOverrideRef<'a> {
     Matrix(&'a [Vec<i64>]),
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum OwnedDivisorBasis {
+    Indices(Vec<usize>),
+    Matrix {
+        standard_basis: Vec<usize>,
+        basis_matrix: Vec<Vec<malachite::Integer>>,
+    },
+}
+
+impl OwnedDivisorBasis {
+    fn as_divisor_basis(&self) -> DivisorBasis<'_> {
+        match self {
+            Self::Indices(indices) => DivisorBasis::Indices(indices),
+            Self::Matrix {
+                standard_basis,
+                basis_matrix,
+            } => DivisorBasis::Matrix {
+                standard_basis,
+                basis_matrix,
+            },
+        }
+    }
+
+    fn dimension(&self) -> usize {
+        match self {
+            Self::Indices(indices) => indices.len(),
+            Self::Matrix { basis_matrix, .. } => basis_matrix.len(),
+        }
+    }
+
+    fn description(&self) -> &'static str {
+        match self {
+            Self::Indices(_) => "index divisor basis",
+            Self::Matrix { .. } => "matrix divisor basis",
+        }
+    }
+}
+
 impl BasisOverride {
     fn representation(&self, context: &str) -> std::result::Result<BasisOverrideRef<'_>, String> {
         match (&self.indices, &self.matrix) {
@@ -473,14 +514,55 @@ fn basis_indices_or_exit(override_value: &BasisOverride, context: &str) -> Vec<u
     )
 }
 
+fn owned_divisor_basis_from_override(
+    override_value: &BasisOverride,
+    standard_basis: &[usize],
+    context: &str,
+) -> std::result::Result<OwnedDivisorBasis, String> {
+    match override_value.representation(context)? {
+        BasisOverrideRef::Indices(indices) => Ok(OwnedDivisorBasis::Indices(indices.to_vec())),
+        BasisOverrideRef::Matrix(matrix) => Ok(OwnedDivisorBasis::Matrix {
+            standard_basis: standard_basis.to_vec(),
+            basis_matrix: basis_matrix_to_integer(matrix),
+        }),
+    }
+}
+
+fn basis_change_matrix_between_owned(
+    glsm: &[Vec<malachite::Integer>],
+    from_basis: &OwnedDivisorBasis,
+    to_basis: &OwnedDivisorBasis,
+) -> std::result::Result<Vec<Vec<malachite::Integer>>, String> {
+    divisor_basis_change_matrix(
+        glsm,
+        from_basis.as_divisor_basis(),
+        to_basis.as_divisor_basis(),
+    )
+    .map_err(|e| e.to_string())
+}
+
+fn production_gv_basis_data(
+    ambient_mori_rays: &[Vec<i64>],
+    linrels: &[Vec<malachite::Integer>],
+    basis: &OwnedDivisorBasis,
+    context: &str,
+) -> Result<GvDivisorBasisData, String> {
+    gv_divisor_basis_data(ambient_mori_rays, linrels, basis.as_divisor_basis())
+        .map_err(|e| format!("failed to build {context} GV divisor-basis data: {e}"))
+}
+
 fn vector_gv_basis_data(
     ambient_mori_rays: &[Vec<i64>],
     linrels: &[Vec<malachite::Integer>],
     basis: &[usize],
     context: &str,
 ) -> Result<GvDivisorBasisData, String> {
-    gv_divisor_basis_data(ambient_mori_rays, linrels, DivisorBasis::Indices(basis))
-        .map_err(|e| format!("failed to build {context} GV divisor-basis data: {e}"))
+    production_gv_basis_data(
+        ambient_mori_rays,
+        linrels,
+        &OwnedDivisorBasis::Indices(basis.to_vec()),
+        context,
+    )
 }
 
 #[derive(Debug, Deserialize)]
@@ -1080,6 +1162,7 @@ struct PipelineArgs {
     diagnose_chamber_updated_kklt: bool,
     diagnose_chamber_updated_kklt_iterations: usize,
     dual_basis_override: Option<BasisOverride>,
+    production_dual_basis_override: Option<BasisOverride>,
 }
 
 struct PrimalGeom {
@@ -1102,8 +1185,8 @@ struct FlatDirectionData {
     dual_triangulation_points: Vec<Point>,
     dual_triangulation: Triangulation,
     dual_linrels: Vec<Vec<malachite::Integer>>,
-    dual_basis: Vec<usize>,
-    dual_kappa_full: cyrus_core::Intersection,
+    dual_divisor_basis: OwnedDivisorBasis,
+    dual_kappa_basis: cyrus_core::Intersection,
     flat_p: Vec<F64<Finite>>,
     ek0_opt: Option<F64<Pos>>,
     m_flux: Vec<I64<Finite>>,
@@ -1178,6 +1261,8 @@ fn parse_args() -> PipelineArgs {
         parse_arg_value::<usize>("--diagnose-chamber-updated-kklt-iterations").unwrap_or(6);
     let dual_basis_override = parse_arg_value::<String>("--dual-basis")
         .map(|path| load_json::<BasisOverride>(&PathBuf::from(path)));
+    let production_dual_basis_override = parse_arg_value::<String>("--production-dual-basis")
+        .map(|path| load_json::<BasisOverride>(&PathBuf::from(path)));
     PipelineArgs {
         stop_after,
         max_deg,
@@ -1212,6 +1297,7 @@ fn parse_args() -> PipelineArgs {
         diagnose_chamber_updated_kklt,
         diagnose_chamber_updated_kklt_iterations,
         dual_basis_override,
+        production_dual_basis_override,
     }
 }
 
@@ -1364,77 +1450,29 @@ fn basis_matrix_to_integer(basis_matrix: &[Vec<i64>]) -> Vec<Vec<malachite::Inte
         .collect()
 }
 
-fn basis_change_matrix_from_indices_to_override(
+fn transform_m_flux_between_divisor_bases(
     glsm: &[Vec<malachite::Integer>],
-    from_basis: &[usize],
-    to_basis: &BasisOverride,
-    context: &str,
-) -> std::result::Result<Vec<Vec<malachite::Integer>>, String> {
-    match to_basis.representation(context)? {
-        BasisOverrideRef::Indices(indices) => {
-            basis_change_matrix(glsm, from_basis, indices).map_err(|e| e.to_string())
-        }
-        BasisOverrideRef::Matrix(matrix) => {
-            let basis_matrix = basis_matrix_to_integer(matrix);
-            divisor_basis_change_matrix(
-                glsm,
-                DivisorBasis::Indices(from_basis),
-                DivisorBasis::Matrix {
-                    standard_basis: from_basis,
-                    basis_matrix: &basis_matrix,
-                },
-            )
-            .map_err(|e| e.to_string())
-        }
-    }
-}
-
-fn basis_change_matrix_from_override_to_indices(
-    glsm: &[Vec<malachite::Integer>],
-    from_basis: &BasisOverride,
-    to_basis: &[usize],
-    context: &str,
-) -> std::result::Result<Vec<Vec<malachite::Integer>>, String> {
-    match from_basis.representation(context)? {
-        BasisOverrideRef::Indices(indices) => {
-            basis_change_matrix(glsm, indices, to_basis).map_err(|e| e.to_string())
-        }
-        BasisOverrideRef::Matrix(matrix) => {
-            let basis_matrix = basis_matrix_to_integer(matrix);
-            divisor_basis_change_matrix(
-                glsm,
-                DivisorBasis::Matrix {
-                    standard_basis: to_basis,
-                    basis_matrix: &basis_matrix,
-                },
-                DivisorBasis::Indices(to_basis),
-            )
-            .map_err(|e| e.to_string())
-        }
-    }
-}
-
-fn transform_m_flux_to_computed_basis(
-    glsm: &[Vec<malachite::Integer>],
-    computed_basis: &[usize],
-    flux_basis: &[usize],
+    production_basis: &OwnedDivisorBasis,
+    source_basis: &OwnedDivisorBasis,
     values: &[i64],
     label: &str,
 ) -> Vec<i64> {
-    if computed_basis == flux_basis {
+    if production_basis == source_basis {
         return values.to_vec();
     }
-    let transform = basis_change_matrix(glsm, computed_basis, flux_basis).unwrap_or_else(|e| {
-        eprintln!("[ERROR] failed to compute {label} basis transform: {e}");
-        std::process::exit(2);
-    });
+    let transform = basis_change_matrix_between_owned(glsm, production_basis, source_basis)
+        .unwrap_or_else(|e| {
+            eprintln!("[ERROR] failed to compute {label} basis transform: {e}");
+            std::process::exit(2);
+        });
     if !is_unimodular(&transform) {
         eprintln!("[ERROR] {label} basis transform is not unimodular");
         std::process::exit(2);
     }
     eprintln!(
-        "[INFO] transforming {label} from flux basis {:?} to computed basis {:?}",
-        flux_basis, computed_basis
+        "[INFO] transforming {label} from {} source coordinates to {} production coordinates",
+        source_basis.description(),
+        production_basis.description()
     );
     apply_integer_basis_transform(&transform, values, label).unwrap_or_else(|e| {
         eprintln!("[ERROR] failed to apply {label} basis transform: {e}");
@@ -1442,82 +1480,29 @@ fn transform_m_flux_to_computed_basis(
     })
 }
 
-fn transform_m_flux_from_override_to_computed_basis(
+fn transform_k_flux_between_divisor_bases(
     glsm: &[Vec<malachite::Integer>],
-    computed_basis: &[usize],
-    flux_basis: &BasisOverride,
-    values: &[i64],
-    label: &str,
-) -> Vec<i64> {
-    let transform = basis_change_matrix_from_indices_to_override(
-        glsm,
-        computed_basis,
-        flux_basis,
-        "--dual-basis",
-    )
-    .unwrap_or_else(|e| {
-        eprintln!("[ERROR] failed to compute {label} basis transform: {e}");
-        std::process::exit(2);
-    });
-    if !is_unimodular(&transform) {
-        eprintln!("[ERROR] {label} basis transform is not unimodular");
-        std::process::exit(2);
-    }
-    eprintln!("[INFO] transforming {label} from --dual-basis source coordinates to computed basis");
-    apply_integer_basis_transform(&transform, values, label).unwrap_or_else(|e| {
-        eprintln!("[ERROR] failed to apply {label} basis transform: {e}");
-        std::process::exit(2);
-    })
-}
-
-fn transform_k_flux_to_computed_basis(
-    glsm: &[Vec<malachite::Integer>],
-    computed_basis: &[usize],
-    flux_basis: &[usize],
+    source_basis: &OwnedDivisorBasis,
+    production_basis: &OwnedDivisorBasis,
     values: &[i64],
 ) -> Vec<i64> {
-    if computed_basis == flux_basis {
+    if production_basis == source_basis {
         return values.to_vec();
     }
-    let transform = basis_change_matrix(glsm, flux_basis, computed_basis).unwrap_or_else(|e| {
-        eprintln!("[ERROR] failed to compute K basis transform: {e}");
-        std::process::exit(2);
-    });
+    let transform = basis_change_matrix_between_owned(glsm, source_basis, production_basis)
+        .unwrap_or_else(|e| {
+            eprintln!("[ERROR] failed to compute K basis transform: {e}");
+            std::process::exit(2);
+        });
     if !is_unimodular(&transform) {
         eprintln!("[ERROR] K basis transform is not unimodular");
         std::process::exit(2);
     }
     eprintln!(
-        "[INFO] transforming K from flux basis {:?} to computed basis {:?}",
-        flux_basis, computed_basis
+        "[INFO] transforming K from {} source coordinates to {} production coordinates",
+        source_basis.description(),
+        production_basis.description()
     );
-    apply_integer_basis_transform_transpose(&transform, values, "K").unwrap_or_else(|e| {
-        eprintln!("[ERROR] failed to apply K basis transform: {e}");
-        std::process::exit(2);
-    })
-}
-
-fn transform_k_flux_from_override_to_computed_basis(
-    glsm: &[Vec<malachite::Integer>],
-    computed_basis: &[usize],
-    flux_basis: &BasisOverride,
-    values: &[i64],
-) -> Vec<i64> {
-    let transform = basis_change_matrix_from_override_to_indices(
-        glsm,
-        flux_basis,
-        computed_basis,
-        "--dual-basis",
-    )
-    .unwrap_or_else(|e| {
-        eprintln!("[ERROR] failed to compute K basis transform: {e}");
-        std::process::exit(2);
-    });
-    if !is_unimodular(&transform) {
-        eprintln!("[ERROR] K basis transform is not unimodular");
-        std::process::exit(2);
-    }
-    eprintln!("[INFO] transforming K from --dual-basis source coordinates to computed basis");
     apply_integer_basis_transform_transpose(&transform, values, "K").unwrap_or_else(|e| {
         eprintln!("[ERROR] failed to apply K basis transform: {e}");
         std::process::exit(2);
@@ -1624,19 +1609,34 @@ fn stage_intersection(
     }
 }
 
-fn select_dual_basis(override_opt: Option<&BasisOverride>, computed: Vec<usize>) -> Vec<usize> {
+fn select_production_dual_basis(
+    override_opt: Option<&BasisOverride>,
+    computed_standard_basis: &[usize],
+) -> OwnedDivisorBasis {
     override_opt.map_or_else(
         || {
             eprintln!(
-                "[INFO] using computed dual basis (len={}, basis={:?})",
-                computed.len(),
-                computed
+                "[INFO] using computed dual production basis (len={}, basis={:?})",
+                computed_standard_basis.len(),
+                computed_standard_basis
             );
-            computed
+            OwnedDivisorBasis::Indices(computed_standard_basis.to_vec())
         },
         |explicit| {
-            eprintln!("[INFO] using explicit dual basis from --dual-basis");
-            basis_indices_or_exit(explicit, "--dual-basis")
+            let basis = owned_divisor_basis_from_override(
+                explicit,
+                computed_standard_basis,
+                "--production-dual-basis",
+            )
+            .unwrap_or_else(|err| {
+                eprintln!("[ERROR] {err}");
+                std::process::exit(2);
+            });
+            eprintln!(
+                "[INFO] using explicit {} from --production-dual-basis",
+                basis.description()
+            );
+            basis
         },
     )
 }
@@ -1648,6 +1648,7 @@ fn stage_flat_direction(
     allow_invalid_ek0: bool,
     use_mcallister_flux_basis_default: bool,
     dual_basis_override: Option<&BasisOverride>,
+    production_dual_basis_override: Option<&BasisOverride>,
     t0: &Instant,
 ) -> FlatDirectionData {
     let dual_polytope = geom
@@ -1669,19 +1670,28 @@ fn stage_flat_direction(
     }
     let (dual_glsm, dual_linrel, dual_basis_auto) =
         compute_glsm_and_linrels(&dual_points_vec).expect("Failed dual GLSM");
-    let dual_basis = select_dual_basis(None, dual_basis_auto);
-    let flux_basis = if dual_basis_override.is_none() {
-        if use_mcallister_flux_basis_default {
-            eprintln!("[INFO] using McAllister flux source basis [3, 4, 5, 8]");
-            Some(vec![3, 4, 5, 8])
-        } else {
-            eprintln!("[INFO] using computed dual basis as flux coordinate basis");
-            Some(dual_basis.clone())
-        }
-    } else {
-        eprintln!("[INFO] using explicit flux source basis from --dual-basis");
-        None
-    };
+    let dual_standard_basis = dual_basis_auto;
+    let dual_divisor_basis =
+        select_production_dual_basis(production_dual_basis_override, &dual_standard_basis);
+    let flux_basis = dual_basis_override.map_or_else(
+        || {
+            if use_mcallister_flux_basis_default {
+                eprintln!("[INFO] using McAllister flux source basis [3, 4, 5, 8]");
+                OwnedDivisorBasis::Indices(vec![3, 4, 5, 8])
+            } else {
+                eprintln!("[INFO] using production dual basis as flux coordinate basis");
+                dual_divisor_basis.clone()
+            }
+        },
+        |basis| {
+            eprintln!("[INFO] using explicit flux source basis from --dual-basis");
+            owned_divisor_basis_from_override(basis, &dual_standard_basis, "--dual-basis")
+                .unwrap_or_else(|err| {
+                    eprintln!("[ERROR] {err}");
+                    std::process::exit(2);
+                })
+        },
+    );
     let dual_points_i64: Vec<Vec<i64>> = dual_points_vec
         .iter()
         .map(|p| p.coords().to_vec())
@@ -1698,53 +1708,38 @@ fn stage_flat_direction(
     let dual_kappa_full =
         compute_intersection_cytools(&dual_triangulation, &dual_points_vec, &dual_linrels_i64)
             .expect("Failed dual intersection numbers");
-    let dual_kappa = intersection_in_basis(&dual_kappa_full, &dual_basis);
+    let dual_kappa_basis = cyrus_core::intersection_in_divisor_basis(
+        &dual_kappa_full,
+        dual_divisor_basis.as_divisor_basis(),
+    )
+    .expect("failed dual intersection production-basis handoff");
     let (k_raw, m_raw) = load_flux_vectors(data_dir, manifest_dir);
-    let k_raw = dual_basis_override.map_or_else(
-        || {
-            transform_k_flux_to_computed_basis(
-                &dual_glsm,
-                &dual_basis,
-                flux_basis.as_deref().expect("default flux basis"),
-                &k_raw,
-            )
-        },
-        |basis| {
-            transform_k_flux_from_override_to_computed_basis(&dual_glsm, &dual_basis, basis, &k_raw)
-        },
+    let k_raw = transform_k_flux_between_divisor_bases(
+        &dual_glsm,
+        &flux_basis,
+        &dual_divisor_basis,
+        &k_raw,
     );
-    let m_raw = dual_basis_override.map_or_else(
-        || {
-            transform_m_flux_to_computed_basis(
-                &dual_glsm,
-                &dual_basis,
-                flux_basis.as_deref().expect("default flux basis"),
-                &m_raw,
-                "M",
-            )
-        },
-        |basis| {
-            transform_m_flux_from_override_to_computed_basis(
-                &dual_glsm,
-                &dual_basis,
-                basis,
-                &m_raw,
-                "M",
-            )
-        },
+    let m_raw = transform_m_flux_between_divisor_bases(
+        &dual_glsm,
+        &dual_divisor_basis,
+        &flux_basis,
+        &m_raw,
+        "M",
     );
     let k_flux: Vec<I64<Finite>> = k_raw.iter().map(|&v| I64::<Finite>::new(v)).collect();
     let m_flux: Vec<I64<Finite>> = m_raw.iter().map(|&v| I64::<Finite>::new(v)).collect();
-    let (flat_p, ek0_opt) = match compute_flat_direction_full(&dual_kappa, &k_flux, &m_flux) {
+    let (flat_p, ek0_opt) = match compute_flat_direction_full(&dual_kappa_basis, &k_flux, &m_flux) {
         Some(v) => (v.p, Some(v.ek0)),
         None if allow_invalid_ek0 => {
             eprintln!(
                 "[WARN] invalid flat direction (ek0<=0); continuing due to --allow-invalid-ek0"
             );
-            let p = compute_flat_direction(&dual_kappa, &k_flux, &m_flux).unwrap_or_else(|| {
-                eprintln!("[ERROR] flat direction solve failed");
-                std::process::exit(2);
-            });
+            let p =
+                compute_flat_direction(&dual_kappa_basis, &k_flux, &m_flux).unwrap_or_else(|| {
+                    eprintln!("[ERROR] flat direction solve failed");
+                    std::process::exit(2);
+                });
             (p, None)
         }
         None => {
@@ -1758,8 +1753,8 @@ fn stage_flat_direction(
         dual_triangulation_points: dual_points_vec,
         dual_triangulation,
         dual_linrels: dual_linrel,
-        dual_basis,
-        dual_kappa_full,
+        dual_divisor_basis,
+        dual_kappa_basis,
         flat_p,
         ek0_opt,
         m_flux,
@@ -1781,24 +1776,19 @@ fn stage_gv(
         None,
     )
     .expect("Failed ambient mori cone cap rays");
-    let gv_basis = vector_gv_basis_data(
+    let gv_basis = production_gv_basis_data(
         &ambient_rays,
         &flat.dual_linrels,
-        &flat.dual_basis,
+        &flat.dual_divisor_basis,
         "dual mirror",
     )
     .unwrap_or_else(|e| panic!("{e}"));
-    let dual_kappa = cyrus_core::intersection_in_divisor_basis(
-        &flat.dual_kappa_full,
-        DivisorBasis::Indices(&flat.dual_basis),
-    )
-    .expect("failed dual mirror intersection basis handoff");
     let grading = compute_grading_vector(&gv_basis.mori_rays).expect("No grading vector found");
     let invariants = cyrus_core::compute_gv_invariants(
         &gv_basis.mori_rays,
         &grading,
         &gv_basis.q_matrix,
-        &dual_kappa,
+        &flat.dual_kappa_basis,
         min_points,
         max_deg,
     )
@@ -10343,6 +10333,7 @@ fn run_pipeline(args: PipelineArgs) {
         args.allow_invalid_ek0,
         args.validate_mcallister_assertions,
         args.dual_basis_override.as_ref(),
+        args.production_dual_basis_override.as_ref(),
         &t0,
     );
     if !stage_enabled(Stage::Gv, args.stop_after) {
@@ -10384,7 +10375,7 @@ fn run_pipeline(args: PipelineArgs) {
         args.diagnose_chamber_updated_kklt_iterations,
         small_curve_cutoff,
         args.small_curve_pruning,
-        flat.dual_basis.len(),
+        flat.dual_divisor_basis.dimension(),
         &t0,
     );
     if !stage_enabled(Stage::Vacuum, args.stop_after) {
@@ -10529,20 +10520,19 @@ mod tests {
         let matrix_basis =
             serde_json::from_str::<BasisOverride>(r#"{"matrix":[[0,0,1,1],[0,0,0,1]]}"#)
                 .expect("matrix basis JSON should parse");
+        let production_basis = OwnedDivisorBasis::Indices(computed_basis.clone());
+        let source_basis =
+            owned_divisor_basis_from_override(&matrix_basis, &computed_basis, "--dual-basis")
+                .expect("matrix source basis should parse");
 
-        let transform = basis_change_matrix_from_indices_to_override(
-            &glsm,
-            &computed_basis,
-            &matrix_basis,
-            "--dual-basis",
-        )
-        .expect("matrix source basis should be equivalent to computed basis");
+        let transform = basis_change_matrix_between_owned(&glsm, &production_basis, &source_basis)
+            .expect("matrix source basis should be equivalent to computed basis");
         assert_eq!(transform, int_matrix(&[&[1, 0], &[1, 1]]));
 
-        let transformed = transform_m_flux_from_override_to_computed_basis(
+        let transformed = transform_m_flux_between_divisor_bases(
             &glsm,
-            &computed_basis,
-            &matrix_basis,
+            &production_basis,
+            &source_basis,
             &[5, 7],
             "M",
         );
@@ -10556,23 +10546,62 @@ mod tests {
         let matrix_basis =
             serde_json::from_str::<BasisOverride>(r#"{"matrix":[[0,0,1,1],[0,0,0,1]]}"#)
                 .expect("matrix basis JSON should parse");
+        let production_basis = OwnedDivisorBasis::Indices(computed_basis.clone());
+        let source_basis =
+            owned_divisor_basis_from_override(&matrix_basis, &computed_basis, "--dual-basis")
+                .expect("matrix source basis should parse");
 
-        let transform = basis_change_matrix_from_override_to_indices(
-            &glsm,
-            &matrix_basis,
-            &computed_basis,
-            "--dual-basis",
-        )
-        .expect("matrix source basis should be equivalent to computed basis");
+        let transform = basis_change_matrix_between_owned(&glsm, &source_basis, &production_basis)
+            .expect("matrix source basis should be equivalent to computed basis");
         assert_eq!(transform, int_matrix(&[&[1, 0], &[-1, 1]]));
 
-        let transformed = transform_k_flux_from_override_to_computed_basis(
+        let transformed = transform_k_flux_between_divisor_bases(
             &glsm,
-            &computed_basis,
-            &matrix_basis,
+            &source_basis,
+            &production_basis,
             &[5, 7],
         );
         assert_eq!(transformed, vec![-2, 7]);
+    }
+
+    #[test]
+    fn matrix_production_dual_basis_builds_flux_transforms_and_gv_inputs() {
+        let glsm = int_matrix(&[&[1, 0, -1, -1], &[0, 1, -2, -3]]);
+        let linrels = glsm.clone();
+        let standard_basis = vec![2, 3];
+        let matrix_basis =
+            serde_json::from_str::<BasisOverride>(r#"{"matrix":[[0,0,1,1],[0,0,0,1]]}"#)
+                .expect("matrix basis JSON should parse");
+        let production_basis = owned_divisor_basis_from_override(
+            &matrix_basis,
+            &standard_basis,
+            "--production-dual-basis",
+        )
+        .expect("matrix production basis should parse");
+        let source_basis = OwnedDivisorBasis::Indices(standard_basis);
+
+        let m_transformed = transform_m_flux_between_divisor_bases(
+            &glsm,
+            &production_basis,
+            &source_basis,
+            &[5, 7],
+            "M",
+        );
+        assert_eq!(m_transformed, vec![5, 2]);
+
+        let k_transformed = transform_k_flux_between_divisor_bases(
+            &glsm,
+            &source_basis,
+            &production_basis,
+            &[5, 7],
+        );
+        assert_eq!(k_transformed, vec![12, 7]);
+
+        let ambient = vec![vec![0, 0, 1, 0], vec![0, 0, 2, 2]];
+        let data = production_gv_basis_data(&ambient, &linrels, &production_basis, "test mirror")
+            .expect("matrix production basis should build cygv inputs");
+        assert_eq!(data.mori_rays, vec![vec![1, 0], vec![2, 1]]);
+        assert_eq!(data.q_matrix, vec![vec![2, 1, 0], vec![1, -1, 1]]);
     }
 
     #[test]
