@@ -45,6 +45,7 @@ use crate::utils::lll_reduce;
 
 const GRADING_CACHE_VERSION: &str = "grading-vector-cytools-lp-v1";
 const LATTICE_CACHE_VERSION: &str = "lattice-points-v2";
+const GV_CACHE_VERSION: &str = "gv-invariants-cygv-0.1.2-v1";
 const CKYZ_ADDITION_TABLE_MAX_ENTRIES: usize = 5_000_000;
 const CKYZ_ABSENT_ADDITION_INDEX: usize = usize::MAX;
 const CKYZ_DENSE_DEGREE_INDEX_MAX_ENTRIES: usize = 5_000_000;
@@ -10336,6 +10337,21 @@ impl GvLatticeAugmentation {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GvCachePolicy {
+    Enabled,
+    Disabled,
+}
+
+impl GvCachePolicy {
+    fn from_env() -> Self {
+        match env::var("CYRUS_GV_CACHE") {
+            Ok(value) if value == "0" => Self::Disabled,
+            _ => Self::Enabled,
+        }
+    }
+}
+
 /// Compute GV invariants using cygv.
 ///
 /// This mirrors the CYTools default wrapper: the supplied Mori-cap rays are
@@ -10363,6 +10379,7 @@ pub fn compute_gv_invariants(
         min_points,
         max_deg,
         GvLatticeAugmentation::CytoolsDefault,
+        GvCachePolicy::from_env(),
     )
 }
 
@@ -10392,6 +10409,7 @@ pub fn compute_gv_invariants_with_degree_bounded_lattice(
         min_points,
         max_deg,
         GvLatticeAugmentation::DegreeBoundedDiagnostic,
+        GvCachePolicy::from_env(),
     )
 }
 
@@ -10420,6 +10438,7 @@ pub fn compute_gv_invariants_with_provided_generators(
         min_points,
         max_deg,
         GvLatticeAugmentation::None,
+        GvCachePolicy::from_env(),
     )
 }
 
@@ -10572,6 +10591,7 @@ fn compute_gv_invariants_inner(
     min_points: Option<u32>,
     max_deg: Option<u32>,
     lattice_augmentation: GvLatticeAugmentation,
+    cache_policy: GvCachePolicy,
 ) -> Result<Vec<(Vec<i32>, Integer)>> {
     let t0 = std::time::Instant::now();
     eprintln!(
@@ -10848,6 +10868,8 @@ fn compute_gv_invariants_inner(
 
     let cache_key = {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        GV_CACHE_VERSION.hash(&mut hasher);
+        lattice_augmentation.as_str().hash(&mut hasher);
         grading_vec_i32.hash(&mut hasher);
         max_deg.hash(&mut hasher);
         min_points.hash(&mut hasher);
@@ -10864,8 +10886,13 @@ fn compute_gv_invariants_inner(
     let cache_dir = env::var("CYRUS_CACHE_DIR")
         .map_or_else(|_| PathBuf::from("target/cyrus-cache"), PathBuf::from);
     let gv_cache_path = cache_dir.join(format!("gv_invariants_{cache_key:x}.json"));
-    eprintln!("[DEBUG] gv cache path: {}", gv_cache_path.display());
-    if gv_cache_path.exists() {
+    let cache_enabled = cache_policy == GvCachePolicy::Enabled;
+    eprintln!(
+        "[DEBUG] gv cache path: {} ({})",
+        gv_cache_path.display(),
+        if cache_enabled { "enabled" } else { "disabled" }
+    );
+    if cache_enabled && gv_cache_path.exists() {
         let data = fs::read_to_string(&gv_cache_path).map_err(|e| {
             Error::InvalidInput(format!(
                 "Failed to read GV cache {}: {e}",
@@ -10907,7 +10934,9 @@ fn compute_gv_invariants_inner(
     let out =
         compute_cygv_rat_threefold_from_semigroup(semigroup, &q, intnums_map, "cygv GV wrapper")?;
 
-    if let Err(e) = fs::create_dir_all(&cache_dir) {
+    if !cache_enabled {
+        eprintln!("[DEBUG] gv invariants: cache write skipped");
+    } else if let Err(e) = fs::create_dir_all(&cache_dir) {
         eprintln!(
             "[WARN] failed to create GV cache dir {}: {}",
             cache_dir.display(),
@@ -11692,10 +11721,10 @@ mod tests {
     use super::{
         BoundedCurveDecompositionIndex, CkyzExpCoefficientCache, CkyzIndexedSeries,
         CkyzLocalIntersectionTerm, CkyzLocalSurfaceIdentification, CkyzLocalSurfaceKind,
-        CkyzMonomialDomain, CurveDecompositionTerm, CurvePruningStrategy, GvLatticeAugmentation,
-        LocalToricCircuitKind, LocalToricCoordinate2D, NilpotentRayCandidate,
-        NilpotentRayDegreeSlice, NilpotentRaySliceDistance, OriginCircuitCurveWitness,
-        OriginCircuitRelationPoint, ToricCurveCandidate,
+        CkyzMonomialDomain, CurveDecompositionTerm, CurvePruningStrategy, GvCachePolicy,
+        GvLatticeAugmentation, LocalToricCircuitKind, LocalToricCoordinate2D,
+        NilpotentRayCandidate, NilpotentRayDegreeSlice, NilpotentRaySliceDistance,
+        OriginCircuitCurveWitness, OriginCircuitRelationPoint, ToricCurveCandidate,
         certify_supporting_mori_face_by_exact_kernel, check_extremal_mori_ray_separator,
         check_supporting_mori_face_normal, ckyz_cover_closed_target_degrees,
         ckyz_cygv_previous_qn_level_count, ckyz_expalpha_power_caches_domain, ckyz_grading_degree,
@@ -11728,7 +11757,7 @@ mod tests {
         compute_ckyz_local_prepotential_period_corrections,
         compute_ckyz_local_surface_gv_invariants_for_multiples_with_causal_domain,
         compute_ckyz_log_period_corrections, compute_ckyz_log_period_corrections_domain,
-        compute_grading_vector, compute_gv_invariants,
+        compute_grading_vector, compute_gv_invariants_inner,
         compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_provided_generators, compute_local_p2_genus_zero_gv_series,
         compute_local_toric_circuit_gv_series, compute_one_dimensional_ray_gv_series,
@@ -15611,13 +15640,15 @@ mod tests {
 
         let mut intnums = Intersection::new(1);
         set_intersection_i64(&mut intnums, 0, 0, 0, 5);
-        let gvs = compute_gv_invariants_with_provided_generators(
+        let gvs = compute_gv_invariants_inner(
             &data.mori_rays,
             &[1],
             &data.q_matrix,
             &intnums,
             None,
             Some(1),
+            GvLatticeAugmentation::None,
+            GvCachePolicy::Disabled,
         )
         .expect("actual cygv should compute quintic degree-one GV");
 
@@ -15633,13 +15664,15 @@ mod tests {
         let mut intnums = Intersection::new(1);
         set_intersection_i64(&mut intnums, 0, 0, 0, 5);
 
-        let gvs = compute_gv_invariants(
+        let gvs = compute_gv_invariants_inner(
             &[vec![1]],
             &[1],
             &[vec![1, 1, 1, 1, 1]],
             &intnums,
             None,
             Some(1),
+            GvLatticeAugmentation::CytoolsDefault,
+            GvCachePolicy::Disabled,
         )
         .expect("CYTools-style wrapper should compute quintic degree-one GV");
 
