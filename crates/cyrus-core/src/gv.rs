@@ -11728,7 +11728,8 @@ mod tests {
         compute_ckyz_local_prepotential_period_corrections,
         compute_ckyz_local_surface_gv_invariants_for_multiples_with_causal_domain,
         compute_ckyz_log_period_corrections, compute_ckyz_log_period_corrections_domain,
-        compute_grading_vector, compute_gv_invariants_with_explicit_semigroup,
+        compute_grading_vector, compute_gv_invariants,
+        compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_provided_generators, compute_local_p2_genus_zero_gv_series,
         compute_local_toric_circuit_gv_series, compute_one_dimensional_ray_gv_series,
         compute_ray_gv_series_with_provided_generators, curve_in_rational_row_span,
@@ -15619,6 +15620,28 @@ mod tests {
             Some(1),
         )
         .expect("actual cygv should compute quintic degree-one GV");
+
+        assert!(
+            gvs.iter()
+                .any(|(charge, value)| charge == &[1] && value == &Integer::from(2875)),
+            "degree-one quintic GV 2875 missing from {gvs:?}"
+        );
+    }
+
+    #[test]
+    fn cytools_default_quintic_handoff_runs_actual_cygv_degree_one() {
+        let mut intnums = Intersection::new(1);
+        set_intersection_i64(&mut intnums, 0, 0, 0, 5);
+
+        let gvs = compute_gv_invariants(
+            &[vec![1]],
+            &[1],
+            &[vec![1, 1, 1, 1, 1]],
+            &intnums,
+            None,
+            Some(1),
+        )
+        .expect("CYTools-style wrapper should compute quintic degree-one GV");
 
         assert!(
             gvs.iter()
