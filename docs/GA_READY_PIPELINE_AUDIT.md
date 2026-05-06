@@ -348,7 +348,10 @@ to make the remaining GV layer more first-principles:
    target lookups return `GV=0`, and the three errors are non-integral
    series-inversion failures. This rules out the small active-support windows
    as a valid replacement for the missing source-derived semigroup/chamber
-   inputs. The direct source read reinforces this: `cygv`
+   inputs. The exact supporting-face verifier also rejects those same windows
+   as codimension-one chamber faces, with
+   `active_support_not_certified_as_codimension_one_face=9`. The direct source
+   read reinforces this: `cygv`
    obtains GV values from the full
    finite semigroup, HKTY alpha/beta construction, and degree-ordered
    `Li2(q_N)` subtraction history, while the McAllister paper's small-curve

@@ -13,7 +13,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 
-use cyrus_core::gv::cygv_pair_reduced_seed_generators;
+use cyrus_core::gv::{
+    certify_supporting_mori_face_by_exact_kernel, cygv_pair_reduced_seed_generators,
+};
 use cyrus_core::types::rational::Rational;
 use cyrus_core::types::tags::Finite;
 use cyrus_core::{
@@ -161,6 +163,7 @@ struct ContextReport {
     local_cygv_actual_call_readiness_counts: BTreeMap<String, usize>,
     local_cygv_missing_source_input_counts: BTreeMap<String, usize>,
     active_support_status_counts: BTreeMap<String, usize>,
+    active_support_face_certificate_status_counts: BTreeMap<String, usize>,
     local_cygv_q_matrix_orientation_status_counts: BTreeMap<String, usize>,
     local_cygv_q_matrix_layout_status_counts: BTreeMap<String, usize>,
     local_cygv_origin_point_status_counts: BTreeMap<String, usize>,
@@ -3148,36 +3151,7 @@ fn active_support_generator_gv(
             Some("cygv diagnostic requires a panic=unwind build".to_string()),
         ));
     }
-    let target = dense_from_sparse(&sample.basis_nonzero, context.dimension)?;
-    let support = target_active_support(sample, context.dimension)?;
-    if support.is_empty() {
-        return Err("active-support generator window is empty".to_string());
-    }
-
-    let mut generators = Vec::new();
-    let mut seen = HashSet::new();
-    for ray in context.degree_bounded_rays {
-        let degree = curve_degree(ray, context.grading)?;
-        if degree <= 0 || degree > sample.degree {
-            continue;
-        }
-        if ray
-            .iter()
-            .enumerate()
-            .all(|(idx, &value)| value == 0 || support.contains(&idx))
-            && seen.insert(ray.clone())
-        {
-            generators.push(ray.clone());
-        }
-    }
-    if !generators
-        .iter()
-        .any(|ray| ray.as_slice() == target.as_slice())
-    {
-        generators.push(target.clone());
-    }
-    generators.sort();
-    generators.dedup();
+    let (target, generators) = active_support_generators(sample, context)?;
 
     let max_deg = u32::try_from(sample.degree)
         .map_err(|_| format!("target degree {} does not fit in u32", sample.degree))?;
@@ -3235,6 +3209,57 @@ fn active_support_generator_gv(
         Some(gv),
         None,
     ))
+}
+
+fn active_support_generators(
+    sample: &MissingGvTargetSample,
+    context: &ValidatedContext<'_>,
+) -> Result<(Vec<i64>, Vec<Vec<i64>>), String> {
+    let target = dense_from_sparse(&sample.basis_nonzero, context.dimension)?;
+    let support = target_active_support(sample, context.dimension)?;
+    if support.is_empty() {
+        return Err("active-support generator window is empty".to_string());
+    }
+
+    let mut generators = Vec::new();
+    let mut seen = HashSet::new();
+    for ray in context.degree_bounded_rays {
+        let degree = curve_degree(ray, context.grading)?;
+        if degree <= 0 || degree > sample.degree {
+            continue;
+        }
+        if ray
+            .iter()
+            .enumerate()
+            .all(|(idx, &value)| value == 0 || support.contains(&idx))
+            && seen.insert(ray.clone())
+        {
+            generators.push(ray.clone());
+        }
+    }
+    if !generators
+        .iter()
+        .any(|ray| ray.as_slice() == target.as_slice())
+    {
+        generators.push(target.clone());
+    }
+    generators.sort();
+    generators.dedup();
+    Ok((target, generators))
+}
+
+fn active_support_face_certificate_status(
+    sample: &MissingGvTargetSample,
+    context: &ValidatedContext<'_>,
+) -> String {
+    let Ok((_, generators)) = active_support_generators(sample, context) else {
+        return "active_support_face_certificate_error".to_string();
+    };
+    match certify_supporting_mori_face_by_exact_kernel(&generators, context.degree_bounded_rays) {
+        Ok(Some(_)) => "active_support_certified_codimension_one_face".to_string(),
+        Ok(None) => "active_support_not_certified_as_codimension_one_face".to_string(),
+        Err(_) => "active_support_face_certificate_error".to_string(),
+    }
 }
 
 fn support_overlap_generator_gv(
@@ -3442,6 +3467,12 @@ fn build_report(
             .map(|target| target.active_support_status.as_deref()),
         "not_run",
     );
+    let active_support_face_certificate_status_counts =
+        active_support_face_certificate_status_counts(
+            &validated.stats.sample,
+            &validated,
+            target_index_filter,
+        );
     let local_cygv_q_matrix_orientation_status_counts =
         local_cygv_q_matrix_orientation_status_counts(
             targets
@@ -3490,6 +3521,7 @@ fn build_report(
         local_cygv_actual_call_readiness_counts,
         local_cygv_missing_source_input_counts,
         active_support_status_counts,
+        active_support_face_certificate_status_counts,
         local_cygv_q_matrix_orientation_status_counts,
         local_cygv_q_matrix_layout_status_counts,
         local_cygv_origin_point_status_counts,
@@ -3564,6 +3596,22 @@ fn optional_status_counts<'a>(
         *counts
             .entry(status.unwrap_or(missing_status).to_string())
             .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn active_support_face_certificate_status_counts(
+    samples: &[MissingGvTargetSample],
+    context: &ValidatedContext<'_>,
+    target_index_filter: Option<usize>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for (idx, sample) in samples.iter().enumerate() {
+        if target_index_filter.is_some_and(|filter| filter != idx) {
+            continue;
+        }
+        let status = active_support_face_certificate_status(sample, context);
+        *counts.entry(status).or_insert(0usize) += 1;
     }
     counts
 }

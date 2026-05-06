@@ -1901,7 +1901,9 @@ The current `cygv` crate source sharpens the same boundary:
   target lookups are all `GV=0`, while the three errors are non-integral
   series-inversion failures. This confirms that small active-support generator
   windows are not a source-derived substitute for the missing semigroup and
-  chamber data.
+  chamber data. The exact supporting-face verifier also rejects those windows
+  as codimension-one chamber faces:
+  `active_support_not_certified_as_codimension_one_face=9`.
 
 The actionable consequence is that a Cyrus replacement for corrected-chamber
 or potent-ray GV values must recreate the finite semigroup and lower-degree
