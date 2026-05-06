@@ -13,7 +13,7 @@ use cyrus_core::{
     DivisorBasis, Point, Polytope, Triangulation, compute_frst_heights, compute_glsm_and_linrels,
     compute_grading_vector, compute_gv_invariants, compute_intersection_cytools,
     compute_linear_relations_no_origin, compute_mori_cone_cap_rays, gv_divisor_basis_data,
-    intersection_in_basis,
+    intersection_in_divisor_basis,
 };
 
 const DEFAULT_MCALLISTER_GV_MIN_POINTS: u32 = 20_000;
@@ -215,7 +215,9 @@ fn main() {
         compute_intersection_cytools(&triangulation, &triangulation_points, &linrels_i64)
             .expect("Failed intersection numbers");
     eprintln!("[TIME] intersection: {:.2?}", t0.elapsed());
-    let intersection = intersection_in_basis(&intersection_full, &basis);
+    let intersection =
+        intersection_in_divisor_basis(&intersection_full, DivisorBasis::Indices(&basis))
+            .expect("Failed intersection basis handoff");
     eprintln!("[TIME] intersection_in_basis: {:.2?}", t0.elapsed());
 
     let ambient_rays = compute_mori_cone_cap_rays(

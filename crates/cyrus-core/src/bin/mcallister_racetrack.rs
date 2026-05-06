@@ -18,7 +18,7 @@ use cyrus_core::{
     DivisorBasis, Point, Polytope, Triangulation, basis_change_matrix, build_racetrack_terms,
     compute_glsm_and_linrels, compute_grading_vector, compute_gv_invariants,
     compute_intersection_cytools, compute_linear_relations_no_origin, compute_mori_cone_cap_rays,
-    compute_w0_from_terms, gv_divisor_basis_data, intersection_in_basis, is_unimodular,
+    compute_w0_from_terms, gv_divisor_basis_data, intersection_in_divisor_basis, is_unimodular,
     solve_racetrack,
 };
 
@@ -367,7 +367,9 @@ fn main() {
         compute_intersection_cytools(&triangulation, &triangulation_points, &linrels_i64)
             .expect("Failed intersection numbers");
     eprintln!("[TIME] intersection: {:.2?}", t0.elapsed());
-    let intersection = intersection_in_basis(&intersection_full, &basis);
+    let intersection =
+        intersection_in_divisor_basis(&intersection_full, DivisorBasis::Indices(&basis))
+            .expect("Failed intersection basis handoff");
     eprintln!("[TIME] intersection_in_basis: {:.2?}", t0.elapsed());
     let flux_basis = vec![3, 4, 5, 8];
     let k_raw = transform_k_flux_to_computed_basis(&glsm, &basis, &flux_basis, &k_raw);

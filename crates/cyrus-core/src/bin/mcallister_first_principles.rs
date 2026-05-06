@@ -1071,7 +1071,7 @@ struct FlatDirectionData {
     dual_triangulation: Triangulation,
     dual_linrels: Vec<Vec<malachite::Integer>>,
     dual_basis: Vec<usize>,
-    dual_kappa: cyrus_core::Intersection,
+    dual_kappa_full: cyrus_core::Intersection,
     flat_p: Vec<F64<Finite>>,
     ek0_opt: Option<F64<Pos>>,
     m_flux: Vec<I64<Finite>>,
@@ -1653,7 +1653,7 @@ fn stage_flat_direction(
         dual_triangulation,
         dual_linrels: dual_linrel,
         dual_basis,
-        dual_kappa,
+        dual_kappa_full,
         flat_p,
         ek0_opt,
         m_flux,
@@ -1682,12 +1682,17 @@ fn stage_gv(
         "dual mirror",
     )
     .unwrap_or_else(|e| panic!("{e}"));
+    let dual_kappa = cyrus_core::intersection_in_divisor_basis(
+        &flat.dual_kappa_full,
+        DivisorBasis::Indices(&flat.dual_basis),
+    )
+    .expect("failed dual mirror intersection basis handoff");
     let grading = compute_grading_vector(&gv_basis.mori_rays).expect("No grading vector found");
     let invariants = cyrus_core::compute_gv_invariants(
         &gv_basis.mori_rays,
         &grading,
         &gv_basis.q_matrix,
-        &flat.dual_kappa,
+        &dual_kappa,
         min_points,
         max_deg,
     )
