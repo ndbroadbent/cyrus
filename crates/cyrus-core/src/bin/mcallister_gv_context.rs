@@ -253,11 +253,21 @@ struct CygvPathHistoryProbe {
     previous_window_degrees: Vec<i128>,
     previous_window_degree_count: Option<usize>,
     previous_window_element_count: Option<usize>,
+    predecessor_counts_complete: bool,
     predecessor_difference_count: Option<usize>,
     improving_predecessor_difference_count: Option<usize>,
     closest_series_distance: Option<String>,
     closest_series_predecessor_nonzero: Option<Vec<(usize, i64)>>,
     closest_series_difference_nonzero: Option<Vec<(usize, i64)>>,
+}
+
+struct CygvPathPredecessorStats {
+    previous_window_element_count: usize,
+    predecessor_difference_count: usize,
+    improving_predecessor_difference_count: usize,
+    closest_distance: f64,
+    closest_predecessor: Option<Vec<i64>>,
+    closest_difference: Option<Vec<i64>>,
 }
 
 struct CygvSemigroupMeasurement {
@@ -1598,6 +1608,7 @@ fn cygv_path_history_probe(
             previous_window_degrees: Vec::new(),
             previous_window_degree_count: None,
             previous_window_element_count: None,
+            predecessor_counts_complete: false,
             predecessor_difference_count: None,
             improving_predecessor_difference_count: None,
             closest_series_distance: None,
@@ -1635,6 +1646,7 @@ fn cygv_path_history_probe_inner(
             previous_window_degrees: Vec::new(),
             previous_window_degree_count: None,
             previous_window_element_count: None,
+            predecessor_counts_complete: false,
             predecessor_difference_count: None,
             improving_predecessor_difference_count: None,
             closest_series_distance: None,
@@ -1646,48 +1658,90 @@ fn cygv_path_history_probe_inner(
     let closure =
         bounded_cygv_semigroup_closure(&seeds, context.grading, sample.degree, element_limit)?;
     let target_in_closure = closure.elements.contains(target);
+    let selected_degree_vec =
+        cygv_previous_window_degrees(&closure.degree_counts, sample.degree, previous_level_count);
+    let selected_degrees = selected_degree_vec.iter().copied().collect::<HashSet<_>>();
+    let predecessor_stats = cygv_path_predecessor_stats(
+        &closure.elements,
+        context.grading,
+        target,
+        &selected_degrees,
+    )?;
     if !closure.completed {
         return Ok(CygvPathHistoryProbe {
             status: closure.status,
             closure_element_count: Some(closure.elements.len()),
-            previous_window_degrees: cygv_previous_window_degrees(
-                &closure.degree_counts,
-                sample.degree,
-                previous_level_count,
-            ),
+            previous_window_degrees: selected_degree_vec,
             closure_degree_counts: closure.degree_counts,
             target_in_closure: Some(target_in_closure),
             previous_level_count,
-            previous_window_degree_count: None,
-            previous_window_element_count: None,
-            predecessor_difference_count: None,
-            improving_predecessor_difference_count: None,
-            closest_series_distance: None,
-            closest_series_predecessor_nonzero: None,
-            closest_series_difference_nonzero: None,
+            previous_window_degree_count: Some(selected_degrees.len()),
+            previous_window_element_count: Some(predecessor_stats.previous_window_element_count),
+            predecessor_counts_complete: false,
+            predecessor_difference_count: Some(predecessor_stats.predecessor_difference_count),
+            improving_predecessor_difference_count: Some(
+                predecessor_stats.improving_predecessor_difference_count,
+            ),
+            closest_series_distance: Some(format!("{:.6}", predecessor_stats.closest_distance)),
+            closest_series_predecessor_nonzero: predecessor_stats
+                .closest_predecessor
+                .as_deref()
+                .map(sparse_from_dense),
+            closest_series_difference_nonzero: predecessor_stats
+                .closest_difference
+                .as_deref()
+                .map(sparse_from_dense),
         });
     }
 
-    let selected_degree_vec =
-        cygv_previous_window_degrees(&closure.degree_counts, sample.degree, previous_level_count);
-    let selected_degrees = selected_degree_vec.iter().copied().collect::<HashSet<_>>();
+    Ok(CygvPathHistoryProbe {
+        status: "completed_bounded_closure".to_string(),
+        closure_element_count: Some(closure.elements.len()),
+        closure_degree_counts: closure.degree_counts,
+        target_in_closure: Some(target_in_closure),
+        previous_level_count,
+        previous_window_degrees: selected_degree_vec,
+        previous_window_degree_count: Some(selected_degrees.len()),
+        previous_window_element_count: Some(predecessor_stats.previous_window_element_count),
+        predecessor_counts_complete: true,
+        predecessor_difference_count: Some(predecessor_stats.predecessor_difference_count),
+        improving_predecessor_difference_count: Some(
+            predecessor_stats.improving_predecessor_difference_count,
+        ),
+        closest_series_distance: Some(format!("{:.6}", predecessor_stats.closest_distance)),
+        closest_series_predecessor_nonzero: predecessor_stats
+            .closest_predecessor
+            .as_deref()
+            .map(sparse_from_dense),
+        closest_series_difference_nonzero: predecessor_stats
+            .closest_difference
+            .as_deref()
+            .map(sparse_from_dense),
+    })
+}
 
+fn cygv_path_predecessor_stats(
+    elements: &HashSet<Vec<i64>>,
+    grading: &[i64],
+    target: &[i64],
+    selected_degrees: &HashSet<i128>,
+) -> Result<CygvPathPredecessorStats, String> {
     let mut previous_window_element_count = 0usize;
     let mut predecessor_difference_count = 0usize;
     let mut improving_predecessor_difference_count = 0usize;
     let mut closest_distance = cygv_series_distance(target);
     let mut closest_predecessor = None;
     let mut closest_difference = None;
-    let mut sorted_elements = closure.elements.iter().collect::<Vec<_>>();
+    let mut sorted_elements = elements.iter().collect::<Vec<_>>();
     sorted_elements.sort();
     for element in sorted_elements {
-        let degree = curve_degree(element, context.grading)?;
+        let degree = curve_degree(element, grading)?;
         if !selected_degrees.contains(&degree) {
             continue;
         }
         previous_window_element_count += 1;
         let difference = checked_vector_difference(target, element)?;
-        if !closure.elements.contains(&difference) {
+        if !elements.contains(&difference) {
             continue;
         }
         predecessor_difference_count += 1;
@@ -1699,21 +1753,13 @@ fn cygv_path_history_probe_inner(
             closest_difference = Some(difference);
         }
     }
-
-    Ok(CygvPathHistoryProbe {
-        status: "completed_bounded_closure".to_string(),
-        closure_element_count: Some(closure.elements.len()),
-        closure_degree_counts: closure.degree_counts,
-        target_in_closure: Some(target_in_closure),
-        previous_level_count,
-        previous_window_degrees: selected_degree_vec,
-        previous_window_degree_count: Some(selected_degrees.len()),
-        previous_window_element_count: Some(previous_window_element_count),
-        predecessor_difference_count: Some(predecessor_difference_count),
-        improving_predecessor_difference_count: Some(improving_predecessor_difference_count),
-        closest_series_distance: Some(format!("{closest_distance:.6}")),
-        closest_series_predecessor_nonzero: closest_predecessor.as_deref().map(sparse_from_dense),
-        closest_series_difference_nonzero: closest_difference.as_deref().map(sparse_from_dense),
+    Ok(CygvPathPredecessorStats {
+        previous_window_element_count,
+        predecessor_difference_count,
+        improving_predecessor_difference_count,
+        closest_distance,
+        closest_predecessor,
+        closest_difference,
     })
 }
 
@@ -2416,6 +2462,7 @@ mod tests {
         assert_eq!(probe.previous_window_degrees, vec![1]);
         assert_eq!(probe.previous_window_degree_count, Some(1));
         assert_eq!(probe.previous_window_element_count, Some(2));
+        assert!(probe.predecessor_counts_complete);
         assert_eq!(probe.predecessor_difference_count, Some(2));
         assert_eq!(probe.improving_predecessor_difference_count, Some(1));
         assert_eq!(probe.closest_series_distance.as_deref(), Some("1.000000"));
@@ -2467,8 +2514,10 @@ mod tests {
 
         assert_eq!(probe.status, "exceeded_element_limit_initial_2");
         assert_eq!(probe.previous_window_degrees, vec![1]);
-        assert_eq!(probe.previous_window_degree_count, None);
-        assert_eq!(probe.predecessor_difference_count, None);
+        assert_eq!(probe.previous_window_degree_count, Some(1));
+        assert!(!probe.predecessor_counts_complete);
+        assert_eq!(probe.predecessor_difference_count, Some(2));
+        assert_eq!(probe.closest_series_distance.as_deref(), Some("1.000000"));
     }
 
     #[test]
