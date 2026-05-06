@@ -4,6 +4,13 @@ This note records the current read-through of the CYTools `compute_gvs()` path a
 `cygv` HKTY implementation. It is intended to prevent more diagnostic churn around
 the McAllister Stage 5 GV residual.
 
+Current implementation boundary: Cyrus must call the actual Rust `cygv` crate
+for compact hypersurface HKTY/GV computation. We should not port or reimplement
+that compact `cygv` engine locally. The CKYZ code in `gv.rs` is a separate
+noncompact local-surface diagnostic path, used only where compact `cygv` has no
+valid input shape, and saved McAllister GV rows remain assertions rather than
+inputs.
+
 ## CYTools Contract
 
 The authoritative CYTools wrapper is
@@ -149,13 +156,14 @@ double-log/prepotential-period `z`-series into the resulting `q`-series. This
 matches the mirror-map composition step but still stops before the
 multiple-cover subtraction that cygv performs in `series_inversion`.
 
-The local CKYZ GV helper now ports the relevant intermediate cygv conversion:
-it forms `beta - alpha_i alpha_j`, contracts it with the local intersection
-expression using the same diagonal `1/2` convention as cygv's symmetric
-intersection contraction, and then applies the CKYZ `instbase` cover relation
-`A_m = sum_{k d = m} w(d) N_d / k^2`. This is deliberately separate from the
-compact cygv semigroup inversion and is currently validated only for the source
-normalizations that are pinned by local `P^2`, `F0`, and `F1` tables.
+The local CKYZ GV helper now mirrors the relevant intermediate HKTY-shaped
+conversion for local surfaces: it forms `beta - alpha_i alpha_j`, contracts it
+with the local intersection expression using the same diagonal `1/2` convention
+as cygv's symmetric intersection contraction, and then applies the CKYZ
+`instbase` cover relation `A_m = sum_{k d = m} w(d) N_d / k^2`. This is
+deliberately separate from the compact cygv semigroup inversion and is currently
+validated only for the source normalizations that are pinned by local `P^2`,
+`F0`, `F1`, and polygon-5 checks.
 
 This means local face/ray HKTY checks can be correct for isolated classes while
 still not reproducing the global CYTools/cygv output. The global result depends
@@ -1109,7 +1117,7 @@ extractor now updates targets with coefficient-level `Li2(q_N)` probes instead
 of materializing each full `Li2(q_N)` series. That is enough to validate the
 first four `potent_rays_gv.dat` entries for all 395 rank-two CKYZ McAllister
 potent-ray rows without using those GV rows as inputs, and to make the narrowed
-polygon-5 `[4,3,2]` first-seven regression practical. Polygon 5 is included with
+polygon-5 full-row release regressions practical. Polygon 5 is included with
 finite-limit cover weights `[1, 1, 1]`; the printed
 `C1 = 3J1 + 2J2 + 2J3` weights are intentionally rejected because they produce
 non-integral invariants in this extraction. This is not yet enough for all ten
@@ -1132,19 +1140,21 @@ polygon-5 `[4,3,2]`, `N=7` regression pass in about 46 seconds in debug; `N=8`
 and `N=9` also pass as debug diagnostics in about 118 seconds and 274 seconds,
 respectively. Focused polygon-5 `[4,3,2]`, `N=10` still exceeds a 300 second
 debug timeout, but it passes in release in about 62 seconds and now has an
-ignored full-row regression. A traced debug `N=10` run sharpened the remaining
-runtime boundary: support prediction finished quickly (`broad=26691`,
-`selected=21721`, about 9 seconds), z-history selection reduced the problem to
-`5235` residual degrees in about 17 seconds, and coefficient-level extraction
-still reached only grading 4 before a 180 second timeout. The next target is
-therefore the live residual dependency graph for broad all-row gates, not
-another broad support-domain optimization.
+ignored full-row regression. The other polygon-5 source direction `[3,2,2]`
+passes `N=10` in release in about 11 seconds and has matching ignored full-row
+coverage. A traced debug `[4,3,2]`, `N=10` run sharpened the remaining runtime
+boundary: support prediction finished quickly (`broad=26691`, `selected=21721`,
+about 9 seconds), z-history selection reduced the problem to `5235` residual
+degrees in about 17 seconds, and coefficient-level extraction still reached
+only grading 4 before a 180 second timeout. The next target is therefore the
+live residual dependency graph for broad all-row gates, not another broad
+support-domain optimization.
 The same test can be narrowed with `CYRUS_CKYZ_TARGET_DIRECTION=a,b,...`.
-Focused all-ten checks now pass for the F0 directions `[1,1]`/`[1,2]` and F1
-directions `[2,1]`/`[3,1]`; polygon-5 direction `[4,3,2]` passes through `N=7`
-when narrowed but remains the first slow family at `N=10`. The immediate
-source/history-domain work should therefore focus on the rank-three polygon-5
-local model first.
+Focused all-ten checks now pass for the F0 directions `[1,1]`/`[1,2]`, F1
+directions `[2,1]`/`[3,1]`, and both polygon-5 directions `[4,3,2]`/`[3,2,2]`
+when run in release. The immediate source/history-domain work should therefore
+focus on making broad all-row checks practical and then on the rank-four local
+contexts.
 
 ## May 2026 CYTools/cygv Porting Gaps
 
@@ -1206,7 +1216,7 @@ multiples is not enough input unless the surrounding local semigroup has also
 been reconstructed. The answer for a ray depends on the semigroup's lower
 degree classes and on the order in which they are subtracted.
 
-Third, the current all-ten CKYZ blocker is domain/history shape, not arithmetic
+Third, the current broad CKYZ blocker is domain/history shape, not arithmetic
 alone. Dense indexing and guarded addition tables fixed the obvious
 multiplication overhead, and the first-four checks now run for all 395 rank-two
 CKYZ rows. Cyrus' targeted extractor now uses the union of componentwise past
@@ -1258,7 +1268,7 @@ history, with a grading order that determines when lower classes are removed.
 The current Cyrus CKYZ `target_downset` is useful because it avoids unrelated
 incomparable targets, but it is still a formal componentwise past domain. For
 large ray multiples such as polygon-5 directions, that past is enormous even
-though the actual cygv-style computation only needs the semigroup elements that
+though a degree-ordered HKTY computation only needs the semigroup elements that
 can participate in the target coefficient and its prior subtraction history.
 
 The next implementation should therefore introduce an explicit local
@@ -1314,21 +1324,21 @@ coefficient-level z-residual updates make the focused `[4,3,2]`, `N=7` run pass
 in about 46 seconds in debug. The focused `[4,3,2]`, `N=8` and `N=9` runs also
 pass as debug diagnostics in about 118 seconds and 274 seconds, while `N=10`
 passes in release in about 62 seconds but still times out in debug after
-300 seconds. A fresh debug trace shows the support-predicted domain itself is
-built in seconds; the remaining slow step is coefficient-level subtraction
-across the `5235` selected z-history degrees. This confirms the next missing
-object more sharply: Cyrus needs a live residual/source-history domain for broad
-all-row checks, not just the full semigroup generated by the CKYZ coordinate
-axes up to a source grading cutoff.
+300 seconds. The second polygon-5 direction `[3,2,2]` passes full-ten in release
+in about 11 seconds. A fresh debug trace shows the support-predicted domain
+itself is built in seconds; the remaining slow step is coefficient-level
+subtraction across the `5235` selected z-history degrees. This confirms the
+next missing object more sharply: Cyrus needs a live residual/source-history
+domain for broad all-row checks, not just the full semigroup generated by the
+CKYZ coordinate axes up to a source grading cutoff.
 
 This is still not the full McAllister potent-ray solution. The F0
-`[1,1]`/`[1,2]` and F1 `[2,1]`/`[3,1]` all-ten checks prove the CKYZ
-source-derived path can reach complete saved rows for multiple non-`P^2`
-families, and the polygon-5 first-seven check shows the coefficient-level
-residual path is useful. The missing step is still to derive the local generator
-set and grading for each normalized support signature from geometry, then use a
-narrower source/history domain to raise the larger rank-two CKYZ families beyond
-the first four multiples and the focused polygon-5 first-seven checkpoint.
+`[1,1]`/`[1,2]`, F1 `[2,1]`/`[3,1]`, and polygon-5 all-ten checks prove the
+CKYZ source-derived path can reach complete saved rows for multiple non-`P^2`
+families. The missing step is still to derive the local generator set and
+grading for each normalized support signature from geometry, then use a
+narrower source/history domain to raise broad rank-two CKYZ validation beyond
+the first four multiples and to handle the rank-four local contexts.
 
 ## May 2026 Corrected-Chamber Source Checkpoint
 

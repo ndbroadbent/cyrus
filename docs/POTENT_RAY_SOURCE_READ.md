@@ -51,12 +51,14 @@ sequence visible in the first potent ray cannot honestly be obtained by
 pretending the charge vector `(-3,1,1,1)` is just a compact CYTools/cygv
 hypersurface input.
 
-The local CKYZ path Cyrus is building mirrors only the period-coefficient layer
-of that machinery, then performs the local-surface steps that are absent from
-compact cygv. The double-log/prepotential-period routine computes the source
-CKYZ `rho`-derivatives in B-model `z` coordinates, and the inverse mirror-map
-helper composes those coefficients into flat `q` coordinates. The local
-instanton-potential helper mirrors cygv's essential `beta - alpha alpha`
+The local CKYZ path Cyrus is building is not a replacement for compact `cygv`.
+For compact hypersurface GV, Cyrus should call the actual Rust `cygv` crate.
+The CKYZ routines mirror only the local/noncompact period-coefficient layer and
+then perform local-surface steps that compact `cygv` cannot accept as valid
+input. The double-log/prepotential-period routine computes the source CKYZ
+`rho`-derivatives in B-model `z` coordinates, and the inverse mirror-map helper
+composes those coefficients into flat `q` coordinates. The local
+instanton-potential helper mirrors the HKTY-shaped `beta - alpha alpha`
 conversion and applies the CKYZ `instbase` multiple-cover inversion for
 source-derived finite-limit weights.
 
@@ -64,8 +66,9 @@ This is now validated for local `P^2`, `F0`, `F1`, and polygon 5. The gated
 McAllister rank-two CKYZ test checks the first four saved GV entries for all
 395 rank-two CKYZ potent-ray rows from source relation data, and a focused
 first-principles regression checks all ten saved entries for the canonical F0
-source directions `[1,1]` and `[1,2]`, plus F1 source directions `[2,1]` and
-`[3,1]`. The saved `potent_rays_gv.dat` values remain validation targets only.
+source directions `[1,1]` and `[1,2]`, F1 source directions `[2,1]` and
+`[3,1]`, and both polygon-5 source directions `[4,3,2]` and `[3,2,2]` in
+release. The saved `potent_rays_gv.dat` values remain validation targets only.
 The full ten-entry rows across all families still need a sharper
 coefficient-targeted extractor; the current support-predicted domain is
 source-derived and avoids full broad rational composition before domain
@@ -419,13 +422,18 @@ Executable evidence is now split by layer:
   the saved GV row as input;
 - `mcallister_f1_3_1_ckyz_potent_ray_all_ten_gvs_are_reconstructed` checks all
   ten saved entries for the canonical F1 source direction `[3,1]` without using
-  the saved GV row as input.
+  the saved GV row as input;
+- `mcallister_polygon5_4_3_2_ckyz_potent_ray_all_ten_gvs_are_reconstructed` and
+  `mcallister_polygon5_3_2_2_ckyz_potent_ray_all_ten_gvs_are_reconstructed` are
+  ignored debug tests that check all ten saved entries for both polygon-5 source
+  directions in release without using the saved GV rows as input.
 
 This is not yet a general potent-ray GV engine. The rank-two CKYZ local-surface
 path is source-derived, and its current targeted extractor uses the
 cover-closed union of componentwise past downsets for the requested degrees.
-That is sufficient for first-four validation, small local tables, and the full
-F0 `[1,1]`/`[1,2]` and F1 `[2,1]`/`[3,1]` saved rows, but it is not the right
+That is sufficient for first-four validation, small local tables, the full
+F0 `[1,1]`/`[1,2]`, F1 `[2,1]`/`[3,1]`, and polygon-5 `[4,3,2]`/`[3,2,2]`
+saved rows in release, but it is not the right
 performance model for all ten saved entries across larger target directions.
 The next source-derived object is a coefficient/path-history local-series
 extractor, not a one-dimensional coefficient-pattern rule.

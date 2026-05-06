@@ -2,6 +2,9 @@
 //!
 //! Implements the CYTools mori_cone_cap algorithm and grading vector selection,
 //! then wires up the `cygv` crate for actual GV computation.
+//! Compact hypersurface GV computation must stay on the upstream `cygv` crate;
+//! the CKYZ helpers in this module are local/noncompact diagnostics and are not
+//! a replacement for `cygv`'s HKTY implementation.
 //!
 //! Reference: CYTools `calabiyau.py` (mori_cone_cap) and `cone.py` (grading vector).
 
@@ -988,7 +991,7 @@ pub struct CkyzZResidualCoefficientWorkProfile {
     /// Number of ordered lower-grading residual degree pairs inspected by
     /// extraction.
     pub residual_pair_count: usize,
-    /// Number of same-grading index pairs skipped by the cygv-style batch order.
+    /// Number of same-grading index pairs skipped by the degree-ordered batch order.
     pub same_grading_pair_skip_count: usize,
     /// Number of residual pairs that pass the componentwise divisibility gate.
     pub componentwise_pair_count: usize,
@@ -2336,7 +2339,7 @@ pub fn extract_ckyz_local_gv_invariants_from_potential(
 /// Compute local CKYZ genus-zero GV invariants through a total-degree cutoff.
 ///
 /// This combines the source-derived period coefficients, mirror-map
-/// substitution, cygv-style `beta - alpha alpha` conversion, and the
+/// substitution, the HKTY-shaped `beta - alpha alpha` conversion, and the
 /// `instbase` multiple-cover inversion. The `cover_weight_coefficients` are the
 /// coefficients `x_i` in CKYZ's finite-limit expression
 /// `sum_i x_i (J_i J_j) = c1(B) J_j`.
@@ -10489,6 +10492,9 @@ pub fn cygv_pair_reduced_seed_generators(elements: &[Vec<i64>]) -> Result<Vec<Ve
 /// identity element inserted if absent. This is the right entry point for
 /// diagnostics that construct a causal-diamond or face-local semigroup
 /// explicitly.
+///
+/// The HKTY stages still run inside the upstream `cygv` crate. Cyrus only
+/// prepares the explicit semigroup data here.
 ///
 /// # Errors
 /// Returns an error if the semigroup, grading, GLSM charge matrix, or

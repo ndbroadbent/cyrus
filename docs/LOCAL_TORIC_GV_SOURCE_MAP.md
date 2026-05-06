@@ -243,11 +243,13 @@ check that this reduces to the existing local `P^2` inverse mirror map and that
 the coupled `F0` source terms transform consistently through degree two.
 
 Cyrus also now has the first source-normalized local GV extraction layer:
-`compute_ckyz_local_instanton_potential_corrections` forms the cygv-style
+`compute_ckyz_local_instanton_potential_corrections` forms the HKTY-shaped
 `beta - alpha_i alpha_j` instanton-potential coefficients, applies the local
 intersection expression with the diagonal `1/2` symmetry factor, and substitutes
-the inverse mirror map. `compute_ckyz_local_gv_invariants` then applies the
-CKYZ `instbase` multiple-cover inversion
+the inverse mirror map. This local/noncompact layer is not a compact `cygv`
+replacement; compact hypersurface GV should call the actual Rust `cygv` crate.
+`compute_ckyz_local_gv_invariants` then applies the CKYZ `instbase`
+multiple-cover inversion
 `A_m = sum_{k d = m} w(d) N_d / k^2`, with
 `w(d) = -sum_i x_i d_i`.
 
@@ -266,8 +268,9 @@ not always the printed `C1` coefficients: `F1` uses `[2, 1]`, while polygon 5
 uses `[1, 1, 1]` rather than `[3, 2, 2]`. The gated McAllister tests now
 reconstruct the first four saved GV entries for all 395 rank-two CKYZ
 potent-ray rows from source data, and all ten saved entries for the canonical
-F0 source directions `[1,1]`/`[1,2]` and F1 source directions `[2,1]`/`[3,1]`.
-They do not yet reproduce all ten entries across every rank-two row: the
+F0 source directions `[1,1]`/`[1,2]`, F1 source directions `[2,1]`/`[3,1]`,
+and both polygon-5 source directions `[4,3,2]`/`[3,2,2]` in release. They do
+not yet reproduce all ten entries across every rank-two row: the
 current box-truncated formal-series path is still too slow for the largest
 directions, so true coefficient-targeted extraction remains the next
 optimization.
