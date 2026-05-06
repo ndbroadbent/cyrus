@@ -10561,81 +10561,7 @@ pub fn compute_gv_invariants_with_explicit_semigroup(
     let elements = DMatrix::from_column_slice(dim, n_elements, &element_data);
     let semigroup = cygv::Semigroup::from_data(elements, grading)
         .map_err(|e| Error::InvalidInput(format!("explicit GV semigroup is inconsistent: {e}")))?;
-
-    let zero_cutoff = RugRational::new();
-    let poly_props = cygv::PolynomialProperties::new(&semigroup, &zero_cutoff);
-    let (intnum_dict, intnum_idxpairs, n_indices) = cygv::misc::process_int_nums(intnums_map, true)
-        .map_err(|e| Error::InvalidInput(format!("cygv intersection preprocessing failed: {e}")))?;
-
-    let n_threads = env::var("CYRUS_GV_THREADS")
-        .ok()
-        .and_then(|v| v.parse::<u32>().ok())
-        .map_or_else(
-            || std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get),
-            |n| {
-                if n == 0 { 1 } else { n as usize }
-            },
-        );
-    let pool_size = env::var("CYRUS_GV_POOL_SIZE")
-        .ok()
-        .and_then(|v| v.parse::<usize>().ok())
-        .unwrap_or(1000);
-    let main_pool = cygv::NumberPool::new(poly_props.zero_cutoff.clone(), pool_size);
-    let thread_pools: Vec<_> = (0..n_threads)
-        .map(|_| cygv::NumberPool::new(poly_props.zero_cutoff.clone(), pool_size))
-        .collect();
-    let mut all_pools = (main_pool, thread_pools);
-    let nefpart: Vec<DVector<i32>> = Vec::new();
-
-    let fp = cygv::fundamental_period::compute_omega(
-        &poly_props,
-        &semigroup,
-        &q,
-        &nefpart,
-        &intnum_idxpairs,
-        &mut all_pools,
-    )
-    .map_err(|e| Error::InvalidInput(format!("cygv fundamental period failed: {e}")))?;
-
-    let inst_data = cygv::instanton::compute_instanton_data(
-        fp,
-        &poly_props,
-        &intnum_idxpairs,
-        n_indices,
-        &intnum_dict,
-        true,
-        &mut all_pools,
-    )
-    .map_err(|e| Error::InvalidInput(format!("cygv instanton data failed: {e}")))?;
-
-    let gv = cygv::series_inversion::invert_series::<RugRational, true, true>(
-        inst_data,
-        &poly_props,
-        &mut all_pools,
-    )
-    .map_err(|e| Error::InvalidInput(format!("cygv series inversion failed: {e}")))?;
-
-    let mut gv_sorted: Vec<_> = gv.into_iter().collect();
-    gv_sorted
-        .sort_unstable_by_key(|((element_idx, insertion_idx), _)| (*element_idx, *insertion_idx));
-    let mut out = Vec::with_capacity(gv_sorted.len());
-    for ((element_idx, _), gv_value) in gv_sorted {
-        let (numer, denom) = gv_value.into_numer_denom();
-        if denom != rug::Integer::from(1) {
-            return Err(Error::InvalidInput(format!(
-                "explicit GV semigroup produced non-integral invariant at element index {element_idx}: denominator {denom}"
-            )));
-        }
-        let gv_int = numer
-            .to_string()
-            .parse::<Integer>()
-            .map_err(|()| Error::InvalidInput("GV integer conversion failed".into()))?;
-        out.push((
-            semigroup.elements.column(element_idx).as_slice().to_vec(),
-            gv_int,
-        ));
-    }
-    Ok(out)
+    compute_cygv_rat_threefold_from_semigroup(semigroup, &q, intnums_map, "explicit GV semigroup")
 }
 
 fn compute_gv_invariants_inner(
@@ -10661,8 +10587,28 @@ fn compute_gv_invariants_inner(
             "Either min_points or max_deg must be specified".into(),
         ));
     }
+    if rays.is_empty() {
+        return Err(Error::InvalidInput(
+            "GV computation requires at least one generator".into(),
+        ));
+    }
 
     let dim = rays[0].len();
+    if dim == 0 {
+        return Err(Error::InvalidInput(
+            "GV generator dimension must be positive".into(),
+        ));
+    }
+    if rays.iter().any(|row| row.len() != dim) {
+        return Err(Error::InvalidInput(
+            "GV generator rows have inconsistent dimensions".into(),
+        ));
+    }
+    if grading_vector.len() != dim {
+        return Err(Error::InvalidInput(
+            "grading vector length must match GV generator dimension".into(),
+        ));
+    }
 
     // Report generator degree range for diagnostics.
     if let Some(d) = max_deg {
@@ -10949,37 +10895,17 @@ fn compute_gv_invariants_inner(
         return Ok(out);
     }
 
-    // No nef-partition for hypersurfaces
-    let nefpart: Vec<DVector<i32>> = Vec::new();
-
-    let n_threads = env::var("CYRUS_GV_THREADS")
-        .ok()
-        .and_then(|v| v.parse::<u32>().ok());
-    let pool_size = env::var("CYRUS_GV_POOL_SIZE")
-        .ok()
-        .and_then(|v| v.parse::<usize>().ok())
-        .unwrap_or(1000);
-
-    let invariants = cygv::compute_gv_rat_threefold(
-        generators,
-        grading,
-        max_deg,
-        min_points,
-        q,
-        nefpart,
-        intnums_map,
-        n_threads,
-        pool_size,
-    );
-
-    let mut out = Vec::with_capacity(invariants.len());
-    for (v, gv) in invariants {
-        let gv_str = gv.to_string();
-        let gv_int = gv_str
-            .parse::<Integer>()
-            .map_err(|()| Error::InvalidInput("GV integer conversion failed".into()))?;
-        out.push((v.as_slice().to_vec(), gv_int));
+    let semigroup = if let Some(d) = max_deg {
+        cygv::Semigroup::with_max_degree(generators, grading, d)
+    } else if let Some(n) = min_points {
+        cygv::Semigroup::with_min_elements(generators, grading, n as usize)
+    } else {
+        cygv::Semigroup::from_data(generators, grading)
     }
+    .map_err(|e| Error::InvalidInput(format!("cygv semigroup construction failed: {e}")))?;
+
+    let out =
+        compute_cygv_rat_threefold_from_semigroup(semigroup, &q, intnums_map, "cygv GV wrapper")?;
 
     if let Err(e) = fs::create_dir_all(&cache_dir) {
         eprintln!(
@@ -11022,6 +10948,101 @@ fn compute_gv_invariants_inner(
     }
 
     Ok(out)
+}
+
+fn compute_cygv_rat_threefold_from_semigroup(
+    semigroup: cygv::Semigroup,
+    q: &DMatrix<i32>,
+    intnums_map: HashMap<(usize, usize, usize), i32>,
+    context: &str,
+) -> Result<Vec<(Vec<i32>, Integer)>> {
+    let zero_cutoff = RugRational::new();
+    let poly_props = cygv::PolynomialProperties::new(&semigroup, &zero_cutoff);
+    let (intnum_dict, intnum_idxpairs, n_indices) = cygv::misc::process_int_nums(intnums_map, true)
+        .map_err(|e| {
+            Error::InvalidInput(format!(
+                "{context}: cygv intersection preprocessing failed: {e}"
+            ))
+        })?;
+
+    let n_threads = cygv_thread_count_from_env();
+    let pool_size = cygv_pool_size_from_env();
+    let main_pool = cygv::NumberPool::new(poly_props.zero_cutoff.clone(), pool_size);
+    let thread_pools: Vec<_> = (0..n_threads)
+        .map(|_| cygv::NumberPool::new(poly_props.zero_cutoff.clone(), pool_size))
+        .collect();
+    let mut all_pools = (main_pool, thread_pools);
+    let nefpart: Vec<DVector<i32>> = Vec::new();
+
+    let fp = cygv::fundamental_period::compute_omega(
+        &poly_props,
+        &semigroup,
+        q,
+        &nefpart,
+        &intnum_idxpairs,
+        &mut all_pools,
+    )
+    .map_err(|e| Error::InvalidInput(format!("{context}: cygv fundamental period failed: {e}")))?;
+
+    let inst_data = cygv::instanton::compute_instanton_data(
+        fp,
+        &poly_props,
+        &intnum_idxpairs,
+        n_indices,
+        &intnum_dict,
+        true,
+        &mut all_pools,
+    )
+    .map_err(|e| Error::InvalidInput(format!("{context}: cygv instanton data failed: {e}")))?;
+
+    let gv = cygv::series_inversion::invert_series::<RugRational, true, true>(
+        inst_data,
+        &poly_props,
+        &mut all_pools,
+    )
+    .map_err(|e| Error::InvalidInput(format!("{context}: cygv series inversion failed: {e}")))?;
+
+    let mut gv_sorted: Vec<_> = gv.into_iter().collect();
+    gv_sorted
+        .sort_unstable_by_key(|((element_idx, insertion_idx), _)| (*element_idx, *insertion_idx));
+
+    let mut out = Vec::with_capacity(gv_sorted.len());
+    for ((element_idx, _), gv_value) in gv_sorted {
+        let (numer, denom) = gv_value.into_numer_denom();
+        if denom != rug::Integer::from(1) {
+            return Err(Error::InvalidInput(format!(
+                "{context}: cygv produced non-integral invariant at element index {element_idx}: denominator {denom}"
+            )));
+        }
+        let gv_int = numer
+            .to_string()
+            .parse::<Integer>()
+            .map_err(|()| Error::InvalidInput("GV integer conversion failed".into()))?;
+        out.push((
+            semigroup.elements.column(element_idx).as_slice().to_vec(),
+            gv_int,
+        ));
+    }
+    Ok(out)
+}
+
+fn cygv_thread_count_from_env() -> usize {
+    env::var("CYRUS_GV_THREADS")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+        .map_or_else(
+            || std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get),
+            |n| {
+                if n == 0 { 1 } else { n as usize }
+            },
+        )
+}
+
+fn cygv_pool_size_from_env() -> usize {
+    env::var("CYRUS_GV_POOL_SIZE")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(1000)
 }
 
 fn cygv_q_matrix(q_matrix: &[Vec<i64>], dim: usize) -> Result<DMatrix<i32>> {
@@ -11775,6 +11796,42 @@ mod tests {
         .unwrap_err();
 
         assert!(err.to_string().contains("q_matrix is empty"));
+    }
+
+    #[test]
+    fn provided_generator_gv_path_rejects_empty_generators_without_panicking() {
+        let err = compute_gv_invariants_with_provided_generators(
+            &[],
+            &[1],
+            &[vec![1]],
+            &Intersection::new(1),
+            None,
+            Some(1),
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("at least one generator"));
+    }
+
+    #[test]
+    fn provided_generator_gv_path_converts_cygv_semigroup_errors_to_result() {
+        let mut intnums = Intersection::new(1);
+        set_intersection_i64(&mut intnums, 0, 0, 0, 1);
+
+        let err = compute_gv_invariants_with_provided_generators(
+            &[vec![1]],
+            &[-1],
+            &[vec![1]],
+            &intnums,
+            None,
+            Some(1),
+        )
+        .unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains("cygv semigroup construction failed")
+        );
     }
 
     #[test]

@@ -11,6 +11,13 @@ noncompact local-surface diagnostic path, used only where compact `cygv` has no
 valid input shape, and saved McAllister GV rows remain assertions rather than
 inputs.
 
+For GA use, Cyrus now calls the upstream `cygv` modules directly rather than
+the convenience `cygv::compute_gv_rat_threefold` wrapper. This preserves
+`cygv`'s HKTY implementation while letting Cyrus convert semigroup,
+intersection-preprocessing, fundamental-period, instanton, series-inversion,
+and non-integral-output failures into ordinary `Result` errors. Bad candidate
+geometries should fail loudly without unwinding the whole search.
+
 ## CYTools Contract
 
 The authoritative CYTools wrapper is
