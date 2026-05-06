@@ -10602,9 +10602,9 @@ fn compute_gv_invariants_inner(
         min_points,
         lattice_augmentation.as_str()
     );
-    if min_points.is_none() && max_deg.is_none() {
+    if min_points.is_some() == max_deg.is_some() {
         return Err(Error::InvalidInput(
-            "Either min_points or max_deg must be specified".into(),
+            "Exactly one of min_points or max_deg must be specified".into(),
         ));
     }
     if rays.is_empty() {
@@ -11869,6 +11869,41 @@ mod tests {
         .unwrap_err();
 
         assert!(err.to_string().contains("at least one generator"));
+    }
+
+    #[test]
+    fn cygv_wrappers_require_exactly_one_truncation_control() {
+        let mut intnums = Intersection::new(1);
+        set_intersection_i64(&mut intnums, 0, 0, 0, 5);
+
+        let neither = compute_gv_invariants_with_provided_generators(
+            &[vec![1]],
+            &[1],
+            &[vec![1, 1, 1, 1, 1]],
+            &intnums,
+            None,
+            None,
+        )
+        .unwrap_err();
+        let both = compute_gv_invariants_with_provided_generators(
+            &[vec![1]],
+            &[1],
+            &[vec![1, 1, 1, 1, 1]],
+            &intnums,
+            Some(10),
+            Some(1),
+        )
+        .unwrap_err();
+
+        assert!(
+            neither
+                .to_string()
+                .contains("Exactly one of min_points or max_deg")
+        );
+        assert!(
+            both.to_string()
+                .contains("Exactly one of min_points or max_deg")
+        );
     }
 
     #[test]
