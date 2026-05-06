@@ -1775,6 +1775,13 @@ The current `cygv` crate source sharpens the same boundary:
   partial previous-window elements but no visible predecessor split before the
   cap. Both rows have `predecessor_counts_complete=false`, so this is only a
   lower-bound diagnostic on the source history.
+- `mcallister_gv_context --target-index N` now narrows expensive source-history
+  probes to one missing target. With `--target-index 7/8 --element-limit 50000`,
+  both degree-10 targets still exceed the cap but now show two visible
+  predecessor/residual splits each, and both closest residual distances improve
+  to `4.0`. This is evidence that the relevant cygv subtraction history is
+  present in the broad degree-bounded source domain, but still not cheap enough
+  to certify by naive bounded closure.
 
 The actionable consequence is that a Cyrus replacement for corrected-chamber
 or potent-ray GV values must recreate the finite semigroup and lower-degree
