@@ -25,8 +25,8 @@ use cyrus_core::types::f64::F64;
 use cyrus_core::types::i64::I64;
 use cyrus_core::types::tags::Finite;
 use cyrus_core::{
-    compute_glsm_and_linrels, compute_intersection_cytools, compute_linear_relations_no_origin,
-    intersection_in_basis, Point, Triangulation,
+    compute_frst_heights, compute_glsm_and_linrels, compute_intersection_cytools,
+    compute_linear_relations_no_origin, intersection_in_basis, Point, Polytope, Triangulation,
 };
 
 #[derive(Debug, Deserialize)]
@@ -38,13 +38,8 @@ struct FluxInput {
 }
 
 #[derive(Debug, Deserialize)]
-struct DualPointsFixture {
+struct PolytopeInput {
     points: Vec<Vec<i64>>,
-}
-
-#[derive(Debug, Deserialize)]
-struct DualSimplicesFixture {
-    simplices: Vec<Vec<usize>>,
 }
 
 fn parse_arg_value<T: std::str::FromStr>(flag: &str) -> Option<T> {
@@ -229,6 +224,100 @@ fn summary_json(summary: &TermSummary, top_terms: usize) -> serde_json::Value {
     })
 }
 
+fn load_primal_points(data_dir: Option<&str>, manifest_dir: &PathBuf) -> Vec<Vec<i64>> {
+    data_dir.map_or_else(
+        || {
+            let poly_path = manifest_dir.join("tests/mcallister_e2e/inputs/polytope.json");
+            let poly: PolytopeInput = load_json(&poly_path);
+            poly.points
+        },
+        |dir| {
+            let dir = PathBuf::from(dir);
+            read_points(&dir.join("points.dat"))
+        },
+    )
+}
+
+fn compute_dual_inputs_from_primal_points(
+    primal_points_raw: Vec<Vec<i64>>,
+) -> (Polytope, Vec<Point>, Triangulation) {
+    let primal_points = primal_points_raw
+        .into_iter()
+        .map(Point::new)
+        .collect::<Vec<_>>();
+    let primal_polytope =
+        Polytope::from_vertices(primal_points).expect("Failed to build primal polytope");
+    let dual_polytope = primal_polytope
+        .compute_dual()
+        .expect("Failed to compute dual polytope");
+    let dual_points_vec = dual_polytope
+        .points_not_interior_to_facets()
+        .expect("Failed to filter dual triangulation points");
+    let dual_origin_idx = dual_points_vec
+        .iter()
+        .position(|point| point.coords().iter().all(|&coord| coord == 0))
+        .expect("dual origin not found in triangulation points");
+    let (_dual_heights, dual_triangulation) =
+        compute_frst_heights(&dual_points_vec, dual_origin_idx).expect("Failed dual FRST");
+    (dual_polytope, dual_points_vec, dual_triangulation)
+}
+
+fn sorted_point_coords(points: &[Point]) -> Vec<Vec<i64>> {
+    let mut coords = points
+        .iter()
+        .map(|point| point.coords().to_vec())
+        .collect::<Vec<_>>();
+    coords.sort();
+    coords
+}
+
+fn sorted_simplices(triangulation: &Triangulation) -> Vec<Vec<usize>> {
+    let mut simplices = triangulation.simplices().to_vec();
+    simplices.sort();
+    simplices
+}
+
+fn validate_dual_checkpoint(
+    dual_polytope: &Polytope,
+    dual_triangulation: &Triangulation,
+    data_dir: &str,
+) {
+    let dir = PathBuf::from(data_dir);
+    let dual_points_path = dir.join("dual_points.dat");
+    if dual_points_path.exists() {
+        let mut expected_points = read_points(&dual_points_path);
+        expected_points.sort();
+        let actual_points = sorted_point_coords(dual_polytope.vertices());
+        if actual_points != expected_points {
+            eprintln!("[ERROR] computed dual polytope differs from dual_points.dat checkpoint");
+            std::process::exit(2);
+        }
+        eprintln!("[INFO] computed dual polytope matches dual_points.dat checkpoint");
+    }
+
+    let dual_simplices_path = dir.join("dual_simplices.dat");
+    if dual_simplices_path.exists() {
+        let mut expected_simplices = read_points(&dual_simplices_path)
+            .into_iter()
+            .map(|row| {
+                row.into_iter()
+                    .map(|value| {
+                        usize::try_from(value)
+                            .expect("dual_simplices.dat index must be non-negative")
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        expected_simplices.sort();
+        let actual_simplices = sorted_simplices(dual_triangulation);
+        if actual_simplices != expected_simplices {
+            eprintln!("[ERROR] computed dual FRST differs from dual_simplices.dat checkpoint");
+            std::process::exit(2);
+        }
+        eprintln!("[INFO] computed dual FRST matches dual_simplices.dat checkpoint");
+    }
+}
+
 fn main() {
     let t0 = Instant::now();
     let data_dir = parse_arg_value::<String>("--data-dir")
@@ -276,35 +365,12 @@ fn main() {
     let mut sweep_two_report: Option<serde_json::Value> = None;
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
-    let (dual_points_raw, dual_simplices_raw) = if let Some(dir) = &data_dir {
-        let dir = PathBuf::from(dir);
-        let points = read_points(&dir.join("dual_points.dat"));
-        let simplices_i64 = read_points(&dir.join("dual_simplices.dat"));
-        let simplices = simplices_i64
-            .into_iter()
-            .map(|row| {
-                row.into_iter()
-                    .map(|v| usize::try_from(v).expect("simplex index must be non-negative"))
-                    .collect::<Vec<usize>>()
-            })
-            .collect();
-        (points, simplices)
-    } else {
-        eprintln!("[WARN] using dual points/simplices JSON fixtures");
-        let dual_points_path = manifest_dir.join("tests/mcallister_e2e/overrides/dual_points.json");
-        let dual_points: DualPointsFixture = load_json(&dual_points_path);
-        let dual_simplices_path =
-            manifest_dir.join("tests/mcallister_e2e/overrides/dual_simplices.json");
-        let dual_simplices: DualSimplicesFixture = load_json(&dual_simplices_path);
-        (dual_points.points, dual_simplices.simplices)
-    };
-
-    let dual_points_vec: Vec<Point> = dual_points_raw
-        .iter()
-        .take(9)
-        .map(|coords| Point::new(coords.clone()))
-        .collect();
-    let dual_triangulation = Triangulation::new(dual_simplices_raw);
+    let primal_points_raw = load_primal_points(data_dir.as_deref(), &manifest_dir);
+    let (dual_polytope, dual_points_vec, dual_triangulation) =
+        compute_dual_inputs_from_primal_points(primal_points_raw);
+    if let Some(dir) = &data_dir {
+        validate_dual_checkpoint(&dual_polytope, &dual_triangulation, dir);
+    }
 
     let dual_points_i64: Vec<Vec<i64>> = dual_points_vec
         .iter()

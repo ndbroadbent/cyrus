@@ -633,6 +633,22 @@ fn stage0_mcallister_binaries_do_not_use_validation_replay_artifacts() {
                 }
             }
         }
+
+        if tokens.contains("dual_points.dat") || tokens.contains("dual_simplices.dat") {
+            assert!(
+                source.contains(".compute_dual()"),
+                "{rel_path} must compute the dual polytope before using dual_points.dat as a checkpoint"
+            );
+            assert!(
+                source.contains("compute_frst_heights"),
+                "{rel_path} must compute the dual FRST before using dual_simplices.dat as a checkpoint"
+            );
+            assert!(
+                !source.contains("overrides/dual_points.json")
+                    && !source.contains("overrides/dual_simplices.json"),
+                "{rel_path} must not use legacy dual geometry fixture overrides as computation inputs"
+            );
+        }
     }
 }
 
