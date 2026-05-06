@@ -1825,8 +1825,10 @@ The current `cygv` crate source sharpens the same boundary:
   coordinates for every affine rank, not only the old rank-two
   `local_coordinates_2d` field. `mcallister_first_principles` serializes these
   full-rank local lattice coordinates in the corrected-chamber GV context, and
-  `mcallister_gv_context` remains backward-compatible with older dumps. This
-  moves the higher-rank origin-circuit work forward by preserving the
+  `mcallister_gv_context` reconstructs the same coordinates from relation
+  points when reading older dumps. On the saved 4-214-647 context, the four
+  compact-threefold-shaped targets now report five local points of rank three.
+  This moves the higher-rank origin-circuit work forward by preserving the
   source-derived local support points needed to build a valid compact/local
   `cygv` input, but it still does not supply the semigroup generators, grading,
   chamber orientation, or intersection tensor by itself.

@@ -16,8 +16,9 @@ use std::path::PathBuf;
 use cyrus_core::types::rational::Rational;
 use cyrus_core::types::tags::Finite;
 use cyrus_core::{
-    Intersection, compute_gv_invariants_with_explicit_semigroup,
+    Intersection, Point, compute_gv_invariants_with_explicit_semigroup,
     compute_gv_invariants_with_provided_generators, cygv_pair_reduced_seed_generators,
+    diagnose_affine_toric_circuit,
 };
 
 #[derive(Debug, Deserialize)]
@@ -1069,6 +1070,57 @@ fn cygv_compact_input_readiness(
     )
 }
 
+fn origin_circuit_affine_support_with_coordinates(
+    sample: &MissingGvTargetSample,
+) -> Result<Option<OriginCircuitAffineSupportSample>, String> {
+    let Some(mut support) = sample.origin_circuit_affine_support.clone() else {
+        return Ok(None);
+    };
+    if !support.local_coordinates.is_empty() {
+        return Ok(Some(support));
+    }
+    let Some(witness) = sample.origin_circuit_first_witness.as_ref() else {
+        return Ok(Some(support));
+    };
+    if witness.relation_points.is_empty() {
+        return Ok(Some(support));
+    }
+
+    let points = witness
+        .relation_points
+        .iter()
+        .map(|point| Point::new(point.coordinates.clone()))
+        .collect::<Vec<_>>();
+    let relation = witness
+        .relation_points
+        .iter()
+        .map(|point| point.coefficient)
+        .collect::<Vec<_>>();
+    let diagnostic = diagnose_affine_toric_circuit(&relation, &points)
+        .map_err(|error| format!("failed to reconstruct local affine coordinates: {error}"))?
+        .ok_or_else(|| {
+            "failed to reconstruct local affine coordinates: relation is not an affine circuit"
+                .to_string()
+        })?;
+
+    support.local_coordinates = diagnostic
+        .local_coordinates
+        .iter()
+        .map(|point| {
+            let ambient_point = witness
+                .relation_points
+                .get(point.point_index)
+                .ok_or_else(|| "local coordinate point index is out of witness bounds".to_string())?
+                .point_index;
+            Ok(OriginCircuitLocalCoordinateSample {
+                point_index: ambient_point,
+                coordinates: point.coordinates.clone(),
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    Ok(Some(support))
+}
+
 fn validate_context<'a>(
     context: &'a CorrectedChamberGvContext,
 ) -> Result<ValidatedContext<'a>, String> {
@@ -1199,6 +1251,16 @@ fn report_target(
         .as_ref()
         .map(Vec::len)
         .or(sample.real_cone_decomposition_active_generators);
+    let origin_circuit_affine_support = match origin_circuit_affine_support_with_coordinates(sample)
+    {
+        Ok(support) => support,
+        Err(error) => {
+            eprintln!(
+                "[WARN] target {index}: {error}; preserving serialized origin-circuit support"
+            );
+            sample.origin_circuit_affine_support.clone()
+        }
+    };
     let local_cygv_hypersurface_shape = match local_cygv_hypersurface_shape(sample) {
         Ok(shape) => shape,
         Err(error) => {
@@ -1210,7 +1272,7 @@ fn report_target(
                 origin_circuit_pattern: sample.origin_circuit_pattern.clone(),
                 origin_circuit_witness_count: sample.origin_circuit_witness_count,
                 origin_circuit_first_witness: sample.origin_circuit_first_witness.clone(),
-                origin_circuit_affine_support: sample.origin_circuit_affine_support.clone(),
+                origin_circuit_affine_support,
                 local_cygv_hypersurface_shape: None,
                 cms_general_divisor_shape_candidates: sample
                     .cms_general_divisor_shape_candidates
@@ -1274,7 +1336,7 @@ fn report_target(
                 origin_circuit_pattern: sample.origin_circuit_pattern.clone(),
                 origin_circuit_witness_count: sample.origin_circuit_witness_count,
                 origin_circuit_first_witness: sample.origin_circuit_first_witness.clone(),
-                origin_circuit_affine_support: sample.origin_circuit_affine_support.clone(),
+                origin_circuit_affine_support,
                 local_cygv_hypersurface_shape,
                 cms_general_divisor_shape_candidates: sample
                     .cms_general_divisor_shape_candidates
@@ -1338,7 +1400,7 @@ fn report_target(
                 origin_circuit_pattern: sample.origin_circuit_pattern.clone(),
                 origin_circuit_witness_count: sample.origin_circuit_witness_count,
                 origin_circuit_first_witness: sample.origin_circuit_first_witness.clone(),
-                origin_circuit_affine_support: sample.origin_circuit_affine_support.clone(),
+                origin_circuit_affine_support,
                 local_cygv_hypersurface_shape,
                 cms_general_divisor_shape_candidates: sample
                     .cms_general_divisor_shape_candidates
@@ -1406,7 +1468,7 @@ fn report_target(
                 origin_circuit_pattern: sample.origin_circuit_pattern.clone(),
                 origin_circuit_witness_count: sample.origin_circuit_witness_count,
                 origin_circuit_first_witness: sample.origin_circuit_first_witness.clone(),
-                origin_circuit_affine_support: sample.origin_circuit_affine_support.clone(),
+                origin_circuit_affine_support,
                 local_cygv_hypersurface_shape,
                 cms_general_divisor_shape_candidates: sample
                     .cms_general_divisor_shape_candidates
@@ -1467,7 +1529,7 @@ fn report_target(
         origin_circuit_pattern: sample.origin_circuit_pattern.clone(),
         origin_circuit_witness_count: sample.origin_circuit_witness_count,
         origin_circuit_first_witness: sample.origin_circuit_first_witness.clone(),
-        origin_circuit_affine_support: sample.origin_circuit_affine_support.clone(),
+        origin_circuit_affine_support,
         local_cygv_hypersurface_shape,
         cms_general_divisor_shape_candidates: sample.cms_general_divisor_shape_candidates.clone(),
         cms_general_divisor_intersection_checks: sample
@@ -3043,6 +3105,99 @@ mod tests {
     }
 
     #[test]
+    fn origin_circuit_affine_support_reconstructs_full_coordinates_for_old_dumps() {
+        let relation_points = vec![
+            OriginCircuitRelationPointSample {
+                point_index: 0,
+                coefficient: -1,
+                coordinates: vec![0, 0, 0, 0],
+                face_dimension: Some(4),
+            },
+            OriginCircuitRelationPointSample {
+                point_index: 46,
+                coefficient: 2,
+                coordinates: vec![1, 2, 0, 2],
+                face_dimension: Some(1),
+            },
+            OriginCircuitRelationPointSample {
+                point_index: 208,
+                coefficient: 1,
+                coordinates: vec![2, 2, 1, 2],
+                face_dimension: Some(2),
+            },
+            OriginCircuitRelationPointSample {
+                point_index: 211,
+                coefficient: -3,
+                coordinates: vec![2, 3, 1, 3],
+                face_dimension: Some(2),
+            },
+            OriginCircuitRelationPointSample {
+                point_index: 214,
+                coefficient: 1,
+                coordinates: vec![2, 3, 2, 3],
+                face_dimension: Some(2),
+            },
+        ];
+        let sample = MissingGvTargetSample {
+            degree: 10,
+            generators_le_degree: 720,
+            is_mori_generator: true,
+            origin_circuit_pattern: Some("-3:1,-1:1,1:2,2:1".to_string()),
+            origin_circuit_witness_count: Some(1),
+            origin_circuit_first_witness: Some(OriginCircuitWitnessSample {
+                first_facet_exclusive_point: 208,
+                second_facet_exclusive_point: 214,
+                shared_two_simplex: vec![46, 55, 211],
+                first_facet_size: 23,
+                second_facet_size: 191,
+                sparse_relation: relation_points
+                    .iter()
+                    .map(|point| (point.point_index, point.coefficient))
+                    .collect(),
+                relation_points: relation_points.clone(),
+            }),
+            origin_circuit_affine_support: Some(OriginCircuitAffineSupportSample {
+                affine_rank: 3,
+                coefficient_counts: BTreeMap::from([(-3, 1), (-1, 1), (1, 2), (2, 1)]),
+                local_charge_basis: vec![vec![1, -2, -1, 3, -1]],
+                local_coordinates: Vec::new(),
+                local_coordinates_2d: None,
+            }),
+            cms_general_divisor_shape_candidates: None,
+            cms_general_divisor_intersection_checks: None,
+            branch_diagnostic: None,
+            real_cone_decomposable_by_other_generators: false,
+            real_cone_decomposition_active_generators: None,
+            real_cone_decomposition_active_generator_basis_nonzero: None,
+            real_cone_decomposition_exact_coefficients: None,
+            real_cone_decomposition_exact_kind: None,
+            ambient_nonzero: Vec::new(),
+            basis_nonzero: Vec::new(),
+        };
+
+        let support = origin_circuit_affine_support_with_coordinates(&sample)
+            .unwrap()
+            .expect("support should be present");
+
+        assert_eq!(support.local_coordinates.len(), 5);
+        for point in &support.local_coordinates {
+            assert_eq!(point.coordinates.len(), 3);
+        }
+        let coefficients = relation_points
+            .iter()
+            .map(|point| (point.point_index, point.coefficient))
+            .collect::<HashMap<_, _>>();
+        for coordinate_idx in 0..3 {
+            let weighted_sum: i64 = support
+                .local_coordinates
+                .iter()
+                .map(|point| coefficients[&point.point_index] * point.coordinates[coordinate_idx])
+                .sum();
+            assert_eq!(weighted_sum, 0);
+        }
+    }
+
+    #[test]
     fn lower_seed_diamond_probe_is_opt_in_and_respects_element_limit() {
         let stats = MissingGvTargetStats {
             target_count: 0,
@@ -3405,6 +3560,12 @@ mod tests {
                     point_index: 7,
                     coefficient: 1,
                     coordinates: vec![1, 0, 0, 0],
+                    face_dimension: Some(3),
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 11,
+                    coefficient: 1,
+                    coordinates: vec![-1, 0, 0, 0],
                     face_dimension: Some(3),
                 },
                 OriginCircuitRelationPointSample {

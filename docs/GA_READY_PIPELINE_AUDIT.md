@@ -297,8 +297,11 @@ to make the remaining GV layer more first-principles:
    intersection tensor, and target-coordinate map listed in the JSON. The core
    affine-circuit diagnostic and McAllister context export now preserve
    full-rank local affine coordinates for these rank-three/four supports rather
-   than only rank-two coordinates, giving the next source-derived construction
-   actual local support points to work from. The
+   than only rank-two coordinates. The context tool also reconstructs them from
+   relation points in older dumps; on the saved 4-214-647 context the four
+   compact-threefold-shaped misses now expose five rank-three local points
+   each. This gives the next source-derived construction actual local support
+   points to work from. The
    direct source read reinforces this: `cygv` obtains GV values from the full
    finite semigroup, HKTY alpha/beta construction, and degree-ordered
    `Li2(q_N)` subtraction history, while the McAllister paper's small-curve
