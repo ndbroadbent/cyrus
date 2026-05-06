@@ -1845,7 +1845,7 @@ The current `cygv` crate source sharpens the same boundary:
   `target_relation_status=target_relation_integral_in_local_charge_basis` and
   `target_relation_in_charge_basis=[-1]`. This means the sparse affine relation
   itself is now understood at the local charge-lattice level. The remaining
-  blocker is still the certified semigroup/grading/chamber/intersection input
+  blocker is still the certified semigroup, `q` phase, chamber, and intersection input
   needed before an actual `cygv` call can produce a compact GV value.
 - The same skeleton now records the two overall local charge-basis orientation
   candidates. On the saved context, all four compact-threefold-shaped targets
@@ -1876,9 +1876,12 @@ The current `cygv` crate source sharpens the same boundary:
   skeletons remain `blocked_missing_source_derived_inputs`. The primitive
   one-parameter local grading vector is now source-derived as `[1]` for all nine
   skeletons, and the report aggregates this as
-  `source_derived_primitive_one_parameter_grading=9`. The remaining missing
-  inputs are counted explicitly: each of the nine skeletons is still missing
-  `local_semigroup_generators`, `local_q_matrix_orientation_and_phase`,
+  `source_derived_primitive_one_parameter_grading=9`. The same target-coordinate
+  check now source-derives the local `q` orientation as sign `-1` for all nine
+  skeletons, with
+  `source_derived_target_positive_orientation=9`. The remaining missing inputs
+  are counted explicitly: each of the nine skeletons is still missing
+  `local_semigroup_generators`, `local_q_matrix_phase`,
   `local_intersection_tensor`, and `local_chamber_certificate`.
 
 The actionable consequence is that a Cyrus replacement for corrected-chamber

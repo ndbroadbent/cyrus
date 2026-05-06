@@ -160,6 +160,7 @@ struct ContextReport {
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
     local_cygv_actual_call_readiness_counts: BTreeMap<String, usize>,
     local_cygv_missing_source_input_counts: BTreeMap<String, usize>,
+    local_cygv_q_matrix_orientation_status_counts: BTreeMap<String, usize>,
     local_cygv_grading_vector_status_counts: BTreeMap<String, usize>,
     targets: Vec<TargetReport>,
 }
@@ -251,6 +252,8 @@ struct LocalCygvInputSkeleton {
     target_relation_in_charge_basis: Option<Vec<i64>>,
     target_relation_status: String,
     orientation_candidates: Vec<LocalCygvOrientationCandidate>,
+    local_q_matrix_orientation_candidate: Option<i64>,
+    local_q_matrix_orientation_status: String,
     local_grading_vector_candidate: Option<Vec<i64>>,
     local_grading_vector_status: String,
     remaining_uncertified_inputs: Vec<String>,
@@ -1177,14 +1180,20 @@ fn local_cygv_input_skeleton(
         &local_q_matrix_rows,
         target_relation_in_charge_basis.as_deref(),
     );
+    let (local_q_matrix_orientation_candidate, local_q_matrix_orientation_status) =
+        local_cygv_q_matrix_orientation_candidate(&orientation_candidates);
     let (local_grading_vector_candidate, local_grading_vector_status) =
         local_cygv_grading_vector_candidate(&orientation_candidates);
     let mut remaining_uncertified_inputs = vec!["local_semigroup_generators".to_string()];
     if local_grading_vector_candidate.is_none() {
         remaining_uncertified_inputs.push("local_grading_vector".to_string());
     }
+    if local_q_matrix_orientation_candidate.is_some() {
+        remaining_uncertified_inputs.push("local_q_matrix_phase".to_string());
+    } else {
+        remaining_uncertified_inputs.push("local_q_matrix_orientation_and_phase".to_string());
+    }
     remaining_uncertified_inputs.extend([
-        "local_q_matrix_orientation_and_phase".to_string(),
         "local_intersection_tensor".to_string(),
         "local_chamber_certificate".to_string(),
     ]);
@@ -1195,10 +1204,50 @@ fn local_cygv_input_skeleton(
         target_relation_in_charge_basis,
         target_relation_status,
         orientation_candidates,
+        local_q_matrix_orientation_candidate,
+        local_q_matrix_orientation_status,
         local_grading_vector_candidate,
         local_grading_vector_status,
         remaining_uncertified_inputs,
     }))
+}
+
+fn local_cygv_q_matrix_orientation_candidate(
+    orientation_candidates: &[LocalCygvOrientationCandidate],
+) -> (Option<i64>, String) {
+    let eligible = orientation_candidates
+        .iter()
+        .filter(|candidate| {
+            candidate.target_coordinate_is_nonnegative == Some(true)
+                && candidate.target_coordinate_is_primitive == Some(true)
+        })
+        .collect::<Vec<_>>();
+    match eligible.as_slice() {
+        [] => {
+            if orientation_candidates
+                .iter()
+                .any(|candidate| candidate.target_coordinate.is_none())
+            {
+                (
+                    None,
+                    "local_q_orientation_target_coordinate_unavailable".to_string(),
+                )
+            } else {
+                (
+                    None,
+                    "local_q_orientation_blocked_no_positive_primitive_target".to_string(),
+                )
+            }
+        }
+        [candidate] => (
+            Some(candidate.overall_charge_basis_sign),
+            "source_derived_target_positive_orientation".to_string(),
+        ),
+        _ => (
+            None,
+            "local_q_orientation_ambiguous_multiple_positive_primitive_targets".to_string(),
+        ),
+    }
 }
 
 fn local_cygv_grading_vector_candidate(
@@ -3273,6 +3322,12 @@ fn build_report(
             .iter()
             .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
     );
+    let local_cygv_q_matrix_orientation_status_counts =
+        local_cygv_q_matrix_orientation_status_counts(
+            targets
+                .iter()
+                .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
+        );
     let local_cygv_grading_vector_status_counts = local_cygv_grading_vector_status_counts(
         targets
             .iter()
@@ -3299,6 +3354,7 @@ fn build_report(
         local_cygv_target_candidate_status_counts,
         local_cygv_actual_call_readiness_counts,
         local_cygv_missing_source_input_counts,
+        local_cygv_q_matrix_orientation_status_counts,
         local_cygv_grading_vector_status_counts,
         targets,
     }
@@ -3367,6 +3423,18 @@ fn local_cygv_grading_vector_status_counts<'a>(
     for skeleton in skeletons {
         *counts
             .entry(skeleton.local_grading_vector_status.clone())
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_q_matrix_orientation_status_counts<'a>(
+    skeletons: impl IntoIterator<Item = &'a LocalCygvInputSkeleton>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for skeleton in skeletons {
+        *counts
+            .entry(skeleton.local_q_matrix_orientation_status.clone())
             .or_insert(0usize) += 1;
     }
     counts
@@ -3673,6 +3741,11 @@ mod tests {
             skeleton.target_relation_status,
             "target_relation_integral_in_local_charge_basis"
         );
+        assert_eq!(skeleton.local_q_matrix_orientation_candidate, Some(-1));
+        assert_eq!(
+            skeleton.local_q_matrix_orientation_status,
+            "source_derived_target_positive_orientation"
+        );
         assert_eq!(skeleton.local_grading_vector_candidate, Some(vec![1]));
         assert_eq!(
             skeleton.local_grading_vector_status,
@@ -3683,6 +3756,18 @@ mod tests {
                 .remaining_uncertified_inputs
                 .iter()
                 .any(|input| input == "local_grading_vector")
+        );
+        assert!(
+            !skeleton
+                .remaining_uncertified_inputs
+                .iter()
+                .any(|input| input == "local_q_matrix_orientation_and_phase")
+        );
+        assert!(
+            skeleton
+                .remaining_uncertified_inputs
+                .iter()
+                .any(|input| input == "local_q_matrix_phase")
         );
         assert_eq!(skeleton.orientation_candidates.len(), 2);
         let positive_target = &skeleton.orientation_candidates[0];
@@ -3769,6 +3854,8 @@ mod tests {
                 &[vec![1], vec![-2], vec![-1], vec![3], vec![-1]],
                 Some(&[-1]),
             ),
+            local_q_matrix_orientation_candidate: None,
+            local_q_matrix_orientation_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -3783,6 +3870,8 @@ mod tests {
                 &[vec![2], vec![1], vec![2], vec![-1], vec![-2], vec![-2]],
                 Some(&[-1]),
             ),
+            local_q_matrix_orientation_candidate: None,
+            local_q_matrix_orientation_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -3824,6 +3913,8 @@ mod tests {
             target_relation_in_charge_basis: None,
             target_relation_status: String::new(),
             orientation_candidates: supported_candidate.clone(),
+            local_q_matrix_orientation_candidate: None,
+            local_q_matrix_orientation_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: vec!["local_intersection_tensor".to_string()],
@@ -3835,6 +3926,8 @@ mod tests {
             target_relation_in_charge_basis: None,
             target_relation_status: String::new(),
             orientation_candidates: supported_candidate,
+            local_q_matrix_orientation_candidate: None,
+            local_q_matrix_orientation_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -3849,6 +3942,8 @@ mod tests {
                 &[vec![2], vec![1], vec![2], vec![-1], vec![-2], vec![-2]],
                 Some(&[1]),
             ),
+            local_q_matrix_orientation_candidate: None,
+            local_q_matrix_orientation_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -3894,6 +3989,8 @@ mod tests {
             target_relation_in_charge_basis: None,
             target_relation_status: String::new(),
             orientation_candidates: Vec::new(),
+            local_q_matrix_orientation_candidate: None,
+            local_q_matrix_orientation_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: vec![
@@ -3908,6 +4005,8 @@ mod tests {
             target_relation_in_charge_basis: None,
             target_relation_status: String::new(),
             orientation_candidates: Vec::new(),
+            local_q_matrix_orientation_candidate: None,
+            local_q_matrix_orientation_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: vec![
@@ -3932,6 +4031,8 @@ mod tests {
             target_relation_in_charge_basis: None,
             target_relation_status: String::new(),
             orientation_candidates: Vec::new(),
+            local_q_matrix_orientation_candidate: None,
+            local_q_matrix_orientation_status: String::new(),
             local_grading_vector_candidate: Some(vec![1]),
             local_grading_vector_status: "source_derived_primitive_one_parameter_grading"
                 .to_string(),
@@ -3944,6 +4045,8 @@ mod tests {
             target_relation_in_charge_basis: None,
             target_relation_status: String::new(),
             orientation_candidates: Vec::new(),
+            local_q_matrix_orientation_candidate: None,
+            local_q_matrix_orientation_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: "local_grading_blocked_no_positive_primitive_target"
                 .to_string(),
@@ -3956,6 +4059,8 @@ mod tests {
             target_relation_in_charge_basis: None,
             target_relation_status: String::new(),
             orientation_candidates: Vec::new(),
+            local_q_matrix_orientation_candidate: None,
+            local_q_matrix_orientation_status: String::new(),
             local_grading_vector_candidate: Some(vec![1]),
             local_grading_vector_status: "source_derived_primitive_one_parameter_grading"
                 .to_string(),
@@ -3973,6 +4078,67 @@ mod tests {
         assert_eq!(
             counts
                 .get("local_grading_blocked_no_positive_primitive_target")
+                .copied(),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn local_cygv_q_matrix_orientation_status_counts_aggregate_skeletons() {
+        let first = LocalCygvInputSkeleton {
+            support_point_indices: Vec::new(),
+            local_q_matrix_rows: Vec::new(),
+            target_relation_coefficients: None,
+            target_relation_in_charge_basis: None,
+            target_relation_status: String::new(),
+            orientation_candidates: Vec::new(),
+            local_q_matrix_orientation_candidate: Some(-1),
+            local_q_matrix_orientation_status: "source_derived_target_positive_orientation"
+                .to_string(),
+            local_grading_vector_candidate: None,
+            local_grading_vector_status: String::new(),
+            remaining_uncertified_inputs: Vec::new(),
+        };
+        let second = LocalCygvInputSkeleton {
+            support_point_indices: Vec::new(),
+            local_q_matrix_rows: Vec::new(),
+            target_relation_coefficients: None,
+            target_relation_in_charge_basis: None,
+            target_relation_status: String::new(),
+            orientation_candidates: Vec::new(),
+            local_q_matrix_orientation_candidate: None,
+            local_q_matrix_orientation_status:
+                "local_q_orientation_blocked_no_positive_primitive_target".to_string(),
+            local_grading_vector_candidate: None,
+            local_grading_vector_status: String::new(),
+            remaining_uncertified_inputs: Vec::new(),
+        };
+        let third = LocalCygvInputSkeleton {
+            support_point_indices: Vec::new(),
+            local_q_matrix_rows: Vec::new(),
+            target_relation_coefficients: None,
+            target_relation_in_charge_basis: None,
+            target_relation_status: String::new(),
+            orientation_candidates: Vec::new(),
+            local_q_matrix_orientation_candidate: Some(-1),
+            local_q_matrix_orientation_status: "source_derived_target_positive_orientation"
+                .to_string(),
+            local_grading_vector_candidate: None,
+            local_grading_vector_status: String::new(),
+            remaining_uncertified_inputs: Vec::new(),
+        };
+
+        let counts = local_cygv_q_matrix_orientation_status_counts([&first, &second, &third]);
+
+        assert_eq!(
+            counts
+                .get("source_derived_target_positive_orientation")
+                .copied(),
+            Some(2)
+        );
+        assert_eq!(
+            counts
+                .get("local_q_orientation_blocked_no_positive_primitive_target")
                 .copied(),
             Some(1)
         );
