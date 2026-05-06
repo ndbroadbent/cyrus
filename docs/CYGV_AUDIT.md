@@ -1781,6 +1781,15 @@ The current `cygv` crate source sharpens the same boundary:
   90-second window and was stopped manually. This was semigroup construction
   only, not HKTY/GV inversion, so the bottleneck is already present at the
   source-domain closure scale.
+- The path-history probe now also checks whether a target is an exact sum of up
+  to four lower-degree cygv seed rows before any closure truncation. This is
+  separate from predecessor counting: it answers whether the target is primitive
+  with respect to the lower-degree seed semigroup. On the current degree-10
+  targets, both `7` and `8` have three-term lower-seed decompositions even
+  though the deterministic 50000-element capped closure still does not expose a
+  certified predecessor/residual split. Thus the target classes are not
+  primitive obstructions; the unresolved piece is the broader monomial map and
+  degree-ordered residual history used by cygv.
 
 The actionable consequence is that a Cyrus replacement for corrected-chamber
 or potent-ray GV values must recreate the finite semigroup and lower-degree
