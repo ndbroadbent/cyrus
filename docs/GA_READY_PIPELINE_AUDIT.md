@@ -327,12 +327,12 @@ to make the remaining GV layer more first-principles:
    `target_positive_but_ignored_by_cygv_omega_bucket=5`, and
    `target_not_in_nonnegative_local_semigroup=9`. The same report now keeps
    actual-call readiness separate from target eligibility; all nine local
-   skeletons are still `blocked_missing_source_derived_inputs`, and the report
-   aggregates the missing source-input counts as nine each for
-   `local_semigroup_generators`, `local_grading_vector`,
-   `local_q_matrix_orientation_and_phase`, `local_intersection_tensor`, and
-   `local_chamber_certificate`, so none is a valid actual-`cygv` call yet. The
-   direct source read reinforces this: `cygv`
+   skeletons are still `blocked_missing_source_derived_inputs`. The primitive
+   one-parameter grading vector is now source-derived as `[1]` for all nine
+   skeletons, while the missing source-input counts remain nine each for
+   `local_semigroup_generators`, `local_q_matrix_orientation_and_phase`,
+   `local_intersection_tensor`, and `local_chamber_certificate`, so none is a
+   valid actual-`cygv` call yet. The direct source read reinforces this: `cygv`
    obtains GV values from the full
    finite semigroup, HKTY alpha/beta construction, and degree-ordered
    `Li2(q_N)` subtraction history, while the McAllister paper's small-curve
