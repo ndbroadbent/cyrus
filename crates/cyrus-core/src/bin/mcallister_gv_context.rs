@@ -179,6 +179,9 @@ struct ContextReport {
     origin_circuit_facet_context_status_counts: BTreeMap<String, usize>,
     active_support_status_counts: BTreeMap<String, usize>,
     active_support_face_certificate_status_counts: BTreeMap<String, usize>,
+    origin_relation_support_face_certificate_status_counts: BTreeMap<String, usize>,
+    origin_shared_facet_face_certificate_status_counts: BTreeMap<String, usize>,
+    origin_facet_union_face_certificate_status_counts: BTreeMap<String, usize>,
     local_cygv_q_matrix_orientation_status_counts: BTreeMap<String, usize>,
     local_cygv_q_matrix_layout_status_counts: BTreeMap<String, usize>,
     local_cygv_origin_point_status_counts: BTreeMap<String, usize>,
@@ -225,6 +228,9 @@ struct TargetReport {
     origin_relation_support_generator_count: Option<usize>,
     origin_shared_facet_generator_count: Option<usize>,
     origin_facet_union_generator_count: Option<usize>,
+    origin_relation_support_face_certificate_status: Option<String>,
+    origin_shared_facet_face_certificate_status: Option<String>,
+    origin_facet_union_face_certificate_status: Option<String>,
     support_overlap_generator_counts: Vec<SupportOverlapCount>,
     support_closure_layer_counts: Vec<SupportClosureLayerCount>,
     support_overlap_min_for_run: Option<usize>,
@@ -1026,6 +1032,18 @@ struct OriginCircuitAmbientGeneratorCounts {
     facet_union: Option<usize>,
 }
 
+struct OriginCircuitAmbientSupportCertificateStatuses {
+    relation_support: Option<String>,
+    shared_facet: Option<String>,
+    facet_union: Option<String>,
+}
+
+struct OriginCircuitAmbientSupportSets {
+    relation_support: HashSet<usize>,
+    shared_facet: HashSet<usize>,
+    facet_union: HashSet<usize>,
+}
+
 fn origin_circuit_ambient_generator_counts(
     sample: &MissingGvTargetSample,
     context: &ValidatedContext<'_>,
@@ -1037,13 +1055,37 @@ fn origin_circuit_ambient_generator_counts(
             facet_union: None,
         };
     };
-    let Some(witness) = sample.origin_circuit_first_witness.as_ref() else {
+    let Some(supports) = origin_circuit_ambient_support_sets(sample) else {
         return OriginCircuitAmbientGeneratorCounts {
             relation_support: None,
             shared_facet: None,
             facet_union: None,
         };
     };
+
+    OriginCircuitAmbientGeneratorCounts {
+        relation_support: Some(degree_bounded_ray_context_support_count(
+            ray_context,
+            sample.degree,
+            &supports.relation_support,
+        )),
+        shared_facet: Some(degree_bounded_ray_context_support_count(
+            ray_context,
+            sample.degree,
+            &supports.shared_facet,
+        )),
+        facet_union: Some(degree_bounded_ray_context_support_count(
+            ray_context,
+            sample.degree,
+            &supports.facet_union,
+        )),
+    }
+}
+
+fn origin_circuit_ambient_support_sets(
+    sample: &MissingGvTargetSample,
+) -> Option<OriginCircuitAmbientSupportSets> {
+    let witness = sample.origin_circuit_first_witness.as_ref()?;
 
     let relation_support = witness
         .relation_points
@@ -1065,23 +1107,11 @@ fn origin_circuit_ambient_generator_counts(
         .collect::<HashSet<_>>();
     facet_union.insert(0);
 
-    OriginCircuitAmbientGeneratorCounts {
-        relation_support: Some(degree_bounded_ray_context_support_count(
-            ray_context,
-            sample.degree,
-            &relation_support,
-        )),
-        shared_facet: Some(degree_bounded_ray_context_support_count(
-            ray_context,
-            sample.degree,
-            &shared_facet,
-        )),
-        facet_union: Some(degree_bounded_ray_context_support_count(
-            ray_context,
-            sample.degree,
-            &facet_union,
-        )),
-    }
+    Some(OriginCircuitAmbientSupportSets {
+        relation_support,
+        shared_facet,
+        facet_union,
+    })
 }
 
 fn degree_bounded_ray_context_support_count(
@@ -1098,6 +1128,111 @@ fn degree_bounded_ray_context_support_count(
                 .all(|(idx, _)| allowed_ambient_support.contains(idx))
         })
         .count()
+}
+
+fn origin_circuit_ambient_support_face_certificate_statuses(
+    sample: &MissingGvTargetSample,
+    context: &ValidatedContext<'_>,
+    generator_limit: usize,
+) -> OriginCircuitAmbientSupportCertificateStatuses {
+    let Some(ray_context) = context.degree_bounded_ray_context else {
+        return OriginCircuitAmbientSupportCertificateStatuses {
+            relation_support: Some("missing_degree_bounded_mori_ray_context".to_string()),
+            shared_facet: Some("missing_degree_bounded_mori_ray_context".to_string()),
+            facet_union: Some("missing_degree_bounded_mori_ray_context".to_string()),
+        };
+    };
+    let Some(supports) = origin_circuit_ambient_support_sets(sample) else {
+        return OriginCircuitAmbientSupportCertificateStatuses {
+            relation_support: Some("no_origin_circuit_witness".to_string()),
+            shared_facet: Some("no_origin_circuit_witness".to_string()),
+            facet_union: Some("no_origin_circuit_witness".to_string()),
+        };
+    };
+
+    OriginCircuitAmbientSupportCertificateStatuses {
+        relation_support: Some(origin_circuit_ambient_support_face_certificate_status(
+            ray_context,
+            sample.degree,
+            &supports.relation_support,
+            context,
+            generator_limit,
+        )),
+        shared_facet: Some(origin_circuit_ambient_support_face_certificate_status(
+            ray_context,
+            sample.degree,
+            &supports.shared_facet,
+            context,
+            generator_limit,
+        )),
+        facet_union: Some(origin_circuit_ambient_support_face_certificate_status(
+            ray_context,
+            sample.degree,
+            &supports.facet_union,
+            context,
+            generator_limit,
+        )),
+    }
+}
+
+fn origin_circuit_ambient_support_face_certificate_status(
+    ray_context: &[DegreeBoundedMoriRayContextSample],
+    max_degree: i128,
+    allowed_ambient_support: &HashSet<usize>,
+    context: &ValidatedContext<'_>,
+    generator_limit: usize,
+) -> String {
+    let generators = degree_bounded_ray_context_support_generators(
+        ray_context,
+        max_degree,
+        allowed_ambient_support,
+        context.dimension,
+    );
+    let Ok(generators) = generators else {
+        return "origin_support_certificate_error".to_string();
+    };
+    if generators.is_empty() {
+        return "origin_support_no_generators".to_string();
+    }
+    if generators.len() > generator_limit {
+        return format!(
+            "origin_support_skipped_generator_limit_{generator_limit}_actual_{}",
+            generators.len()
+        );
+    }
+    match certify_supporting_mori_face_by_exact_kernel(&generators, context.degree_bounded_rays) {
+        Ok(Some(_)) => "origin_support_certified_codimension_one_face".to_string(),
+        Ok(None) => "origin_support_not_certified_as_codimension_one_face".to_string(),
+        Err(_) => "origin_support_certificate_error".to_string(),
+    }
+}
+
+fn degree_bounded_ray_context_support_generators(
+    ray_context: &[DegreeBoundedMoriRayContextSample],
+    max_degree: i128,
+    allowed_ambient_support: &HashSet<usize>,
+    dimension: usize,
+) -> Result<Vec<Vec<i64>>, String> {
+    let mut generators = Vec::new();
+    let mut seen = HashSet::new();
+    for ray in ray_context {
+        if ray.degree <= 0 || ray.degree > max_degree {
+            continue;
+        }
+        if !ray
+            .ambient_nonzero
+            .iter()
+            .all(|(idx, _)| allowed_ambient_support.contains(idx))
+        {
+            continue;
+        }
+        let basis_ray = dense_from_sparse(&ray.basis_nonzero, dimension)?;
+        if seen.insert(basis_ray.clone()) {
+            generators.push(basis_ray);
+        }
+    }
+    generators.sort();
+    Ok(generators)
 }
 
 fn local_cygv_hypersurface_shape(
@@ -1896,6 +2031,8 @@ fn report_target(
     support_overlap_min_for_run: Option<usize>,
     support_overlap_max_target_degree: Option<i128>,
     support_overlap_pair_reduce_for_run: bool,
+    certify_origin_support_domains: bool,
+    origin_support_certificate_limit: usize,
     measure_cygv_semigroups: bool,
     run_lower_seed_diamonds: bool,
     measure_cygv_degree_ladder: bool,
@@ -1978,6 +2115,9 @@ fn report_target(
                 origin_relation_support_generator_count: None,
                 origin_shared_facet_generator_count: None,
                 origin_facet_union_generator_count: None,
+                origin_relation_support_face_certificate_status: None,
+                origin_shared_facet_face_certificate_status: None,
+                origin_facet_union_face_certificate_status: None,
                 support_overlap_generator_counts: Vec::new(),
                 support_closure_layer_counts: Vec::new(),
                 support_overlap_min_for_run,
@@ -2046,6 +2186,9 @@ fn report_target(
                 origin_relation_support_generator_count: None,
                 origin_shared_facet_generator_count: None,
                 origin_facet_union_generator_count: None,
+                origin_relation_support_face_certificate_status: None,
+                origin_shared_facet_face_certificate_status: None,
+                origin_facet_union_face_certificate_status: None,
                 support_overlap_generator_counts: Vec::new(),
                 support_closure_layer_counts: Vec::new(),
                 support_overlap_min_for_run,
@@ -2114,6 +2257,9 @@ fn report_target(
                 origin_relation_support_generator_count: None,
                 origin_shared_facet_generator_count: None,
                 origin_facet_union_generator_count: None,
+                origin_relation_support_face_certificate_status: None,
+                origin_shared_facet_face_certificate_status: None,
+                origin_facet_union_face_certificate_status: None,
                 support_overlap_generator_counts: Vec::new(),
                 support_closure_layer_counts: Vec::new(),
                 support_overlap_min_for_run,
@@ -2186,6 +2332,9 @@ fn report_target(
                 origin_relation_support_generator_count: None,
                 origin_shared_facet_generator_count: None,
                 origin_facet_union_generator_count: None,
+                origin_relation_support_face_certificate_status: None,
+                origin_shared_facet_face_certificate_status: None,
+                origin_facet_union_face_certificate_status: None,
                 support_overlap_generator_counts: Vec::new(),
                 support_closure_layer_counts: Vec::new(),
                 support_overlap_min_for_run,
@@ -2210,6 +2359,19 @@ fn report_target(
         }
     };
     let origin_counts = origin_circuit_ambient_generator_counts(sample, context);
+    let origin_certificates = if certify_origin_support_domains {
+        origin_circuit_ambient_support_face_certificate_statuses(
+            sample,
+            context,
+            origin_support_certificate_limit,
+        )
+    } else {
+        OriginCircuitAmbientSupportCertificateStatuses {
+            relation_support: None,
+            shared_facet: None,
+            facet_union: None,
+        }
+    };
     let base = TargetReport {
         index,
         degree: sample.degree,
@@ -2250,6 +2412,9 @@ fn report_target(
         origin_relation_support_generator_count: origin_counts.relation_support,
         origin_shared_facet_generator_count: origin_counts.shared_facet,
         origin_facet_union_generator_count: origin_counts.facet_union,
+        origin_relation_support_face_certificate_status: origin_certificates.relation_support,
+        origin_shared_facet_face_certificate_status: origin_certificates.shared_facet,
+        origin_facet_union_face_certificate_status: origin_certificates.facet_union,
         support_overlap_generator_counts: Vec::new(),
         support_closure_layer_counts: Vec::new(),
         support_overlap_min_for_run,
@@ -3565,6 +3730,8 @@ fn build_report(
     support_overlap_min_for_run: Option<usize>,
     support_overlap_max_target_degree: Option<i128>,
     support_overlap_pair_reduce_for_run: bool,
+    certify_origin_support_domains: bool,
+    origin_support_certificate_limit: usize,
     measure_cygv_semigroups: bool,
     run_lower_seed_diamonds: bool,
     measure_cygv_degree_ladder: bool,
@@ -3589,6 +3756,8 @@ fn build_report(
             support_overlap_min_for_run,
             support_overlap_max_target_degree,
             support_overlap_pair_reduce_for_run,
+            certify_origin_support_domains,
+            origin_support_certificate_limit,
             measure_cygv_semigroups,
             run_lower_seed_diamonds,
             measure_cygv_degree_ladder,
@@ -3631,6 +3800,28 @@ fn build_report(
             &validated,
             target_index_filter,
         );
+    let origin_relation_support_face_certificate_status_counts = optional_status_counts(
+        targets.iter().map(|target| {
+            target
+                .origin_relation_support_face_certificate_status
+                .as_deref()
+        }),
+        "not_run",
+    );
+    let origin_shared_facet_face_certificate_status_counts = optional_status_counts(
+        targets.iter().map(|target| {
+            target
+                .origin_shared_facet_face_certificate_status
+                .as_deref()
+        }),
+        "not_run",
+    );
+    let origin_facet_union_face_certificate_status_counts = optional_status_counts(
+        targets
+            .iter()
+            .map(|target| target.origin_facet_union_face_certificate_status.as_deref()),
+        "not_run",
+    );
     let local_cygv_q_matrix_orientation_status_counts =
         local_cygv_q_matrix_orientation_status_counts(
             targets
@@ -3685,6 +3876,9 @@ fn build_report(
         origin_circuit_facet_context_status_counts,
         active_support_status_counts,
         active_support_face_certificate_status_counts,
+        origin_relation_support_face_certificate_status_counts,
+        origin_shared_facet_face_certificate_status_counts,
+        origin_facet_union_face_certificate_status_counts,
         local_cygv_q_matrix_orientation_status_counts,
         local_cygv_q_matrix_layout_status_counts,
         local_cygv_origin_point_status_counts,
@@ -3916,7 +4110,7 @@ fn target_index_selected(index: usize, target_index_filter: Option<usize>) -> bo
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--support-overlap-max-target-degree N] [--measure-cygv-semigroups] [--run-lower-seed-diamonds] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
+            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--origin-support-certificate-limit N] [--measure-cygv-semigroups] [--run-lower-seed-diamonds] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
         );
         std::process::exit(2);
     };
@@ -3928,6 +4122,9 @@ fn main() {
         parse_flag("--pair-reduce-support-overlap-generators");
     let support_overlap_max_target_degree =
         parse_arg_value::<i128>("--support-overlap-max-target-degree");
+    let certify_origin_support_domains = parse_flag("--certify-origin-support-domains");
+    let origin_support_certificate_limit =
+        parse_arg_value::<usize>("--origin-support-certificate-limit").unwrap_or(256);
     let measure_cygv_semigroups = parse_flag("--measure-cygv-semigroups");
     let run_lower_seed_diamonds = parse_flag("--run-lower-seed-diamonds");
     let measure_cygv_degree_ladder = parse_flag("--measure-cygv-degree-ladder");
@@ -3956,6 +4153,8 @@ fn main() {
         support_overlap_min_for_run,
         support_overlap_max_target_degree,
         support_overlap_pair_reduce_for_run,
+        certify_origin_support_domains,
+        origin_support_certificate_limit,
         measure_cygv_semigroups,
         run_lower_seed_diamonds,
         measure_cygv_degree_ladder,
@@ -4082,7 +4281,7 @@ mod tests {
         };
         let grading = vec![1, 1];
         let q_matrix = vec![vec![1, 0], vec![0, 1]];
-        let degree_bounded_rays = Vec::new();
+        let degree_bounded_rays = vec![vec![1, 0], vec![0, 1], vec![1, 1]];
         let ray_context = vec![
             DegreeBoundedMoriRayContextSample {
                 degree: 1,
@@ -4180,6 +4379,21 @@ mod tests {
         assert_eq!(counts.relation_support, Some(1));
         assert_eq!(counts.shared_facet, Some(2));
         assert_eq!(counts.facet_union, Some(3));
+
+        let certificates =
+            origin_circuit_ambient_support_face_certificate_statuses(&sample, &context, 2);
+        assert_eq!(
+            certificates.relation_support.as_deref(),
+            Some("origin_support_certified_codimension_one_face")
+        );
+        assert_eq!(
+            certificates.shared_facet.as_deref(),
+            Some("origin_support_not_certified_as_codimension_one_face")
+        );
+        assert_eq!(
+            certificates.facet_union.as_deref(),
+            Some("origin_support_skipped_generator_limit_2_actual_3")
+        );
     }
 
     #[test]
@@ -5441,6 +5655,8 @@ mod tests {
             None,
             false,
             false,
+            256,
+            false,
             false,
             false,
             None,
@@ -5561,6 +5777,8 @@ mod tests {
             Some(0),
             Some(4),
             false,
+            false,
+            256,
             false,
             false,
             false,

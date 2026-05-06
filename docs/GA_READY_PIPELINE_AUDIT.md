@@ -132,6 +132,7 @@ cargo build -p cyrus-core --bin mcallister_first_principles
 CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 timeout 600 ./target/release/mcallister_first_principles --stop-after volume --allow-invalid-ek0 --diagnose-corrected-chamber-gv --dump-corrected-chamber-gv-context /tmp/cyrus_corrected_chamber_gv_context_schema3.json
 cargo build -p cyrus-core --bin mcallister_gv_context
 ./target/debug/mcallister_gv_context --context /tmp/cyrus_corrected_chamber_gv_context_schema3.json --out /tmp/cyrus_gv_context_schema3_ray_context_report.json
+./target/debug/mcallister_gv_context --context /tmp/cyrus_corrected_chamber_gv_context_schema3.json --certify-origin-support-domains --origin-support-certificate-limit 256 --out /tmp/cyrus_gv_context_schema3_origin_support_cert_report.json
 CYRUS_FIRST_PRINCIPLES=1 CYRUS_MCALLISTER_RUNNER_HEAVY=1 CYRUS_MCALLISTER_DATA_DIR=/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 cargo test -p cyrus-core --test mcallister_e2e stage0_first_principles_runner_accepts_declared_inputs_only_data_dir -- --nocapture
 cargo check -p cyrus-core --bin mcallister_first_principles
 cargo fmt --check
@@ -369,6 +370,11 @@ to make the remaining GV layer more first-principles:
    facet-pair neighborhoods give `12..367`, and full facet unions give
    `458..2381`, so neither naive support restriction is a valid replacement for
    the missing chamber semigroup.
+   The opt-in exact-kernel certificate probe keeps this conservative: all nine
+   relation-support domains and the four shared-facet domains below the
+   256-generator guard are not certified as codimension-one faces, while the
+   broader shared/facet-union domains are explicitly skipped with their actual
+   row counts.
    The direct source
    read reinforces this: `cygv`
    obtains GV values from the full

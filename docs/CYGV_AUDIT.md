@@ -275,6 +275,12 @@ shared-facet neighborhoods contain `12..367`, and the full facet unions contain
 `458..2381`. Thus the valid chamber semigroup is neither the single sparse
 origin-circuit relation nor the whole facet union; it still needs a
 source-derived chamber/face certificate.
+An opt-in exact-kernel certificate probe now makes the same point algebraically:
+the nine relation-support domains are all
+`origin_support_not_certified_as_codimension_one_face`; the four shared-facet
+domains under the 256-row guard are also not certified; and the broader
+shared/facet-union domains are reported as skipped with their actual generator
+counts rather than sent into an unbounded integer-kernel computation.
 
 ## McAllister Paper Boundary
 
