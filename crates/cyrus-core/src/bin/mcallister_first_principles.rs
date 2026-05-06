@@ -921,6 +921,8 @@ struct OriginCircuitWitnessSample {
     first_facet_exclusive_point: usize,
     second_facet_exclusive_point: usize,
     shared_two_simplex: Vec<usize>,
+    first_facet: Vec<usize>,
+    second_facet: Vec<usize>,
     first_facet_size: usize,
     second_facet_size: usize,
     sparse_relation: Vec<(usize, i64)>,
@@ -2943,6 +2945,8 @@ fn origin_circuit_witness_sample(
         first_facet_exclusive_point: witness.first_facet_exclusive_point,
         second_facet_exclusive_point: witness.second_facet_exclusive_point,
         shared_two_simplex: witness.shared_two_simplex.clone(),
+        first_facet: witness.first_facet.clone(),
+        second_facet: witness.second_facet.clone(),
         first_facet_size: witness.first_facet.len(),
         second_facet_size: witness.second_facet.len(),
         sparse_relation: witness.sparse_relation.clone(),
@@ -7943,7 +7947,7 @@ fn write_corrected_chamber_gv_context_export(
         .as_ref()
         .map(|stats| stats.sample.len() == stats.target_count);
     let export = CorrectedChamberGvContextExport {
-        schema_version: 1,
+        schema_version: 2,
         source: "mcallister_first_principles corrected-chamber GV diagnostic",
         small_curve_cutoff: small_curve_cutoff.get(),
         small_curve_pruning: small_curve_pruning.as_str(),

@@ -129,6 +129,10 @@ struct OriginCircuitWitnessSample {
     first_facet_exclusive_point: usize,
     second_facet_exclusive_point: usize,
     shared_two_simplex: Vec<usize>,
+    #[serde(default)]
+    first_facet: Vec<usize>,
+    #[serde(default)]
+    second_facet: Vec<usize>,
     first_facet_size: usize,
     second_facet_size: usize,
     sparse_relation: Vec<(usize, i64)>,
@@ -162,6 +166,7 @@ struct ContextReport {
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
     local_cygv_actual_call_readiness_counts: BTreeMap<String, usize>,
     local_cygv_missing_source_input_counts: BTreeMap<String, usize>,
+    origin_circuit_facet_context_status_counts: BTreeMap<String, usize>,
     active_support_status_counts: BTreeMap<String, usize>,
     active_support_face_certificate_status_counts: BTreeMap<String, usize>,
     local_cygv_q_matrix_orientation_status_counts: BTreeMap<String, usize>,
@@ -1648,7 +1653,7 @@ fn origin_circuit_affine_support_with_coordinates(
 fn validate_context<'a>(
     context: &'a CorrectedChamberGvContext,
 ) -> Result<ValidatedContext<'a>, String> {
-    if context.schema_version != 1 {
+    if !matches!(context.schema_version, 1 | 2) {
         return Err(format!(
             "unsupported corrected-chamber GV context schema {}",
             context.schema_version
@@ -3461,6 +3466,8 @@ fn build_report(
             .iter()
             .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
     );
+    let origin_circuit_facet_context_status_counts =
+        origin_circuit_facet_context_status_counts(&validated.stats.sample, target_index_filter);
     let active_support_status_counts = optional_status_counts(
         targets
             .iter()
@@ -3520,6 +3527,7 @@ fn build_report(
         local_cygv_target_candidate_status_counts,
         local_cygv_actual_call_readiness_counts,
         local_cygv_missing_source_input_counts,
+        origin_circuit_facet_context_status_counts,
         active_support_status_counts,
         active_support_face_certificate_status_counts,
         local_cygv_q_matrix_orientation_status_counts,
@@ -3598,6 +3606,52 @@ fn optional_status_counts<'a>(
             .or_insert(0usize) += 1;
     }
     counts
+}
+
+fn origin_circuit_facet_context_status_counts(
+    samples: &[MissingGvTargetSample],
+    target_index_filter: Option<usize>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for (idx, sample) in samples.iter().enumerate() {
+        if target_index_filter.is_some_and(|filter| filter != idx) {
+            continue;
+        }
+        let status = origin_circuit_facet_context_status(sample);
+        *counts.entry(status).or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn origin_circuit_facet_context_status(sample: &MissingGvTargetSample) -> String {
+    let Some(witness) = sample.origin_circuit_first_witness.as_ref() else {
+        return "no_origin_circuit_witness".to_string();
+    };
+    if witness.first_facet.is_empty() || witness.second_facet.is_empty() {
+        return "origin_circuit_missing_full_facet_context".to_string();
+    }
+    if witness.first_facet.len() != witness.first_facet_size
+        || witness.second_facet.len() != witness.second_facet_size
+    {
+        return "origin_circuit_facet_context_size_mismatch".to_string();
+    }
+
+    let first_facet = witness.first_facet.iter().copied().collect::<HashSet<_>>();
+    let second_facet = witness.second_facet.iter().copied().collect::<HashSet<_>>();
+    let shared_two_simplex_is_common = witness
+        .shared_two_simplex
+        .iter()
+        .all(|point| first_facet.contains(point) && second_facet.contains(point));
+    let exclusive_points_are_exclusive = first_facet.contains(&witness.first_facet_exclusive_point)
+        && !second_facet.contains(&witness.first_facet_exclusive_point)
+        && second_facet.contains(&witness.second_facet_exclusive_point)
+        && !first_facet.contains(&witness.second_facet_exclusive_point);
+
+    if shared_two_simplex_is_common && exclusive_points_are_exclusive {
+        "source_derived_full_facet_context".to_string()
+    } else {
+        "origin_circuit_facet_context_inconsistent".to_string()
+    }
 }
 
 fn active_support_face_certificate_status_counts(
@@ -3912,6 +3966,8 @@ mod tests {
                 first_facet_exclusive_point: 208,
                 second_facet_exclusive_point: 214,
                 shared_two_simplex: vec![46, 55, 211],
+                first_facet: Vec::new(),
+                second_facet: Vec::new(),
                 first_facet_size: 23,
                 second_facet_size: 191,
                 sparse_relation: relation_points
@@ -4920,6 +4976,8 @@ mod tests {
             first_facet_exclusive_point: 7,
             second_facet_exclusive_point: 11,
             shared_two_simplex: vec![2, 3, 5],
+            first_facet: vec![2, 3, 5, 7],
+            second_facet: vec![2, 3, 5, 11],
             first_facet_size: 4,
             second_facet_size: 4,
             sparse_relation: vec![(7, 1), (11, 1), (0, -2)],
@@ -5043,6 +5101,16 @@ mod tests {
                 .unwrap()
                 .sparse_relation,
             vec![(7, 1), (11, 1), (0, -2)]
+        );
+        assert_eq!(
+            origin_circuit_facet_context_status(&stats.sample[0]),
+            "source_derived_full_facet_context"
+        );
+        assert_eq!(
+            origin_circuit_facet_context_status_counts(&stats.sample, None)
+                .get("source_derived_full_facet_context")
+                .copied(),
+            Some(1)
         );
         assert_eq!(
             report
