@@ -797,6 +797,7 @@ fn report_target(
     run_integer_diamonds: bool,
     run_active_support_generators: bool,
     support_overlap_min_for_run: Option<usize>,
+    support_overlap_max_target_degree: Option<i128>,
     measure_cygv_semigroups: bool,
     semigroup_measure_max_target_degree: Option<i128>,
     semigroup_measure_max_seed_count: Option<usize>,
@@ -1150,9 +1151,18 @@ fn report_target(
         support_overlap_run_gv,
         support_overlap_run_error,
     ) = if let Some(min_overlap) = support_overlap_min_for_run {
-        match support_overlap_generator_gv(sample, context, min_overlap) {
-            Ok((count, status, gv, error)) => (Some(count), Some(status), gv, error),
-            Err(error) => (None, Some("error".to_string()), None, Some(error)),
+        if support_overlap_max_target_degree.is_some_and(|max_degree| sample.degree > max_degree) {
+            (
+                None,
+                Some("skipped_target_degree_limit".to_string()),
+                None,
+                None,
+            )
+        } else {
+            match support_overlap_generator_gv(sample, context, min_overlap) {
+                Ok((count, status, gv, error)) => (Some(count), Some(status), gv, error),
+                Err(error) => (None, Some("error".to_string()), None, Some(error)),
+            }
         }
     } else {
         (None, None, None, None)
@@ -2049,6 +2059,7 @@ fn build_report(
     run_integer_diamonds: bool,
     run_active_support_generators: bool,
     support_overlap_min_for_run: Option<usize>,
+    support_overlap_max_target_degree: Option<i128>,
     measure_cygv_semigroups: bool,
     semigroup_measure_max_target_degree: Option<i128>,
     semigroup_measure_max_seed_count: Option<usize>,
@@ -2064,6 +2075,7 @@ fn build_report(
             run_integer_diamonds,
             run_active_support_generators,
             support_overlap_min_for_run,
+            support_overlap_max_target_degree,
             measure_cygv_semigroups,
             semigroup_measure_max_target_degree,
             semigroup_measure_max_seed_count,
@@ -2095,13 +2107,15 @@ fn build_report(
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--measure-cygv-semigroups] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
+            "[ERROR] usage: mcallister_gv_context --context path [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--support-overlap-max-target-degree N] [--measure-cygv-semigroups] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
         );
         std::process::exit(2);
     };
     let run_integer_diamonds = parse_flag("--run-integer-diamonds");
     let run_active_support_generators = parse_flag("--run-active-support-generators");
     let support_overlap_min_for_run = parse_arg_value::<usize>("--run-support-overlap-generators");
+    let support_overlap_max_target_degree =
+        parse_arg_value::<i128>("--support-overlap-max-target-degree");
     let measure_cygv_semigroups = parse_flag("--measure-cygv-semigroups");
     let semigroup_measure_max_target_degree =
         parse_arg_value::<i128>("--semigroup-measure-max-target-degree");
@@ -2124,6 +2138,7 @@ fn main() {
         run_integer_diamonds,
         run_active_support_generators,
         support_overlap_min_for_run,
+        support_overlap_max_target_degree,
         measure_cygv_semigroups,
         semigroup_measure_max_target_degree,
         semigroup_measure_max_seed_count,
@@ -2434,6 +2449,7 @@ mod tests {
             &context,
             false,
             false,
+            None,
             None,
             false,
             None,

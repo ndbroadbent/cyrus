@@ -1447,7 +1447,11 @@ One-hop support-overlap windows are now executable diagnostics too. With
 provided generators. This also fails as a source domain: seven targets panic in
 cygv with `NonIntegerGVError`, and the remaining two return `GV=0`. So the
 correct context is not just "rows sharing several active/target support
-coordinates" either.
+coordinates" either. The same runner can use `--run-support-overlap-generators
+0 --support-overlap-max-target-degree N` to try every positive degree-bounded
+generator up to each low-degree target through cygv's provided-generator path.
+Those results are still diagnostic unless the generator set is promoted to a
+source-certified chamber semigroup.
 
 The compact dual-polytope CYTools-to-cygv handoff is now checked at the source
 boundary for 4-214-647. A Cyrus dump from
