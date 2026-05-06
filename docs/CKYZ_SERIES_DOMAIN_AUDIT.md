@@ -593,3 +593,37 @@ three direct coordinate candidates, so this shows the initial direct
 coefficient work is itself too broad at ten multiples. The next useful change
 needs a shared demand graph for those direct coordinate Li2 coefficients, not a
 per-candidate/per-target recursion.
+
+A third uncommitted attempt implemented that shared direct-coordinate demand
+graph. It grouped direct candidates by `scale = m*d`, computed demanded
+`exp(scale.alpha)` coefficients bottom-up over the predecessor closure, and
+left reused `q_N` candidates on the existing full indexed `Li2(q_N)` path. It
+was correct on the focused regressions but still rejected before commit:
+
+```text
+cargo fmt --check
+cargo test -p cyrus-core ckyz_coefficient_li2_matches_full_series_on_polygon5 -- --nocapture
+cargo test -p cyrus-core ckyz_z_series_inversion_matches -- --nocapture
+cargo test -p cyrus-core ckyz_local_gv -- --nocapture
+```
+
+The McAllister `[4,3,2]`, N=4 gate still passed, but got slightly slower:
+
+```text
+[CKYZ_Z_HISTORY] domain=1641 terminals=4 selected=434 candidate_evaluations=2842 exp_support_classes=6 elapsed=129.202959ms
+[CKYZ_Z_EXTRACT] degrees=434 nonzero_gvs=217 li2_coefficients=10373 li2_materialized_terms=18369 previous_qns=217 qn_reuses=214 delta_q_cache=4 direct_scales=12 direct_seed_deltas=1657 direct_closure_deltas=3845 direct_predecessor_edges=161145 elapsed=1.001114833s
+```
+
+The `[4,3,2]`, N=10 filtered gate timed out after 300 seconds after reaching
+the same z-history and before printing the first extraction progress line:
+
+```text
+[CKYZ_Z_HISTORY] domain=21721 terminals=10 selected=5235 candidate_evaluations=38195 exp_support_classes=6 elapsed=18.062914958s
+```
+
+This rules out a bottom-up demand graph only for the direct coordinate
+coefficients. The first extraction batch still spends too much time before the
+progress trace, and the N=4 cost model regressed. The next attempt should
+profile and reduce the cost of constructing the direct `q_delta`/first-batch
+objects themselves, or change the finite domain/history selection, rather than
+adding another coefficient recurrence layer on top of the current direct path.
