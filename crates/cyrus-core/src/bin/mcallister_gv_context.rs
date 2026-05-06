@@ -1917,9 +1917,6 @@ fn support_overlap_generator_gv(
     context: &ValidatedContext<'_>,
     min_overlap: usize,
 ) -> Result<(usize, String, Option<String>, Option<String>), String> {
-    if min_overlap == 0 {
-        return Err("support-overlap generator run requires min_overlap >= 1".to_string());
-    }
     if cfg!(panic = "abort") {
         return Ok((
             0,
@@ -1929,7 +1926,11 @@ fn support_overlap_generator_gv(
         ));
     }
     let target = dense_from_sparse(&sample.basis_nonzero, context.dimension)?;
-    let support = target_active_support(sample, context.dimension)?;
+    let support = if min_overlap == 0 {
+        None
+    } else {
+        Some(target_active_support(sample, context.dimension)?)
+    };
     let mut generators = Vec::new();
     let mut seen = HashSet::new();
     for ray in context.degree_bounded_rays {
@@ -1937,12 +1938,14 @@ fn support_overlap_generator_gv(
         if degree <= 0 || degree > sample.degree {
             continue;
         }
-        let overlap = ray
-            .iter()
-            .enumerate()
-            .filter(|(idx, value)| **value != 0 && support.contains(idx))
-            .count();
-        if overlap >= min_overlap && seen.insert(ray.clone()) {
+        let include = support.as_ref().is_none_or(|support| {
+            ray.iter()
+                .enumerate()
+                .filter(|(idx, value)| **value != 0 && support.contains(idx))
+                .count()
+                >= min_overlap
+        });
+        if include && seen.insert(ray.clone()) {
             generators.push(ray.clone());
         }
     }
@@ -1954,13 +1957,12 @@ fn support_overlap_generator_gv(
     }
     generators.sort();
     generators.dedup();
-    run_provided_generator_target_gv(
-        &generators,
-        &target,
-        sample.degree,
-        context,
-        "support_overlap_generators",
-    )
+    let label = if min_overlap == 0 {
+        "degree_bounded_generators"
+    } else {
+        "support_overlap_generators"
+    };
+    run_provided_generator_target_gv(&generators, &target, sample.degree, context, label)
 }
 
 fn run_provided_generator_target_gv(
@@ -2093,7 +2095,7 @@ fn build_report(
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--measure-cygv-semigroups] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--out path]"
+            "[ERROR] usage: mcallister_gv_context --context path [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--measure-cygv-semigroups] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
         );
         std::process::exit(2);
     };

@@ -201,6 +201,12 @@ to make the remaining GV layer more first-principles:
    `366..2814` rows, so naive support closure returns to the intractable broad
    domain. Executing the small overlap-4 windows (`3..19` generators) also
    fails as a source domain: seven `NonIntegerGVError` panics and two zeros.
+   `mcallister_gv_context --run-support-overlap-generators 0` now uses the same
+   report fields to try all positive degree-bounded generators up to each
+   target degree through cygv's provided-generator path. This remains
+   diagnostic because the exported rows are degree-bounded projected generators,
+   not a certified full chamber semigroup or CYTools lattice-augmented Mori-cap
+   context.
    A direct cygv semigroup-size diagnostic now confirms why: the degree-10
    missing targets already have `720` seed rows at or below the target degree,
    and an unguarded cygv semigroup closure measurement did not finish within
