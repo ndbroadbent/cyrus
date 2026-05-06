@@ -341,6 +341,8 @@ struct CygvCoordinateKappaSupport {
 #[derive(Clone, Debug, Serialize)]
 struct CygvPathHistoryProbe {
     status: String,
+    seed_count: Option<usize>,
+    reduced_seed_count: Option<usize>,
     closure_element_count: Option<usize>,
     closure_degree_counts: BTreeMap<i128, usize>,
     target_in_closure: Option<bool>,
@@ -2613,6 +2615,7 @@ fn report_target(
                 &target,
                 run_lower_seed_diamonds,
                 element_limit,
+                semigroup_measure_max_seed_count,
             ))
         }
     } else {
@@ -3093,6 +3096,7 @@ fn cygv_path_history_probe(
     target: &[i64],
     run_lower_seed_diamonds: bool,
     element_limit: usize,
+    max_seed_count: Option<usize>,
 ) -> CygvPathHistoryProbe {
     match cygv_path_history_probe_inner(
         sample,
@@ -3100,10 +3104,13 @@ fn cygv_path_history_probe(
         target,
         run_lower_seed_diamonds,
         element_limit,
+        max_seed_count,
     ) {
         Ok(probe) => probe,
         Err(error) => CygvPathHistoryProbe {
             status: format!("error: {error}"),
+            seed_count: None,
+            reduced_seed_count: None,
             closure_element_count: None,
             closure_degree_counts: BTreeMap::new(),
             target_in_closure: None,
@@ -3138,6 +3145,7 @@ fn cygv_path_history_probe_inner(
     target: &[i64],
     run_lower_seed_diamonds: bool,
     element_limit: usize,
+    max_seed_count: Option<usize>,
 ) -> Result<CygvPathHistoryProbe, String> {
     let previous_level_count = cygv_previous_level_count(context.dimension);
     let mut seeds = Vec::new();
@@ -3154,6 +3162,8 @@ fn cygv_path_history_probe_inner(
     if seeds.is_empty() {
         return Ok(CygvPathHistoryProbe {
             status: "skipped_empty_seed_set".to_string(),
+            seed_count: Some(0),
+            reduced_seed_count: Some(0),
             closure_element_count: None,
             closure_degree_counts: BTreeMap::new(),
             target_in_closure: None,
@@ -3178,6 +3188,38 @@ fn cygv_path_history_probe_inner(
             lower_seed_diamond_error: None,
         });
     }
+    if max_seed_count.is_some_and(|limit| seeds.len() > limit) {
+        return Ok(CygvPathHistoryProbe {
+            status: "skipped_seed_limit".to_string(),
+            seed_count: Some(seeds.len()),
+            reduced_seed_count: None,
+            closure_element_count: None,
+            closure_degree_counts: BTreeMap::new(),
+            target_in_closure: None,
+            previous_level_count,
+            previous_window_degrees: Vec::new(),
+            previous_window_degree_count: None,
+            previous_window_element_count: None,
+            predecessor_counts_complete: false,
+            predecessor_difference_count: None,
+            improving_predecessor_difference_count: None,
+            closest_series_distance: None,
+            closest_series_predecessor_nonzero: None,
+            closest_series_difference_nonzero: None,
+            lower_seed_decomposition_max_terms: 4,
+            lower_seed_decomposition_status: "skipped_seed_limit".to_string(),
+            lower_seed_decomposition_term_count: None,
+            lower_seed_decomposition_terms_nonzero: None,
+            lower_seed_decomposition_error: None,
+            lower_seed_diamond_status: Some("skipped_seed_limit".to_string()),
+            lower_seed_diamond_element_count: None,
+            lower_seed_diamond_gv: None,
+            lower_seed_diamond_error: None,
+        });
+    }
+    let reduced_seed_count = cygv_pair_reduced_seed_generators(&seeds)
+        .map_err(|error| format!("cygv seed reduction failed: {error}"))?
+        .len();
     let lower_seed_decomposition = lower_seed_decomposition_probe(target, &seeds, 4);
     let lower_seed_diamond = lower_seed_diamond_probe(
         target,
@@ -3202,6 +3244,8 @@ fn cygv_path_history_probe_inner(
     if !closure.completed {
         return Ok(CygvPathHistoryProbe {
             status: closure.status,
+            seed_count: Some(seeds.len()),
+            reduced_seed_count: Some(reduced_seed_count),
             closure_element_count: Some(closure.elements.len()),
             previous_window_degrees: selected_degree_vec,
             closure_degree_counts: closure.degree_counts,
@@ -3237,6 +3281,8 @@ fn cygv_path_history_probe_inner(
 
     Ok(CygvPathHistoryProbe {
         status: "completed_bounded_closure".to_string(),
+        seed_count: Some(seeds.len()),
+        reduced_seed_count: Some(reduced_seed_count),
         closure_element_count: Some(closure.elements.len()),
         closure_degree_counts: closure.degree_counts,
         target_in_closure: Some(target_in_closure),
@@ -5461,8 +5507,11 @@ mod tests {
 
         let target = vec![1, 1];
         let probe =
-            cygv_path_history_probe_inner(&stats.sample[0], &context, &target, false, 16).unwrap();
+            cygv_path_history_probe_inner(&stats.sample[0], &context, &target, false, 16, None)
+                .unwrap();
         assert_eq!(probe.status, "completed_bounded_closure");
+        assert_eq!(probe.seed_count, Some(3));
+        assert_eq!(probe.reduced_seed_count, Some(2));
         assert_eq!(probe.target_in_closure, Some(true));
         assert_eq!(probe.previous_level_count, 2);
         assert_eq!(probe.previous_window_degrees, vec![1]);
@@ -5518,14 +5567,74 @@ mod tests {
 
         let target = vec![1, 1];
         let probe =
-            cygv_path_history_probe_inner(&stats.sample[0], &context, &target, false, 2).unwrap();
+            cygv_path_history_probe_inner(&stats.sample[0], &context, &target, false, 2, None)
+                .unwrap();
 
         assert_eq!(probe.status, "exceeded_element_limit_initial_2");
+        assert_eq!(probe.seed_count, Some(2));
+        assert_eq!(probe.reduced_seed_count, Some(2));
         assert_eq!(probe.previous_window_degrees, vec![1]);
         assert_eq!(probe.previous_window_degree_count, Some(1));
         assert!(!probe.predecessor_counts_complete);
         assert_eq!(probe.predecessor_difference_count, Some(2));
         assert_eq!(probe.closest_series_distance.as_deref(), Some("1.000000"));
+    }
+
+    #[test]
+    fn path_history_probe_respects_seed_limit_before_closure() {
+        let stats = MissingGvTargetStats {
+            target_count: 1,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: vec![MissingGvTargetSample {
+                degree: 2,
+                generators_le_degree: 3,
+                is_mori_generator: false,
+                origin_circuit_pattern: None,
+                origin_circuit_witness_count: None,
+                origin_circuit_first_witness: None,
+                origin_circuit_affine_support: None,
+                cms_general_divisor_shape_candidates: None,
+                cms_general_divisor_intersection_checks: None,
+                branch_diagnostic: None,
+                real_cone_decomposable_by_other_generators: false,
+                real_cone_decomposition_active_generators: None,
+                real_cone_decomposition_active_generator_basis_nonzero: None,
+                real_cone_decomposition_exact_coefficients: None,
+                real_cone_decomposition_exact_kind: None,
+                ambient_nonzero: vec![(0, 1), (1, 1)],
+                basis_nonzero: vec![(0, 1), (1, 1)],
+            }],
+        };
+        let grading = vec![1, 1];
+        let q_matrix = vec![vec![1, 0], vec![0, 1]];
+        let degree_bounded_rays = vec![vec![1, 0], vec![0, 1], vec![1, 1]];
+        let context = ValidatedContext {
+            dimension: 2,
+            degree_bound: 2,
+            q_cols: 2,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: None,
+            intersection: Intersection::new(2),
+            stats: &stats,
+        };
+
+        let target = vec![1, 1];
+        let probe =
+            cygv_path_history_probe_inner(&stats.sample[0], &context, &target, false, 16, Some(2))
+                .unwrap();
+
+        assert_eq!(probe.status, "skipped_seed_limit");
+        assert_eq!(probe.seed_count, Some(3));
+        assert_eq!(probe.reduced_seed_count, None);
+        assert_eq!(probe.lower_seed_decomposition_status, "skipped_seed_limit");
+        assert_eq!(
+            probe.lower_seed_diamond_status.as_deref(),
+            Some("skipped_seed_limit")
+        );
+        assert_eq!(probe.closure_element_count, None);
+        assert_eq!(probe.previous_window_element_count, None);
     }
 
     #[test]
