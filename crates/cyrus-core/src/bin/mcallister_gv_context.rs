@@ -259,6 +259,11 @@ struct CygvPathHistoryProbe {
     closest_series_distance: Option<String>,
     closest_series_predecessor_nonzero: Option<Vec<(usize, i64)>>,
     closest_series_difference_nonzero: Option<Vec<(usize, i64)>>,
+    lower_seed_decomposition_max_terms: usize,
+    lower_seed_decomposition_status: String,
+    lower_seed_decomposition_term_count: Option<usize>,
+    lower_seed_decomposition_terms_nonzero: Option<Vec<Vec<(usize, i64)>>>,
+    lower_seed_decomposition_error: Option<String>,
 }
 
 struct CygvPathPredecessorStats {
@@ -268,6 +273,13 @@ struct CygvPathPredecessorStats {
     closest_distance: f64,
     closest_predecessor: Option<Vec<i64>>,
     closest_difference: Option<Vec<i64>>,
+}
+
+struct LowerSeedDecompositionProbe {
+    status: String,
+    term_count: Option<usize>,
+    terms_nonzero: Option<Vec<Vec<(usize, i64)>>>,
+    error: Option<String>,
 }
 
 struct CygvSemigroupMeasurement {
@@ -555,6 +567,123 @@ fn decomposition_diamond_elements(
     }
     elements.sort();
     Ok(elements)
+}
+
+fn lower_seed_decomposition_probe(
+    target: &[i64],
+    seeds: &[Vec<i64>],
+    max_terms: usize,
+) -> LowerSeedDecompositionProbe {
+    match bounded_seed_decomposition(target, seeds, max_terms) {
+        Ok(Some(terms)) => LowerSeedDecompositionProbe {
+            status: "found_lower_seed_decomposition".to_string(),
+            term_count: Some(terms.len()),
+            terms_nonzero: Some(
+                terms
+                    .iter()
+                    .map(|term| sparse_from_dense(term))
+                    .collect::<Vec<_>>(),
+            ),
+            error: None,
+        },
+        Ok(None) => LowerSeedDecompositionProbe {
+            status: format!("not_found_up_to_{max_terms}"),
+            term_count: None,
+            terms_nonzero: None,
+            error: None,
+        },
+        Err(error) => LowerSeedDecompositionProbe {
+            status: "error".to_string(),
+            term_count: None,
+            terms_nonzero: None,
+            error: Some(error),
+        },
+    }
+}
+
+fn bounded_seed_decomposition(
+    target: &[i64],
+    seeds: &[Vec<i64>],
+    max_terms: usize,
+) -> Result<Option<Vec<Vec<i64>>>, String> {
+    if max_terms < 2 || seeds.is_empty() {
+        return Ok(None);
+    }
+    if max_terms > 4 {
+        return Err("bounded seed decomposition currently supports max_terms <= 4".to_string());
+    }
+    if seeds.iter().any(|seed| seed.len() != target.len()) {
+        return Err("bounded seed decomposition seed dimension mismatch".to_string());
+    }
+
+    let pair_sums = seed_pair_sums(seeds)?;
+    if let Some(pairs) = pair_sums.get(target)
+        && let Some(&(i, j)) = pairs.first()
+    {
+        return Ok(Some(sorted_decomposition(vec![
+            seeds[i].clone(),
+            seeds[j].clone(),
+        ])));
+    }
+    if max_terms < 3 {
+        return Ok(None);
+    }
+
+    for seed in seeds {
+        let remainder = checked_vector_difference(target, seed)?;
+        let Some(pairs) = pair_sums.get(&remainder) else {
+            continue;
+        };
+        if let Some(&(i, j)) = pairs.first() {
+            return Ok(Some(sorted_decomposition(vec![
+                seed.clone(),
+                seeds[i].clone(),
+                seeds[j].clone(),
+            ])));
+        }
+    }
+    if max_terms < 4 {
+        return Ok(None);
+    }
+
+    let mut pair_items = pair_sums.iter().collect::<Vec<_>>();
+    pair_items.sort_by(|(left, _), (right, _)| left.cmp(right));
+    for (first_sum, first_pairs) in pair_items {
+        let remainder = checked_vector_difference(target, first_sum)?;
+        let Some(second_pairs) = pair_sums.get(&remainder) else {
+            continue;
+        };
+        let Some(&(i, j)) = first_pairs.first() else {
+            continue;
+        };
+        let Some(&(k, l)) = second_pairs.first() else {
+            continue;
+        };
+        return Ok(Some(sorted_decomposition(vec![
+            seeds[i].clone(),
+            seeds[j].clone(),
+            seeds[k].clone(),
+            seeds[l].clone(),
+        ])));
+    }
+
+    Ok(None)
+}
+
+fn seed_pair_sums(seeds: &[Vec<i64>]) -> Result<HashMap<Vec<i64>, Vec<(usize, usize)>>, String> {
+    let mut pair_sums: HashMap<Vec<i64>, Vec<(usize, usize)>> = HashMap::new();
+    for i in 0..seeds.len() {
+        for j in i..seeds.len() {
+            let sum = checked_vector_sum(&seeds[i], &seeds[j])?;
+            pair_sums.entry(sum).or_default().push((i, j));
+        }
+    }
+    Ok(pair_sums)
+}
+
+fn sorted_decomposition(mut terms: Vec<Vec<i64>>) -> Vec<Vec<i64>> {
+    terms.sort();
+    terms
 }
 
 fn reconstruct_intersection(
@@ -1614,6 +1743,13 @@ fn cygv_path_history_probe(
             closest_series_distance: None,
             closest_series_predecessor_nonzero: None,
             closest_series_difference_nonzero: None,
+            lower_seed_decomposition_max_terms: 4,
+            lower_seed_decomposition_status: "not_run".to_string(),
+            lower_seed_decomposition_term_count: None,
+            lower_seed_decomposition_terms_nonzero: None,
+            lower_seed_decomposition_error: Some(
+                "path-history probe failed before seed decomposition".to_string(),
+            ),
         },
     }
 }
@@ -1652,8 +1788,14 @@ fn cygv_path_history_probe_inner(
             closest_series_distance: None,
             closest_series_predecessor_nonzero: None,
             closest_series_difference_nonzero: None,
+            lower_seed_decomposition_max_terms: 4,
+            lower_seed_decomposition_status: "skipped_empty_seed_set".to_string(),
+            lower_seed_decomposition_term_count: None,
+            lower_seed_decomposition_terms_nonzero: None,
+            lower_seed_decomposition_error: None,
         });
     }
+    let lower_seed_decomposition = lower_seed_decomposition_probe(target, &seeds, 4);
 
     let closure =
         bounded_cygv_semigroup_closure(&seeds, context.grading, sample.degree, element_limit)?;
@@ -1691,6 +1833,11 @@ fn cygv_path_history_probe_inner(
                 .closest_difference
                 .as_deref()
                 .map(sparse_from_dense),
+            lower_seed_decomposition_max_terms: 4,
+            lower_seed_decomposition_status: lower_seed_decomposition.status,
+            lower_seed_decomposition_term_count: lower_seed_decomposition.term_count,
+            lower_seed_decomposition_terms_nonzero: lower_seed_decomposition.terms_nonzero,
+            lower_seed_decomposition_error: lower_seed_decomposition.error,
         });
     }
 
@@ -1717,6 +1864,11 @@ fn cygv_path_history_probe_inner(
             .closest_difference
             .as_deref()
             .map(sparse_from_dense),
+        lower_seed_decomposition_max_terms: 4,
+        lower_seed_decomposition_status: lower_seed_decomposition.status,
+        lower_seed_decomposition_term_count: lower_seed_decomposition.term_count,
+        lower_seed_decomposition_terms_nonzero: lower_seed_decomposition.terms_nonzero,
+        lower_seed_decomposition_error: lower_seed_decomposition.error,
     })
 }
 
@@ -2324,6 +2476,28 @@ mod tests {
                 vec![2, 0],
                 vec![2, 1],
             ]
+        );
+    }
+
+    #[test]
+    fn bounded_seed_decomposition_finds_short_lower_seed_sums() {
+        let seeds = vec![vec![0, 1], vec![1, 0], vec![2, 0]];
+
+        assert_eq!(
+            bounded_seed_decomposition(&[2, 1], &seeds, 2).unwrap(),
+            Some(vec![vec![0, 1], vec![2, 0]])
+        );
+        assert_eq!(
+            bounded_seed_decomposition(&[3, 1], &seeds, 3).unwrap(),
+            Some(vec![vec![0, 1], vec![1, 0], vec![2, 0]])
+        );
+        assert_eq!(
+            bounded_seed_decomposition(&[5, 1], &seeds, 3).unwrap(),
+            None
+        );
+        assert_eq!(
+            bounded_seed_decomposition(&[5, 1], &seeds, 4).unwrap(),
+            Some(vec![vec![0, 1], vec![1, 0], vec![2, 0], vec![2, 0]])
         );
     }
 
