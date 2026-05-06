@@ -156,6 +156,7 @@ struct ContextReport {
     missing_target_count: usize,
     exact_kind_counts: HashMap<String, usize>,
     local_cygv_charge_signature_counts: BTreeMap<String, usize>,
+    local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
     targets: Vec<TargetReport>,
 }
 
@@ -3205,6 +3206,11 @@ fn build_report(
     }
     let local_cygv_charge_signature_counts =
         local_cygv_charge_signature_counts(&validated.stats.sample, target_index_filter);
+    let local_cygv_target_candidate_status_counts = local_cygv_target_candidate_status_counts(
+        targets
+            .iter()
+            .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
+    );
     ContextReport {
         schema_version: context.schema_version,
         dimension: validated.dimension,
@@ -3223,6 +3229,7 @@ fn build_report(
             .real_cone_decomposition_exact_kind_counts
             .clone(),
         local_cygv_charge_signature_counts,
+        local_cygv_target_candidate_status_counts,
         targets,
     }
 }
@@ -3241,6 +3248,20 @@ fn local_cygv_charge_signature_counts(
         };
         let key = local_charge_signature_key(&support.local_charge_basis);
         *counts.entry(key).or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_target_candidate_status_counts<'a>(
+    skeletons: impl IntoIterator<Item = &'a LocalCygvInputSkeleton>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for skeleton in skeletons {
+        for candidate in &skeleton.orientation_candidates {
+            *counts
+                .entry(candidate.target_candidate_status.clone())
+                .or_insert(0usize) += 1;
+        }
     }
     counts
 }
@@ -3602,6 +3623,56 @@ mod tests {
         assert_eq!(
             candidates[1].target_candidate_status,
             "target_not_in_nonnegative_local_semigroup"
+        );
+    }
+
+    #[test]
+    fn local_cygv_target_status_counts_aggregate_orientation_candidates() {
+        let compact_threefold_like = LocalCygvInputSkeleton {
+            support_point_indices: Vec::new(),
+            local_q_matrix_rows: Vec::new(),
+            target_relation_coefficients: None,
+            target_relation_in_charge_basis: None,
+            target_relation_status: String::new(),
+            orientation_candidates: local_cygv_orientation_candidates(
+                &[vec![1], vec![-2], vec![-1], vec![3], vec![-1]],
+                Some(&[-1]),
+            ),
+            remaining_uncertified_inputs: Vec::new(),
+        };
+        let fourfold_like = LocalCygvInputSkeleton {
+            support_point_indices: Vec::new(),
+            local_q_matrix_rows: Vec::new(),
+            target_relation_coefficients: None,
+            target_relation_in_charge_basis: None,
+            target_relation_status: String::new(),
+            orientation_candidates: local_cygv_orientation_candidates(
+                &[vec![2], vec![1], vec![2], vec![-1], vec![-2], vec![-2]],
+                Some(&[-1]),
+            ),
+            remaining_uncertified_inputs: Vec::new(),
+        };
+
+        let counts =
+            local_cygv_target_candidate_status_counts([&compact_threefold_like, &fourfold_like]);
+
+        assert_eq!(
+            counts
+                .get("target_primitive_positive_supported_by_cygv_omega_bucket")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(
+            counts
+                .get("target_positive_but_ignored_by_cygv_omega_bucket")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(
+            counts
+                .get("target_not_in_nonnegative_local_semigroup")
+                .copied(),
+            Some(2)
         );
     }
 

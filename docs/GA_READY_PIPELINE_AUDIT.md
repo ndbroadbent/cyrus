@@ -321,8 +321,11 @@ to make the remaining GV layer more first-principles:
    have a primitive positive sign-`-1` candidate in a cygv-supported omega
    bucket, while the other five sign-`-1` candidates are positive but
    `ignored_gt2`, and every sign-`+1` candidate is a negative local coordinate.
-   The
-   direct source read reinforces this: `cygv` obtains GV values from the full
+   The report now includes these as top-level status counts:
+   `target_primitive_positive_supported_by_cygv_omega_bucket=4`,
+   `target_positive_but_ignored_by_cygv_omega_bucket=5`, and
+   `target_not_in_nonnegative_local_semigroup=9`. The direct source read
+   reinforces this: `cygv` obtains GV values from the full
    finite semigroup, HKTY alpha/beta construction, and degree-ordered
    `Li2(q_N)` subtraction history, while the McAllister paper's small-curve
    discussion is a selected-toric-curve control argument rather than a closed

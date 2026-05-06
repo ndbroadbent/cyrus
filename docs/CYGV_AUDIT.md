@@ -1861,8 +1861,12 @@ The current `cygv` crate source sharpens the same boundary:
   buckets. On the saved context, only targets `3`, `6`, `7`, and `8` have a
   primitive positive sign-`-1` candidate in a cygv-supported omega bucket. The
   other five sign-`-1` candidates are positive but fall in `ignored_gt2`, and
-  all sign-`+1` candidates are negative local coordinates. This narrows the
-  plausible compact-local cygv candidates without assigning any GV value.
+  all sign-`+1` candidates are negative local coordinates. The JSON report now
+  aggregates these statuses at top level as
+  `target_primitive_positive_supported_by_cygv_omega_bucket=4`,
+  `target_positive_but_ignored_by_cygv_omega_bucket=5`, and
+  `target_not_in_nonnegative_local_semigroup=9`. This narrows the plausible
+  compact-local cygv candidates without assigning any GV value.
 
 The actionable consequence is that a Cyrus replacement for corrected-chamber
 or potent-ray GV values must recreate the finite semigroup and lower-degree
