@@ -1456,12 +1456,17 @@ source-certified chamber semigroup.
 The direct provided-generator probe has now been run against the actual Rust
 `cygv` crate, not a local reimplementation. In the release profile the runner
 records `skipped_panic_abort`, because the guarded diagnostic cannot catch a
-crate panic when the binary is compiled with `panic=abort`. In a debug/unwind
-run, the degree-10 probe entered `cygv` with `720` supplied generators and
-`max_deg=10`, then exceeded a `600s` timeout without returning a GV value or a
-panic. This supports the same conclusion as the semigroup-size diagnostics: the
-corrected-chamber blocker is the source/domain selection feeding cygv, not a
-missing hand-rolled replacement for cygv itself.
+crate panic when the binary is compiled with `panic=abort`. In an optimized
+release/unwind run, the degree-10 probe entered `cygv` with `720` supplied
+generators and `max_deg=10`, then exceeded a `1200s` timeout without returning
+a GV value or a panic. The debug/unwind version of the same probe exceeded
+`600s`. The runner can also pass `--pair-reduce-support-overlap-generators` to
+mirror cygv's own pair-sum seed reduction before the crate call; that reduced
+the degree-10 input from `720` to `450` generators, but the optimized
+release/unwind probe still exceeded `900s`. This supports the same conclusion
+as the semigroup-size diagnostics: the corrected-chamber blocker is the
+source/domain selection feeding cygv, not a missing hand-rolled replacement for
+cygv itself.
 
 The compact dual-polytope CYTools-to-cygv handoff is now checked at the source
 boundary for 4-214-647. A Cyrus dump from
@@ -1646,8 +1651,10 @@ The current `cygv` crate source sharpens the same boundary:
   explained by cygv's initial decomposable-seed pruning.
 - Running the actual `cygv` provided-generator path with all positive
   degree-bounded rows through degree 10 confirms that this seed size is already
-  too broad for an interactive diagnostic: the debug/unwind run entered cygv
-  with `720` generators and exceeded `600s` without returning; the release
+  too broad for an interactive diagnostic: the optimized release/unwind run
+  entered cygv with `720` generators and exceeded `1200s` without returning;
+  pre-reducing those seeds with cygv's own pair-sum rule lowered the direct
+  input to `450` generators but still exceeded `900s`; the normal release
   profile is guarded off because it uses `panic=abort`.
 - `PolynomialProperties::new` creates the monomial lookup table from every
   semigroup element. Polynomial multiplication and series substitution drop

@@ -210,11 +210,15 @@ to make the remaining GV layer more first-principles:
    or CYTools lattice-augmented Mori-cap context.
    The actual Rust `cygv` crate has now been exercised on that bounded path:
    the release build correctly refuses the guarded diagnostic under
-   `panic=abort`, and the debug/unwind run with
+   `panic=abort`, the optimized release/unwind run with
    `--run-support-overlap-generators 0 --support-overlap-max-target-degree 10`
    entered `cygv` with `720` supplied degree-bounded generators and did not
-   finish within `600s`. It produced no GV value or panic. This is a measured
-   runtime blocker, not a reason to reimplement compact cygv locally.
+   finish within `1200s`, and the debug/unwind run did not finish within
+   `600s`. Passing `--pair-reduce-support-overlap-generators` mirrors cygv's
+   own pair-sum seed pruning before the crate call and reduced the same
+   degree-10 input to `450` generators, but that optimized release/unwind run
+   still exceeded `900s`. These probes produced no GV value or panic. This is a
+   measured runtime blocker, not a reason to reimplement compact cygv locally.
    A direct cygv semigroup-size diagnostic now confirms why: the degree-10
    missing targets already have `720` seed rows at or below the target degree,
    and an unguarded cygv semigroup closure measurement did not finish within

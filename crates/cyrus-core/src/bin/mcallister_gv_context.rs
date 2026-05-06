@@ -186,6 +186,7 @@ struct TargetReport {
     support_overlap_generator_counts: Vec<SupportOverlapCount>,
     support_closure_layer_counts: Vec<SupportClosureLayerCount>,
     support_overlap_min_for_run: Option<usize>,
+    support_overlap_pair_reduce_for_run: bool,
     support_overlap_run_generator_count: Option<usize>,
     support_overlap_run_status: Option<String>,
     support_overlap_run_gv: Option<String>,
@@ -798,6 +799,7 @@ fn report_target(
     run_active_support_generators: bool,
     support_overlap_min_for_run: Option<usize>,
     support_overlap_max_target_degree: Option<i128>,
+    support_overlap_pair_reduce_for_run: bool,
     measure_cygv_semigroups: bool,
     semigroup_measure_max_target_degree: Option<i128>,
     semigroup_measure_max_seed_count: Option<usize>,
@@ -854,6 +856,7 @@ fn report_target(
                 support_overlap_generator_counts: Vec::new(),
                 support_closure_layer_counts: Vec::new(),
                 support_overlap_min_for_run,
+                support_overlap_pair_reduce_for_run,
                 support_overlap_run_generator_count: None,
                 support_overlap_run_status: None,
                 support_overlap_run_gv: None,
@@ -916,6 +919,7 @@ fn report_target(
                 support_overlap_generator_counts: Vec::new(),
                 support_closure_layer_counts: Vec::new(),
                 support_overlap_min_for_run,
+                support_overlap_pair_reduce_for_run,
                 support_overlap_run_generator_count: None,
                 support_overlap_run_status: None,
                 support_overlap_run_gv: None,
@@ -978,6 +982,7 @@ fn report_target(
                 support_overlap_generator_counts: Vec::new(),
                 support_closure_layer_counts: Vec::new(),
                 support_overlap_min_for_run,
+                support_overlap_pair_reduce_for_run,
                 support_overlap_run_generator_count: None,
                 support_overlap_run_status: None,
                 support_overlap_run_gv: None,
@@ -1044,6 +1049,7 @@ fn report_target(
                 support_overlap_generator_counts: Vec::new(),
                 support_closure_layer_counts: Vec::new(),
                 support_overlap_min_for_run,
+                support_overlap_pair_reduce_for_run,
                 support_overlap_run_generator_count: None,
                 support_overlap_run_status: None,
                 support_overlap_run_gv: None,
@@ -1101,6 +1107,7 @@ fn report_target(
         support_overlap_generator_counts: Vec::new(),
         support_closure_layer_counts: Vec::new(),
         support_overlap_min_for_run,
+        support_overlap_pair_reduce_for_run,
         support_overlap_run_generator_count: None,
         support_overlap_run_status: None,
         support_overlap_run_gv: None,
@@ -1159,7 +1166,12 @@ fn report_target(
                 None,
             )
         } else {
-            match support_overlap_generator_gv(sample, context, min_overlap) {
+            match support_overlap_generator_gv(
+                sample,
+                context,
+                min_overlap,
+                support_overlap_pair_reduce_for_run,
+            ) {
                 Ok((count, status, gv, error)) => (Some(count), Some(status), gv, error),
                 Err(error) => (None, Some("error".to_string()), None, Some(error)),
             }
@@ -1926,6 +1938,7 @@ fn support_overlap_generator_gv(
     sample: &MissingGvTargetSample,
     context: &ValidatedContext<'_>,
     min_overlap: usize,
+    pair_reduce: bool,
 ) -> Result<(usize, String, Option<String>, Option<String>), String> {
     if cfg!(panic = "abort") {
         return Ok((
@@ -1967,10 +1980,16 @@ fn support_overlap_generator_gv(
     }
     generators.sort();
     generators.dedup();
-    let label = if min_overlap == 0 {
-        "degree_bounded_generators"
-    } else {
-        "support_overlap_generators"
+    if pair_reduce {
+        generators = cygv_pair_reduced_seed_generators(&generators).map_err(|error| {
+            format!("cygv pair-reducing support-overlap generators failed: {error}")
+        })?;
+    }
+    let label = match (min_overlap, pair_reduce) {
+        (0, false) => "degree_bounded_generators",
+        (0, true) => "degree_bounded_pair_reduced_generators",
+        (_, false) => "support_overlap_generators",
+        (_, true) => "support_overlap_pair_reduced_generators",
     };
     run_provided_generator_target_gv(&generators, &target, sample.degree, context, label)
 }
@@ -2060,6 +2079,7 @@ fn build_report(
     run_active_support_generators: bool,
     support_overlap_min_for_run: Option<usize>,
     support_overlap_max_target_degree: Option<i128>,
+    support_overlap_pair_reduce_for_run: bool,
     measure_cygv_semigroups: bool,
     semigroup_measure_max_target_degree: Option<i128>,
     semigroup_measure_max_seed_count: Option<usize>,
@@ -2076,6 +2096,7 @@ fn build_report(
             run_active_support_generators,
             support_overlap_min_for_run,
             support_overlap_max_target_degree,
+            support_overlap_pair_reduce_for_run,
             measure_cygv_semigroups,
             semigroup_measure_max_target_degree,
             semigroup_measure_max_seed_count,
@@ -2107,13 +2128,15 @@ fn build_report(
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--support-overlap-max-target-degree N] [--measure-cygv-semigroups] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
+            "[ERROR] usage: mcallister_gv_context --context path [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--support-overlap-max-target-degree N] [--measure-cygv-semigroups] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
         );
         std::process::exit(2);
     };
     let run_integer_diamonds = parse_flag("--run-integer-diamonds");
     let run_active_support_generators = parse_flag("--run-active-support-generators");
     let support_overlap_min_for_run = parse_arg_value::<usize>("--run-support-overlap-generators");
+    let support_overlap_pair_reduce_for_run =
+        parse_flag("--pair-reduce-support-overlap-generators");
     let support_overlap_max_target_degree =
         parse_arg_value::<i128>("--support-overlap-max-target-degree");
     let measure_cygv_semigroups = parse_flag("--measure-cygv-semigroups");
@@ -2139,6 +2162,7 @@ fn main() {
         run_active_support_generators,
         support_overlap_min_for_run,
         support_overlap_max_target_degree,
+        support_overlap_pair_reduce_for_run,
         measure_cygv_semigroups,
         semigroup_measure_max_target_degree,
         semigroup_measure_max_seed_count,
@@ -2452,6 +2476,7 @@ mod tests {
             None,
             None,
             false,
+            false,
             None,
             None,
             &mut semigroup_measurement_cache,
@@ -2546,6 +2571,7 @@ mod tests {
             false,
             Some(0),
             Some(4),
+            false,
             false,
             None,
             None,
