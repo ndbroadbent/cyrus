@@ -2161,6 +2161,7 @@ fn curve_degree(curve: &[i64], grading: &[i64]) -> Result<i128, String> {
 fn build_report(
     context: &CorrectedChamberGvContext,
     validated: &ValidatedContext<'_>,
+    target_index_filter: Option<usize>,
     run_integer_diamonds: bool,
     run_active_support_generators: bool,
     support_overlap_min_for_run: Option<usize>,
@@ -2174,6 +2175,9 @@ fn build_report(
     let mut semigroup_measurement_cache = HashMap::new();
     let mut targets = Vec::with_capacity(validated.stats.sample.len());
     for (idx, sample) in validated.stats.sample.iter().enumerate() {
+        if !target_index_selected(idx, target_index_filter) {
+            continue;
+        }
         targets.push(report_target(
             idx,
             sample,
@@ -2211,13 +2215,18 @@ fn build_report(
     }
 }
 
+fn target_index_selected(index: usize, target_index_filter: Option<usize>) -> bool {
+    target_index_filter.is_none_or(|selected| selected == index)
+}
+
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--support-overlap-max-target-degree N] [--measure-cygv-semigroups] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
+            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--support-overlap-max-target-degree N] [--measure-cygv-semigroups] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
         );
         std::process::exit(2);
     };
+    let target_index_filter = parse_arg_value::<usize>("--target-index");
     let run_integer_diamonds = parse_flag("--run-integer-diamonds");
     let run_active_support_generators = parse_flag("--run-active-support-generators");
     let support_overlap_min_for_run = parse_arg_value::<usize>("--run-support-overlap-generators");
@@ -2244,6 +2253,7 @@ fn main() {
     let report = build_report(
         &context,
         &validated,
+        target_index_filter,
         run_integer_diamonds,
         run_active_support_generators,
         support_overlap_min_for_run,
@@ -2319,6 +2329,13 @@ mod tests {
     fn curve_degree_rejects_dimension_mismatch() {
         assert_eq!(curve_degree(&[2, -1], &[3, 5]).unwrap(), 1);
         assert!(curve_degree(&[1], &[1, 2]).is_err());
+    }
+
+    #[test]
+    fn target_index_filter_selects_only_requested_target() {
+        assert!(target_index_selected(3, None));
+        assert!(target_index_selected(3, Some(3)));
+        assert!(!target_index_selected(3, Some(4)));
     }
 
     #[test]
