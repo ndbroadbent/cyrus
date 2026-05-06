@@ -2496,4 +2496,67 @@ mod tests {
             "real_ok"
         );
     }
+
+    #[test]
+    fn support_overlap_run_respects_target_degree_limit() {
+        let stats = MissingGvTargetStats {
+            target_count: 1,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: vec![MissingGvTargetSample {
+                degree: 5,
+                generators_le_degree: 1,
+                is_mori_generator: true,
+                origin_circuit_pattern: None,
+                origin_circuit_witness_count: None,
+                origin_circuit_first_witness: None,
+                origin_circuit_affine_support: None,
+                cms_general_divisor_shape_candidates: None,
+                cms_general_divisor_intersection_checks: None,
+                branch_diagnostic: None,
+                real_cone_decomposable_by_other_generators: false,
+                real_cone_decomposition_active_generators: None,
+                real_cone_decomposition_active_generator_basis_nonzero: None,
+                real_cone_decomposition_exact_coefficients: None,
+                real_cone_decomposition_exact_kind: None,
+                ambient_nonzero: vec![(0, 1)],
+                basis_nonzero: vec![(0, 1)],
+            }],
+        };
+        let grading = vec![1];
+        let q_matrix = vec![vec![1]];
+        let degree_bounded_rays = vec![vec![1]];
+        let intersection = Intersection::new(1);
+        let context = ValidatedContext {
+            dimension: 1,
+            degree_bound: 5,
+            q_cols: 1,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            intersection,
+            stats: &stats,
+        };
+        let mut semigroup_measurement_cache = HashMap::new();
+
+        let report = report_target(
+            0,
+            &stats.sample[0],
+            &context,
+            false,
+            false,
+            Some(0),
+            Some(4),
+            false,
+            None,
+            None,
+            &mut semigroup_measurement_cache,
+            256,
+        );
+
+        assert_eq!(
+            report.support_overlap_run_status.as_deref(),
+            Some("skipped_target_degree_limit")
+        );
+        assert_eq!(report.support_overlap_run_generator_count, None);
+    }
 }
