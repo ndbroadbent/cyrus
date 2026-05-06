@@ -1907,9 +1907,10 @@ The current `cygv` crate source sharpens the same boundary:
   The corrected-chamber context export has therefore been advanced to schema
   `2` and now serializes the full source-derived pair of facets for each
   origin-circuit witness, not just their sizes. Schema-`1` context dumps remain
-  readable and are reported as `origin_circuit_missing_full_facet_context=9`.
-  Regenerating the context is the next input needed for a facet/chamber
-  semigroup certificate.
+  readable and are reported as `origin_circuit_missing_full_facet_context=9`;
+  the regenerated schema-`2` context report verifies the new data as
+  `source_derived_full_facet_context=9`. This supplies the facet provenance
+  needed for the next chamber/semigroup certificate step.
 
 The actionable consequence is that a Cyrus replacement for corrected-chamber
 or potent-ray GV values must recreate the finite semigroup and lower-degree

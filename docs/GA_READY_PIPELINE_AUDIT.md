@@ -354,9 +354,10 @@ to make the remaining GV layer more first-principles:
    corrected-chamber context export is now schema `2` and includes the full
    source-derived facet pair for each origin-circuit witness; old schema-`1`
    dumps are still readable and report
-   `origin_circuit_missing_full_facet_context=9`, so the immediate next step is
-   to regenerate the context and use those facet sets for chamber/semigroup
-   certification. The direct source
+   `origin_circuit_missing_full_facet_context=9`, while the regenerated
+   schema-`2` report verifies `source_derived_full_facet_context=9`. The next
+   step is to use those facet sets for chamber/semigroup certification. The
+   direct source
    read reinforces this: `cygv`
    obtains GV values from the full
    finite semigroup, HKTY alpha/beta construction, and degree-ordered
