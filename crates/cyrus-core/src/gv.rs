@@ -10352,6 +10352,21 @@ impl GvCachePolicy {
     }
 }
 
+fn gv_lattice_augmentation_grading(
+    rays: &[Vec<i64>],
+    semigroup_grading_vector: &[i64],
+    lattice_augmentation: GvLatticeAugmentation,
+) -> Result<Vec<i64>> {
+    match lattice_augmentation {
+        GvLatticeAugmentation::CytoolsDefault => compute_grading_vector(rays).ok_or_else(|| {
+            Error::InvalidInput("failed to compute CYTools default lattice grading vector".into())
+        }),
+        GvLatticeAugmentation::DegreeBoundedDiagnostic | GvLatticeAugmentation::None => {
+            Ok(semigroup_grading_vector.to_vec())
+        }
+    }
+}
+
 /// Compute GV invariants using cygv.
 ///
 /// This mirrors the CYTools default wrapper: the supplied Mori-cap rays are
@@ -10698,6 +10713,21 @@ fn compute_gv_invariants_inner(
 
     let lattice_pts = if lattice_augmentation != GvLatticeAugmentation::None {
         let lattice_cache = LatticeCacheControls::from_env(1000, 0);
+        let lattice_grading =
+            gv_lattice_augmentation_grading(rays, grading_vector, lattice_augmentation)?;
+        if lattice_grading.len() != dim {
+            return Err(Error::InvalidInput(
+                "lattice grading vector length must match GV generator dimension".into(),
+            ));
+        }
+        if lattice_augmentation == GvLatticeAugmentation::CytoolsDefault
+            && lattice_grading != grading_vector
+        {
+            eprintln!(
+                "[DEBUG] gv lattice grading differs from cygv semigroup grading: lattice={:?} semigroup={:?}",
+                lattice_grading, grading_vector
+            );
+        }
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         LATTICE_CACHE_VERSION.hash(&mut hasher);
         let mut key_rays: Vec<&[i64]> = rays.iter().map(Vec::as_slice).collect();
@@ -10705,7 +10735,7 @@ fn compute_gv_invariants_inner(
         for row in &key_rays {
             row.hash(&mut hasher);
         }
-        grading_vector.hash(&mut hasher);
+        lattice_grading.hash(&mut hasher);
         lattice_min_points.hash(&mut hasher);
         lattice_max_deg.hash(&mut hasher);
         lattice_cache.max_coord.hash(&mut hasher);
@@ -10741,7 +10771,7 @@ fn compute_gv_invariants_inner(
             let pts = cone.find_lattice_points_ortools(
                 lattice_min_points,
                 lattice_max_deg,
-                grading_vector,
+                &lattice_grading,
                 lattice_cache.max_coord,
                 lattice_cache.deg_window,
             )?;
@@ -11770,10 +11800,10 @@ mod tests {
         extract_ckyz_local_gv_invariants_from_z_potential_for_degrees,
         find_extremal_mori_ray_separator, find_pair_decomposition, find_semigroup_decomposition,
         finite_cutoff_gv_charges_excluding_primitive_rays, finite_gv_nonzero_degree_slice_points,
-        gv_divisor_basis_data, gv_lattice_search_request, intersection_in_divisor_basis,
-        intersection_in_matrix_divisor_basis, load_grading_cache, local_p2_inverse_mirror_map,
-        local_p2_mirror_correction, map_basis_gv_invariants_to_ambient,
-        nilpotent_ray_degree_slice_for_cutoff_fraction,
+        gv_divisor_basis_data, gv_lattice_augmentation_grading, gv_lattice_search_request,
+        intersection_in_divisor_basis, intersection_in_matrix_divisor_basis, load_grading_cache,
+        local_p2_inverse_mirror_map, local_p2_mirror_correction,
+        map_basis_gv_invariants_to_ambient, nilpotent_ray_degree_slice_for_cutoff_fraction,
         nilpotent_ray_divergence_check_from_slice_distances,
         nilpotent_ray_divergence_check_with_explicit_slice_lattices,
         nilpotent_ray_lll_reduced_slice_distance, nilpotent_ray_slice_comparison_points,
@@ -15464,6 +15494,28 @@ mod tests {
             gv_lattice_search_request(400, Some(7), GvLatticeAugmentation::None),
             (None, None)
         );
+    }
+
+    #[test]
+    fn cytools_default_lattice_augmentation_uses_cone_grading() {
+        let rays = vec![vec![1, 0], vec![0, 1]];
+        let supplied_semigroup_grading = vec![7, 11];
+
+        let cytools_default = gv_lattice_augmentation_grading(
+            &rays,
+            &supplied_semigroup_grading,
+            GvLatticeAugmentation::CytoolsDefault,
+        )
+        .unwrap();
+        let diagnostic = gv_lattice_augmentation_grading(
+            &rays,
+            &supplied_semigroup_grading,
+            GvLatticeAugmentation::DegreeBoundedDiagnostic,
+        )
+        .unwrap();
+
+        assert_eq!(cytools_default, vec![1, 1]);
+        assert_eq!(diagnostic, supplied_semigroup_grading);
     }
 
     #[test]

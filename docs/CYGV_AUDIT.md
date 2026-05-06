@@ -376,6 +376,10 @@ Their boundaries are different:
 - `compute_gv_invariants` mirrors the CYTools default augmentation: it always
   augments Mori-cap rays with `min_points=100*h11` lattice points before calling
   `cygv`, even when the final semigroup truncation is controlled by `max_deg`.
+  This lattice augmentation uses the Mori cone's own grading vector, matching
+  CYTools' `mori.find_lattice_points(...)` call; a caller-supplied `grading_vec`
+  is still used as the `cygv` semigroup grading, but it does not change the
+  pre-`cygv` lattice-point seed enumeration in the default path.
 - `compute_gv_invariants_with_degree_bounded_lattice` is the explicitly named
   diagnostic shortcut: when `max_deg` is supplied it bounds the Mori-cone
   lattice-point enumeration before calling `cygv`. This is useful for controlled
