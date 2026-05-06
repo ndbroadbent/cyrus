@@ -1761,6 +1761,12 @@ The current `cygv` crate source sharpens the same boundary:
   predecessor/residual split found in the bounded monomial map. These are
   diagnostics for reconstructing the source domain; they are not GV values and
   do not replace the upstream cygv HKTY call.
+- Re-running that report on the saved 4-214-647 context with the same degree-10
+  cap shows both low-degree missing targets reach partial previous degrees
+  `1..9` before the 20000-element cap. The predecessor counts remain unset
+  because the closure is incomplete, which is exactly the current blocker:
+  Cyrus can see the relevant lower grading slices, but not yet certify the full
+  cygv subtraction history cheaply.
 
 The actionable consequence is that a Cyrus replacement for corrected-chamber
 or potent-ray GV values must recreate the finite semigroup and lower-degree
