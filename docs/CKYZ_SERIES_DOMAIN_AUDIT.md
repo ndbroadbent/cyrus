@@ -524,9 +524,20 @@ and still finishes in about 156 seconds:
 
 ```text
 [CKYZ_PROFILE] kind=3 direction=[4, 3, 2] multiples=10 target_downset=26691 predicted=21721 causal=Some(129766)
-[CKYZ_COEFFICIENT_WORK] kind=3 direction=[4, 3, 2] multiples=10 domain=21721 history=5235 residual_pairs=13475754 same_grading_skips=224241 componentwise_pairs=7154291 li2_terms=9042668 support_pairs=2620565 support_li2_terms=3219472 unique_scales=7065 unique_deltas=16750 unique_exp_states=7166981 support_unique_exp_states=2587631 support_scales=5235
+[CKYZ_COEFFICIENT_WORK] kind=3 direction=[4, 3, 2] multiples=10 domain=21721 history=5235 residual_pairs=13475754 same_grading_skips=224241 componentwise_pairs=7154291 li2_terms=9042668 support_pairs=2620565 support_li2_terms=3219472 unique_scales=7065 unique_deltas=16750 unique_exp_states=7166981 support_unique_exp_states=2587631 support_scales=5235 qn_history_levels=2 qn_history_hits=5232 qn_history_misses=3 qn_history_unique_deltas=4
 ```
 
 This confirms the next bottleneck is still the coefficient-demand graph /
 source-style `q_N` history reuse, not BTreeMap conversion in the inverse-map
 setup.
+
+The new `q_N` history counters are deliberately diagnostic: they assume each
+selected residual-history degree is a possible nonzero candidate, then apply
+cygv's rolling `previous_qn` nearest-delta heuristic over the same grading
+batches. On this McAllister profile, only the first three candidates would need
+to start from a direct monomial; every other candidate can reuse recent
+history, and the reuse deltas collapse to four distinct nonzero degrees. That
+is the concrete next implementation target: build local CKYZ `q_N` and
+`Li2(q_N)` from recent indexed finite polynomials and tiny monomial deltas,
+instead of asking the recursive coefficient evaluator for millions of
+independent `(scale, delta)` states.

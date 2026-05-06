@@ -1106,7 +1106,7 @@ fn mcallister_rank_two_ckyz_domain_profiles_are_inventoried() {
     if print_coefficient_work {
         for ((kind, direction), profile) in &coefficient_profiles_by_source {
             eprintln!(
-                "[CKYZ_COEFFICIENT_WORK] kind={kind} direction={direction:?} multiples={multiples_to_profile} domain={} history={} residual_pairs={} same_grading_skips={} componentwise_pairs={} li2_terms={} support_pairs={} support_li2_terms={} unique_scales={} unique_deltas={} unique_exp_states={} support_unique_exp_states={} support_scales={}",
+                "[CKYZ_COEFFICIENT_WORK] kind={kind} direction={direction:?} multiples={multiples_to_profile} domain={} history={} residual_pairs={} same_grading_skips={} componentwise_pairs={} li2_terms={} support_pairs={} support_li2_terms={} unique_scales={} unique_deltas={} unique_exp_states={} support_unique_exp_states={} support_scales={} qn_history_levels={} qn_history_hits={} qn_history_misses={} qn_history_unique_deltas={}",
                 profile.domain_degree_count,
                 profile.path_history_degree_count,
                 profile.residual_pair_count,
@@ -1120,6 +1120,10 @@ fn mcallister_rank_two_ckyz_domain_profiles_are_inventoried() {
                 profile.unique_exp_state_count,
                 profile.support_unique_exp_state_count,
                 profile.support_exp_state_counts_by_scale.len(),
+                profile.qn_history_level_count,
+                profile.qn_history_candidate_hit_count,
+                profile.qn_history_candidate_miss_count,
+                profile.qn_history_unique_delta_count,
             );
             for (scale, count) in profile.support_exp_state_counts_by_scale.iter().take(10) {
                 eprintln!(

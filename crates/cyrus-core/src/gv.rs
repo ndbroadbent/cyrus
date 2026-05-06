@@ -846,6 +846,25 @@ pub struct CkyzZResidualCoefficientWorkProfile {
     pub support_unique_exp_state_count: usize,
     /// Supported `(scale, delta)` counts grouped by scale degree, sorted largest first.
     pub support_exp_state_counts_by_scale: Vec<(Vec<usize>, usize)>,
+    /// Number of rolling history levels cygv would retain for this rank.
+    pub qn_history_level_count: usize,
+    /// Number of selected history degrees whose closest source-shaped `q_N`
+    /// start can reuse a previous candidate.
+    pub qn_history_candidate_hit_count: usize,
+    /// Number of selected history degrees that would still start from the
+    /// direct monomial in the source-shaped `q_N` history heuristic.
+    pub qn_history_candidate_miss_count: usize,
+    /// Number of distinct nonzero delta degrees selected by the source-shaped
+    /// `q_N` history heuristic.
+    pub qn_history_unique_delta_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CkyzQnHistoryReuseProfile {
+    level_count: usize,
+    candidate_hit_count: usize,
+    candidate_miss_count: usize,
+    unique_delta_count: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1550,6 +1569,8 @@ fn ckyz_z_residual_coefficient_work_profile(
         .iter()
         .map(|degree| ckyz_grading_degree(degree, &grading_vector))
         .collect::<Result<Vec<_>>>()?;
+    let qn_history_profile =
+        ckyz_qn_history_reuse_profile(&extraction_degrees, &extraction_gradings, domain)?;
     let mut residual_pair_count = 0usize;
     let mut same_grading_pair_skip_count = 0usize;
     let mut componentwise_pair_count = 0usize;
@@ -1684,6 +1705,10 @@ fn ckyz_z_residual_coefficient_work_profile(
         unique_exp_state_count: unique_exp_states.len(),
         support_unique_exp_state_count: support_unique_exp_states.len(),
         support_exp_state_counts_by_scale,
+        qn_history_level_count: qn_history_profile.level_count,
+        qn_history_candidate_hit_count: qn_history_profile.candidate_hit_count,
+        qn_history_candidate_miss_count: qn_history_profile.candidate_miss_count,
+        qn_history_unique_delta_count: qn_history_profile.unique_delta_count,
     })
 }
 
@@ -4524,6 +4549,97 @@ fn ckyz_sort_degrees_for_extraction_with_grading(
             .then_with(|| lhs.cmp(rhs))
     });
     Ok(())
+}
+
+fn ckyz_cygv_previous_qn_level_count(rank: usize) -> usize {
+    if rank < 4 {
+        2
+    } else if rank < 10 {
+        5
+    } else {
+        10
+    }
+}
+
+#[allow(clippy::cast_precision_loss)]
+fn ckyz_qn_history_distance_score(degree: &[usize]) -> f64 {
+    degree
+        .iter()
+        .map(|&entry| {
+            if entry == 0 {
+                0.0
+            } else {
+                (entry as f64).log2() + 1.0
+            }
+        })
+        .sum()
+}
+
+fn ckyz_qn_history_reuse_profile(
+    extraction_degrees: &[Vec<usize>],
+    extraction_gradings: &[usize],
+    domain: &CkyzMonomialDomain,
+) -> Result<CkyzQnHistoryReuseProfile> {
+    if extraction_degrees.len() != extraction_gradings.len() {
+        return Err(Error::InvalidInput(
+            "CKYZ q_N history profile degree/grading length mismatch".into(),
+        ));
+    }
+    let level_count = ckyz_cygv_previous_qn_level_count(domain.rank);
+    let mut previous_degrees = VecDeque::from(vec![Vec::<Vec<usize>>::new(); level_count]);
+    let mut candidate_hit_count = 0usize;
+    let mut candidate_miss_count = 0usize;
+    let mut unique_deltas = BTreeSet::<Vec<usize>>::new();
+
+    let mut batch_start = 0usize;
+    while batch_start < extraction_degrees.len() {
+        let batch_grading = extraction_gradings[batch_start];
+        let batch_end = extraction_gradings.partition_point(|&grading| grading <= batch_grading);
+        for degree in &extraction_degrees[batch_start..batch_end] {
+            let mut closest_delta = degree.clone();
+            let mut closest_distance = ckyz_qn_history_distance_score(degree);
+            let mut hit_previous = false;
+            for previous_batch in &previous_degrees {
+                for previous_degree in previous_batch {
+                    let Some(delta) = ckyz_subtract_degree_multiple(degree, previous_degree, 1)
+                    else {
+                        continue;
+                    };
+                    if !domain.contains(&delta) {
+                        continue;
+                    }
+                    let distance = ckyz_qn_history_distance_score(&delta);
+                    if distance < closest_distance {
+                        closest_distance = distance;
+                        closest_delta = delta;
+                        hit_previous = true;
+                    }
+                }
+            }
+            if hit_previous {
+                candidate_hit_count = candidate_hit_count.checked_add(1).ok_or_else(|| {
+                    Error::InvalidInput("CKYZ q_N history hit count overflowed".into())
+                })?;
+            } else {
+                candidate_miss_count = candidate_miss_count.checked_add(1).ok_or_else(|| {
+                    Error::InvalidInput("CKYZ q_N history miss count overflowed".into())
+                })?;
+            }
+            if closest_delta.iter().any(|&entry| entry != 0) {
+                unique_deltas.insert(closest_delta);
+            }
+        }
+        previous_degrees.pop_front();
+        previous_degrees.push_back(extraction_degrees[batch_start..batch_end].to_vec());
+        batch_start = batch_end;
+    }
+
+    Ok(CkyzQnHistoryReuseProfile {
+        level_count,
+        candidate_hit_count,
+        candidate_miss_count,
+        unique_delta_count: unique_deltas.len(),
+    })
 }
 
 fn compute_ckyz_log_period_corrections_domain(
@@ -12142,6 +12258,13 @@ mod tests {
         assert!(profile.unique_scale_count <= profile.li2_delta_term_count);
         assert!(profile.unique_exp_state_count <= profile.li2_delta_term_count);
         assert!(profile.support_unique_exp_state_count <= profile.unique_exp_state_count);
+        assert_eq!(profile.qn_history_level_count, 2);
+        assert_eq!(
+            profile.qn_history_candidate_hit_count + profile.qn_history_candidate_miss_count,
+            profile.path_history_degree_count
+        );
+        assert!(profile.qn_history_candidate_hit_count > 0);
+        assert!(profile.qn_history_unique_delta_count <= profile.path_history_degree_count);
         assert_eq!(
             profile
                 .support_exp_state_counts_by_scale
