@@ -518,3 +518,15 @@ coefficient counts, with z extraction at about 818 ms:
 [CKYZ_Z_HISTORY] domain=1641 terminals=4 selected=434 candidate_evaluations=2842 exp_support_classes=6 elapsed=129.201625ms
 [CKYZ_Z_EXTRACT] degrees=434 nonzero_gvs=217 li2_coefficients=9443 li2_support_skips=22508 li2_support_classes=6 exp_coeff_cache=23529 scaled_alpha_cache=23529 predecessor_deltas=1061 elapsed=817.789625ms
 ```
+
+The N=10 coefficient-work profile is unchanged by the indexed representation
+and still finishes in about 156 seconds:
+
+```text
+[CKYZ_PROFILE] kind=3 direction=[4, 3, 2] multiples=10 target_downset=26691 predicted=21721 causal=Some(129766)
+[CKYZ_COEFFICIENT_WORK] kind=3 direction=[4, 3, 2] multiples=10 domain=21721 history=5235 residual_pairs=13475754 same_grading_skips=224241 componentwise_pairs=7154291 li2_terms=9042668 support_pairs=2620565 support_li2_terms=3219472 unique_scales=7065 unique_deltas=16750 unique_exp_states=7166981 support_unique_exp_states=2587631 support_scales=5235
+```
+
+This confirms the next bottleneck is still the coefficient-demand graph /
+source-style `q_N` history reuse, not BTreeMap conversion in the inverse-map
+setup.
