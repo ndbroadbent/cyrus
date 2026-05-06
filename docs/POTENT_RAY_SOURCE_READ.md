@@ -300,10 +300,11 @@ A follow-up source pass confirms the boundary for the next code change:
   It is acceptable for low-dimensional mirror/racetrack validation, but not for
   the Kähler-side potent-ray production path.
 
-So the next implementation should first produce a source-derived inventory of
-rank-two local support families from the normalized signatures, then derive the
-local mirror/HKTY input for one non-`P^2` family. It should not assign a GV
-sequence merely because a coefficient pattern matches an ancillary row.
+So the next implementation should use the source-derived inventory of local
+support families from normalized signatures and full-rank local affine
+coordinates, then derive the local mirror/HKTY input for one non-`P^2` family.
+It should not assign a GV sequence merely because a coefficient pattern matches
+an ancillary row.
 
 ## Code-Level Targeted-Extraction Implications
 
@@ -461,9 +462,11 @@ coefficient/path-history domain for that local calculation.
 For the affine-rank-four rows, the source-derived path is different: first
 derive the actual low-dimensional compact Mori-face context, including its
 semigroup generators, grading vector, compact `q` matrix, and intersection data.
-Only after those compact inputs are available should Cyrus call the cygv/HKTY
-path and compare multiples of the target charge direction against the
-corresponding `potent_rays_gv.dat` row.
+The full-rank local affine coordinates now preserved in the diagnostics are
+input to that reconstruction, not a replacement for it. Only after those compact
+inputs are available should Cyrus call the cygv/HKTY path and compare multiples
+of the target charge direction against the corresponding `potent_rays_gv.dat`
+row.
 
 Anything that directly maps a coefficient pattern such as `(-5, 1, 1, 1, 2)`
 to a saved GV sequence would reintroduce the same cheating this audit is meant

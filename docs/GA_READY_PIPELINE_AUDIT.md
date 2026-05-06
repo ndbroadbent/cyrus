@@ -294,7 +294,11 @@ to make the remaining GV layer more first-principles:
    compact-threefold-shaped misses share `[-2,-1,-1,1,3]` and are explicitly
    marked `shape_only_missing_source_derived_cygv_inputs`, with the missing
    local semigroup generators, grading vector, `q` orientation/phase,
-   intersection tensor, and target-coordinate map listed in the JSON. The
+   intersection tensor, and target-coordinate map listed in the JSON. The core
+   affine-circuit diagnostic and McAllister context export now preserve
+   full-rank local affine coordinates for these rank-three/four supports rather
+   than only rank-two coordinates, giving the next source-derived construction
+   actual local support points to work from. The
    direct source read reinforces this: `cygv` obtains GV values from the full
    finite semigroup, HKTY alpha/beta construction, and degree-ordered
    `Li2(q_N)` subtraction history, while the McAllister paper's small-curve

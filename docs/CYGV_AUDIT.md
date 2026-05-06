@@ -1821,6 +1821,15 @@ The current `cygv` crate source sharpens the same boundary:
   coordinate. This is a guardrail: a compact-looking charge row is not a GV
   computation and is not a substitute for calling the actual `cygv` crate with
   complete source-derived inputs.
+- The core affine-circuit diagnostic now also records integral local
+  coordinates for every affine rank, not only the old rank-two
+  `local_coordinates_2d` field. `mcallister_first_principles` serializes these
+  full-rank local lattice coordinates in the corrected-chamber GV context, and
+  `mcallister_gv_context` remains backward-compatible with older dumps. This
+  moves the higher-rank origin-circuit work forward by preserving the
+  source-derived local support points needed to build a valid compact/local
+  `cygv` input, but it still does not supply the semigroup generators, grading,
+  chamber orientation, or intersection tensor by itself.
 
 The actionable consequence is that a Cyrus replacement for corrected-chamber
 or potent-ray GV values must recreate the finite semigroup and lower-degree

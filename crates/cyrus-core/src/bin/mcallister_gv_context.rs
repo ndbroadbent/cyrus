@@ -83,7 +83,15 @@ struct OriginCircuitAffineSupportSample {
     affine_rank: usize,
     coefficient_counts: BTreeMap<i64, usize>,
     local_charge_basis: Vec<Vec<i64>>,
+    #[serde(default)]
+    local_coordinates: Vec<OriginCircuitLocalCoordinateSample>,
     local_coordinates_2d: Option<Vec<OriginCircuitLocalCoordinate2DSample>>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct OriginCircuitLocalCoordinateSample {
+    point_index: usize,
+    coordinates: Vec<i64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -3411,6 +3419,7 @@ mod tests {
             affine_rank: 3,
             coefficient_counts: BTreeMap::from([(-2, 1), (1, 2)]),
             local_charge_basis: vec![vec![1, -2, 1]],
+            local_coordinates: Vec::new(),
             local_coordinates_2d: None,
         };
         let branch_diagnostic = MissingGvBranchDiagnostic {

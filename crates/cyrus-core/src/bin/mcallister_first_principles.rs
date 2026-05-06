@@ -857,7 +857,14 @@ struct OriginCircuitAffineSupportSample {
     affine_rank: usize,
     coefficient_counts: BTreeMap<i64, usize>,
     local_charge_basis: Vec<Vec<i64>>,
+    local_coordinates: Vec<OriginCircuitLocalCoordinateSample>,
     local_coordinates_2d: Option<Vec<OriginCircuitLocalCoordinate2DSample>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+struct OriginCircuitLocalCoordinateSample {
+    point_index: usize,
+    coordinates: Vec<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -2963,6 +2970,14 @@ fn origin_circuit_affine_support_sample(
         affine_rank: diagnostic.affine_rank,
         coefficient_counts,
         local_charge_basis: diagnostic.local_charge_basis.clone(),
+        local_coordinates: diagnostic
+            .local_coordinates
+            .iter()
+            .map(|point| OriginCircuitLocalCoordinateSample {
+                point_index: point.point_index,
+                coordinates: point.coordinates.clone(),
+            })
+            .collect(),
         local_coordinates_2d: diagnostic.local_coordinates_2d.as_ref().map(|coordinates| {
             coordinates
                 .iter()
@@ -11079,6 +11094,10 @@ mod tests {
             BTreeMap::from([(-1, 2), (1, 2)])
         );
         assert_eq!(support.local_charge_basis, vec![vec![1, 1, -1, -1]]);
+        assert_eq!(support.local_coordinates.len(), 4);
+        for point in &support.local_coordinates {
+            assert_eq!(point.coordinates.len(), 2);
+        }
         assert!(support.local_coordinates_2d.is_some());
     }
 
