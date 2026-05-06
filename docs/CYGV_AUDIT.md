@@ -1882,8 +1882,12 @@ The current `cygv` crate source sharpens the same boundary:
   `source_derived_target_positive_orientation=9`. The selected oriented local
   `q` matrix is now serialized in both cygv's divisor-row layout and Cyrus'
   wrapper layout, and the report aggregates
-  `source_derived_oriented_q_matrix_layout=9`. The remaining missing inputs are
-  counted explicitly: each of the nine skeletons is still missing
+  `source_derived_oriented_q_matrix_layout=9`. The report also records that all
+  nine local relations include the lattice origin point, aggregated as
+  `local_gkz_relation_includes_origin_point_requires_phase_mapping=9`. This is
+  why the local `q` phase/chamber mapping remains a real source input rather
+  than a formatting detail. The remaining missing inputs are counted explicitly:
+  each of the nine skeletons is still missing
   `local_semigroup_generators`, `local_q_matrix_phase`,
   `local_intersection_tensor`, and `local_chamber_certificate`.
 

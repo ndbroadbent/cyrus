@@ -162,6 +162,7 @@ struct ContextReport {
     local_cygv_missing_source_input_counts: BTreeMap<String, usize>,
     local_cygv_q_matrix_orientation_status_counts: BTreeMap<String, usize>,
     local_cygv_q_matrix_layout_status_counts: BTreeMap<String, usize>,
+    local_cygv_origin_point_status_counts: BTreeMap<String, usize>,
     local_cygv_grading_vector_status_counts: BTreeMap<String, usize>,
     targets: Vec<TargetReport>,
 }
@@ -248,6 +249,8 @@ struct LocalChargeMultiplicity {
 #[derive(Clone, Debug, Serialize)]
 struct LocalCygvInputSkeleton {
     support_point_indices: Vec<usize>,
+    support_contains_origin_point: bool,
+    local_cygv_origin_point_status: String,
     local_q_matrix_rows: Vec<Vec<i64>>,
     target_relation_coefficients: Option<Vec<i64>>,
     target_relation_in_charge_basis: Option<Vec<i64>>,
@@ -1151,6 +1154,13 @@ fn local_cygv_input_skeleton(
                 .map(|point| point.point_index)
                 .collect()
         });
+    let support_contains_origin_point = support_point_indices.contains(&0);
+    let local_cygv_origin_point_status = if support_contains_origin_point {
+        "local_gkz_relation_includes_origin_point_requires_phase_mapping"
+    } else {
+        "local_support_has_no_origin_point"
+    }
+    .to_string();
     let target_relation_coefficients =
         sample
             .origin_circuit_first_witness
@@ -1211,6 +1221,8 @@ fn local_cygv_input_skeleton(
     ]);
     Ok(Some(LocalCygvInputSkeleton {
         support_point_indices,
+        support_contains_origin_point,
+        local_cygv_origin_point_status,
         local_q_matrix_rows,
         target_relation_coefficients,
         target_relation_in_charge_basis,
@@ -3397,6 +3409,11 @@ fn build_report(
             .iter()
             .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
     );
+    let local_cygv_origin_point_status_counts = local_cygv_origin_point_status_counts(
+        targets
+            .iter()
+            .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
+    );
     let local_cygv_grading_vector_status_counts = local_cygv_grading_vector_status_counts(
         targets
             .iter()
@@ -3425,6 +3442,7 @@ fn build_report(
         local_cygv_missing_source_input_counts,
         local_cygv_q_matrix_orientation_status_counts,
         local_cygv_q_matrix_layout_status_counts,
+        local_cygv_origin_point_status_counts,
         local_cygv_grading_vector_status_counts,
         targets,
     }
@@ -3517,6 +3535,18 @@ fn local_cygv_q_matrix_layout_status_counts<'a>(
     for skeleton in skeletons {
         *counts
             .entry(skeleton.local_cygv_q_matrix_layout_status.clone())
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_origin_point_status_counts<'a>(
+    skeletons: impl IntoIterator<Item = &'a LocalCygvInputSkeleton>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for skeleton in skeletons {
+        *counts
+            .entry(skeleton.local_cygv_origin_point_status.clone())
             .or_insert(0usize) += 1;
     }
     counts
@@ -3810,6 +3840,11 @@ mod tests {
             .unwrap()
             .expect("local skeleton should be present");
         assert_eq!(skeleton.support_point_indices, vec![0, 46, 208, 211, 214]);
+        assert!(skeleton.support_contains_origin_point);
+        assert_eq!(
+            skeleton.local_cygv_origin_point_status,
+            "local_gkz_relation_includes_origin_point_requires_phase_mapping"
+        );
         assert_eq!(
             skeleton.local_q_matrix_rows,
             vec![vec![1], vec![-2], vec![-1], vec![3], vec![-1]]
@@ -3940,6 +3975,8 @@ mod tests {
     fn local_cygv_target_status_counts_aggregate_orientation_candidates() {
         let compact_threefold_like = LocalCygvInputSkeleton {
             support_point_indices: Vec::new(),
+            support_contains_origin_point: false,
+            local_cygv_origin_point_status: String::new(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -3959,6 +3996,8 @@ mod tests {
         };
         let fourfold_like = LocalCygvInputSkeleton {
             support_point_indices: Vec::new(),
+            support_contains_origin_point: false,
+            local_cygv_origin_point_status: String::new(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4008,6 +4047,8 @@ mod tests {
         );
         let blocked_missing_inputs = LocalCygvInputSkeleton {
             support_point_indices: Vec::new(),
+            support_contains_origin_point: false,
+            local_cygv_origin_point_status: String::new(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4024,6 +4065,8 @@ mod tests {
         };
         let ready = LocalCygvInputSkeleton {
             support_point_indices: Vec::new(),
+            support_contains_origin_point: false,
+            local_cygv_origin_point_status: String::new(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4040,6 +4083,8 @@ mod tests {
         };
         let blocked_orientation = LocalCygvInputSkeleton {
             support_point_indices: Vec::new(),
+            support_contains_origin_point: false,
+            local_cygv_origin_point_status: String::new(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4093,6 +4138,8 @@ mod tests {
     fn local_cygv_missing_source_input_counts_aggregate_uncertified_inputs() {
         let first = LocalCygvInputSkeleton {
             support_point_indices: Vec::new(),
+            support_contains_origin_point: false,
+            local_cygv_origin_point_status: String::new(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4112,6 +4159,8 @@ mod tests {
         };
         let second = LocalCygvInputSkeleton {
             support_point_indices: Vec::new(),
+            support_contains_origin_point: false,
+            local_cygv_origin_point_status: String::new(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4141,6 +4190,8 @@ mod tests {
     fn local_cygv_grading_vector_status_counts_aggregate_skeletons() {
         let first = LocalCygvInputSkeleton {
             support_point_indices: Vec::new(),
+            support_contains_origin_point: false,
+            local_cygv_origin_point_status: String::new(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4158,6 +4209,8 @@ mod tests {
         };
         let second = LocalCygvInputSkeleton {
             support_point_indices: Vec::new(),
+            support_contains_origin_point: false,
+            local_cygv_origin_point_status: String::new(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4175,6 +4228,8 @@ mod tests {
         };
         let third = LocalCygvInputSkeleton {
             support_point_indices: Vec::new(),
+            support_contains_origin_point: false,
+            local_cygv_origin_point_status: String::new(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4211,6 +4266,9 @@ mod tests {
     fn local_cygv_q_matrix_orientation_status_counts_aggregate_skeletons() {
         let first = LocalCygvInputSkeleton {
             support_point_indices: Vec::new(),
+            support_contains_origin_point: true,
+            local_cygv_origin_point_status:
+                "local_gkz_relation_includes_origin_point_requires_phase_mapping".to_string(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4229,6 +4287,8 @@ mod tests {
         };
         let second = LocalCygvInputSkeleton {
             support_point_indices: Vec::new(),
+            support_contains_origin_point: false,
+            local_cygv_origin_point_status: "local_support_has_no_origin_point".to_string(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4247,6 +4307,9 @@ mod tests {
         };
         let third = LocalCygvInputSkeleton {
             support_point_indices: Vec::new(),
+            support_contains_origin_point: true,
+            local_cygv_origin_point_status:
+                "local_gkz_relation_includes_origin_point_requires_phase_mapping".to_string(),
             local_q_matrix_rows: Vec::new(),
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
@@ -4289,6 +4352,20 @@ mod tests {
         assert_eq!(
             layout_counts
                 .get("local_q_matrix_layout_blocked_no_orientation")
+                .copied(),
+            Some(1)
+        );
+
+        let origin_counts = local_cygv_origin_point_status_counts([&first, &second, &third]);
+        assert_eq!(
+            origin_counts
+                .get("local_gkz_relation_includes_origin_point_requires_phase_mapping")
+                .copied(),
+            Some(2)
+        );
+        assert_eq!(
+            origin_counts
+                .get("local_support_has_no_origin_point")
                 .copied(),
             Some(1)
         );

@@ -332,8 +332,11 @@ to make the remaining GV layer more first-principles:
    skeletons, and the local `q` orientation is now source-derived as sign `-1`
    for all nine skeletons. The oriented local `q` matrix is now serialized in
    both cygv's divisor-row layout and Cyrus' wrapper layout, with
-   `source_derived_oriented_q_matrix_layout=9`. The missing source-input counts
-   remain nine each for `local_semigroup_generators`, `local_q_matrix_phase`,
+   `source_derived_oriented_q_matrix_layout=9`. The same report records
+   `local_gkz_relation_includes_origin_point_requires_phase_mapping=9`, so the
+   remaining local `q` phase/chamber mapping is source data, not a matrix
+   transpose issue. The missing source-input counts remain nine each for
+   `local_semigroup_generators`, `local_q_matrix_phase`,
    `local_intersection_tensor`, and `local_chamber_certificate`, so none is a
    valid actual-`cygv` call yet. The direct source read reinforces this: `cygv`
    obtains GV values from the full
