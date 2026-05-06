@@ -159,6 +159,7 @@ struct ContextReport {
     local_cygv_charge_signature_counts: BTreeMap<String, usize>,
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
     local_cygv_actual_call_readiness_counts: BTreeMap<String, usize>,
+    local_cygv_missing_source_input_counts: BTreeMap<String, usize>,
     targets: Vec<TargetReport>,
 }
 
@@ -3218,6 +3219,11 @@ fn build_report(
             .iter()
             .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
     );
+    let local_cygv_missing_source_input_counts = local_cygv_missing_source_input_counts(
+        targets
+            .iter()
+            .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
+    );
     ContextReport {
         schema_version: context.schema_version,
         dimension: validated.dimension,
@@ -3238,6 +3244,7 @@ fn build_report(
         local_cygv_charge_signature_counts,
         local_cygv_target_candidate_status_counts,
         local_cygv_actual_call_readiness_counts,
+        local_cygv_missing_source_input_counts,
         targets,
     }
 }
@@ -3282,6 +3289,18 @@ fn local_cygv_actual_call_readiness_counts<'a>(
         *counts
             .entry(local_cygv_actual_call_readiness(skeleton))
             .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_missing_source_input_counts<'a>(
+    skeletons: impl IntoIterator<Item = &'a LocalCygvInputSkeleton>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for skeleton in skeletons {
+        for input in &skeleton.remaining_uncertified_inputs {
+            *counts.entry(input.clone()).or_insert(0usize) += 1;
+        }
     }
     counts
 }
@@ -3776,6 +3795,40 @@ mod tests {
             Some(1)
         );
         assert_eq!(counts.get("ready_for_actual_cygv_call").copied(), Some(1));
+    }
+
+    #[test]
+    fn local_cygv_missing_source_input_counts_aggregate_uncertified_inputs() {
+        let first = LocalCygvInputSkeleton {
+            support_point_indices: Vec::new(),
+            local_q_matrix_rows: Vec::new(),
+            target_relation_coefficients: None,
+            target_relation_in_charge_basis: None,
+            target_relation_status: String::new(),
+            orientation_candidates: Vec::new(),
+            remaining_uncertified_inputs: vec![
+                "local_semigroup_generators".to_string(),
+                "local_intersection_tensor".to_string(),
+            ],
+        };
+        let second = LocalCygvInputSkeleton {
+            support_point_indices: Vec::new(),
+            local_q_matrix_rows: Vec::new(),
+            target_relation_coefficients: None,
+            target_relation_in_charge_basis: None,
+            target_relation_status: String::new(),
+            orientation_candidates: Vec::new(),
+            remaining_uncertified_inputs: vec![
+                "local_semigroup_generators".to_string(),
+                "local_chamber_certificate".to_string(),
+            ],
+        };
+
+        let counts = local_cygv_missing_source_input_counts([&first, &second]);
+
+        assert_eq!(counts.get("local_semigroup_generators").copied(), Some(2));
+        assert_eq!(counts.get("local_intersection_tensor").copied(), Some(1));
+        assert_eq!(counts.get("local_chamber_certificate").copied(), Some(1));
     }
 
     #[test]
