@@ -2963,7 +2963,6 @@ impl CkyzIndexedSeries {
         Self { terms }
     }
 
-    #[cfg(test)]
     fn monomial(
         degree: &[usize],
         coefficient: Rational,
@@ -3262,7 +3261,6 @@ impl CkyzIndexedSeries {
         Ok(out)
     }
 
-    #[cfg(test)]
     fn li2(&self, domain: &CkyzMonomialDomain) -> Result<Self> {
         let max_exponent = self
             .min_total_degree(domain, "CKYZ Li2 input")?
@@ -4918,7 +4916,6 @@ fn ckyz_q_degree_series_in_z_domain(
     ckyz_series_mul_domain(&monomial, &exp_exponent, domain)
 }
 
-#[cfg(test)]
 fn ckyz_indexed_alpha_series(
     alpha: &[BTreeMap<Vec<usize>, Rational>],
     domain: &CkyzMonomialDomain,
@@ -4942,7 +4939,6 @@ fn ckyz_indexed_alpha_series(
         .collect()
 }
 
-#[cfg(test)]
 fn ckyz_indexed_q_delta_series_in_z_domain(
     degree: &[usize],
     indexed_alpha: &[CkyzIndexedSeries],
@@ -4974,7 +4970,6 @@ fn ckyz_indexed_q_delta_series_in_z_domain(
     monomial.mul(&exp_exponent, domain)
 }
 
-#[cfg(test)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct CkyzIndexedQnBuild {
     series: CkyzIndexedSeries,
@@ -4982,7 +4977,6 @@ struct CkyzIndexedQnBuild {
     delta_degree: Vec<usize>,
 }
 
-#[cfg(test)]
 fn ckyz_indexed_q_degree_series_with_previous_cache_in_z_domain(
     degree_index: usize,
     previous_qn: &VecDeque<HashMap<usize, CkyzIndexedSeries>>,
@@ -5130,6 +5124,7 @@ fn ckyz_q_degree_series_from_expalpha_powers_in_z_domain(
     Ok(out)
 }
 
+#[cfg(test)]
 fn ckyz_delta_degree(target: &[usize], base: &[usize]) -> Option<Vec<usize>> {
     target
         .iter()
@@ -5231,6 +5226,7 @@ fn ckyz_subtract_degree_multiple(
         .collect()
 }
 
+#[cfg(test)]
 fn ckyz_subtract_degree_multiple_into(
     out: &mut Vec<usize>,
     target: &[usize],
@@ -5299,6 +5295,7 @@ fn ckyz_q_degree_li2_support_intersects_indices_in_z_domain(
     Ok(false)
 }
 
+#[cfg(test)]
 #[derive(Clone, Debug)]
 struct CkyzScaledAlphaTerm {
     degree: Vec<usize>,
@@ -5306,6 +5303,7 @@ struct CkyzScaledAlphaTerm {
     coefficients: Vec<Rational>,
 }
 
+#[cfg(test)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct CkyzAlphaPredecessor {
     term_index: usize,
@@ -5313,6 +5311,7 @@ struct CkyzAlphaPredecessor {
     term_total_degree: usize,
 }
 
+#[cfg(test)]
 #[derive(Clone, Debug, Default)]
 struct CkyzExpCoefficientCache {
     scale_ids: HashMap<Vec<usize>, usize>,
@@ -5321,6 +5320,7 @@ struct CkyzExpCoefficientCache {
     alpha_predecessors_by_delta: HashMap<usize, Vec<CkyzAlphaPredecessor>>,
 }
 
+#[cfg(test)]
 impl CkyzExpCoefficientCache {
     fn scale_id(&mut self, scale_degree: &[usize]) -> usize {
         if let Some(&scale_id) = self.scale_ids.get(scale_degree) {
@@ -5347,10 +5347,6 @@ impl CkyzExpCoefficientCache {
         coefficients.insert(delta_index, coefficient);
     }
 
-    fn coefficient_count(&self) -> usize {
-        self.coefficients_by_scale.iter().map(HashMap::len).sum()
-    }
-
     fn scaled_alpha_coefficient(
         &mut self,
         scale_id: usize,
@@ -5368,13 +5364,6 @@ impl CkyzExpCoefficientCache {
         let coefficient = ckyz_scaled_alpha_coefficient(scale_degree, term);
         coefficients.insert(term_index, coefficient.clone());
         coefficient
-    }
-
-    fn scaled_alpha_coefficient_count(&self) -> usize {
-        self.scaled_alpha_coefficients_by_scale
-            .iter()
-            .map(HashMap::len)
-            .sum()
     }
 
     fn alpha_predecessors(
@@ -5415,12 +5404,9 @@ impl CkyzExpCoefficientCache {
             .insert(delta_index, predecessors.clone());
         Ok(predecessors)
     }
-
-    fn alpha_predecessor_delta_count(&self) -> usize {
-        self.alpha_predecessors_by_delta.len()
-    }
 }
 
+#[cfg(test)]
 fn ckyz_scaled_alpha_terms(
     alpha: &[BTreeMap<Vec<usize>, Rational>],
     domain: &CkyzMonomialDomain,
@@ -5462,6 +5448,7 @@ fn ckyz_scaled_alpha_terms(
         .collect()
 }
 
+#[cfg(test)]
 fn ckyz_scaled_alpha_coefficient(scale_degree: &[usize], term: &CkyzScaledAlphaTerm) -> Rational {
     let mut coefficient = Rational::from(0);
     for (&scale, term_coefficient) in scale_degree.iter().zip(term.coefficients.iter()) {
@@ -5473,6 +5460,7 @@ fn ckyz_scaled_alpha_coefficient(scale_degree: &[usize], term: &CkyzScaledAlphaT
     coefficient
 }
 
+#[cfg(test)]
 fn ckyz_exp_scaled_alpha_coefficient_by_index_in_z_domain(
     scale_id: usize,
     scale_degree: &[usize],
@@ -5547,6 +5535,7 @@ fn ckyz_q_degree_li2_coefficient_in_z_domain(
     .map(|(coefficient, _)| coefficient)
 }
 
+#[cfg(test)]
 fn ckyz_q_degree_li2_coefficient_and_support_in_z_domain(
     degree: &[usize],
     target: &[usize],
@@ -5749,109 +5738,140 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
                 .unwrap_or_else(|| Rational::from(0)),
         );
     }
+
+    #[derive(Clone, Debug)]
+    struct CkyzZResidualCandidate {
+        position: usize,
+        domain_index: usize,
+        weight: i64,
+        gv: Integer,
+    }
+
     let mut invariants = BTreeMap::new();
     let trace_timing = env::var_os("CYRUS_TRACE_CKYZ_Z_HISTORY").is_some();
     let extraction_start = trace_timing.then(std::time::Instant::now);
     let mut nonzero_gv_count = 0usize;
     let mut li2_coefficient_evaluations = 0usize;
-    let mut li2_support_skips = 0usize;
-    let alpha_terms = ckyz_scaled_alpha_terms(alpha, domain)?;
-    let alpha_supports = alpha
-        .iter()
-        .map(|series| ckyz_series_support_indices(series, domain))
-        .collect::<Vec<_>>();
-    let mut exp_support_cache = HashMap::<Vec<usize>, BTreeSet<usize>>::new();
-    let mut exp_coefficient_cache = CkyzExpCoefficientCache::default();
-    for (degree_index, degree) in extraction_degrees.iter().enumerate() {
-        let domain_degree_index = extraction_indices[degree_index];
-        let coefficient = residual_by_index[domain_degree_index]
-            .as_ref()
-            .cloned()
-            .unwrap_or_else(|| Rational::from(0));
-        if coefficient == 0 {
-            continue;
-        }
-        let weight = ckyz_cover_weight(cover_weight_coefficients, degree)?;
-        if weight == 0 {
-            return Err(Error::InvalidInput(
-                "CKYZ local GV extraction encountered a nonzero coefficient with zero cover weight"
-                    .into(),
-            ));
-        }
-        let gv_rational = coefficient / Rational::from(weight);
-        if gv_rational.denominator_ref() != &1u32 {
-            return Err(Error::InvalidInput(format!(
-                "CKYZ local GV invariant at degree {degree:?} is not integral: {gv_rational}"
-            )));
-        }
-        let gv = Integer::try_from(gv_rational).map_err(|_| {
-            Error::InvalidInput(format!(
-                "CKYZ local GV invariant at degree {degree:?} is not integral"
-            ))
-        })?;
-        if gv == 0 {
-            continue;
-        }
-        invariants.insert(degree.clone(), gv.clone());
-        nonzero_gv_count += 1;
+    let indexed_alpha = ckyz_indexed_alpha_series(alpha, domain)?;
+    let previous_level_count = ckyz_cygv_previous_qn_level_count(rank);
+    let mut previous_qn = VecDeque::from(vec![
+        HashMap::<usize, CkyzIndexedSeries>::new();
+        previous_level_count
+    ]);
+    let mut previous_qn_indices = VecDeque::from(vec![Vec::<usize>::new(); previous_level_count]);
+    let mut q_delta_cache = HashMap::<Vec<usize>, CkyzIndexedSeries>::new();
+    let mut qn_reuse_count = 0usize;
 
-        let subtraction_scale = -Rational::from(weight) * Rational::from(gv);
-        let degree_grading = extraction_gradings[degree_index];
-        let first_later_grading_index =
-            extraction_gradings.partition_point(|&grading| grading <= degree_grading);
-        let coordinate_key = ckyz_q_degree_nonzero_coordinate_key(degree);
-        if !exp_support_cache.contains_key(&coordinate_key) {
-            let exp_support = ckyz_q_degree_exp_support_for_coordinate_key(
-                &coordinate_key,
-                degree,
-                &alpha_supports,
+    let mut extraction_position_by_domain_index = vec![None::<usize>; domain.degrees.len()];
+    for (position, &domain_index) in extraction_indices.iter().enumerate() {
+        extraction_position_by_domain_index[domain_index] = Some(position);
+    }
+
+    let mut batch_start = 0usize;
+    while batch_start < extraction_degrees.len() {
+        let batch_grading = extraction_gradings[batch_start];
+        let batch_end = extraction_gradings.partition_point(|&grading| grading <= batch_grading);
+        let mut candidates = Vec::new();
+        for position in batch_start..batch_end {
+            let degree = &extraction_degrees[position];
+            let domain_degree_index = extraction_indices[position];
+            let coefficient = residual_by_index[domain_degree_index]
+                .as_ref()
+                .cloned()
+                .unwrap_or_else(|| Rational::from(0));
+            if coefficient == 0 {
+                continue;
+            }
+            let weight = ckyz_cover_weight(cover_weight_coefficients, degree)?;
+            if weight == 0 {
+                return Err(Error::InvalidInput(
+                    "CKYZ local GV extraction encountered a nonzero coefficient with zero cover weight"
+                        .into(),
+                ));
+            }
+            let gv_rational = coefficient / Rational::from(weight);
+            if gv_rational.denominator_ref() != &1u32 {
+                return Err(Error::InvalidInput(format!(
+                    "CKYZ local GV invariant at degree {degree:?} is not integral: {gv_rational}"
+                )));
+            }
+            let gv = Integer::try_from(gv_rational).map_err(|_| {
+                Error::InvalidInput(format!(
+                    "CKYZ local GV invariant at degree {degree:?} is not integral"
+                ))
+            })?;
+            if gv == 0 {
+                continue;
+            }
+            invariants.insert(degree.clone(), gv.clone());
+            nonzero_gv_count += 1;
+            candidates.push(CkyzZResidualCandidate {
+                position,
+                domain_index: domain_degree_index,
+                weight,
+                gv,
+            });
+        }
+
+        let mut computed_qn = HashMap::new();
+        let mut computed_qn_indices = Vec::new();
+        for candidate in candidates {
+            let built = ckyz_indexed_q_degree_series_with_previous_cache_in_z_domain(
+                candidate.domain_index,
+                &previous_qn,
+                &previous_qn_indices,
+                &mut q_delta_cache,
+                &indexed_alpha,
                 domain,
             )?;
-            exp_support_cache.insert(coordinate_key.clone(), exp_support);
-        }
-        let exp_support = exp_support_cache
-            .get(&coordinate_key)
-            .expect("exponential support was inserted above");
-        for (target_position, target) in extraction_degrees
-            .iter()
-            .enumerate()
-            .skip(first_later_grading_index)
-        {
-            let (li2_coefficient, has_supported_delta) =
-                ckyz_q_degree_li2_coefficient_and_support_in_z_domain(
-                    degree,
-                    target,
-                    &alpha_terms,
-                    domain,
-                    Some(exp_support),
-                    &mut exp_coefficient_cache,
-                )?;
-            if !has_supported_delta {
-                li2_support_skips = li2_support_skips.checked_add(1).ok_or_else(|| {
-                    Error::InvalidInput("CKYZ Li2 support skip count overflowed".into())
-                })?;
-                continue;
+            if built.reused_previous {
+                qn_reuse_count = qn_reuse_count
+                    .checked_add(1)
+                    .ok_or_else(|| Error::InvalidInput("CKYZ q_N reuse count overflowed".into()))?;
             }
-            if li2_coefficient == 0 {
-                continue;
+            let li2_qn = built.series.li2(domain)?;
+            let subtraction_scale =
+                -Rational::from(candidate.weight) * Rational::from(candidate.gv);
+            for (target_index, li2_coefficient) in &li2_qn.terms {
+                if *li2_coefficient == 0 {
+                    continue;
+                }
+                let Some(target_position) = extraction_position_by_domain_index[*target_index]
+                else {
+                    continue;
+                };
+                if target_position <= candidate.position
+                    || extraction_gradings[target_position] <= batch_grading
+                {
+                    continue;
+                }
+                li2_coefficient_evaluations =
+                    li2_coefficient_evaluations.checked_add(1).ok_or_else(|| {
+                        Error::InvalidInput("CKYZ Li2 coefficient count overflowed".into())
+                    })?;
+                let entry =
+                    residual_by_index[*target_index].get_or_insert_with(|| Rational::from(0));
+                *entry += subtraction_scale.clone() * li2_coefficient.clone();
             }
-            li2_coefficient_evaluations += 1;
-            let target_index = extraction_indices[target_position];
-            let entry = residual_by_index[target_index].get_or_insert_with(|| Rational::from(0));
-            *entry += subtraction_scale.clone() * li2_coefficient;
+            computed_qn.insert(candidate.domain_index, built.series);
+            computed_qn_indices.push(candidate.domain_index);
         }
+
+        previous_qn.pop_front();
+        previous_qn_indices.pop_front();
+        previous_qn.push_back(computed_qn);
+        previous_qn_indices.push_back(computed_qn_indices);
+        batch_start = batch_end;
     }
     if let Some(start) = extraction_start {
         eprintln!(
-            "[CKYZ_Z_EXTRACT] degrees={} nonzero_gvs={} li2_coefficients={} li2_support_skips={} li2_support_classes={} exp_coeff_cache={} scaled_alpha_cache={} predecessor_deltas={} elapsed={:?}",
+            "[CKYZ_Z_EXTRACT] degrees={} nonzero_gvs={} li2_coefficients={} previous_qns={} qn_reuses={} delta_q_cache={} elapsed={:?}",
             extraction_degrees.len(),
             nonzero_gv_count,
             li2_coefficient_evaluations,
-            li2_support_skips,
-            exp_support_cache.len(),
-            exp_coefficient_cache.coefficient_count(),
-            exp_coefficient_cache.scaled_alpha_coefficient_count(),
-            exp_coefficient_cache.alpha_predecessor_delta_count(),
+            nonzero_gv_count,
+            qn_reuse_count,
+            q_delta_cache.len(),
             start.elapsed(),
         );
     }

@@ -552,3 +552,18 @@ history-built `q_N` and `Li2(q_N)` matches the direct exponential construction
 on the support-predicted domain. This keeps the next production switch
 mechanical: replace recursive per-coefficient Li2 subtraction with the tested
 indexed `q_N` builder, while preserving the current residual/integrality logic.
+
+That production switch now exists for the CKYZ z-residual extractor. The local
+z-series tests still match the flat-coordinate extractor, and the McAllister
+`[4,3,2]`, N=4 first-principles gate reports:
+
+```text
+[CKYZ_Z_EXTRACT] degrees=434 nonzero_gvs=217 li2_coefficients=9443 previous_qns=217 qn_reuses=214 delta_q_cache=4 elapsed=858.176958ms
+```
+
+The N=10 filtered gate still did not finish; it was stopped after about five
+minutes after completing z-history selection but before the extraction trace.
+So the source-shape is now right, but full `Li2(q_N)` materialization is still
+too broad at 5,235 history degrees. The next change should keep the same
+grading-batched `q_N` cache but update only demanded residual coefficients from
+`Li2(q_N)`, rather than expanding every Li2 monomial in the finite domain.
