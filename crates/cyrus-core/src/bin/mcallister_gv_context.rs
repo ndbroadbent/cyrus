@@ -254,6 +254,7 @@ struct LocalCygvOrientationCandidate {
     overall_charge_basis_sign: i64,
     local_q_matrix_rows: Vec<Vec<i64>>,
     target_coordinate: Option<Vec<i64>>,
+    target_candidate_status: String,
     target_coordinate_is_nonnegative: Option<bool>,
     target_coordinate_gcd: Option<i64>,
     target_coordinate_is_primitive: Option<bool>,
@@ -1222,10 +1223,16 @@ fn local_cygv_orientation_candidates(
                     .then(|| oriented_q.iter().filter(|row| row[0] < 0).count());
             let positive_unit_generator_omega_bucket =
                 positive_unit_generator_negative_intersections.map(cygv_omega_bucket);
+            let target_candidate_status = local_cygv_target_candidate_status(
+                target_coordinate_is_nonnegative,
+                target_coordinate_is_primitive,
+                positive_unit_generator_omega_bucket.as_deref(),
+            );
             LocalCygvOrientationCandidate {
                 overall_charge_basis_sign: sign,
                 local_q_matrix_rows: oriented_q,
                 target_coordinate,
+                target_candidate_status,
                 target_coordinate_is_nonnegative,
                 target_coordinate_gcd,
                 target_coordinate_is_primitive,
@@ -1235,6 +1242,29 @@ fn local_cygv_orientation_candidates(
             }
         })
         .collect()
+}
+
+fn local_cygv_target_candidate_status(
+    target_coordinate_is_nonnegative: Option<bool>,
+    target_coordinate_is_primitive: Option<bool>,
+    positive_unit_generator_omega_bucket: Option<&str>,
+) -> String {
+    let Some(nonnegative) = target_coordinate_is_nonnegative else {
+        return "target_coordinate_unavailable".to_string();
+    };
+    if !nonnegative {
+        return "target_not_in_nonnegative_local_semigroup".to_string();
+    }
+    if target_coordinate_is_primitive == Some(false) {
+        return "target_nonprimitive_local_multiple".to_string();
+    }
+    match positive_unit_generator_omega_bucket {
+        Some(bucket) if bucket.starts_with("ignored") => {
+            "target_positive_but_ignored_by_cygv_omega_bucket".to_string()
+        }
+        Some(_) => "target_primitive_positive_supported_by_cygv_omega_bucket".to_string(),
+        None => "target_positive_but_omega_bucket_unavailable".to_string(),
+    }
 }
 
 fn transpose_local_charge_basis(local_charge_basis: &[Vec<i64>]) -> Vec<Vec<i64>> {
@@ -3506,6 +3536,10 @@ mod tests {
         let positive_target = &skeleton.orientation_candidates[0];
         assert_eq!(positive_target.overall_charge_basis_sign, -1);
         assert_eq!(positive_target.target_coordinate, Some(vec![1]));
+        assert_eq!(
+            positive_target.target_candidate_status,
+            "target_primitive_positive_supported_by_cygv_omega_bucket"
+        );
         assert_eq!(positive_target.target_coordinate_is_nonnegative, Some(true));
         assert_eq!(positive_target.target_coordinate_gcd, Some(1));
         assert_eq!(positive_target.target_coordinate_is_primitive, Some(true));
@@ -3523,6 +3557,10 @@ mod tests {
         let original_orientation = &skeleton.orientation_candidates[1];
         assert_eq!(original_orientation.overall_charge_basis_sign, 1);
         assert_eq!(original_orientation.target_coordinate, Some(vec![-1]));
+        assert_eq!(
+            original_orientation.target_candidate_status,
+            "target_not_in_nonnegative_local_semigroup"
+        );
         assert_eq!(original_orientation.target_coordinate_gcd, Some(1));
         assert_eq!(
             original_orientation.target_primitive_direction,
@@ -3537,6 +3575,33 @@ mod tests {
                 .positive_unit_generator_omega_bucket
                 .as_deref(),
             Some("ignored_gt2")
+        );
+    }
+
+    #[test]
+    fn local_cygv_orientation_status_marks_positive_omega_ignored_candidates() {
+        let candidates = local_cygv_orientation_candidates(
+            &[vec![2], vec![1], vec![2], vec![-1], vec![-2], vec![-2]],
+            Some(&[-1]),
+        );
+
+        assert_eq!(candidates.len(), 2);
+        assert_eq!(candidates[0].overall_charge_basis_sign, -1);
+        assert_eq!(candidates[0].target_coordinate, Some(vec![1]));
+        assert_eq!(
+            candidates[0]
+                .positive_unit_generator_omega_bucket
+                .as_deref(),
+            Some("ignored_gt2")
+        );
+        assert_eq!(
+            candidates[0].target_candidate_status,
+            "target_positive_but_ignored_by_cygv_omega_bucket"
+        );
+        assert_eq!(candidates[1].overall_charge_basis_sign, 1);
+        assert_eq!(
+            candidates[1].target_candidate_status,
+            "target_not_in_nonnegative_local_semigroup"
         );
     }
 

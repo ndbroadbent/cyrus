@@ -315,7 +315,13 @@ to make the remaining GV layer more first-principles:
    primitive direction; on the current saved context all nine origin-circuit
    misses have primitive local target coordinate, with sign `-1` giving `[1]`
    and sign `+1` giving `[-1]`. This is still not a chamber certificate and
-   supplies no GV value by itself. The
+   supplies no GV value by itself. The same orientation report now records a
+   target-candidate status from the primitive coordinate and cygv's
+   negative-intersection omega buckets: only targets `3`, `6`, `7`, and `8`
+   have a primitive positive sign-`-1` candidate in a cygv-supported omega
+   bucket, while the other five sign-`-1` candidates are positive but
+   `ignored_gt2`, and every sign-`+1` candidate is a negative local coordinate.
+   The
    direct source read reinforces this: `cygv` obtains GV values from the full
    finite semigroup, HKTY alpha/beta construction, and degree-ordered
    `Li2(q_N)` subtraction history, while the McAllister paper's small-curve
