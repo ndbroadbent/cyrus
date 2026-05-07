@@ -14513,9 +14513,61 @@ fn local_cygv_one_parameter_family_status(skeleton: &LocalCygvInputSkeleton) -> 
         } else {
             "local_p2_bundle_charge_family_missing_tensor_chamber_certificate".to_string()
         }
+    } else if let Some(signature) = one_parameter_weighted_p2_split_bundle_signature(charges) {
+        format!("uncertified_one_parameter_split_bundle_over_weighted_p2:{signature}")
     } else {
         format!("uncertified_one_parameter_charge_family:{charge_signature}")
     }
+}
+
+fn one_parameter_weighted_p2_split_bundle_signature(charges: &[i64]) -> Option<String> {
+    let mut base_weights = charges
+        .iter()
+        .copied()
+        .filter(|&charge| charge > 0)
+        .collect::<Vec<_>>();
+    let mut bundle_degrees = charges
+        .iter()
+        .copied()
+        .filter(|&charge| charge < 0)
+        .map(i64::checked_abs)
+        .collect::<Option<Vec<_>>>()?;
+    if base_weights.len() != 3 || bundle_degrees.len() != 2 {
+        return None;
+    }
+    base_weights.sort_unstable();
+    bundle_degrees.sort_unstable();
+    let base_degree = base_weights
+        .iter()
+        .try_fold(0i64, |acc, &value| acc.checked_add(value))?;
+    let bundle_degree = bundle_degrees
+        .iter()
+        .try_fold(0i64, |acc, &value| acc.checked_add(value))?;
+    if base_degree != bundle_degree {
+        return None;
+    }
+    let base_hyperplane_square_denominator = base_weights
+        .iter()
+        .try_fold(1i64, |acc, &value| acc.checked_mul(value))?;
+    let base_hyperplane_square = if base_hyperplane_square_denominator == 1 {
+        "1".to_string()
+    } else {
+        format!("1/{base_hyperplane_square_denominator}")
+    };
+    Some(format!(
+        "base={};bundle={};base_hyperplane_square={}",
+        base_weights
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(","),
+        bundle_degrees
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(","),
+        base_hyperplane_square
+    ))
 }
 
 fn local_cygv_missing_source_input_counts<'a>(
@@ -17377,7 +17429,7 @@ mod tests {
         );
         assert_eq!(
             local_cygv_one_parameter_family_status(&uncertified_weighted),
-            "uncertified_one_parameter_charge_family:-3,-1,1,1,2"
+            "uncertified_one_parameter_split_bundle_over_weighted_p2:base=1,1,2;bundle=1,3;base_hyperplane_square=1/2"
         );
         assert_eq!(
             local_cygv_one_parameter_family_status(&p2_without_certificate),
@@ -17397,7 +17449,7 @@ mod tests {
         );
         assert_eq!(
             counts
-                .get("uncertified_one_parameter_charge_family:-3,-1,1,1,2")
+                .get("uncertified_one_parameter_split_bundle_over_weighted_p2:base=1,1,2;bundle=1,3;base_hyperplane_square=1/2")
                 .copied(),
             Some(1)
         );
@@ -17406,6 +17458,22 @@ mod tests {
                 .get("local_p2_bundle_charge_family_missing_tensor_chamber_certificate")
                 .copied(),
             Some(1)
+        );
+    }
+
+    #[test]
+    fn one_parameter_weighted_p2_split_bundle_signature_requires_two_bundle_directions() {
+        assert_eq!(
+            one_parameter_weighted_p2_split_bundle_signature(&[-1, 2, -3, 1, 1]).as_deref(),
+            Some("base=1,1,2;bundle=1,3;base_hyperplane_square=1/2")
+        );
+        assert_eq!(
+            one_parameter_weighted_p2_split_bundle_signature(&[-1, -1, -1, 1, 3]),
+            None
+        );
+        assert_eq!(
+            one_parameter_weighted_p2_split_bundle_signature(&[-1, -2, 1, 2, 2]),
+            None
         );
     }
 

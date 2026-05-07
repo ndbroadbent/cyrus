@@ -900,13 +900,15 @@ to make the remaining GV layer more first-principles:
    certified chamber/intersection tensor history that would make such a local
    value promotable in the compact pipeline.
    The report now makes that boundary explicit with
-   `local_cygv_one_parameter_family_status_counts`. A regenerated target `8`
-   schema-4 report classifies the target family as
-   `uncertified_one_parameter_charge_family:-3,-1,1,1,2`, while certified
-   `source_derived_local_p2_bundle_family_with_tensor_chamber_certificate`
-   rows are counted separately. Thus the target `8` unit-tensor/formula-sum
-   match remains diagnostic and cannot be confused with the source-derived
-   `O(-1)+O(-2)->P^2` import family.
+   `local_cygv_one_parameter_family_status_counts`. The regenerated all-target
+   report classifies the four compact one-parameter target families as
+   `uncertified_one_parameter_split_bundle_over_weighted_p2:base=1,1,2;bundle=1,3;base_hyperplane_square=1/2`,
+   while certified
+   `source_derived_local_p2_bundle_family_with_tensor_chamber_certificate` rows
+   are counted separately. Thus the target `8` unit-tensor/formula-sum match
+   remains diagnostic and cannot be confused with the source-derived
+   `O(-1)+O(-2)->P^2` import family; it now has the more specific
+   `O(-1)+O(-3)->P(1,1,2)`-style weighted-base shape.
    Origin-circuit witness-domain reports now optionally run compact `cygv` on
    relation, shared-facet, and guarded facet-union generator domains. For
    target `8`, relation-only gives `GV=2`, materializes one target qN term,
