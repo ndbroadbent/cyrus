@@ -1638,7 +1638,12 @@ degree-8 side is not a supplied seed at all. The immediate missing input is
 therefore composite lower-degree semigroup history, not simply another
 uncovered Mori generator. The first-generation seed-sum sample for the degree-8
 side splits it further as a toric-covered degree-2 reduced seed plus an
-uncovered degree-6 seed that does not survive pair reduction.
+uncovered degree-6 seed that does not survive pair reduction. Tracing that
+degree-6 seed through the pair-reduction relation shows it splits into
+degree-4 and degree-2 reduced seeds, both with source-derived toric GV values.
+So at least for the nearest degree-10 histories, the open problem has moved
+from identifying leaf toric formulas to reproducing cygv's composite
+degree-ordered subtraction history over those leaves.
 
 After rebuilding `mcallister_gv_context`, the dry-run report now preserves the
 origin-circuit provenance exported by `mcallister_first_principles`. A fresh

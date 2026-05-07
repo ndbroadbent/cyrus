@@ -249,7 +249,11 @@ to make the remaining GV layer more first-principles:
    next source-history task is composite lower-degree semigroup reconstruction.
    The seed-sum sample for that degree-8 side splits it again as a
    toric-covered degree-2 reduced seed plus an uncovered degree-6 seed that does
-   not survive pair reduction.
+   not survive pair reduction; tracing that degree-6 seed through the
+   pair-reduction relation reaches degree-4 and degree-2 reduced seeds that
+   both have toric GV values. The missing compact-GV work is therefore cygv's
+   composite degree-ordered subtraction history, not leaf toric formula
+   discovery for those nearest paths.
    A
    structured export now exists via
    `--dump-corrected-chamber-gv-context`; it records the local charge basis,

@@ -436,8 +436,21 @@ struct CygvSeedSumDecomposition {
     reduced_seed_toric_gv: Option<String>,
     seed_toric_gv: Option<String>,
     seed_is_reduced_seed: bool,
+    seed_pair_reduction_sum: Option<CygvSeedPairDecomposition>,
     reduced_seed_nonzero: Vec<(usize, i64)>,
     seed_nonzero: Vec<(usize, i64)>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CygvSeedPairDecomposition {
+    lhs_degree: i128,
+    rhs_degree: i128,
+    lhs_toric_gv: Option<String>,
+    rhs_toric_gv: Option<String>,
+    lhs_is_reduced_seed: bool,
+    rhs_is_reduced_seed: bool,
+    lhs_nonzero: Vec<(usize, i64)>,
+    rhs_nonzero: Vec<(usize, i64)>,
 }
 
 struct CygvPathPredecessorStats {
@@ -3885,8 +3898,46 @@ fn first_generation_seed_sum_decomposition(
             reduced_seed_toric_gv: covered_toric_gv_by_basis.get(reduced_seed).cloned(),
             seed_toric_gv: covered_toric_gv_by_basis.get(&seed).cloned(),
             seed_is_reduced_seed: reduced_seed_set.contains(&seed),
+            seed_pair_reduction_sum: seed_pair_reduction_sum_decomposition(
+                &seed,
+                grading,
+                seed_set,
+                reduced_seed_set,
+                covered_toric_gv_by_basis,
+            )?,
             reduced_seed_nonzero: sparse_from_dense(reduced_seed),
             seed_nonzero: sparse_from_dense(&seed),
+        }));
+    }
+    Ok(None)
+}
+
+fn seed_pair_reduction_sum_decomposition(
+    seed: &[i64],
+    grading: &[i64],
+    seed_set: &HashSet<Vec<i64>>,
+    reduced_seed_set: &HashSet<Vec<i64>>,
+    covered_toric_gv_by_basis: &HashMap<Vec<i64>, String>,
+) -> Result<Option<CygvSeedPairDecomposition>, String> {
+    if reduced_seed_set.contains(seed) {
+        return Ok(None);
+    }
+    let mut sorted_seeds = seed_set.iter().collect::<Vec<_>>();
+    sorted_seeds.sort();
+    for lhs in sorted_seeds {
+        let rhs = checked_vector_difference(seed, lhs)?;
+        if !seed_set.contains(&rhs) {
+            continue;
+        }
+        return Ok(Some(CygvSeedPairDecomposition {
+            lhs_degree: curve_degree(lhs, grading)?,
+            rhs_degree: curve_degree(&rhs, grading)?,
+            lhs_toric_gv: covered_toric_gv_by_basis.get(lhs).cloned(),
+            rhs_toric_gv: covered_toric_gv_by_basis.get(&rhs).cloned(),
+            lhs_is_reduced_seed: reduced_seed_set.contains(lhs),
+            rhs_is_reduced_seed: reduced_seed_set.contains(&rhs),
+            lhs_nonzero: sparse_from_dense(lhs),
+            rhs_nonzero: sparse_from_dense(&rhs),
         }));
     }
     Ok(None)
