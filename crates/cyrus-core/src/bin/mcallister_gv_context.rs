@@ -559,6 +559,10 @@ struct LocalCygvSourceResolutionHintSummary {
     shared_two_simplex_star_reduced_unit_tensor_candidate_gv: Option<String>,
     shared_two_simplex_star_reduced_unit_tensor_probe_status: String,
     shared_two_simplex_star_reduced_unit_tensor_probe_error: Option<String>,
+    shared_two_simplex_star_target_relation_status: String,
+    shared_two_simplex_star_target_relation_missing_points: Vec<usize>,
+    shared_two_simplex_star_target_relation_extra_star_points: Vec<usize>,
+    shared_two_simplex_star_target_relation_coordinates: Option<Vec<i64>>,
     zero_relation_shared_two_simplex_points: Vec<usize>,
     zero_relation_shared_two_simplex_point_samples: Vec<OriginCircuitRelationPointSample>,
     resolved_shared_support_status: String,
@@ -14578,6 +14582,10 @@ fn local_cygv_source_resolution_hint_summaries(
                 local_cygv_shared_two_simplex_star_reduction_hint(&star_support_hint);
             let star_reduced_unit_tensor_probe =
                 local_cygv_star_reduced_unit_tensor_probe(&star_reduction_hint);
+            let star_target_relation_hint = local_cygv_star_target_relation_hint(
+                target.origin_circuit_first_witness.as_ref(),
+                &star_support_hint,
+            );
             let star_extra_affine_heights =
                 origin_circuit_shared_two_simplex_star_extra_affine_heights(
                     target.origin_circuit_first_witness.as_ref(),
@@ -14620,6 +14628,13 @@ fn local_cygv_source_resolution_hint_summaries(
                     star_reduced_unit_tensor_probe.status,
                 shared_two_simplex_star_reduced_unit_tensor_probe_error:
                     star_reduced_unit_tensor_probe.error,
+                shared_two_simplex_star_target_relation_status: star_target_relation_hint.status,
+                shared_two_simplex_star_target_relation_missing_points: star_target_relation_hint
+                    .missing_points,
+                shared_two_simplex_star_target_relation_extra_star_points:
+                    star_target_relation_hint.extra_star_points,
+                shared_two_simplex_star_target_relation_coordinates: star_target_relation_hint
+                    .coordinates,
                 zero_relation_shared_two_simplex_points:
                     origin_circuit_zero_relation_shared_two_simplex_points(
                         target.origin_circuit_first_witness.as_ref(),
@@ -15155,6 +15170,13 @@ struct LocalCygvStarReducedUnitTensorProbe {
     error: Option<String>,
 }
 
+struct LocalCygvStarTargetRelationHint {
+    status: String,
+    missing_points: Vec<usize>,
+    extra_star_points: Vec<usize>,
+    coordinates: Option<Vec<i64>>,
+}
+
 fn local_cygv_shared_two_simplex_star_support_hint(
     witness: Option<&OriginCircuitWitnessSample>,
 ) -> LocalCygvStarSupportHint {
@@ -15370,6 +15392,89 @@ fn local_cygv_star_reduced_unit_tensor_probe(
             status: "star_reduced_unit_tensor_probe_hkty_error".to_string(),
             error: Some(error),
         },
+    }
+}
+
+fn local_cygv_star_target_relation_hint(
+    witness: Option<&OriginCircuitWitnessSample>,
+    star_support: &LocalCygvStarSupportHint,
+) -> LocalCygvStarTargetRelationHint {
+    let empty = |status: &str| LocalCygvStarTargetRelationHint {
+        status: status.to_string(),
+        missing_points: Vec::new(),
+        extra_star_points: Vec::new(),
+        coordinates: None,
+    };
+    let Some(witness) = witness else {
+        return empty("star_target_relation_missing_origin_circuit_witness");
+    };
+    if star_support.point_indices.is_empty() {
+        return empty("star_target_relation_missing_star_support");
+    }
+    let relation_by_point = witness
+        .relation_points
+        .iter()
+        .map(|point| (point.point_index, point.coefficient))
+        .collect::<BTreeMap<_, _>>();
+    let relation_points = relation_by_point.keys().copied().collect::<BTreeSet<_>>();
+    let star_points = star_support
+        .point_indices
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let missing_points = relation_points
+        .difference(&star_points)
+        .copied()
+        .collect::<Vec<_>>();
+    let extra_star_points = star_points
+        .difference(&relation_points)
+        .copied()
+        .collect::<Vec<_>>();
+    if !missing_points.is_empty() {
+        return LocalCygvStarTargetRelationHint {
+            status: "star_target_relation_not_supported_by_star_support".to_string(),
+            missing_points,
+            extra_star_points,
+            coordinates: None,
+        };
+    }
+    let target = star_support
+        .point_indices
+        .iter()
+        .map(|point_index| relation_by_point.get(point_index).copied().unwrap_or(0))
+        .collect::<Vec<_>>();
+    let Some(charge_basis) = star_support.charge_basis.as_ref() else {
+        return LocalCygvStarTargetRelationHint {
+            status: "star_target_relation_blocked_missing_star_charge_basis".to_string(),
+            missing_points,
+            extra_star_points,
+            coordinates: None,
+        };
+    };
+    let coordinates = match relation_coordinates_in_local_charge_basis(&target, charge_basis) {
+        Ok(coordinates) => coordinates,
+        Err(error) => {
+            return LocalCygvStarTargetRelationHint {
+                status: format!(
+                    "star_target_relation_coordinate_error:{}",
+                    status_error_fragment(&error)
+                ),
+                missing_points,
+                extra_star_points,
+                coordinates: None,
+            };
+        }
+    };
+    let status = if coordinates.is_some() {
+        "star_target_relation_integral_in_star_charge_basis"
+    } else {
+        "star_target_relation_not_in_star_charge_basis"
+    };
+    LocalCygvStarTargetRelationHint {
+        status: status.to_string(),
+        missing_points,
+        extra_star_points,
+        coordinates,
     }
 }
 
@@ -18747,6 +18852,18 @@ mod tests {
             star_reduction_hint.reduced_charge_row,
             Some(vec![1, 1, -1, -1])
         );
+        let star_target_relation_hint =
+            local_cygv_star_target_relation_hint(Some(&witness), &star_support_hint);
+        assert_eq!(
+            star_target_relation_hint.status,
+            "star_target_relation_not_supported_by_star_support"
+        );
+        assert_eq!(star_target_relation_hint.missing_points, vec![211, 214]);
+        assert_eq!(
+            star_target_relation_hint.extra_star_points,
+            vec![55, 195, 212]
+        );
+        assert_eq!(star_target_relation_hint.coordinates, None);
         let resolved_hint = local_cygv_resolved_shared_support_hint(&skeleton, Some(&witness));
         assert_eq!(
             resolved_hint.status,

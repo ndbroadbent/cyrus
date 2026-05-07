@@ -3173,6 +3173,13 @@ rejected by compact `cygv` with "the dimension of the CY must be at least
 three". Thus targets `7`/`8` need the local/noncompact resolved-conifold
 certificate, and targets `3`/`6` still need a real weighted-phase tensor rather
 than the unit-tensor toy value.
+The target-vs-star support guardrail is now explicit as well. In
+`/tmp/cyrus_gv_context_star_target_relation_report.json`, all four weighted
+rows report `star_target_relation_not_supported_by_star_support`: targets
+`3`, `6`, `7`, and `8` are respectively missing relation points
+`[208,211]`, `[49,52]`, `[208,214]`, and `[211,214]` from their actual star
+supports. Therefore the reduced star rows are neighboring chamber data, not
+the missing target relations themselves.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

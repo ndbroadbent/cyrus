@@ -133,6 +133,10 @@ run pass. Any remaining mismatch must be explicit and localizable.
    non-promotable: it gives `0` for targets `3`/`6` and rejects targets `7`/`8`
    as below compact CY dimension three. This keeps the blocker on deriving
    certified local/noncompact phase data.
+   The target-vs-star support guardrail confirms the star rows cannot be
+   assigned to the missing targets directly: each weighted target relation has
+   relation points absent from the actual star support. The chamber map still
+   has to explain how these neighboring rows determine the target GV history.
    A fresh read of
    `string_theory/mcallister_2107/latest_cytools/compute_kklt_iterative.py`
    confirms the sign convention used by Cyrus,
