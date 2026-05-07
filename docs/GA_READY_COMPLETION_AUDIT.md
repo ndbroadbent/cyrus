@@ -181,7 +181,14 @@ and matrix-basis pipeline are no longer open.
    therefore reproducing the composite semigroup subtraction history over these
    leaves. A pair-expanded reduced-leaf explicit semigroup has only 12 elements
    and returns `GV=0` for both degree-10 targets, so it is not the valid compact
-   history domain.
+   history domain. A broader path-support provided-generator probe, formed from
+   the target plus sampled predecessor/difference/decomposition supports and
+   still executed through the actual Rust `cygv` crate, also fails as a
+   replacement: target `7` uses support size `7` with `11` generators and
+   target `8` uses support size `6` with `7` generators, and both return
+   `GV=0`. This keeps the missing object at the certified compact/chamber
+   semigroup and degree-ordered subtraction history level, not a small support
+   subset.
 5. **Potent-ray local diagnostics.** Rank-two N=10 and rank-four potent-ray
    rows are still incomplete, but they are validation diagnostics rather than
    blockers for the compact GA-ready GV engine.

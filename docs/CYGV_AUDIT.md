@@ -1647,6 +1647,17 @@ degree-ordered subtraction history over those leaves. A pair-expanded reduced
 leaf diamond, still run through actual `cygv` as an explicit semigroup, has 12
 elements for both degree-10 targets and returns `GV=0`; the tiny leaf diamond is
 therefore still not the correct compact history domain.
+The path-history probe now has a broader opt-in
+`--run-path-support-generators` check that collects the support of the target,
+sampled predecessor/difference pairs, and sampled seed-sum decompositions, then
+passes every degree-bounded generator contained in that support to the actual
+Rust `cygv` crate. On the saved corrected-chamber context with covered toric
+rows, target `7` has path support size `7`, supplies `11` generators, and
+returns `GV=0`; target `8` has path support size `6`, supplies `7` generators,
+and also returns `GV=0`. This rules out the sampled path-support generator
+domain as the missing compact HKTY history. Like the lower-seed diamonds, it is
+a negative diagnostic unless a source certificate promotes the supplied
+semigroup.
 
 After rebuilding `mcallister_gv_context`, the dry-run report now preserves the
 origin-circuit provenance exported by `mcallister_first_principles`. A fresh

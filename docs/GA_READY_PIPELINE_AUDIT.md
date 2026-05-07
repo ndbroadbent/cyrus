@@ -256,9 +256,15 @@ to make the remaining GV layer more first-principles:
    discovery for those nearest paths. Running the pair-expanded reduced-leaf
    diamond through actual `cygv` gives a 12-element explicit semigroup and
    `GV=0` for both degree-10 targets, so this still is not the valid compact
-   history domain.
-   A
-   structured export now exists via
+   history domain. The next broader local check,
+   `--run-path-support-generators`, builds a supplied generator set from the
+   union of the target, predecessor, difference, and sampled decomposition
+   supports and runs that through actual `cygv`. On the same degree-10 targets
+   this gives support/generator sizes `7/11` for target `7` and `6/7` for
+   target `8`, and both return `GV=0`. Therefore the path-support generator
+   subset is another diagnostic-only negative result, not the missing compact
+   semigroup.
+   A structured export now exists via
    `--dump-corrected-chamber-gv-context`; it records the local charge basis,
    target degree, degree-bounded projected Mori rays, exact active-generator
    decompositions, q-matrix, curve-basis matrix, grading vector, and sparse

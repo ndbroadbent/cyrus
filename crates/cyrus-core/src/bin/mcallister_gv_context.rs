@@ -408,6 +408,11 @@ struct CygvPathHistoryProbe {
     pair_expanded_lower_seed_diamond_element_count: Option<usize>,
     pair_expanded_lower_seed_diamond_gv: Option<String>,
     pair_expanded_lower_seed_diamond_error: Option<String>,
+    path_support_size: Option<usize>,
+    path_support_generator_count: Option<usize>,
+    path_support_status: Option<String>,
+    path_support_gv: Option<String>,
+    path_support_error: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -484,6 +489,14 @@ struct PairExpandedLowerSeedProbe {
     term_count: Option<usize>,
     terms_nonzero: Option<Vec<Vec<(usize, i64)>>>,
     terms: Option<Vec<Vec<i64>>>,
+    error: Option<String>,
+}
+
+struct PathSupportGeneratorProbe {
+    support_size: Option<usize>,
+    generator_count: Option<usize>,
+    status: Option<String>,
+    gv: Option<String>,
     error: Option<String>,
 }
 
@@ -892,6 +905,127 @@ fn pair_expanded_lower_seed_diamond_probe(
             gv: None,
             error: Some(error),
         },
+    }
+}
+
+fn path_support_generator_probe(
+    target: &[i64],
+    target_degree: i128,
+    candidates: &[CygvPathPredecessorCandidate],
+    context: &ValidatedContext<'_>,
+    run_path_support_generators: bool,
+) -> PathSupportGeneratorProbe {
+    if !run_path_support_generators {
+        return PathSupportGeneratorProbe {
+            support_size: None,
+            generator_count: None,
+            status: None,
+            gv: None,
+            error: None,
+        };
+    }
+    match path_support_generator_probe_inner(target, target_degree, candidates, context) {
+        Ok(probe) => probe,
+        Err(error) => PathSupportGeneratorProbe {
+            support_size: None,
+            generator_count: None,
+            status: Some("error".to_string()),
+            gv: None,
+            error: Some(error),
+        },
+    }
+}
+
+fn path_support_generator_probe_inner(
+    target: &[i64],
+    target_degree: i128,
+    candidates: &[CygvPathPredecessorCandidate],
+    context: &ValidatedContext<'_>,
+) -> Result<PathSupportGeneratorProbe, String> {
+    let support = path_candidate_support(target, candidates);
+    if support.is_empty() {
+        return Ok(PathSupportGeneratorProbe {
+            support_size: Some(0),
+            generator_count: Some(0),
+            status: Some("skipped_empty_path_support".to_string()),
+            gv: None,
+            error: None,
+        });
+    }
+    let mut generators = Vec::new();
+    let mut seen = HashSet::new();
+    for ray in context.degree_bounded_rays {
+        let degree = curve_degree(ray, context.grading)?;
+        if degree <= 0 || degree > target_degree {
+            continue;
+        }
+        let supported = ray
+            .iter()
+            .enumerate()
+            .all(|(idx, &value)| value == 0 || support.contains(&idx));
+        if supported && seen.insert(ray.clone()) {
+            generators.push(ray.clone());
+        }
+    }
+    if !generators.iter().any(|ray| ray.as_slice() == target) {
+        generators.push(target.to_vec());
+    }
+    generators.sort();
+    generators.dedup();
+    let (generator_count, status, gv, error) = run_provided_generator_target_gv(
+        &generators,
+        target,
+        target_degree,
+        context,
+        "path_support_generators",
+    )?;
+    Ok(PathSupportGeneratorProbe {
+        support_size: Some(support.len()),
+        generator_count: Some(generator_count),
+        status: Some(status),
+        gv,
+        error,
+    })
+}
+
+fn path_candidate_support(
+    target: &[i64],
+    candidates: &[CygvPathPredecessorCandidate],
+) -> HashSet<usize> {
+    let mut support = sparse_from_dense(target)
+        .into_iter()
+        .map(|(idx, _)| idx)
+        .collect::<HashSet<_>>();
+    for candidate in candidates {
+        extend_support_from_sparse(&mut support, &candidate.predecessor_nonzero);
+        extend_support_from_sparse(&mut support, &candidate.difference_nonzero);
+        if let Some(decomposition) = candidate.predecessor_first_generation_seed_sum.as_ref() {
+            extend_support_from_seed_sum(&mut support, decomposition);
+        }
+        if let Some(decomposition) = candidate.difference_first_generation_seed_sum.as_ref() {
+            extend_support_from_seed_sum(&mut support, decomposition);
+        }
+    }
+    support
+}
+
+fn extend_support_from_seed_sum(
+    support: &mut HashSet<usize>,
+    decomposition: &CygvSeedSumDecomposition,
+) {
+    extend_support_from_sparse(support, &decomposition.reduced_seed_nonzero);
+    extend_support_from_sparse(support, &decomposition.seed_nonzero);
+    if let Some(pair) = decomposition.seed_pair_reduction_sum.as_ref() {
+        extend_support_from_sparse(support, &pair.lhs_nonzero);
+        extend_support_from_sparse(support, &pair.rhs_nonzero);
+    }
+}
+
+fn extend_support_from_sparse(support: &mut HashSet<usize>, sparse: &[(usize, i64)]) {
+    for &(idx, value) in sparse {
+        if value != 0 {
+            support.insert(idx);
+        }
     }
 }
 
@@ -2591,6 +2725,7 @@ fn report_target(
     measure_cygv_semigroups: bool,
     probe_cygv_path_history: bool,
     run_lower_seed_diamonds: bool,
+    run_path_support_generators: bool,
     measure_cygv_degree_ladder: bool,
     cygv_degree_ladder_max_degree: Option<i128>,
     semigroup_measure_max_target_degree: Option<i128>,
@@ -3171,6 +3306,7 @@ fn report_target(
                 context,
                 &target,
                 run_lower_seed_diamonds,
+                run_path_support_generators,
                 element_limit,
                 semigroup_measure_max_seed_count,
                 closure_generation_limit,
@@ -3654,6 +3790,7 @@ fn cygv_path_history_probe(
     context: &ValidatedContext<'_>,
     target: &[i64],
     run_lower_seed_diamonds: bool,
+    run_path_support_generators: bool,
     element_limit: usize,
     max_seed_count: Option<usize>,
     closure_generation_limit: Option<usize>,
@@ -3663,6 +3800,7 @@ fn cygv_path_history_probe(
         context,
         target,
         run_lower_seed_diamonds,
+        run_path_support_generators,
         element_limit,
         max_seed_count,
         closure_generation_limit,
@@ -3707,6 +3845,11 @@ fn cygv_path_history_probe(
             pair_expanded_lower_seed_diamond_element_count: None,
             pair_expanded_lower_seed_diamond_gv: None,
             pair_expanded_lower_seed_diamond_error: None,
+            path_support_size: None,
+            path_support_generator_count: None,
+            path_support_status: None,
+            path_support_gv: None,
+            path_support_error: None,
         },
     }
 }
@@ -3716,6 +3859,7 @@ fn cygv_path_history_probe_inner(
     context: &ValidatedContext<'_>,
     target: &[i64],
     run_lower_seed_diamonds: bool,
+    run_path_support_generators: bool,
     element_limit: usize,
     max_seed_count: Option<usize>,
     closure_generation_limit: Option<usize>,
@@ -3770,6 +3914,11 @@ fn cygv_path_history_probe_inner(
             pair_expanded_lower_seed_diamond_element_count: None,
             pair_expanded_lower_seed_diamond_gv: None,
             pair_expanded_lower_seed_diamond_error: None,
+            path_support_size: None,
+            path_support_generator_count: None,
+            path_support_status: None,
+            path_support_gv: None,
+            path_support_error: None,
         });
     }
     if max_seed_count.is_some_and(|limit| seeds.len() > limit) {
@@ -3810,6 +3959,11 @@ fn cygv_path_history_probe_inner(
             pair_expanded_lower_seed_diamond_element_count: None,
             pair_expanded_lower_seed_diamond_gv: None,
             pair_expanded_lower_seed_diamond_error: None,
+            path_support_size: None,
+            path_support_generator_count: None,
+            path_support_status: None,
+            path_support_gv: None,
+            path_support_error: None,
         });
     }
     let reduced_seeds = cygv_pair_reduced_seed_generators(&seeds)
@@ -3855,6 +4009,13 @@ fn cygv_path_history_probe_inner(
         &seen,
         &reduced_seeds,
     )?;
+    let path_support_generators = path_support_generator_probe(
+        target,
+        sample.degree,
+        &predecessor_stats.candidate_sample,
+        context,
+        run_path_support_generators,
+    );
     if !closure.completed {
         return Ok(CygvPathHistoryProbe {
             status: closure.status,
@@ -3903,6 +4064,11 @@ fn cygv_path_history_probe_inner(
                 .element_count,
             pair_expanded_lower_seed_diamond_gv: pair_expanded_lower_seed_diamond.gv,
             pair_expanded_lower_seed_diamond_error: pair_expanded_lower_seed_diamond.error,
+            path_support_size: path_support_generators.support_size,
+            path_support_generator_count: path_support_generators.generator_count,
+            path_support_status: path_support_generators.status,
+            path_support_gv: path_support_generators.gv,
+            path_support_error: path_support_generators.error,
         });
     }
 
@@ -3953,6 +4119,11 @@ fn cygv_path_history_probe_inner(
             .element_count,
         pair_expanded_lower_seed_diamond_gv: pair_expanded_lower_seed_diamond.gv,
         pair_expanded_lower_seed_diamond_error: pair_expanded_lower_seed_diamond.error,
+        path_support_size: path_support_generators.support_size,
+        path_support_generator_count: path_support_generators.generator_count,
+        path_support_status: path_support_generators.status,
+        path_support_gv: path_support_generators.gv,
+        path_support_error: path_support_generators.error,
     })
 }
 
@@ -4639,6 +4810,7 @@ fn build_report(
     measure_cygv_semigroups: bool,
     probe_cygv_path_history: bool,
     run_lower_seed_diamonds: bool,
+    run_path_support_generators: bool,
     measure_cygv_degree_ladder: bool,
     cygv_degree_ladder_max_degree: Option<i128>,
     semigroup_measure_max_target_degree: Option<i128>,
@@ -4670,6 +4842,7 @@ fn build_report(
             measure_cygv_semigroups,
             probe_cygv_path_history,
             run_lower_seed_diamonds,
+            run_path_support_generators,
             measure_cygv_degree_ladder,
             cygv_degree_ladder_max_degree,
             semigroup_measure_max_target_degree,
@@ -5065,7 +5238,7 @@ fn target_index_selected(index: usize, target_index_filter: Option<usize>) -> bo
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--origin-support-certificate-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--closure-generation-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
+            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--origin-support-certificate-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--closure-generation-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
         );
         std::process::exit(2);
     };
@@ -5087,6 +5260,7 @@ fn main() {
     let measure_cygv_semigroups = parse_flag("--measure-cygv-semigroups");
     let probe_cygv_path_history = parse_flag("--probe-cygv-path-history");
     let run_lower_seed_diamonds = parse_flag("--run-lower-seed-diamonds");
+    let run_path_support_generators = parse_flag("--run-path-support-generators");
     let measure_cygv_degree_ladder = parse_flag("--measure-cygv-degree-ladder");
     let cygv_degree_ladder_max_degree = parse_arg_value::<i128>("--cygv-degree-ladder-max-degree");
     let semigroup_measure_max_target_degree =
@@ -5122,6 +5296,7 @@ fn main() {
         measure_cygv_semigroups,
         probe_cygv_path_history,
         run_lower_seed_diamonds,
+        run_path_support_generators,
         measure_cygv_degree_ladder,
         cygv_degree_ladder_max_degree,
         semigroup_measure_max_target_degree,
@@ -6591,6 +6766,47 @@ mod tests {
     }
 
     #[test]
+    fn path_candidate_support_merges_target_path_and_seed_sum_terms() {
+        let candidate = CygvPathPredecessorCandidate {
+            predecessor_degree: 3,
+            difference_degree: 4,
+            series_distance: "0.000000".to_string(),
+            predecessor_toric_gv: None,
+            difference_toric_gv: None,
+            predecessor_is_seed: false,
+            difference_is_seed: false,
+            predecessor_is_reduced_seed: false,
+            difference_is_reduced_seed: false,
+            predecessor_first_generation_seed_sum: Some(CygvSeedSumDecomposition {
+                reduced_seed_degree: 1,
+                seed_degree: 2,
+                reduced_seed_toric_gv: None,
+                seed_toric_gv: None,
+                seed_is_reduced_seed: false,
+                seed_pair_reduction_sum: Some(CygvSeedPairDecomposition {
+                    lhs_degree: 1,
+                    rhs_degree: 1,
+                    lhs_toric_gv: None,
+                    rhs_toric_gv: None,
+                    lhs_is_reduced_seed: true,
+                    rhs_is_reduced_seed: true,
+                    lhs_nonzero: vec![(4, 3), (5, 0)],
+                    rhs_nonzero: vec![(6, 1)],
+                }),
+                reduced_seed_nonzero: vec![(2, 1)],
+                seed_nonzero: vec![(3, -1)],
+            }),
+            difference_first_generation_seed_sum: None,
+            predecessor_nonzero: vec![(1, 1)],
+            difference_nonzero: vec![(3, 0), (4, 1)],
+        };
+
+        let support = path_candidate_support(&[0, 5, 0, 0, 0, 0, 0, 1], &[candidate]);
+
+        assert_eq!(support, HashSet::from([1, 2, 3, 4, 6, 7]));
+    }
+
+    #[test]
     fn path_history_probe_counts_cygv_monomial_map_predecessors() {
         let stats = MissingGvTargetStats {
             target_count: 1,
@@ -6639,6 +6855,7 @@ mod tests {
             &stats.sample[0],
             &context,
             &target,
+            false,
             false,
             16,
             None,
@@ -6762,6 +6979,7 @@ mod tests {
             &context,
             &target,
             false,
+            false,
             2,
             None,
             None,
@@ -6824,6 +7042,7 @@ mod tests {
             &stats.sample[0],
             &context,
             &target,
+            false,
             false,
             16,
             Some(2),
@@ -6994,6 +7213,7 @@ mod tests {
             false,
             false,
             false,
+            false,
             None,
             None,
             None,
@@ -7123,6 +7343,7 @@ mod tests {
             false,
             false,
             false,
+            false,
             None,
             None,
             None,
@@ -7154,6 +7375,7 @@ mod tests {
             None,
             false,
             true,
+            false,
             false,
             false,
             None,
