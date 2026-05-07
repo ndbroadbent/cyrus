@@ -647,8 +647,12 @@ struct ActiveDecompositionSourceLeafSummary {
     matching_uncovered_source_ray_degree: Option<i128>,
     matching_uncovered_source_ray_origin_circuit_pattern: Option<String>,
     matching_uncovered_source_ray_exact_kind: Option<String>,
+    matching_uncovered_source_ray_cms_check_status_counts: BTreeMap<String, usize>,
+    matching_uncovered_source_ray_cms_solution_summaries: Vec<CmsGeneralDivisorSolutionSummary>,
+    matching_uncovered_source_ray_local_charge_signature: Option<String>,
     matching_uncovered_source_ray_local_cygv_readiness: Option<String>,
     matching_uncovered_source_ray_local_missing_inputs: Vec<String>,
+    matching_uncovered_source_ray_local_cygv_input_skeleton: Option<LocalCygvInputSkeleton>,
     occurrences: Vec<ActiveDecompositionSourceLeafOccurrence>,
 }
 
@@ -693,6 +697,7 @@ struct PathSupportSourceClassContext {
     matching_uncovered_source_ray_local_charge_signature: Option<String>,
     matching_uncovered_source_ray_local_cygv_readiness: Option<String>,
     matching_uncovered_source_ray_local_missing_inputs: Vec<String>,
+    matching_uncovered_source_ray_local_cygv_input_skeleton: Option<LocalCygvInputSkeleton>,
 }
 
 struct CygvPathPredecessorStats {
@@ -1429,6 +1434,7 @@ fn path_support_source_class_context(
         matching_uncovered_source_ray_local_charge_signature,
         matching_uncovered_source_ray_local_cygv_readiness,
         matching_uncovered_source_ray_local_missing_inputs,
+        matching_uncovered_source_ray_local_cygv_input_skeleton,
     ) = uncovered_source_ray_local_cygv_context(matching_uncovered_source_ray.as_ref())?;
     let Some(ray_context) = context.degree_bounded_ray_context else {
         return Ok(PathSupportSourceClassContext {
@@ -1465,6 +1471,7 @@ fn path_support_source_class_context(
             matching_uncovered_source_ray_local_charge_signature,
             matching_uncovered_source_ray_local_cygv_readiness,
             matching_uncovered_source_ray_local_missing_inputs,
+            matching_uncovered_source_ray_local_cygv_input_skeleton,
         });
     };
 
@@ -1510,14 +1517,23 @@ fn path_support_source_class_context(
         matching_uncovered_source_ray_local_charge_signature,
         matching_uncovered_source_ray_local_cygv_readiness,
         matching_uncovered_source_ray_local_missing_inputs,
+        matching_uncovered_source_ray_local_cygv_input_skeleton,
     })
 }
 
 fn uncovered_source_ray_local_cygv_context(
     matching_uncovered_source_ray: Option<&(usize, &MissingGvTargetSample)>,
-) -> Result<(Option<String>, Option<String>, Vec<String>), String> {
+) -> Result<
+    (
+        Option<String>,
+        Option<String>,
+        Vec<String>,
+        Option<LocalCygvInputSkeleton>,
+    ),
+    String,
+> {
     let Some((_, sample)) = matching_uncovered_source_ray else {
-        return Ok((None, None, Vec::new()));
+        return Ok((None, None, Vec::new(), None));
     };
     let signature = sample
         .origin_circuit_affine_support
@@ -1527,9 +1543,10 @@ fn uncovered_source_ray_local_cygv_context(
         local_cygv_input_skeleton(sample, sample.origin_circuit_affine_support.as_ref())?;
     let readiness = skeleton.as_ref().map(local_cygv_actual_call_readiness);
     let missing_inputs = skeleton
-        .map(|skeleton| skeleton.remaining_uncertified_inputs)
+        .as_ref()
+        .map(|skeleton| skeleton.remaining_uncertified_inputs.clone())
         .unwrap_or_default();
-    Ok((signature, readiness, missing_inputs))
+    Ok((signature, readiness, missing_inputs, skeleton))
 }
 
 fn missing_sample_cms_check_status_counts(
@@ -2278,6 +2295,29 @@ fn active_decomposition_unresolved_source_leaf_summaries(
                         matching_uncovered_source_ray_exact_kind: source_context.as_ref().and_then(
                             |context| context.matching_uncovered_source_ray_exact_kind.clone(),
                         ),
+                        matching_uncovered_source_ray_cms_check_status_counts: source_context
+                            .as_ref()
+                            .map(|context| {
+                                context
+                                    .matching_uncovered_source_ray_cms_check_status_counts
+                                    .clone()
+                            })
+                            .unwrap_or_default(),
+                        matching_uncovered_source_ray_cms_solution_summaries: source_context
+                            .as_ref()
+                            .map(|context| {
+                                context
+                                    .matching_uncovered_source_ray_cms_solution_summaries
+                                    .clone()
+                            })
+                            .unwrap_or_default(),
+                        matching_uncovered_source_ray_local_charge_signature: source_context
+                            .as_ref()
+                            .and_then(|context| {
+                                context
+                                    .matching_uncovered_source_ray_local_charge_signature
+                                    .clone()
+                            }),
                         matching_uncovered_source_ray_local_cygv_readiness: source_context
                             .as_ref()
                             .and_then(|context| {
@@ -2293,6 +2333,13 @@ fn active_decomposition_unresolved_source_leaf_summaries(
                                     .clone()
                             })
                             .unwrap_or_default(),
+                        matching_uncovered_source_ray_local_cygv_input_skeleton: source_context
+                            .as_ref()
+                            .and_then(|context| {
+                                context
+                                    .matching_uncovered_source_ray_local_cygv_input_skeleton
+                                    .clone()
+                            }),
                         occurrences: vec![occurrence],
                     });
                 }
@@ -9442,8 +9489,46 @@ mod tests {
             is_mori_generator: false,
             origin_circuit_pattern: None,
             origin_circuit_witness_count: None,
-            origin_circuit_first_witness: None,
-            origin_circuit_affine_support: None,
+            origin_circuit_first_witness: Some(OriginCircuitWitnessSample {
+                first_facet_exclusive_point: 0,
+                second_facet_exclusive_point: 1,
+                shared_two_simplex: Vec::new(),
+                first_facet: Vec::new(),
+                second_facet: Vec::new(),
+                first_facet_size: 1,
+                second_facet_size: 1,
+                sparse_relation: vec![(0, 2), (1, -1)],
+                relation_points: vec![
+                    OriginCircuitRelationPointSample {
+                        point_index: 0,
+                        coefficient: 2,
+                        coordinates: vec![0],
+                        face_dimension: None,
+                    },
+                    OriginCircuitRelationPointSample {
+                        point_index: 1,
+                        coefficient: -1,
+                        coordinates: vec![1],
+                        face_dimension: None,
+                    },
+                ],
+            }),
+            origin_circuit_affine_support: Some(OriginCircuitAffineSupportSample {
+                affine_rank: 1,
+                coefficient_counts: BTreeMap::from([(-1, 1), (2, 1)]),
+                local_charge_basis: vec![vec![2, -1]],
+                local_coordinates: vec![
+                    OriginCircuitLocalCoordinateSample {
+                        point_index: 0,
+                        coordinates: vec![0],
+                    },
+                    OriginCircuitLocalCoordinateSample {
+                        point_index: 1,
+                        coordinates: vec![1],
+                    },
+                ],
+                local_coordinates_2d: None,
+            }),
             cms_general_divisor_shape_candidates: None,
             cms_general_divisor_intersection_checks: None,
             branch_diagnostic: None,
@@ -9547,6 +9632,15 @@ mod tests {
         assert!(summaries.iter().any(|summary| {
             summary.source_status == "active_generator_matches_uncovered_source_ray"
                 && summary.matching_uncovered_source_ray_index == Some(1)
+                && summary
+                    .matching_uncovered_source_ray_local_charge_signature
+                    .as_deref()
+                    == Some("-1,2")
+                && summary
+                    .matching_uncovered_source_ray_local_cygv_input_skeleton
+                    .as_ref()
+                    .and_then(|skeleton| skeleton.local_cygv_wrapper_q_matrix_candidate.as_ref())
+                    == Some(&vec![vec![2, -1]])
         }));
         assert!(summaries.iter().any(|summary| {
             summary.source_status == "active_generator_source_ray_not_toric_covered"

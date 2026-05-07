@@ -2320,6 +2320,20 @@ missing targets and six matching uncovered source rays with degrees 4, 10, 10,
 `local_chamber_certificate`; the degree-4 ray has no origin-pattern diagnostic
 yet. This is now the concrete lower leaf set for the next GV implementation
 step.
+The active-leaf report now serializes the matching uncovered source ray's
+local charge signature, CMS check status counts, CMS solution summaries, and
+full `LocalCygvInputSkeleton` when an origin-circuit support exists. On the
+current enriched report the five origin-circuit lower leaves all have
+source-derived one-parameter semigroup generators, primitive grading `[1]`, and
+oriented q-row candidates. The degree-12 row has local signature
+`-2,-2,-1,2,3` and q row `[-2,-3,2,2,1]`; the degree-14 row has signature
+`-1,-1,-1,1,2` and q row `[-1,-2,1,1,1]`. Both land in cygv's `neg2` omega
+bucket for the primitive generator. The three degree-10 rows have signatures
+`-2,-2,-1,1,2,2` or `-2,-1,-1,1,1,2` and oriented q rows with three negative
+intersections, so cygv's compact coefficient layer would ignore the primitive
+term without a different certified phase/chamber model. This narrows the next
+step to local phase/intersection/chamber certification for a known set of
+source rows, not discovery of additional active leaves.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

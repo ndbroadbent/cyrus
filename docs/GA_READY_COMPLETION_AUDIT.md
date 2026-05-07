@@ -324,7 +324,11 @@ source-ray leaves. Five of those source-ray leaves are blocked on
 `local_chamber_certificate`; the remaining degree-4 leaf lacks an
 origin-pattern/source-derived readiness classification. The remaining
 source-ray work is therefore local phase/intersection/chamber certification,
-not finding which lower leaves are involved.
+not finding which lower leaves are involved. The enriched active-leaf report
+now also carries the matching source rays' local q rows and CMS check counts:
+two origin-circuit lower leaves are primitive `neg2` q-row candidates, while
+three have three negative primitive intersections and still need a different
+certified phase or chamber model.
 
 ## Next Concrete Action
 

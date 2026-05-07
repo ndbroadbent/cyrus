@@ -85,7 +85,11 @@ run pass. Any remaining mismatch must be explicit and localizable.
    `local_intersection_tensor`, and `local_chamber_certificate`; the degree-4
    source ray still lacks an origin-pattern/source-derived readiness label.
    That makes the next corrected-GV step local phase/intersection/chamber
-   construction, not more leaf discovery.
+   construction, not more leaf discovery. The enriched active-leaf report now
+   includes the matched source-ray q rows and CMS status counts; two lower
+   origin-circuit leaves are primitive `neg2` candidates, while three have
+   three negative primitive intersections under the oriented local q row and
+   still need a certified alternate phase/chamber model.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for
