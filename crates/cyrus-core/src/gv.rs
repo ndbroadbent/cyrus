@@ -836,6 +836,33 @@ impl Default for SupportingMoriFaceLpSearchOptions {
     }
 }
 
+/// Diagnostic trace for an LP-assisted supporting Mori face search.
+///
+/// The LP phases only propose real normals. A populated `certificate` has
+/// still passed exact integer verification through
+/// [`check_supporting_mori_face_normal`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SupportingMoriFaceLpSearchDiagnostic {
+    /// Rank of the supplied face generators.
+    pub face_rank: usize,
+    /// Ambient curve-coordinate dimension.
+    pub dim: usize,
+    /// Final search status.
+    pub status: String,
+    /// Outcome of the exact-kernel certificate attempt.
+    pub exact_kernel_status: String,
+    /// Outcome of the aggregate LP attempt.
+    pub aggregate_status: String,
+    /// Number of anchor rays tested after the aggregate LP attempt.
+    pub anchor_attempt_count: usize,
+    /// Number of anchor LPs that returned a finite real normal.
+    pub anchor_lp_solution_count: usize,
+    /// Counts of per-anchor outcomes.
+    pub anchor_status_counts: BTreeMap<String, usize>,
+    /// Exact certificate, when any search phase found one.
+    pub certificate: Option<SupportingMoriFaceCertificate>,
+}
+
 /// Exact certificate that a target curve spans an extremal Mori ray.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExtremalMoriRayCertificate {
@@ -8488,46 +8515,115 @@ pub fn certify_supporting_mori_face_by_lp_search(
     mori_generators: &[Vec<i64>],
     options: &SupportingMoriFaceLpSearchOptions,
 ) -> Result<Option<SupportingMoriFaceCertificate>> {
-    if face_generators.is_empty() {
-        return Ok(None);
-    }
+    Ok(
+        diagnose_supporting_mori_face_by_lp_search(face_generators, mori_generators, options)?
+            .certificate,
+    )
+}
+
+/// Run the LP-assisted supporting-face search and report each failed phase.
+///
+/// This is a diagnostic companion to [`certify_supporting_mori_face_by_lp_search`].
+/// It exists because a missing certificate can mean several different things:
+/// no exact codimension-one kernel, no feasible aggregate LP normal, a real
+/// normal that cannot be rounded to an exact integer certificate, or the same
+/// outcomes across bounded anchor attempts.
+pub fn diagnose_supporting_mori_face_by_lp_search(
+    face_generators: &[Vec<i64>],
+    mori_generators: &[Vec<i64>],
+    options: &SupportingMoriFaceLpSearchOptions,
+) -> Result<SupportingMoriFaceLpSearchDiagnostic> {
     validate_supporting_face_lp_inputs(face_generators, mori_generators, options)?;
-    if let Some(certificate) =
-        certify_supporting_mori_face_by_exact_kernel(face_generators, mori_generators)?
-    {
-        return Ok(Some(certificate));
+    let dim = mori_generators[0].len();
+    let face_rank = if face_generators.is_empty() {
+        0
+    } else {
+        curve_row_span_rank(face_generators)?
+    };
+    let mut diagnostic = SupportingMoriFaceLpSearchDiagnostic {
+        face_rank,
+        dim,
+        status: String::new(),
+        exact_kernel_status: String::new(),
+        aggregate_status: "not_attempted".to_string(),
+        anchor_attempt_count: 0,
+        anchor_lp_solution_count: 0,
+        anchor_status_counts: BTreeMap::new(),
+        certificate: None,
+    };
+
+    if face_generators.is_empty() {
+        diagnostic.status = "empty_support".to_string();
+        diagnostic.exact_kernel_status = "not_attempted_empty_support".to_string();
+        return Ok(diagnostic);
+    }
+
+    match certify_supporting_mori_face_by_exact_kernel(face_generators, mori_generators)? {
+        Some(certificate) => {
+            diagnostic.status = "certified_exact_kernel".to_string();
+            diagnostic.exact_kernel_status = "certified".to_string();
+            diagnostic.certificate = Some(certificate);
+            return Ok(diagnostic);
+        }
+        None => {
+            diagnostic.exact_kernel_status = "no_certificate".to_string();
+        }
     }
 
     if let Some(lp_normal) =
         solve_supporting_face_normal_aggregate_lp(face_generators, mori_generators, options)?
-        && let Some(certificate) = integer_supporting_face_certificate_from_lp(
-            &lp_normal,
-            face_generators,
-            mori_generators,
-            options,
-        )?
     {
-        return Ok(Some(certificate));
-    }
-
-    let anchors = supporting_face_anchor_candidates(face_generators, mori_generators, options)?;
-    for anchor in anchors {
-        let Some(lp_normal) =
-            solve_supporting_face_normal_lp(face_generators, mori_generators, &anchor, options)?
-        else {
-            continue;
-        };
         if let Some(certificate) = integer_supporting_face_certificate_from_lp(
             &lp_normal,
             face_generators,
             mori_generators,
             options,
         )? {
-            return Ok(Some(certificate));
+            diagnostic.status = "certified_aggregate_lp".to_string();
+            diagnostic.aggregate_status = "certified".to_string();
+            diagnostic.certificate = Some(certificate);
+            return Ok(diagnostic);
         }
+        diagnostic.aggregate_status = "lp_solution_rounding_no_certificate".to_string();
+    } else {
+        diagnostic.aggregate_status = "lp_no_solution_or_cutting_exhausted".to_string();
     }
 
-    Ok(None)
+    let anchors = supporting_face_anchor_candidates(face_generators, mori_generators, options)?;
+    for anchor in anchors {
+        diagnostic.anchor_attempt_count += 1;
+        let Some(lp_normal) =
+            solve_supporting_face_normal_lp(face_generators, mori_generators, &anchor, options)?
+        else {
+            *diagnostic
+                .anchor_status_counts
+                .entry("lp_no_solution_or_cutting_exhausted".to_string())
+                .or_insert(0) += 1;
+            continue;
+        };
+        diagnostic.anchor_lp_solution_count += 1;
+        if let Some(certificate) = integer_supporting_face_certificate_from_lp(
+            &lp_normal,
+            face_generators,
+            mori_generators,
+            options,
+        )? {
+            *diagnostic
+                .anchor_status_counts
+                .entry("certified".to_string())
+                .or_insert(0) += 1;
+            diagnostic.status = "certified_anchor_lp".to_string();
+            diagnostic.certificate = Some(certificate);
+            return Ok(diagnostic);
+        }
+        *diagnostic
+            .anchor_status_counts
+            .entry("lp_solution_rounding_no_certificate".to_string())
+            .or_insert(0) += 1;
+    }
+
+    diagnostic.status = "lp_no_certificate".to_string();
+    Ok(diagnostic)
 }
 
 fn validate_supporting_face_lp_inputs(
@@ -12857,7 +12953,8 @@ mod tests {
         curve_in_rational_row_span, curve_row_span_rank, curve_volume_in_divisor_basis,
         cygv_pair_reduced_seed_generators, detect_apparent_nilpotent_ray_from_gv_multiples,
         detect_apparent_nilpotent_rays_from_gv_table, diagnose_affine_toric_circuit,
-        dump_mori_rays_cdd, exact_i64_dot_checked, extract_ckyz_local_gv_invariants_from_potential,
+        diagnose_supporting_mori_face_by_lp_search, dump_mori_rays_cdd, exact_i64_dot_checked,
+        extract_ckyz_local_gv_invariants_from_potential,
         extract_ckyz_local_gv_invariants_from_potential_for_degrees,
         extract_ckyz_local_gv_invariants_from_z_potential_for_degrees,
         find_extremal_mori_ray_separator, find_pair_decomposition, find_semigroup_decomposition,
@@ -15279,6 +15376,29 @@ mod tests {
     }
 
     #[test]
+    fn supporting_mori_face_lp_diagnostic_reports_certified_phase() {
+        let diagnostic = diagnose_supporting_mori_face_by_lp_search(
+            &[vec![1, 0, 0]],
+            &[vec![1, 0, 0], vec![0, 1, 0], vec![0, 0, 1], vec![1, 1, 1]],
+            &SupportingMoriFaceLpSearchOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(diagnostic.face_rank, 1);
+        assert_eq!(diagnostic.dim, 3);
+        assert_eq!(diagnostic.exact_kernel_status, "no_certificate");
+        assert!(diagnostic.certificate.is_some());
+        assert!(
+            diagnostic.status == "certified_aggregate_lp"
+                || diagnostic.status == "certified_anchor_lp"
+        );
+        if diagnostic.status == "certified_aggregate_lp" {
+            assert_eq!(diagnostic.aggregate_status, "certified");
+            assert_eq!(diagnostic.anchor_attempt_count, 0);
+        }
+    }
+
+    #[test]
     fn supporting_mori_face_lp_search_rejects_full_dimensional_support() {
         let certificate = certify_supporting_mori_face_by_lp_search(
             &[vec![1, 0], vec![0, 1]],
@@ -15288,6 +15408,27 @@ mod tests {
         .unwrap();
 
         assert!(certificate.is_none());
+    }
+
+    #[test]
+    fn supporting_mori_face_lp_diagnostic_reports_full_dimensional_failure() {
+        let diagnostic = diagnose_supporting_mori_face_by_lp_search(
+            &[vec![1, 0], vec![0, 1]],
+            &[vec![1, 0], vec![0, 1], vec![1, 1]],
+            &SupportingMoriFaceLpSearchOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(diagnostic.face_rank, 2);
+        assert_eq!(diagnostic.dim, 2);
+        assert_eq!(diagnostic.status, "lp_no_certificate");
+        assert_eq!(diagnostic.exact_kernel_status, "no_certificate");
+        assert_eq!(
+            diagnostic.aggregate_status,
+            "lp_no_solution_or_cutting_exhausted"
+        );
+        assert_eq!(diagnostic.anchor_attempt_count, 0);
+        assert!(diagnostic.certificate.is_none());
     }
 
     #[test]

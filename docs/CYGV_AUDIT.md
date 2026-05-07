@@ -2899,6 +2899,19 @@ is promoted: target `7`'s matching degree-six and degree-eight histories return
 return `offset_generators_lp_no_certificate_rank_3_dim_214`. The qN matches
 therefore identify a plausible local history pattern, not a certified
 corrected-chamber face.
+The LP diagnostic now separates exact-kernel, aggregate-LP, and anchor-LP
+failures. Regenerating
+`/tmp/cyrus_gv_context_target7_lp_diagnostic_report.json` and
+`/tmp/cyrus_gv_context_target8_lp_diagnostic_report.json` shows all four
+offset-generator candidate domains have `lp_search_status=lp_no_certificate`,
+`exact_kernel_status=no_certificate`, and
+`aggregate_status=lp_no_solution_or_cutting_exhausted`. Each then tries all
+`16` bounded anchor rays, with `anchor_lp_solution_count=0` and
+`anchor_status_counts={"lp_no_solution_or_cutting_exhausted":16}`. So the
+current failure is not integer rounding/scaling of a real LP normal: the
+bounded aggregate and anchor LP phases do not find a real supporting normal for
+these candidate generator sets. This remains an inconclusive bounded search,
+not a theorem that no chamber face exists.
 The offset-generator report now also serializes the generator degree buckets,
 sparse generator samples, and a raw `FIND_GV=false` GW coefficient trace for
 the same provided-generator domain. Regenerating target `7` and `8` reports

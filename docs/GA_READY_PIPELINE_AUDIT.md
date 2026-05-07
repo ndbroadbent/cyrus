@@ -211,8 +211,15 @@ run pass. Any remaining mismatch must be explicit and localizable.
    count map has all `9` fractional candidates in `unknown_not_toric_covered`,
    split as `8` `not_source_degree_bounded_ray` and `1`
    `source_ray_matches_missing_target`. All candidate domains remain without
-   supporting-face certificates. This keeps the blocker at certified
-   chamber-semigroup construction, not scalar source-GV recovery.
+   supporting-face certificates. The supporting-face diagnostic now records
+   why: fresh target `7` and `8` reports classify all four offset-generator
+   candidates as `lp_search_status=lp_no_certificate`,
+   `exact_kernel_status=no_certificate`, and
+   `aggregate_status=lp_no_solution_or_cutting_exhausted`; all `16` bounded
+   anchor LP attempts per candidate also return no LP solution, so no candidate
+   reaches the integer rounding/certificate-verification phase. This keeps the
+   blocker at certified chamber-semigroup construction, not scalar source-GV
+   recovery.
    Applying the trace to McAllister still requires the certified corrected-chamber
    semigroup/history domain.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for

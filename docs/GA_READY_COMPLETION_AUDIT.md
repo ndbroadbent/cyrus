@@ -425,6 +425,17 @@ and matrix-basis pipeline are no longer open.
    statuses at ranks `4` and `3` in dimension `214`, and target `8` reports LP
    no-certificate at rank `3` for both the matching degree-six row and the
    failing degree-eight row.
+   The LP diagnostic now splits those no-certificate statuses by phase. Fresh
+   target `7` and `8` reports show all four offset-generator candidates have
+   `lp_search_status=lp_no_certificate`,
+   `exact_kernel_status=no_certificate`, and
+   `aggregate_status=lp_no_solution_or_cutting_exhausted`; all `16` bounded
+   anchor LP attempts per candidate also return
+   `lp_no_solution_or_cutting_exhausted`, with zero anchor LP real-normal
+   solutions. The current bounded search is therefore failing at real LP
+   feasibility, not at integer rounding of an LP normal. This still does not
+   prove no supporting chamber face exists, but it rules out the sampled
+   offset-generator domains as certifiable with the current face search.
    The offset-generator report now also records the exact sparse generators,
    generator degree buckets, and a raw `FIND_GV=false` GW coefficient trace for
    the provided-generator domain. Fresh target `7`/`8` runs show that the

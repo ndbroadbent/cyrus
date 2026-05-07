@@ -16,7 +16,8 @@ use std::path::PathBuf;
 use cyrus_core::gv::{
     CygvGvCoefficientTrace, SupportingMoriFaceLpSearchOptions,
     certify_supporting_mori_face_by_exact_kernel, certify_supporting_mori_face_by_lp_search,
-    cygv_pair_reduced_seed_generators, find_extremal_mori_ray_separator,
+    cygv_pair_reduced_seed_generators, diagnose_supporting_mori_face_by_lp_search,
+    find_extremal_mori_ray_separator,
 };
 use cyrus_core::types::rational::Rational;
 use cyrus_core::types::tags::Finite;
@@ -866,6 +867,12 @@ struct CygvSourceQnTermSemigroupProbe {
     generator_face_certificate_normal_nonzero: Option<Vec<(usize, i64)>>,
     generator_face_certificate_zero_count: Option<usize>,
     generator_face_certificate_positive_count: Option<usize>,
+    generator_face_certificate_lp_search_status: Option<String>,
+    generator_face_certificate_lp_exact_kernel_status: Option<String>,
+    generator_face_certificate_lp_aggregate_status: Option<String>,
+    generator_face_certificate_lp_anchor_attempt_count: Option<usize>,
+    generator_face_certificate_lp_anchor_lp_solution_count: Option<usize>,
+    generator_face_certificate_lp_anchor_status_counts: BTreeMap<String, usize>,
     gw_coefficient_trace_count: Option<usize>,
     gw_noninteger_candidate_count: Option<usize>,
     gw_noninteger_known_qn_history_status_counts: BTreeMap<String, usize>,
@@ -883,6 +890,12 @@ struct CygvSourceQnTermGeneratorFaceCertificate {
     normal_nonzero: Option<Vec<(usize, i64)>>,
     zero_count: Option<usize>,
     positive_count: Option<usize>,
+    lp_search_status: Option<String>,
+    lp_exact_kernel_status: Option<String>,
+    lp_aggregate_status: Option<String>,
+    lp_anchor_attempt_count: Option<usize>,
+    lp_anchor_lp_solution_count: Option<usize>,
+    lp_anchor_status_counts: BTreeMap<String, usize>,
 }
 
 struct CygvPathSupportFormulaBalance {
@@ -5061,6 +5074,12 @@ fn source_qn_term_generator_face_certificate(
             normal_nonzero: None,
             zero_count: None,
             positive_count: None,
+            lp_search_status: None,
+            lp_exact_kernel_status: None,
+            lp_aggregate_status: None,
+            lp_anchor_attempt_count: None,
+            lp_anchor_lp_solution_count: None,
+            lp_anchor_status_counts: BTreeMap::new(),
         });
     }
     let rank = curve_row_span_rank(generators)
@@ -5074,6 +5093,12 @@ fn source_qn_term_generator_face_certificate(
             normal_nonzero: None,
             zero_count: None,
             positive_count: None,
+            lp_search_status: None,
+            lp_exact_kernel_status: None,
+            lp_aggregate_status: None,
+            lp_anchor_attempt_count: None,
+            lp_anchor_lp_solution_count: None,
+            lp_anchor_status_counts: BTreeMap::new(),
         });
     }
 
@@ -5090,6 +5115,12 @@ fn source_qn_term_generator_face_certificate(
                 normal_nonzero: Some(sparse_from_dense(&certificate.normal)),
                 zero_count: Some(certificate.zero_generator_count),
                 positive_count: Some(certificate.positive_generator_count),
+                lp_search_status: None,
+                lp_exact_kernel_status: None,
+                lp_aggregate_status: None,
+                lp_anchor_attempt_count: None,
+                lp_anchor_lp_solution_count: None,
+                lp_anchor_status_counts: BTreeMap::new(),
             }),
             Ok(None) => Ok(CygvSourceQnTermGeneratorFaceCertificate {
                 status: format!(
@@ -5099,6 +5130,12 @@ fn source_qn_term_generator_face_certificate(
                 normal_nonzero: None,
                 zero_count: None,
                 positive_count: None,
+                lp_search_status: None,
+                lp_exact_kernel_status: None,
+                lp_aggregate_status: None,
+                lp_anchor_attempt_count: None,
+                lp_anchor_lp_solution_count: None,
+                lp_anchor_status_counts: BTreeMap::new(),
             }),
             Err(error) => Ok(CygvSourceQnTermGeneratorFaceCertificate {
                 status: format!(
@@ -5108,34 +5145,48 @@ fn source_qn_term_generator_face_certificate(
                 normal_nonzero: None,
                 zero_count: None,
                 positive_count: None,
+                lp_search_status: None,
+                lp_exact_kernel_status: None,
+                lp_aggregate_status: None,
+                lp_anchor_attempt_count: None,
+                lp_anchor_lp_solution_count: None,
+                lp_anchor_status_counts: BTreeMap::new(),
             }),
         };
     }
 
     let options = SupportingMoriFaceLpSearchOptions::default();
-    match certify_supporting_mori_face_by_lp_search(
+    match diagnose_supporting_mori_face_by_lp_search(
         generators,
         context.degree_bounded_rays,
         &options,
     ) {
-        Ok(Some(certificate)) => Ok(CygvSourceQnTermGeneratorFaceCertificate {
-            status: format!(
-                "offset_generators_certified_lp_containing_face_rank_{rank}_dim_{}",
-                context.dimension
-            ),
-            normal_nonzero: Some(sparse_from_dense(&certificate.normal)),
-            zero_count: Some(certificate.zero_generator_count),
-            positive_count: Some(certificate.positive_generator_count),
-        }),
-        Ok(None) => Ok(CygvSourceQnTermGeneratorFaceCertificate {
-            status: format!(
-                "offset_generators_lp_no_certificate_rank_{rank}_dim_{}",
-                context.dimension
-            ),
-            normal_nonzero: None,
-            zero_count: None,
-            positive_count: None,
-        }),
+        Ok(diagnostic) => {
+            let certificate = diagnostic.certificate.as_ref();
+            Ok(CygvSourceQnTermGeneratorFaceCertificate {
+                status: if certificate.is_some() {
+                    format!(
+                        "offset_generators_certified_lp_containing_face_rank_{rank}_dim_{}",
+                        context.dimension
+                    )
+                } else {
+                    format!(
+                        "offset_generators_lp_no_certificate_rank_{rank}_dim_{}",
+                        context.dimension
+                    )
+                },
+                normal_nonzero: certificate
+                    .map(|certificate| sparse_from_dense(&certificate.normal)),
+                zero_count: certificate.map(|certificate| certificate.zero_generator_count),
+                positive_count: certificate.map(|certificate| certificate.positive_generator_count),
+                lp_search_status: Some(diagnostic.status),
+                lp_exact_kernel_status: Some(diagnostic.exact_kernel_status),
+                lp_aggregate_status: Some(diagnostic.aggregate_status),
+                lp_anchor_attempt_count: Some(diagnostic.anchor_attempt_count),
+                lp_anchor_lp_solution_count: Some(diagnostic.anchor_lp_solution_count),
+                lp_anchor_status_counts: diagnostic.anchor_status_counts,
+            })
+        }
         Err(error) => Ok(CygvSourceQnTermGeneratorFaceCertificate {
             status: format!(
                 "offset_generators_face_certificate_error_{}",
@@ -5144,6 +5195,12 @@ fn source_qn_term_generator_face_certificate(
             normal_nonzero: None,
             zero_count: None,
             positive_count: None,
+            lp_search_status: None,
+            lp_exact_kernel_status: None,
+            lp_aggregate_status: None,
+            lp_anchor_attempt_count: None,
+            lp_anchor_lp_solution_count: None,
+            lp_anchor_status_counts: BTreeMap::new(),
         }),
     }
 }
@@ -5212,6 +5269,16 @@ fn source_qn_term_provided_generator_probe_from_generators(
             generator_face_certificate_normal_nonzero: face_certificate.normal_nonzero,
             generator_face_certificate_zero_count: face_certificate.zero_count,
             generator_face_certificate_positive_count: face_certificate.positive_count,
+            generator_face_certificate_lp_search_status: face_certificate.lp_search_status,
+            generator_face_certificate_lp_exact_kernel_status: face_certificate
+                .lp_exact_kernel_status,
+            generator_face_certificate_lp_aggregate_status: face_certificate.lp_aggregate_status,
+            generator_face_certificate_lp_anchor_attempt_count: face_certificate
+                .lp_anchor_attempt_count,
+            generator_face_certificate_lp_anchor_lp_solution_count: face_certificate
+                .lp_anchor_lp_solution_count,
+            generator_face_certificate_lp_anchor_status_counts: face_certificate
+                .lp_anchor_status_counts,
             gw_coefficient_trace_count: None,
             gw_noninteger_candidate_count: None,
             gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
@@ -5242,6 +5309,16 @@ fn source_qn_term_provided_generator_probe_from_generators(
             generator_face_certificate_normal_nonzero: face_certificate.normal_nonzero,
             generator_face_certificate_zero_count: face_certificate.zero_count,
             generator_face_certificate_positive_count: face_certificate.positive_count,
+            generator_face_certificate_lp_search_status: face_certificate.lp_search_status,
+            generator_face_certificate_lp_exact_kernel_status: face_certificate
+                .lp_exact_kernel_status,
+            generator_face_certificate_lp_aggregate_status: face_certificate.lp_aggregate_status,
+            generator_face_certificate_lp_anchor_attempt_count: face_certificate
+                .lp_anchor_attempt_count,
+            generator_face_certificate_lp_anchor_lp_solution_count: face_certificate
+                .lp_anchor_lp_solution_count,
+            generator_face_certificate_lp_anchor_status_counts: face_certificate
+                .lp_anchor_status_counts,
             gw_coefficient_trace_count: None,
             gw_noninteger_candidate_count: None,
             gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
@@ -5275,6 +5352,16 @@ fn source_qn_term_provided_generator_probe_from_generators(
             generator_face_certificate_normal_nonzero: face_certificate.normal_nonzero,
             generator_face_certificate_zero_count: face_certificate.zero_count,
             generator_face_certificate_positive_count: face_certificate.positive_count,
+            generator_face_certificate_lp_search_status: face_certificate.lp_search_status,
+            generator_face_certificate_lp_exact_kernel_status: face_certificate
+                .lp_exact_kernel_status,
+            generator_face_certificate_lp_aggregate_status: face_certificate.lp_aggregate_status,
+            generator_face_certificate_lp_anchor_attempt_count: face_certificate
+                .lp_anchor_attempt_count,
+            generator_face_certificate_lp_anchor_lp_solution_count: face_certificate
+                .lp_anchor_lp_solution_count,
+            generator_face_certificate_lp_anchor_status_counts: face_certificate
+                .lp_anchor_status_counts,
             gw_coefficient_trace_count: None,
             gw_noninteger_candidate_count: None,
             gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
@@ -5330,6 +5417,17 @@ fn source_qn_term_provided_generator_probe_from_generators(
                 generator_face_certificate_normal_nonzero: face_certificate.normal_nonzero,
                 generator_face_certificate_zero_count: face_certificate.zero_count,
                 generator_face_certificate_positive_count: face_certificate.positive_count,
+                generator_face_certificate_lp_search_status: face_certificate.lp_search_status,
+                generator_face_certificate_lp_exact_kernel_status: face_certificate
+                    .lp_exact_kernel_status,
+                generator_face_certificate_lp_aggregate_status: face_certificate
+                    .lp_aggregate_status,
+                generator_face_certificate_lp_anchor_attempt_count: face_certificate
+                    .lp_anchor_attempt_count,
+                generator_face_certificate_lp_anchor_lp_solution_count: face_certificate
+                    .lp_anchor_lp_solution_count,
+                generator_face_certificate_lp_anchor_status_counts: face_certificate
+                    .lp_anchor_status_counts,
                 gw_coefficient_trace_count: gw_diagnostic.trace_count,
                 gw_noninteger_candidate_count: gw_diagnostic.noninteger_candidate_count,
                 gw_noninteger_known_qn_history_status_counts: gw_diagnostic
@@ -5371,6 +5469,17 @@ fn source_qn_term_provided_generator_probe_from_generators(
                 generator_face_certificate_normal_nonzero: face_certificate.normal_nonzero,
                 generator_face_certificate_zero_count: face_certificate.zero_count,
                 generator_face_certificate_positive_count: face_certificate.positive_count,
+                generator_face_certificate_lp_search_status: face_certificate.lp_search_status,
+                generator_face_certificate_lp_exact_kernel_status: face_certificate
+                    .lp_exact_kernel_status,
+                generator_face_certificate_lp_aggregate_status: face_certificate
+                    .lp_aggregate_status,
+                generator_face_certificate_lp_anchor_attempt_count: face_certificate
+                    .lp_anchor_attempt_count,
+                generator_face_certificate_lp_anchor_lp_solution_count: face_certificate
+                    .lp_anchor_lp_solution_count,
+                generator_face_certificate_lp_anchor_status_counts: face_certificate
+                    .lp_anchor_status_counts,
                 gw_coefficient_trace_count: gw_diagnostic.trace_count,
                 gw_noninteger_candidate_count: gw_diagnostic.noninteger_candidate_count,
                 gw_noninteger_known_qn_history_status_counts: gw_diagnostic
@@ -5430,6 +5539,15 @@ fn source_qn_term_provided_generator_probe_from_generators(
         generator_face_certificate_normal_nonzero: face_certificate.normal_nonzero,
         generator_face_certificate_zero_count: face_certificate.zero_count,
         generator_face_certificate_positive_count: face_certificate.positive_count,
+        generator_face_certificate_lp_search_status: face_certificate.lp_search_status,
+        generator_face_certificate_lp_exact_kernel_status: face_certificate.lp_exact_kernel_status,
+        generator_face_certificate_lp_aggregate_status: face_certificate.lp_aggregate_status,
+        generator_face_certificate_lp_anchor_attempt_count: face_certificate
+            .lp_anchor_attempt_count,
+        generator_face_certificate_lp_anchor_lp_solution_count: face_certificate
+            .lp_anchor_lp_solution_count,
+        generator_face_certificate_lp_anchor_status_counts: face_certificate
+            .lp_anchor_status_counts,
         gw_coefficient_trace_count: gw_diagnostic.trace_count,
         gw_noninteger_candidate_count: gw_diagnostic.noninteger_candidate_count,
         gw_noninteger_known_qn_history_status_counts: gw_diagnostic
@@ -5473,6 +5591,12 @@ fn source_qn_term_semigroup_probe_from_elements(
             generator_face_certificate_normal_nonzero: None,
             generator_face_certificate_zero_count: None,
             generator_face_certificate_positive_count: None,
+            generator_face_certificate_lp_search_status: None,
+            generator_face_certificate_lp_exact_kernel_status: None,
+            generator_face_certificate_lp_aggregate_status: None,
+            generator_face_certificate_lp_anchor_attempt_count: None,
+            generator_face_certificate_lp_anchor_lp_solution_count: None,
+            generator_face_certificate_lp_anchor_status_counts: BTreeMap::new(),
             gw_coefficient_trace_count: None,
             gw_noninteger_candidate_count: None,
             gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
@@ -5503,6 +5627,12 @@ fn source_qn_term_semigroup_probe_from_elements(
             generator_face_certificate_normal_nonzero: None,
             generator_face_certificate_zero_count: None,
             generator_face_certificate_positive_count: None,
+            generator_face_certificate_lp_search_status: None,
+            generator_face_certificate_lp_exact_kernel_status: None,
+            generator_face_certificate_lp_aggregate_status: None,
+            generator_face_certificate_lp_anchor_attempt_count: None,
+            generator_face_certificate_lp_anchor_lp_solution_count: None,
+            generator_face_certificate_lp_anchor_status_counts: BTreeMap::new(),
             gw_coefficient_trace_count: None,
             gw_noninteger_candidate_count: None,
             gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
@@ -5536,6 +5666,12 @@ fn source_qn_term_semigroup_probe_from_elements(
             generator_face_certificate_normal_nonzero: None,
             generator_face_certificate_zero_count: None,
             generator_face_certificate_positive_count: None,
+            generator_face_certificate_lp_search_status: None,
+            generator_face_certificate_lp_exact_kernel_status: None,
+            generator_face_certificate_lp_aggregate_status: None,
+            generator_face_certificate_lp_anchor_attempt_count: None,
+            generator_face_certificate_lp_anchor_lp_solution_count: None,
+            generator_face_certificate_lp_anchor_status_counts: BTreeMap::new(),
             gw_coefficient_trace_count: None,
             gw_noninteger_candidate_count: None,
             gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
@@ -5582,6 +5718,12 @@ fn source_qn_term_semigroup_probe_from_elements(
                 generator_face_certificate_normal_nonzero: None,
                 generator_face_certificate_zero_count: None,
                 generator_face_certificate_positive_count: None,
+                generator_face_certificate_lp_search_status: None,
+                generator_face_certificate_lp_exact_kernel_status: None,
+                generator_face_certificate_lp_aggregate_status: None,
+                generator_face_certificate_lp_anchor_attempt_count: None,
+                generator_face_certificate_lp_anchor_lp_solution_count: None,
+                generator_face_certificate_lp_anchor_status_counts: BTreeMap::new(),
                 gw_coefficient_trace_count: None,
                 gw_noninteger_candidate_count: None,
                 gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
@@ -5615,6 +5757,12 @@ fn source_qn_term_semigroup_probe_from_elements(
                 generator_face_certificate_normal_nonzero: None,
                 generator_face_certificate_zero_count: None,
                 generator_face_certificate_positive_count: None,
+                generator_face_certificate_lp_search_status: None,
+                generator_face_certificate_lp_exact_kernel_status: None,
+                generator_face_certificate_lp_aggregate_status: None,
+                generator_face_certificate_lp_anchor_attempt_count: None,
+                generator_face_certificate_lp_anchor_lp_solution_count: None,
+                generator_face_certificate_lp_anchor_status_counts: BTreeMap::new(),
                 gw_coefficient_trace_count: None,
                 gw_noninteger_candidate_count: None,
                 gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
@@ -5672,6 +5820,12 @@ fn source_qn_term_semigroup_probe_from_elements(
         generator_face_certificate_normal_nonzero: None,
         generator_face_certificate_zero_count: None,
         generator_face_certificate_positive_count: None,
+        generator_face_certificate_lp_search_status: None,
+        generator_face_certificate_lp_exact_kernel_status: None,
+        generator_face_certificate_lp_aggregate_status: None,
+        generator_face_certificate_lp_anchor_attempt_count: None,
+        generator_face_certificate_lp_anchor_lp_solution_count: None,
+        generator_face_certificate_lp_anchor_status_counts: BTreeMap::new(),
         gw_coefficient_trace_count: None,
         gw_noninteger_candidate_count: None,
         gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
