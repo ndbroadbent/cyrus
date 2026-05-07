@@ -2417,6 +2417,12 @@ non-integral solutions match the inferred degree, and `22` candidate checks
 have no rational divisor solution. The four integral rows all have the
 origin-circuit pattern `origin=-1;neg={-3: 1};pos={1: 4}` with formula value
 `3`; these are source-derived candidates, not yet promoted into the GV map.
+The same narrowed sample now runs the local unit-tensor phase probe. Only `5`
+of the `20` rows match their expected formula set, and those are all
+uncertified `GV=-2` cases. The formula-`3` rows instead give unit-tensor
+candidate `6` and origin-omitted candidate `-9`, so the factor/sign mismatch is
+real evidence that the local intersection tensor and chamber phase still need
+to be derived rather than guessed.
 The same active-leaf records now run the existing one-parameter unit-tensor
 phase probe against those lower source rays. This is still diagnostic-only,
 because the local intersection tensor and chamber certificate are not

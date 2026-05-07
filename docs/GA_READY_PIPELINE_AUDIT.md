@@ -662,5 +662,9 @@ to make the remaining GV layer more first-principles:
    source rays. They are all origin-circuit rows, all still lack the certified
    local q-matrix phase/intersection tensor/chamber certificate, and their CMS
    checks expose `4` integral inferred-degree matches with formula value `3`,
-   `2` non-integral inferred-degree matches, and `22` no-solution checks.
+   `2` non-integral inferred-degree matches, and `22` no-solution checks. The
+   shared-source unit-tensor probe matches only `5/20` expected formula sets
+   (`GV=-2` cases); formula-`3` rows give unit candidate `6` and
+   origin-omitted candidate `-9`, so tensor/chamber certification remains the
+   blocker.
    generators over `7360` occurrences.

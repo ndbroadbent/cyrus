@@ -242,6 +242,11 @@ struct ContextReport {
         BTreeMap<String, usize>,
     shared_facet_unresolved_source_ray_cms_general_divisor_intersection_check_status_counts:
         BTreeMap<String, usize>,
+    shared_facet_unresolved_source_ray_unit_phase_probe_status_counts: BTreeMap<String, usize>,
+    shared_facet_unresolved_source_ray_origin_omitted_unit_phase_probe_status_counts:
+        BTreeMap<String, usize>,
+    shared_facet_unresolved_source_ray_unit_phase_probe_sample:
+        Vec<LocalCygvTargetUnitPhaseProbeSummary>,
     shared_facet_unresolved_source_ray_sample: Vec<TargetReport>,
     origin_circuit_facet_context_status_counts: BTreeMap<String, usize>,
     origin_circuit_witness_relation_support_face_certificate_status_counts: BTreeMap<String, usize>,
@@ -7572,6 +7577,16 @@ fn build_report(
         cms_general_divisor_intersection_check_status_counts(
             &shared_facet_unresolved_source_ray_sample,
         );
+    let shared_facet_unresolved_source_ray_unit_phase_probe_sample =
+        local_cygv_target_unit_phase_probe_summaries(&shared_facet_unresolved_source_ray_sample);
+    let shared_facet_unresolved_source_ray_unit_phase_probe_status_counts =
+        local_cygv_target_unit_phase_probe_status_counts(
+            &shared_facet_unresolved_source_ray_unit_phase_probe_sample,
+        );
+    let shared_facet_unresolved_source_ray_origin_omitted_unit_phase_probe_status_counts =
+        local_cygv_target_origin_omitted_unit_phase_probe_status_counts(
+            &shared_facet_unresolved_source_ray_unit_phase_probe_sample,
+        );
     let origin_circuit_facet_context_status_counts =
         origin_circuit_facet_context_status_counts(&validated.stats.sample, target_index_filter);
     let origin_circuit_witness_domain_sample = origin_circuit_witness_domain_summaries(
@@ -7883,6 +7898,9 @@ fn build_report(
         shared_facet_unresolved_source_ray_local_cygv_missing_source_input_counts,
         shared_facet_unresolved_source_ray_cms_general_divisor_candidate_status_counts,
         shared_facet_unresolved_source_ray_cms_general_divisor_intersection_check_status_counts,
+        shared_facet_unresolved_source_ray_unit_phase_probe_status_counts,
+        shared_facet_unresolved_source_ray_origin_omitted_unit_phase_probe_status_counts,
+        shared_facet_unresolved_source_ray_unit_phase_probe_sample,
         shared_facet_unresolved_source_ray_sample,
         origin_circuit_facet_context_status_counts,
         origin_circuit_witness_relation_support_face_certificate_status_counts,

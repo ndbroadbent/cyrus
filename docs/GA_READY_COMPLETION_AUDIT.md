@@ -362,7 +362,10 @@ fresh export now includes complete first-principles stats for those `20` source
 rays: all are origin-circuit rows, all are blocked on local q-matrix
 phase/intersection tensor/chamber certification, and the CMS checks expose `4`
 integral inferred-degree matches with formula value `3`, `2` non-integral
-matches, and `22` no-solution checks. The
+matches, and `22` no-solution checks. The local unit-tensor probe matches only
+`5/20` expected formula sets (`GV=-2` cases); formula-`3` rows give unit
+candidate `6` and origin-omitted candidate `-9`, so the tensor/chamber model
+cannot be guessed from the unit probe. The
 enriched active-leaf report
 now also carries the matching source rays' local q rows and CMS check counts:
 two origin-circuit lower leaves are primitive `neg2` q-row candidates, while
