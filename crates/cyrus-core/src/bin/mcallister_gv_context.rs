@@ -420,6 +420,7 @@ struct TargetReport {
     origin_circuit_affine_support: Option<OriginCircuitAffineSupportSample>,
     local_cygv_hypersurface_shape: Option<LocalCygvHypersurfaceShape>,
     local_cygv_input_skeleton: Option<LocalCygvInputSkeleton>,
+    local_cygv_one_parameter_family_status: Option<String>,
     local_cygv_unit_phase_probe: Option<LocalCygvTargetUnitPhaseProbeSummary>,
     local_cygv_integer_tensor_scan: Option<LocalCygvIntegerTensorScanSummary>,
     cms_general_divisor_shape_candidates: Option<Vec<CmsGeneralDivisorShapeCandidate>>,
@@ -9741,6 +9742,9 @@ fn report_target(
                 None
             }
         };
+    let local_cygv_one_parameter_family_status = local_cygv_input_skeleton
+        .as_ref()
+        .map(local_cygv_one_parameter_family_status);
     let (cms_general_divisor_solution_summaries, cms_general_divisor_solution_summary_error) =
         match cms_general_divisor_solution_summaries(Some(sample), &context.intersection) {
             Ok(summaries) => (summaries, None),
@@ -9761,6 +9765,8 @@ fn report_target(
                 origin_circuit_affine_support,
                 local_cygv_hypersurface_shape: None,
                 local_cygv_input_skeleton,
+                local_cygv_one_parameter_family_status: local_cygv_one_parameter_family_status
+                    .clone(),
                 local_cygv_unit_phase_probe: None,
                 local_cygv_integer_tensor_scan: None,
                 cms_general_divisor_shape_candidates: sample
@@ -9843,6 +9849,8 @@ fn report_target(
                 origin_circuit_affine_support,
                 local_cygv_hypersurface_shape,
                 local_cygv_input_skeleton,
+                local_cygv_one_parameter_family_status: local_cygv_one_parameter_family_status
+                    .clone(),
                 local_cygv_unit_phase_probe: None,
                 local_cygv_integer_tensor_scan: None,
                 cms_general_divisor_shape_candidates: sample
@@ -9925,6 +9933,8 @@ fn report_target(
                 origin_circuit_affine_support,
                 local_cygv_hypersurface_shape,
                 local_cygv_input_skeleton,
+                local_cygv_one_parameter_family_status: local_cygv_one_parameter_family_status
+                    .clone(),
                 local_cygv_unit_phase_probe: None,
                 local_cygv_integer_tensor_scan: None,
                 cms_general_divisor_shape_candidates: sample
@@ -10011,6 +10021,8 @@ fn report_target(
                 origin_circuit_affine_support,
                 local_cygv_hypersurface_shape,
                 local_cygv_input_skeleton,
+                local_cygv_one_parameter_family_status: local_cygv_one_parameter_family_status
+                    .clone(),
                 local_cygv_unit_phase_probe: None,
                 local_cygv_integer_tensor_scan: None,
                 cms_general_divisor_shape_candidates: sample
@@ -10112,6 +10124,7 @@ fn report_target(
         origin_circuit_affine_support,
         local_cygv_hypersurface_shape,
         local_cygv_input_skeleton,
+        local_cygv_one_parameter_family_status,
         local_cygv_unit_phase_probe: None,
         local_cygv_integer_tensor_scan: None,
         cms_general_divisor_shape_candidates: sample.cms_general_divisor_shape_candidates.clone(),
