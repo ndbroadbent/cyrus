@@ -327,6 +327,8 @@ struct LocalCygvInputSkeleton {
     target_relation_coefficients: Option<Vec<i64>>,
     target_relation_in_charge_basis: Option<Vec<i64>>,
     target_relation_status: String,
+    local_semigroup_generators_candidate: Option<Vec<Vec<i64>>>,
+    local_semigroup_generator_status: String,
     orientation_candidates: Vec<LocalCygvOrientationCandidate>,
     local_q_matrix_orientation_candidate: Option<i64>,
     local_q_matrix_orientation_status: String,
@@ -2778,6 +2780,11 @@ fn local_cygv_input_skeleton(
     );
     let (local_q_matrix_orientation_candidate, local_q_matrix_orientation_status) =
         local_cygv_q_matrix_orientation_candidate(&orientation_candidates);
+    let (local_semigroup_generators_candidate, local_semigroup_generator_status) =
+        local_cygv_semigroup_generators_candidate(
+            &orientation_candidates,
+            local_q_matrix_orientation_candidate,
+        );
     let (
         local_cygv_q_matrix_rows_candidate,
         local_cygv_wrapper_q_matrix_candidate,
@@ -2788,7 +2795,10 @@ fn local_cygv_input_skeleton(
     );
     let (local_grading_vector_candidate, local_grading_vector_status) =
         local_cygv_grading_vector_candidate(&orientation_candidates);
-    let mut remaining_uncertified_inputs = vec!["local_semigroup_generators".to_string()];
+    let mut remaining_uncertified_inputs = Vec::new();
+    if local_semigroup_generators_candidate.is_none() {
+        remaining_uncertified_inputs.push("local_semigroup_generators".to_string());
+    }
     if local_grading_vector_candidate.is_none() {
         remaining_uncertified_inputs.push("local_grading_vector".to_string());
     }
@@ -2811,6 +2821,8 @@ fn local_cygv_input_skeleton(
         target_relation_coefficients,
         target_relation_in_charge_basis,
         target_relation_status,
+        local_semigroup_generators_candidate,
+        local_semigroup_generator_status,
         orientation_candidates,
         local_q_matrix_orientation_candidate,
         local_q_matrix_orientation_status,
@@ -2821,6 +2833,43 @@ fn local_cygv_input_skeleton(
         local_grading_vector_status,
         remaining_uncertified_inputs,
     }))
+}
+
+fn local_cygv_semigroup_generators_candidate(
+    orientation_candidates: &[LocalCygvOrientationCandidate],
+    orientation_candidate: Option<i64>,
+) -> (Option<Vec<Vec<i64>>>, String) {
+    let Some(sign) = orientation_candidate else {
+        return (
+            None,
+            "local_semigroup_generators_blocked_no_orientation".to_string(),
+        );
+    };
+    let Some(candidate) = orientation_candidates
+        .iter()
+        .find(|candidate| candidate.overall_charge_basis_sign == sign)
+    else {
+        return (
+            None,
+            "local_semigroup_generators_missing_selected_orientation".to_string(),
+        );
+    };
+    let Some(direction) = candidate.target_primitive_direction.as_ref() else {
+        return (
+            None,
+            "local_semigroup_generators_blocked_no_target_direction".to_string(),
+        );
+    };
+    if direction.len() != 1 || direction[0] != 1 {
+        return (
+            None,
+            "local_semigroup_generators_blocked_not_one_parameter_unit".to_string(),
+        );
+    }
+    (
+        Some(vec![vec![1]]),
+        "source_derived_one_parameter_unit_semigroup".to_string(),
+    )
 }
 
 fn local_cygv_q_matrix_layout_candidate(
@@ -6924,6 +6973,20 @@ mod tests {
             skeleton.target_relation_status,
             "target_relation_integral_in_local_charge_basis"
         );
+        assert_eq!(
+            skeleton.local_semigroup_generators_candidate,
+            Some(vec![vec![1]])
+        );
+        assert_eq!(
+            skeleton.local_semigroup_generator_status,
+            "source_derived_one_parameter_unit_semigroup"
+        );
+        assert!(
+            !skeleton
+                .remaining_uncertified_inputs
+                .iter()
+                .any(|input| input == "local_semigroup_generators")
+        );
         assert_eq!(skeleton.local_q_matrix_orientation_candidate, Some(-1));
         assert_eq!(
             skeleton.local_q_matrix_orientation_status,
@@ -7049,6 +7112,8 @@ mod tests {
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
             target_relation_status: String::new(),
+            local_semigroup_generators_candidate: None,
+            local_semigroup_generator_status: String::new(),
             orientation_candidates: local_cygv_orientation_candidates(
                 &[vec![1], vec![-2], vec![-1], vec![3], vec![-1]],
                 Some(&[-1]),
@@ -7072,6 +7137,8 @@ mod tests {
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
             target_relation_status: String::new(),
+            local_semigroup_generators_candidate: None,
+            local_semigroup_generator_status: String::new(),
             orientation_candidates: local_cygv_orientation_candidates(
                 &[vec![2], vec![1], vec![2], vec![-1], vec![-2], vec![-2]],
                 Some(&[-1]),
@@ -7125,6 +7192,8 @@ mod tests {
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
             target_relation_status: String::new(),
+            local_semigroup_generators_candidate: None,
+            local_semigroup_generator_status: String::new(),
             orientation_candidates: supported_candidate.clone(),
             local_q_matrix_orientation_candidate: None,
             local_q_matrix_orientation_status: String::new(),
@@ -7145,6 +7214,8 @@ mod tests {
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
             target_relation_status: String::new(),
+            local_semigroup_generators_candidate: None,
+            local_semigroup_generator_status: String::new(),
             orientation_candidates: supported_candidate,
             local_q_matrix_orientation_candidate: None,
             local_q_matrix_orientation_status: String::new(),
@@ -7165,6 +7236,8 @@ mod tests {
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
             target_relation_status: String::new(),
+            local_semigroup_generators_candidate: None,
+            local_semigroup_generator_status: String::new(),
             orientation_candidates: local_cygv_orientation_candidates(
                 &[vec![2], vec![1], vec![2], vec![-1], vec![-2], vec![-2]],
                 Some(&[1]),
@@ -7222,6 +7295,8 @@ mod tests {
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
             target_relation_status: String::new(),
+            local_semigroup_generators_candidate: None,
+            local_semigroup_generator_status: String::new(),
             orientation_candidates: Vec::new(),
             local_q_matrix_orientation_candidate: None,
             local_q_matrix_orientation_status: String::new(),
@@ -7245,6 +7320,8 @@ mod tests {
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
             target_relation_status: String::new(),
+            local_semigroup_generators_candidate: None,
+            local_semigroup_generator_status: String::new(),
             orientation_candidates: Vec::new(),
             local_q_matrix_orientation_candidate: None,
             local_q_matrix_orientation_status: String::new(),
@@ -7300,6 +7377,8 @@ mod tests {
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
             target_relation_status: String::new(),
+            local_semigroup_generators_candidate: None,
+            local_semigroup_generator_status: String::new(),
             orientation_candidates: Vec::new(),
             local_q_matrix_orientation_candidate: None,
             local_q_matrix_orientation_status: String::new(),
@@ -7321,6 +7400,8 @@ mod tests {
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
             target_relation_status: String::new(),
+            local_semigroup_generators_candidate: None,
+            local_semigroup_generator_status: String::new(),
             orientation_candidates: Vec::new(),
             local_q_matrix_orientation_candidate: None,
             local_q_matrix_orientation_status: String::new(),
@@ -7342,6 +7423,8 @@ mod tests {
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
             target_relation_status: String::new(),
+            local_semigroup_generators_candidate: None,
+            local_semigroup_generator_status: String::new(),
             orientation_candidates: Vec::new(),
             local_q_matrix_orientation_candidate: None,
             local_q_matrix_orientation_status: String::new(),
@@ -7384,6 +7467,8 @@ mod tests {
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
             target_relation_status: String::new(),
+            local_semigroup_generators_candidate: None,
+            local_semigroup_generator_status: String::new(),
             orientation_candidates: Vec::new(),
             local_q_matrix_orientation_candidate: Some(-1),
             local_q_matrix_orientation_status: "source_derived_target_positive_orientation"
@@ -7406,6 +7491,8 @@ mod tests {
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
             target_relation_status: String::new(),
+            local_semigroup_generators_candidate: None,
+            local_semigroup_generator_status: String::new(),
             orientation_candidates: Vec::new(),
             local_q_matrix_orientation_candidate: None,
             local_q_matrix_orientation_status:
@@ -7430,6 +7517,8 @@ mod tests {
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
             target_relation_status: String::new(),
+            local_semigroup_generators_candidate: None,
+            local_semigroup_generator_status: String::new(),
             orientation_candidates: Vec::new(),
             local_q_matrix_orientation_candidate: Some(-1),
             local_q_matrix_orientation_status: "source_derived_target_positive_orientation"

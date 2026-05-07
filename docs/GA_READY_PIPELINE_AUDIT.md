@@ -366,12 +366,13 @@ to make the remaining GV layer more first-principles:
    `q_rows - q_cols - 1`: the five six-point affine-rank-four rows are
    fourfold-shaped (`cy_dim=4`), while the four five-point affine-rank-three
    rows are threefold-shaped (`cy_dim=3`) but still lack a source-derived
-   semigroup, grading, intersection tensor, and chamber interpretation. The
+   intersection tensor and chamber interpretation. The one-parameter unit
+   semigroup and grading are now derived later in the local skeleton. The
    same report now groups local charge-row permutation signatures: all four
    compact-threefold-shaped misses share `[-2,-1,-1,1,3]` and are explicitly
    marked `shape_only_missing_source_derived_cygv_inputs`, with the remaining
-   uncertified local semigroup generators, grading vector, `q` phase,
-   intersection tensor, and chamber interpretation listed in the JSON. The core
+   uncertified local `q` phase, intersection tensor, and chamber interpretation
+   listed in the JSON. The core
    affine-circuit diagnostic and McAllister context export now preserve
    full-rank local affine coordinates for these rank-three/four supports rather
    than only rank-two coordinates. The context tool also reconstructs them from
@@ -415,10 +416,11 @@ to make the remaining GV layer more first-principles:
    retention rule: all nine candidates have negative origin coefficient and
    aggregate as `source_cytools_retains_negative_origin_coefficient=9`, so they
    are source-derived Mori-cap origin-circuit rows but not complete local
-   `cygv` inputs. The missing source-input counts remain nine each for
-   `local_semigroup_generators`, `local_q_matrix_phase`,
-   `local_intersection_tensor`, and `local_chamber_certificate`, so none is a
-   valid actual-`cygv` call yet. The opt-in active-support provided-generator
+   `cygv` inputs. The one-parameter unit semigroup generator `[[1]]` is now
+   source-derived for these skeletons, so the missing source-input counts are
+   now the local `q` phase, local intersection tensor, and local chamber
+   certificate; none is a valid actual-`cygv` call yet. The opt-in
+   active-support provided-generator
    diagnostic now uses the actual Rust `cygv` crate and reports
    `computed_active_support_generators=6`, `hkty_error=3`; all six successful
    target lookups return `GV=0`, and the three errors are non-integral
@@ -518,8 +520,9 @@ to make the remaining GV layer more first-principles:
    a certified semigroup/chamber. The new source-ray readiness fields sharpen
    this to a concrete input list: the shared degree-six ray has local charge
    signature `[-1,-1,-1,1,2]` and matching CMS checks, but still lacks
-   `local_semigroup_generators`, `local_q_matrix_phase`,
-   `local_intersection_tensor`, and `local_chamber_certificate`.
+   `local_q_matrix_phase`, `local_intersection_tensor`, and
+   `local_chamber_certificate`. Its one-parameter unit semigroup generator and
+   grading vector are now source-derived.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.
    The exact classical-data transform is now available as

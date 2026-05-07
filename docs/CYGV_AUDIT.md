@@ -1993,9 +1993,11 @@ The current `cygv` crate source sharpens the same boundary:
   direction in the local charge lattice. On the current saved context all nine
   origin-circuit misses have primitive local target coordinate, with sign `-1`
   giving primitive direction `[1]` and sign `+1` giving `[-1]`. This only
-  certifies the target-coordinate arithmetic; the local semigroup generators,
-  grading, chamber certificate, and intersection tensor remain required before
-  an actual compact/local `cygv` call can be meaningful.
+  certifies the target-coordinate arithmetic. For this one-parameter unit case,
+  Cyrus now source-derives the local semigroup generator `[[1]]` and the
+  grading vector `[1]`, but the local `q` phase/chamber mapping, chamber
+  certificate, and intersection tensor remain required before an actual
+  compact/local `cygv` call can be meaningful.
 - The same report now records a compact target-candidate status derived from
   the primitive coordinate and cygv's own `compute_omega` negative-intersection
   buckets. On the saved context, only targets `3`, `6`, `7`, and `8` have a
@@ -2028,8 +2030,8 @@ The current `cygv` crate source sharpens the same boundary:
   source-derived Mori-cap origin-circuit rays, but that is still not enough to
   make them complete local `cygv` inputs. The remaining missing inputs are
   counted explicitly: each of the nine skeletons is still missing
-  `local_semigroup_generators`, `local_q_matrix_phase`,
-  `local_intersection_tensor`, and `local_chamber_certificate`.
+  `local_q_matrix_phase`, `local_intersection_tensor`, and
+  `local_chamber_certificate`.
   The opt-in active-support provided-generator diagnostic now runs through the
   actual Rust `cygv` crate and aggregates as
   `computed_active_support_generators=6` and `hkty_error=3`; the six successful
@@ -2189,13 +2191,14 @@ The path-support source-ray summary now carries local source-input readiness
 for those lower rays. The shared degree-six source ray has local charge
 signature `[-1,-1,-1,1,2]`, a CMS divisor check that matches the inferred
 degree, and path-support GV `-2`, but its actual local `cygv` call is still
-blocked on `local_semigroup_generators`, `local_q_matrix_phase`,
-`local_intersection_tensor`, and `local_chamber_certificate`. The neighboring
+blocked on `local_q_matrix_phase`, `local_intersection_tensor`, and
+`local_chamber_certificate`. The one-parameter unit semigroup `[[1]]` and
+grading `[1]` are now source-derived for these local skeletons. The neighboring
 degree-six source rays with resolved-conifold-like signature
-`[-1,-1,-1,1,1,1]` report the same missing local inputs. Thus the immediate
+`[-1,-1,-1,1,1,1]` report the same remaining local inputs. Thus the immediate
 implementation target is not another scalar source-value classifier; it is the
-source-derived local semigroup/chamber package for these one-parameter
-origin-circuit charge models.
+source-derived local phase/intersection/chamber package for these
+one-parameter origin-circuit charge models.
 
 The stable-Weyl/flop-continuation route is now surfaced as a report-level
 readiness count rather than only per-target arrays. On the schema-3 context all
