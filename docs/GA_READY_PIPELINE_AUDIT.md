@@ -203,8 +203,11 @@ run pass. Any remaining mismatch must be explicit and localizable.
    degree-eight domain still fails the integral `cygv` run but reaches raw
    source candidate `2`. All four domains expose non-integral lower
    coefficient history (`13`, `8`, `9`, and `9` non-integer GW candidates,
-   respectively), and all remain without supporting-face certificates. This
-   keeps the blocker at certified chamber-semigroup construction, not scalar
+   respectively), and the vendored `cygv` error identifies the first target-`8`
+   degree-eight failure as
+   `element_nonzero=[(203,-3),(206,1),(209,1)]` with candidate `4/3`. All
+   candidate domains remain without supporting-face certificates. This keeps
+   the blocker at certified chamber-semigroup construction, not scalar
    source-GV recovery.
    Applying the trace to McAllister still requires the certified corrected-chamber
    semigroup/history domain.

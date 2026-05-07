@@ -127,6 +127,33 @@ where
     }
 }
 
+fn non_integer_gv_error<T>(
+    element_index: usize,
+    insertion_index: usize,
+    pivot_component: i32,
+    instanton_coefficient: &T,
+    gv_candidate: &T,
+    rounded_gv_candidate: &T,
+    poly_props: &PolynomialProperties<T>,
+) -> SeriesInversionError
+where
+    T: PolynomialCoeff<T>,
+{
+    let element_nonzero = poly_props
+        .semigroup
+        .elements
+        .column(element_index)
+        .iter()
+        .copied()
+        .enumerate()
+        .filter(|(_, value)| *value != 0)
+        .collect::<Vec<_>>();
+    SeriesInversionError::NonIntegerGVError(format!(
+        "element_index={element_index}, degree={}, element_nonzero={element_nonzero:?}, insertion_index={insertion_index}, pivot_component={pivot_component}, instanton_coefficient={instanton_coefficient}, gv_candidate={gv_candidate}, rounded_gv_candidate={rounded_gv_candidate}",
+        poly_props.semigroup.degrees[element_index],
+    ))
+}
+
 /// Computes qN for generator curves
 fn compute_qn<T>(
     closest_curve: &Polynomial<T>,
@@ -405,7 +432,15 @@ where
                                 poly_props,
                             ));
                         }
-                        return Err(SeriesInversionError::NonIntegerGVError);
+                        return Err(non_integer_gv_error(
+                            j,
+                            kk.0,
+                            kk.1,
+                            gv_ref,
+                            &tmp_gv_candidate,
+                            &tmp_gv_rounded,
+                            poly_props,
+                        ));
                     }
                     tmp_gv.assign(&tmp_gv_rounded);
                     tmp_gv.abs_mut();
@@ -482,12 +517,21 @@ where
                     };
                     tmp_gv.assign(gv_ref);
                     if FIND_GV {
+                        tmp_gv_candidate.assign(&tmp_gv);
                         tmp_gv_rounded.assign(&tmp_gv);
                         tmp_gv_rounded.round_mut();
                         tmp_gv -= &tmp_gv_rounded;
                         tmp_gv.abs_mut();
                         if tmp_gv > 1e-3 {
-                            return Err(SeriesInversionError::NonIntegerGVError);
+                            return Err(non_integer_gv_error(
+                                j,
+                                k,
+                                1,
+                                gv_ref,
+                                &tmp_gv_candidate,
+                                &tmp_gv_rounded,
+                                poly_props,
+                            ));
                         }
                         tmp_gv.assign(&tmp_gv_rounded);
                         tmp_gv.abs_mut();

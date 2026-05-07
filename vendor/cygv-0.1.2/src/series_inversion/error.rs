@@ -5,15 +5,16 @@ use core::fmt;
 /// An error structure for semigroup errors.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SeriesInversionError {
-    NonIntegerGVError,
+    NonIntegerGVError(String),
 }
 
 /// Implement Display trait for SeriesInversionError.
 impl fmt::Display for SeriesInversionError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let message = match self {
-            SeriesInversionError::NonIntegerGVError => "A non-integer GV invariant was found",
-        };
-        write!(f, "{message}")
+        match self {
+            SeriesInversionError::NonIntegerGVError(details) => {
+                write!(f, "A non-integer GV invariant was found: {details}")
+            }
+        }
     }
 }

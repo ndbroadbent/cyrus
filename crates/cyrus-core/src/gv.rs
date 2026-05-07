@@ -11123,9 +11123,10 @@ pub fn compute_gv_invariants_with_provided_generators_qn_trace(
 /// generators without enforcing GV integrality.
 ///
 /// This is a diagnostic escape hatch for upstream `cygv` failures: when
-/// `FIND_GV=true` rejects a non-integral candidate, `cygv` currently reports
-/// only a generic error. Running the same input with `FIND_GV=false` exposes
-/// the exact coefficient candidates read from the instanton polynomial.
+/// `FIND_GV=true` rejects a non-integral candidate, the vendored `cygv`
+/// diagnostic identifies the first failing candidate. Running the same input
+/// with `FIND_GV=false` exposes the surrounding coefficient candidates read
+/// from the instanton polynomial.
 ///
 /// # Errors
 /// Returns an error if input construction, fundamental-period computation, or

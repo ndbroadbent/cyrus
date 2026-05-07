@@ -2916,7 +2916,10 @@ computes source `GV=-2`, and has `9` non-integral lower GW candidates. Target
 `8`'s degree-eight domain has three generators with degrees `{2:2,6:1}` and
 still fails the integral GV run; the raw GW trace nevertheless reaches the
 source row with `instanton=-2` and candidate `2`, while exposing `9`
-non-integral lower candidates, including a degree-ten candidate `4/3`.
+non-integral lower candidates. The vendored `cygv` error now reports the first
+integrality failure directly:
+`element_nonzero=[(203,-3),(206,1),(209,1)]`, pivot component `-3`,
+instanton coefficient `-4`, GV candidate `4/3`, rounded candidate `1`.
 Thus the current blocker is not hidden by a missing scalar source readout: the
 candidate domains contain fractional lower coefficient history and still lack
 a supporting-face/chamber certificate.

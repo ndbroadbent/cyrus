@@ -433,7 +433,10 @@ and matrix-basis pipeline are no longer open.
    still contain `13`, `8`, and `9` non-integral lower GW candidates,
    respectively. Target `8`'s degree-eight domain remains an integral-run
    `hkty_error`; the raw trace reaches source candidate `2` and exposes `9`
-   non-integral lower candidates, including a degree-ten candidate `4/3`.
+   non-integral lower candidates. The vendored `cygv` error now identifies the
+   first failing coefficient as
+   `element_nonzero=[(203,-3),(206,1),(209,1)]`, pivot component `-3`,
+   instanton coefficient `-4`, GV candidate `4/3`, rounded candidate `1`.
    These traces explain why the candidate domains cannot be promoted without a
    source-derived supporting-face/chamber certificate.
    The target-coefficient balance reconstructs the small-domain
