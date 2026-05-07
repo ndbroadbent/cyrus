@@ -289,6 +289,17 @@ struct ContextReport {
     cygv_lower_seed_diamond_status_counts: BTreeMap<String, usize>,
     cygv_closest_known_qn_residual_status_counts: BTreeMap<String, usize>,
     cygv_closest_known_qn_residual_degree_split_counts: BTreeMap<String, usize>,
+    cygv_closest_known_qn_residual_source_predecessor_unique_count: usize,
+    cygv_closest_known_qn_residual_source_predecessor_occurrence_count: usize,
+    cygv_closest_known_qn_residual_source_predecessor_degree_counts: BTreeMap<i128, usize>,
+    cygv_closest_known_qn_residual_source_predecessor_source_class_status_counts:
+        BTreeMap<String, usize>,
+    cygv_closest_known_qn_residual_source_predecessor_local_cygv_readiness_counts:
+        BTreeMap<String, usize>,
+    cygv_closest_known_qn_residual_source_predecessor_local_missing_input_counts:
+        BTreeMap<String, usize>,
+    cygv_closest_known_qn_residual_source_predecessor_sample:
+        Vec<CygvClosestKnownQnResidualSourcePredecessorSummary>,
     path_support_uncovered_source_ray_unique_count: usize,
     path_support_uncovered_source_ray_occurrence_count: usize,
     path_support_uncovered_source_ray_degree_counts: BTreeMap<i128, usize>,
@@ -771,6 +782,38 @@ struct CygvPathSupportSourceRayOccurrence {
 }
 
 #[derive(Clone, Debug, Serialize)]
+struct CygvClosestKnownQnResidualSourcePredecessorSummary {
+    degree: i128,
+    occurrence_count: usize,
+    source_class_status_counts: BTreeMap<String, usize>,
+    known_qn_history_status_counts: BTreeMap<String, usize>,
+    source_derived_gv_counts: BTreeMap<String, usize>,
+    toric_gv_counts: BTreeMap<String, usize>,
+    source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
+    matching_uncovered_source_ray_index: Option<usize>,
+    matching_uncovered_source_ray_origin_circuit_pattern: Option<String>,
+    matching_uncovered_source_ray_exact_kind: Option<String>,
+    matching_uncovered_source_ray_cms_check_status_counts: BTreeMap<String, usize>,
+    matching_uncovered_source_ray_cms_solution_summaries: Vec<CmsGeneralDivisorSolutionSummary>,
+    matching_uncovered_source_ray_local_charge_signature: Option<String>,
+    matching_uncovered_source_ray_local_cygv_readiness_counts: BTreeMap<String, usize>,
+    matching_uncovered_source_ray_local_missing_input_counts: BTreeMap<String, usize>,
+    curve_nonzero: Vec<(usize, i64)>,
+    occurrences: Vec<CygvClosestKnownQnResidualSourcePredecessorOccurrence>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CygvClosestKnownQnResidualSourcePredecessorOccurrence {
+    target_index: usize,
+    series_distance: String,
+    residual_difference_degree: i128,
+    residual_difference_known_qn_history_status: String,
+    residual_difference_toric_gv: Option<String>,
+    residual_difference_source_derived_gv: Option<String>,
+    residual_difference_nonzero: Vec<(usize, i64)>,
+}
+
+#[derive(Clone, Debug, Serialize)]
 struct ActiveDecompositionSourceLeafSummary {
     source_status: String,
     occurrence_count: usize,
@@ -818,6 +861,25 @@ struct CygvPathSupportSourceRaySummaryBuilder {
     source_ray_ambient_nonzero: Vec<(usize, i64)>,
     curve_nonzero: Vec<(usize, i64)>,
     occurrences: Vec<CygvPathSupportSourceRayOccurrence>,
+}
+
+struct CygvClosestKnownQnResidualSourcePredecessorSummaryBuilder {
+    degree: i128,
+    source_class_status_counts: BTreeMap<String, usize>,
+    known_qn_history_status_counts: BTreeMap<String, usize>,
+    source_derived_gv_counts: BTreeMap<String, usize>,
+    toric_gv_counts: BTreeMap<String, usize>,
+    source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
+    matching_uncovered_source_ray_index: Option<usize>,
+    matching_uncovered_source_ray_origin_circuit_pattern: Option<String>,
+    matching_uncovered_source_ray_exact_kind: Option<String>,
+    matching_uncovered_source_ray_cms_check_status_counts: BTreeMap<String, usize>,
+    matching_uncovered_source_ray_cms_solution_summaries: Vec<CmsGeneralDivisorSolutionSummary>,
+    matching_uncovered_source_ray_local_charge_signature: Option<String>,
+    matching_uncovered_source_ray_local_cygv_readiness_counts: BTreeMap<String, usize>,
+    matching_uncovered_source_ray_local_missing_input_counts: BTreeMap<String, usize>,
+    curve_nonzero: Vec<(usize, i64)>,
+    occurrences: Vec<CygvClosestKnownQnResidualSourcePredecessorOccurrence>,
 }
 
 struct PathSupportSourceClassContext {
@@ -6992,6 +7054,260 @@ fn cygv_closest_known_qn_residual_degree_split_counts(
     counts
 }
 
+fn cygv_closest_known_qn_residual_source_predecessor_summaries(
+    targets: &[TargetReport],
+    context: &ValidatedContext<'_>,
+) -> Vec<CygvClosestKnownQnResidualSourcePredecessorSummary> {
+    let mut summaries: BTreeMap<
+        Vec<(usize, i64)>,
+        CygvClosestKnownQnResidualSourcePredecessorSummaryBuilder,
+    > = BTreeMap::new();
+    for target in targets {
+        let Some(residual) = target
+            .cygv_path_history_probe
+            .as_ref()
+            .and_then(|probe| probe.closest_known_qn_residual_predecessor.as_ref())
+        else {
+            continue;
+        };
+        add_cygv_closest_known_qn_residual_source_predecessor(
+            &mut summaries,
+            target.index,
+            residual,
+            context,
+        );
+    }
+    let mut out = summaries
+        .into_values()
+        .map(
+            |builder| CygvClosestKnownQnResidualSourcePredecessorSummary {
+                degree: builder.degree,
+                occurrence_count: builder.occurrences.len(),
+                source_class_status_counts: builder.source_class_status_counts,
+                known_qn_history_status_counts: builder.known_qn_history_status_counts,
+                source_derived_gv_counts: builder.source_derived_gv_counts,
+                toric_gv_counts: builder.toric_gv_counts,
+                source_ray_ambient_nonzero: builder.source_ray_ambient_nonzero,
+                matching_uncovered_source_ray_index: builder.matching_uncovered_source_ray_index,
+                matching_uncovered_source_ray_origin_circuit_pattern: builder
+                    .matching_uncovered_source_ray_origin_circuit_pattern,
+                matching_uncovered_source_ray_exact_kind: builder
+                    .matching_uncovered_source_ray_exact_kind,
+                matching_uncovered_source_ray_cms_check_status_counts: builder
+                    .matching_uncovered_source_ray_cms_check_status_counts,
+                matching_uncovered_source_ray_cms_solution_summaries: builder
+                    .matching_uncovered_source_ray_cms_solution_summaries,
+                matching_uncovered_source_ray_local_charge_signature: builder
+                    .matching_uncovered_source_ray_local_charge_signature,
+                matching_uncovered_source_ray_local_cygv_readiness_counts: builder
+                    .matching_uncovered_source_ray_local_cygv_readiness_counts,
+                matching_uncovered_source_ray_local_missing_input_counts: builder
+                    .matching_uncovered_source_ray_local_missing_input_counts,
+                curve_nonzero: builder.curve_nonzero,
+                occurrences: builder.occurrences,
+            },
+        )
+        .collect::<Vec<_>>();
+    out.sort_by(|lhs, rhs| {
+        lhs.degree
+            .cmp(&rhs.degree)
+            .then_with(|| lhs.curve_nonzero.cmp(&rhs.curve_nonzero))
+    });
+    out
+}
+
+fn add_cygv_closest_known_qn_residual_source_predecessor(
+    summaries: &mut BTreeMap<
+        Vec<(usize, i64)>,
+        CygvClosestKnownQnResidualSourcePredecessorSummaryBuilder,
+    >,
+    target_index: usize,
+    residual: &CygvClosestKnownQnPredecessor,
+    context: &ValidatedContext<'_>,
+) {
+    if !residual
+        .predecessor_known_qn_history_status
+        .ends_with("_source_gv")
+        && residual.predecessor_source_derived_gv.is_none()
+    {
+        return;
+    }
+    let Ok(curve) = dense_from_sparse(&residual.predecessor_nonzero, context.dimension) else {
+        return;
+    };
+    let source_context_result = path_support_source_class_context(&curve, context);
+    let source_context = source_context_result.ok();
+    let source_class_status = source_context.as_ref().map_or_else(
+        || "source_context_lookup_error".to_string(),
+        |source_context| source_context.status.clone(),
+    );
+    let entry = summaries
+        .entry(residual.predecessor_nonzero.clone())
+        .or_insert_with(
+            || CygvClosestKnownQnResidualSourcePredecessorSummaryBuilder {
+                degree: residual.predecessor_degree,
+                source_class_status_counts: BTreeMap::new(),
+                known_qn_history_status_counts: BTreeMap::new(),
+                source_derived_gv_counts: BTreeMap::new(),
+                toric_gv_counts: BTreeMap::new(),
+                source_ray_ambient_nonzero: source_context
+                    .as_ref()
+                    .and_then(|source_context| source_context.source_ray_ambient_nonzero.clone()),
+                matching_uncovered_source_ray_index: source_context
+                    .as_ref()
+                    .and_then(|source_context| source_context.matching_uncovered_source_ray_index),
+                matching_uncovered_source_ray_origin_circuit_pattern: source_context
+                    .as_ref()
+                    .and_then(|source_context| {
+                        source_context
+                            .matching_uncovered_source_ray_origin_circuit_pattern
+                            .clone()
+                    }),
+                matching_uncovered_source_ray_exact_kind: source_context.as_ref().and_then(
+                    |source_context| {
+                        source_context
+                            .matching_uncovered_source_ray_exact_kind
+                            .clone()
+                    },
+                ),
+                matching_uncovered_source_ray_cms_check_status_counts: source_context
+                    .as_ref()
+                    .map(|source_context| {
+                        source_context
+                            .matching_uncovered_source_ray_cms_check_status_counts
+                            .clone()
+                    })
+                    .unwrap_or_default(),
+                matching_uncovered_source_ray_cms_solution_summaries: source_context
+                    .as_ref()
+                    .map(|source_context| {
+                        source_context
+                            .matching_uncovered_source_ray_cms_solution_summaries
+                            .clone()
+                    })
+                    .unwrap_or_default(),
+                matching_uncovered_source_ray_local_charge_signature: source_context
+                    .as_ref()
+                    .and_then(|source_context| {
+                        source_context
+                            .matching_uncovered_source_ray_local_charge_signature
+                            .clone()
+                    }),
+                matching_uncovered_source_ray_local_cygv_readiness_counts: BTreeMap::new(),
+                matching_uncovered_source_ray_local_missing_input_counts: BTreeMap::new(),
+                curve_nonzero: residual.predecessor_nonzero.clone(),
+                occurrences: Vec::new(),
+            },
+        );
+    debug_assert_eq!(entry.degree, residual.predecessor_degree);
+    *entry
+        .source_class_status_counts
+        .entry(source_class_status)
+        .or_insert(0) += 1;
+    *entry
+        .known_qn_history_status_counts
+        .entry(residual.predecessor_known_qn_history_status.clone())
+        .or_insert(0) += 1;
+    *entry
+        .source_derived_gv_counts
+        .entry(
+            residual
+                .predecessor_source_derived_gv
+                .clone()
+                .unwrap_or_else(|| "missing_source_derived_gv".to_string()),
+        )
+        .or_insert(0) += 1;
+    *entry
+        .toric_gv_counts
+        .entry(
+            residual
+                .predecessor_toric_gv
+                .clone()
+                .unwrap_or_else(|| "not_toric_covered".to_string()),
+        )
+        .or_insert(0) += 1;
+    if let Some(source_context) = source_context.as_ref() {
+        if let Some(readiness) = &source_context.matching_uncovered_source_ray_local_cygv_readiness
+        {
+            *entry
+                .matching_uncovered_source_ray_local_cygv_readiness_counts
+                .entry(readiness.clone())
+                .or_insert(0) += 1;
+        }
+        for input in &source_context.matching_uncovered_source_ray_local_missing_inputs {
+            *entry
+                .matching_uncovered_source_ray_local_missing_input_counts
+                .entry(input.clone())
+                .or_insert(0) += 1;
+        }
+    }
+    entry
+        .matching_uncovered_source_ray_cms_solution_summaries
+        .sort();
+    entry
+        .matching_uncovered_source_ray_cms_solution_summaries
+        .dedup();
+    entry
+        .occurrences
+        .push(CygvClosestKnownQnResidualSourcePredecessorOccurrence {
+            target_index,
+            series_distance: residual.series_distance.clone(),
+            residual_difference_degree: residual.difference_degree,
+            residual_difference_known_qn_history_status: residual
+                .difference_known_qn_history_status
+                .clone(),
+            residual_difference_toric_gv: residual.difference_toric_gv.clone(),
+            residual_difference_source_derived_gv: residual.difference_source_derived_gv.clone(),
+            residual_difference_nonzero: residual.difference_nonzero.clone(),
+        });
+}
+
+fn cygv_closest_known_qn_residual_source_predecessor_degree_counts(
+    summaries: &[CygvClosestKnownQnResidualSourcePredecessorSummary],
+) -> BTreeMap<i128, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts.entry(summary.degree).or_insert(0) += 1;
+    }
+    counts
+}
+
+fn cygv_closest_known_qn_residual_source_predecessor_source_class_status_counts(
+    summaries: &[CygvClosestKnownQnResidualSourcePredecessorSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        for (status, count) in &summary.source_class_status_counts {
+            *counts.entry(status.clone()).or_insert(0) += count;
+        }
+    }
+    counts
+}
+
+fn cygv_closest_known_qn_residual_source_predecessor_local_cygv_readiness_counts(
+    summaries: &[CygvClosestKnownQnResidualSourcePredecessorSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        for (status, count) in &summary.matching_uncovered_source_ray_local_cygv_readiness_counts {
+            *counts.entry(status.clone()).or_insert(0) += count;
+        }
+    }
+    counts
+}
+
+fn cygv_closest_known_qn_residual_source_predecessor_local_missing_input_counts(
+    summaries: &[CygvClosestKnownQnResidualSourcePredecessorSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        for (input, count) in &summary.matching_uncovered_source_ray_local_missing_input_counts {
+            *counts.entry(input.clone()).or_insert(0) += count;
+        }
+    }
+    counts
+}
+
 fn cygv_closest_known_qn_residual_predecessor(
     elements: &HashSet<Vec<i64>>,
     degree_counts: &BTreeMap<i128, usize>,
@@ -8202,6 +8518,31 @@ fn build_report(
         cygv_closest_known_qn_residual_status_counts(&targets);
     let cygv_closest_known_qn_residual_degree_split_counts =
         cygv_closest_known_qn_residual_degree_split_counts(&targets);
+    let cygv_closest_known_qn_residual_source_predecessor_sample =
+        cygv_closest_known_qn_residual_source_predecessor_summaries(&targets, validated);
+    let cygv_closest_known_qn_residual_source_predecessor_unique_count =
+        cygv_closest_known_qn_residual_source_predecessor_sample.len();
+    let cygv_closest_known_qn_residual_source_predecessor_occurrence_count =
+        cygv_closest_known_qn_residual_source_predecessor_sample
+            .iter()
+            .map(|summary| summary.occurrence_count)
+            .sum();
+    let cygv_closest_known_qn_residual_source_predecessor_degree_counts =
+        cygv_closest_known_qn_residual_source_predecessor_degree_counts(
+            &cygv_closest_known_qn_residual_source_predecessor_sample,
+        );
+    let cygv_closest_known_qn_residual_source_predecessor_source_class_status_counts =
+        cygv_closest_known_qn_residual_source_predecessor_source_class_status_counts(
+            &cygv_closest_known_qn_residual_source_predecessor_sample,
+        );
+    let cygv_closest_known_qn_residual_source_predecessor_local_cygv_readiness_counts =
+        cygv_closest_known_qn_residual_source_predecessor_local_cygv_readiness_counts(
+            &cygv_closest_known_qn_residual_source_predecessor_sample,
+        );
+    let cygv_closest_known_qn_residual_source_predecessor_local_missing_input_counts =
+        cygv_closest_known_qn_residual_source_predecessor_local_missing_input_counts(
+            &cygv_closest_known_qn_residual_source_predecessor_sample,
+        );
     let path_support_uncovered_source_ray_sample =
         path_support_uncovered_source_ray_summaries(&targets);
     let path_support_uncovered_source_ray_unique_count =
@@ -8440,6 +8781,13 @@ fn build_report(
         cygv_lower_seed_diamond_status_counts,
         cygv_closest_known_qn_residual_status_counts,
         cygv_closest_known_qn_residual_degree_split_counts,
+        cygv_closest_known_qn_residual_source_predecessor_unique_count,
+        cygv_closest_known_qn_residual_source_predecessor_occurrence_count,
+        cygv_closest_known_qn_residual_source_predecessor_degree_counts,
+        cygv_closest_known_qn_residual_source_predecessor_source_class_status_counts,
+        cygv_closest_known_qn_residual_source_predecessor_local_cygv_readiness_counts,
+        cygv_closest_known_qn_residual_source_predecessor_local_missing_input_counts,
+        cygv_closest_known_qn_residual_source_predecessor_sample,
         path_support_uncovered_source_ray_unique_count,
         path_support_uncovered_source_ray_occurrence_count,
         path_support_uncovered_source_ray_degree_counts,
@@ -11518,6 +11866,129 @@ mod tests {
         );
         assert_eq!(residual.predecessor_nonzero, vec![(1, 1)]);
         assert_eq!(residual.difference_nonzero, vec![(0, 2)]);
+    }
+
+    #[test]
+    fn residual_source_predecessor_summary_preserves_shared_source_certificate_queue() {
+        let mut source_sample = minimal_missing_sample(vec![(1, 1)]);
+        source_sample.degree = 1;
+        source_sample.origin_circuit_pattern = Some("origin=-2;neg={};pos={1: 3}".to_string());
+        source_sample.real_cone_decomposition_exact_kind =
+            Some("source_derived_origin_circuit".to_string());
+        source_sample.cms_general_divisor_shape_candidates =
+            Some(vec![CmsGeneralDivisorShapeCandidate {
+                shrinking_divisor_index: 5,
+                shrinking_divisor_coefficient: -2,
+                shrinking_divisor_coordinates: vec![1],
+                inferred_other_normal_degree: 0,
+                toric_gv1_formula_value: Some(-2),
+                all_non_origin_relation_points_are_two_face: true,
+            }]);
+        source_sample.cms_general_divisor_intersection_checks =
+            Some(vec![CmsGeneralDivisorIntersectionCheck {
+                shrinking_divisor_index: 5,
+                has_rational_divisor_solution: true,
+                solution_basis_support_len: Some(1),
+                solution_basis_nonzero: Some(vec![(1, "1".to_string())]),
+                solution_ambient_basis_nonzero: Some(vec![(54, "1".to_string())]),
+                solution_is_integral: Some(true),
+                computed_other_normal_degree: Some("0".to_string()),
+                matches_inferred_other_normal_degree: Some(true),
+            }]);
+        let source_stats = MissingGvTargetStats {
+            target_count: 1,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: vec![source_sample],
+        };
+        let stats = MissingGvTargetStats {
+            target_count: 0,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: Vec::new(),
+        };
+        let grading = vec![1, 1];
+        let q_matrix = vec![vec![1, 0], vec![0, 1]];
+        let degree_bounded_rays = vec![vec![0, 1]];
+        let ray_context = vec![DegreeBoundedMoriRayContextSample {
+            degree: 1,
+            ambient_nonzero: vec![(54, -2), (203, 1), (206, 1), (209, 1)],
+            basis_nonzero: vec![(1, 1)],
+        }];
+        let context = ValidatedContext {
+            dimension: 2,
+            degree_bound: 2,
+            q_cols: 2,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: Some(&ray_context),
+            covered_toric_gv_by_basis: HashMap::new(),
+            source_derived_gv_by_basis: source_derived_gv_by_basis(Some(&source_stats), 2).unwrap(),
+            intersection: Intersection::new(2),
+            stats: &stats,
+            uncovered_source_ray_stats: Some(&source_stats),
+            shared_facet_unresolved_source_ray_stats: None,
+        };
+        let residual = CygvClosestKnownQnPredecessor {
+            predecessor_degree: 1,
+            difference_degree: 1,
+            series_distance: "4.000000".to_string(),
+            predecessor_toric_gv: None,
+            predecessor_source_derived_gv: Some("-2".to_string()),
+            predecessor_known_qn_history_status: "known_nonzero_source_gv".to_string(),
+            difference_toric_gv: Some("-2".to_string()),
+            difference_source_derived_gv: None,
+            difference_known_qn_history_status: "known_nonzero_toric_gv".to_string(),
+            predecessor_nonzero: vec![(1, 1)],
+            difference_nonzero: vec![(0, 1)],
+        };
+        let mut summaries = BTreeMap::new();
+
+        add_cygv_closest_known_qn_residual_source_predecessor(
+            &mut summaries,
+            7,
+            &residual,
+            &context,
+        );
+        add_cygv_closest_known_qn_residual_source_predecessor(
+            &mut summaries,
+            8,
+            &residual,
+            &context,
+        );
+
+        let summary = summaries.get(&vec![(1, 1)]).unwrap();
+        assert_eq!(summary.occurrences.len(), 2);
+        assert_eq!(
+            summary.source_class_status_counts,
+            BTreeMap::from([("source_ray_known_source_derived_gv".to_string(), 2)])
+        );
+        assert_eq!(
+            summary.source_derived_gv_counts,
+            BTreeMap::from([("-2".to_string(), 2)])
+        );
+        assert_eq!(
+            summary.matching_uncovered_source_ray_index,
+            Some(0),
+            "the known source-derived predecessor should still point at its local source-ray sample"
+        );
+        assert_eq!(
+            summary
+                .matching_uncovered_source_ray_origin_circuit_pattern
+                .as_deref(),
+            Some("origin=-2;neg={};pos={1: 3}")
+        );
+        assert_eq!(
+            summary
+                .matching_uncovered_source_ray_cms_check_status_counts
+                .get("cms_general_divisor_integral_solution_matches_inferred_degree")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(summary.occurrences[0].target_index, 7);
+        assert_eq!(
+            summary.occurrences[1].residual_difference_known_qn_history_status,
+            "known_nonzero_toric_gv"
+        );
     }
 
     #[test]

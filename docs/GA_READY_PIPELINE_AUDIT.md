@@ -112,7 +112,12 @@ run pass. Any remaining mismatch must be explicit and localizable.
    the current 4-214-647 export record the live residual split as the same
    source-derived degree-6 predecessor plus toric degree-2 differences,
    sharpening the next source-history task to the certified semigroup/chamber
-   history around that shared lower composite term.
+   history around that shared lower composite term. The unfiltered bounded
+   report now promotes closest-known residual source predecessors into their own
+   queue: two unique source-derived predecessors occur three times, target 7/8
+   share the degree-6 ray, target 6 has the analogous degree-4 ray, and every
+   occurrence is blocked on `local_intersection_tensor` and
+   `local_chamber_certificate`.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for
@@ -568,11 +573,16 @@ to make the remaining GV layer more first-principles:
    a certified semigroup/chamber. The new source-ray readiness fields sharpen
    this to a concrete input list: the shared degree-six ray has local charge
    signature `[-1,-1,-1,1,2]` and matching CMS checks, but still lacks
-   `local_q_matrix_phase`, `local_intersection_tensor`, and
-   `local_chamber_certificate`. Its one-parameter unit semigroup generator and
-   grading vector are now source-derived. The follow-up primitive probes show
-   that unit tensor normalization explains the `[-1,-2,1,1,1]` lower ray, and
-   that omitting the origin/canonical divisor column explains the
+   `local_intersection_tensor` and `local_chamber_certificate`. The residual
+   predecessor queue also shows target `6` has an analogous degree-four source
+   predecessor with the same local signature and blockers. The CMS divisor cubic
+   suggests tensor value `3`, but the raw-cubic primitive probe gives `GV=-6`;
+   the unit-tensor probe gives the expected `GV=-2` and is not promotable without
+   the chamber/tensor source certificate. Its one-parameter unit semigroup
+   generator, grading vector, and q-matrix phase are now source-derived. The
+   follow-up primitive probes show that unit tensor normalization explains the
+   `[-1,-2,1,1,1]` lower ray, and that omitting the origin/canonical divisor
+   column explains the
    resolved-conifold-like `[-1,1,-1,1,-1,1]` lower ray. These are still
    phase/chamber diagnostics, not promoted GV values. Across all nine
    unresolved origin circuits, the origin-omitted shape aggregate now reports

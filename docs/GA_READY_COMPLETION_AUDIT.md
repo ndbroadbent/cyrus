@@ -132,8 +132,12 @@ and matrix-basis pipeline are no longer open.
    corrected-chamber context export is now accepted by `mcallister_gv_context`;
    bounded target-7 and target-8 path-history reports aggregate the closest
    known `q_N` residual as the same source-derived degree-6 predecessor plus
-   toric degree-2 differences, leaving the certified semigroup/chamber history
-   for that shared lower composite term as the next source-level object.
+   toric degree-2 differences. The unfiltered bounded report now promotes
+   closest-known residual source predecessors into a first-class queue: two
+   unique source-derived predecessors appear across three occurrences, target
+   7/8 share the degree-6 ray, target 6 has the analogous degree-4 ray, and all
+   are blocked only on a source-derived `local_intersection_tensor` and
+   `local_chamber_certificate`.
 2. **Exact corrected KKLT volume.** The no-replay path computes a corrected
    volume but still has a documented instanton/chamber residual.
 3. **Generic matrix-basis pipeline.** Matrix divisor-basis primitives now cover
@@ -286,14 +290,17 @@ and matrix-basis pipeline are no longer open.
    polynomial history in the certified compact/chamber semigroup, not scalar GV
    values for the lower leaves.
    The source-ray summary now shows that shared ray has local charge signature
-   `[-1,-1,-1,1,2]` and a matching CMS check, but is still blocked on
-   `local_q_matrix_phase`, `local_intersection_tensor`, and
-   `local_chamber_certificate` before an actual local `cygv` call can be
-   promoted. The one-parameter unit semigroup generator `[[1]]` and grading
-   `[1]` are now source-derived for this local skeleton. The context export now
-   also keeps the nonzero rational divisor-basis and ambient-basis coefficients
-   from successful CMS-general-divisor solves, so the next chamber/intersection
-   step has the source-derived divisor data rather than only a pass/fail status.
+   `[-1,-1,-1,1,2]` and a matching CMS check. The residual-source predecessor
+   queue now shows the actual remaining inputs: `local_intersection_tensor` and
+   `local_chamber_certificate`. The CMS divisor cubic suggests tensor value `3`,
+   but the raw-cubic primitive probe gives `GV=-6`; the unit-tensor probe gives
+   the expected `GV=-2` and remains unpromoted until the chamber/tensor source is
+   certified. The one-parameter unit semigroup generator `[[1]]`, grading `[1]`,
+   and q-matrix phase are source-derived for this local skeleton. The context
+   export now also keeps the nonzero rational divisor-basis and ambient-basis
+   coefficients from successful CMS-general-divisor solves, so the next
+   chamber/intersection step has the source-derived divisor data rather than
+   only a pass/fail status.
    These lower classes are now classified against the exported source-ray
    context: for both degree-10 targets the sampled lookups split as four known
    toric source rays, four non-toric source rays, and eight composite classes
