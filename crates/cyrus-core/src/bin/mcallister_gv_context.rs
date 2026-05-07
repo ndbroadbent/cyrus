@@ -259,6 +259,9 @@ struct ContextReport {
         Vec<LocalCygvTargetUnitPhaseProbeSummary>,
     shared_facet_unresolved_source_ray_sample: Vec<TargetReport>,
     origin_circuit_facet_context_status_counts: BTreeMap<String, usize>,
+    origin_circuit_witness_relation_support_face_profile_counts: BTreeMap<String, usize>,
+    origin_circuit_witness_shared_facet_face_profile_counts: BTreeMap<String, usize>,
+    origin_circuit_witness_facet_union_face_profile_counts: BTreeMap<String, usize>,
     origin_circuit_witness_relation_support_face_certificate_status_counts: BTreeMap<String, usize>,
     origin_circuit_witness_shared_facet_face_certificate_status_counts: BTreeMap<String, usize>,
     origin_circuit_witness_facet_union_face_certificate_status_counts: BTreeMap<String, usize>,
@@ -3362,6 +3365,9 @@ struct OriginCircuitWitnessDomainSummary {
     relation_rank: Option<usize>,
     shared_facet_rank: Option<usize>,
     facet_union_rank: Option<usize>,
+    relation_support_face_profile: String,
+    shared_facet_face_profile: String,
+    facet_union_face_profile: String,
     relation_source_status_counts: BTreeMap<String, usize>,
     shared_facet_source_status_counts: BTreeMap<String, usize>,
     facet_union_source_status_counts: BTreeMap<String, usize>,
@@ -3570,6 +3576,9 @@ fn origin_circuit_witness_domain_summary(
         relation_rank: relation.rank,
         shared_facet_rank: shared.rank,
         facet_union_rank: union.rank,
+        relation_support_face_profile: relation.support_face_profile,
+        shared_facet_face_profile: shared.support_face_profile,
+        facet_union_face_profile: union.support_face_profile,
         relation_source_status_counts: relation.source_status_counts,
         shared_facet_source_status_counts: shared.source_status_counts,
         facet_union_source_status_counts: union.source_status_counts,
@@ -3582,6 +3591,7 @@ fn origin_circuit_witness_domain_summary(
 struct OriginCircuitWitnessDomainStats {
     generator_count: Option<usize>,
     rank: Option<usize>,
+    support_face_profile: String,
     source_status_counts: BTreeMap<String, usize>,
     certificate_status: String,
 }
@@ -3597,6 +3607,7 @@ fn origin_circuit_witness_domain_stats(
         return OriginCircuitWitnessDomainStats {
             generator_count: None,
             rank: None,
+            support_face_profile: "missing_degree_bounded_mori_ray_context".to_string(),
             source_status_counts: BTreeMap::new(),
             certificate_status: "missing_degree_bounded_mori_ray_context".to_string(),
         };
@@ -3613,6 +3624,10 @@ fn origin_circuit_witness_domain_stats(
             return OriginCircuitWitnessDomainStats {
                 generator_count: None,
                 rank: None,
+                support_face_profile: format!(
+                    "origin_witness_domain_error_{}",
+                    status_error_fragment(&error)
+                ),
                 source_status_counts: BTreeMap::new(),
                 certificate_status: format!(
                     "origin_witness_domain_error_{}",
@@ -3630,6 +3645,10 @@ fn origin_circuit_witness_domain_stats(
                 return OriginCircuitWitnessDomainStats {
                     generator_count: Some(generators.len()),
                     rank: None,
+                    support_face_profile: format!(
+                        "origin_witness_domain_error_{}",
+                        status_error_fragment(&error.to_string())
+                    ),
                     source_status_counts: BTreeMap::new(),
                     certificate_status: format!(
                         "origin_witness_domain_error_{}",
@@ -3639,6 +3658,8 @@ fn origin_circuit_witness_domain_stats(
             }
         }
     };
+    let support_face_profile =
+        support_face_pre_lp_profile(generators.len(), rank, context.dimension, generator_limit);
     let source_status_counts = source_status_counts_for_generators(&generators, context);
     let certificate_status = if certify_domain {
         origin_circuit_ambient_support_face_certificate_status(
@@ -3654,8 +3675,55 @@ fn origin_circuit_witness_domain_stats(
     OriginCircuitWitnessDomainStats {
         generator_count: Some(generators.len()),
         rank,
+        support_face_profile,
         source_status_counts,
         certificate_status,
+    }
+}
+
+fn support_face_pre_lp_profile(
+    generator_count: usize,
+    rank: Option<usize>,
+    dimension: usize,
+    generator_limit: usize,
+) -> String {
+    if generator_count == 0 {
+        return "support_face_empty_domain".to_string();
+    }
+    let Some(rank) = rank else {
+        return "support_face_rank_error".to_string();
+    };
+    if rank > dimension {
+        return format!("support_face_rank_{rank}_exceeds_dim_{dimension}");
+    }
+    let generator_bucket = generator_count_bucket(generator_count);
+    let codimension = dimension - rank;
+    if codimension == 0 {
+        return format!("support_face_full_dimensional_generators_{generator_bucket}");
+    }
+    if codimension == 1 {
+        return format!(
+            "support_face_codim_1_exact_kernel_candidate_generators_{generator_bucket}"
+        );
+    }
+    if generator_count > generator_limit {
+        return format!(
+            "support_face_codim_{codimension}_lp_skipped_generator_limit_{generator_limit}_generators_{generator_bucket}"
+        );
+    }
+    format!("support_face_codim_{codimension}_lp_candidate_generators_{generator_bucket}")
+}
+
+fn generator_count_bucket(generator_count: usize) -> &'static str {
+    match generator_count {
+        0 => "0",
+        1 => "1",
+        2..=4 => "2_4",
+        5..=16 => "5_16",
+        17..=64 => "17_64",
+        65..=256 => "65_256",
+        257..=1024 => "257_1024",
+        _ => "gt_1024",
     }
 }
 
@@ -3916,6 +3984,13 @@ fn origin_circuit_ambient_support_face_certificate_status(
             );
         }
     };
+    let codimension = context.dimension.saturating_sub(rank);
+    if generators.len() == 1 && codimension > 1 {
+        return format!(
+            "origin_support_skipped_single_generator_higher_codimension_rank_{rank}_dim_{}",
+            context.dimension
+        );
+    }
     if rank != context.dimension.saturating_sub(1) {
         let options = SupportingMoriFaceLpSearchOptions::default();
         return match certify_supporting_mori_face_by_lp_search(
@@ -7774,6 +7849,21 @@ fn build_report(
         certify_origin_witness_domains,
         origin_support_certificate_limit,
     );
+    let origin_circuit_witness_relation_support_face_profile_counts =
+        origin_circuit_witness_domain_status_counts(
+            &origin_circuit_witness_domain_sample,
+            |summary| &summary.relation_support_face_profile,
+        );
+    let origin_circuit_witness_shared_facet_face_profile_counts =
+        origin_circuit_witness_domain_status_counts(
+            &origin_circuit_witness_domain_sample,
+            |summary| &summary.shared_facet_face_profile,
+        );
+    let origin_circuit_witness_facet_union_face_profile_counts =
+        origin_circuit_witness_domain_status_counts(
+            &origin_circuit_witness_domain_sample,
+            |summary| &summary.facet_union_face_profile,
+        );
     let origin_circuit_witness_relation_support_face_certificate_status_counts =
         origin_circuit_witness_domain_status_counts(
             &origin_circuit_witness_domain_sample,
@@ -8096,6 +8186,9 @@ fn build_report(
         shared_facet_unresolved_source_ray_unit_phase_probe_sample,
         shared_facet_unresolved_source_ray_sample,
         origin_circuit_facet_context_status_counts,
+        origin_circuit_witness_relation_support_face_profile_counts,
+        origin_circuit_witness_shared_facet_face_profile_counts,
+        origin_circuit_witness_facet_union_face_profile_counts,
         origin_circuit_witness_relation_support_face_certificate_status_counts,
         origin_circuit_witness_shared_facet_face_certificate_status_counts,
         origin_circuit_witness_facet_union_face_certificate_status_counts,
@@ -9221,6 +9314,27 @@ mod tests {
         assert_eq!(counts.shared_facet, Some(2));
         assert_eq!(counts.facet_union, Some(3));
 
+        let summaries = origin_circuit_witness_domain_summaries(
+            std::slice::from_ref(&sample),
+            &context,
+            None,
+            false,
+            2,
+        );
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(
+            summaries[0].relation_support_face_profile,
+            "support_face_codim_1_exact_kernel_candidate_generators_1"
+        );
+        assert_eq!(
+            summaries[0].shared_facet_face_profile,
+            "support_face_full_dimensional_generators_2_4"
+        );
+        assert_eq!(
+            summaries[0].facet_union_face_profile,
+            "support_face_full_dimensional_generators_2_4"
+        );
+
         let certificates =
             origin_circuit_ambient_support_face_certificate_statuses(&sample, &context, 2);
         assert_eq!(
@@ -9234,6 +9348,52 @@ mod tests {
         assert_eq!(
             certificates.facet_union.as_deref(),
             Some("origin_support_skipped_generator_limit_2_actual_3")
+        );
+    }
+
+    #[test]
+    fn origin_support_certificate_skips_single_generator_higher_codimension_lp() {
+        let stats = MissingGvTargetStats {
+            target_count: 0,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: Vec::new(),
+        };
+        let grading = vec![1, 1, 1];
+        let q_matrix = vec![vec![1, 0, 0], vec![0, 1, 0], vec![0, 0, 1]];
+        let degree_bounded_rays = vec![vec![1, 0, 0], vec![0, 1, 0], vec![0, 0, 1]];
+        let ray_context = vec![DegreeBoundedMoriRayContextSample {
+            degree: 1,
+            ambient_nonzero: vec![(4, 1)],
+            basis_nonzero: vec![(0, 1)],
+        }];
+        let context = ValidatedContext {
+            dimension: 3,
+            degree_bound: 1,
+            q_cols: 3,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: Some(&ray_context),
+            covered_toric_gv_by_basis: HashMap::new(),
+            source_derived_gv_by_basis: HashMap::new(),
+            intersection: Intersection::new(3),
+            stats: &stats,
+            uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
+        };
+        let allowed_support = [4usize].into_iter().collect::<HashSet<_>>();
+
+        let status = origin_circuit_ambient_support_face_certificate_status(
+            &ray_context,
+            1,
+            &allowed_support,
+            &context,
+            16,
+        );
+
+        assert_eq!(
+            status,
+            "origin_support_skipped_single_generator_higher_codimension_rank_1_dim_3"
         );
     }
 
