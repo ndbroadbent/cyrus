@@ -625,6 +625,10 @@ struct CygvPathHistoryProbe {
     path_support_target_reconstructed_pre_subtraction_formula_values: Vec<String>,
     path_support_target_reconstructed_pre_subtraction_formula_value_sum: Option<String>,
     path_support_target_reconstructed_pre_subtraction_formula_status: Option<String>,
+    path_support_target_formula_required_pivot_li2_subtraction_sum: Option<String>,
+    path_support_target_formula_missing_pivot_li2_subtraction_sum: Option<String>,
+    path_support_target_formula_gv_candidate_delta: Option<String>,
+    path_support_target_formula_balance_status: Option<String>,
     path_support_gv_coefficient_trace_count: Option<usize>,
     path_support_gv_coefficient_status_counts: BTreeMap<String, usize>,
     path_support_gv_coefficient_trace_sample: Vec<CygvPathSupportGvCoefficientTraceSample>,
@@ -806,6 +810,13 @@ struct CygvPathSupportTargetLi2SubtractionBalance {
     subtraction_sum: Option<String>,
     reconstructed_pre_subtraction_instanton_coefficient: Option<String>,
     reconstructed_pre_subtraction_gv_candidate: Option<String>,
+    status: String,
+}
+
+struct CygvPathSupportFormulaBalance {
+    required_pivot_li2_subtraction_sum: Option<String>,
+    missing_pivot_li2_subtraction_sum: Option<String>,
+    gv_candidate_delta: Option<String>,
     status: String,
 }
 
@@ -4270,6 +4281,79 @@ fn path_support_target_li2_subtraction_balance(
             reconstructed_pre_subtraction_gv_candidate.to_string(),
         ),
         status: "reconstructed_from_target_readout_plus_li2_subtractions".to_string(),
+    })
+}
+
+fn path_support_formula_balance(
+    target_instanton_coefficient: Option<&String>,
+    target_pivot_component: Option<i32>,
+    lower_pivot_li2_subtraction_sum: Option<&String>,
+    reconstructed_pre_subtraction_gv_candidate: Option<&String>,
+    expected_formula_sum: Option<&String>,
+) -> Result<CygvPathSupportFormulaBalance, String> {
+    let Some(expected_formula_sum) = expected_formula_sum else {
+        return Ok(CygvPathSupportFormulaBalance {
+            required_pivot_li2_subtraction_sum: None,
+            missing_pivot_li2_subtraction_sum: None,
+            gv_candidate_delta: None,
+            status: "missing_formula_sum".to_string(),
+        });
+    };
+    let Some(target_instanton_coefficient) = target_instanton_coefficient else {
+        return Ok(CygvPathSupportFormulaBalance {
+            required_pivot_li2_subtraction_sum: None,
+            missing_pivot_li2_subtraction_sum: None,
+            gv_candidate_delta: None,
+            status: "missing_target_instanton_coefficient".to_string(),
+        });
+    };
+    let Some(target_pivot_component) = target_pivot_component else {
+        return Ok(CygvPathSupportFormulaBalance {
+            required_pivot_li2_subtraction_sum: None,
+            missing_pivot_li2_subtraction_sum: None,
+            gv_candidate_delta: None,
+            status: "missing_target_pivot_component".to_string(),
+        });
+    };
+    if target_pivot_component == 0 {
+        return Ok(CygvPathSupportFormulaBalance {
+            required_pivot_li2_subtraction_sum: None,
+            missing_pivot_li2_subtraction_sum: None,
+            gv_candidate_delta: None,
+            status: "zero_target_pivot_component".to_string(),
+        });
+    }
+    let Some(lower_pivot_li2_subtraction_sum) = lower_pivot_li2_subtraction_sum else {
+        return Ok(CygvPathSupportFormulaBalance {
+            required_pivot_li2_subtraction_sum: None,
+            missing_pivot_li2_subtraction_sum: None,
+            gv_candidate_delta: None,
+            status: "missing_lower_pivot_li2_subtraction_sum".to_string(),
+        });
+    };
+
+    let expected_formula_sum = parse_rational(expected_formula_sum)?;
+    let target_instanton_coefficient = parse_rational(target_instanton_coefficient)?;
+    let lower_pivot_li2_subtraction_sum = parse_rational(lower_pivot_li2_subtraction_sum)?;
+    let required = expected_formula_sum.clone()
+        * MalachiteRational::from(Integer::from(target_pivot_component))
+        - target_instanton_coefficient;
+    let missing = required.clone() - lower_pivot_li2_subtraction_sum;
+    let gv_candidate_delta = reconstructed_pre_subtraction_gv_candidate
+        .map(|candidate| {
+            parse_rational(candidate).map(|candidate| expected_formula_sum - candidate)
+        })
+        .transpose()?;
+    let status = if missing == 0 {
+        "formula_pivot_subtraction_balanced"
+    } else {
+        "formula_pivot_subtraction_mismatch"
+    };
+    Ok(CygvPathSupportFormulaBalance {
+        required_pivot_li2_subtraction_sum: Some(required.to_string()),
+        missing_pivot_li2_subtraction_sum: Some(missing.to_string()),
+        gv_candidate_delta: gv_candidate_delta.map(|value| value.to_string()),
+        status: status.to_string(),
     })
 }
 
@@ -8540,6 +8624,10 @@ fn cygv_path_history_probe(
             path_support_target_reconstructed_pre_subtraction_formula_values: Vec::new(),
             path_support_target_reconstructed_pre_subtraction_formula_value_sum: None,
             path_support_target_reconstructed_pre_subtraction_formula_status: None,
+            path_support_target_formula_required_pivot_li2_subtraction_sum: None,
+            path_support_target_formula_missing_pivot_li2_subtraction_sum: None,
+            path_support_target_formula_gv_candidate_delta: None,
+            path_support_target_formula_balance_status: None,
             path_support_gv_coefficient_trace_count: None,
             path_support_gv_coefficient_status_counts: BTreeMap::new(),
             path_support_gv_coefficient_trace_sample: Vec::new(),
@@ -8653,6 +8741,10 @@ fn cygv_path_history_probe_inner(
             path_support_target_reconstructed_pre_subtraction_formula_values: Vec::new(),
             path_support_target_reconstructed_pre_subtraction_formula_value_sum: None,
             path_support_target_reconstructed_pre_subtraction_formula_status: None,
+            path_support_target_formula_required_pivot_li2_subtraction_sum: None,
+            path_support_target_formula_missing_pivot_li2_subtraction_sum: None,
+            path_support_target_formula_gv_candidate_delta: None,
+            path_support_target_formula_balance_status: None,
             path_support_gv_coefficient_trace_count: None,
             path_support_gv_coefficient_status_counts: BTreeMap::new(),
             path_support_gv_coefficient_trace_sample: Vec::new(),
@@ -8742,6 +8834,10 @@ fn cygv_path_history_probe_inner(
             path_support_target_reconstructed_pre_subtraction_formula_values: Vec::new(),
             path_support_target_reconstructed_pre_subtraction_formula_value_sum: None,
             path_support_target_reconstructed_pre_subtraction_formula_status: None,
+            path_support_target_formula_required_pivot_li2_subtraction_sum: None,
+            path_support_target_formula_missing_pivot_li2_subtraction_sum: None,
+            path_support_target_formula_gv_candidate_delta: None,
+            path_support_target_formula_balance_status: None,
             path_support_gv_coefficient_trace_count: None,
             path_support_gv_coefficient_status_counts: BTreeMap::new(),
             path_support_gv_coefficient_trace_sample: Vec::new(),
@@ -8840,6 +8936,19 @@ fn cygv_path_history_probe_inner(
             &expected_formula_values,
             expected_formula_sum.as_ref(),
         )?;
+    let path_support_target_formula_balance = path_support_formula_balance(
+        path_support_generators
+            .target_instanton_coefficient
+            .as_ref(),
+        path_support_generators.target_pivot_component,
+        path_support_generators
+            .target_pivot_li2_subtraction_sum
+            .as_ref(),
+        path_support_generators
+            .target_reconstructed_pre_subtraction_gv_candidate
+            .as_ref(),
+        expected_formula_sum.as_ref(),
+    )?;
     let closest_known_qn_residual_qn_domain_comparison = residual_qn_domain_comparison(
         closest_known_qn_residual_predecessor.as_ref(),
         &path_support_generators,
@@ -8939,6 +9048,15 @@ fn cygv_path_history_probe_inner(
                 expected_formula_sum,
             path_support_target_reconstructed_pre_subtraction_formula_status: Some(
                 path_support_target_reconstructed_pre_subtraction_formula_status,
+            ),
+            path_support_target_formula_required_pivot_li2_subtraction_sum:
+                path_support_target_formula_balance.required_pivot_li2_subtraction_sum,
+            path_support_target_formula_missing_pivot_li2_subtraction_sum:
+                path_support_target_formula_balance.missing_pivot_li2_subtraction_sum,
+            path_support_target_formula_gv_candidate_delta: path_support_target_formula_balance
+                .gv_candidate_delta,
+            path_support_target_formula_balance_status: Some(
+                path_support_target_formula_balance.status,
             ),
             path_support_gv_coefficient_trace_count: path_support_generators
                 .gv_coefficient_trace_count,
@@ -9060,6 +9178,15 @@ fn cygv_path_history_probe_inner(
         path_support_target_reconstructed_pre_subtraction_formula_value_sum: expected_formula_sum,
         path_support_target_reconstructed_pre_subtraction_formula_status: Some(
             path_support_target_reconstructed_pre_subtraction_formula_status,
+        ),
+        path_support_target_formula_required_pivot_li2_subtraction_sum:
+            path_support_target_formula_balance.required_pivot_li2_subtraction_sum,
+        path_support_target_formula_missing_pivot_li2_subtraction_sum:
+            path_support_target_formula_balance.missing_pivot_li2_subtraction_sum,
+        path_support_target_formula_gv_candidate_delta: path_support_target_formula_balance
+            .gv_candidate_delta,
+        path_support_target_formula_balance_status: Some(
+            path_support_target_formula_balance.status,
         ),
         path_support_gv_coefficient_trace_count: path_support_generators.gv_coefficient_trace_count,
         path_support_gv_coefficient_status_counts: path_support_generators
@@ -15774,6 +15901,34 @@ mod tests {
             sources[0].pivot_li2_subtraction_coefficient.as_deref(),
             Some("2")
         );
+    }
+
+    #[test]
+    fn path_support_formula_balance_reports_missing_lower_subtraction() {
+        let target_instanton = "0".to_string();
+        let lower_sum = "3".to_string();
+        let reconstructed = "3/2".to_string();
+        let expected = "3".to_string();
+
+        let balance = path_support_formula_balance(
+            Some(&target_instanton),
+            Some(2),
+            Some(&lower_sum),
+            Some(&reconstructed),
+            Some(&expected),
+        )
+        .expect("formula balance should compute exact rational residuals");
+
+        assert_eq!(
+            balance.required_pivot_li2_subtraction_sum.as_deref(),
+            Some("6")
+        );
+        assert_eq!(
+            balance.missing_pivot_li2_subtraction_sum.as_deref(),
+            Some("3")
+        );
+        assert_eq!(balance.gv_candidate_delta.as_deref(), Some("3/2"));
+        assert_eq!(balance.status, "formula_pivot_subtraction_mismatch");
     }
 
     #[test]

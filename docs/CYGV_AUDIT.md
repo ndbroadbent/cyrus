@@ -2745,6 +2745,15 @@ small path-support calls read the target coefficient as `0` in raw GW mode
 are `3/2` and `2`. Therefore the formula mismatch is not a hidden raw
 instanton read; it is specifically lower-history `Li2(q_N)` attribution in the
 sampled compact qN history.
+The report now records this attribution mismatch in the same units as `cygv`'s
+pivot subtraction. For target `7`, the sampled lower history supplies pivot
+subtraction `3`, while matching the formula value `3` would require `6`; the
+missing lower contribution is therefore `+3`, with GV-candidate delta `3/2`.
+For target `8`, the sampled lower history supplies `-6`, while the formula
+value `3` with pivot component `-3` requires `-9`; the missing lower
+contribution is `-3`, with GV-candidate delta `1`. This gives the next
+corrected-chamber search an exact signed residual rather than a qualitative
+formula mismatch.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use
