@@ -119,6 +119,12 @@ run pass. Any remaining mismatch must be explicit and localizable.
    `[195]`/`[212]`. The origin-circuit exclusive pair is therefore diagnostic
    relation data, not the chamber-star pair that should be fed into a resolved
    source projection.
+   The star-support export now carries coordinates for those extras and
+   computes actual six-point charge rows from the triangulation star. The four
+   weighted rows split into two shared rows, `[2,-1,-1,0,-2,2]` for targets
+   `3`/`6` and `[1,0,1,-1,0,-1]` for targets `7`/`8`, each with affine rank
+   `4` and zero total charge. These rows are candidate local chamber data, not
+   promoted GV inputs until the chamber/intersection certificate is derived.
    A fresh read of
    `string_theory/mcallister_2107/latest_cytools/compute_kklt_iterative.py`
    confirms the sign convention used by Cyrus,

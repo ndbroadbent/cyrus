@@ -1063,6 +1063,7 @@ struct OriginCircuitWitnessSample {
     shared_two_simplex: Vec<usize>,
     shared_two_simplex_points: Vec<OriginCircuitRelationPointSample>,
     shared_two_simplex_star_simplices: Vec<Vec<usize>>,
+    shared_two_simplex_star_extra_point_samples: Vec<Vec<OriginCircuitRelationPointSample>>,
     first_facet: Vec<usize>,
     second_facet: Vec<usize>,
     first_facet_size: usize,
@@ -3104,6 +3105,12 @@ fn origin_circuit_witness_sample(
             witness,
             triangulation,
         ),
+        shared_two_simplex_star_extra_point_samples:
+            origin_circuit_shared_two_simplex_star_extra_point_samples(
+                witness,
+                triangulation_points,
+                triangulation,
+            ),
         first_facet: witness.first_facet.clone(),
         second_facet: witness.second_facet.clone(),
         first_facet_size: witness.first_facet.len(),
@@ -3154,6 +3161,28 @@ fn origin_circuit_shared_two_simplex_point_samples(
         .collect()
 }
 
+fn origin_circuit_point_sample(
+    point_index: usize,
+    relation_by_point: &HashMap<usize, &cyrus_core::OriginCircuitRelationPoint>,
+    triangulation_points: &[Point],
+) -> Option<OriginCircuitRelationPointSample> {
+    if let Some(relation_point) = relation_by_point.get(&point_index) {
+        return Some(OriginCircuitRelationPointSample {
+            point_index,
+            coefficient: relation_point.coefficient,
+            coordinates: relation_point.coordinates.clone(),
+            face_dimension: relation_point.face_dimension,
+        });
+    }
+    let coordinates = triangulation_points.get(point_index)?.coords().to_vec();
+    Some(OriginCircuitRelationPointSample {
+        point_index,
+        coefficient: 0,
+        coordinates,
+        face_dimension: None,
+    })
+}
+
 fn origin_circuit_shared_two_simplex_star_simplices(
     witness: &cyrus_core::OriginCircuitCurveWitness,
     triangulation: Option<&Triangulation>,
@@ -3183,6 +3212,40 @@ fn origin_circuit_shared_two_simplex_star_simplices(
     simplices.sort();
     simplices.dedup();
     simplices
+}
+
+fn origin_circuit_shared_two_simplex_star_extra_point_samples(
+    witness: &cyrus_core::OriginCircuitCurveWitness,
+    triangulation_points: &[Point],
+    triangulation: Option<&Triangulation>,
+) -> Vec<Vec<OriginCircuitRelationPointSample>> {
+    let relation_by_point = witness
+        .relation_points
+        .iter()
+        .map(|point| (point.point_index, point))
+        .collect::<HashMap<_, _>>();
+    let shared = witness
+        .shared_two_simplex
+        .iter()
+        .copied()
+        .collect::<HashSet<_>>();
+    origin_circuit_shared_two_simplex_star_simplices(witness, triangulation)
+        .iter()
+        .map(|simplex| {
+            simplex
+                .iter()
+                .copied()
+                .filter(|point_index| *point_index != 0 && !shared.contains(point_index))
+                .filter_map(|point_index| {
+                    origin_circuit_point_sample(
+                        point_index,
+                        &relation_by_point,
+                        triangulation_points,
+                    )
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect()
 }
 
 fn origin_circuit_affine_support_sample(
@@ -12432,6 +12495,7 @@ mod tests {
             shared_two_simplex: vec![2],
             shared_two_simplex_points: Vec::new(),
             shared_two_simplex_star_simplices: Vec::new(),
+            shared_two_simplex_star_extra_point_samples: Vec::new(),
             first_facet: vec![1, 2],
             second_facet: vec![2, 3],
             first_facet_size: 2,

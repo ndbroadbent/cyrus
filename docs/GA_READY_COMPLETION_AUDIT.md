@@ -715,6 +715,12 @@ and `6` use alternate extras `[2]`/`[46]`, while targets `7` and `8` use
 `[195]`/`[212]`. That sharpens the blocker to constructing the resolved source
 projection/chamber map from the actual triangulation star, not from the
 exclusive pair that appears in the origin-circuit witness relation.
+The next regenerated report includes those star-extra coordinates and computes
+the actual six-point star-support charge rows. All four weighted rows have
+affine rank `4` with one zero-sum charge row: `[2,-1,-1,0,-2,2]` for targets
+`3`/`6` and `[1,0,1,-1,0,-1]` for targets `7`/`8`. This gives the next
+first-principles candidate to certify against local chamber/intersection data,
+instead of using the old scalar weighted-family formula.
 Origin-circuit witness-domain compact `cygv` probes are now opt-in and guarded
 by `--origin-witness-cygv-generator-limit`. The traced target `8` report shows
 the single-generator relation domain computes `GV=2` with one materialized

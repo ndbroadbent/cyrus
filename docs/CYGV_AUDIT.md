@@ -3147,6 +3147,16 @@ Targets `3` and `6` use alternate chamber extras `[2]` and `[46]`; targets `7`
 and `8` use `[195]` and `[212]`. Thus the origin-circuit exclusive pair is a
 witness of the unresolved local relation, not the pair of neighboring chamber
 points in the current triangulation star.
+Regenerating the context with star-extra point samples as
+`/tmp/cyrus_gv_context_star_support_report.json` exposes the corresponding
+six-point actual star supports. They all have affine rank `4`, one integer
+charge row, and zero row sum. Targets `3` and `6` share charge
+`[2,-1,-1,0,-2,2]` on support `[0,2,46,zero,shared,shared]`; targets `7` and
+`8` share charge `[1,0,1,-1,0,-1]` on their analogous sorted supports. The
+extra-point hyperplane heights are `[0,0]` for targets `3`/`6` and `[0,-1]`
+for targets `7`/`8`. This is now the concrete local chamber candidate to
+certify; it is not the same input as either the five-point origin-circuit
+relation or the six-point "relation support plus zero shared ray" diagnostic.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

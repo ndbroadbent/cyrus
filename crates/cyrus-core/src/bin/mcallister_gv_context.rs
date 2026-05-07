@@ -196,6 +196,8 @@ struct OriginCircuitWitnessSample {
     #[serde(default)]
     shared_two_simplex_star_simplices: Vec<Vec<usize>>,
     #[serde(default)]
+    shared_two_simplex_star_extra_point_samples: Vec<Vec<OriginCircuitRelationPointSample>>,
+    #[serde(default)]
     first_facet: Vec<usize>,
     #[serde(default)]
     second_facet: Vec<usize>,
@@ -543,6 +545,13 @@ struct LocalCygvSourceResolutionHintSummary {
     shared_two_simplex_star_status: String,
     shared_two_simplex_star_simplices: Vec<Vec<usize>>,
     shared_two_simplex_star_extra_points: Vec<Vec<usize>>,
+    shared_two_simplex_star_extra_point_samples: Vec<Vec<OriginCircuitRelationPointSample>>,
+    shared_two_simplex_star_extra_affine_heights: Vec<Vec<PointAffineHeight>>,
+    shared_two_simplex_star_support_status: String,
+    shared_two_simplex_star_support_point_indices: Vec<usize>,
+    shared_two_simplex_star_support_affine_rank: Option<usize>,
+    shared_two_simplex_star_support_charge_basis: Option<Vec<Vec<i64>>>,
+    shared_two_simplex_star_support_charge_row_sums: Option<Vec<i64>>,
     zero_relation_shared_two_simplex_points: Vec<usize>,
     zero_relation_shared_two_simplex_point_samples: Vec<OriginCircuitRelationPointSample>,
     resolved_shared_support_status: String,
@@ -557,6 +566,12 @@ struct LocalCygvSourceResolutionHintSummary {
 
 #[derive(Clone, Debug, Serialize)]
 struct ZeroSharedAffineHeight {
+    point_index: usize,
+    height: i64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct PointAffineHeight {
     point_index: usize,
     height: i64,
 }
@@ -14546,6 +14561,14 @@ fn local_cygv_source_resolution_hint_summaries(
                 skeleton,
                 target.origin_circuit_first_witness.as_ref(),
             );
+            let star_support_hint = local_cygv_shared_two_simplex_star_support_hint(
+                target.origin_circuit_first_witness.as_ref(),
+            );
+            let star_extra_affine_heights =
+                origin_circuit_shared_two_simplex_star_extra_affine_heights(
+                    target.origin_circuit_first_witness.as_ref(),
+                    affine_projection_hint.hyperplane.as_deref(),
+                );
             Some(LocalCygvSourceResolutionHintSummary {
                 target_index: target.index,
                 degree: target.degree,
@@ -14563,6 +14586,16 @@ fn local_cygv_source_resolution_hint_summaries(
                     origin_circuit_shared_two_simplex_star_extra_points(
                         target.origin_circuit_first_witness.as_ref(),
                     ),
+                shared_two_simplex_star_extra_point_samples:
+                    origin_circuit_shared_two_simplex_star_extra_point_samples(
+                        target.origin_circuit_first_witness.as_ref(),
+                    ),
+                shared_two_simplex_star_extra_affine_heights: star_extra_affine_heights,
+                shared_two_simplex_star_support_status: star_support_hint.status,
+                shared_two_simplex_star_support_point_indices: star_support_hint.point_indices,
+                shared_two_simplex_star_support_affine_rank: star_support_hint.affine_rank,
+                shared_two_simplex_star_support_charge_basis: star_support_hint.charge_basis,
+                shared_two_simplex_star_support_charge_row_sums: star_support_hint.charge_row_sums,
                 zero_relation_shared_two_simplex_points:
                     origin_circuit_zero_relation_shared_two_simplex_points(
                         target.origin_circuit_first_witness.as_ref(),
@@ -15020,6 +15053,132 @@ fn origin_circuit_shared_two_simplex_star_extra_points(
                 .collect::<Vec<_>>()
         })
         .collect()
+}
+
+fn origin_circuit_shared_two_simplex_star_extra_point_samples(
+    witness: Option<&OriginCircuitWitnessSample>,
+) -> Vec<Vec<OriginCircuitRelationPointSample>> {
+    witness
+        .map(|witness| witness.shared_two_simplex_star_extra_point_samples.clone())
+        .unwrap_or_default()
+}
+
+fn origin_circuit_shared_two_simplex_star_extra_affine_heights(
+    witness: Option<&OriginCircuitWitnessSample>,
+    hyperplane: Option<&[i64]>,
+) -> Vec<Vec<PointAffineHeight>> {
+    let Some(hyperplane) = hyperplane else {
+        return Vec::new();
+    };
+    origin_circuit_shared_two_simplex_star_extra_point_samples(witness)
+        .iter()
+        .map(|simplex_extras| {
+            simplex_extras
+                .iter()
+                .map(|point| PointAffineHeight {
+                    point_index: point.point_index,
+                    height: affine_hyperplane_height(hyperplane, &point.coordinates),
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+struct LocalCygvStarSupportHint {
+    status: String,
+    point_indices: Vec<usize>,
+    affine_rank: Option<usize>,
+    charge_basis: Option<Vec<Vec<i64>>>,
+    charge_row_sums: Option<Vec<i64>>,
+}
+
+fn local_cygv_shared_two_simplex_star_support_hint(
+    witness: Option<&OriginCircuitWitnessSample>,
+) -> LocalCygvStarSupportHint {
+    let empty = |status: &str| LocalCygvStarSupportHint {
+        status: status.to_string(),
+        point_indices: Vec::new(),
+        affine_rank: None,
+        charge_basis: None,
+        charge_row_sums: None,
+    };
+    let Some(witness) = witness else {
+        return empty("shared_two_simplex_star_support_missing_origin_circuit_witness");
+    };
+    if witness
+        .shared_two_simplex_star_extra_point_samples
+        .is_empty()
+    {
+        return empty("shared_two_simplex_star_support_missing_extra_point_samples");
+    }
+    let mut by_point = BTreeMap::new();
+    if let Some(origin) = witness
+        .relation_points
+        .iter()
+        .find(|point| point.point_index == 0)
+        .cloned()
+    {
+        by_point.insert(origin.point_index, origin);
+    }
+    for point in &witness.shared_two_simplex_points {
+        by_point.insert(point.point_index, point.clone());
+    }
+    for point in witness
+        .shared_two_simplex_star_extra_point_samples
+        .iter()
+        .flatten()
+    {
+        by_point.insert(point.point_index, point.clone());
+    }
+    let support = by_point.into_values().collect::<Vec<_>>();
+    let point_indices = support
+        .iter()
+        .map(|point| point.point_index)
+        .collect::<Vec<_>>();
+    let affine_rank = match affine_rank_for_point_samples(&support) {
+        Ok(rank) => rank,
+        Err(error) => {
+            return LocalCygvStarSupportHint {
+                status: format!(
+                    "shared_two_simplex_star_support_affine_rank_error:{}",
+                    status_error_fragment(&error)
+                ),
+                point_indices,
+                affine_rank: None,
+                charge_basis: None,
+                charge_row_sums: None,
+            };
+        }
+    };
+    let charge_basis = match affine_charge_basis_for_point_samples(&support) {
+        Ok(charge_basis) => charge_basis,
+        Err(error) => {
+            return LocalCygvStarSupportHint {
+                status: format!(
+                    "shared_two_simplex_star_support_charge_basis_error:{}",
+                    status_error_fragment(&error)
+                ),
+                point_indices,
+                affine_rank: Some(affine_rank),
+                charge_basis: None,
+                charge_row_sums: None,
+            };
+        }
+    };
+    let charge_row_sums = charge_basis
+        .iter()
+        .map(|row| row.iter().sum::<i64>())
+        .collect::<Vec<_>>();
+    LocalCygvStarSupportHint {
+        status: format!(
+            "shared_two_simplex_star_support_affine_rank_{affine_rank}_charge_rows_{}",
+            charge_basis.len()
+        ),
+        point_indices,
+        affine_rank: Some(affine_rank),
+        charge_basis: Some(charge_basis),
+        charge_row_sums: Some(charge_row_sums),
+    }
 }
 
 fn origin_circuit_resolved_shared_support_point_samples(
@@ -16938,6 +17097,7 @@ mod tests {
                 shared_two_simplex: vec![1, 2, 3],
                 shared_two_simplex_points: Vec::new(),
                 shared_two_simplex_star_simplices: Vec::new(),
+                shared_two_simplex_star_extra_point_samples: Vec::new(),
                 first_facet: vec![1, 2, 3, 4, 6],
                 second_facet: vec![1, 2, 3, 5, 7],
                 first_facet_size: 5,
@@ -17294,6 +17454,7 @@ mod tests {
                 shared_two_simplex: vec![46, 55, 211],
                 shared_two_simplex_points: Vec::new(),
                 shared_two_simplex_star_simplices: Vec::new(),
+                shared_two_simplex_star_extra_point_samples: Vec::new(),
                 first_facet: Vec::new(),
                 second_facet: Vec::new(),
                 first_facet_size: 23,
@@ -18262,6 +18423,20 @@ mod tests {
                 vec![0, 2, 55, 195, 208],
                 vec![0, 2, 55, 208, 212],
             ],
+            shared_two_simplex_star_extra_point_samples: vec![
+                vec![OriginCircuitRelationPointSample {
+                    point_index: 195,
+                    coefficient: 0,
+                    coordinates: vec![1, 1, 0, 1],
+                    face_dimension: None,
+                }],
+                vec![OriginCircuitRelationPointSample {
+                    point_index: 212,
+                    coefficient: 0,
+                    coordinates: vec![2, 3, 1, 4],
+                    face_dimension: None,
+                }],
+            ],
             first_facet: Vec::new(),
             second_facet: Vec::new(),
             first_facet_size: 0,
@@ -18339,6 +18514,36 @@ mod tests {
             origin_circuit_shared_two_simplex_star_extra_points(Some(&witness)),
             vec![vec![195], vec![212]]
         );
+        assert_eq!(
+            origin_circuit_shared_two_simplex_star_extra_affine_heights(
+                Some(&witness),
+                projection_hint.hyperplane.as_deref()
+            )
+            .iter()
+            .map(|simplex| {
+                simplex
+                    .iter()
+                    .map(|height| (height.point_index, height.height))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>(),
+            vec![vec![(195, 0)], vec![(212, -1)]]
+        );
+        let star_support_hint = local_cygv_shared_two_simplex_star_support_hint(Some(&witness));
+        assert_eq!(
+            star_support_hint.status,
+            "shared_two_simplex_star_support_affine_rank_4_charge_rows_1"
+        );
+        assert_eq!(
+            star_support_hint.point_indices,
+            vec![0, 2, 55, 195, 208, 212]
+        );
+        assert_eq!(star_support_hint.affine_rank, Some(4));
+        assert_eq!(
+            star_support_hint.charge_basis,
+            Some(vec![vec![1, 0, 1, -1, 0, -1]])
+        );
+        assert_eq!(star_support_hint.charge_row_sums, Some(vec![0]));
         let resolved_hint = local_cygv_resolved_shared_support_hint(&skeleton, Some(&witness));
         assert_eq!(
             resolved_hint.status,
@@ -19260,6 +19465,7 @@ mod tests {
             shared_two_simplex: vec![1, 5],
             shared_two_simplex_points: Vec::new(),
             shared_two_simplex_star_simplices: Vec::new(),
+            shared_two_simplex_star_extra_point_samples: Vec::new(),
             first_facet: vec![1, 5, 6],
             second_facet: vec![1, 5, 7],
             first_facet_size: 3,
@@ -19414,6 +19620,7 @@ mod tests {
             shared_two_simplex: vec![54, 209],
             shared_two_simplex_points: Vec::new(),
             shared_two_simplex_star_simplices: Vec::new(),
+            shared_two_simplex_star_extra_point_samples: Vec::new(),
             first_facet: vec![54, 203, 209],
             second_facet: vec![54, 206, 209],
             first_facet_size: 3,
@@ -21012,6 +21219,7 @@ mod tests {
                 shared_two_simplex: Vec::new(),
                 shared_two_simplex_points: Vec::new(),
                 shared_two_simplex_star_simplices: Vec::new(),
+                shared_two_simplex_star_extra_point_samples: Vec::new(),
                 first_facet: Vec::new(),
                 second_facet: Vec::new(),
                 first_facet_size: 1,
@@ -21440,6 +21648,7 @@ mod tests {
             shared_two_simplex: vec![1, 3],
             shared_two_simplex_points: Vec::new(),
             shared_two_simplex_star_simplices: Vec::new(),
+            shared_two_simplex_star_extra_point_samples: Vec::new(),
             first_facet: Vec::new(),
             second_facet: Vec::new(),
             first_facet_size: 2,
@@ -21526,6 +21735,7 @@ mod tests {
             shared_two_simplex: vec![1, 3],
             shared_two_simplex_points: Vec::new(),
             shared_two_simplex_star_simplices: Vec::new(),
+            shared_two_simplex_star_extra_point_samples: Vec::new(),
             first_facet: Vec::new(),
             second_facet: Vec::new(),
             first_facet_size: 2,
@@ -21608,6 +21818,7 @@ mod tests {
             shared_two_simplex: vec![1, 2],
             shared_two_simplex_points: Vec::new(),
             shared_two_simplex_star_simplices: Vec::new(),
+            shared_two_simplex_star_extra_point_samples: Vec::new(),
             first_facet: Vec::new(),
             second_facet: Vec::new(),
             first_facet_size: 2,
@@ -21718,6 +21929,7 @@ mod tests {
             shared_two_simplex: vec![1, 2],
             shared_two_simplex_points: Vec::new(),
             shared_two_simplex_star_simplices: Vec::new(),
+            shared_two_simplex_star_extra_point_samples: Vec::new(),
             first_facet: Vec::new(),
             second_facet: Vec::new(),
             first_facet_size: 2,
@@ -22163,6 +22375,7 @@ mod tests {
             shared_two_simplex: vec![1, 2],
             shared_two_simplex_points: Vec::new(),
             shared_two_simplex_star_simplices: Vec::new(),
+            shared_two_simplex_star_extra_point_samples: Vec::new(),
             first_facet: Vec::new(),
             second_facet: Vec::new(),
             first_facet_size: 3,
@@ -22189,6 +22402,7 @@ mod tests {
             shared_two_simplex: vec![1, 2],
             shared_two_simplex_points: Vec::new(),
             shared_two_simplex_star_simplices: Vec::new(),
+            shared_two_simplex_star_extra_point_samples: Vec::new(),
             first_facet: vec![1, 2, 6],
             second_facet: vec![1, 2, 7],
             first_facet_size: 3,
@@ -22232,6 +22446,7 @@ mod tests {
             shared_two_simplex: vec![1, 2],
             shared_two_simplex_points: Vec::new(),
             shared_two_simplex_star_simplices: Vec::new(),
+            shared_two_simplex_star_extra_point_samples: Vec::new(),
             first_facet: vec![1, 2, 4, 6],
             second_facet: vec![1, 2, 5, 7],
             first_facet_size: 4,
@@ -22274,6 +22489,7 @@ mod tests {
             shared_two_simplex: vec![1, 2],
             shared_two_simplex_points: Vec::new(),
             shared_two_simplex_star_simplices: Vec::new(),
+            shared_two_simplex_star_extra_point_samples: Vec::new(),
             first_facet: vec![1, 2, 4],
             second_facet: vec![1, 2, 5],
             first_facet_size: 3,
@@ -22357,6 +22573,7 @@ mod tests {
             shared_two_simplex: vec![2, 3, 5],
             shared_two_simplex_points: Vec::new(),
             shared_two_simplex_star_simplices: Vec::new(),
+            shared_two_simplex_star_extra_point_samples: Vec::new(),
             first_facet: vec![2, 3, 5, 7],
             second_facet: vec![2, 3, 5, 11],
             first_facet_size: 4,
