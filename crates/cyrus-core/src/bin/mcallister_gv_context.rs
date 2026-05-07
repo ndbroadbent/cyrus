@@ -311,6 +311,8 @@ struct ContextReport {
     cygv_closest_known_qn_residual_qn_domain_status_counts: BTreeMap<String, usize>,
     cygv_closest_known_qn_residual_qn_domain_parent_only_source_status_counts:
         BTreeMap<String, usize>,
+    cygv_closest_known_qn_residual_qn_domain_parent_only_offset_known_qn_history_status_counts:
+        BTreeMap<String, usize>,
     cygv_closest_known_qn_residual_source_predecessor_unique_count: usize,
     cygv_closest_known_qn_residual_source_predecessor_occurrence_count: usize,
     cygv_closest_known_qn_residual_source_predecessor_degree_counts: BTreeMap<i128, usize>,
@@ -1090,6 +1092,11 @@ struct CygvResidualQnDomainTermClassification {
     exponent_nonzero: Vec<(usize, i64)>,
     coefficient: String,
     degree: i128,
+    offset_from_residual_nonzero: Vec<(usize, i64)>,
+    offset_from_residual_degree: i128,
+    offset_toric_gv: Option<String>,
+    offset_source_derived_gv: Option<String>,
+    offset_known_qn_history_status: String,
     source_class_status: String,
     source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
     matching_missing_target_index: Option<usize>,
@@ -1791,6 +1798,7 @@ fn residual_parent_only_qn_term_classifications(
     comparison: &CygvResidualQnDomainComparison,
     context: &ValidatedContext<'_>,
 ) -> Result<Vec<CygvResidualQnDomainTermClassification>, String> {
+    let residual_dense = dense_from_sparse(&comparison.residual_nonzero, context.dimension)?;
     comparison
         .parent_path_support_term_signatures
         .iter()
@@ -1802,11 +1810,25 @@ fn residual_parent_only_qn_term_classifications(
         .map(|term| {
             let curve = dense_from_sparse(&term.exponent_nonzero, context.dimension)?;
             let degree = curve_degree(&curve, context.grading)?;
+            let offset = checked_vector_difference(&curve, &residual_dense)?;
+            let offset_from_residual_degree = curve_degree(&offset, context.grading)?;
+            let offset_toric_gv = context.covered_toric_gv_by_basis.get(&offset).cloned();
+            let offset_source_derived_gv = context.source_derived_gv_by_basis.get(&offset).cloned();
+            let offset_known_qn_history_status = known_qn_history_status(
+                offset_toric_gv.as_deref(),
+                offset_source_derived_gv.as_deref(),
+            )?
+            .to_string();
             let source_context = path_support_source_class_context(&curve, context)?;
             Ok(CygvResidualQnDomainTermClassification {
                 exponent_nonzero: term.exponent_nonzero.clone(),
                 coefficient: term.coefficient.clone(),
                 degree,
+                offset_from_residual_nonzero: sparse_from_dense(&offset),
+                offset_from_residual_degree,
+                offset_toric_gv,
+                offset_source_derived_gv,
+                offset_known_qn_history_status,
                 source_class_status: source_context.status,
                 source_ray_ambient_nonzero: source_context.source_ray_ambient_nonzero,
                 matching_missing_target_index: source_context.matching_missing_target_index,
@@ -10325,6 +10347,10 @@ fn build_report(
     );
     let cygv_closest_known_qn_residual_qn_domain_parent_only_source_status_counts =
         cygv_closest_known_qn_residual_qn_domain_parent_only_source_status_counts(&targets);
+    let cygv_closest_known_qn_residual_qn_domain_parent_only_offset_known_qn_history_status_counts =
+        cygv_closest_known_qn_residual_qn_domain_parent_only_offset_known_qn_history_status_counts(
+            &targets,
+        );
     let cygv_closest_known_qn_residual_source_predecessor_sample =
         cygv_closest_known_qn_residual_source_predecessor_summaries(&targets, validated);
     let cygv_closest_known_qn_residual_source_predecessor_unique_count =
@@ -10622,6 +10648,7 @@ fn build_report(
         cygv_closest_known_qn_residual_difference_sample,
         cygv_closest_known_qn_residual_qn_domain_status_counts,
         cygv_closest_known_qn_residual_qn_domain_parent_only_source_status_counts,
+        cygv_closest_known_qn_residual_qn_domain_parent_only_offset_known_qn_history_status_counts,
         cygv_closest_known_qn_residual_source_predecessor_unique_count,
         cygv_closest_known_qn_residual_source_predecessor_occurrence_count,
         cygv_closest_known_qn_residual_source_predecessor_degree_counts,
@@ -10822,6 +10849,27 @@ fn cygv_closest_known_qn_residual_qn_domain_parent_only_source_status_counts(
         };
         for (status, count) in &comparison.parent_only_term_source_status_counts {
             *counts.entry(status.clone()).or_insert(0usize) += count;
+        }
+    }
+    counts
+}
+
+fn cygv_closest_known_qn_residual_qn_domain_parent_only_offset_known_qn_history_status_counts(
+    targets: &[TargetReport],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        let Some(comparison) = target.cygv_path_history_probe.as_ref().and_then(|probe| {
+            probe
+                .closest_known_qn_residual_qn_domain_comparison
+                .as_ref()
+        }) else {
+            continue;
+        };
+        for classification in &comparison.parent_only_term_classification_sample {
+            *counts
+                .entry(classification.offset_known_qn_history_status.clone())
+                .or_insert(0usize) += 1;
         }
     }
     counts

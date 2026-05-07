@@ -366,7 +366,11 @@ and matrix-basis pipeline are no longer open.
    GV value. The parent-only terms now classify as the missing target itself
    for target `8`, and as the missing target plus one generated degree-ten
    non-source-ray term for target `7`; the cancellation is therefore occurring
-   at the degree-ten chamber-history layer.
+   at the degree-ten chamber-history layer. The offsets from the residual to
+   those parent-only terms are all known degree-two toric classes with `GV=-2`,
+   so the remaining history problem is how the certified chamber couples a
+   source-known degree-eight residual to sibling toric offsets, not how to
+   assign those lower offsets.
    The source-ray summary now shows that shared ray has local charge signature
    `[-1,-1,-1,1,2]` and a matching CMS check. The residual-source predecessor
    queue now shows all three occurrences have shared origin-circuit witness

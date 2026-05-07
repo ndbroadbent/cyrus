@@ -2667,6 +2667,15 @@ classification, while the other degree-ten term
 not produced by an unclassified scalar residual leaf; it is produced by qN
 terms that couple the residual to the degree-ten missing-target layer, plus one
 generated target-7 side term outside the exported source-ray context.
+Subtracting the degree-eight residual from each parent-only term shows that all
+of these terms are residual plus a known degree-two toric offset. Target `7`
+has two such offsets, both `known_nonzero_toric_gv` with `GV=-2`: its own
+residual difference `[(44,1),(54,1),(206,-2)]`, and target `8`'s residual
+difference `[(54,1),(203,-2)]`. Target `8` has the latter offset only. The
+top-level reports now aggregate this as
+`cygv_closest_known_qn_residual_qn_domain_parent_only_offset_known_qn_history_status_counts`,
+which reads `{"known_nonzero_toric_gv":2}` for target `7` and
+`{"known_nonzero_toric_gv":1}` for target `8`.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use

@@ -162,8 +162,11 @@ run pass. Any remaining mismatch must be explicit and localizable.
    samples are complete and marked `different_qn_term_counts`. The parent-only
    terms now carry source classification: target 8's extra term is the missing
    target itself, while target 7 has the missing target plus one degree-10
-   generated term outside the exported source-ray context. Applying the trace
-   to McAllister still requires the certified corrected-chamber
+   generated term outside the exported source-ray context. Subtracting the
+   degree-8 residual from each parent-only term shows all offsets are known
+   degree-2 toric classes with `GV=-2`; target 7 sees both its own and target
+   8's residual difference, while target 8 sees target 8's residual difference.
+   Applying the trace to McAllister still requires the certified corrected-chamber
    semigroup/history domain.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
