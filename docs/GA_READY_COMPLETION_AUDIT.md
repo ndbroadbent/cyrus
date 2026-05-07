@@ -380,6 +380,13 @@ and matrix-basis pipeline are no longer open.
    the missing target GV. The qN-shape trace further shows the generated
    target-`7` side term is only an `identity_single_term_qn_polynomial`, so it
    is not concealing a lower-history expansion inside its own qN polynomial.
+   The target-coefficient balance reconstructs the small-domain
+   pre-subtraction readouts: target `7` has lower-source sum `3`,
+   post-subtraction coefficient `0`, pivot component `2`, and
+   pre-subtraction candidate `3/2`; target `8` has lower-source sum `-6`,
+   pivot component `-3`, and pre-subtraction candidate `2`. These are not
+   promoted GV values; they are evidence that the sampled domains cancel to
+   zero before target qN materialization.
    This comparison is currently bounded to the
    target `7`/`8` degree-ten pair: the all-target run timed out at `900s`,
    targets `2`-`5` time out under `180s` per-target probes, and targets

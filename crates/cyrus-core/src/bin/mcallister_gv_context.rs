@@ -607,6 +607,11 @@ struct CygvPathHistoryProbe {
     path_support_target_rounded_gv_candidate: Option<String>,
     path_support_target_pivot_coordinate: Option<usize>,
     path_support_target_pivot_component: Option<i32>,
+    path_support_target_pivot_li2_subtraction_source_count: Option<usize>,
+    path_support_target_pivot_li2_subtraction_sum: Option<String>,
+    path_support_target_reconstructed_pre_subtraction_instanton_coefficient: Option<String>,
+    path_support_target_reconstructed_pre_subtraction_gv_candidate: Option<String>,
+    path_support_target_li2_subtraction_balance_status: Option<String>,
     path_support_gv_coefficient_trace_count: Option<usize>,
     path_support_gv_coefficient_status_counts: BTreeMap<String, usize>,
     path_support_gv_coefficient_trace_sample: Vec<CygvPathSupportGvCoefficientTraceSample>,
@@ -774,6 +779,14 @@ struct CygvPathSupportTargetMonomialQnSource {
     target_pivot_coordinate: Option<usize>,
     source_component_at_target_pivot: Option<i32>,
     pivot_li2_subtraction_coefficient: Option<String>,
+}
+
+struct CygvPathSupportTargetLi2SubtractionBalance {
+    source_count: usize,
+    subtraction_sum: Option<String>,
+    reconstructed_pre_subtraction_instanton_coefficient: Option<String>,
+    reconstructed_pre_subtraction_gv_candidate: Option<String>,
+    status: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1204,6 +1217,11 @@ struct PathSupportGeneratorProbe {
     target_rounded_gv_candidate: Option<String>,
     target_pivot_coordinate: Option<usize>,
     target_pivot_component: Option<i32>,
+    target_pivot_li2_subtraction_source_count: Option<usize>,
+    target_pivot_li2_subtraction_sum: Option<String>,
+    target_reconstructed_pre_subtraction_instanton_coefficient: Option<String>,
+    target_reconstructed_pre_subtraction_gv_candidate: Option<String>,
+    target_li2_subtraction_balance_status: Option<String>,
     gv_coefficient_trace_count: Option<usize>,
     gv_coefficient_status_counts: BTreeMap<String, usize>,
     gv_coefficient_trace_sample: Vec<CygvPathSupportGvCoefficientTraceSample>,
@@ -1664,6 +1682,11 @@ fn path_support_generator_probe(
             target_rounded_gv_candidate: None,
             target_pivot_coordinate: None,
             target_pivot_component: None,
+            target_pivot_li2_subtraction_source_count: None,
+            target_pivot_li2_subtraction_sum: None,
+            target_reconstructed_pre_subtraction_instanton_coefficient: None,
+            target_reconstructed_pre_subtraction_gv_candidate: None,
+            target_li2_subtraction_balance_status: None,
             gv_coefficient_trace_count: None,
             gv_coefficient_status_counts: BTreeMap::new(),
             gv_coefficient_trace_sample: Vec::new(),
@@ -1697,6 +1720,11 @@ fn path_support_generator_probe(
             target_rounded_gv_candidate: None,
             target_pivot_coordinate: None,
             target_pivot_component: None,
+            target_pivot_li2_subtraction_source_count: None,
+            target_pivot_li2_subtraction_sum: None,
+            target_reconstructed_pre_subtraction_instanton_coefficient: None,
+            target_reconstructed_pre_subtraction_gv_candidate: None,
+            target_li2_subtraction_balance_status: None,
             gv_coefficient_trace_count: None,
             gv_coefficient_status_counts: BTreeMap::new(),
             gv_coefficient_trace_sample: Vec::new(),
@@ -2116,6 +2144,11 @@ fn path_support_generator_probe_inner(
             target_rounded_gv_candidate: None,
             target_pivot_coordinate: None,
             target_pivot_component: None,
+            target_pivot_li2_subtraction_source_count: None,
+            target_pivot_li2_subtraction_sum: None,
+            target_reconstructed_pre_subtraction_instanton_coefficient: None,
+            target_reconstructed_pre_subtraction_gv_candidate: None,
+            target_li2_subtraction_balance_status: None,
             gv_coefficient_trace_count: None,
             gv_coefficient_status_counts: BTreeMap::new(),
             gv_coefficient_trace_sample: Vec::new(),
@@ -2186,6 +2219,11 @@ fn path_support_generator_probe_inner(
                 target_rounded_gv_candidate: None,
                 target_pivot_coordinate: None,
                 target_pivot_component: None,
+                target_pivot_li2_subtraction_source_count: None,
+                target_pivot_li2_subtraction_sum: None,
+                target_reconstructed_pre_subtraction_instanton_coefficient: None,
+                target_reconstructed_pre_subtraction_gv_candidate: None,
+                target_li2_subtraction_balance_status: None,
                 gv_coefficient_trace_count: None,
                 gv_coefficient_status_counts: BTreeMap::new(),
                 gv_coefficient_trace_sample: Vec::new(),
@@ -2218,6 +2256,11 @@ fn path_support_generator_probe_inner(
                 target_rounded_gv_candidate: None,
                 target_pivot_coordinate: None,
                 target_pivot_component: None,
+                target_pivot_li2_subtraction_source_count: None,
+                target_pivot_li2_subtraction_sum: None,
+                target_reconstructed_pre_subtraction_instanton_coefficient: None,
+                target_reconstructed_pre_subtraction_gv_candidate: None,
+                target_li2_subtraction_balance_status: None,
                 gv_coefficient_trace_count: None,
                 gv_coefficient_status_counts: BTreeMap::new(),
                 gv_coefficient_trace_sample: Vec::new(),
@@ -2283,6 +2326,12 @@ fn path_support_generator_probe_inner(
     let target_monomial_qn_sources =
         path_support_target_monomial_qn_sources(&traced.qn_trace, &gvs_by_curve, &target_i32);
     let target_monomial_qn_source_count = target_monomial_qn_sources.len();
+    let target_li2_subtraction_balance = path_support_target_li2_subtraction_balance(
+        &target_monomial_qn_sources,
+        target_degree,
+        target_instanton_coefficient.as_ref(),
+        target_pivot_component,
+    )?;
     let target_monomial_qn_source_sample = target_monomial_qn_sources
         .into_iter()
         .take(CYGV_PATH_SUPPORT_TARGET_MONOMIAL_QN_SOURCE_SAMPLE_LIMIT)
@@ -2315,6 +2364,15 @@ fn path_support_generator_probe_inner(
         target_rounded_gv_candidate,
         target_pivot_coordinate,
         target_pivot_component,
+        target_pivot_li2_subtraction_source_count: Some(
+            target_li2_subtraction_balance.source_count,
+        ),
+        target_pivot_li2_subtraction_sum: target_li2_subtraction_balance.subtraction_sum,
+        target_reconstructed_pre_subtraction_instanton_coefficient: target_li2_subtraction_balance
+            .reconstructed_pre_subtraction_instanton_coefficient,
+        target_reconstructed_pre_subtraction_gv_candidate: target_li2_subtraction_balance
+            .reconstructed_pre_subtraction_gv_candidate,
+        target_li2_subtraction_balance_status: Some(target_li2_subtraction_balance.status),
         gv_coefficient_trace_count: Some(gv_coefficient_trace_count),
         gv_coefficient_status_counts,
         gv_coefficient_trace_sample,
@@ -3930,6 +3988,80 @@ fn path_support_target_monomial_qn_sources(
             })
         })
         .collect()
+}
+
+fn path_support_target_li2_subtraction_balance(
+    sources: &[CygvPathSupportTargetMonomialQnSource],
+    target_degree: i128,
+    target_instanton_coefficient: Option<&String>,
+    target_pivot_component: Option<i32>,
+) -> Result<CygvPathSupportTargetLi2SubtractionBalance, String> {
+    let mut subtraction_sum = MalachiteRational::from(0);
+    let lower_sources = sources
+        .iter()
+        .filter(|source| i128::from(source.degree) < target_degree)
+        .collect::<Vec<_>>();
+    for source in &lower_sources {
+        let Some(coefficient) = source.pivot_li2_subtraction_coefficient.as_deref() else {
+            return Ok(CygvPathSupportTargetLi2SubtractionBalance {
+                source_count: lower_sources.len(),
+                subtraction_sum: None,
+                reconstructed_pre_subtraction_instanton_coefficient: None,
+                reconstructed_pre_subtraction_gv_candidate: None,
+                status: "missing_lower_pivot_li2_subtraction_coefficient".to_string(),
+            });
+        };
+        subtraction_sum += parse_rational(coefficient)?;
+    }
+
+    let Some(target_instanton_coefficient) = target_instanton_coefficient else {
+        return Ok(CygvPathSupportTargetLi2SubtractionBalance {
+            source_count: lower_sources.len(),
+            subtraction_sum: Some(subtraction_sum.to_string()),
+            reconstructed_pre_subtraction_instanton_coefficient: None,
+            reconstructed_pre_subtraction_gv_candidate: None,
+            status: "missing_target_instanton_coefficient".to_string(),
+        });
+    };
+    let target_instanton_coefficient = parse_rational(target_instanton_coefficient)?;
+    let reconstructed_pre_subtraction_instanton_coefficient =
+        target_instanton_coefficient + subtraction_sum.clone();
+    let Some(target_pivot_component) = target_pivot_component else {
+        return Ok(CygvPathSupportTargetLi2SubtractionBalance {
+            source_count: lower_sources.len(),
+            subtraction_sum: Some(subtraction_sum.to_string()),
+            reconstructed_pre_subtraction_instanton_coefficient: Some(
+                reconstructed_pre_subtraction_instanton_coefficient.to_string(),
+            ),
+            reconstructed_pre_subtraction_gv_candidate: None,
+            status: "missing_target_pivot_component".to_string(),
+        });
+    };
+    if target_pivot_component == 0 {
+        return Ok(CygvPathSupportTargetLi2SubtractionBalance {
+            source_count: lower_sources.len(),
+            subtraction_sum: Some(subtraction_sum.to_string()),
+            reconstructed_pre_subtraction_instanton_coefficient: Some(
+                reconstructed_pre_subtraction_instanton_coefficient.to_string(),
+            ),
+            reconstructed_pre_subtraction_gv_candidate: None,
+            status: "zero_target_pivot_component".to_string(),
+        });
+    }
+    let reconstructed_pre_subtraction_gv_candidate =
+        reconstructed_pre_subtraction_instanton_coefficient.clone()
+            / MalachiteRational::from(Integer::from(target_pivot_component));
+    Ok(CygvPathSupportTargetLi2SubtractionBalance {
+        source_count: lower_sources.len(),
+        subtraction_sum: Some(subtraction_sum.to_string()),
+        reconstructed_pre_subtraction_instanton_coefficient: Some(
+            reconstructed_pre_subtraction_instanton_coefficient.to_string(),
+        ),
+        reconstructed_pre_subtraction_gv_candidate: Some(
+            reconstructed_pre_subtraction_gv_candidate.to_string(),
+        ),
+        status: "reconstructed_from_target_readout_plus_li2_subtractions".to_string(),
+    })
 }
 
 fn sparse_from_i32_dense(values: &[i32]) -> Vec<(usize, i64)> {
@@ -8187,6 +8319,11 @@ fn cygv_path_history_probe(
             path_support_target_rounded_gv_candidate: None,
             path_support_target_pivot_coordinate: None,
             path_support_target_pivot_component: None,
+            path_support_target_pivot_li2_subtraction_source_count: None,
+            path_support_target_pivot_li2_subtraction_sum: None,
+            path_support_target_reconstructed_pre_subtraction_instanton_coefficient: None,
+            path_support_target_reconstructed_pre_subtraction_gv_candidate: None,
+            path_support_target_li2_subtraction_balance_status: None,
             path_support_gv_coefficient_trace_count: None,
             path_support_gv_coefficient_status_counts: BTreeMap::new(),
             path_support_gv_coefficient_trace_sample: Vec::new(),
@@ -8281,6 +8418,11 @@ fn cygv_path_history_probe_inner(
             path_support_target_rounded_gv_candidate: None,
             path_support_target_pivot_coordinate: None,
             path_support_target_pivot_component: None,
+            path_support_target_pivot_li2_subtraction_source_count: None,
+            path_support_target_pivot_li2_subtraction_sum: None,
+            path_support_target_reconstructed_pre_subtraction_instanton_coefficient: None,
+            path_support_target_reconstructed_pre_subtraction_gv_candidate: None,
+            path_support_target_li2_subtraction_balance_status: None,
             path_support_gv_coefficient_trace_count: None,
             path_support_gv_coefficient_status_counts: BTreeMap::new(),
             path_support_gv_coefficient_trace_sample: Vec::new(),
@@ -8351,6 +8493,11 @@ fn cygv_path_history_probe_inner(
             path_support_target_rounded_gv_candidate: None,
             path_support_target_pivot_coordinate: None,
             path_support_target_pivot_component: None,
+            path_support_target_pivot_li2_subtraction_source_count: None,
+            path_support_target_pivot_li2_subtraction_sum: None,
+            path_support_target_reconstructed_pre_subtraction_instanton_coefficient: None,
+            path_support_target_reconstructed_pre_subtraction_gv_candidate: None,
+            path_support_target_li2_subtraction_balance_status: None,
             path_support_gv_coefficient_trace_count: None,
             path_support_gv_coefficient_status_counts: BTreeMap::new(),
             path_support_gv_coefficient_trace_sample: Vec::new(),
@@ -8511,6 +8658,16 @@ fn cygv_path_history_probe_inner(
                 .target_rounded_gv_candidate,
             path_support_target_pivot_coordinate: path_support_generators.target_pivot_coordinate,
             path_support_target_pivot_component: path_support_generators.target_pivot_component,
+            path_support_target_pivot_li2_subtraction_source_count: path_support_generators
+                .target_pivot_li2_subtraction_source_count,
+            path_support_target_pivot_li2_subtraction_sum: path_support_generators
+                .target_pivot_li2_subtraction_sum,
+            path_support_target_reconstructed_pre_subtraction_instanton_coefficient:
+                path_support_generators.target_reconstructed_pre_subtraction_instanton_coefficient,
+            path_support_target_reconstructed_pre_subtraction_gv_candidate: path_support_generators
+                .target_reconstructed_pre_subtraction_gv_candidate,
+            path_support_target_li2_subtraction_balance_status: path_support_generators
+                .target_li2_subtraction_balance_status,
             path_support_gv_coefficient_trace_count: path_support_generators
                 .gv_coefficient_trace_count,
             path_support_gv_coefficient_status_counts: path_support_generators
@@ -8600,6 +8757,16 @@ fn cygv_path_history_probe_inner(
             .target_rounded_gv_candidate,
         path_support_target_pivot_coordinate: path_support_generators.target_pivot_coordinate,
         path_support_target_pivot_component: path_support_generators.target_pivot_component,
+        path_support_target_pivot_li2_subtraction_source_count: path_support_generators
+            .target_pivot_li2_subtraction_source_count,
+        path_support_target_pivot_li2_subtraction_sum: path_support_generators
+            .target_pivot_li2_subtraction_sum,
+        path_support_target_reconstructed_pre_subtraction_instanton_coefficient:
+            path_support_generators.target_reconstructed_pre_subtraction_instanton_coefficient,
+        path_support_target_reconstructed_pre_subtraction_gv_candidate: path_support_generators
+            .target_reconstructed_pre_subtraction_gv_candidate,
+        path_support_target_li2_subtraction_balance_status: path_support_generators
+            .target_li2_subtraction_balance_status,
         path_support_gv_coefficient_trace_count: path_support_generators.gv_coefficient_trace_count,
         path_support_gv_coefficient_status_counts: path_support_generators
             .gv_coefficient_status_counts,
@@ -14595,6 +14762,11 @@ mod tests {
                 target_rounded_gv_candidate: None,
                 target_pivot_coordinate: None,
                 target_pivot_component: None,
+                target_pivot_li2_subtraction_source_count: None,
+                target_pivot_li2_subtraction_sum: None,
+                target_reconstructed_pre_subtraction_instanton_coefficient: None,
+                target_reconstructed_pre_subtraction_gv_candidate: None,
+                target_li2_subtraction_balance_status: None,
                 gv_coefficient_trace_count: None,
                 gv_coefficient_status_counts: BTreeMap::new(),
                 gv_coefficient_trace_sample: Vec::new(),
@@ -14674,6 +14846,11 @@ mod tests {
                 target_rounded_gv_candidate: None,
                 target_pivot_coordinate: None,
                 target_pivot_component: None,
+                target_pivot_li2_subtraction_source_count: None,
+                target_pivot_li2_subtraction_sum: None,
+                target_reconstructed_pre_subtraction_instanton_coefficient: None,
+                target_reconstructed_pre_subtraction_gv_candidate: None,
+                target_li2_subtraction_balance_status: None,
                 gv_coefficient_trace_count: None,
                 gv_coefficient_status_counts: BTreeMap::new(),
                 gv_coefficient_trace_sample: Vec::new(),
@@ -14965,6 +15142,24 @@ mod tests {
                 .pivot_li2_subtraction_coefficient
                 .as_deref(),
             Some("2875")
+        );
+        assert_eq!(probe.target_pivot_li2_subtraction_source_count, Some(0));
+        assert_eq!(probe.target_pivot_li2_subtraction_sum.as_deref(), Some("0"));
+        assert_eq!(
+            probe
+                .target_reconstructed_pre_subtraction_instanton_coefficient
+                .as_deref(),
+            Some("2875")
+        );
+        assert_eq!(
+            probe
+                .target_reconstructed_pre_subtraction_gv_candidate
+                .as_deref(),
+            Some("2875")
+        );
+        assert_eq!(
+            probe.target_li2_subtraction_balance_status.as_deref(),
+            Some("reconstructed_from_target_readout_plus_li2_subtractions")
         );
     }
 

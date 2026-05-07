@@ -2623,6 +2623,16 @@ target coefficient before cygv decides whether a target `q_N` polynomial is
 needed. The unresolved object is still the certified corrected-chamber
 semigroup/history whose lower `q_N` sequence gives McAllister's nonzero target
 correction, not a missing scalar lookup inside the current path-support run.
+The target-coefficient balance diagnostic now reconstructs the coefficient that
+was present before those lower-degree subtractions. For target `7`, the three
+lower sources sum to a pivot-coordinate subtraction coefficient `3`; since the
+post-subtraction target coefficient is `0` and the pivot component is `2`, the
+pre-subtraction target GV candidate in this small domain was `3/2`. For target
+`8`, the corresponding lower-source sum is `-6`; with post-subtraction
+coefficient `0` and pivot component `-3`, the pre-subtraction candidate was
+`2`. These are diagnostics of the sampled path-support domains, not promoted
+corrected-chamber GV values: they show exactly how the sampled lower history
+drives the target readout to zero.
 The report now also exports a bounded sample and status counts for all GV
 coefficient readouts in the path-support `cygv` call. Target `7` has `79`
 coefficient readouts split as `11` integer-nonzero, `25` integer-zero/absent,

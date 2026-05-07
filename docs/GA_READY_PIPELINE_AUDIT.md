@@ -180,7 +180,13 @@ run pass. Any remaining mismatch must be explicit and localizable.
    hidden lower-history terms of its own in this parent domain. The
    missing-target-shaped parent-only terms for targets 7 and 8 have no
    parent-domain qN polynomial shape because those same parent domains read
-   them as zero/absent.
+   them as zero/absent. The target-coefficient balance now reconstructs the
+   small-domain pre-subtraction target readout: target 7 has lower-source sum
+   `3`, post-subtraction coefficient `0`, pivot component `2`, and therefore
+   pre-subtraction candidate `3/2`; target 8 has lower-source sum `-6`, pivot
+   component `-3`, and pre-subtraction candidate `2`. This pins the small
+   domains as internally consistent zero histories, not as the missing
+   corrected-chamber target values.
    The same report is not yet scalable across all nine misses: the all-target
    schema-4 run timed out at 900 seconds, targets 2-5 time out under 180-second
    per-target probes, and targets 0/1/6 hit non-integer HKTY errors in their
