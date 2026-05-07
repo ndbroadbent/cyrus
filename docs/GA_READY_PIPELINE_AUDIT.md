@@ -243,7 +243,11 @@ to make the remaining GV layer more first-principles:
    `difference_only_toric_covered=2`, `predecessor_only_toric_covered=2`,
    `neither_toric_covered=4`, and no `both_toric_covered` pairs, so the
    immediate missing history includes lower-degree non-toric terms rather than
-   only the degree-10 target formulas. A
+   only the degree-10 target formulas. The sampled nearest `8+2` splits now
+   also report seed membership: the degree-2 side is a toric-covered
+   pair-reduced seed, while the degree-8 side is not a supplied seed, so the
+   next source-history task is composite lower-degree semigroup reconstruction.
+   A
    structured export now exists via
    `--dump-corrected-chamber-gv-context`; it records the local charge basis,
    target degree, degree-bounded projected Mori rays, exact active-generator

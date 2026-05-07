@@ -170,7 +170,10 @@ and matrix-basis pipeline are no longer open.
    `difference_only_toric_covered=2`, `predecessor_only_toric_covered=2`, and
    `neither_toric_covered=4`, with no pair where both sides are toric-covered.
    This keeps the next compact-GV task focused on lower-degree non-toric
-   history, not just the nine target classes.
+   history, not just the nine target classes. The nearest `8+2` samples now
+   show that the degree-2 side is a toric-covered pair-reduced seed, while the
+   degree-8 side is not a supplied seed, so that lower-degree history is
+   composite rather than a single uncovered Mori generator.
 5. **Potent-ray local diagnostics.** Rank-two N=10 and rank-four potent-ray
    rows are still incomplete, but they are validation diagnostics rather than
    blockers for the compact GA-ready GV engine.

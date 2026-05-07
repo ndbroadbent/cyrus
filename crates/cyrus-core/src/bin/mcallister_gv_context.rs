@@ -419,6 +419,10 @@ struct CygvPathPredecessorCandidate {
     series_distance: String,
     predecessor_toric_gv: Option<String>,
     difference_toric_gv: Option<String>,
+    predecessor_is_seed: bool,
+    difference_is_seed: bool,
+    predecessor_is_reduced_seed: bool,
+    difference_is_reduced_seed: bool,
     predecessor_nonzero: Vec<(usize, i64)>,
     difference_nonzero: Vec<(usize, i64)>,
 }
@@ -3587,9 +3591,11 @@ fn cygv_path_history_probe_inner(
             lower_seed_diamond_error: None,
         });
     }
-    let reduced_seed_count = cygv_pair_reduced_seed_generators(&seeds)
+    let reduced_seeds = cygv_pair_reduced_seed_generators(&seeds)
         .map_err(|error| format!("cygv seed reduction failed: {error}"))?
-        .len();
+        .into_iter()
+        .collect::<HashSet<_>>();
+    let reduced_seed_count = reduced_seeds.len();
     let lower_seed_decomposition = lower_seed_decomposition_probe(target, &seeds, 4);
     let lower_seed_diamond = lower_seed_diamond_probe(
         target,
@@ -3616,6 +3622,8 @@ fn cygv_path_history_probe_inner(
         target,
         &selected_degrees,
         &context.covered_toric_gv_by_basis,
+        &seen,
+        &reduced_seeds,
     )?;
     if !closure.completed {
         return Ok(CygvPathHistoryProbe {
@@ -3706,6 +3714,8 @@ fn cygv_path_predecessor_stats(
     target: &[i64],
     selected_degrees: &HashSet<i128>,
     covered_toric_gv_by_basis: &HashMap<Vec<i64>, String>,
+    seed_set: &HashSet<Vec<i64>>,
+    reduced_seed_set: &HashSet<Vec<i64>>,
 ) -> Result<CygvPathPredecessorStats, String> {
     let mut previous_window_element_count = 0usize;
     let mut predecessor_difference_count = 0usize;
@@ -3750,6 +3760,10 @@ fn cygv_path_predecessor_stats(
                     series_distance: format!("{distance:.6}"),
                     predecessor_toric_gv: covered_toric_gv_by_basis.get(element).cloned(),
                     difference_toric_gv: covered_toric_gv_by_basis.get(&difference).cloned(),
+                    predecessor_is_seed: seed_set.contains(element),
+                    difference_is_seed: seed_set.contains(&difference),
+                    predecessor_is_reduced_seed: reduced_seed_set.contains(element),
+                    difference_is_reduced_seed: reduced_seed_set.contains(&difference),
                     predecessor_nonzero: sparse_from_dense(element),
                     difference_nonzero: sparse_from_dense(&difference),
                 },
@@ -3773,6 +3787,10 @@ fn cygv_path_predecessor_stats(
                     series_distance: format!("{distance:.6}"),
                     predecessor_toric_gv: covered_toric_gv_by_basis.get(element).cloned(),
                     difference_toric_gv: covered_toric_gv_by_basis.get(&difference).cloned(),
+                    predecessor_is_seed: seed_set.contains(element),
+                    difference_is_seed: seed_set.contains(&difference),
+                    predecessor_is_reduced_seed: reduced_seed_set.contains(element),
+                    difference_is_reduced_seed: reduced_seed_set.contains(&difference),
                     predecessor_nonzero: sparse_from_dense(element),
                     difference_nonzero: sparse_from_dense(&difference),
                 },
@@ -6312,6 +6330,10 @@ mod tests {
                 .as_deref(),
             Some("11")
         );
+        assert!(probe.predecessor_candidate_sample[0].predecessor_is_seed);
+        assert!(probe.predecessor_candidate_sample[0].difference_is_seed);
+        assert!(probe.predecessor_candidate_sample[0].predecessor_is_reduced_seed);
+        assert!(probe.predecessor_candidate_sample[0].difference_is_reduced_seed);
         assert_eq!(
             probe.predecessor_candidate_sample[1].predecessor_nonzero,
             vec![(1, 1)]

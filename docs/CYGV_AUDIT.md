@@ -1631,7 +1631,12 @@ covered toric rows, both degree-10 targets have coverage counts
 `difference_only_toric_covered=2`, `predecessor_only_toric_covered=2`,
 `neither_toric_covered=4`, and no `both_toric_covered` pairs. The nearest
 `8+2` splits therefore still require lower-degree non-toric history, not just a
-missing degree-10 toric formula.
+missing degree-10 toric formula. The predecessor samples now also mark whether
+each side is a supplied seed or a cygv pair-reduced seed. In those nearest
+`8+2` splits, the degree-2 side is a toric-covered reduced seed, while the
+degree-8 side is not a supplied seed at all. The immediate missing input is
+therefore composite lower-degree semigroup history, not simply another
+uncovered Mori generator.
 
 After rebuilding `mcallister_gv_context`, the dry-run report now preserves the
 origin-circuit provenance exported by `mcallister_first_principles`. A fresh
