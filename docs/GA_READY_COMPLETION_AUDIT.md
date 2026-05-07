@@ -243,6 +243,11 @@ and matrix-basis pipeline are no longer open.
    degree-eight residual; for target `8` it is `[(54,1),(203,-2)]`, again with
    an unknown degree-eight residual. So the next missing object is the
    certified qN history for those degree-eight residuals.
+   The residual trace now shows both degree-eight residuals choose the shared
+   source-known degree-six ray `[(54,-2),(203,1),(206,1),(209,1)]`, leaving the
+   same toric degree-two classes above. This confirms the remaining gap is qN
+   polynomial history in the certified compact/chamber semigroup, not scalar GV
+   values for the lower leaves.
    These lower classes are now classified against the exported source-ray
    context: for both degree-10 targets the sampled lookups split as four known
    toric source rays, four non-toric source rays, and eight composite classes

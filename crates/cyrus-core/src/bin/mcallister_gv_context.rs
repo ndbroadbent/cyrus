@@ -401,6 +401,7 @@ struct CygvPathHistoryProbe {
     closest_series_predecessor_nonzero: Option<Vec<(usize, i64)>>,
     closest_series_difference_nonzero: Option<Vec<(usize, i64)>>,
     closest_known_qn_predecessor: Option<CygvClosestKnownQnPredecessor>,
+    closest_known_qn_residual_predecessor: Option<CygvClosestKnownQnPredecessor>,
     predecessor_candidate_sample_limit: usize,
     predecessor_candidate_sample: Vec<CygvPathPredecessorCandidate>,
     lower_seed_decomposition_max_terms: usize,
@@ -4506,6 +4507,7 @@ fn cygv_path_history_probe(
             closest_series_predecessor_nonzero: None,
             closest_series_difference_nonzero: None,
             closest_known_qn_predecessor: None,
+            closest_known_qn_residual_predecessor: None,
             predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
             predecessor_candidate_sample: Vec::new(),
             lower_seed_decomposition_max_terms: 4,
@@ -4582,6 +4584,7 @@ fn cygv_path_history_probe_inner(
             closest_series_predecessor_nonzero: None,
             closest_series_difference_nonzero: None,
             closest_known_qn_predecessor: None,
+            closest_known_qn_residual_predecessor: None,
             predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
             predecessor_candidate_sample: Vec::new(),
             lower_seed_decomposition_max_terms: 4,
@@ -4632,6 +4635,7 @@ fn cygv_path_history_probe_inner(
             closest_series_predecessor_nonzero: None,
             closest_series_difference_nonzero: None,
             closest_known_qn_predecessor: None,
+            closest_known_qn_residual_predecessor: None,
             predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
             predecessor_candidate_sample: Vec::new(),
             lower_seed_decomposition_max_terms: 4,
@@ -4704,6 +4708,16 @@ fn cygv_path_history_probe_inner(
         &seen,
         &reduced_seeds,
     )?;
+    let closest_known_qn_residual_predecessor = cygv_closest_known_qn_residual_predecessor(
+        &closure.elements,
+        &closure.degree_counts,
+        context.grading,
+        context.dimension,
+        previous_level_count,
+        predecessor_stats.closest_known_qn_predecessor.as_ref(),
+        &context.covered_toric_gv_by_basis,
+        &context.source_derived_gv_by_basis,
+    )?;
     let path_support_generators = path_support_generator_probe(
         target,
         sample.degree,
@@ -4741,6 +4755,7 @@ fn cygv_path_history_probe_inner(
                 .as_deref()
                 .map(sparse_from_dense),
             closest_known_qn_predecessor: predecessor_stats.closest_known_qn_predecessor,
+            closest_known_qn_residual_predecessor,
             predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
             predecessor_candidate_sample: predecessor_stats.candidate_sample,
             lower_seed_decomposition_max_terms: 4,
@@ -4802,6 +4817,7 @@ fn cygv_path_history_probe_inner(
             .as_deref()
             .map(sparse_from_dense),
         closest_known_qn_predecessor: predecessor_stats.closest_known_qn_predecessor,
+        closest_known_qn_residual_predecessor,
         predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
         predecessor_candidate_sample: predecessor_stats.candidate_sample,
         lower_seed_decomposition_max_terms: 4,
@@ -4872,6 +4888,104 @@ fn is_known_nonzero_qn_history_status(status: &str) -> bool {
     matches!(status, "known_nonzero_toric_gv" | "known_nonzero_source_gv")
 }
 
+fn cygv_closest_known_qn_residual_predecessor(
+    elements: &HashSet<Vec<i64>>,
+    degree_counts: &BTreeMap<i128, usize>,
+    grading: &[i64],
+    dimension: usize,
+    previous_level_count: usize,
+    closest_known_qn_predecessor: Option<&CygvClosestKnownQnPredecessor>,
+    covered_toric_gv_by_basis: &HashMap<Vec<i64>, String>,
+    source_derived_gv_by_basis: &HashMap<Vec<i64>, String>,
+) -> Result<Option<CygvClosestKnownQnPredecessor>, String> {
+    let Some(closest_known_qn_predecessor) = closest_known_qn_predecessor else {
+        return Ok(None);
+    };
+    if closest_known_qn_predecessor.difference_known_qn_history_status
+        != "unknown_not_toric_covered"
+    {
+        return Ok(None);
+    }
+    let residual = dense_from_sparse(&closest_known_qn_predecessor.difference_nonzero, dimension)?;
+    let residual_degree = curve_degree(&residual, grading)?;
+    let selected_degree_vec =
+        cygv_previous_window_degrees(degree_counts, residual_degree, previous_level_count);
+    let selected_degrees = selected_degree_vec.into_iter().collect::<HashSet<_>>();
+    cygv_closest_known_qn_predecessor(
+        elements,
+        grading,
+        &residual,
+        &selected_degrees,
+        covered_toric_gv_by_basis,
+        source_derived_gv_by_basis,
+    )
+}
+
+fn cygv_closest_known_qn_predecessor(
+    elements: &HashSet<Vec<i64>>,
+    grading: &[i64],
+    target: &[i64],
+    selected_degrees: &HashSet<i128>,
+    covered_toric_gv_by_basis: &HashMap<Vec<i64>, String>,
+    source_derived_gv_by_basis: &HashMap<Vec<i64>, String>,
+) -> Result<Option<CygvClosestKnownQnPredecessor>, String> {
+    let target_series_distance = cygv_series_distance(target);
+    let mut closest = None;
+    let mut sorted_elements = elements.iter().collect::<Vec<_>>();
+    sorted_elements.sort();
+    for element in sorted_elements {
+        let degree = curve_degree(element, grading)?;
+        if !selected_degrees.contains(&degree) {
+            continue;
+        }
+        let difference = checked_vector_difference(target, element)?;
+        if !elements.contains(&difference) {
+            continue;
+        }
+        let predecessor_toric_gv = covered_toric_gv_by_basis.get(element);
+        let predecessor_source_derived_gv = source_derived_gv_by_basis.get(element);
+        let predecessor_known_qn_history_status = known_qn_history_status(
+            predecessor_toric_gv.map(String::as_str),
+            predecessor_source_derived_gv.map(String::as_str),
+        )?;
+        if !is_known_nonzero_qn_history_status(predecessor_known_qn_history_status) {
+            continue;
+        }
+        let distance = cygv_series_distance(&difference);
+        if distance >= target_series_distance
+            || closest
+                .as_ref()
+                .is_some_and(|(best_distance, _)| distance >= *best_distance)
+        {
+            continue;
+        }
+        let difference_toric_gv = covered_toric_gv_by_basis.get(&difference);
+        let difference_source_derived_gv = source_derived_gv_by_basis.get(&difference);
+        let difference_known_qn_history_status = known_qn_history_status(
+            difference_toric_gv.map(String::as_str),
+            difference_source_derived_gv.map(String::as_str),
+        )?;
+        closest = Some((
+            distance,
+            CygvClosestKnownQnPredecessor {
+                predecessor_degree: degree,
+                difference_degree: curve_degree(&difference, grading)?,
+                series_distance: format!("{distance:.6}"),
+                predecessor_toric_gv: predecessor_toric_gv.cloned(),
+                predecessor_source_derived_gv: predecessor_source_derived_gv.cloned(),
+                predecessor_known_qn_history_status: predecessor_known_qn_history_status
+                    .to_string(),
+                difference_toric_gv: difference_toric_gv.cloned(),
+                difference_source_derived_gv: difference_source_derived_gv.cloned(),
+                difference_known_qn_history_status: difference_known_qn_history_status.to_string(),
+                predecessor_nonzero: sparse_from_dense(element),
+                difference_nonzero: sparse_from_dense(&difference),
+            },
+        ));
+    }
+    Ok(closest.map(|(_, predecessor)| predecessor))
+}
+
 fn cygv_path_predecessor_stats(
     elements: &HashSet<Vec<i64>>,
     grading: &[i64],
@@ -4889,7 +5003,6 @@ fn cygv_path_predecessor_stats(
     let mut closest_distance = target_series_distance;
     let mut closest_predecessor = None;
     let mut closest_difference = None;
-    let mut closest_known_qn_predecessor = None;
     let mut candidate_sample = Vec::new();
     let mut toric_coverage_counts = BTreeMap::new();
     let mut known_qn_history_counts = BTreeMap::new();
@@ -4938,31 +5051,6 @@ fn cygv_path_predecessor_stats(
             .or_insert(0) += 1;
         let difference_degree = curve_degree(&difference, grading)?;
         let distance = cygv_series_distance(&difference);
-        if is_known_nonzero_qn_history_status(predecessor_known_qn_history_status)
-            && distance < target_series_distance
-            && closest_known_qn_predecessor
-                .as_ref()
-                .is_none_or(|(best_distance, _)| distance < *best_distance)
-        {
-            closest_known_qn_predecessor = Some((
-                distance,
-                CygvClosestKnownQnPredecessor {
-                    predecessor_degree: degree,
-                    difference_degree,
-                    series_distance: format!("{distance:.6}"),
-                    predecessor_toric_gv: predecessor_toric_gv.cloned(),
-                    predecessor_source_derived_gv: predecessor_source_derived_gv.cloned(),
-                    predecessor_known_qn_history_status: predecessor_known_qn_history_status
-                        .to_string(),
-                    difference_toric_gv: difference_toric_gv.cloned(),
-                    difference_source_derived_gv: difference_source_derived_gv.cloned(),
-                    difference_known_qn_history_status: difference_known_qn_history_status
-                        .to_string(),
-                    predecessor_nonzero: sparse_from_dense(element),
-                    difference_nonzero: sparse_from_dense(&difference),
-                },
-            ));
-        }
         if candidate_sample.len() < CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT {
             candidate_sample.push((
                 distance,
@@ -5076,8 +5164,14 @@ fn cygv_path_predecessor_stats(
         closest_distance,
         closest_predecessor,
         closest_difference,
-        closest_known_qn_predecessor: closest_known_qn_predecessor
-            .map(|(_, predecessor)| predecessor),
+        closest_known_qn_predecessor: cygv_closest_known_qn_predecessor(
+            elements,
+            grading,
+            target,
+            selected_degrees,
+            covered_toric_gv_by_basis,
+            source_derived_gv_by_basis,
+        )?,
         candidate_sample: candidate_sample
             .into_iter()
             .map(|(_, candidate)| candidate)
@@ -7920,6 +8014,50 @@ mod tests {
             decomposition.seed_known_qn_history_status,
             "known_nonzero_toric_gv"
         );
+    }
+
+    #[test]
+    fn closest_known_qn_residual_predecessor_traces_unknown_residual() {
+        let elements = [vec![0, 1], vec![2, 0], vec![2, 1]]
+            .into_iter()
+            .collect::<HashSet<_>>();
+        let degree_counts = BTreeMap::from([(1, 1), (2, 1), (3, 1)]);
+        let covered_toric_gv_by_basis = HashMap::new();
+        let mut source_derived_gv_by_basis = HashMap::new();
+        source_derived_gv_by_basis.insert(vec![0, 1], "5".to_string());
+        let closest = CygvClosestKnownQnPredecessor {
+            predecessor_degree: 1,
+            difference_degree: 3,
+            series_distance: "3.000000".to_string(),
+            predecessor_toric_gv: None,
+            predecessor_source_derived_gv: None,
+            predecessor_known_qn_history_status: "known_nonzero_toric_gv".to_string(),
+            difference_toric_gv: None,
+            difference_source_derived_gv: None,
+            difference_known_qn_history_status: "unknown_not_toric_covered".to_string(),
+            predecessor_nonzero: vec![(0, 1)],
+            difference_nonzero: vec![(0, 2), (1, 1)],
+        };
+
+        let residual = cygv_closest_known_qn_residual_predecessor(
+            &elements,
+            &degree_counts,
+            &[1, 1],
+            2,
+            2,
+            Some(&closest),
+            &covered_toric_gv_by_basis,
+            &source_derived_gv_by_basis,
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(
+            residual.predecessor_known_qn_history_status,
+            "known_nonzero_source_gv"
+        );
+        assert_eq!(residual.predecessor_nonzero, vec![(1, 1)]);
+        assert_eq!(residual.difference_nonzero, vec![(0, 2)]);
     }
 
     #[test]

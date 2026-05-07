@@ -2175,6 +2175,16 @@ class. Thus the next missing object is specifically the qN polynomial history
 of the degree-eight residuals in a certified compact semigroup, not merely the
 existence of lower source-ray GV numbers.
 
+The one-level residual trace now shows that those unknown degree-eight
+residuals themselves choose the shared source-known degree-six ray
+`[(54,-2),(203,1),(206,1),(209,1)]` as their closest certified qN predecessor.
+The target-`7` residual then leaves the toric degree-two class
+`[(44,1),(54,1),(206,-2)]`, and the target-`8` residual leaves
+`[(54,1),(203,-2)]`. This narrows the missing datum further: Cyrus knows scalar
+GV values for the lower leaves, but still lacks the compact/chamber qN
+polynomial history for the source-derived degree-six ray and the degree-eight
+composites.
+
 The stable-Weyl/flop-continuation route is now surfaced as a report-level
 readiness count rather than only per-target arrays. On the schema-3 context all
 nine remaining targets have CMS-style formula candidates, but the 14 exact
