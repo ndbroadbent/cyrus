@@ -1692,8 +1692,9 @@ rows, target `7` has path support size `7`, supplies `11` generators, returns
 `GV=0`, and now records `11` cygv-materialized qN polynomials in that small
 domain, with bounded term samples for direct inspection. The target itself has
 no qN polynomial because the small-domain target GV is zero. Target `8` has path
-support size `6`, supplies `7` generators, and also returns `GV=0`. This rules
-out the sampled path-support generator domain as the missing compact HKTY
+support size `6`, supplies `7` generators, returns `GV=0`, and records `6`
+cygv-materialized qN polynomials; it also has no target qN polynomial. This
+rules out the sampled path-support generator domain as the missing compact HKTY
 history. Like the lower-seed diamonds, it is a negative diagnostic unless a
 source certificate promotes the supplied semigroup.
 

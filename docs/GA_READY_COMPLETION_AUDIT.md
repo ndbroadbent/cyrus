@@ -258,8 +258,9 @@ and matrix-basis pipeline are no longer open.
    materializes 11 qN polynomials with bounded term samples, has qN for ten
    sampled nonzero lower lookups, and records six zero/absent lower lookups
    with no qN, but the target remains `GV=0` with no target qN polynomial.
-   These lower-class values are therefore diagnostic artifacts of the small
-   domain, not
+   Target `8` repeats the same scalar/qN-status split with 6 materialized qN
+   polynomials and no target qN polynomial. These lower-class values are
+   therefore diagnostic artifacts of the small domain, not
    promotable compact GV history.
    The report now also aggregates the uncovered source-ray subset as a unique
    queue. For each of targets `7` and `8`, the queue has two unique degree-six

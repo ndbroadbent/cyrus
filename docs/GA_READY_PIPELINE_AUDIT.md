@@ -142,9 +142,10 @@ run pass. Any remaining mismatch must be explicit and localizable.
    preserves the degree-one GV `2875` for explicit and provided-generator
    domains. The target-7 path-support probe now records 11 small-domain qN
    polynomials with bounded term samples and ten sampled nonzero lower-class
-   qN lookups, while the target still has `GV=0` and no qN polynomial. Applying
-   the trace to McAllister still requires the certified corrected-chamber
-   semigroup/history domain.
+   qN lookups; target 8 similarly records 6 small-domain qN polynomials and ten
+   sampled nonzero lower-class qN lookups. Both targets still have `GV=0` and no
+   target qN polynomial in these small domains. Applying the trace to McAllister
+   still requires the certified corrected-chamber semigroup/history domain.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for
