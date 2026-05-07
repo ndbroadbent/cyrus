@@ -1643,7 +1643,10 @@ degree-6 seed through the pair-reduction relation shows it splits into
 degree-4 and degree-2 reduced seeds, both with source-derived toric GV values.
 So at least for the nearest degree-10 histories, the open problem has moved
 from identifying leaf toric formulas to reproducing cygv's composite
-degree-ordered subtraction history over those leaves.
+degree-ordered subtraction history over those leaves. A pair-expanded reduced
+leaf diamond, still run through actual `cygv` as an explicit semigroup, has 12
+elements for both degree-10 targets and returns `GV=0`; the tiny leaf diamond is
+therefore still not the correct compact history domain.
 
 After rebuilding `mcallister_gv_context`, the dry-run report now preserves the
 origin-circuit provenance exported by `mcallister_first_principles`. A fresh

@@ -401,6 +401,13 @@ struct CygvPathHistoryProbe {
     lower_seed_diamond_element_count: Option<usize>,
     lower_seed_diamond_gv: Option<String>,
     lower_seed_diamond_error: Option<String>,
+    pair_expanded_lower_seed_decomposition_status: Option<String>,
+    pair_expanded_lower_seed_decomposition_term_count: Option<usize>,
+    pair_expanded_lower_seed_decomposition_terms_nonzero: Option<Vec<Vec<(usize, i64)>>>,
+    pair_expanded_lower_seed_diamond_status: Option<String>,
+    pair_expanded_lower_seed_diamond_element_count: Option<usize>,
+    pair_expanded_lower_seed_diamond_gv: Option<String>,
+    pair_expanded_lower_seed_diamond_error: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -465,6 +472,14 @@ struct CygvPathPredecessorStats {
 }
 
 struct LowerSeedDecompositionProbe {
+    status: String,
+    term_count: Option<usize>,
+    terms_nonzero: Option<Vec<Vec<(usize, i64)>>>,
+    terms: Option<Vec<Vec<i64>>>,
+    error: Option<String>,
+}
+
+struct PairExpandedLowerSeedProbe {
     status: String,
     term_count: Option<usize>,
     terms_nonzero: Option<Vec<Vec<(usize, i64)>>>,
@@ -844,6 +859,165 @@ fn lower_seed_diamond_probe(
             error: Some(error),
         },
     }
+}
+
+fn pair_expanded_lower_seed_diamond_probe(
+    target: &[i64],
+    pair_expanded: &PairExpandedLowerSeedProbe,
+    context: &ValidatedContext<'_>,
+    run_lower_seed_diamonds: bool,
+    element_limit: usize,
+) -> LowerSeedDiamondProbe {
+    if !run_lower_seed_diamonds {
+        return LowerSeedDiamondProbe {
+            status: None,
+            element_count: None,
+            gv: None,
+            error: None,
+        };
+    }
+    let Some(terms) = pair_expanded.terms.as_deref() else {
+        return LowerSeedDiamondProbe {
+            status: Some("skipped_no_pair_expanded_lower_seed_decomposition".to_string()),
+            element_count: None,
+            gv: None,
+            error: pair_expanded.error.clone(),
+        };
+    };
+    match lower_seed_diamond_probe_inner(target, terms, context, element_limit) {
+        Ok(probe) => probe,
+        Err(error) => LowerSeedDiamondProbe {
+            status: Some("error".to_string()),
+            element_count: None,
+            gv: None,
+            error: Some(error),
+        },
+    }
+}
+
+fn pair_expanded_lower_seed_probe(
+    lower_seed_decomposition: &LowerSeedDecompositionProbe,
+    seed_set: &HashSet<Vec<i64>>,
+    reduced_seed_set: &HashSet<Vec<i64>>,
+    max_terms: usize,
+    max_depth: usize,
+) -> PairExpandedLowerSeedProbe {
+    let Some(terms) = lower_seed_decomposition.terms.as_deref() else {
+        return PairExpandedLowerSeedProbe {
+            status: "skipped_no_lower_seed_decomposition".to_string(),
+            term_count: None,
+            terms_nonzero: None,
+            terms: None,
+            error: lower_seed_decomposition.error.clone(),
+        };
+    };
+    match pair_expand_terms_to_reduced_seeds(
+        terms,
+        seed_set,
+        reduced_seed_set,
+        max_terms,
+        max_depth,
+    ) {
+        Ok(Some(expanded_terms)) => PairExpandedLowerSeedProbe {
+            status: "expanded_to_pair_reduced_seed_terms".to_string(),
+            term_count: Some(expanded_terms.len()),
+            terms_nonzero: Some(
+                expanded_terms
+                    .iter()
+                    .map(|term| sparse_from_dense(term))
+                    .collect(),
+            ),
+            terms: Some(expanded_terms),
+            error: None,
+        },
+        Ok(None) => PairExpandedLowerSeedProbe {
+            status: "already_pair_reduced_seed_terms".to_string(),
+            term_count: Some(terms.len()),
+            terms_nonzero: Some(terms.iter().map(|term| sparse_from_dense(term)).collect()),
+            terms: Some(terms.to_vec()),
+            error: None,
+        },
+        Err(error) => PairExpandedLowerSeedProbe {
+            status: "error".to_string(),
+            term_count: None,
+            terms_nonzero: None,
+            terms: None,
+            error: Some(error),
+        },
+    }
+}
+
+fn pair_expand_terms_to_reduced_seeds(
+    terms: &[Vec<i64>],
+    seed_set: &HashSet<Vec<i64>>,
+    reduced_seed_set: &HashSet<Vec<i64>>,
+    max_terms: usize,
+    max_depth: usize,
+) -> Result<Option<Vec<Vec<i64>>>, String> {
+    let mut expanded = Vec::new();
+    let mut changed = false;
+    for term in terms {
+        let mut term_expansion = Vec::new();
+        pair_expand_seed_to_reduced_terms(
+            term,
+            seed_set,
+            reduced_seed_set,
+            max_depth,
+            &mut term_expansion,
+        )?;
+        if term_expansion.len() != 1 || term_expansion.first() != Some(term) {
+            changed = true;
+        }
+        expanded.extend(term_expansion);
+        if expanded.len() > max_terms {
+            return Err(format!(
+                "pair-expanded lower-seed decomposition exceeds term limit {max_terms}"
+            ));
+        }
+    }
+    if !changed {
+        return Ok(None);
+    }
+    Ok(Some(sorted_decomposition(expanded)))
+}
+
+fn pair_expand_seed_to_reduced_terms(
+    seed: &[i64],
+    seed_set: &HashSet<Vec<i64>>,
+    reduced_seed_set: &HashSet<Vec<i64>>,
+    remaining_depth: usize,
+    out: &mut Vec<Vec<i64>>,
+) -> Result<(), String> {
+    if reduced_seed_set.contains(seed) {
+        out.push(seed.to_vec());
+        return Ok(());
+    }
+    if remaining_depth == 0 {
+        out.push(seed.to_vec());
+        return Ok(());
+    }
+    let Some((lhs, rhs)) = seed_pair_reduction_terms(seed, seed_set)? else {
+        out.push(seed.to_vec());
+        return Ok(());
+    };
+    pair_expand_seed_to_reduced_terms(&lhs, seed_set, reduced_seed_set, remaining_depth - 1, out)?;
+    pair_expand_seed_to_reduced_terms(&rhs, seed_set, reduced_seed_set, remaining_depth - 1, out)?;
+    Ok(())
+}
+
+fn seed_pair_reduction_terms(
+    seed: &[i64],
+    seed_set: &HashSet<Vec<i64>>,
+) -> Result<Option<(Vec<i64>, Vec<i64>)>, String> {
+    let mut sorted_seeds = seed_set.iter().collect::<Vec<_>>();
+    sorted_seeds.sort();
+    for lhs in sorted_seeds {
+        let rhs = checked_vector_difference(seed, lhs)?;
+        if seed_set.contains(&rhs) {
+            return Ok(Some((lhs.clone(), rhs)));
+        }
+    }
+    Ok(None)
 }
 
 fn lower_seed_diamond_probe_inner(
@@ -3526,6 +3700,13 @@ fn cygv_path_history_probe(
             lower_seed_diamond_element_count: None,
             lower_seed_diamond_gv: None,
             lower_seed_diamond_error: None,
+            pair_expanded_lower_seed_decomposition_status: None,
+            pair_expanded_lower_seed_decomposition_term_count: None,
+            pair_expanded_lower_seed_decomposition_terms_nonzero: None,
+            pair_expanded_lower_seed_diamond_status: None,
+            pair_expanded_lower_seed_diamond_element_count: None,
+            pair_expanded_lower_seed_diamond_gv: None,
+            pair_expanded_lower_seed_diamond_error: None,
         },
     }
 }
@@ -3582,6 +3763,13 @@ fn cygv_path_history_probe_inner(
             lower_seed_diamond_element_count: None,
             lower_seed_diamond_gv: None,
             lower_seed_diamond_error: None,
+            pair_expanded_lower_seed_decomposition_status: None,
+            pair_expanded_lower_seed_decomposition_term_count: None,
+            pair_expanded_lower_seed_decomposition_terms_nonzero: None,
+            pair_expanded_lower_seed_diamond_status: None,
+            pair_expanded_lower_seed_diamond_element_count: None,
+            pair_expanded_lower_seed_diamond_gv: None,
+            pair_expanded_lower_seed_diamond_error: None,
         });
     }
     if max_seed_count.is_some_and(|limit| seeds.len() > limit) {
@@ -3615,6 +3803,13 @@ fn cygv_path_history_probe_inner(
             lower_seed_diamond_element_count: None,
             lower_seed_diamond_gv: None,
             lower_seed_diamond_error: None,
+            pair_expanded_lower_seed_decomposition_status: None,
+            pair_expanded_lower_seed_decomposition_term_count: None,
+            pair_expanded_lower_seed_decomposition_terms_nonzero: None,
+            pair_expanded_lower_seed_diamond_status: None,
+            pair_expanded_lower_seed_diamond_element_count: None,
+            pair_expanded_lower_seed_diamond_gv: None,
+            pair_expanded_lower_seed_diamond_error: None,
         });
     }
     let reduced_seeds = cygv_pair_reduced_seed_generators(&seeds)
@@ -3626,6 +3821,15 @@ fn cygv_path_history_probe_inner(
     let lower_seed_diamond = lower_seed_diamond_probe(
         target,
         &lower_seed_decomposition,
+        context,
+        run_lower_seed_diamonds,
+        element_limit,
+    );
+    let pair_expanded_lower_seed =
+        pair_expanded_lower_seed_probe(&lower_seed_decomposition, &seen, &reduced_seeds, 16, 8);
+    let pair_expanded_lower_seed_diamond = pair_expanded_lower_seed_diamond_probe(
+        target,
+        &pair_expanded_lower_seed,
         context,
         run_lower_seed_diamonds,
         element_limit,
@@ -3690,6 +3894,15 @@ fn cygv_path_history_probe_inner(
             lower_seed_diamond_element_count: lower_seed_diamond.element_count,
             lower_seed_diamond_gv: lower_seed_diamond.gv,
             lower_seed_diamond_error: lower_seed_diamond.error,
+            pair_expanded_lower_seed_decomposition_status: Some(pair_expanded_lower_seed.status),
+            pair_expanded_lower_seed_decomposition_term_count: pair_expanded_lower_seed.term_count,
+            pair_expanded_lower_seed_decomposition_terms_nonzero: pair_expanded_lower_seed
+                .terms_nonzero,
+            pair_expanded_lower_seed_diamond_status: pair_expanded_lower_seed_diamond.status,
+            pair_expanded_lower_seed_diamond_element_count: pair_expanded_lower_seed_diamond
+                .element_count,
+            pair_expanded_lower_seed_diamond_gv: pair_expanded_lower_seed_diamond.gv,
+            pair_expanded_lower_seed_diamond_error: pair_expanded_lower_seed_diamond.error,
         });
     }
 
@@ -3731,6 +3944,15 @@ fn cygv_path_history_probe_inner(
         lower_seed_diamond_element_count: lower_seed_diamond.element_count,
         lower_seed_diamond_gv: lower_seed_diamond.gv,
         lower_seed_diamond_error: lower_seed_diamond.error,
+        pair_expanded_lower_seed_decomposition_status: Some(pair_expanded_lower_seed.status),
+        pair_expanded_lower_seed_decomposition_term_count: pair_expanded_lower_seed.term_count,
+        pair_expanded_lower_seed_decomposition_terms_nonzero: pair_expanded_lower_seed
+            .terms_nonzero,
+        pair_expanded_lower_seed_diamond_status: pair_expanded_lower_seed_diamond.status,
+        pair_expanded_lower_seed_diamond_element_count: pair_expanded_lower_seed_diamond
+            .element_count,
+        pair_expanded_lower_seed_diamond_gv: pair_expanded_lower_seed_diamond.gv,
+        pair_expanded_lower_seed_diamond_error: pair_expanded_lower_seed_diamond.error,
     })
 }
 
@@ -4998,6 +5220,26 @@ mod tests {
             degree_bounded_mori_ray_context_status(&validated),
             "source_derived_ambient_and_basis_degree_bounded_mori_ray_context"
         );
+    }
+
+    #[test]
+    fn pair_expansion_replaces_nonreduced_seed_terms() {
+        let seed_set = [vec![1, 0], vec![0, 1], vec![1, 1]]
+            .into_iter()
+            .collect::<HashSet<_>>();
+        let reduced_seed_set = [vec![1, 0], vec![0, 1]].into_iter().collect::<HashSet<_>>();
+
+        let expanded = pair_expand_terms_to_reduced_seeds(
+            &[vec![1, 1], vec![1, 0]],
+            &seed_set,
+            &reduced_seed_set,
+            4,
+            4,
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(expanded, vec![vec![0, 1], vec![1, 0], vec![1, 0]]);
     }
 
     #[test]

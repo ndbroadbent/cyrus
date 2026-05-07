@@ -179,7 +179,9 @@ and matrix-basis pipeline are no longer open.
    reduction; that degree-6 seed pair-reduces into degree-4 and degree-2
    reduced seeds that both have toric GV values. The next compact-GV task is
    therefore reproducing the composite semigroup subtraction history over these
-   leaves.
+   leaves. A pair-expanded reduced-leaf explicit semigroup has only 12 elements
+   and returns `GV=0` for both degree-10 targets, so it is not the valid compact
+   history domain.
 5. **Potent-ray local diagnostics.** Rank-two N=10 and rank-four potent-ray
    rows are still incomplete, but they are validation diagnostics rather than
    blockers for the compact GA-ready GV engine.
