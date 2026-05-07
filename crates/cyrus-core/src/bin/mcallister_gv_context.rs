@@ -642,6 +642,8 @@ struct CygvPathHistoryProbe {
     path_support_target_gw_candidate: Option<String>,
     path_support_qn_trace_sample: Vec<CygvPathSupportQnTracePolynomialSample>,
     path_support_target_monomial_qn_source_count: Option<usize>,
+    path_support_target_monomial_qn_source_diamond_parent_qn_comparison_status_counts:
+        BTreeMap<String, usize>,
     path_support_target_monomial_qn_source_sample: Vec<CygvPathSupportTargetMonomialQnSource>,
     path_support_error: Option<String>,
     path_support_lookup_status_counts: BTreeMap<String, usize>,
@@ -4592,6 +4594,19 @@ fn bounded_diamond_parent_qn_comparison_status(
             "same_count_different_qn_term_signatures"
         }
         .to_string(),
+    )
+}
+
+fn target_monomial_qn_source_diamond_parent_qn_comparison_status_counts(
+    sources: &[CygvPathSupportTargetMonomialQnSource],
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        sources.iter().map(|source| {
+            source
+                .source_bounded_diamond_parent_qn_comparison_status
+                .as_deref()
+        }),
+        "not_compared",
     )
 }
 
@@ -9025,6 +9040,8 @@ fn cygv_path_history_probe(
             path_support_target_gw_candidate: None,
             path_support_qn_trace_sample: Vec::new(),
             path_support_target_monomial_qn_source_count: None,
+            path_support_target_monomial_qn_source_diamond_parent_qn_comparison_status_counts:
+                BTreeMap::new(),
             path_support_target_monomial_qn_source_sample: Vec::new(),
             path_support_error: None,
             path_support_lookup_status_counts: BTreeMap::new(),
@@ -9142,6 +9159,8 @@ fn cygv_path_history_probe_inner(
             path_support_target_gw_candidate: None,
             path_support_qn_trace_sample: Vec::new(),
             path_support_target_monomial_qn_source_count: None,
+            path_support_target_monomial_qn_source_diamond_parent_qn_comparison_status_counts:
+                BTreeMap::new(),
             path_support_target_monomial_qn_source_sample: Vec::new(),
             path_support_error: None,
             path_support_lookup_status_counts: BTreeMap::new(),
@@ -9235,6 +9254,8 @@ fn cygv_path_history_probe_inner(
             path_support_target_gw_candidate: None,
             path_support_qn_trace_sample: Vec::new(),
             path_support_target_monomial_qn_source_count: None,
+            path_support_target_monomial_qn_source_diamond_parent_qn_comparison_status_counts:
+                BTreeMap::new(),
             path_support_target_monomial_qn_source_sample: Vec::new(),
             path_support_error: None,
             path_support_lookup_status_counts: BTreeMap::new(),
@@ -9356,6 +9377,10 @@ fn cygv_path_history_probe_inner(
         &seen,
         &reduced_seeds,
     )?;
+    let path_support_target_monomial_qn_source_diamond_parent_qn_comparison_status_counts =
+        target_monomial_qn_source_diamond_parent_qn_comparison_status_counts(
+            &path_support_generators.target_monomial_qn_source_sample,
+        );
     if !closure.completed {
         return Ok(CygvPathHistoryProbe {
             status: closure.status,
@@ -9481,6 +9506,8 @@ fn cygv_path_history_probe_inner(
             path_support_qn_trace_sample: path_support_generators.qn_trace_sample,
             path_support_target_monomial_qn_source_count: path_support_generators
                 .target_monomial_qn_source_count,
+            path_support_target_monomial_qn_source_diamond_parent_qn_comparison_status_counts:
+                path_support_target_monomial_qn_source_diamond_parent_qn_comparison_status_counts,
             path_support_target_monomial_qn_source_sample: path_support_generators
                 .target_monomial_qn_source_sample,
             path_support_error: path_support_generators.error,
@@ -9608,6 +9635,7 @@ fn cygv_path_history_probe_inner(
         path_support_qn_trace_sample: path_support_generators.qn_trace_sample,
         path_support_target_monomial_qn_source_count: path_support_generators
             .target_monomial_qn_source_count,
+        path_support_target_monomial_qn_source_diamond_parent_qn_comparison_status_counts,
         path_support_target_monomial_qn_source_sample: path_support_generators
             .target_monomial_qn_source_sample,
         path_support_error: path_support_generators.error,
@@ -16526,6 +16554,20 @@ mod tests {
         assert_eq!(
             bounded_diamond_parent_qn_comparison_status(&sources[0], &bounded).as_deref(),
             Some("different_qn_term_counts")
+        );
+
+        let mut compared_source = sources[0].clone();
+        compared_source.source_bounded_diamond_parent_qn_comparison_status =
+            Some("different_qn_term_counts".to_string());
+        assert_eq!(
+            target_monomial_qn_source_diamond_parent_qn_comparison_status_counts(&[
+                sources[0].clone(),
+                compared_source,
+            ]),
+            BTreeMap::from([
+                ("different_qn_term_counts".to_string(), 1),
+                ("not_compared".to_string(), 1),
+            ])
         );
     }
 
