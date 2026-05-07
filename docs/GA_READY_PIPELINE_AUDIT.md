@@ -1009,3 +1009,9 @@ to make the remaining GV layer more first-principles:
    `62/36/14/14`, and the target-plus-star degrees are `-10/-12/6/6`. The
    negative star-side degrees rule out treating the star relation as an
    effective covered GV contribution.
+   The full union-support height profile is now serialized as well. For
+   targets `3`/`6`, the off-hyperplane zero-shared ray carries zero target and
+   star coefficient; for targets `7`/`8`, the height `-1` zero-shared ray and
+   height `-1` star extra `212` carry opposite star coefficients. This keeps
+   the next source-derived task focused on the actual chamber map and
+   intersection transport across that wall.

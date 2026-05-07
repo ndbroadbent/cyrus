@@ -756,6 +756,12 @@ target-minus-star `62/36/14/14`, and target-plus-star `-10/-12/6/6`. The
 negative star-side degrees confirm that the star-union object is chamber
 history rather than an effective scalar GV row already present in the known
 maps.
+The height-profile report now tags every union-support point by role and
+coefficient. Targets `3`/`6` have only a coefficient-zero zero-shared ray off
+the relation hyperplane, while targets `7`/`8` have a height `-1` star-side
+pair: the zero-shared ray with coefficient `+1` and star extra `212` with
+coefficient `-1`. The remaining certificate work is therefore a real
+chamber-map/intersection problem, not just a missing projection or lookup.
 Origin-circuit witness-domain compact `cygv` probes are now opt-in and guarded
 by `--origin-witness-cygv-generator-limit`. The traced target `8` report shows
 the single-generator relation domain computes `GV=2` with one materialized

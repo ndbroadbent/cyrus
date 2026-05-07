@@ -3217,6 +3217,17 @@ these are chamber-history rows, not direct effective GV rows. This rules out
 closing the gap by reusing an already-covered scalar GV entry; the remaining
 input is still the source-derived local chamber/intersection/semigroup
 certificate.
+Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
+serializes a role-tagged height profile over the full union support. For
+targets `3`/`6`, the off-hyperplane zero-shared ray has height `-1` but zero
+target and star coefficient; all nonzero target/star coefficients in the
+union row lie at height `0`. For targets `7`/`8`, the zero-shared ray at
+height `-1` has star coefficient `+1`, and the alternate star extra `212` at
+height `-1` has star coefficient `-1`; the target relation's nonzero
+coefficients remain on height `0`. This makes the chamber-map obstruction more
+explicit: the missing certificate must explain the height `-1` star-side pair
+and its projection into the target chamber, not merely find another global
+curve coordinate.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

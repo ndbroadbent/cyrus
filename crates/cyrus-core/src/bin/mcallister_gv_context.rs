@@ -568,6 +568,7 @@ struct LocalCygvSourceResolutionHintSummary {
     shared_two_simplex_star_union_point_indices: Vec<usize>,
     shared_two_simplex_star_union_affine_rank: Option<usize>,
     shared_two_simplex_star_union_charge_basis: Option<Vec<Vec<i64>>>,
+    shared_two_simplex_star_union_affine_height_profile: Vec<StarUnionAffineHeight>,
     shared_two_simplex_star_union_target_coordinates: Option<Vec<i64>>,
     shared_two_simplex_star_union_target_rational_coordinates: Option<Vec<String>>,
     shared_two_simplex_star_union_target_rational_denominators: Option<Vec<String>>,
@@ -603,6 +604,17 @@ struct ZeroSharedAffineHeight {
 #[derive(Clone, Debug, Serialize)]
 struct PointAffineHeight {
     point_index: usize,
+    height: i64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct StarUnionAffineHeight {
+    point_index: usize,
+    role: String,
+    target_coefficient: i64,
+    star_coefficient: i64,
+    target_minus_star_coefficient: i64,
+    target_plus_star_coefficient: i64,
     height: i64,
 }
 
@@ -14748,6 +14760,11 @@ fn local_cygv_source_resolution_hint_summaries(
                 &star_union_relation_hint,
                 context,
             );
+            let star_union_affine_height_profile = local_cygv_star_union_affine_height_profile(
+                target.origin_circuit_first_witness.as_ref(),
+                &star_support_hint,
+                affine_projection_hint.hyperplane.as_deref(),
+            );
             let star_extra_affine_heights =
                 origin_circuit_shared_two_simplex_star_extra_affine_heights(
                     target.origin_circuit_first_witness.as_ref(),
@@ -14801,6 +14818,8 @@ fn local_cygv_source_resolution_hint_summaries(
                 shared_two_simplex_star_union_point_indices: star_union_relation_hint.point_indices,
                 shared_two_simplex_star_union_affine_rank: star_union_relation_hint.affine_rank,
                 shared_two_simplex_star_union_charge_basis: star_union_relation_hint.charge_basis,
+                shared_two_simplex_star_union_affine_height_profile:
+                    star_union_affine_height_profile,
                 shared_two_simplex_star_union_target_coordinates: star_union_relation_hint
                     .target_coordinates,
                 shared_two_simplex_star_union_target_rational_coordinates: star_union_relation_hint
@@ -15719,6 +15738,110 @@ fn local_cygv_star_target_relation_hint(
         missing_points,
         extra_star_points,
         coordinates,
+    }
+}
+
+fn local_cygv_star_union_affine_height_profile(
+    witness: Option<&OriginCircuitWitnessSample>,
+    star_support: &LocalCygvStarSupportHint,
+    hyperplane: Option<&[i64]>,
+) -> Vec<StarUnionAffineHeight> {
+    let (Some(witness), Some(hyperplane), Some(star_charge_basis)) =
+        (witness, hyperplane, star_support.charge_basis.as_ref())
+    else {
+        return Vec::new();
+    };
+    let Some(star_charge_row) = star_charge_basis.first() else {
+        return Vec::new();
+    };
+    if star_charge_basis.len() != 1 || star_charge_row.len() != star_support.point_indices.len() {
+        return Vec::new();
+    }
+    let support = origin_circuit_star_union_point_samples(witness, star_support);
+    if support.is_empty() {
+        return Vec::new();
+    }
+    let target_by_point = witness
+        .relation_points
+        .iter()
+        .map(|point| (point.point_index, point.coefficient))
+        .collect::<BTreeMap<_, _>>();
+    let star_by_point = star_support
+        .point_indices
+        .iter()
+        .copied()
+        .zip(star_charge_row.iter().copied())
+        .collect::<BTreeMap<_, _>>();
+    let shared_two_simplex = witness
+        .shared_two_simplex
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let zero_shared = origin_circuit_zero_relation_shared_two_simplex_points(Some(witness))
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let relation_exclusive = BTreeSet::from([
+        witness.first_facet_exclusive_point,
+        witness.second_facet_exclusive_point,
+    ]);
+    let star_extra = origin_circuit_shared_two_simplex_star_extra_points(Some(witness))
+        .into_iter()
+        .flatten()
+        .collect::<BTreeSet<_>>();
+    support
+        .into_iter()
+        .map(|point| {
+            let target_coefficient = target_by_point
+                .get(&point.point_index)
+                .copied()
+                .unwrap_or(0);
+            let star_coefficient = star_by_point.get(&point.point_index).copied().unwrap_or(0);
+            StarUnionAffineHeight {
+                role: star_union_point_role(
+                    point.point_index,
+                    &zero_shared,
+                    &shared_two_simplex,
+                    &relation_exclusive,
+                    &star_extra,
+                    &target_by_point,
+                    &star_by_point,
+                ),
+                point_index: point.point_index,
+                target_coefficient,
+                star_coefficient,
+                target_minus_star_coefficient: target_coefficient - star_coefficient,
+                target_plus_star_coefficient: target_coefficient + star_coefficient,
+                height: affine_hyperplane_height(hyperplane, &point.coordinates),
+            }
+        })
+        .collect()
+}
+
+fn star_union_point_role(
+    point_index: usize,
+    zero_shared: &BTreeSet<usize>,
+    shared_two_simplex: &BTreeSet<usize>,
+    relation_exclusive: &BTreeSet<usize>,
+    star_extra: &BTreeSet<usize>,
+    target_by_point: &BTreeMap<usize, i64>,
+    star_by_point: &BTreeMap<usize, i64>,
+) -> String {
+    if point_index == 0 {
+        "origin".to_string()
+    } else if zero_shared.contains(&point_index) {
+        "zero_relation_shared_two_simplex".to_string()
+    } else if relation_exclusive.contains(&point_index) {
+        "origin_circuit_exclusive".to_string()
+    } else if shared_two_simplex.contains(&point_index) {
+        "relation_shared_two_simplex".to_string()
+    } else if star_extra.contains(&point_index) {
+        "star_extra".to_string()
+    } else if target_by_point.contains_key(&point_index) {
+        "target_relation".to_string()
+    } else if star_by_point.contains_key(&point_index) {
+        "star_support".to_string()
+    } else {
+        "star_union_support".to_string()
     }
 }
 
@@ -19870,6 +19993,52 @@ mod tests {
                 (211, 1),
                 (212, -1),
                 (214, 1)
+            ]
+        );
+        assert_eq!(
+            local_cygv_star_union_affine_height_profile(
+                Some(&witness),
+                &star_support_hint,
+                projection_hint.hyperplane.as_deref()
+            )
+            .into_iter()
+            .map(|entry| {
+                (
+                    entry.point_index,
+                    entry.role,
+                    entry.target_coefficient,
+                    entry.star_coefficient,
+                    entry.target_minus_star_coefficient,
+                    entry.target_plus_star_coefficient,
+                    entry.height,
+                )
+            })
+            .collect::<Vec<_>>(),
+            vec![
+                (0, "origin".to_string(), -1, 1, -2, 0, 0),
+                (2, "relation_shared_two_simplex".to_string(), 2, 0, 2, 2, 0),
+                (
+                    55,
+                    "zero_relation_shared_two_simplex".to_string(),
+                    0,
+                    1,
+                    -1,
+                    1,
+                    -1
+                ),
+                (195, "star_extra".to_string(), 0, -1, 1, -1, 0),
+                (
+                    208,
+                    "relation_shared_two_simplex".to_string(),
+                    -3,
+                    0,
+                    -3,
+                    -3,
+                    0
+                ),
+                (211, "origin_circuit_exclusive".to_string(), 1, 0, 1, 1, 0),
+                (212, "star_extra".to_string(), 0, -1, 1, -1, -1),
+                (214, "origin_circuit_exclusive".to_string(), 1, 0, 1, 1, 0),
             ]
         );
         let resolved_hint = local_cygv_resolved_shared_support_hint(&skeleton, Some(&witness));
