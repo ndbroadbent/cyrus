@@ -2782,6 +2782,18 @@ first-generation seed sum in the current source set. That separates the two
 objects in the residual polynomial: one is the missing target read as zero in
 the sampled parent domain, the other is a later-generation compact-history term
 with nonzero scalar output.
+The same samples now include a bounded lower-seed decomposition summary up to
+four terms. For the target-monomial degree-eight qN source, both target `7`
+and target `8` have a two-term lower-seed decomposition. For target `7`, this
+is exactly the certified degree-six source row plus the degree-two toric row
+that appears in the pivot-subtraction split. The parent-only residual terms
+also decompose within this bound: target `7`'s nonzero generated sibling has a
+three-term lower-seed decomposition, and the missing-target-shaped seed has a
+separate three-term decomposition despite being a raw pair-reduced seed. Target
+`8`'s missing-target-shaped parent-only term also has a three-term lower-seed
+decomposition. These are still scalar/decomposition diagnostics, not compact
+history promotion, but they identify the finite lower-leaf inputs for the next
+`q_N` history check.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use

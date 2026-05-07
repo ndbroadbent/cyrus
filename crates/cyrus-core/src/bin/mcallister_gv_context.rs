@@ -818,6 +818,7 @@ struct CygvPathSupportTargetMonomialQnSource {
     source_is_seed: Option<bool>,
     source_is_reduced_seed: Option<bool>,
     source_first_generation_seed_sum: Option<CygvSeedSumDecomposition>,
+    source_bounded_seed_decomposition: Option<CygvBoundedSeedDecompositionSummary>,
 }
 
 struct CygvPathSupportTargetLi2SubtractionBalance {
@@ -1186,6 +1187,15 @@ struct CygvResidualQnDomainTermClassification {
     source_is_seed: Option<bool>,
     source_is_reduced_seed: Option<bool>,
     source_first_generation_seed_sum: Option<CygvSeedSumDecomposition>,
+    source_bounded_seed_decomposition: Option<CygvBoundedSeedDecompositionSummary>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CygvBoundedSeedDecompositionSummary {
+    max_terms: usize,
+    status: String,
+    term_count: Option<usize>,
+    terms_nonzero: Option<Vec<Vec<(usize, i64)>>>,
 }
 
 struct PathSupportSourceClassContext {
@@ -2027,6 +2037,8 @@ fn residual_parent_only_qn_term_classifications(
                 &context.covered_toric_gv_by_basis,
                 &context.source_derived_gv_by_basis,
             )?;
+            let source_bounded_seed_decomposition =
+                bounded_seed_decomposition_summary(&curve, seed_set, 4)?;
             Ok(CygvResidualQnDomainTermClassification {
                 exponent_nonzero: term.exponent_nonzero.clone(),
                 coefficient: term.coefficient.clone(),
@@ -2069,6 +2081,7 @@ fn residual_parent_only_qn_term_classifications(
                 source_is_seed: Some(seed_set.contains(&curve)),
                 source_is_reduced_seed: Some(reduced_seed_set.contains(&curve)),
                 source_first_generation_seed_sum,
+                source_bounded_seed_decomposition: Some(source_bounded_seed_decomposition),
             })
         })
         .collect()
@@ -4303,9 +4316,33 @@ fn path_support_target_monomial_qn_sources(
                 source_is_seed: None,
                 source_is_reduced_seed: None,
                 source_first_generation_seed_sum: None,
+                source_bounded_seed_decomposition: None,
             })
         })
         .collect()
+}
+
+fn bounded_seed_decomposition_summary(
+    target: &[i64],
+    seed_set: &HashSet<Vec<i64>>,
+    max_terms: usize,
+) -> Result<CygvBoundedSeedDecompositionSummary, String> {
+    let mut seeds = seed_set.iter().cloned().collect::<Vec<_>>();
+    seeds.sort();
+    match bounded_seed_decomposition(target, &seeds, max_terms)? {
+        Some(terms) => Ok(CygvBoundedSeedDecompositionSummary {
+            max_terms,
+            status: "found_lower_seed_decomposition".to_string(),
+            term_count: Some(terms.len()),
+            terms_nonzero: Some(terms.iter().map(|term| sparse_from_dense(term)).collect()),
+        }),
+        None => Ok(CygvBoundedSeedDecompositionSummary {
+            max_terms,
+            status: format!("not_found_up_to_{max_terms}"),
+            term_count: None,
+            terms_nonzero: None,
+        }),
+    }
 }
 
 fn annotate_target_monomial_qn_sources_with_seed_decompositions(
@@ -4326,6 +4363,8 @@ fn annotate_target_monomial_qn_sources_with_seed_decompositions(
             &context.covered_toric_gv_by_basis,
             &context.source_derived_gv_by_basis,
         )?;
+        source.source_bounded_seed_decomposition =
+            Some(bounded_seed_decomposition_summary(&curve, seed_set, 4)?);
     }
     Ok(())
 }
@@ -15813,6 +15852,12 @@ mod tests {
                 .source_first_generation_seed_sum
                 .is_some()
         );
+        let bounded = classifications[0]
+            .source_bounded_seed_decomposition
+            .as_ref()
+            .expect("parent-only source should include bounded seed decomposition summary");
+        assert_eq!(bounded.status, "found_lower_seed_decomposition");
+        assert_eq!(bounded.term_count, Some(2));
     }
 
     #[test]
@@ -16135,6 +16180,17 @@ mod tests {
         assert_eq!(
             decomposition.seed_known_qn_history_status,
             "unknown_not_toric_covered"
+        );
+        let bounded = sources[0]
+            .source_bounded_seed_decomposition
+            .as_ref()
+            .expect("source should include bounded seed decomposition summary");
+        assert_eq!(bounded.max_terms, 4);
+        assert_eq!(bounded.status, "found_lower_seed_decomposition");
+        assert_eq!(bounded.term_count, Some(2));
+        assert_eq!(
+            bounded.terms_nonzero.as_deref(),
+            Some(&[vec![(1, 1)], vec![(0, 1)]][..])
         );
     }
 
