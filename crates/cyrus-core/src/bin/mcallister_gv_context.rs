@@ -12070,10 +12070,22 @@ fn target_index_selected(index: usize, target_index_filter: Option<usize>) -> bo
     target_index_filter.is_none_or(|selected| selected == index)
 }
 
+fn selected_target_indices(
+    stats: &MissingGvTargetStats,
+    target_index_filter: Option<usize>,
+) -> Vec<usize> {
+    stats
+        .sample
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, _)| target_index_selected(idx, target_index_filter).then_some(idx))
+        .collect()
+}
+
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--trace-support-overlap-qn] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--certify-origin-witness-domains] [--origin-support-certificate-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--scan-local-integer-tensors] [--local-tensor-scan-bound N] [--element-limit N] [--closure-generation-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
+            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--trace-support-overlap-qn] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--certify-origin-witness-domains] [--origin-support-certificate-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--scan-local-integer-tensors] [--local-tensor-scan-bound N] [--element-limit N] [--closure-generation-limit N] [--out path | --per-target-out-dir path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
         );
         std::process::exit(2);
     };
@@ -12109,6 +12121,12 @@ fn main() {
     let element_limit = parse_arg_value::<usize>("--element-limit").unwrap_or(256);
     let closure_generation_limit = parse_arg_value::<usize>("--closure-generation-limit");
     let out_path = parse_arg_value::<PathBuf>("--out");
+    let per_target_out_dir = parse_arg_value::<PathBuf>("--per-target-out-dir");
+
+    if out_path.is_some() && per_target_out_dir.is_some() {
+        eprintln!("[ERROR] use either --out or --per-target-out-dir, not both");
+        std::process::exit(2);
+    }
 
     let context = load_json::<CorrectedChamberGvContext>(&context_path).unwrap_or_else(|e| {
         eprintln!("[ERROR] {e}");
@@ -12118,6 +12136,62 @@ fn main() {
         eprintln!("[ERROR] invalid corrected-chamber GV context: {e}");
         std::process::exit(2);
     });
+    if let Some(out_dir) = per_target_out_dir {
+        std::fs::create_dir_all(&out_dir).unwrap_or_else(|e| {
+            eprintln!(
+                "[ERROR] failed to create per-target report directory {}: {e}",
+                out_dir.display()
+            );
+            std::process::exit(2);
+        });
+        let target_indices = selected_target_indices(validated.stats, target_index_filter);
+        if target_indices.is_empty() {
+            eprintln!("[ERROR] no targets selected by --target-index");
+            std::process::exit(2);
+        }
+        for target_index in target_indices {
+            let report = build_report(
+                &context,
+                &validated,
+                Some(target_index),
+                run_integer_diamonds,
+                run_active_support_generators,
+                support_overlap_min_for_run,
+                support_overlap_max_target_degree,
+                support_overlap_pair_reduce_for_run,
+                trace_support_overlap_qn,
+                certify_origin_support_domains,
+                certify_origin_witness_domains,
+                origin_support_certificate_limit,
+                certify_target_extremal_rays,
+                target_extremal_generator_limit,
+                target_extremal_max_degree,
+                measure_cygv_semigroups,
+                probe_cygv_path_history,
+                run_lower_seed_diamonds,
+                run_path_support_generators,
+                measure_cygv_degree_ladder,
+                cygv_degree_ladder_max_degree,
+                semigroup_measure_max_target_degree,
+                semigroup_measure_max_seed_count,
+                scan_local_integer_tensors,
+                local_tensor_scan_bound,
+                element_limit,
+                closure_generation_limit,
+            );
+            let content = serde_json::to_string_pretty(&report).unwrap_or_else(|e| {
+                eprintln!("[ERROR] failed to serialize context report: {e}");
+                std::process::exit(2);
+            });
+            let path = out_dir.join(format!("target_{target_index}.json"));
+            std::fs::write(&path, content).unwrap_or_else(|e| {
+                eprintln!("[ERROR] failed to write {}: {e}", path.display());
+                std::process::exit(2);
+            });
+            eprintln!("[INFO] wrote {}", path.display());
+        }
+        return;
+    }
     let report = build_report(
         &context,
         &validated,
@@ -13843,6 +13917,42 @@ mod tests {
         assert!(target_index_selected(3, None));
         assert!(target_index_selected(3, Some(3)));
         assert!(!target_index_selected(3, Some(4)));
+    }
+
+    #[test]
+    fn selected_target_indices_preserves_report_order() {
+        fn sample() -> MissingGvTargetSample {
+            MissingGvTargetSample {
+                degree: 0,
+                generators_le_degree: 0,
+                is_mori_generator: false,
+                origin_circuit_pattern: None,
+                origin_circuit_witness_count: None,
+                origin_circuit_first_witness: None,
+                origin_circuit_witnesses: None,
+                origin_circuit_affine_support: None,
+                cms_general_divisor_shape_candidates: None,
+                cms_general_divisor_intersection_checks: None,
+                branch_diagnostic: None,
+                real_cone_decomposable_by_other_generators: false,
+                real_cone_decomposition_active_generators: None,
+                real_cone_decomposition_active_generator_basis_nonzero: None,
+                real_cone_decomposition_exact_coefficients: None,
+                real_cone_decomposition_exact_kind: None,
+                ambient_nonzero: Vec::new(),
+                basis_nonzero: Vec::new(),
+            }
+        }
+
+        let stats = MissingGvTargetStats {
+            target_count: 3,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: vec![sample(), sample(), sample()],
+        };
+
+        assert_eq!(selected_target_indices(&stats, None), vec![0, 1, 2]);
+        assert_eq!(selected_target_indices(&stats, Some(1)), vec![1]);
+        assert!(selected_target_indices(&stats, Some(4)).is_empty());
     }
 
     #[test]
