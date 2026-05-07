@@ -2994,6 +2994,16 @@ a fractional lower raw candidate, a degree-4 non-source-degree-bounded row
 `[(44,2),(54,2),(206,-4)]` with candidate `-1/4`. Thus target `7`'s bounded
 diamonds do not hide a fractional target coefficient analogous to target `8`;
 they are still the wrong compact history because the target readout is zero.
+The target-level report now embeds the local one-parameter unit probe and the
+integer tensor scan next to the compact/path diagnostics. On
+`/tmp/cyrus_gv_context_target8_local_unit_and_tensor_scan_embedded_report.json`,
+target `8`'s oriented local q-matrix `[-1,2,-3,1,1]` gives unit-tensor
+candidate `3`, matching the CMS formula sum `3`, and the bounded scan confirms
+the same match at tensor value `1`. This is explicitly uncertified, but it
+shows that the local charge orientation and unit semigroup can reproduce the
+expected scalar formula while the compact bounded diamond reads the target as
+`4/3`. The remaining gap is therefore the certified local/compact chamber
+tensor history, not a missing one-parameter q-matrix orientation.
 Thus the current blocker is not hidden by a missing scalar source readout: the
 candidate domains contain fractional lower coefficient history and still lack
 a supporting-face/chamber certificate.

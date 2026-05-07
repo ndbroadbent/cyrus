@@ -656,6 +656,14 @@ diamond has a fractional lower degree-4 raw candidate, but it is
 `not_source_degree_bounded_ray`, not the target row. Target `7` therefore still
 needs the correct compact `q_N` history; the bounded diamonds do not provide a
 promotable nonzero target coefficient.
+Target-level reports now embed the local unit probe and integer tensor scan,
+so the local-circuit scalar check can be compared directly with compact
+bounded-diamond traces. For target `8`, the local oriented one-parameter model
+`[-1,2,-3,1,1]` gives unit-tensor candidate `3`, matching the CMS formula sum
+at tensor value `1`, while the compact bounded diamond's target raw GW
+candidate is `4/3`. This keeps the q-matrix orientation in the plausible
+bucket and moves the unresolved discrepancy to certified chamber/intersection
+tensor history.
 
 ## Next Concrete Action
 

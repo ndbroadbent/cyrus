@@ -889,4 +889,12 @@ to make the remaining GV layer more first-principles:
    `zero_or_absent_gw`, with only one unrelated fractional lower degree-4
    candidate. This contrast separates target `8`'s fractional target-row
    failure from target `7`'s zero-history failure.
+   Target reports now embed the local unit probe and local integer tensor
+   scan. For target `8`, that puts the local scalar check next to the compact
+   diamond evidence: the oriented local q-matrix `[-1,2,-3,1,1]` with tensor
+   value `1` gives candidate `3`, matching the CMS formula sum, while the
+   compact bounded diamond reads the target coefficient as `4/3`. The remaining
+   problem is therefore not the one-parameter orientation itself, but the
+   certified chamber/intersection tensor history that would make such a local
+   value promotable in the compact pipeline.
    generators over `7360` occurrences.
