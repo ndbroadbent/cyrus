@@ -2093,6 +2093,21 @@ is not just the nine corrected-chamber target rays: it also involves lower
 degree-six source rays that were not toric-covered and composite closure
 classes that are not source rays at all.
 
+Those uncovered source rays are now aggregated at report level instead of only
+appearing in per-target lookup rows. Rerunning targets `7` and `8` with the same
+one-generation path-history probe gives, for each target,
+`path_support_uncovered_source_ray_unique_count=2`,
+`path_support_uncovered_source_ray_occurrence_count=4`,
+`path_support_uncovered_source_ray_degree_counts={"6":2}`, and
+`path_support_uncovered_source_ray_path_support_gv_counts={"1":2,"-2":2}`.
+Target `7` has degree-six source rays with basis supports
+`[(44,1),(53,-1),(203,1),(206,-1),(207,1)]` and
+`[(54,-2),(203,1),(206,1),(209,1)]`; target `8` has
+`[(53,-1),(203,-1),(206,1),(207,1)]` and the same
+`[(54,-2),(203,1),(206,1),(209,1)]` ray. The shared ray makes the next missing
+compact-GV subproblem explicit: it is a lower-degree source-derived ray queue,
+not just a target-local artifact of the degree-10 rows.
+
 The stable-Weyl/flop-continuation route is now surfaced as a report-level
 readiness count rather than only per-target arrays. On the schema-3 context all
 nine remaining targets have CMS-style formula candidates, but the 14 exact

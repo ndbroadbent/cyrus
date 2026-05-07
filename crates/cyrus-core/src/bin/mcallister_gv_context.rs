@@ -202,6 +202,12 @@ struct ContextReport {
     cygv_path_history_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_decomposition_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_diamond_status_counts: BTreeMap<String, usize>,
+    path_support_uncovered_source_ray_unique_count: usize,
+    path_support_uncovered_source_ray_occurrence_count: usize,
+    path_support_uncovered_source_ray_degree_counts: BTreeMap<i128, usize>,
+    path_support_uncovered_source_ray_lookup_status_counts: BTreeMap<String, usize>,
+    path_support_uncovered_source_ray_path_support_gv_counts: BTreeMap<String, usize>,
+    path_support_uncovered_source_ray_sample: Vec<CygvPathSupportSourceRaySummary>,
     local_cygv_q_matrix_orientation_status_counts: BTreeMap<String, usize>,
     local_cygv_q_matrix_layout_status_counts: BTreeMap<String, usize>,
     local_cygv_origin_point_status_counts: BTreeMap<String, usize>,
@@ -490,6 +496,35 @@ struct CygvPathSupportLookup {
     matching_missing_target_origin_circuit_pattern: Option<String>,
     matching_missing_target_exact_kind: Option<String>,
     curve_nonzero: Vec<(usize, i64)>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CygvPathSupportSourceRaySummary {
+    degree: i128,
+    occurrence_count: usize,
+    known_qn_history_status_counts: BTreeMap<String, usize>,
+    path_support_lookup_status_counts: BTreeMap<String, usize>,
+    path_support_gv_counts: BTreeMap<String, usize>,
+    source_ray_ambient_nonzero: Vec<(usize, i64)>,
+    curve_nonzero: Vec<(usize, i64)>,
+    occurrences: Vec<CygvPathSupportSourceRayOccurrence>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CygvPathSupportSourceRayOccurrence {
+    target_index: usize,
+    candidate_index: usize,
+    side: String,
+}
+
+struct CygvPathSupportSourceRaySummaryBuilder {
+    degree: i128,
+    known_qn_history_status_counts: BTreeMap<String, usize>,
+    path_support_lookup_status_counts: BTreeMap<String, usize>,
+    path_support_gv_counts: BTreeMap<String, usize>,
+    source_ray_ambient_nonzero: Vec<(usize, i64)>,
+    curve_nonzero: Vec<(usize, i64)>,
+    occurrences: Vec<CygvPathSupportSourceRayOccurrence>,
 }
 
 struct PathSupportSourceClassContext {
@@ -1291,6 +1326,121 @@ fn path_support_lookup_status(
         (_, false) => "path_support_zero_or_absent_unrecognized_history_status",
     };
     Ok(status.to_string())
+}
+
+fn path_support_uncovered_source_ray_summaries(
+    targets: &[TargetReport],
+) -> Vec<CygvPathSupportSourceRaySummary> {
+    let mut summaries: BTreeMap<Vec<(usize, i64)>, CygvPathSupportSourceRaySummaryBuilder> =
+        BTreeMap::new();
+    for target in targets {
+        let Some(probe) = target.cygv_path_history_probe.as_ref() else {
+            continue;
+        };
+        for lookup in &probe.path_support_lookup_sample {
+            add_path_support_uncovered_source_ray_lookup(&mut summaries, target.index, lookup);
+        }
+    }
+    let mut out = summaries
+        .into_values()
+        .map(|builder| CygvPathSupportSourceRaySummary {
+            degree: builder.degree,
+            occurrence_count: builder.occurrences.len(),
+            known_qn_history_status_counts: builder.known_qn_history_status_counts,
+            path_support_lookup_status_counts: builder.path_support_lookup_status_counts,
+            path_support_gv_counts: builder.path_support_gv_counts,
+            source_ray_ambient_nonzero: builder.source_ray_ambient_nonzero,
+            curve_nonzero: builder.curve_nonzero,
+            occurrences: builder.occurrences,
+        })
+        .collect::<Vec<_>>();
+    out.sort_by(|lhs, rhs| {
+        lhs.degree
+            .cmp(&rhs.degree)
+            .then_with(|| lhs.curve_nonzero.cmp(&rhs.curve_nonzero))
+    });
+    out
+}
+
+fn add_path_support_uncovered_source_ray_lookup(
+    summaries: &mut BTreeMap<Vec<(usize, i64)>, CygvPathSupportSourceRaySummaryBuilder>,
+    target_index: usize,
+    lookup: &CygvPathSupportLookup,
+) {
+    if lookup.source_class_status != "source_ray_not_toric_covered" {
+        return;
+    }
+    let entry = summaries
+        .entry(lookup.curve_nonzero.clone())
+        .or_insert_with(|| CygvPathSupportSourceRaySummaryBuilder {
+            degree: lookup.degree,
+            known_qn_history_status_counts: BTreeMap::new(),
+            path_support_lookup_status_counts: BTreeMap::new(),
+            path_support_gv_counts: BTreeMap::new(),
+            source_ray_ambient_nonzero: lookup
+                .source_ray_ambient_nonzero
+                .clone()
+                .unwrap_or_default(),
+            curve_nonzero: lookup.curve_nonzero.clone(),
+            occurrences: Vec::new(),
+        });
+    debug_assert_eq!(entry.degree, lookup.degree);
+    *entry
+        .known_qn_history_status_counts
+        .entry(lookup.known_qn_history_status.clone())
+        .or_insert(0) += 1;
+    *entry
+        .path_support_lookup_status_counts
+        .entry(lookup.path_support_lookup_status.clone())
+        .or_insert(0) += 1;
+    *entry
+        .path_support_gv_counts
+        .entry(
+            lookup
+                .path_support_gv
+                .clone()
+                .unwrap_or_else(|| "missing_path_support_gv".to_string()),
+        )
+        .or_insert(0) += 1;
+    entry.occurrences.push(CygvPathSupportSourceRayOccurrence {
+        target_index,
+        candidate_index: lookup.candidate_index,
+        side: lookup.side.clone(),
+    });
+}
+
+fn path_support_uncovered_source_ray_degree_counts(
+    summaries: &[CygvPathSupportSourceRaySummary],
+) -> BTreeMap<i128, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts.entry(summary.degree).or_insert(0) += 1;
+    }
+    counts
+}
+
+fn path_support_uncovered_source_ray_lookup_status_counts(
+    summaries: &[CygvPathSupportSourceRaySummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        for (status, count) in &summary.path_support_lookup_status_counts {
+            *counts.entry(status.clone()).or_insert(0) += count;
+        }
+    }
+    counts
+}
+
+fn path_support_uncovered_source_ray_path_support_gv_counts(
+    summaries: &[CygvPathSupportSourceRaySummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        for (gv, count) in &summary.path_support_gv_counts {
+            *counts.entry(gv.clone()).or_insert(0) += count;
+        }
+    }
+    counts
 }
 
 fn path_candidate_support(
@@ -5313,6 +5463,25 @@ fn build_report(
         }),
         "not_run",
     );
+    let path_support_uncovered_source_ray_sample =
+        path_support_uncovered_source_ray_summaries(&targets);
+    let path_support_uncovered_source_ray_unique_count =
+        path_support_uncovered_source_ray_sample.len();
+    let path_support_uncovered_source_ray_occurrence_count =
+        path_support_uncovered_source_ray_sample
+            .iter()
+            .map(|summary| summary.occurrence_count)
+            .sum();
+    let path_support_uncovered_source_ray_degree_counts =
+        path_support_uncovered_source_ray_degree_counts(&path_support_uncovered_source_ray_sample);
+    let path_support_uncovered_source_ray_lookup_status_counts =
+        path_support_uncovered_source_ray_lookup_status_counts(
+            &path_support_uncovered_source_ray_sample,
+        );
+    let path_support_uncovered_source_ray_path_support_gv_counts =
+        path_support_uncovered_source_ray_path_support_gv_counts(
+            &path_support_uncovered_source_ray_sample,
+        );
     let local_cygv_q_matrix_orientation_status_counts =
         local_cygv_q_matrix_orientation_status_counts(
             targets
@@ -5380,6 +5549,12 @@ fn build_report(
         cygv_path_history_status_counts,
         cygv_lower_seed_decomposition_status_counts,
         cygv_lower_seed_diamond_status_counts,
+        path_support_uncovered_source_ray_unique_count,
+        path_support_uncovered_source_ray_occurrence_count,
+        path_support_uncovered_source_ray_degree_counts,
+        path_support_uncovered_source_ray_lookup_status_counts,
+        path_support_uncovered_source_ray_path_support_gv_counts,
+        path_support_uncovered_source_ray_sample,
         local_cygv_q_matrix_orientation_status_counts,
         local_cygv_q_matrix_layout_status_counts,
         local_cygv_origin_point_status_counts,
@@ -7293,6 +7468,57 @@ mod tests {
         assert!(!sparse_matches_dense(&[(0, 2), (4, 1)], &[2, 0, 0, -1]));
         assert!(!sparse_matches_dense(&[(0, 2), (0, 2)], &[2, 0, 0, -1]));
         assert!(!sparse_matches_dense(&[(0, 0)], &[0]));
+    }
+
+    #[test]
+    fn path_support_uncovered_source_ray_summary_keeps_unique_source_queue() {
+        let mut summaries = BTreeMap::new();
+        let lookup = CygvPathSupportLookup {
+            candidate_index: 2,
+            side: "difference".to_string(),
+            degree: 6,
+            known_qn_history_status: "unknown_not_toric_covered".to_string(),
+            toric_gv: None,
+            path_support_gv: Some("1".to_string()),
+            path_support_lookup_status: "path_support_nonzero_unknown_not_toric_covered"
+                .to_string(),
+            source_class_status: "source_ray_not_toric_covered".to_string(),
+            source_ray_ambient_nonzero: Some(vec![(0, -1), (5, 1)]),
+            matching_missing_target_index: None,
+            matching_missing_target_degree: None,
+            matching_missing_target_origin_circuit_pattern: None,
+            matching_missing_target_exact_kind: None,
+            curve_nonzero: vec![(3, -1), (8, 1)],
+        };
+        add_path_support_uncovered_source_ray_lookup(&mut summaries, 7, &lookup);
+        let repeated_lookup = CygvPathSupportLookup {
+            candidate_index: 5,
+            side: "predecessor".to_string(),
+            path_support_gv: Some("-2".to_string()),
+            ..lookup.clone()
+        };
+        add_path_support_uncovered_source_ray_lookup(&mut summaries, 8, &repeated_lookup);
+        let ignored_lookup = CygvPathSupportLookup {
+            source_class_status: "not_source_degree_bounded_ray".to_string(),
+            curve_nonzero: vec![(9, 1)],
+            ..lookup
+        };
+        add_path_support_uncovered_source_ray_lookup(&mut summaries, 9, &ignored_lookup);
+
+        assert_eq!(summaries.len(), 1);
+        let summary = summaries.get(&vec![(3, -1), (8, 1)]).unwrap();
+        assert_eq!(summary.degree, 6);
+        assert_eq!(summary.occurrences.len(), 2);
+        assert_eq!(
+            summary.known_qn_history_status_counts,
+            BTreeMap::from([("unknown_not_toric_covered".to_string(), 2)])
+        );
+        assert_eq!(
+            summary.path_support_gv_counts,
+            BTreeMap::from([("1".to_string(), 1), ("-2".to_string(), 1)])
+        );
+        assert_eq!(summary.occurrences[0].target_index, 7);
+        assert_eq!(summary.occurrences[1].side, "predecessor");
     }
 
     #[test]

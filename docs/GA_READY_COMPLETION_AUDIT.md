@@ -206,6 +206,13 @@ and matrix-basis pipeline are no longer open.
    non-toric lower classes, but the target remains `GV=0`. These lower-class
    values are therefore diagnostic artifacts of the small domain, not
    promotable compact GV history.
+   The report now also aggregates the uncovered source-ray subset as a unique
+   queue. For each of targets `7` and `8`, the queue has two unique degree-six
+   source rays, four sampled occurrences, and diagnostic small-domain GV counts
+   `{"1":2,"-2":2}`. One degree-six ray,
+   `[(54,-2),(203,1),(206,1),(209,1)]`, appears in both target queues, so the
+   next compact-GV task is shared lower-degree history rather than nine
+   independent final target rows.
    These lower classes are now classified against the exported source-ray
    context: for both degree-10 targets the sampled lookups split as four known
    toric source rays, four non-toric source rays, and eight composite classes

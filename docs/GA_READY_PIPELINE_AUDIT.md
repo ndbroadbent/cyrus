@@ -479,7 +479,12 @@ to make the remaining GV layer more first-principles:
    target has four known toric source-ray lookups, four non-toric source-ray
    lookups, and eight composite/non-source-ray lookups, with no lower lookup
    matching one of the nine direct target rows. The compact history problem is
-   therefore broader than the final target classes themselves.
+   therefore broader than the final target classes themselves. The report now
+   promotes the non-toric source-ray subset into a unique queue: each of targets
+   `7` and `8` has two unique degree-six source rays, four sampled occurrences,
+   and diagnostic small-domain GV counts `{"1":2,"-2":2}`; the source ray
+   `[(54,-2),(203,1),(206,1),(209,1)]` appears in both target queues. This gives
+   the next compact-GV step a concrete shared lower-history target.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.
    The exact classical-data transform is now available as
