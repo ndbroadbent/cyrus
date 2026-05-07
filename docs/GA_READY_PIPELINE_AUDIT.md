@@ -404,7 +404,11 @@ to make the remaining GV layer more first-principles:
    target monomial directly. For both degree-10 targets there are three such
    lower sources: the toric degree-two predecessor, the shared source-derived
    degree-six row, and the unknown degree-eight residual, with target-term
-   coefficients `-2`, `-1`, and `1`. This exposes the series-inversion
+   coefficients `-2`, `-1`, and `1`. The trace now comes from `cygv`'s exact
+   `Li2(q_N)` polynomial after finite monomial-map truncation: the exact Li2
+   target coefficients are `-5/2`, `-1`, and `1`; target `7`'s pivot
+   subtraction coefficients are `5`, `0`, and `-2`, while target `8`'s are
+   `-10`, `2`, and `2`. This exposes the series-inversion
    cancellation/history that must be reproduced in a certified chamber.
    A direct cygv semigroup-size diagnostic now confirms why: the degree-10
    missing targets already have `720` seed rows at or below the target degree,

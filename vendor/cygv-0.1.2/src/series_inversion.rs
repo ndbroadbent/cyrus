@@ -28,11 +28,37 @@ pub struct QnPolynomialTrace<T> {
     pub degree: u32,
     pub element: Vec<i32>,
     pub terms: Vec<QnPolynomialTerm<T>>,
+    pub li2_terms: Vec<QnPolynomialTerm<T>>,
+}
+
+fn trace_polynomial_terms<T>(
+    polynomial: &Polynomial<T>,
+    poly_props: &PolynomialProperties<T>,
+) -> Vec<QnPolynomialTerm<T>>
+where
+    T: PolynomialCoeff<T>,
+{
+    polynomial
+        .nonzero
+        .iter()
+        .map(|&monomial_index| QnPolynomialTerm {
+            monomial_index,
+            exponent: poly_props
+                .semigroup
+                .elements
+                .column(monomial_index)
+                .iter()
+                .copied()
+                .collect(),
+            coefficient: polynomial.coeffs[&monomial_index].clone(),
+        })
+        .collect()
 }
 
 fn trace_qn_polynomial<T>(
     element_index: usize,
     qn: &Polynomial<T>,
+    li2qn: &Polynomial<T>,
     poly_props: &PolynomialProperties<T>,
 ) -> QnPolynomialTrace<T>
 where
@@ -45,26 +71,12 @@ where
         .iter()
         .copied()
         .collect();
-    let terms = qn
-        .nonzero
-        .iter()
-        .map(|&monomial_index| QnPolynomialTerm {
-            monomial_index,
-            exponent: poly_props
-                .semigroup
-                .elements
-                .column(monomial_index)
-                .iter()
-                .copied()
-                .collect(),
-            coefficient: qn.coeffs[&monomial_index].clone(),
-        })
-        .collect();
     QnPolynomialTrace {
         element_index,
         degree: poly_props.semigroup.degrees[element_index],
         element,
-        terms,
+        terms: trace_polynomial_terms(qn, poly_props),
+        li2_terms: trace_polynomial_terms(li2qn, poly_props),
     }
 }
 
@@ -397,7 +409,7 @@ where
                 };
                 computed_qn.insert(j, qn.clone(main_pool));
                 if collect_qn_trace {
-                    qn_trace.push(trace_qn_polynomial(j, &qn, poly_props));
+                    qn_trace.push(trace_qn_polynomial(j, &qn, &li2qn, poly_props));
                 }
                 if IS_THREEFOLD {
                     for (k, inst_k) in inst.iter_mut().enumerate() {

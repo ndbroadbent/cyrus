@@ -726,6 +726,11 @@ struct CygvPathSupportTargetMonomialQnSource {
     target_term_count: usize,
     target_term_monomial_indices: Vec<usize>,
     target_term_coefficients: Vec<String>,
+    target_li2_coefficient_status: String,
+    target_li2_coefficient: Option<String>,
+    target_pivot_coordinate: Option<usize>,
+    source_component_at_target_pivot: Option<i32>,
+    pivot_li2_subtraction_coefficient: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -3188,6 +3193,7 @@ fn path_support_target_monomial_qn_sources(
     gvs_by_curve: &HashMap<Vec<i32>, String>,
     target: &[i32],
 ) -> Vec<CygvPathSupportTargetMonomialQnSource> {
+    let target_pivot_coordinate = target.iter().position(|&value| value != 0);
     qn_trace
         .iter()
         .filter_map(|poly| {
@@ -3199,11 +3205,40 @@ fn path_support_target_monomial_qn_sources(
             if target_terms.is_empty() {
                 return None;
             }
+            let li2_coefficient = poly
+                .li2_terms
+                .iter()
+                .filter(|term| term.exponent.as_slice() == target)
+                .try_fold(MalachiteRational::from(0), |acc, term| {
+                    parse_rational(&term.coefficient).map(|coefficient| acc + coefficient)
+                });
+            let (target_li2_coefficient_status, li2_coefficient) = match li2_coefficient {
+                Ok(value) => (
+                    "target_li2_coefficient_from_cygv_trace".to_string(),
+                    Some(value),
+                ),
+                Err(error) => (format!("target_li2_coefficient_error: {error}"), None),
+            };
+            let curve_gv = gvs_by_curve.get(&poly.element).cloned();
+            let (source_component_at_target_pivot, pivot_li2_subtraction_coefficient) = match (
+                target_pivot_coordinate,
+                curve_gv.as_deref().map(parse_rational).transpose(),
+                li2_coefficient.as_ref(),
+            ) {
+                (Some(pivot), Ok(Some(gv)), Some(li2)) => {
+                    let component = poly.element.get(pivot).copied().unwrap_or_default();
+                    let coefficient =
+                        gv * MalachiteRational::from(Integer::from(component)) * li2.clone();
+                    (Some(component), Some(coefficient.to_string()))
+                }
+                (Some(pivot), _, _) => (poly.element.get(pivot).copied(), None),
+                (None, _, _) => (None, None),
+            };
             Some(CygvPathSupportTargetMonomialQnSource {
                 element_index: poly.element_index,
                 degree: poly.degree,
                 curve_nonzero: sparse_from_i32_dense(&poly.element),
-                curve_gv: gvs_by_curve.get(&poly.element).cloned(),
+                curve_gv,
                 term_count: poly.terms.len(),
                 target_term_count: target_terms.len(),
                 target_term_monomial_indices: target_terms
@@ -3214,6 +3249,11 @@ fn path_support_target_monomial_qn_sources(
                     .iter()
                     .map(|term| term.coefficient.clone())
                     .collect(),
+                target_li2_coefficient_status,
+                target_li2_coefficient: li2_coefficient.map(|value| value.to_string()),
+                target_pivot_coordinate,
+                source_component_at_target_pivot,
+                pivot_li2_subtraction_coefficient,
             })
         })
         .collect()
@@ -13514,6 +13554,18 @@ mod tests {
             probe.target_monomial_qn_source_sample[0].target_term_coefficients,
             vec!["1"]
         );
+        assert_eq!(
+            probe.target_monomial_qn_source_sample[0]
+                .target_li2_coefficient
+                .as_deref(),
+            Some("1")
+        );
+        assert_eq!(
+            probe.target_monomial_qn_source_sample[0]
+                .pivot_li2_subtraction_coefficient
+                .as_deref(),
+            Some("2875")
+        );
     }
 
     #[test]
@@ -13540,6 +13592,11 @@ mod tests {
                         coefficient: "1".to_string(),
                     },
                 ],
+                li2_terms: vec![CygvQnTraceTerm {
+                    monomial_index: 11,
+                    exponent: vec![2, -3, 1],
+                    coefficient: "-1".to_string(),
+                }],
             },
             CygvQnTracePolynomial {
                 element_index: 9,
@@ -13550,6 +13607,7 @@ mod tests {
                     exponent: vec![0, 1, -1],
                     coefficient: "1".to_string(),
                 }],
+                li2_terms: Vec::new(),
             },
         ];
         let mut gvs_by_curve = HashMap::new();
@@ -13566,6 +13624,51 @@ mod tests {
         assert_eq!(sources[0].target_term_count, 2);
         assert_eq!(sources[0].target_term_monomial_indices, vec![11, 13]);
         assert_eq!(sources[0].target_term_coefficients, vec!["-2", "1"]);
+        assert_eq!(
+            sources[0].target_li2_coefficient_status,
+            "target_li2_coefficient_from_cygv_trace"
+        );
+        assert_eq!(sources[0].target_li2_coefficient.as_deref(), Some("-1"));
+        assert_eq!(sources[0].target_pivot_coordinate, Some(0));
+        assert_eq!(sources[0].source_component_at_target_pivot, Some(1));
+        assert_eq!(
+            sources[0].pivot_li2_subtraction_coefficient.as_deref(),
+            Some("2")
+        );
+    }
+
+    #[test]
+    fn path_support_target_monomial_sources_use_cygv_li2_trace() {
+        let trace = vec![CygvQnTracePolynomial {
+            element_index: 1,
+            degree: 1,
+            element: vec![1],
+            terms: vec![CygvQnTraceTerm {
+                monomial_index: 2,
+                exponent: vec![2],
+                coefficient: "2".to_string(),
+            }],
+            li2_terms: vec![CygvQnTraceTerm {
+                monomial_index: 2,
+                exponent: vec![2],
+                coefficient: "9/4".to_string(),
+            }],
+        }];
+        let mut gvs_by_curve = HashMap::new();
+        gvs_by_curve.insert(vec![1], "3".to_string());
+
+        let sources = path_support_target_monomial_qn_sources(&trace, &gvs_by_curve, &[2]);
+
+        assert_eq!(sources.len(), 1);
+        assert_eq!(
+            sources[0].target_li2_coefficient_status,
+            "target_li2_coefficient_from_cygv_trace"
+        );
+        assert_eq!(sources[0].target_li2_coefficient.as_deref(), Some("9/4"));
+        assert_eq!(
+            sources[0].pivot_li2_subtraction_coefficient.as_deref(),
+            Some("27/4")
+        );
     }
 
     #[test]

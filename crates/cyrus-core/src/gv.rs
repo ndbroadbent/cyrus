@@ -73,6 +73,8 @@ pub struct CygvQnTracePolynomial {
     pub element: Vec<i32>,
     /// Nonzero terms of the `q_N` polynomial.
     pub terms: Vec<CygvQnTraceTerm>,
+    /// Nonzero terms of `Li2(q_N)` after cygv's finite monomial-map truncation.
+    pub li2_terms: Vec<CygvQnTraceTerm>,
 }
 
 /// GV output together with the compact `q_N` polynomials cygv materialized.
@@ -11974,6 +11976,15 @@ fn compute_cygv_rat_threefold_raw_from_semigroup_unchecked(
                     coefficient: term.coefficient.to_string(),
                 })
                 .collect(),
+            li2_terms: poly
+                .li2_terms
+                .into_iter()
+                .map(|term| CygvQnTraceTerm {
+                    monomial_index: term.monomial_index,
+                    exponent: term.exponent,
+                    coefficient: term.coefficient.to_string(),
+                })
+                .collect(),
         })
         .collect();
 
@@ -16770,6 +16781,14 @@ mod tests {
                 coefficient: "1".to_string(),
             }]
         );
+        assert_eq!(
+            traced.qn_trace[0].li2_terms,
+            vec![CygvQnTraceTerm {
+                monomial_index: 1,
+                exponent: vec![1],
+                coefficient: "1".to_string(),
+            }]
+        );
     }
 
     #[test]
@@ -16806,6 +16825,7 @@ mod tests {
         assert_eq!(traced.qn_trace.len(), 1);
         assert_eq!(traced.qn_trace[0].element, vec![1]);
         assert_eq!(traced.qn_trace[0].terms.len(), 1);
+        assert_eq!(traced.qn_trace[0].li2_terms.len(), 1);
     }
 
     #[test]
