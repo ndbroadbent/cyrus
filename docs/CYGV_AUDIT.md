@@ -2332,17 +2332,19 @@ this source-derived split directly:
 {"origin_omitted_compact_threefold_hypersurface_shape":5,
 "origin_omitted_cy_dim_2_not_compact_threefold":4}`. Thus the nine unresolved
 origin circuits are no longer a single local-phase bucket: five have a
-CYTools-style no-origin compact-threefold `q` shape, while four require a
-different local/noncompact or chamber-continuation construction.
+CYTools-style no-origin dimension-three `q` shape with nonzero charge sum, while
+four require a different local/noncompact or chamber-continuation construction.
+The phase selector now labels those five no-origin rows as non-Calabi-Yau
+diagnostics rather than compact CY threefold handoffs.
 The same report runs a target-level unit-tensor phase probe against the CMS
 formula candidate set without using that set to choose a value. The
 origin-included unit tensor matches the formula set for the four CY-dimension-2
 rows (`unit_tensor_probe_matches_expected_formula_set_but_uncertified=4`) and
-mismatches for the five compact no-origin rows. Conversely, origin omission
-matches only one compact no-origin target and mismatches the other four compact
-no-origin targets, while the four CY-dimension-2 rows hit the expected `cygv`
-dimension guard. This rules out a single origin-column convention or unit
-normalization as the whole remaining GV solution.
+mismatches for the five no-origin diagnostic rows. Conversely, origin omission
+matches only one no-origin target and mismatches the other four no-origin
+targets, while the four CY-dimension-2 rows hit the expected `cygv` dimension
+guard. This rules out a single origin-column convention or unit normalization as
+the whole remaining GV solution.
 These are source-derived local-intersection candidates, not a certified local
 `cygv` intersection tensor yet, so the skeleton still lists the missing
 `local_q_matrix_phase`, `local_intersection_tensor`, and

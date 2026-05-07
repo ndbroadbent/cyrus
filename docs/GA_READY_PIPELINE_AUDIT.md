@@ -767,12 +767,14 @@ to make the remaining GV layer more first-principles:
    column explains the
    resolved-conifold-like `[-1,1,-1,1,-1,1]` lower ray. These are still
    phase/chamber diagnostics, not promoted GV values. Across all nine
-   unresolved origin circuits, the origin-omitted shape aggregate now reports
-   five compact-threefold-shaped no-origin rows and four CY-dimension-2 rows.
-   The target-level unit-tensor phase probe matches the four CY-dimension-2
-   rows in the origin-included convention and only one compact no-origin row in
-   the origin-omitted convention; the other four compact no-origin rows still
-   mismatch their formula candidate sets.
+   unresolved origin circuits, the origin-omitted shape aggregate reports five
+   dimension-three no-origin rows and four CY-dimension-2 rows. The phase
+   selector now labels those five no-origin rows as non-Calabi-Yau diagnostics,
+   not compact CY threefold handoffs, because their charge sums are nonzero. The
+   target-level unit-tensor phase probe matches the four CY-dimension-2 rows in
+   the origin-included convention and only one no-origin diagnostic row in the
+   origin-omitted convention; the other four no-origin rows still mismatch their
+   formula candidate sets.
    The follow-up opt-in local integer tensor scan confirms this is not just a
    missing scalar normalization: with tensor values scanned over `-8..8`, four
    of the nine targets match their CMS formula candidate at tensor value `1`,

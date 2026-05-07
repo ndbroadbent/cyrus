@@ -9133,36 +9133,72 @@ fn local_cygv_q_matrix_phase_candidate(
     };
     let mut candidates = Vec::new();
     if local_cygv_q_matrix_cy_dimension(wrapper_q_matrix) == Some(3) {
-        candidates.push((
-            "including_origin",
-            wrapper_q_matrix
+        candidates.push(LocalCygvPhaseCandidate {
+            label: "including_origin",
+            q_matrix: wrapper_q_matrix
                 .iter()
                 .map(std::clone::Clone::clone)
                 .collect::<Vec<_>>(),
-        ));
+            is_calabi_yau_charge: local_cygv_q_matrix_is_calabi_yau_charge(wrapper_q_matrix),
+        });
     }
     if let Ok(Some(origin_omitted)) =
         local_origin_omitted_wrapper_q_matrix_from_parts(support_point_indices, wrapper_q_matrix)
     {
         if local_cygv_q_matrix_cy_dimension(&origin_omitted) == Some(3) {
-            candidates.push(("omitting_origin", origin_omitted));
+            candidates.push(LocalCygvPhaseCandidate {
+                label: "omitting_origin",
+                is_calabi_yau_charge: local_cygv_q_matrix_is_calabi_yau_charge(&origin_omitted),
+                q_matrix: origin_omitted,
+            });
         }
     }
 
-    match candidates.as_slice() {
-        [] => (
+    let cy_candidates = candidates
+        .iter()
+        .filter(|candidate| candidate.is_calabi_yau_charge)
+        .collect::<Vec<_>>();
+    match cy_candidates.as_slice() {
+        [candidate] => (
+            Some(candidate.q_matrix.clone()),
+            format!(
+                "source_derived_unique_compact_threefold_phase_{}",
+                candidate.label
+            ),
+        ),
+        [_, _, ..] => (
             None,
-            "local_q_matrix_phase_blocked_no_compact_threefold_phase".to_string(),
+            "local_q_matrix_phase_ambiguous_multiple_calabi_yau_threefold_phases".to_string(),
         ),
-        [(label, matrix)] => (
-            Some(matrix.clone()),
-            format!("source_derived_unique_compact_threefold_phase_{label}"),
-        ),
-        _ => (
-            None,
-            "local_q_matrix_phase_ambiguous_multiple_compact_threefold_phases".to_string(),
-        ),
+        [] => match candidates.as_slice() {
+            [] => (
+                None,
+                "local_q_matrix_phase_blocked_no_dimension_three_phase".to_string(),
+            ),
+            [candidate] => (
+                Some(candidate.q_matrix.clone()),
+                format!(
+                    "source_derived_unique_dimension_three_non_calabi_yau_phase_{}",
+                    candidate.label
+                ),
+            ),
+            _ => (
+                None,
+                "local_q_matrix_phase_ambiguous_multiple_non_calabi_yau_dimension_three_phases"
+                    .to_string(),
+            ),
+        },
     }
+}
+
+struct LocalCygvPhaseCandidate {
+    label: &'static str,
+    q_matrix: Vec<Vec<i64>>,
+    is_calabi_yau_charge: bool,
+}
+
+fn local_cygv_q_matrix_is_calabi_yau_charge(q_matrix: &[Vec<i64>]) -> bool {
+    q_matrix.iter().all(|row| row.iter().sum::<i64>() == 0)
 }
 
 fn local_cygv_q_matrix_cy_dimension(q_matrix: &[Vec<i64>]) -> Option<i64> {
@@ -16685,6 +16721,30 @@ mod tests {
         assert_eq!(
             candidates[1].target_candidate_status,
             "target_not_in_nonnegative_local_semigroup"
+        );
+    }
+
+    #[test]
+    fn local_cygv_phase_candidate_labels_non_calabi_yau_dimension_three_phase() {
+        let (phase_q_matrix, phase_status) = local_cygv_q_matrix_phase_candidate(
+            &[0, 55, 56, 202, 208, 211],
+            Some(&[vec![-2, -1, -2, 1, 2, 2]]),
+        );
+
+        assert_eq!(phase_q_matrix, Some(vec![vec![-1, -2, 1, 2, 2]]));
+        assert_eq!(
+            phase_status,
+            "source_derived_unique_dimension_three_non_calabi_yau_phase_omitting_origin"
+        );
+
+        let (phase_q_matrix, phase_status) = local_cygv_q_matrix_phase_candidate(
+            &[0, 2, 208, 211, 214],
+            Some(&[vec![-1, 2, -3, 1, 1]]),
+        );
+        assert_eq!(phase_q_matrix, Some(vec![vec![-1, 2, -3, 1, 1]]));
+        assert_eq!(
+            phase_status,
+            "source_derived_unique_compact_threefold_phase_including_origin"
         );
     }
 
