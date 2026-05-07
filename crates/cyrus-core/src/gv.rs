@@ -8570,56 +8570,67 @@ pub fn diagnose_supporting_mori_face_by_lp_search(
         }
     }
 
-    if let Some(lp_normal) =
-        solve_supporting_face_normal_aggregate_lp(face_generators, mori_generators, options)?
-    {
-        if let Some(certificate) = integer_supporting_face_certificate_from_lp(
-            &lp_normal,
-            face_generators,
-            mori_generators,
-            options,
-        )? {
-            diagnostic.status = "certified_aggregate_lp".to_string();
-            diagnostic.aggregate_status = "certified".to_string();
-            diagnostic.certificate = Some(certificate);
-            return Ok(diagnostic);
+    match solve_supporting_face_normal_aggregate_lp_detailed(
+        face_generators,
+        mori_generators,
+        options,
+    )? {
+        SupportingFaceLpNormalSearchOutcome::Found(lp_normal) => {
+            if let Some(certificate) = integer_supporting_face_certificate_from_lp(
+                &lp_normal,
+                face_generators,
+                mori_generators,
+                options,
+            )? {
+                diagnostic.status = "certified_aggregate_lp".to_string();
+                diagnostic.aggregate_status = "certified".to_string();
+                diagnostic.certificate = Some(certificate);
+                return Ok(diagnostic);
+            }
+            diagnostic.aggregate_status = "lp_solution_rounding_no_certificate".to_string();
         }
-        diagnostic.aggregate_status = "lp_solution_rounding_no_certificate".to_string();
-    } else {
-        diagnostic.aggregate_status = "lp_no_solution_or_cutting_exhausted".to_string();
+        other => {
+            diagnostic.aggregate_status = other.status().to_string();
+        }
     }
 
     let anchors = supporting_face_anchor_candidates(face_generators, mori_generators, options)?;
     for anchor in anchors {
         diagnostic.anchor_attempt_count += 1;
-        let Some(lp_normal) =
-            solve_supporting_face_normal_lp(face_generators, mori_generators, &anchor, options)?
-        else {
-            *diagnostic
-                .anchor_status_counts
-                .entry("lp_no_solution_or_cutting_exhausted".to_string())
-                .or_insert(0) += 1;
-            continue;
-        };
-        diagnostic.anchor_lp_solution_count += 1;
-        if let Some(certificate) = integer_supporting_face_certificate_from_lp(
-            &lp_normal,
+        match solve_supporting_face_normal_lp_detailed(
             face_generators,
             mori_generators,
+            &anchor,
             options,
         )? {
-            *diagnostic
-                .anchor_status_counts
-                .entry("certified".to_string())
-                .or_insert(0) += 1;
-            diagnostic.status = "certified_anchor_lp".to_string();
-            diagnostic.certificate = Some(certificate);
-            return Ok(diagnostic);
+            SupportingFaceLpNormalSearchOutcome::Found(lp_normal) => {
+                diagnostic.anchor_lp_solution_count += 1;
+                if let Some(certificate) = integer_supporting_face_certificate_from_lp(
+                    &lp_normal,
+                    face_generators,
+                    mori_generators,
+                    options,
+                )? {
+                    *diagnostic
+                        .anchor_status_counts
+                        .entry("certified".to_string())
+                        .or_insert(0) += 1;
+                    diagnostic.status = "certified_anchor_lp".to_string();
+                    diagnostic.certificate = Some(certificate);
+                    return Ok(diagnostic);
+                }
+                *diagnostic
+                    .anchor_status_counts
+                    .entry("lp_solution_rounding_no_certificate".to_string())
+                    .or_insert(0) += 1;
+            }
+            other => {
+                *diagnostic
+                    .anchor_status_counts
+                    .entry(other.status().to_string())
+                    .or_insert(0) += 1;
+            }
         }
-        *diagnostic
-            .anchor_status_counts
-            .entry("lp_solution_rounding_no_certificate".to_string())
-            .or_insert(0) += 1;
     }
 
     diagnostic.status = "lp_no_certificate".to_string();
@@ -8698,11 +8709,29 @@ fn supporting_face_anchor_candidates(
     Ok(anchors)
 }
 
-fn solve_supporting_face_normal_aggregate_lp(
+enum SupportingFaceLpNormalSearchOutcome {
+    Found(Vec<f64>),
+    LpNoSolution,
+    RepeatedViolation,
+    CuttingRoundLimit,
+}
+
+impl SupportingFaceLpNormalSearchOutcome {
+    fn status(&self) -> &'static str {
+        match self {
+            Self::Found(_) => "lp_solution",
+            Self::LpNoSolution => "lp_no_solution",
+            Self::RepeatedViolation => "lp_repeated_violation",
+            Self::CuttingRoundLimit => "lp_cutting_round_limit",
+        }
+    }
+}
+
+fn solve_supporting_face_normal_aggregate_lp_detailed(
     face_generators: &[Vec<i64>],
     mori_generators: &[Vec<i64>],
     options: &SupportingMoriFaceLpSearchOptions,
-) -> Result<Option<Vec<f64>>> {
+) -> Result<SupportingFaceLpNormalSearchOutcome> {
     let aggregate = aggregate_mori_ray_coefficients(mori_generators)?;
     let mut enforced_ray_indices = Vec::new();
     let mut enforced_ray_set = HashSet::new();
@@ -8715,18 +8744,18 @@ fn solve_supporting_face_normal_aggregate_lp(
             options,
         )?
         else {
-            return Ok(None);
+            return Ok(SupportingFaceLpNormalSearchOutcome::LpNoSolution);
         };
         let Some(violating_idx) = most_negative_lp_normal_violation(&normal, mori_generators)
         else {
-            return Ok(Some(normal));
+            return Ok(SupportingFaceLpNormalSearchOutcome::Found(normal));
         };
         if !enforced_ray_set.insert(violating_idx) {
-            return Ok(None);
+            return Ok(SupportingFaceLpNormalSearchOutcome::RepeatedViolation);
         }
         enforced_ray_indices.push(violating_idx);
     }
-    Ok(None)
+    Ok(SupportingFaceLpNormalSearchOutcome::CuttingRoundLimit)
 }
 
 fn aggregate_mori_ray_coefficients(mori_generators: &[Vec<i64>]) -> Result<Vec<i128>> {
@@ -8784,12 +8813,12 @@ fn solve_supporting_face_normal_aggregate_lp_with_enforced_rays(
     solve_supporting_face_normal_lp_model(model, &normal_vars.normal)
 }
 
-fn solve_supporting_face_normal_lp(
+fn solve_supporting_face_normal_lp_detailed(
     face_generators: &[Vec<i64>],
     mori_generators: &[Vec<i64>],
     anchor: &[i64],
     options: &SupportingMoriFaceLpSearchOptions,
-) -> Result<Option<Vec<f64>>> {
+) -> Result<SupportingFaceLpNormalSearchOutcome> {
     let mut enforced_ray_indices = Vec::new();
     let mut enforced_ray_set = HashSet::new();
     for _ in 0..options.cutting_rounds {
@@ -8801,18 +8830,18 @@ fn solve_supporting_face_normal_lp(
             options,
         )?
         else {
-            return Ok(None);
+            return Ok(SupportingFaceLpNormalSearchOutcome::LpNoSolution);
         };
         let Some(violating_idx) = most_negative_lp_normal_violation(&normal, mori_generators)
         else {
-            return Ok(Some(normal));
+            return Ok(SupportingFaceLpNormalSearchOutcome::Found(normal));
         };
         if !enforced_ray_set.insert(violating_idx) {
-            return Ok(None);
+            return Ok(SupportingFaceLpNormalSearchOutcome::RepeatedViolation);
         }
         enforced_ray_indices.push(violating_idx);
     }
-    Ok(None)
+    Ok(SupportingFaceLpNormalSearchOutcome::CuttingRoundLimit)
 }
 
 fn solve_supporting_face_normal_lp_with_enforced_rays(
@@ -15423,10 +15452,7 @@ mod tests {
         assert_eq!(diagnostic.dim, 2);
         assert_eq!(diagnostic.status, "lp_no_certificate");
         assert_eq!(diagnostic.exact_kernel_status, "no_certificate");
-        assert_eq!(
-            diagnostic.aggregate_status,
-            "lp_no_solution_or_cutting_exhausted"
-        );
+        assert_eq!(diagnostic.aggregate_status, "lp_no_solution");
         assert_eq!(diagnostic.anchor_attempt_count, 0);
         assert!(diagnostic.certificate.is_none());
     }

@@ -2905,13 +2905,19 @@ failures. Regenerating
 `/tmp/cyrus_gv_context_target8_lp_diagnostic_report.json` shows all four
 offset-generator candidate domains have `lp_search_status=lp_no_certificate`,
 `exact_kernel_status=no_certificate`, and
-`aggregate_status=lp_no_solution_or_cutting_exhausted`. Each then tries all
-`16` bounded anchor rays, with `anchor_lp_solution_count=0` and
-`anchor_status_counts={"lp_no_solution_or_cutting_exhausted":16}`. So the
-current failure is not integer rounding/scaling of a real LP normal: the
-bounded aggregate and anchor LP phases do not find a real supporting normal for
-these candidate generator sets. This remains an inconclusive bounded search,
-not a theorem that no chamber face exists.
+`aggregate_status=lp_cutting_round_limit` at the default `64` cutting rounds.
+Each then tries all `16` bounded anchor rays, with `anchor_lp_solution_count=0`
+and `anchor_status_counts={"lp_cutting_round_limit":16}`. Raising the probe
+with `--supporting-face-lp-cutting-rounds 256` sharpens this: the degree-eight
+candidate domains for both targets reach aggregate `lp_no_solution`, while the
+shared degree-six source domain still hits the aggregate cutting-round limit.
+The anchor attempts still produce no real normal: target `7` has anchor counts
+`{lp_no_solution:13, lp_cutting_round_limit:3}` for degree six and
+`{lp_no_solution:11, lp_cutting_round_limit:5}` for degree eight; target `8`
+has `{lp_no_solution:11, lp_cutting_round_limit:5}` for both rows. So the
+current failure is not integer rounding/scaling of a real LP normal. This
+remains an inconclusive bounded search, not a theorem that no chamber face
+exists.
 The offset-generator report now also serializes the generator degree buckets,
 sparse generator samples, and a raw `FIND_GV=false` GW coefficient trace for
 the same provided-generator domain. Regenerating target `7` and `8` reports

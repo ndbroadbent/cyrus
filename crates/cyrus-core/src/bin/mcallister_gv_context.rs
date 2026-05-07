@@ -4704,6 +4704,7 @@ fn annotate_target_monomial_qn_sources_with_seed_decompositions(
     seed_set: &HashSet<Vec<i64>>,
     reduced_seed_set: &HashSet<Vec<i64>>,
     context: &ValidatedContext<'_>,
+    supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
 ) -> Result<(), String> {
     for source in sources {
         let curve = dense_from_sparse(&source.curve_nonzero, context.dimension)?;
@@ -4739,7 +4740,11 @@ fn annotate_target_monomial_qn_sources_with_seed_decompositions(
         source.source_parent_qn_term_seed_expanded_semigroup_probe =
             source_parent_qn_term_seed_expanded_semigroup_probe(source, context, seed_set)?;
         source.source_parent_qn_term_offset_generator_probe =
-            source_parent_qn_term_offset_generator_probe(source, context)?;
+            source_parent_qn_term_offset_generator_probe(
+                source,
+                context,
+                supporting_face_lp_options,
+            )?;
     }
     Ok(())
 }
@@ -4968,6 +4973,7 @@ fn source_parent_qn_term_seed_expanded_semigroup_probe(
 fn source_parent_qn_term_offset_generator_probe(
     source: &CygvPathSupportTargetMonomialQnSource,
     context: &ValidatedContext<'_>,
+    supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
 ) -> Result<Option<CygvSourceQnTermSemigroupProbe>, String> {
     if source
         .source_bounded_diamond_parent_qn_comparison_status
@@ -4987,6 +4993,7 @@ fn source_parent_qn_term_offset_generator_probe(
         max_degree,
         "computed_source_qn_term_offset_generators",
         "source qN-term offset generators",
+        supporting_face_lp_options,
     )
 }
 
@@ -5067,6 +5074,7 @@ fn source_qn_term_offset_generators(
 fn source_qn_term_generator_face_certificate(
     generators: &[Vec<i64>],
     context: &ValidatedContext<'_>,
+    supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
 ) -> Result<CygvSourceQnTermGeneratorFaceCertificate, String> {
     if generators.is_empty() {
         return Ok(CygvSourceQnTermGeneratorFaceCertificate {
@@ -5155,11 +5163,10 @@ fn source_qn_term_generator_face_certificate(
         };
     }
 
-    let options = SupportingMoriFaceLpSearchOptions::default();
     match diagnose_supporting_mori_face_by_lp_search(
         generators,
         context.degree_bounded_rays,
-        &options,
+        supporting_face_lp_options,
     ) {
         Ok(diagnostic) => {
             let certificate = diagnostic.certificate.as_ref();
@@ -5242,12 +5249,17 @@ fn source_qn_term_provided_generator_probe_from_generators(
     max_degree: i128,
     computed_status: &str,
     error_label: &str,
+    supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
 ) -> Result<Option<CygvSourceQnTermSemigroupProbe>, String> {
     let source_curve = dense_from_sparse(&source.curve_nonzero, context.dimension)?;
     let generator_degree_counts =
         path_support_generator_degree_counts(&generators, context.grading)?;
     let generator_nonzero_sample = path_support_generator_nonzero_sample(&generators);
-    let face_certificate = source_qn_term_generator_face_certificate(&generators, context)?;
+    let face_certificate = source_qn_term_generator_face_certificate(
+        &generators,
+        context,
+        supporting_face_lp_options,
+    )?;
     if generators.len() > CYGV_BOUNDED_DECOMPOSITION_DIAMOND_ELEMENT_LIMIT {
         return Ok(Some(CygvSourceQnTermSemigroupProbe {
             element_count: None,
@@ -9089,6 +9101,7 @@ fn report_target(
     >,
     element_limit: usize,
     closure_generation_limit: Option<usize>,
+    supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
 ) -> TargetReport {
     let exact_kind = sample.real_cone_decomposition_exact_kind.clone();
     let active_generator_count = sample
@@ -9736,6 +9749,7 @@ fn report_target(
                 element_limit,
                 semigroup_measure_max_seed_count,
                 closure_generation_limit,
+                supporting_face_lp_options,
             ))
         }
     } else {
@@ -10228,6 +10242,7 @@ fn cygv_path_history_probe(
     element_limit: usize,
     max_seed_count: Option<usize>,
     closure_generation_limit: Option<usize>,
+    supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
 ) -> CygvPathHistoryProbe {
     match cygv_path_history_probe_inner(
         sample,
@@ -10238,6 +10253,7 @@ fn cygv_path_history_probe(
         element_limit,
         max_seed_count,
         closure_generation_limit,
+        supporting_face_lp_options,
     ) {
         Ok(probe) => probe,
         Err(error) => CygvPathHistoryProbe {
@@ -10347,6 +10363,7 @@ fn cygv_path_history_probe_inner(
     element_limit: usize,
     max_seed_count: Option<usize>,
     closure_generation_limit: Option<usize>,
+    supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
 ) -> Result<CygvPathHistoryProbe, String> {
     let previous_level_count = cygv_previous_level_count(context.dimension);
     let mut seeds = Vec::new();
@@ -10617,6 +10634,7 @@ fn cygv_path_history_probe_inner(
             &seen,
             &reduced_seeds,
             context,
+            supporting_face_lp_options,
         )?;
     }
     let mut path_support_generators = path_support_generator_probe(
@@ -10631,6 +10649,7 @@ fn cygv_path_history_probe_inner(
         &seen,
         &reduced_seeds,
         context,
+        supporting_face_lp_options,
     )?;
     let expected_formula_values = sample_expected_toric_gv1_formula_values(sample);
     let expected_formula_sum = sample_expected_toric_gv1_formula_value_sum(sample);
@@ -12466,6 +12485,7 @@ fn build_report(
     local_tensor_scan_bound: i64,
     element_limit: usize,
     closure_generation_limit: Option<usize>,
+    supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
 ) -> ContextReport {
     let mut semigroup_measurement_cache = HashMap::new();
     let mut semigroup_ladder_cache = HashMap::new();
@@ -12501,6 +12521,7 @@ fn build_report(
             &mut semigroup_ladder_cache,
             element_limit,
             closure_generation_limit,
+            supporting_face_lp_options,
         ));
     }
     let missing_local_cygv_charge_signature_counts =
@@ -12582,6 +12603,7 @@ fn build_report(
                 &mut semigroup_ladder_cache,
                 element_limit,
                 closure_generation_limit,
+                supporting_face_lp_options,
             ));
         }
     }
@@ -14239,7 +14261,7 @@ fn selected_target_indices(
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--trace-support-overlap-qn] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--certify-origin-witness-domains] [--origin-support-certificate-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--scan-local-integer-tensors] [--local-tensor-scan-bound N] [--element-limit N] [--closure-generation-limit N] [--out path | --per-target-out-dir path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
+            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--trace-support-overlap-qn] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--certify-origin-witness-domains] [--origin-support-certificate-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--supporting-face-lp-anchor-attempts N] [--supporting-face-lp-cutting-rounds N] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--scan-local-integer-tensors] [--local-tensor-scan-bound N] [--element-limit N] [--closure-generation-limit N] [--out path | --per-target-out-dir path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
         );
         std::process::exit(2);
     };
@@ -14264,6 +14286,14 @@ fn main() {
     let probe_cygv_path_history = parse_flag("--probe-cygv-path-history");
     let run_lower_seed_diamonds = parse_flag("--run-lower-seed-diamonds");
     let run_path_support_generators = parse_flag("--run-path-support-generators");
+    let supporting_face_lp_defaults = SupportingMoriFaceLpSearchOptions::default();
+    let supporting_face_lp_options = SupportingMoriFaceLpSearchOptions {
+        anchor_attempts: parse_arg_value::<usize>("--supporting-face-lp-anchor-attempts")
+            .unwrap_or(supporting_face_lp_defaults.anchor_attempts),
+        cutting_rounds: parse_arg_value::<usize>("--supporting-face-lp-cutting-rounds")
+            .unwrap_or(supporting_face_lp_defaults.cutting_rounds),
+        ..supporting_face_lp_defaults
+    };
     let measure_cygv_degree_ladder = parse_flag("--measure-cygv-degree-ladder");
     let cygv_degree_ladder_max_degree = parse_arg_value::<i128>("--cygv-degree-ladder-max-degree");
     let semigroup_measure_max_target_degree =
@@ -14332,6 +14362,7 @@ fn main() {
                 local_tensor_scan_bound,
                 element_limit,
                 closure_generation_limit,
+                &supporting_face_lp_options,
             );
             let content = serde_json::to_string_pretty(&report).unwrap_or_else(|e| {
                 eprintln!("[ERROR] failed to serialize context report: {e}");
@@ -14374,6 +14405,7 @@ fn main() {
         local_tensor_scan_bound,
         element_limit,
         closure_generation_limit,
+        &supporting_face_lp_options,
     );
     let content = serde_json::to_string_pretty(&report).unwrap_or_else(|e| {
         eprintln!("[ERROR] failed to serialize context report: {e}");
@@ -17654,9 +17686,13 @@ mod tests {
         let mut offset_source = probe.target_monomial_qn_source_sample[0].clone();
         offset_source.source_bounded_diamond_parent_qn_comparison_status =
             Some("different_qn_term_counts".to_string());
-        let offset_probe = source_parent_qn_term_offset_generator_probe(&offset_source, &context)
-            .expect("offset-generator probe should run against the actual cygv wrapper")
-            .expect("mismatched qN source should request an offset-generator probe");
+        let offset_probe = source_parent_qn_term_offset_generator_probe(
+            &offset_source,
+            &context,
+            &SupportingMoriFaceLpSearchOptions::default(),
+        )
+        .expect("offset-generator probe should run against the actual cygv wrapper")
+        .expect("mismatched qN source should request an offset-generator probe");
         assert_eq!(
             offset_probe.status,
             "computed_source_qn_term_offset_generators"
@@ -17843,6 +17879,7 @@ mod tests {
             &seed_set,
             &reduced_seed_set,
             &context,
+            &SupportingMoriFaceLpSearchOptions::default(),
         )
         .expect("seed decomposition annotation should succeed");
 
@@ -18116,10 +18153,13 @@ mod tests {
                 .expect("offset generators should build from source decomposition plus offsets");
         assert_eq!(offset_generators, vec![vec![1]]);
         assert_eq!(offset_max_degree, 2);
-        let offset_generator_probe =
-            source_parent_qn_term_offset_generator_probe(&compared_source, &context)
-                .expect("offset-generator probe should build a bounded diagnostic")
-                .expect("mismatched source with known offset should request offset generators");
+        let offset_generator_probe = source_parent_qn_term_offset_generator_probe(
+            &compared_source,
+            &context,
+            &SupportingMoriFaceLpSearchOptions::default(),
+        )
+        .expect("offset-generator probe should build a bounded diagnostic")
+        .expect("mismatched source with known offset should request offset generators");
         assert_eq!(offset_generator_probe.generator_count, Some(1));
         assert_eq!(
             offset_generator_probe.generator_degree_counts,
@@ -19219,6 +19259,7 @@ mod tests {
             16,
             None,
             None,
+            &SupportingMoriFaceLpSearchOptions::default(),
         )
         .unwrap();
         assert_eq!(probe.status, "completed_bounded_closure");
@@ -19384,6 +19425,7 @@ mod tests {
             2,
             None,
             None,
+            &SupportingMoriFaceLpSearchOptions::default(),
         )
         .unwrap();
 
@@ -19452,6 +19494,7 @@ mod tests {
             16,
             Some(2),
             None,
+            &SupportingMoriFaceLpSearchOptions::default(),
         )
         .unwrap();
 
@@ -19826,6 +19869,7 @@ mod tests {
             &mut semigroup_ladder_cache,
             256,
             None,
+            &SupportingMoriFaceLpSearchOptions::default(),
         );
 
         assert_eq!(report.origin_circuit_pattern.as_deref(), Some("-2:1,1:2"));
@@ -19965,6 +20009,7 @@ mod tests {
             &mut semigroup_ladder_cache,
             256,
             None,
+            &SupportingMoriFaceLpSearchOptions::default(),
         );
 
         assert_eq!(
@@ -20000,6 +20045,7 @@ mod tests {
             &mut semigroup_ladder_cache,
             256,
             None,
+            &SupportingMoriFaceLpSearchOptions::default(),
         );
 
         assert_eq!(path_report.cygv_semigroup_measure_status, None);

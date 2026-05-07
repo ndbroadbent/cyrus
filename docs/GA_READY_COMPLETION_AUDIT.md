@@ -429,13 +429,19 @@ and matrix-basis pipeline are no longer open.
    target `7` and `8` reports show all four offset-generator candidates have
    `lp_search_status=lp_no_certificate`,
    `exact_kernel_status=no_certificate`, and
-   `aggregate_status=lp_no_solution_or_cutting_exhausted`; all `16` bounded
-   anchor LP attempts per candidate also return
-   `lp_no_solution_or_cutting_exhausted`, with zero anchor LP real-normal
-   solutions. The current bounded search is therefore failing at real LP
-   feasibility, not at integer rounding of an LP normal. This still does not
-   prove no supporting chamber face exists, but it rules out the sampled
-   offset-generator domains as certifiable with the current face search.
+   `aggregate_status=lp_cutting_round_limit` at the default `64` cutting
+   rounds; all `16` bounded anchor LP attempts per candidate also return the
+   cutting limit, with zero anchor LP real-normal solutions. The context
+   binary now exposes `--supporting-face-lp-cutting-rounds` and
+   `--supporting-face-lp-anchor-attempts` for this diagnostic. Raising target
+   `7` and `8` to `256` cutting rounds makes both degree-eight aggregate LPs
+   return `lp_no_solution`, while the shared degree-six source domain still
+   hits the aggregate cutting limit. Anchor attempts still produce no real
+   normal: target `7` splits `13/3` and `11/5` between `lp_no_solution` and
+   `lp_cutting_round_limit`; target `8` splits `11/5` for both rows. This
+   still does not prove no supporting chamber face exists; it says the sampled
+   offset-generator domains are not certifiable with the current bounded
+   face-search settings.
    The offset-generator report now also records the exact sparse generators,
    generator degree buckets, and a raw `FIND_GV=false` GW coefficient trace for
    the provided-generator domain. Fresh target `7`/`8` runs show that the

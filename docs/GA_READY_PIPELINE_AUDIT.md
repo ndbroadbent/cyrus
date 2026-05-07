@@ -215,11 +215,15 @@ run pass. Any remaining mismatch must be explicit and localizable.
    why: fresh target `7` and `8` reports classify all four offset-generator
    candidates as `lp_search_status=lp_no_certificate`,
    `exact_kernel_status=no_certificate`, and
-   `aggregate_status=lp_no_solution_or_cutting_exhausted`; all `16` bounded
-   anchor LP attempts per candidate also return no LP solution, so no candidate
-   reaches the integer rounding/certificate-verification phase. This keeps the
-   blocker at certified chamber-semigroup construction, not scalar source-GV
-   recovery.
+   `aggregate_status=lp_cutting_round_limit` at the default `64` cuts; all
+   `16` bounded anchor LP attempts per candidate also hit the cutting-round
+   limit. The context binary now exposes
+   `--supporting-face-lp-cutting-rounds` and
+   `--supporting-face-lp-anchor-attempts`; rerunning target `7` and `8` with
+   `256` cuts turns both degree-eight aggregate LPs into `lp_no_solution`,
+   leaves the shared degree-six aggregate LPs at the cutting limit, and still
+   yields zero anchor real-normal solutions. This keeps the blocker at
+   certified chamber-semigroup construction, not scalar source-GV recovery.
    Applying the trace to McAllister still requires the certified corrected-chamber
    semigroup/history domain.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
