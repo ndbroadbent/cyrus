@@ -908,7 +908,12 @@ to make the remaining GV layer more first-principles:
    are counted separately. Thus the target `8` unit-tensor/formula-sum match
    remains diagnostic and cannot be confused with the source-derived
    `O(-1)+O(-2)->P^2` import family; it now has the more specific
-   `O(-1)+O(-3)->P(1,1,2)`-style weighted-base shape.
+   `O(-1)+O(-3)->P(1,1,2)`-style weighted-base shape. The target skeletons now
+   also report
+   `local_intersection_tensor_blocked_weighted_p2_split_bundle_requires_source_derived_resolution_chamber`
+   and the analogous chamber-certificate blocker for those four rows, so the
+   missing input is labeled as a resolution/chamber certificate rather than a
+   generic non-`P^2` mismatch.
    Origin-circuit witness-domain reports now optionally run compact `cygv` on
    relation, shared-facet, and guarded facet-union generator domains. For
    target `8`, relation-only gives `GV=2`, materializes one target qN term,

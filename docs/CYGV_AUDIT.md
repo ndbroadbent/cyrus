@@ -3094,6 +3094,14 @@ Certified
 remain counted separately from these uncertified weighted-base charge
 families. This prevents the `[-3,-1,1,1,2]` unit-tensor match from being
 promoted as if it were the source-derived `O(-1)+O(-2)->P^2` family.
+Regenerating `/tmp/cyrus_gv_context_all_weighted_p2_blocker_report.json` also
+changes the target skeleton blocker labels: the four weighted-base rows now
+report
+`local_intersection_tensor_blocked_weighted_p2_split_bundle_requires_source_derived_resolution_chamber`
+and the analogous chamber-certificate status, while the five no-origin rows
+remain blocked as non-CY diagnostic phases. This keeps the next required input
+explicit: a source-derived resolution/chamber certificate for the weighted-base
+local model, not a tensor scan or CMS scalar promotion.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

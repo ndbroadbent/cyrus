@@ -9023,6 +9023,9 @@ fn local_p2_bundle_tensor_chamber_certificate(
     positive.sort_unstable();
     negative.sort_unstable();
     if positive != [1, 1, 1] || negative != [-2, -1] {
+        if one_parameter_weighted_p2_split_bundle_signature(charges).is_some() {
+            return blocked("weighted_p2_split_bundle_requires_source_derived_resolution_chamber");
+        }
         return blocked("not_o_minus_one_o_minus_two_over_p2");
     }
     (
@@ -17430,6 +17433,26 @@ mod tests {
         assert_eq!(
             local_cygv_one_parameter_family_status(&uncertified_weighted),
             "uncertified_one_parameter_split_bundle_over_weighted_p2:base=1,1,2;bundle=1,3;base_hyperplane_square=1/2"
+        );
+        let (_, tensor_status, chamber_status) = local_p2_bundle_tensor_chamber_certificate(
+            uncertified_weighted
+                .local_cygv_phase_q_matrix_candidate
+                .as_deref(),
+            uncertified_weighted
+                .local_semigroup_generators_candidate
+                .as_deref(),
+            uncertified_weighted
+                .local_grading_vector_candidate
+                .as_deref(),
+            &uncertified_weighted.local_cygv_q_matrix_phase_status,
+        );
+        assert_eq!(
+            tensor_status,
+            "local_intersection_tensor_blocked_weighted_p2_split_bundle_requires_source_derived_resolution_chamber"
+        );
+        assert_eq!(
+            chamber_status,
+            "local_chamber_certificate_blocked_weighted_p2_split_bundle_requires_source_derived_resolution_chamber"
         );
         assert_eq!(
             local_cygv_one_parameter_family_status(&p2_without_certificate),

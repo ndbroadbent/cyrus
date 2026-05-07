@@ -682,7 +682,11 @@ Equivalently, their charge data has the shape of an
 `O(-1)+O(-2)->P2` source family. Certified
 `source_derived_local_p2_bundle_family_with_tensor_chamber_certificate` rows are
 counted separately, so the local unit-tensor match is explicitly not a
-promotable replacement for the missing compact GV target correction.
+promotable replacement for the missing compact GV target correction. The same
+report now gives those four rows the tensor/chamber blocker
+`weighted_p2_split_bundle_requires_source_derived_resolution_chamber`, while
+the five non-CY no-origin diagnostic rows remain blocked on the no-origin phase
+choice.
 Origin-circuit witness-domain compact `cygv` probes are now opt-in and guarded
 by `--origin-witness-cygv-generator-limit`. The traced target `8` report shows
 the single-generator relation domain computes `GV=2` with one materialized
