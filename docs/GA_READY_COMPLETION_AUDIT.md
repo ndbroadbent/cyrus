@@ -674,9 +674,15 @@ shows the relation domain fails compact HKTY integrality on the missing target
 itself with raw candidate `3/2`, while the 21-generator shared-facet domain
 computes `GV=0` with `51` qN polynomials, no target qN polynomial, and raw
 target GW candidate `0`. The 458/506-generator facet unions are skipped with
-the default diagnostic guard. These are not promoted because the LP/exact
-witness-domain face certificates still fail, but they rule out the small
-relation/shared-facet domains as the corrected McAllister compact histories.
+the default diagnostic guard. The new certificate diagnostic fields show the
+same LP failure modes explicitly: target `8` shared facets have full/aggregate
+`lp_no_solution` and anchors split `14` cutting-round limits to `2`
+no-solution outcomes; target `7` shared facets have full LP `Unknown`,
+aggregate `lp_no_solution`, and anchors split `9` cutting-round limits to `7`
+no-solution outcomes; both facet unions have full/aggregate/anchor
+`lp_no_solution`. These are not promoted because the LP/exact witness-domain
+face certificates still fail, but they rule out the small relation/shared-facet
+domains as the corrected McAllister compact histories.
 
 ## Next Concrete Action
 

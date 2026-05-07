@@ -3023,8 +3023,16 @@ with instanton coefficient `3` and candidate `3/2`; its 21-generator
 shared-facet domain computes `GV=0` after `51` qN polynomials, has no target
 qN polynomial, and its `43` fractional raw candidates are all
 `not_source_degree_bounded_ray`. The 458/506-generator facet unions are still
-skipped under the diagnostic guard. Thus the witness-domain compact probes do
-not promote either degree-10 target; they show that the small
+skipped under the diagnostic guard. The same reports now include certificate
+phase diagnostics: target `8`'s shared facets have
+`lp_search_status=lp_no_certificate`, exact-kernel `no_certificate`,
+full/aggregate `lp_no_solution`, and anchor counts
+`{"lp_cutting_round_limit":14,"lp_no_solution":2}`; target `7`'s shared facets
+have full LP `lp_solver_other_unknown`, aggregate `lp_no_solution`, and anchor
+counts `{"lp_cutting_round_limit":9,"lp_no_solution":7}`. Both degree-10
+facet-union domains have full/aggregate `lp_no_solution` and all `16` anchor
+attempts at `lp_no_solution`. Thus the witness-domain compact probes do not
+promote either degree-10 target; they show that the small
 relation/shared-facet domains have the wrong compact history before any larger
 facet-union question.
 Thus the current blocker is not hidden by a missing scalar source readout: the

@@ -7083,9 +7083,45 @@ struct OriginCircuitWitnessDomainSummary {
     relation_support_face_certificate_status: String,
     shared_facet_face_certificate_status: String,
     facet_union_face_certificate_status: String,
+    relation_support_face_certificate_diagnostic: OriginCircuitWitnessSupportFaceCertificateProbe,
+    shared_facet_face_certificate_diagnostic: OriginCircuitWitnessSupportFaceCertificateProbe,
+    facet_union_face_certificate_diagnostic: OriginCircuitWitnessSupportFaceCertificateProbe,
     relation_cygv_probe: Option<OriginCircuitWitnessDomainCygvProbe>,
     shared_facet_cygv_probe: Option<OriginCircuitWitnessDomainCygvProbe>,
     facet_union_cygv_probe: Option<OriginCircuitWitnessDomainCygvProbe>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct OriginCircuitWitnessSupportFaceCertificateProbe {
+    status: String,
+    normal_nonzero: Option<Vec<(usize, i64)>>,
+    zero_count: Option<usize>,
+    positive_count: Option<usize>,
+    lp_search_status: Option<String>,
+    lp_exact_kernel_status: Option<String>,
+    lp_full_status: Option<String>,
+    lp_aggregate_status: Option<String>,
+    lp_anchor_attempt_count: Option<usize>,
+    lp_anchor_lp_solution_count: Option<usize>,
+    lp_anchor_status_counts: BTreeMap<String, usize>,
+}
+
+fn origin_circuit_witness_support_face_certificate_probe_empty(
+    status: String,
+) -> OriginCircuitWitnessSupportFaceCertificateProbe {
+    OriginCircuitWitnessSupportFaceCertificateProbe {
+        status,
+        normal_nonzero: None,
+        zero_count: None,
+        positive_count: None,
+        lp_search_status: None,
+        lp_exact_kernel_status: None,
+        lp_full_status: None,
+        lp_aggregate_status: None,
+        lp_anchor_attempt_count: None,
+        lp_anchor_lp_solution_count: None,
+        lp_anchor_status_counts: BTreeMap::new(),
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -7394,6 +7430,9 @@ fn origin_circuit_witness_domain_summary(
         relation_support_face_certificate_status: relation.certificate_status,
         shared_facet_face_certificate_status: shared.certificate_status,
         facet_union_face_certificate_status: union.certificate_status,
+        relation_support_face_certificate_diagnostic: relation.certificate_diagnostic,
+        shared_facet_face_certificate_diagnostic: shared.certificate_diagnostic,
+        facet_union_face_certificate_diagnostic: union.certificate_diagnostic,
         relation_cygv_probe: relation.cygv_probe,
         shared_facet_cygv_probe: shared.cygv_probe,
         facet_union_cygv_probe: union.cygv_probe,
@@ -7406,7 +7445,116 @@ struct OriginCircuitWitnessDomainStats {
     support_face_profile: String,
     source_status_counts: BTreeMap<String, usize>,
     certificate_status: String,
+    certificate_diagnostic: OriginCircuitWitnessSupportFaceCertificateProbe,
     cygv_probe: Option<OriginCircuitWitnessDomainCygvProbe>,
+}
+
+fn origin_circuit_witness_support_face_certificate_probe(
+    generators: &[Vec<i64>],
+    rank: Option<usize>,
+    context: &ValidatedContext<'_>,
+    generator_limit: usize,
+) -> OriginCircuitWitnessSupportFaceCertificateProbe {
+    if generators.is_empty() {
+        return origin_circuit_witness_support_face_certificate_probe_empty(
+            "origin_support_no_generators".to_string(),
+        );
+    }
+    if generators.len() > generator_limit {
+        return origin_circuit_witness_support_face_certificate_probe_empty(format!(
+            "origin_support_skipped_generator_limit_{generator_limit}_actual_{}",
+            generators.len()
+        ));
+    }
+    let Some(rank) = rank else {
+        return origin_circuit_witness_support_face_certificate_probe_empty(
+            "origin_support_certificate_error_rank_missing".to_string(),
+        );
+    };
+    let codimension = context.dimension.saturating_sub(rank);
+    if generators.len() == 1 && codimension > 1 {
+        return origin_circuit_witness_support_face_certificate_probe_empty(format!(
+            "origin_support_skipped_single_generator_higher_codimension_rank_{rank}_dim_{}",
+            context.dimension
+        ));
+    }
+
+    if rank == context.dimension.saturating_sub(1) {
+        return match certify_supporting_mori_face_by_exact_kernel(
+            generators,
+            context.degree_bounded_rays,
+        ) {
+            Ok(Some(certificate)) => OriginCircuitWitnessSupportFaceCertificateProbe {
+                status: "origin_support_certified_codimension_one_face".to_string(),
+                normal_nonzero: Some(sparse_from_dense(&certificate.normal)),
+                zero_count: Some(certificate.zero_generator_count),
+                positive_count: Some(certificate.positive_generator_count),
+                lp_search_status: None,
+                lp_exact_kernel_status: Some("certified".to_string()),
+                lp_full_status: None,
+                lp_aggregate_status: None,
+                lp_anchor_attempt_count: None,
+                lp_anchor_lp_solution_count: None,
+                lp_anchor_status_counts: BTreeMap::new(),
+            },
+            Ok(None) => OriginCircuitWitnessSupportFaceCertificateProbe {
+                status: "origin_support_codimension_one_but_not_supporting".to_string(),
+                normal_nonzero: None,
+                zero_count: None,
+                positive_count: None,
+                lp_search_status: None,
+                lp_exact_kernel_status: Some("no_certificate".to_string()),
+                lp_full_status: None,
+                lp_aggregate_status: None,
+                lp_anchor_attempt_count: None,
+                lp_anchor_lp_solution_count: None,
+                lp_anchor_status_counts: BTreeMap::new(),
+            },
+            Err(error) => origin_circuit_witness_support_face_certificate_probe_empty(format!(
+                "origin_support_certificate_error_{}",
+                status_error_fragment(&error.to_string())
+            )),
+        };
+    }
+
+    let options = SupportingMoriFaceLpSearchOptions::default();
+    match diagnose_supporting_mori_face_by_lp_search(
+        generators,
+        context.degree_bounded_rays,
+        &options,
+    ) {
+        Ok(diagnostic) => {
+            let certificate = diagnostic.certificate.as_ref();
+            OriginCircuitWitnessSupportFaceCertificateProbe {
+                status: if certificate.is_some() {
+                    format!(
+                        "origin_support_certified_lp_containing_face_rank_{rank}_dim_{}",
+                        context.dimension
+                    )
+                } else {
+                    format!(
+                        "origin_support_lp_no_certificate_rank_{rank}_dim_{}",
+                        context.dimension
+                    )
+                },
+                normal_nonzero: certificate
+                    .map(|certificate| sparse_from_dense(&certificate.normal)),
+                zero_count: certificate.map(|certificate| certificate.zero_generator_count),
+                positive_count: certificate.map(|certificate| certificate.positive_generator_count),
+                lp_search_status: Some(diagnostic.status),
+                lp_exact_kernel_status: Some(diagnostic.exact_kernel_status),
+                lp_full_status: Some(diagnostic.full_status),
+                lp_aggregate_status: Some(diagnostic.aggregate_status),
+                lp_anchor_attempt_count: Some(diagnostic.anchor_attempt_count),
+                lp_anchor_lp_solution_count: Some(diagnostic.anchor_lp_solution_count),
+                lp_anchor_status_counts: diagnostic.anchor_status_counts,
+            }
+        }
+        Err(error) => origin_circuit_witness_support_face_certificate_probe_empty(format!(
+            "origin_support_certificate_error_{}",
+            status_error_fragment(&error.to_string())
+        )),
+    }
 }
 
 fn origin_circuit_witness_domain_stats(
@@ -7427,6 +7575,9 @@ fn origin_circuit_witness_domain_stats(
             support_face_profile: "missing_degree_bounded_mori_ray_context".to_string(),
             source_status_counts: BTreeMap::new(),
             certificate_status: "missing_degree_bounded_mori_ray_context".to_string(),
+            certificate_diagnostic: origin_circuit_witness_support_face_certificate_probe_empty(
+                "missing_degree_bounded_mori_ray_context".to_string(),
+            ),
             cygv_probe: None,
         };
     };
@@ -7451,6 +7602,12 @@ fn origin_circuit_witness_domain_stats(
                     "origin_witness_domain_error_{}",
                     status_error_fragment(&error)
                 ),
+                certificate_diagnostic: origin_circuit_witness_support_face_certificate_probe_empty(
+                    format!(
+                        "origin_witness_domain_error_{}",
+                        status_error_fragment(&error)
+                    ),
+                ),
                 cygv_probe: None,
             };
         }
@@ -7473,6 +7630,11 @@ fn origin_circuit_witness_domain_stats(
                         "origin_witness_domain_error_{}",
                         status_error_fragment(&error.to_string())
                     ),
+                    certificate_diagnostic:
+                        origin_circuit_witness_support_face_certificate_probe_empty(format!(
+                            "origin_witness_domain_error_{}",
+                            status_error_fragment(&error.to_string())
+                        )),
                     cygv_probe: None,
                 };
             }
@@ -7481,17 +7643,17 @@ fn origin_circuit_witness_domain_stats(
     let support_face_profile =
         support_face_pre_lp_profile(generators.len(), rank, context.dimension, generator_limit);
     let source_status_counts = source_status_counts_for_generators(&generators, context);
-    let certificate_status = if certify_domain {
-        origin_circuit_ambient_support_face_certificate_status(
-            ray_context,
-            degree,
-            allowed_ambient_support,
+    let certificate_diagnostic = if certify_domain {
+        origin_circuit_witness_support_face_certificate_probe(
+            &generators,
+            rank,
             context,
             generator_limit,
         )
     } else {
-        "not_run".to_string()
+        origin_circuit_witness_support_face_certificate_probe_empty("not_run".to_string())
     };
+    let certificate_status = certificate_diagnostic.status.clone();
     let cygv_probe = origin_circuit_witness_domain_cygv_probe(
         &generators,
         target,
@@ -7507,6 +7669,7 @@ fn origin_circuit_witness_domain_stats(
         support_face_profile,
         source_status_counts,
         certificate_status,
+        certificate_diagnostic,
         cygv_probe,
     }
 }
@@ -15570,6 +15733,41 @@ mod tests {
             summaries[0].facet_union_face_profile,
             "support_face_full_dimensional_generators_2_4"
         );
+        let certified_summaries = origin_circuit_witness_domain_summaries(
+            std::slice::from_ref(&sample),
+            &context,
+            None,
+            true,
+            2,
+            false,
+            64,
+        );
+        assert_eq!(
+            certified_summaries[0]
+                .relation_support_face_certificate_diagnostic
+                .status,
+            "origin_support_certified_codimension_one_face"
+        );
+        assert_eq!(
+            certified_summaries[0]
+                .relation_support_face_certificate_diagnostic
+                .normal_nonzero
+                .as_deref(),
+            Some(&[(1, 1)][..])
+        );
+        assert_eq!(
+            certified_summaries[0]
+                .relation_support_face_certificate_diagnostic
+                .lp_exact_kernel_status
+                .as_deref(),
+            Some("certified")
+        );
+        assert_eq!(
+            certified_summaries[0]
+                .facet_union_face_certificate_diagnostic
+                .status,
+            "origin_support_skipped_generator_limit_2_actual_3"
+        );
 
         let certificates =
             origin_circuit_ambient_support_face_certificate_statuses(&sample, &context, 2);
@@ -15631,6 +15829,18 @@ mod tests {
             status,
             "origin_support_skipped_single_generator_higher_codimension_rank_1_dim_3"
         );
+        let probe = origin_circuit_witness_support_face_certificate_probe(
+            &[vec![1, 0, 0]],
+            Some(1),
+            &context,
+            16,
+        );
+        assert_eq!(
+            probe.status,
+            "origin_support_skipped_single_generator_higher_codimension_rank_1_dim_3"
+        );
+        assert_eq!(probe.lp_search_status, None);
+        assert_eq!(probe.lp_anchor_status_counts, BTreeMap::new());
     }
 
     #[test]

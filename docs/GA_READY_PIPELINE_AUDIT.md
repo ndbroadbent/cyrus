@@ -906,6 +906,12 @@ to make the remaining GV layer more first-principles:
    row with raw candidate `3/2`, while the shared facet gives `GV=0` after
    `51` qN polynomials with no target qN and raw target GW candidate `0`.
    Both large facet unions exceed the default `64`-generator compact probe
-   guard. These readouts are diagnostic because the witness-domain
-   supporting-face certificates remain absent, but they show the small witness
-   domains are not the missing corrected chamber.
+   guard. The certificate diagnostics now also report the LP phase outcomes:
+   target `8` shared facets have full/aggregate `lp_no_solution` and anchors
+   split `14` cutting-round limits to `2` no-solution outcomes; target `7`
+   shared facets have full LP `Unknown`, aggregate `lp_no_solution`, and
+   anchors split `9` cutting-round limits to `7` no-solution outcomes; both
+   facet unions have full/aggregate/anchor `lp_no_solution`. These readouts
+   are diagnostic because the witness-domain supporting-face certificates
+   remain absent, but they show the small witness domains are not the missing
+   corrected chamber.
