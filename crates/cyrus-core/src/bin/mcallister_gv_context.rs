@@ -264,6 +264,10 @@ struct TargetExtremalRayCertificateProbe {
     zero_other_generator_count: Option<usize>,
     positive_other_generator_count: Option<usize>,
     separator_normal_nonzero: Option<Vec<(usize, i64)>>,
+    decomposition_kind: Option<String>,
+    decomposition_active_generator_count: Option<usize>,
+    decomposition_exact_coefficients: Option<Vec<String>>,
+    decomposition_active_generators_nonzero: Option<Vec<Vec<(usize, i64)>>>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1293,6 +1297,9 @@ fn target_extremal_ray_certificate_probe(
     if !run {
         return None;
     }
+    if let Some(probe) = target_exact_non_extremal_decomposition_probe(sample, target, context) {
+        return Some(probe);
+    }
     if !sample.is_mori_generator {
         return Some(TargetExtremalRayCertificateProbe {
             status: "skipped_non_mori_generator".to_string(),
@@ -1300,6 +1307,10 @@ fn target_extremal_ray_certificate_probe(
             zero_other_generator_count: None,
             positive_other_generator_count: None,
             separator_normal_nonzero: None,
+            decomposition_kind: None,
+            decomposition_active_generator_count: None,
+            decomposition_exact_coefficients: None,
+            decomposition_active_generators_nonzero: None,
         });
     }
     if max_target_degree.is_some_and(|max_degree| sample.degree > max_degree) {
@@ -1309,6 +1320,10 @@ fn target_extremal_ray_certificate_probe(
             zero_other_generator_count: None,
             positive_other_generator_count: None,
             separator_normal_nonzero: None,
+            decomposition_kind: None,
+            decomposition_active_generator_count: None,
+            decomposition_exact_coefficients: None,
+            decomposition_active_generators_nonzero: None,
         });
     }
     if context.degree_bounded_rays.len() > generator_limit {
@@ -1321,6 +1336,10 @@ fn target_extremal_ray_certificate_probe(
             zero_other_generator_count: None,
             positive_other_generator_count: None,
             separator_normal_nonzero: None,
+            decomposition_kind: None,
+            decomposition_active_generator_count: None,
+            decomposition_exact_coefficients: None,
+            decomposition_active_generators_nonzero: None,
         });
     }
     match find_extremal_mori_ray_separator(target, context.degree_bounded_rays) {
@@ -1330,6 +1349,10 @@ fn target_extremal_ray_certificate_probe(
             zero_other_generator_count: Some(certificate.zero_other_generator_count),
             positive_other_generator_count: Some(certificate.positive_other_generator_count),
             separator_normal_nonzero: Some(sparse_from_dense(&certificate.separator_normal)),
+            decomposition_kind: None,
+            decomposition_active_generator_count: None,
+            decomposition_exact_coefficients: None,
+            decomposition_active_generators_nonzero: None,
         }),
         Ok(None) => Some(TargetExtremalRayCertificateProbe {
             status: "not_certified_as_extremal_ray".to_string(),
@@ -1337,6 +1360,10 @@ fn target_extremal_ray_certificate_probe(
             zero_other_generator_count: None,
             positive_other_generator_count: None,
             separator_normal_nonzero: None,
+            decomposition_kind: None,
+            decomposition_active_generator_count: None,
+            decomposition_exact_coefficients: None,
+            decomposition_active_generators_nonzero: None,
         }),
         Err(error) => Some(TargetExtremalRayCertificateProbe {
             status: format!("error_{}", status_error_fragment(&error.to_string())),
@@ -1344,8 +1371,114 @@ fn target_extremal_ray_certificate_probe(
             zero_other_generator_count: None,
             positive_other_generator_count: None,
             separator_normal_nonzero: None,
+            decomposition_kind: None,
+            decomposition_active_generator_count: None,
+            decomposition_exact_coefficients: None,
+            decomposition_active_generators_nonzero: None,
         }),
     }
+}
+
+fn target_exact_non_extremal_decomposition_probe(
+    sample: &MissingGvTargetSample,
+    target: &[i64],
+    context: &ValidatedContext<'_>,
+) -> Option<TargetExtremalRayCertificateProbe> {
+    if !sample.real_cone_decomposable_by_other_generators {
+        return None;
+    }
+    let Some(kind) = sample.real_cone_decomposition_exact_kind.as_deref() else {
+        return None;
+    };
+    let Some(active_generators_sparse) = sample
+        .real_cone_decomposition_active_generator_basis_nonzero
+        .as_ref()
+    else {
+        return None;
+    };
+    let Some(coefficients) = sample.real_cone_decomposition_exact_coefficients.as_ref() else {
+        return None;
+    };
+
+    match verify_exact_positive_decomposition(
+        target,
+        active_generators_sparse,
+        coefficients,
+        context.dimension,
+    ) {
+        Ok(()) => Some(TargetExtremalRayCertificateProbe {
+            status: format!("not_extremal_by_exact_{kind}_decomposition"),
+            same_ray_generator_count: None,
+            zero_other_generator_count: None,
+            positive_other_generator_count: None,
+            separator_normal_nonzero: None,
+            decomposition_kind: Some(kind.to_string()),
+            decomposition_active_generator_count: Some(active_generators_sparse.len()),
+            decomposition_exact_coefficients: Some(coefficients.clone()),
+            decomposition_active_generators_nonzero: Some(active_generators_sparse.clone()),
+        }),
+        Err(error) => Some(TargetExtremalRayCertificateProbe {
+            status: format!(
+                "error_invalid_exact_decomposition_{}",
+                status_error_fragment(&error)
+            ),
+            same_ray_generator_count: None,
+            zero_other_generator_count: None,
+            positive_other_generator_count: None,
+            separator_normal_nonzero: None,
+            decomposition_kind: Some(kind.to_string()),
+            decomposition_active_generator_count: Some(active_generators_sparse.len()),
+            decomposition_exact_coefficients: Some(coefficients.clone()),
+            decomposition_active_generators_nonzero: Some(active_generators_sparse.clone()),
+        }),
+    }
+}
+
+fn verify_exact_positive_decomposition(
+    target: &[i64],
+    active_generators_sparse: &[Vec<(usize, i64)>],
+    coefficients: &[String],
+    dimension: usize,
+) -> Result<(), String> {
+    if target.len() != dimension {
+        return Err(format!(
+            "target dimension {} does not match context dimension {dimension}",
+            target.len()
+        ));
+    }
+    if active_generators_sparse.len() != coefficients.len() {
+        return Err(format!(
+            "active generator count {} does not match coefficient count {}",
+            active_generators_sparse.len(),
+            coefficients.len()
+        ));
+    }
+
+    let zero = MalachiteRational::from(0);
+    let mut reconstructed = vec![zero.clone(); dimension];
+    for (generator_sparse, coefficient) in active_generators_sparse.iter().zip(coefficients) {
+        let coefficient = parse_rational(coefficient)?;
+        if coefficient <= zero {
+            return Err("decomposition coefficient is not positive".to_string());
+        }
+        let generator = dense_from_sparse(generator_sparse, dimension)?;
+        if generator == target {
+            return Err("decomposition uses the target ray itself".to_string());
+        }
+        for (slot, &entry) in reconstructed.iter_mut().zip(generator.iter()) {
+            *slot += coefficient.clone() * MalachiteRational::from(Integer::from(entry));
+        }
+    }
+
+    for (idx, (actual, &expected)) in reconstructed.iter().zip(target.iter()).enumerate() {
+        let expected = MalachiteRational::from(Integer::from(expected));
+        if actual != &expected {
+            return Err(format!(
+                "decomposition coordinate {idx} reconstructs {actual} instead of {expected}"
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn degree_bounded_ray_context_support_generators(
@@ -5599,6 +5732,73 @@ mod tests {
         )
         .expect("enabled probe should report a limit status");
         assert_eq!(limited.status, "skipped_generator_limit_2_actual_3");
+    }
+
+    #[test]
+    fn target_extremal_ray_probe_short_circuits_exact_decomposition() {
+        let stats = MissingGvTargetStats {
+            target_count: 1,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: vec![MissingGvTargetSample {
+                degree: 2,
+                generators_le_degree: 3,
+                is_mori_generator: true,
+                origin_circuit_pattern: None,
+                origin_circuit_witness_count: None,
+                origin_circuit_first_witness: None,
+                origin_circuit_affine_support: None,
+                cms_general_divisor_shape_candidates: None,
+                cms_general_divisor_intersection_checks: None,
+                branch_diagnostic: None,
+                real_cone_decomposable_by_other_generators: true,
+                real_cone_decomposition_active_generators: Some(2),
+                real_cone_decomposition_active_generator_basis_nonzero: Some(vec![
+                    vec![(0, 1)],
+                    vec![(1, 1)],
+                ]),
+                real_cone_decomposition_exact_coefficients: Some(vec![
+                    "1".to_string(),
+                    "1".to_string(),
+                ]),
+                real_cone_decomposition_exact_kind: Some("integer_semigroup".to_string()),
+                ambient_nonzero: vec![(0, 1), (1, 1)],
+                basis_nonzero: vec![(0, 1), (1, 1)],
+            }],
+        };
+        let grading = vec![1, 1];
+        let q_matrix = vec![vec![1, 0], vec![0, 1]];
+        let degree_bounded_rays = vec![vec![1, 0], vec![0, 1], vec![1, 1]];
+        let context = ValidatedContext {
+            dimension: 2,
+            degree_bound: 2,
+            q_cols: 2,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: None,
+            intersection: Intersection::new(2),
+            stats: &stats,
+        };
+
+        let probe = target_extremal_ray_certificate_probe(
+            &stats.sample[0],
+            &[1, 1],
+            &context,
+            true,
+            0,
+            None,
+        )
+        .expect("enabled probe should report the exact decomposition");
+        assert_eq!(
+            probe.status,
+            "not_extremal_by_exact_integer_semigroup_decomposition"
+        );
+        assert_eq!(probe.decomposition_active_generator_count, Some(2));
+        assert_eq!(
+            probe.decomposition_exact_coefficients,
+            Some(vec!["1".to_string(), "1".to_string()])
+        );
+        assert_eq!(probe.separator_normal_nonzero, None);
     }
 
     #[test]

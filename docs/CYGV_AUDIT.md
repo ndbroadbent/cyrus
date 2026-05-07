@@ -1706,8 +1706,16 @@ themselves the missing origin-circuit GV source. Cyrus now has an exact
 separator verifier, `check_extremal_mori_ray_separator`, and an exact DDM-based
 finite-cone separator search, `find_extremal_mori_ray_separator`, for the
 cone-theoretic claim that a target curve spans an extremal Mori ray in a
-supplied generator set. `check_stable_weyl_candidate_certificate` combines that
-certificate with the divisor-collapse and tensor-transform checks, while
+supplied generator set. The context report also short-circuits this search when
+the export already contains an exact positive decomposition of the target by
+other degree-bounded generators: on the fresh schema-3 4-214-647 context, the
+nine solved-t misses are classified as five exact integer-semigroup
+decompositions and four exact rational-cone decompositions, so none is
+extremal in that finite cone. This is still only cone triage; a decomposable
+curve class can carry nonzero GV data, and this certificate does not identify
+the HKTY semigroup or chamber continuation.
+`check_stable_weyl_candidate_certificate` combines that certificate with the
+divisor-collapse and tensor-transform checks, while
 `find_stable_weyl_candidate_certificate` performs the separator search before
 running those same algebraic checks. A usable continuation step still needs the
 supplied finite generators to be certified as the relevant chamber/Mori context,

@@ -208,10 +208,14 @@ to make the remaining GV layer more first-principles:
    found no promoted relation-support certificate for eight targets, reported
    solver errors for one relation support and three small shared-facet supports,
    and skipped larger facet-union supports under the 256-generator cap.
-   `mcallister_gv_context` now also has an opt-in exact extremal-ray separator
-   probe for target Mori generators. That is useful cone triage, but it only
-   certifies extremality in the supplied finite degree-bounded generator set; it
-   does not identify the HKTY semigroup or promote a corrected GV value. The
+   `mcallister_gv_context` now also has an opt-in exact extremal-ray probe for
+   target Mori generators. It first verifies any exported exact positive
+   decomposition by other degree-bounded generators, and only falls back to the
+   DDM separator search when that non-extremality certificate is absent. On the
+   fresh schema-3 4-214-647 context, all nine solved-t misses short-circuit:
+   five are exact integer-semigroup decompositions and four are exact
+   rational-cone decompositions. This is useful cone triage, but it neither
+   identifies the HKTY semigroup nor promotes a corrected GV value. The
    immediate audit checkpoint is still to reconstruct the smallest exact
    semigroup/chamber context for these higher-rank origin circuits. The prior
    checkpoint of distinguishing exact
