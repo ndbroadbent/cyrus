@@ -274,10 +274,12 @@ origin-support guard to `4096` for the two degree-10 misses checks the larger
 facet-union domains too: target `7` has relation/shared/union ranks
 `1/13/194`, target `8` has ranks `1/9/177`, and all six domains report
 `origin_support_lp_no_certificate_*`. An opt-in exact rational span-closure scan
-now checks whether these same witness domains omit any degree-bounded Mori rows
-that are forced by their row span. For targets `7` and `8`, relation, shared
-facet, and facet union domains each scan `720` unique candidates and report
-`span_closed_under_degree_bounded_context` with zero extra generators. The next
+now checks whether these witness domains omit any degree-bounded Mori rows that
+are forced by their row span. After replacing per-candidate rank recomputation
+with a per-domain exact rational row-echelon basis, the full nine-target scan
+finishes and reports relation, shared facet, and facet union domains all as
+`span_closed_under_degree_bounded_context` with zero extra generators. The
+per-target candidate counts are `720..2963`, bounded by target degree. The next
 source-derived object therefore remains the higher-rank local semigroup or
 flop/chamber context for these origin-circuit supports, not a promoted
 LP-witness fallback or a missing span-closure row.

@@ -27,9 +27,8 @@ use cyrus_core::{
     compute_gv_invariants_with_provided_generators,
     compute_gv_invariants_with_provided_generators_qn_trace,
     compute_gw_coefficient_trace_with_explicit_semigroup,
-    compute_gw_coefficient_trace_with_provided_generators, curve_in_rational_row_span,
-    curve_row_span_rank, diagnose_affine_toric_circuit, integer_math::solve_linear_system_rational,
-    utils::gcd_list_int,
+    compute_gw_coefficient_trace_with_provided_generators, curve_row_span_rank,
+    diagnose_affine_toric_circuit, integer_math::solve_linear_system_rational, utils::gcd_list_int,
 };
 
 const CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT: usize = 32;
@@ -7915,6 +7914,103 @@ fn source_status_counts_for_generators(
     counts
 }
 
+struct ExactRationalRowSpan {
+    dimension: usize,
+    rref_rows: Vec<(usize, Vec<MalachiteRational>)>,
+}
+
+impl ExactRationalRowSpan {
+    fn from_integer_rows(rows: &[Vec<i64>]) -> Result<Self, String> {
+        if rows.is_empty() {
+            return Ok(Self {
+                dimension: 0,
+                rref_rows: Vec::new(),
+            });
+        }
+        let dimension = rows[0].len();
+        if rows.iter().any(|row| row.len() != dimension) {
+            return Err("row span rows have inconsistent dimensions".to_string());
+        }
+        let mut work = rows
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .map(|&value| MalachiteRational::from(Integer::from(value)))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let n_rows = work.len();
+        let zero = MalachiteRational::from(0);
+        let mut rank = 0usize;
+        let mut col = 0usize;
+
+        while rank < n_rows && col < dimension {
+            let pivot_row = (rank..n_rows).find(|&row| work[row][col] != zero);
+            if let Some(pivot_row) = pivot_row {
+                work.swap(rank, pivot_row);
+                let pivot_value = work[rank][col].clone();
+                for c in col..dimension {
+                    work[rank][c] /= &pivot_value;
+                }
+                for row in 0..n_rows {
+                    if row == rank || work[row][col] == zero {
+                        continue;
+                    }
+                    let factor = work[row][col].clone();
+                    for c in col..dimension {
+                        let sub = &factor * &work[rank][c];
+                        work[row][c] -= sub;
+                    }
+                }
+                rank += 1;
+            }
+            col += 1;
+        }
+
+        let mut rref_rows = Vec::with_capacity(rank);
+        for row in work.into_iter().take(rank) {
+            let Some(pivot) = row.iter().position(|value| value != &zero) else {
+                continue;
+            };
+            rref_rows.push((pivot, row));
+        }
+        rref_rows.sort_by_key(|(pivot, _)| *pivot);
+        Ok(Self {
+            dimension,
+            rref_rows,
+        })
+    }
+
+    fn contains_integer_row(&self, row: &[i64]) -> Result<bool, String> {
+        if self.rref_rows.is_empty() {
+            return Ok(row.iter().all(|&value| value == 0));
+        }
+        if row.len() != self.dimension {
+            return Err(format!(
+                "row dimension {} does not match span dimension {}",
+                row.len(),
+                self.dimension
+            ));
+        }
+        let zero = MalachiteRational::from(0);
+        let mut work = row
+            .iter()
+            .map(|&value| MalachiteRational::from(Integer::from(value)))
+            .collect::<Vec<_>>();
+        for (pivot, basis_row) in &self.rref_rows {
+            if work[*pivot] == zero {
+                continue;
+            }
+            let factor = work[*pivot].clone();
+            for c in 0..self.dimension {
+                let sub = &factor * &basis_row[c];
+                work[c] -= sub;
+            }
+        }
+        Ok(work.iter().all(|value| value == &zero))
+    }
+}
+
 fn origin_circuit_witness_domain_span_closure_probe(
     generators: &[Vec<i64>],
     context: &ValidatedContext<'_>,
@@ -7929,6 +8025,15 @@ fn origin_circuit_witness_domain_span_closure_probe(
             "span_closure_empty_generators".to_string(),
         );
     }
+    let row_span = match ExactRationalRowSpan::from_integer_rows(generators) {
+        Ok(row_span) => row_span,
+        Err(error) => {
+            return origin_circuit_witness_domain_span_closure_probe_empty(format!(
+                "span_closure_span_error_{}",
+                status_error_fragment(&error)
+            ));
+        }
+    };
     let Some(ray_context) = context.degree_bounded_ray_context else {
         return origin_circuit_witness_domain_span_closure_probe_empty(
             "missing_degree_bounded_mori_ray_context".to_string(),
@@ -7978,7 +8083,7 @@ fn origin_circuit_witness_domain_span_closure_probe(
         if selected.contains(&basis_ray) {
             continue;
         }
-        let in_span = match curve_in_rational_row_span(&basis_ray, generators) {
+        let in_span = match row_span.contains_integer_row(&basis_ray) {
             Ok(in_span) => in_span,
             Err(error) => {
                 return OriginCircuitWitnessDomainSpanClosureProbe {
@@ -15697,6 +15802,27 @@ mod tests {
         assert_eq!(sparse_from_dense(&[2, 0, 0, -1]), vec![(0, 2), (3, -1)]);
         assert!(dense_from_sparse(&[(4, 1)], 4).is_err());
         assert!(dense_from_sparse(&[(1, 1), (1, 2)], 4).is_err());
+    }
+
+    #[test]
+    fn exact_rational_row_span_reuses_reduced_basis_for_membership() {
+        let span =
+            ExactRationalRowSpan::from_integer_rows(&[vec![2, 0, 0], vec![0, 3, 0]]).unwrap();
+
+        assert!(span.contains_integer_row(&[4, 9, 0]).unwrap());
+        assert!(!span.contains_integer_row(&[1, 0, 1]).unwrap());
+        assert!(
+            ExactRationalRowSpan::from_integer_rows(&[])
+                .unwrap()
+                .contains_integer_row(&[0, 0])
+                .unwrap()
+        );
+        assert!(
+            !ExactRationalRowSpan::from_integer_rows(&[])
+                .unwrap()
+                .contains_integer_row(&[0, 1])
+                .unwrap()
+        );
     }
 
     fn minimal_corrected_context(

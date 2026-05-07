@@ -595,12 +595,14 @@ witness relation domains and all 14 shared-facet domains fail the existing
 LP/exact supporting-face certificate, and the two degree-10 facet-union domains
 small enough for the `512` generator guard fail as well. Larger facet unions
 remain explicitly skipped. The report now has an opt-in rational span-closure
-scan for those witness domains. On the two degree-10 cases, targets `7` and `8`
-each scan `720` unique degree-bounded candidates, and relation/shared/union
-domains are all `span_closed_under_degree_bounded_context` with zero extra
-same-span generators. This rules out the cheap "small domain forgot forced
-span rows" explanation for those two cases; the blocker remains supporting-face
-or chamber-semigroup certification. These witness domains also still contain unresolved
+scan for those witness domains, backed by a per-domain exact rational row-echelon
+basis rather than repeated full rank recomputation. On the current schema-3
+context, all nine targets report relation/shared/union domains as
+`span_closed_under_degree_bounded_context` with zero extra same-span generators,
+after scanning `720..2963` unique degree-bounded candidates depending on target
+degree. This rules out the cheap "small domain forgot forced span rows"
+explanation; the blocker remains supporting-face or chamber-semigroup
+certification. These witness domains also still contain unresolved
 source data: the shared-facet domains aggregate to `228` source rays without a
 derived GV value, `20` other missing-target hits, and `10` uncovered-source-ray
 hits, despite also containing many toric-covered and source-derived-GV
