@@ -126,7 +126,13 @@ run pass. Any remaining mismatch must be explicit and localizable.
    by local charge signature: 52 full-facet CMS formula imports break into
    `-1,-1,-1,1,1,1` 28 times, `-1,-1,-1,1,2` 20 times,
    `-1,-1,1,1` 3 times, and `-1,-1,-1,-1,1,3` once. The current residual
-   predecessors remain in the `-1,-1,-1,1,2` family.
+   predecessors remain in the `-1,-1,-1,1,2` family. The residual predecessor
+   sample now also serializes the source-derived local `cygv` skeleton: both
+   source predecessors have compact including-origin phase
+   `q=[-1,-2,1,1,1]`, semigroup `[[1]]`, grading `[1]`, unit-tensor probe
+   `GV=-2`, and expected formula value `-2`, but still list
+   `local_intersection_tensor` and `local_chamber_certificate` as the only
+   uncertified inputs.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for

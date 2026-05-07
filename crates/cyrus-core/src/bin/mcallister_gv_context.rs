@@ -807,6 +807,8 @@ struct CygvClosestKnownQnResidualSourcePredecessorSummary {
     matching_uncovered_source_ray_local_charge_signature: Option<String>,
     matching_uncovered_source_ray_local_cygv_readiness_counts: BTreeMap<String, usize>,
     matching_uncovered_source_ray_local_missing_input_counts: BTreeMap<String, usize>,
+    matching_uncovered_source_ray_local_cygv_input_skeleton: Option<LocalCygvInputSkeleton>,
+    matching_uncovered_source_ray_local_unit_phase_probe: Option<LocalCygvUnitPhaseProbe>,
     curve_nonzero: Vec<(usize, i64)>,
     occurrences: Vec<CygvClosestKnownQnResidualSourcePredecessorOccurrence>,
 }
@@ -889,6 +891,8 @@ struct CygvClosestKnownQnResidualSourcePredecessorSummaryBuilder {
     matching_uncovered_source_ray_local_charge_signature: Option<String>,
     matching_uncovered_source_ray_local_cygv_readiness_counts: BTreeMap<String, usize>,
     matching_uncovered_source_ray_local_missing_input_counts: BTreeMap<String, usize>,
+    matching_uncovered_source_ray_local_cygv_input_skeleton: Option<LocalCygvInputSkeleton>,
+    matching_uncovered_source_ray_local_unit_phase_probe: Option<LocalCygvUnitPhaseProbe>,
     curve_nonzero: Vec<(usize, i64)>,
     occurrences: Vec<CygvClosestKnownQnResidualSourcePredecessorOccurrence>,
 }
@@ -7192,6 +7196,10 @@ fn cygv_closest_known_qn_residual_source_predecessor_summaries(
                     .matching_uncovered_source_ray_local_cygv_readiness_counts,
                 matching_uncovered_source_ray_local_missing_input_counts: builder
                     .matching_uncovered_source_ray_local_missing_input_counts,
+                matching_uncovered_source_ray_local_cygv_input_skeleton: builder
+                    .matching_uncovered_source_ray_local_cygv_input_skeleton,
+                matching_uncovered_source_ray_local_unit_phase_probe: builder
+                    .matching_uncovered_source_ray_local_unit_phase_probe,
                 curve_nonzero: builder.curve_nonzero,
                 occurrences: builder.occurrences,
             },
@@ -7295,6 +7303,20 @@ fn add_cygv_closest_known_qn_residual_source_predecessor(
                     }),
                 matching_uncovered_source_ray_local_cygv_readiness_counts: BTreeMap::new(),
                 matching_uncovered_source_ray_local_missing_input_counts: BTreeMap::new(),
+                matching_uncovered_source_ray_local_cygv_input_skeleton: source_context
+                    .as_ref()
+                    .and_then(|source_context| {
+                        source_context
+                            .matching_uncovered_source_ray_local_cygv_input_skeleton
+                            .clone()
+                    }),
+                matching_uncovered_source_ray_local_unit_phase_probe: source_context
+                    .as_ref()
+                    .and_then(|source_context| {
+                        source_context
+                            .matching_uncovered_source_ray_local_unit_phase_probe
+                            .clone()
+                    }),
                 curve_nonzero: residual.predecessor_nonzero.clone(),
                 occurrences: Vec::new(),
             },
@@ -12127,6 +12149,34 @@ mod tests {
                 },
             ],
         });
+        source_sample.origin_circuit_affine_support = Some(OriginCircuitAffineSupportSample {
+            affine_rank: 4,
+            coefficient_counts: BTreeMap::from([(-2, 1), (-1, 1), (1, 3)]),
+            local_charge_basis: vec![vec![-1, -2, 1, 1, 1]],
+            local_coordinates: vec![
+                OriginCircuitLocalCoordinateSample {
+                    point_index: 0,
+                    coordinates: Vec::new(),
+                },
+                OriginCircuitLocalCoordinateSample {
+                    point_index: 54,
+                    coordinates: Vec::new(),
+                },
+                OriginCircuitLocalCoordinateSample {
+                    point_index: 203,
+                    coordinates: Vec::new(),
+                },
+                OriginCircuitLocalCoordinateSample {
+                    point_index: 206,
+                    coordinates: Vec::new(),
+                },
+                OriginCircuitLocalCoordinateSample {
+                    point_index: 209,
+                    coordinates: Vec::new(),
+                },
+            ],
+            local_coordinates_2d: None,
+        });
         source_sample.real_cone_decomposition_exact_kind =
             Some("source_derived_origin_circuit".to_string());
         source_sample.cms_general_divisor_shape_candidates =
@@ -12242,6 +12292,26 @@ mod tests {
                 .matching_uncovered_source_ray_facet_context_status
                 .as_deref(),
             Some("source_derived_full_facet_context")
+        );
+        let skeleton = summary
+            .matching_uncovered_source_ray_local_cygv_input_skeleton
+            .as_ref()
+            .expect("residual source predecessor should preserve local cygv skeleton");
+        assert_eq!(
+            skeleton.local_cygv_q_matrix_phase_status,
+            "source_derived_unique_compact_threefold_phase_including_origin"
+        );
+        assert_eq!(
+            skeleton.remaining_uncertified_inputs,
+            ["local_intersection_tensor", "local_chamber_certificate"]
+        );
+        let unit_probe = summary
+            .matching_uncovered_source_ray_local_unit_phase_probe
+            .as_ref()
+            .expect("residual source predecessor should preserve unit phase probe");
+        assert_eq!(
+            unit_probe.unit_tensor_probe_status,
+            "unit_tensor_probe_matches_expected_formula_set_but_uncertified"
         );
         assert_eq!(
             summary

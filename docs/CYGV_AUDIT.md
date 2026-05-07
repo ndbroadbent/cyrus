@@ -2474,6 +2474,19 @@ missing only `local_intersection_tensor` and `local_chamber_certificate`; the
 residual predecessors lie in the `-1,-1,-1,1,2` import family. This makes the
 remaining task a chamber/tensor certification problem inside an already
 observed source-derived family, not a search for an unseen scalar GV family.
+The residual predecessor sample now preserves the source-derived local `cygv`
+skeleton instead of only the scalar CMS summaries. On
+`/tmp/cyrus_gv_context_all_source_residual_skeleton_report.json`, both
+residual source predecessors have compact including-origin phase
+`q=[-1,-2,1,1,1]`, one-parameter semigroup `[[1]]`, grading `[1]`,
+unit-tensor primitive value `GV=-2`, and expected formula value `-2`. They
+therefore share the exact same remaining uncertified inputs:
+`local_intersection_tensor` and `local_chamber_certificate`. A direct read of
+`cygv` 0.1.2 shows that `misc::process_int_nums` only normalizes the supplied
+intersection-number dictionary and `instanton::compute_inst_thread` consumes
+that tensor directly, so there is no hidden `cygv` routine that derives this
+local tensor from `q`; Cyrus must still source the tensor/chamber from toric
+phase data or a justified local model.
 An opt-in target-level integer tensor scan now runs the same one-parameter
 local skeletons through the actual compact `cygv` call while varying the single
 intersection tensor entry over a bounded integer range. On the fresh

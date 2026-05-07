@@ -307,7 +307,10 @@ and matrix-basis pipeline are no longer open.
    origin-circuit witness. Those 52 imports now split by local charge signature
    as `-1,-1,-1,1,1,1:28`, `-1,-1,-1,1,2:20`, `-1,-1,1,1:3`, and
    `-1,-1,-1,-1,1,3:1`; the residual predecessors stay in the
-   `-1,-1,-1,1,2` family. The
+   `-1,-1,-1,1,2` family. The residual predecessor sample now carries its
+   local `cygv` skeleton: both residual source rows use including-origin
+   `q=[-1,-2,1,1,1]`, semigroup `[[1]]`, grading `[1]`, and a unit-tensor
+   probe that gives `GV=-2` against expected `-2`. The
    CMS divisor cubic suggests tensor value `3`,
    but the raw-cubic primitive probe gives `GV=-6`; the unit-tensor probe gives
    the expected `GV=-2` and remains unpromoted until the chamber/tensor source is
