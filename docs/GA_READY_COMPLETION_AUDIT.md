@@ -325,7 +325,11 @@ and matrix-basis pipeline are no longer open.
    `path_support_target_gv_coefficient_status=integer_zero_or_absent_gv`.
    Thus the current path-support domains are internally consistent zero-GV
    histories after lower `Li2(q_N)` subtraction; the remaining blocker is the
-   certified corrected-chamber semigroup/history, not qN trace visibility.
+   certified corrected-chamber semigroup/history, not qN trace visibility. The
+   report now exports all path-support GV coefficient-readout status counts as
+   well: target `7` has `79` readouts (`11` nonzero, `25` zero/absent, `43`
+   missing), and target `8` has `33` (`6`, `16`, `11`), giving a direct audit
+   of the small-domain composite decisions.
    The path-history report now also mirrors `cygv`'s nearest live-`q_N`
    predecessor selection. The closest certified qN predecessor for target `7`
    is the toric degree-two class `[(44,1),(54,1),(206,-2)]` with an unknown

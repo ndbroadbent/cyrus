@@ -14,9 +14,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 
 use cyrus_core::gv::{
-    SupportingMoriFaceLpSearchOptions, certify_supporting_mori_face_by_exact_kernel,
-    certify_supporting_mori_face_by_lp_search, cygv_pair_reduced_seed_generators,
-    find_extremal_mori_ray_separator,
+    CygvGvCoefficientTrace, SupportingMoriFaceLpSearchOptions,
+    certify_supporting_mori_face_by_exact_kernel, certify_supporting_mori_face_by_lp_search,
+    cygv_pair_reduced_seed_generators, find_extremal_mori_ray_separator,
 };
 use cyrus_core::types::rational::Rational;
 use cyrus_core::types::tags::Finite;
@@ -31,6 +31,7 @@ use cyrus_core::{
 const CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT: usize = 32;
 const CYGV_PATH_SUPPORT_QN_TRACE_SAMPLE_LIMIT: usize = 16;
 const CYGV_PATH_SUPPORT_QN_TRACE_TERM_SAMPLE_LIMIT: usize = 16;
+const CYGV_PATH_SUPPORT_GV_COEFFICIENT_TRACE_SAMPLE_LIMIT: usize = 32;
 const CYGV_PATH_SUPPORT_TARGET_MONOMIAL_QN_SOURCE_SAMPLE_LIMIT: usize = 16;
 const ORIGIN_CIRCUIT_WITNESS_DOMAIN_UNRESOLVED_SAMPLE_LIMIT: usize = 64;
 const ORIGIN_CIRCUIT_WITNESS_DOMAIN_OCCURRENCE_SAMPLE_LIMIT: usize = 8;
@@ -586,6 +587,9 @@ struct CygvPathHistoryProbe {
     path_support_target_rounded_gv_candidate: Option<String>,
     path_support_target_pivot_coordinate: Option<usize>,
     path_support_target_pivot_component: Option<i32>,
+    path_support_gv_coefficient_trace_count: Option<usize>,
+    path_support_gv_coefficient_status_counts: BTreeMap<String, usize>,
+    path_support_gv_coefficient_trace_sample: Vec<CygvPathSupportGvCoefficientTraceSample>,
     path_support_qn_trace_sample: Vec<CygvPathSupportQnTracePolynomialSample>,
     path_support_target_monomial_qn_source_count: Option<usize>,
     path_support_target_monomial_qn_source_sample: Vec<CygvPathSupportTargetMonomialQnSource>,
@@ -720,6 +724,19 @@ struct CygvPathSupportQnTraceTermSample {
     monomial_index: usize,
     exponent_nonzero: Vec<(usize, i64)>,
     coefficient: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CygvPathSupportGvCoefficientTraceSample {
+    element_index: usize,
+    degree: u32,
+    curve_nonzero: Vec<(usize, i64)>,
+    insertion_index: usize,
+    pivot_component: i32,
+    instanton_coefficient: Option<String>,
+    gv_candidate: Option<String>,
+    rounded_gv_candidate: Option<String>,
+    status: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1069,6 +1086,9 @@ struct PathSupportGeneratorProbe {
     target_rounded_gv_candidate: Option<String>,
     target_pivot_coordinate: Option<usize>,
     target_pivot_component: Option<i32>,
+    gv_coefficient_trace_count: Option<usize>,
+    gv_coefficient_status_counts: BTreeMap<String, usize>,
+    gv_coefficient_trace_sample: Vec<CygvPathSupportGvCoefficientTraceSample>,
     qn_trace_sample: Vec<CygvPathSupportQnTracePolynomialSample>,
     target_monomial_qn_source_count: Option<usize>,
     target_monomial_qn_source_sample: Vec<CygvPathSupportTargetMonomialQnSource>,
@@ -1518,6 +1538,9 @@ fn path_support_generator_probe(
             target_rounded_gv_candidate: None,
             target_pivot_coordinate: None,
             target_pivot_component: None,
+            gv_coefficient_trace_count: None,
+            gv_coefficient_status_counts: BTreeMap::new(),
+            gv_coefficient_trace_sample: Vec::new(),
             qn_trace_sample: Vec::new(),
             target_monomial_qn_source_count: None,
             target_monomial_qn_source_sample: Vec::new(),
@@ -1544,6 +1567,9 @@ fn path_support_generator_probe(
             target_rounded_gv_candidate: None,
             target_pivot_coordinate: None,
             target_pivot_component: None,
+            gv_coefficient_trace_count: None,
+            gv_coefficient_status_counts: BTreeMap::new(),
+            gv_coefficient_trace_sample: Vec::new(),
             qn_trace_sample: Vec::new(),
             target_monomial_qn_source_count: None,
             target_monomial_qn_source_sample: Vec::new(),
@@ -1578,6 +1604,9 @@ fn path_support_generator_probe_inner(
             target_rounded_gv_candidate: None,
             target_pivot_coordinate: None,
             target_pivot_component: None,
+            gv_coefficient_trace_count: None,
+            gv_coefficient_status_counts: BTreeMap::new(),
+            gv_coefficient_trace_sample: Vec::new(),
             qn_trace_sample: Vec::new(),
             target_monomial_qn_source_count: None,
             target_monomial_qn_source_sample: Vec::new(),
@@ -1641,6 +1670,9 @@ fn path_support_generator_probe_inner(
                 target_rounded_gv_candidate: None,
                 target_pivot_coordinate: None,
                 target_pivot_component: None,
+                gv_coefficient_trace_count: None,
+                gv_coefficient_status_counts: BTreeMap::new(),
+                gv_coefficient_trace_sample: Vec::new(),
                 qn_trace_sample: Vec::new(),
                 target_monomial_qn_source_count: None,
                 target_monomial_qn_source_sample: Vec::new(),
@@ -1666,6 +1698,9 @@ fn path_support_generator_probe_inner(
                 target_rounded_gv_candidate: None,
                 target_pivot_coordinate: None,
                 target_pivot_component: None,
+                gv_coefficient_trace_count: None,
+                gv_coefficient_status_counts: BTreeMap::new(),
+                gv_coefficient_trace_sample: Vec::new(),
                 qn_trace_sample: Vec::new(),
                 target_monomial_qn_source_count: None,
                 target_monomial_qn_source_sample: Vec::new(),
@@ -1682,6 +1717,11 @@ fn path_support_generator_probe_inner(
     };
     let qn_trace_polynomial_count = traced.qn_trace.len();
     let qn_trace_sample = path_support_qn_trace_sample(&traced.qn_trace);
+    let gv_coefficient_trace_count = traced.gv_coefficient_trace.len();
+    let gv_coefficient_status_counts =
+        path_support_gv_coefficient_status_counts(&traced.gv_coefficient_trace);
+    let gv_coefficient_trace_sample =
+        path_support_gv_coefficient_trace_sample(&traced.gv_coefficient_trace);
     let qn_trace_term_counts_by_curve = traced
         .qn_trace
         .iter()
@@ -1741,6 +1781,9 @@ fn path_support_generator_probe_inner(
         target_rounded_gv_candidate,
         target_pivot_coordinate,
         target_pivot_component,
+        gv_coefficient_trace_count: Some(gv_coefficient_trace_count),
+        gv_coefficient_status_counts,
+        gv_coefficient_trace_sample,
         qn_trace_sample,
         target_monomial_qn_source_count: Some(target_monomial_qn_source_count),
         target_monomial_qn_source_sample,
@@ -3246,6 +3289,36 @@ fn path_support_qn_trace_sample(
                     coefficient: term.coefficient.clone(),
                 })
                 .collect(),
+        })
+        .collect()
+}
+
+fn path_support_gv_coefficient_status_counts(
+    trace: &[CygvGvCoefficientTrace],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for entry in trace {
+        *counts.entry(entry.status.clone()).or_insert(0) += 1;
+    }
+    counts
+}
+
+fn path_support_gv_coefficient_trace_sample(
+    trace: &[CygvGvCoefficientTrace],
+) -> Vec<CygvPathSupportGvCoefficientTraceSample> {
+    trace
+        .iter()
+        .take(CYGV_PATH_SUPPORT_GV_COEFFICIENT_TRACE_SAMPLE_LIMIT)
+        .map(|entry| CygvPathSupportGvCoefficientTraceSample {
+            element_index: entry.element_index,
+            degree: entry.degree,
+            curve_nonzero: sparse_from_i32_dense(&entry.element),
+            insertion_index: entry.insertion_index,
+            pivot_component: entry.pivot_component,
+            instanton_coefficient: entry.instanton_coefficient.clone(),
+            gv_candidate: entry.gv_candidate.clone(),
+            rounded_gv_candidate: entry.rounded_gv_candidate.clone(),
+            status: entry.status.clone(),
         })
         .collect()
 }
@@ -7574,6 +7647,9 @@ fn cygv_path_history_probe(
             path_support_target_rounded_gv_candidate: None,
             path_support_target_pivot_coordinate: None,
             path_support_target_pivot_component: None,
+            path_support_gv_coefficient_trace_count: None,
+            path_support_gv_coefficient_status_counts: BTreeMap::new(),
+            path_support_gv_coefficient_trace_sample: Vec::new(),
             path_support_qn_trace_sample: Vec::new(),
             path_support_target_monomial_qn_source_count: None,
             path_support_target_monomial_qn_source_sample: Vec::new(),
@@ -7663,6 +7739,9 @@ fn cygv_path_history_probe_inner(
             path_support_target_rounded_gv_candidate: None,
             path_support_target_pivot_coordinate: None,
             path_support_target_pivot_component: None,
+            path_support_gv_coefficient_trace_count: None,
+            path_support_gv_coefficient_status_counts: BTreeMap::new(),
+            path_support_gv_coefficient_trace_sample: Vec::new(),
             path_support_qn_trace_sample: Vec::new(),
             path_support_target_monomial_qn_source_count: None,
             path_support_target_monomial_qn_source_sample: Vec::new(),
@@ -7728,6 +7807,9 @@ fn cygv_path_history_probe_inner(
             path_support_target_rounded_gv_candidate: None,
             path_support_target_pivot_coordinate: None,
             path_support_target_pivot_component: None,
+            path_support_gv_coefficient_trace_count: None,
+            path_support_gv_coefficient_status_counts: BTreeMap::new(),
+            path_support_gv_coefficient_trace_sample: Vec::new(),
             path_support_qn_trace_sample: Vec::new(),
             path_support_target_monomial_qn_source_count: None,
             path_support_target_monomial_qn_source_sample: Vec::new(),
@@ -7870,6 +7952,12 @@ fn cygv_path_history_probe_inner(
                 .target_rounded_gv_candidate,
             path_support_target_pivot_coordinate: path_support_generators.target_pivot_coordinate,
             path_support_target_pivot_component: path_support_generators.target_pivot_component,
+            path_support_gv_coefficient_trace_count: path_support_generators
+                .gv_coefficient_trace_count,
+            path_support_gv_coefficient_status_counts: path_support_generators
+                .gv_coefficient_status_counts,
+            path_support_gv_coefficient_trace_sample: path_support_generators
+                .gv_coefficient_trace_sample,
             path_support_qn_trace_sample: path_support_generators.qn_trace_sample,
             path_support_target_monomial_qn_source_count: path_support_generators
                 .target_monomial_qn_source_count,
@@ -7951,6 +8039,11 @@ fn cygv_path_history_probe_inner(
             .target_rounded_gv_candidate,
         path_support_target_pivot_coordinate: path_support_generators.target_pivot_coordinate,
         path_support_target_pivot_component: path_support_generators.target_pivot_component,
+        path_support_gv_coefficient_trace_count: path_support_generators.gv_coefficient_trace_count,
+        path_support_gv_coefficient_status_counts: path_support_generators
+            .gv_coefficient_status_counts,
+        path_support_gv_coefficient_trace_sample: path_support_generators
+            .gv_coefficient_trace_sample,
         path_support_qn_trace_sample: path_support_generators.qn_trace_sample,
         path_support_target_monomial_qn_source_count: path_support_generators
             .target_monomial_qn_source_count,
@@ -13643,6 +13736,22 @@ mod tests {
         assert_eq!(probe.target_rounded_gv_candidate.as_deref(), Some("2875"));
         assert_eq!(probe.target_pivot_coordinate, Some(0));
         assert_eq!(probe.target_pivot_component, Some(1));
+        assert_eq!(probe.gv_coefficient_trace_count, Some(1));
+        assert_eq!(
+            probe.gv_coefficient_status_counts,
+            BTreeMap::from([("integer_nonzero_gv".to_string(), 1)])
+        );
+        assert_eq!(probe.gv_coefficient_trace_sample.len(), 1);
+        assert_eq!(
+            probe.gv_coefficient_trace_sample[0].curve_nonzero,
+            vec![(0, 1)]
+        );
+        assert_eq!(
+            probe.gv_coefficient_trace_sample[0]
+                .instanton_coefficient
+                .as_deref(),
+            Some("2875")
+        );
         assert_eq!(probe.qn_trace_sample.len(), 1);
         assert_eq!(probe.qn_trace_sample[0].curve_nonzero, vec![(0, 1)]);
         assert_eq!(probe.qn_trace_sample[0].term_count, 1);

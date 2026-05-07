@@ -2606,6 +2606,13 @@ target coefficient before cygv decides whether a target `q_N` polynomial is
 needed. The unresolved object is still the certified corrected-chamber
 semigroup/history whose lower `q_N` sequence gives McAllister's nonzero target
 correction, not a missing scalar lookup inside the current path-support run.
+The report now also exports a bounded sample and status counts for all GV
+coefficient readouts in the path-support `cygv` call. Target `7` has `79`
+coefficient readouts split as `11` integer-nonzero, `25` integer-zero/absent,
+and `43` missing instanton coefficients; target `8` has `33` readouts split as
+`6`, `16`, and `11`. This gives a direct compact-history audit for the
+degree-four, degree-six, and degree-eight composite classes rather than
+requiring those decisions to be inferred from qN samples alone.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use

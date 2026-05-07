@@ -414,7 +414,11 @@ to make the remaining GV layer more first-principles:
    mutable instanton polynomial: in both small path-support domains the target
    instanton coefficient and GV candidate are exactly `0`, with
    `integer_zero_or_absent_gv` status. The current small domains are therefore
-   internally consistent zero histories, not failed target lookups.
+   internally consistent zero histories, not failed target lookups. The
+   path-support report also exposes all GV coefficient readout status counts:
+   target `7` has `79` readouts (`11` nonzero, `25` zero/absent, `43`
+   missing), while target `8` has `33` (`6`, `16`, `11`). This pins the
+   composite lower-degree decisions made in the small domains.
    A direct cygv semigroup-size diagnostic now confirms why: the degree-10
    missing targets already have `720` seed rows at or below the target degree,
    and an unguarded cygv semigroup closure measurement did not finish within
