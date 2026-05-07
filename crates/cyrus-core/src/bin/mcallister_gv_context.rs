@@ -1078,6 +1078,8 @@ struct CygvResidualQnDomainComparison {
     parent_path_support_term_signatures: Vec<CygvPathSupportQnTraceTermSignature>,
     residual_subtarget_term_signatures: Vec<CygvPathSupportQnTraceTermSignature>,
     parent_only_term_source_status_counts: BTreeMap<String, usize>,
+    parent_only_term_parent_path_support_qn_trace_status_counts: BTreeMap<String, usize>,
+    parent_only_term_parent_path_support_gv_coefficient_status_counts: BTreeMap<String, usize>,
     parent_only_term_classification_sample: Vec<CygvResidualQnDomainTermClassification>,
 }
 
@@ -1092,6 +1094,13 @@ struct CygvResidualQnDomainTermClassification {
     exponent_nonzero: Vec<(usize, i64)>,
     coefficient: String,
     degree: i128,
+    parent_path_support_gv: Option<String>,
+    parent_path_support_qn_trace_status: Option<String>,
+    parent_path_support_qn_trace_term_count: Option<usize>,
+    parent_path_support_gv_coefficient_status: Option<String>,
+    parent_path_support_instanton_coefficient: Option<String>,
+    parent_path_support_gv_candidate: Option<String>,
+    parent_path_support_rounded_gv_candidate: Option<String>,
     offset_from_residual_nonzero: Vec<(usize, i64)>,
     offset_from_residual_degree: i128,
     offset_toric_gv: Option<String>,
@@ -1125,6 +1134,16 @@ struct PathSupportSourceClassContext {
     matching_uncovered_source_ray_local_missing_inputs: Vec<String>,
     matching_uncovered_source_ray_local_cygv_input_skeleton: Option<LocalCygvInputSkeleton>,
     matching_uncovered_source_ray_local_unit_phase_probe: Option<LocalCygvUnitPhaseProbe>,
+}
+
+struct PathSupportCurveRuntimeLookup {
+    path_support_gv: Option<String>,
+    path_support_qn_trace_status: Option<String>,
+    path_support_qn_trace_term_count: Option<usize>,
+    path_support_gv_coefficient_status: Option<String>,
+    path_support_instanton_coefficient: Option<String>,
+    path_support_gv_candidate: Option<String>,
+    path_support_rounded_gv_candidate: Option<String>,
 }
 
 struct CygvPathPredecessorStats {
@@ -1183,6 +1202,12 @@ struct PathSupportGeneratorProbe {
     qn_trace_status_counts: BTreeMap<String, usize>,
     source_class_status_counts: BTreeMap<String, usize>,
     lookup_sample: Vec<CygvPathSupportLookup>,
+    #[serde(skip)]
+    gv_by_curve: HashMap<Vec<i32>, String>,
+    #[serde(skip)]
+    qn_trace_term_counts_by_curve: HashMap<Vec<i32>, usize>,
+    #[serde(skip)]
+    gv_coefficient_trace_by_curve: HashMap<Vec<i32>, CygvGvCoefficientTrace>,
 }
 
 struct LowerSeedDiamondProbe {
@@ -1635,6 +1660,9 @@ fn path_support_generator_probe(
             qn_trace_status_counts: BTreeMap::new(),
             source_class_status_counts: BTreeMap::new(),
             lookup_sample: Vec::new(),
+            gv_by_curve: HashMap::new(),
+            qn_trace_term_counts_by_curve: HashMap::new(),
+            gv_coefficient_trace_by_curve: HashMap::new(),
         };
     }
     match path_support_generator_probe_inner(target, target_degree, candidates, context) {
@@ -1664,6 +1692,9 @@ fn path_support_generator_probe(
             qn_trace_status_counts: BTreeMap::new(),
             source_class_status_counts: BTreeMap::new(),
             lookup_sample: Vec::new(),
+            gv_by_curve: HashMap::new(),
+            qn_trace_term_counts_by_curve: HashMap::new(),
+            gv_coefficient_trace_by_curve: HashMap::new(),
         },
     }
 }
@@ -1750,9 +1781,26 @@ fn residual_qn_domain_comparison(
         residual_probe,
     );
     let parent_only_classifications =
-        residual_parent_only_qn_term_classifications(&comparison, context)?;
+        residual_parent_only_qn_term_classifications(&comparison, parent_probe, context)?;
     comparison.parent_only_term_source_status_counts =
         parent_only_qn_term_source_status_counts(&parent_only_classifications);
+    comparison.parent_only_term_parent_path_support_qn_trace_status_counts = optional_status_counts(
+        parent_only_classifications.iter().map(|classification| {
+            classification
+                .parent_path_support_qn_trace_status
+                .as_deref()
+        }),
+        "missing_parent_path_support_qn_trace_status",
+    );
+    comparison.parent_only_term_parent_path_support_gv_coefficient_status_counts =
+        optional_status_counts(
+            parent_only_classifications.iter().map(|classification| {
+                classification
+                    .parent_path_support_gv_coefficient_status
+                    .as_deref()
+            }),
+            "missing_parent_path_support_gv_coefficient_status",
+        );
     comparison.parent_only_term_classification_sample = parent_only_classifications;
     Ok(Some(comparison))
 }
@@ -1790,12 +1838,15 @@ fn residual_qn_domain_comparison_for_curve(
         parent_path_support_term_signatures,
         residual_subtarget_term_signatures,
         parent_only_term_source_status_counts: BTreeMap::new(),
+        parent_only_term_parent_path_support_qn_trace_status_counts: BTreeMap::new(),
+        parent_only_term_parent_path_support_gv_coefficient_status_counts: BTreeMap::new(),
         parent_only_term_classification_sample: Vec::new(),
     }
 }
 
 fn residual_parent_only_qn_term_classifications(
     comparison: &CygvResidualQnDomainComparison,
+    parent_probe: &PathSupportGeneratorProbe,
     context: &ValidatedContext<'_>,
 ) -> Result<Vec<CygvResidualQnDomainTermClassification>, String> {
     let residual_dense = dense_from_sparse(&comparison.residual_nonzero, context.dimension)?;
@@ -1819,11 +1870,25 @@ fn residual_parent_only_qn_term_classifications(
                 offset_source_derived_gv.as_deref(),
             )?
             .to_string();
+            let parent_path_support =
+                path_support_runtime_curve_lookup(parent_probe, &term.exponent_nonzero, context)?;
             let source_context = path_support_source_class_context(&curve, context)?;
             Ok(CygvResidualQnDomainTermClassification {
                 exponent_nonzero: term.exponent_nonzero.clone(),
                 coefficient: term.coefficient.clone(),
                 degree,
+                parent_path_support_gv: parent_path_support.path_support_gv,
+                parent_path_support_qn_trace_status: parent_path_support
+                    .path_support_qn_trace_status,
+                parent_path_support_qn_trace_term_count: parent_path_support
+                    .path_support_qn_trace_term_count,
+                parent_path_support_gv_coefficient_status: parent_path_support
+                    .path_support_gv_coefficient_status,
+                parent_path_support_instanton_coefficient: parent_path_support
+                    .path_support_instanton_coefficient,
+                parent_path_support_gv_candidate: parent_path_support.path_support_gv_candidate,
+                parent_path_support_rounded_gv_candidate: parent_path_support
+                    .path_support_rounded_gv_candidate,
                 offset_from_residual_nonzero: sparse_from_dense(&offset),
                 offset_from_residual_degree,
                 offset_toric_gv,
@@ -1856,6 +1921,49 @@ fn parent_only_qn_term_source_status_counts(
             .or_insert(0) += 1;
     }
     counts
+}
+
+fn path_support_runtime_curve_lookup(
+    probe: &PathSupportGeneratorProbe,
+    curve_nonzero: &[(usize, i64)],
+    context: &ValidatedContext<'_>,
+) -> Result<PathSupportCurveRuntimeLookup, String> {
+    if probe.status.as_deref() != Some("computed_path_support_generators") {
+        return Ok(PathSupportCurveRuntimeLookup {
+            path_support_gv: None,
+            path_support_qn_trace_status: None,
+            path_support_qn_trace_term_count: None,
+            path_support_gv_coefficient_status: None,
+            path_support_instanton_coefficient: None,
+            path_support_gv_candidate: None,
+            path_support_rounded_gv_candidate: None,
+        });
+    }
+    let curve = dense_from_sparse(curve_nonzero, context.dimension)?;
+    let curve_i32 = curve_i64_to_i32(&curve, "path-support runtime lookup curve")?;
+    let path_support_gv = probe
+        .gv_by_curve
+        .get(&curve_i32)
+        .cloned()
+        .unwrap_or_else(|| "0".to_string());
+    let path_support_qn_trace_term_count =
+        probe.qn_trace_term_counts_by_curve.get(&curve_i32).copied();
+    let path_support_qn_trace_status =
+        path_support_qn_trace_status(&path_support_gv, path_support_qn_trace_term_count)?
+            .to_string();
+    let gv_coefficient_trace = probe.gv_coefficient_trace_by_curve.get(&curve_i32);
+    Ok(PathSupportCurveRuntimeLookup {
+        path_support_gv: Some(path_support_gv),
+        path_support_qn_trace_status: Some(path_support_qn_trace_status),
+        path_support_qn_trace_term_count,
+        path_support_gv_coefficient_status: gv_coefficient_trace.map(|entry| entry.status.clone()),
+        path_support_instanton_coefficient: gv_coefficient_trace
+            .and_then(|entry| entry.instanton_coefficient.clone()),
+        path_support_gv_candidate: gv_coefficient_trace
+            .and_then(|entry| entry.gv_candidate.clone()),
+        path_support_rounded_gv_candidate: gv_coefficient_trace
+            .and_then(|entry| entry.rounded_gv_candidate.clone()),
+    })
 }
 
 fn qn_trace_sample_for_curve<'a>(
@@ -1945,6 +2053,9 @@ fn path_support_generator_probe_inner(
             qn_trace_status_counts: BTreeMap::new(),
             source_class_status_counts: BTreeMap::new(),
             lookup_sample: Vec::new(),
+            gv_by_curve: HashMap::new(),
+            qn_trace_term_counts_by_curve: HashMap::new(),
+            gv_coefficient_trace_by_curve: HashMap::new(),
         });
     }
     let mut generators = Vec::new();
@@ -2011,6 +2122,9 @@ fn path_support_generator_probe_inner(
                 qn_trace_status_counts: BTreeMap::new(),
                 source_class_status_counts: BTreeMap::new(),
                 lookup_sample: Vec::new(),
+                gv_by_curve: HashMap::new(),
+                qn_trace_term_counts_by_curve: HashMap::new(),
+                gv_coefficient_trace_by_curve: HashMap::new(),
             });
         }
         Err(payload) => {
@@ -2042,6 +2156,9 @@ fn path_support_generator_probe_inner(
                 qn_trace_status_counts: BTreeMap::new(),
                 source_class_status_counts: BTreeMap::new(),
                 lookup_sample: Vec::new(),
+                gv_by_curve: HashMap::new(),
+                qn_trace_term_counts_by_curve: HashMap::new(),
+                gv_coefficient_trace_by_curve: HashMap::new(),
             });
         }
     };
@@ -2056,6 +2173,11 @@ fn path_support_generator_probe_inner(
         .qn_trace
         .iter()
         .map(|poly| (poly.element.clone(), poly.terms.len()))
+        .collect::<HashMap<_, _>>();
+    let gv_coefficient_trace_by_curve = traced
+        .gv_coefficient_trace
+        .iter()
+        .map(|entry| (entry.element.clone(), entry.clone()))
         .collect::<HashMap<_, _>>();
     let target_gv_coefficient_trace = traced
         .gv_coefficient_trace
@@ -2122,6 +2244,9 @@ fn path_support_generator_probe_inner(
         qn_trace_status_counts,
         source_class_status_counts,
         lookup_sample,
+        gv_by_curve: gvs_by_curve,
+        qn_trace_term_counts_by_curve,
+        gv_coefficient_trace_by_curve,
     })
 }
 
@@ -14299,6 +14424,9 @@ mod tests {
                 qn_trace_status_counts: BTreeMap::new(),
                 source_class_status_counts: BTreeMap::new(),
                 lookup_sample: Vec::new(),
+                gv_by_curve: HashMap::new(),
+                qn_trace_term_counts_by_curve: HashMap::new(),
+                gv_coefficient_trace_by_curve: HashMap::new(),
             }
         }
 
@@ -14323,6 +14451,160 @@ mod tests {
         );
         assert_eq!(comparison.parent_path_support_term_signatures.len(), 2);
         assert_eq!(comparison.residual_subtarget_term_signatures.len(), 1);
+    }
+
+    #[test]
+    fn residual_parent_only_classification_exports_parent_path_support_lookup() {
+        let residual = vec![(0, 1), (1, -1)];
+        let parent_only_exponent = vec![(0, 2)];
+        let mut parent = {
+            let sample = CygvPathSupportQnTracePolynomialSample {
+                element_index: 0,
+                degree: 2,
+                curve_nonzero: residual.clone(),
+                term_count: 2,
+                term_sample_limit: 16,
+                term_sample: vec![
+                    CygvPathSupportQnTraceTermSample {
+                        monomial_index: 0,
+                        exponent_nonzero: residual.clone(),
+                        coefficient: "1".to_string(),
+                    },
+                    CygvPathSupportQnTraceTermSample {
+                        monomial_index: 1,
+                        exponent_nonzero: parent_only_exponent.clone(),
+                        coefficient: "1".to_string(),
+                    },
+                ],
+            };
+            PathSupportGeneratorProbe {
+                support_size: None,
+                generator_count: None,
+                status: Some("computed_path_support_generators".to_string()),
+                gv: None,
+                qn_trace_polynomial_count: None,
+                target_qn_trace_status: None,
+                target_qn_trace_term_count: None,
+                target_gv_coefficient_status: None,
+                target_instanton_coefficient: None,
+                target_gv_candidate: None,
+                target_rounded_gv_candidate: None,
+                target_pivot_coordinate: None,
+                target_pivot_component: None,
+                gv_coefficient_trace_count: None,
+                gv_coefficient_status_counts: BTreeMap::new(),
+                gv_coefficient_trace_sample: Vec::new(),
+                qn_trace_sample: vec![sample],
+                target_monomial_qn_source_count: None,
+                target_monomial_qn_source_sample: Vec::new(),
+                error: None,
+                lookup_status_counts: BTreeMap::new(),
+                qn_trace_status_counts: BTreeMap::new(),
+                source_class_status_counts: BTreeMap::new(),
+                lookup_sample: Vec::new(),
+                gv_by_curve: HashMap::new(),
+                qn_trace_term_counts_by_curve: HashMap::new(),
+                gv_coefficient_trace_by_curve: HashMap::new(),
+            }
+        };
+        parent.gv_by_curve.insert(vec![2, 0], "5".to_string());
+        parent.qn_trace_term_counts_by_curve.insert(vec![2, 0], 3);
+        parent.gv_coefficient_trace_by_curve.insert(
+            vec![2, 0],
+            CygvGvCoefficientTrace {
+                element_index: 7,
+                degree: 2,
+                element: vec![2, 0],
+                insertion_index: 0,
+                pivot_component: 2,
+                instanton_coefficient: Some("10".to_string()),
+                gv_candidate: Some("5".to_string()),
+                rounded_gv_candidate: Some("5".to_string()),
+                status: "integer_nonzero_gv".to_string(),
+            },
+        );
+        let subtarget = PathSupportGeneratorProbe {
+            qn_trace_sample: vec![CygvPathSupportQnTracePolynomialSample {
+                element_index: 0,
+                degree: 2,
+                curve_nonzero: residual.clone(),
+                term_count: 1,
+                term_sample_limit: 16,
+                term_sample: vec![CygvPathSupportQnTraceTermSample {
+                    monomial_index: 0,
+                    exponent_nonzero: residual.clone(),
+                    coefficient: "1".to_string(),
+                }],
+            }],
+            ..parent.clone()
+        };
+        let comparison =
+            residual_qn_domain_comparison_for_curve(residual.clone(), &parent, Some(&subtarget));
+        let grading = vec![1, 1];
+        let q_matrix: Vec<Vec<i64>> = Vec::new();
+        let degree_bounded_rays: Vec<Vec<i64>> = Vec::new();
+        let stats = MissingGvTargetStats {
+            target_count: 0,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: Vec::new(),
+        };
+        let context = ValidatedContext {
+            dimension: 2,
+            degree_bound: 2,
+            q_cols: 0,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: None,
+            covered_toric_gv_by_basis: HashMap::from([(vec![1, 1], "-2".to_string())]),
+            source_derived_gv_by_basis: HashMap::new(),
+            intersection: Intersection::new(2),
+            stats: &stats,
+            uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
+        };
+
+        let classifications =
+            residual_parent_only_qn_term_classifications(&comparison, &parent, &context)
+                .expect("parent-only classification should use parent path-support maps");
+
+        assert_eq!(classifications.len(), 1);
+        assert_eq!(
+            classifications[0].parent_path_support_gv.as_deref(),
+            Some("5")
+        );
+        assert_eq!(
+            classifications[0]
+                .parent_path_support_qn_trace_status
+                .as_deref(),
+            Some("path_support_qn_materialized_for_nonzero_gv")
+        );
+        assert_eq!(
+            classifications[0].parent_path_support_qn_trace_term_count,
+            Some(3)
+        );
+        assert_eq!(
+            classifications[0]
+                .parent_path_support_gv_coefficient_status
+                .as_deref(),
+            Some("integer_nonzero_gv")
+        );
+        assert_eq!(
+            classifications[0]
+                .parent_path_support_instanton_coefficient
+                .as_deref(),
+            Some("10")
+        );
+        assert_eq!(
+            classifications[0]
+                .parent_path_support_gv_candidate
+                .as_deref(),
+            Some("5")
+        );
+        assert_eq!(
+            classifications[0].offset_known_qn_history_status,
+            "known_nonzero_toric_gv"
+        );
     }
 
     #[test]

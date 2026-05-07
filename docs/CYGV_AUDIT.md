@@ -2667,6 +2667,20 @@ classification, while the other degree-ten term
 not produced by an unclassified scalar residual leaf; it is produced by qN
 terms that couple the residual to the degree-ten missing-target layer, plus one
 generated target-7 side term outside the exported source-ray context.
+The parent-only classification now also looks each parent-only exponent back up
+inside the parent path-support `cygv` run before serializing the comparison. In
+`/tmp/cyrus_gv_context_target7_parent_path_lookup_report.json`, the generated
+target-7 side term is itself a nonzero parent-domain object
+(`parent_path_support_gv=-2`, one qN term, and
+`parent_path_support_gv_coefficient_status=integer_nonzero_gv`). The
+missing-target-shaped parent-only term in that same report is explicitly
+`GV=0` with no qN polynomial and an `integer_zero_or_absent_gv` coefficient
+readout. In
+`/tmp/cyrus_gv_context_target8_parent_path_lookup_report.json`, target `8`'s
+missing-target-shaped parent-only term is likewise `GV=0` with no parent-domain
+qN polynomial. This rules out interpreting the missing-target monomial as a
+nonzero small-domain target; the only nonzero extra parent-domain term observed
+so far is the generated target-7 side term.
 Subtracting the degree-eight residual from each parent-only term shows that all
 of these terms are residual plus a known degree-two toric offset. Target `7`
 has two such offsets, both `known_nonzero_toric_gv` with `GV=-2`: its own
