@@ -2208,7 +2208,9 @@ evidence: CMS shape/check rows are accepted as known qN history only when the
 sample also has a single/shared origin-circuit witness relation and
 `source_derived_full_facet_context`. A guarded 4-214-647 report preserves the
 same residual-source predecessor queue, so the added guard removes a possible
-shape-only shortcut without changing the live blocker.
+shape-only shortcut without changing the live blocker. The same report counts
+`52` imported full-facet CMS formula rows, `79` rows with no integral matching
+CMS formula, and `115` rows with no origin-circuit witness.
 
 The first-principles context export now preserves the actual rational divisor
 solution behind each CMS-general-divisor intersection check. Successful checks

@@ -301,7 +301,10 @@ and matrix-basis pipeline are no longer open.
    inputs are `local_intersection_tensor` and `local_chamber_certificate`. The
    source-derived scalar GV map now enforces this full facet context before a
    CMS-derived value enters qN-history status, and the guarded 4-214-647 report
-   still records the same two source predecessors across three occurrences. The
+   still records the same two source predecessors across three occurrences. It
+   also records source-ray import counts: `52` full-facet CMS formula imports,
+   `79` rows with no integral matching CMS formula, and `115` rows with no
+   origin-circuit witness. The
    CMS divisor cubic suggests tensor value `3`,
    but the raw-cubic primitive probe gives `GV=-6`; the unit-tensor probe gives
    the expected `GV=-2` and remains unpromoted until the chamber/tensor source is

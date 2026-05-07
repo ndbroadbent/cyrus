@@ -229,6 +229,7 @@ struct ContextReport {
     cms_general_divisor_intersection_check_status_counts: BTreeMap<String, usize>,
     origin_circuit_witness_relation_status_counts: BTreeMap<String, usize>,
     uncovered_source_ray_origin_circuit_witness_relation_status_counts: BTreeMap<String, usize>,
+    uncovered_source_ray_source_derived_gv_import_status_counts: BTreeMap<String, usize>,
     shared_facet_unresolved_source_ray_target_count: Option<usize>,
     shared_facet_unresolved_source_ray_origin_circuit_pattern_counts: BTreeMap<String, usize>,
     shared_facet_unresolved_source_ray_origin_circuit_witness_relation_status_counts:
@@ -5428,20 +5429,39 @@ fn add_toric_diagnostic_context_gvs(
 }
 
 fn source_derived_gv_for_sample(sample: &MissingGvTargetSample) -> Result<Option<String>, String> {
+    source_derived_gv_value_and_status_for_sample(sample).map(|(value, _status)| value)
+}
+
+fn source_derived_gv_value_and_status_for_sample(
+    sample: &MissingGvTargetSample,
+) -> Result<(Option<String>, String), String> {
     let witness_relation_status = origin_circuit_witness_relation_status(sample);
     if witness_relation_status != "single_origin_circuit_witness"
         && witness_relation_status != "all_origin_circuit_witnesses_share_relation"
     {
-        return Ok(None);
+        return Ok((
+            None,
+            format!("source_derived_gv_not_imported_{witness_relation_status}"),
+        ));
     }
-    if origin_circuit_facet_context_status(sample) != "source_derived_full_facet_context" {
-        return Ok(None);
+    let facet_context_status = origin_circuit_facet_context_status(sample);
+    if facet_context_status != "source_derived_full_facet_context" {
+        return Ok((
+            None,
+            format!("source_derived_gv_not_imported_{facet_context_status}"),
+        ));
     }
     let Some(candidates) = sample.cms_general_divisor_shape_candidates.as_deref() else {
-        return Ok(None);
+        return Ok((
+            None,
+            "source_derived_gv_not_imported_missing_cms_shape_candidates".to_string(),
+        ));
     };
     let Some(checks) = sample.cms_general_divisor_intersection_checks.as_deref() else {
-        return Ok(None);
+        return Ok((
+            None,
+            "source_derived_gv_not_imported_missing_cms_intersection_checks".to_string(),
+        ));
     };
     let mut values = Vec::new();
     for check in checks {
@@ -5466,12 +5486,34 @@ fn source_derived_gv_for_sample(sample: &MissingGvTargetSample) -> Result<Option
     values.sort_unstable();
     values.dedup();
     match values.as_slice() {
-        [] => Ok(None),
-        [value] => Ok(Some(value.to_string())),
+        [] => Ok((
+            None,
+            "source_derived_gv_not_imported_no_integral_matching_cms_formula".to_string(),
+        )),
+        [value] => Ok((
+            Some(value.to_string()),
+            "source_derived_gv_imported_full_facet_cms_formula".to_string(),
+        )),
         _ => Err(format!(
             "source-derived CMS checks produce conflicting GV formula values {values:?}"
         )),
     }
+}
+
+fn source_derived_gv_import_status_counts(
+    stats: Option<&MissingGvTargetStats>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    let Some(stats) = stats else {
+        return counts;
+    };
+    for sample in &stats.sample {
+        let status = source_derived_gv_value_and_status_for_sample(sample)
+            .map(|(_value, status)| status)
+            .unwrap_or_else(|error| format!("source_derived_gv_import_error:{error}"));
+        *counts.entry(status).or_insert(0) += 1;
+    }
+    counts
 }
 
 struct ValidatedContext<'a> {
@@ -8306,6 +8348,8 @@ fn build_report(
         .uncovered_source_ray_stats
         .map(|stats| origin_circuit_witness_relation_status_counts(&stats.sample, None))
         .unwrap_or_default();
+    let uncovered_source_ray_source_derived_gv_import_status_counts =
+        source_derived_gv_import_status_counts(validated.uncovered_source_ray_stats);
     let shared_facet_unresolved_source_ray_target_count = validated
         .shared_facet_unresolved_source_ray_stats
         .map(|stats| stats.target_count);
@@ -8801,6 +8845,7 @@ fn build_report(
         origin_circuit_witness_relation_status_counts:
             missing_origin_circuit_witness_relation_status_counts,
         uncovered_source_ray_origin_circuit_witness_relation_status_counts,
+        uncovered_source_ray_source_derived_gv_import_status_counts,
         shared_facet_unresolved_source_ray_target_count,
         shared_facet_unresolved_source_ray_origin_circuit_pattern_counts,
         shared_facet_unresolved_source_ray_origin_circuit_witness_relation_status_counts,
@@ -11850,6 +11895,13 @@ mod tests {
             None,
             "shape/CMS checks without full facet context are diagnostic only"
         );
+        assert_eq!(
+            source_derived_gv_value_and_status_for_sample(&sample).unwrap(),
+            (
+                None,
+                "source_derived_gv_not_imported_no_origin_circuit_witness".to_string()
+            )
+        );
         sample.origin_circuit_first_witness = Some(OriginCircuitWitnessSample {
             first_facet_exclusive_point: 6,
             second_facet_exclusive_point: 7,
@@ -11890,12 +11942,26 @@ mod tests {
             source_derived_gv_for_sample(&sample).unwrap().as_deref(),
             Some("-2")
         );
+        assert_eq!(
+            source_derived_gv_value_and_status_for_sample(&sample).unwrap(),
+            (
+                Some("-2".to_string()),
+                "source_derived_gv_imported_full_facet_cms_formula".to_string()
+            )
+        );
 
         let stats = MissingGvTargetStats {
             target_count: 1,
             real_cone_decomposition_exact_kind_counts: HashMap::new(),
             sample: vec![sample],
         };
+        assert_eq!(
+            source_derived_gv_import_status_counts(Some(&stats)),
+            BTreeMap::from([(
+                "source_derived_gv_imported_full_facet_cms_formula".to_string(),
+                1
+            )])
+        );
         let map = source_derived_gv_by_basis(Some(&stats), 2).unwrap();
         assert_eq!(map.get(&vec![2, 0]).map(String::as_str), Some("-2"));
     }

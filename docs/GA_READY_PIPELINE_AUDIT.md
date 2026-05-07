@@ -584,7 +584,9 @@ to make the remaining GV layer more first-principles:
    predecessor with the same local signature, facet context, and blockers. The
    source-derived GV importer now refuses CMS shape/check rows without full
    origin-circuit facet context, so these lower rays enter qN history only
-   because the source context is present. The
+   because the source context is present. The guarded import-status report has
+   `52` full-facet CMS formula imports, `79` rows with no integral matching CMS
+   formula, and `115` rows with no origin-circuit witness. The
    CMS divisor cubic
    suggests tensor value `3`, but the raw-cubic primitive probe gives `GV=-6`;
    the unit-tensor probe gives the expected `GV=-2` and is not promotable without
