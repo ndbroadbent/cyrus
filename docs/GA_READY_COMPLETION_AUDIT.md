@@ -687,6 +687,14 @@ report now gives those four rows the tensor/chamber blocker
 `weighted_p2_split_bundle_requires_source_derived_resolution_chamber`, while
 the five non-CY no-origin diagnostic rows remain blocked on the no-origin phase
 choice.
+The latest context report also records a source-witness resolution hint for
+this exact weighted family: all four weighted rows have one zero-relation point
+in the shared two-simplex of the origin-circuit witness
+(`target 3 -> 202`, `target 6 -> 199`, `target 7 -> 55`,
+`target 8 -> 55`). The aggregate status is
+`source_witness_weighted_p2_split_bundle_has_single_zero_relation_shared_resolution_ray=4`.
+This is not yet a chamber certificate, but it identifies the source-derived
+extra ray that the resolved local phase/intersection construction must use.
 Origin-circuit witness-domain compact `cygv` probes are now opt-in and guarded
 by `--origin-witness-cygv-generator-limit`. The traced target `8` report shows
 the single-generator relation domain computes `GV=2` with one materialized

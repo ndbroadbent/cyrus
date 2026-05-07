@@ -236,6 +236,8 @@ struct ContextReport {
     active_decomposition_source_leaf_cms_candidate_status_counts: BTreeMap<String, usize>,
     local_cygv_charge_signature_counts: BTreeMap<String, usize>,
     local_cygv_one_parameter_family_status_counts: BTreeMap<String, usize>,
+    local_cygv_source_resolution_hint_status_counts: BTreeMap<String, usize>,
+    local_cygv_source_resolution_hint_sample: Vec<LocalCygvSourceResolutionHintSummary>,
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
     local_cygv_actual_call_readiness_counts: BTreeMap<String, usize>,
     local_cygv_missing_source_input_counts: BTreeMap<String, usize>,
@@ -519,6 +521,17 @@ struct LocalCygvHypersurfaceShape {
 struct LocalChargeMultiplicity {
     charge: i64,
     count: usize,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvSourceResolutionHintSummary {
+    target_index: usize,
+    degree: i128,
+    status: String,
+    zero_relation_shared_two_simplex_points: Vec<usize>,
+    relation_support_point_indices: Vec<usize>,
+    local_phase_q_matrix: Option<Vec<Vec<i64>>>,
+    local_one_parameter_family_status: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -13532,6 +13545,10 @@ fn build_report(
                 .iter()
                 .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
         );
+    let local_cygv_source_resolution_hint_status_counts =
+        local_cygv_source_resolution_hint_status_counts(&targets);
+    let local_cygv_source_resolution_hint_sample =
+        local_cygv_source_resolution_hint_summaries(&targets);
     let missing_local_cygv_missing_source_input_counts = local_cygv_missing_source_input_counts(
         targets
             .iter()
@@ -14263,6 +14280,8 @@ fn build_report(
         local_cygv_charge_signature_counts: missing_local_cygv_charge_signature_counts,
         local_cygv_one_parameter_family_status_counts:
             missing_local_cygv_one_parameter_family_status_counts,
+        local_cygv_source_resolution_hint_status_counts,
+        local_cygv_source_resolution_hint_sample,
         local_cygv_target_candidate_status_counts,
         local_cygv_actual_call_readiness_counts: missing_local_cygv_actual_call_readiness_counts,
         local_cygv_missing_source_input_counts: missing_local_cygv_missing_source_input_counts,
@@ -14466,6 +14485,124 @@ fn local_cygv_one_parameter_family_status_counts<'a>(
             .or_insert(0usize) += 1;
     }
     counts
+}
+
+fn local_cygv_source_resolution_hint_summaries(
+    targets: &[TargetReport],
+) -> Vec<LocalCygvSourceResolutionHintSummary> {
+    targets
+        .iter()
+        .filter_map(|target| {
+            let skeleton = target.local_cygv_input_skeleton.as_ref()?;
+            let status = local_cygv_source_resolution_hint_status(
+                skeleton,
+                target.origin_circuit_first_witness.as_ref(),
+            );
+            Some(LocalCygvSourceResolutionHintSummary {
+                target_index: target.index,
+                degree: target.degree,
+                status,
+                zero_relation_shared_two_simplex_points:
+                    origin_circuit_zero_relation_shared_two_simplex_points(
+                        target.origin_circuit_first_witness.as_ref(),
+                    ),
+                relation_support_point_indices: target
+                    .origin_circuit_first_witness
+                    .as_ref()
+                    .map(origin_circuit_relation_support_point_indices)
+                    .unwrap_or_default(),
+                local_phase_q_matrix: skeleton.local_cygv_phase_q_matrix_candidate.clone(),
+                local_one_parameter_family_status: target
+                    .local_cygv_one_parameter_family_status
+                    .clone(),
+            })
+        })
+        .collect()
+}
+
+fn local_cygv_source_resolution_hint_status_counts<'a>(
+    targets: impl IntoIterator<Item = &'a TargetReport>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        let Some(skeleton) = target.local_cygv_input_skeleton.as_ref() else {
+            continue;
+        };
+        *counts
+            .entry(local_cygv_source_resolution_hint_status(
+                skeleton,
+                target.origin_circuit_first_witness.as_ref(),
+            ))
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_hint_status(
+    skeleton: &LocalCygvInputSkeleton,
+    witness: Option<&OriginCircuitWitnessSample>,
+) -> String {
+    let Some(q_matrix) = skeleton.local_cygv_phase_q_matrix_candidate.as_ref() else {
+        return "local_resolution_hint_blocked_missing_phase_q_matrix".to_string();
+    };
+    if q_matrix.len() != 1 {
+        return "local_resolution_hint_not_one_parameter_local_q_matrix".to_string();
+    }
+    let charges = &q_matrix[0];
+    if one_parameter_weighted_p2_split_bundle_signature(charges).is_none() {
+        return "local_resolution_hint_not_weighted_p2_split_bundle".to_string();
+    }
+    if skeleton.local_cygv_q_matrix_phase_status
+        != "source_derived_unique_compact_threefold_phase_including_origin"
+    {
+        return format!(
+            "local_resolution_hint_weighted_p2_split_bundle_blocked_phase_status:{}",
+            skeleton.local_cygv_q_matrix_phase_status
+        );
+    }
+    let zero_shared = origin_circuit_zero_relation_shared_two_simplex_points(witness);
+    match zero_shared.len() {
+        0 => "weighted_p2_split_bundle_no_zero_relation_shared_resolution_ray".to_string(),
+        1 => {
+            "source_witness_weighted_p2_split_bundle_has_single_zero_relation_shared_resolution_ray"
+                .to_string()
+        }
+        _ => {
+            "weighted_p2_split_bundle_has_multiple_zero_relation_shared_resolution_rays".to_string()
+        }
+    }
+}
+
+fn origin_circuit_zero_relation_shared_two_simplex_points(
+    witness: Option<&OriginCircuitWitnessSample>,
+) -> Vec<usize> {
+    let Some(witness) = witness else {
+        return Vec::new();
+    };
+    let relation_support = witness
+        .relation_points
+        .iter()
+        .map(|point| point.point_index)
+        .collect::<BTreeSet<_>>();
+    let mut zero_shared = witness
+        .shared_two_simplex
+        .iter()
+        .copied()
+        .filter(|point| !relation_support.contains(point))
+        .collect::<Vec<_>>();
+    zero_shared.sort_unstable();
+    zero_shared.dedup();
+    zero_shared
+}
+
+fn origin_circuit_relation_support_point_indices(
+    witness: &OriginCircuitWitnessSample,
+) -> Vec<usize> {
+    witness
+        .relation_points
+        .iter()
+        .map(|point| point.point_index)
+        .collect()
 }
 
 fn local_cygv_one_parameter_family_status(skeleton: &LocalCygvInputSkeleton) -> String {
@@ -17497,6 +17634,65 @@ mod tests {
         assert_eq!(
             one_parameter_weighted_p2_split_bundle_signature(&[-1, -2, 1, 2, 2]),
             None
+        );
+    }
+
+    #[test]
+    fn weighted_p2_resolution_hint_records_zero_relation_shared_ray() {
+        let skeleton = skeleton_with_origin_phase_probe(
+            vec![0, 2, 208, 211, 214],
+            Some(vec![vec![-1, 2, -3, 1, 1]]),
+        );
+        let witness = OriginCircuitWitnessSample {
+            first_facet_exclusive_point: 214,
+            second_facet_exclusive_point: 211,
+            shared_two_simplex: vec![2, 55, 208],
+            first_facet: Vec::new(),
+            second_facet: Vec::new(),
+            first_facet_size: 0,
+            second_facet_size: 0,
+            sparse_relation: vec![(0, -1), (2, 2), (208, -3), (211, 1), (214, 1)],
+            relation_points: vec![
+                OriginCircuitRelationPointSample {
+                    point_index: 0,
+                    coefficient: -1,
+                    coordinates: vec![0, 0, 0, 0],
+                    face_dimension: Some(4),
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 2,
+                    coefficient: 2,
+                    coordinates: vec![1, 0, 0, 0],
+                    face_dimension: Some(0),
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 208,
+                    coefficient: -3,
+                    coordinates: vec![2, 2, 1, 2],
+                    face_dimension: Some(2),
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 211,
+                    coefficient: 1,
+                    coordinates: vec![2, 3, 1, 3],
+                    face_dimension: Some(2),
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 214,
+                    coefficient: 1,
+                    coordinates: vec![2, 3, 2, 3],
+                    face_dimension: Some(2),
+                },
+            ],
+        };
+
+        assert_eq!(
+            origin_circuit_zero_relation_shared_two_simplex_points(Some(&witness)),
+            vec![55]
+        );
+        assert_eq!(
+            local_cygv_source_resolution_hint_status(&skeleton, Some(&witness)),
+            "source_witness_weighted_p2_split_bundle_has_single_zero_relation_shared_resolution_ray"
         );
     }
 

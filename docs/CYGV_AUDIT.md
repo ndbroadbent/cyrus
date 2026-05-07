@@ -3102,6 +3102,18 @@ and the analogous chamber-certificate status, while the five no-origin rows
 remain blocked as non-CY diagnostic phases. This keeps the next required input
 explicit: a source-derived resolution/chamber certificate for the weighted-base
 local model, not a tensor scan or CMS scalar promotion.
+The follow-up report
+`/tmp/cyrus_gv_context_all_resolution_hint_report.json` adds a source-witness
+resolution hint. Its aggregate
+`local_cygv_source_resolution_hint_status_counts` is
+`{"local_resolution_hint_not_weighted_p2_split_bundle":5,
+"source_witness_weighted_p2_split_bundle_has_single_zero_relation_shared_resolution_ray":4}`.
+For the four weighted rows, the zero-relation shared two-simplex points are
+`202`, `199`, `55`, and `55` for targets `3`, `6`, `7`, and `8`
+respectively. This is chamber evidence from the actual origin-circuit facet
+witnesses: the five-point weighted relation is not yet the full resolved local
+model, and the next implementation step should serialize/use that extra shared
+ray with coordinates when constructing the resolved local phase.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

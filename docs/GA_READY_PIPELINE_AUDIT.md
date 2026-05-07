@@ -98,6 +98,11 @@ run pass. Any remaining mismatch must be explicit and localizable.
    Non-promotable CMS rational solutions are now retained as diagnostics:
    two integral degree-10 solutions mismatch the inferred normal degree and one
    solution is nonintegral.
+   The weighted `P(1,1,2)` target-family report now also records one
+   source-witness zero-relation shared ray for each of the four compact
+   weighted rows (`202`, `199`, `55`, `55`). That points the next chamber task
+   at the resolved local phase containing the extra shared ray, rather than at
+   another scalar tensor scan.
    A fresh read of
    `string_theory/mcallister_2107/latest_cytools/compute_kklt_iterative.py`
    confirms the sign convention used by Cyrus,
