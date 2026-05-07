@@ -159,8 +159,11 @@ run pass. Any remaining mismatch must be explicit and localizable.
    polynomial domain dependence directly: target 7's residual has 3 qN terms in
    the degree-10 parent path-support domain but 1 as a residual subtarget, and
    target 8 has 2 parent-domain terms but 1 residual-subtarget term. Both
-   samples are complete and marked `different_qn_term_counts`. Applying the
-   trace to McAllister still requires the certified corrected-chamber
+   samples are complete and marked `different_qn_term_counts`. The parent-only
+   terms now carry source classification: target 8's extra term is the missing
+   target itself, while target 7 has the missing target plus one degree-10
+   generated term outside the exported source-ray context. Applying the trace
+   to McAllister still requires the certified corrected-chamber
    semigroup/history domain.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV

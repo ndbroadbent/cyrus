@@ -363,7 +363,10 @@ and matrix-basis pipeline are no longer open.
    term. Both complete samples are marked `different_qn_term_counts`, so the
    remaining work is constructing the certified chamber history whose qN
    polynomial includes the right ambient terms, not finding a scalar residual
-   GV value.
+   GV value. The parent-only terms now classify as the missing target itself
+   for target `8`, and as the missing target plus one generated degree-ten
+   non-source-ray term for target `7`; the cancellation is therefore occurring
+   at the degree-ten chamber-history layer.
    The source-ray summary now shows that shared ray has local charge signature
    `[-1,-1,-1,1,2]` and a matching CMS check. The residual-source predecessor
    queue now shows all three occurrences have shared origin-circuit witness

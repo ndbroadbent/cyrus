@@ -1072,12 +1072,29 @@ struct CygvResidualQnDomainComparison {
     term_signature_comparison_status: String,
     parent_path_support_term_signatures: Vec<CygvPathSupportQnTraceTermSignature>,
     residual_subtarget_term_signatures: Vec<CygvPathSupportQnTraceTermSignature>,
+    parent_only_term_source_status_counts: BTreeMap<String, usize>,
+    parent_only_term_classification_sample: Vec<CygvResidualQnDomainTermClassification>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 struct CygvPathSupportQnTraceTermSignature {
     exponent_nonzero: Vec<(usize, i64)>,
     coefficient: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CygvResidualQnDomainTermClassification {
+    exponent_nonzero: Vec<(usize, i64)>,
+    coefficient: String,
+    degree: i128,
+    source_class_status: String,
+    source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
+    matching_missing_target_index: Option<usize>,
+    matching_missing_target_degree: Option<i128>,
+    matching_missing_target_exact_kind: Option<String>,
+    matching_uncovered_source_ray_index: Option<usize>,
+    matching_uncovered_source_ray_degree: Option<i128>,
+    matching_uncovered_source_ray_exact_kind: Option<String>,
 }
 
 struct PathSupportSourceClassContext {
@@ -1717,11 +1734,17 @@ fn residual_qn_domain_comparison(
     let predecessor = dense_from_sparse(&residual.predecessor_nonzero, context.dimension)?;
     let difference = dense_from_sparse(&residual.difference_nonzero, context.dimension)?;
     let residual_target = checked_vector_sum(&predecessor, &difference)?;
-    Ok(Some(residual_qn_domain_comparison_for_curve(
+    let mut comparison = residual_qn_domain_comparison_for_curve(
         sparse_from_dense(&residual_target),
         parent_probe,
         residual_probe,
-    )))
+    );
+    let parent_only_classifications =
+        residual_parent_only_qn_term_classifications(&comparison, context)?;
+    comparison.parent_only_term_source_status_counts =
+        parent_only_qn_term_source_status_counts(&parent_only_classifications);
+    comparison.parent_only_term_classification_sample = parent_only_classifications;
+    Ok(Some(comparison))
 }
 
 fn residual_qn_domain_comparison_for_curve(
@@ -1756,7 +1779,58 @@ fn residual_qn_domain_comparison_for_curve(
         term_signature_comparison_status,
         parent_path_support_term_signatures,
         residual_subtarget_term_signatures,
+        parent_only_term_source_status_counts: BTreeMap::new(),
+        parent_only_term_classification_sample: Vec::new(),
     }
+}
+
+fn residual_parent_only_qn_term_classifications(
+    comparison: &CygvResidualQnDomainComparison,
+    context: &ValidatedContext<'_>,
+) -> Result<Vec<CygvResidualQnDomainTermClassification>, String> {
+    comparison
+        .parent_path_support_term_signatures
+        .iter()
+        .filter(|term| {
+            !comparison
+                .residual_subtarget_term_signatures
+                .contains(*term)
+        })
+        .map(|term| {
+            let curve = dense_from_sparse(&term.exponent_nonzero, context.dimension)?;
+            let degree = curve_degree(&curve, context.grading)?;
+            let source_context = path_support_source_class_context(&curve, context)?;
+            Ok(CygvResidualQnDomainTermClassification {
+                exponent_nonzero: term.exponent_nonzero.clone(),
+                coefficient: term.coefficient.clone(),
+                degree,
+                source_class_status: source_context.status,
+                source_ray_ambient_nonzero: source_context.source_ray_ambient_nonzero,
+                matching_missing_target_index: source_context.matching_missing_target_index,
+                matching_missing_target_degree: source_context.matching_missing_target_degree,
+                matching_missing_target_exact_kind: source_context
+                    .matching_missing_target_exact_kind,
+                matching_uncovered_source_ray_index: source_context
+                    .matching_uncovered_source_ray_index,
+                matching_uncovered_source_ray_degree: source_context
+                    .matching_uncovered_source_ray_degree,
+                matching_uncovered_source_ray_exact_kind: source_context
+                    .matching_uncovered_source_ray_exact_kind,
+            })
+        })
+        .collect()
+}
+
+fn parent_only_qn_term_source_status_counts(
+    classifications: &[CygvResidualQnDomainTermClassification],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for classification in classifications {
+        *counts
+            .entry(classification.source_class_status.clone())
+            .or_insert(0) += 1;
+    }
+    counts
 }
 
 fn qn_trace_sample_for_curve<'a>(

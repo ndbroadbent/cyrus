@@ -2657,6 +2657,16 @@ marked `different_qn_term_counts` with complete term samples, so the live
 blocker is now visibly the domain-dependent qN polynomial in the
 degree-ten chamber history, not the scalar `GV=-2` value of the degree-eight
 residual.
+Classifying the parent-only qN terms narrows this further. For target `8`, the
+only parent-only term is the missing target itself, classified as
+`source_ray_matches_missing_target` with exact-kind `rational_cone`. For target
+`7`, one parent-only term is again the missing target itself with the same
+classification, while the other degree-ten term
+`[(44,1),(203,-1),(206,-1),(209,1)]` is
+`not_source_degree_bounded_ray`. The target-support cancellation is therefore
+not produced by an unclassified scalar residual leaf; it is produced by qN
+terms that couple the residual to the degree-ten missing-target layer, plus one
+generated target-7 side term outside the exported source-ray context.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use
