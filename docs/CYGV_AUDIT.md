@@ -2839,6 +2839,17 @@ degree-bounded ray. This makes the next compact-history domain requirement more
 specific: it must include the final missing target qN monomial as part of the
 parent source's qN polynomial history, not merely close over lower source and
 toric leaves.
+As a bounded self-containment check, the report now builds an explicit
+semigroup from each mismatching source's parent-domain qN term support and
+runs it through the actual `cygv` qN trace. This is intentionally diagnostic
+because it uses the already-observed parent qN support as input. For target
+`7`, both mismatching source rows fail with non-integer HKTY output. For target
+`8`, the degree-six and degree-eight source supports compute scalar GV values
+`-2` and `2`, respectively, but both materialize only one source qN term and
+still report `different_qn_term_counts` against the parent qN polynomial. Thus
+the parent qN term set is not a self-contained compact semigroup certificate;
+the missing object remains the broader parent-domain/chamber history that
+produces those terms integrally and in the right order.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use

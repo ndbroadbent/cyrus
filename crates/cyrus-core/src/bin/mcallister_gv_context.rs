@@ -832,6 +832,7 @@ struct CygvPathSupportTargetMonomialQnSource {
     source_bounded_diamond_diamond_only_qn_term_signature_sample:
         Vec<CygvPathSupportQnTraceTermSignature>,
     source_bounded_diamond_parent_only_qn_term_context_sample: Vec<CygvQnTermSignatureContext>,
+    source_parent_qn_term_semigroup_probe: Option<CygvSourceQnTermSemigroupProbe>,
 }
 
 struct CygvPathSupportTargetLi2SubtractionBalance {
@@ -840,6 +841,17 @@ struct CygvPathSupportTargetLi2SubtractionBalance {
     reconstructed_pre_subtraction_instanton_coefficient: Option<String>,
     reconstructed_pre_subtraction_gv_candidate: Option<String>,
     status: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CygvSourceQnTermSemigroupProbe {
+    element_count: Option<usize>,
+    status: String,
+    gv: Option<String>,
+    error: Option<String>,
+    qn_trace_polynomial_count: Option<usize>,
+    source_qn_trace_term_count: Option<usize>,
+    parent_qn_comparison_status: Option<String>,
 }
 
 struct CygvPathSupportFormulaBalance {
@@ -4383,6 +4395,7 @@ fn path_support_target_monomial_qn_sources(
                 source_bounded_diamond_parent_only_qn_term_signature_sample: Vec::new(),
                 source_bounded_diamond_diamond_only_qn_term_signature_sample: Vec::new(),
                 source_bounded_diamond_parent_only_qn_term_context_sample: Vec::new(),
+                source_parent_qn_term_semigroup_probe: None,
             })
         })
         .collect()
@@ -4590,6 +4603,8 @@ fn annotate_target_monomial_qn_sources_with_seed_decompositions(
                 seed_set,
                 reduced_seed_set,
             )?;
+        source.source_parent_qn_term_semigroup_probe =
+            source_parent_qn_term_semigroup_probe(source, context)?;
         source.source_bounded_seed_decomposition = Some(bounded_seed_decomposition);
     }
     Ok(())
@@ -4733,6 +4748,187 @@ fn qn_term_signature_context_sample(
             })
         })
         .collect()
+}
+
+fn source_parent_qn_term_semigroup_probe(
+    source: &CygvPathSupportTargetMonomialQnSource,
+    context: &ValidatedContext<'_>,
+) -> Result<Option<CygvSourceQnTermSemigroupProbe>, String> {
+    if source
+        .source_bounded_diamond_parent_qn_comparison_status
+        .as_deref()
+        != Some("different_qn_term_counts")
+    {
+        return Ok(None);
+    }
+    let source_curve = dense_from_sparse(&source.curve_nonzero, context.dimension)?;
+    let mut elements = Vec::new();
+    let mut seen = HashSet::new();
+    let zero = vec![0i64; context.dimension];
+    if seen.insert(zero.clone()) {
+        elements.push(zero);
+    }
+    if seen.insert(source_curve.clone()) {
+        elements.push(source_curve.clone());
+    }
+    for signature in &source.source_qn_term_signature_sample {
+        let element = dense_from_sparse(&signature.exponent_nonzero, context.dimension)?;
+        if seen.insert(element.clone()) {
+            elements.push(element);
+        }
+    }
+    elements.sort();
+    if elements.len() > CYGV_BOUNDED_DECOMPOSITION_DIAMOND_ELEMENT_LIMIT {
+        return Ok(Some(CygvSourceQnTermSemigroupProbe {
+            element_count: Some(elements.len()),
+            status: format!(
+                "skipped_element_limit_{CYGV_BOUNDED_DECOMPOSITION_DIAMOND_ELEMENT_LIMIT}"
+            ),
+            gv: None,
+            error: None,
+            qn_trace_polynomial_count: None,
+            source_qn_trace_term_count: None,
+            parent_qn_comparison_status: None,
+        }));
+    }
+    if context.q_matrix.is_empty() || context.q_cols == 0 {
+        return Ok(Some(CygvSourceQnTermSemigroupProbe {
+            element_count: Some(elements.len()),
+            status: "skipped_no_q_matrix".to_string(),
+            gv: None,
+            error: None,
+            qn_trace_polynomial_count: None,
+            source_qn_trace_term_count: None,
+            parent_qn_comparison_status: None,
+        }));
+    }
+    if cfg!(panic = "abort") {
+        return Ok(Some(CygvSourceQnTermSemigroupProbe {
+            element_count: Some(elements.len()),
+            status: "hkty_unavailable_panic_abort".to_string(),
+            gv: None,
+            error: Some(
+                "running cygv explicit-semigroup HKTY requires a panic=unwind build for diagnostics"
+                    .to_string(),
+            ),
+            qn_trace_polynomial_count: None,
+            source_qn_trace_term_count: None,
+            parent_qn_comparison_status: None,
+        }));
+    }
+
+    let source_i32 = curve_i64_to_i32(&source_curve, "source qN-term semigroup curve")?;
+    let previous_panic_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let traced_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        compute_gv_invariants_with_explicit_semigroup_qn_trace(
+            &elements,
+            context.grading,
+            context.q_matrix,
+            &context.intersection,
+        )
+    }));
+    std::panic::set_hook(previous_panic_hook);
+
+    let traced = match traced_result {
+        Ok(Ok(traced)) => traced,
+        Ok(Err(error)) => {
+            return Ok(Some(CygvSourceQnTermSemigroupProbe {
+                element_count: Some(elements.len()),
+                status: "hkty_error".to_string(),
+                gv: None,
+                error: Some(format!("source qN-term semigroup HKTY failed: {error}")),
+                qn_trace_polynomial_count: None,
+                source_qn_trace_term_count: None,
+                parent_qn_comparison_status: None,
+            }));
+        }
+        Err(payload) => {
+            return Ok(Some(CygvSourceQnTermSemigroupProbe {
+                element_count: Some(elements.len()),
+                status: "hkty_panic".to_string(),
+                gv: None,
+                error: Some(format!(
+                    "source qN-term semigroup HKTY panicked: {}",
+                    panic_payload_message(payload.as_ref())
+                )),
+                qn_trace_polynomial_count: None,
+                source_qn_trace_term_count: None,
+                parent_qn_comparison_status: None,
+            }));
+        }
+    };
+
+    let qn_trace_polynomial_count = traced.qn_trace.len();
+    let source_qn = traced
+        .qn_trace
+        .iter()
+        .find(|poly| poly.element == source_i32);
+    let source_qn_trace_term_count = source_qn.map(|poly| poly.terms.len());
+    let generated_terms = source_qn
+        .map(qn_trace_poly_term_signatures)
+        .unwrap_or_default();
+    let parent_qn_comparison_status = Some(qn_term_signature_comparison_status(
+        source.term_count,
+        source.source_qn_term_sample_complete,
+        &source.source_qn_term_signature_sample,
+        source_qn_trace_term_count,
+        source_qn
+            .map(|poly| poly.terms.len() <= CYGV_PATH_SUPPORT_QN_TRACE_TERM_SAMPLE_LIMIT)
+            .unwrap_or(false),
+        &generated_terms,
+    ));
+    let gv = traced
+        .invariants
+        .into_iter()
+        .find_map(|(curve, value)| (curve == source_i32).then(|| value.to_string()))
+        .unwrap_or_else(|| "0".to_string());
+    Ok(Some(CygvSourceQnTermSemigroupProbe {
+        element_count: Some(elements.len()),
+        status: "computed_source_qn_term_semigroup".to_string(),
+        gv: Some(gv),
+        error: None,
+        qn_trace_polynomial_count: Some(qn_trace_polynomial_count),
+        source_qn_trace_term_count,
+        parent_qn_comparison_status,
+    }))
+}
+
+fn qn_trace_poly_term_signatures(
+    poly: &CygvQnTracePolynomial,
+) -> Vec<CygvPathSupportQnTraceTermSignature> {
+    poly.terms
+        .iter()
+        .take(CYGV_PATH_SUPPORT_QN_TRACE_TERM_SAMPLE_LIMIT)
+        .map(|term| CygvPathSupportQnTraceTermSignature {
+            exponent_nonzero: sparse_from_i32_dense(&term.exponent),
+            coefficient: term.coefficient.clone(),
+        })
+        .collect()
+}
+
+fn qn_term_signature_comparison_status(
+    expected_term_count: usize,
+    expected_sample_complete: bool,
+    expected_terms: &[CygvPathSupportQnTraceTermSignature],
+    actual_term_count: Option<usize>,
+    actual_sample_complete: bool,
+    actual_terms: &[CygvPathSupportQnTraceTermSignature],
+) -> String {
+    let Some(actual_term_count) = actual_term_count else {
+        return "missing_in_source_qn_term_semigroup".to_string();
+    };
+    if expected_term_count != actual_term_count {
+        return "different_qn_term_counts".to_string();
+    }
+    if !expected_sample_complete || !actual_sample_complete {
+        return "same_count_but_sample_truncated".to_string();
+    }
+    if expected_terms == actual_terms {
+        "same_qn_term_signatures".to_string()
+    } else {
+        "same_count_different_qn_term_signatures".to_string()
+    }
 }
 
 fn target_monomial_qn_source_diamond_parent_qn_comparison_status_counts(
@@ -16774,6 +16970,11 @@ mod tests {
         let mut compared_source = sources[0].clone();
         compared_source.source_bounded_diamond_parent_qn_comparison_status =
             Some("different_qn_term_counts".to_string());
+        let semigroup_probe = source_parent_qn_term_semigroup_probe(&compared_source, &context)
+            .expect("qN-term semigroup probe should build a bounded diagnostic")
+            .expect("mismatched source should request a qN-term semigroup probe");
+        assert_eq!(semigroup_probe.element_count, Some(3));
+        assert_eq!(semigroup_probe.status, "skipped_no_q_matrix");
         assert_eq!(
             target_monomial_qn_source_diamond_parent_qn_comparison_status_counts(&[
                 sources[0].clone(),
