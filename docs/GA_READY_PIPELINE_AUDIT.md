@@ -147,8 +147,16 @@ run pass. Any remaining mismatch must be explicit and localizable.
    target qN polynomial in these small domains. A reduced two-target aggregate
    collapses 17 qN-polynomial occurrences to 11 unique lower curves, with 6
    curves shared by both target-support domains and 4 unique curves showing
-   domain-dependent qN term counts. Applying the trace to McAllister still
-   requires the certified corrected-chamber semigroup/history domain.
+   domain-dependent qN term counts. The residual-subtarget probe now also
+   takes the closest-known degree-8 residual itself as a small path-support
+   target: target 7's residual uses support size 7 with 8 generators and returns
+   `GV=-2` after materializing 10 qN polynomials, while target 8's residual
+   uses support size 6 with 6 generators and also returns `GV=-2` after
+   materializing 6 qN polynomials. The original degree-10 target-support
+   domains in those same reports remain `GV=0` with no target qN polynomial, so
+   this is a diagnostic for the lower composite history, not a corrected-target
+   replacement. Applying the trace to McAllister still requires the certified
+   corrected-chamber semigroup/history domain.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for

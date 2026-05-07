@@ -563,6 +563,7 @@ struct CygvPathHistoryProbe {
     closest_series_difference_nonzero: Option<Vec<(usize, i64)>>,
     closest_known_qn_predecessor: Option<CygvClosestKnownQnPredecessor>,
     closest_known_qn_residual_predecessor: Option<CygvClosestKnownQnPredecessor>,
+    closest_known_qn_residual_path_support_probe: Option<PathSupportGeneratorProbe>,
     predecessor_candidate_sample_limit: usize,
     predecessor_candidate_sample: Vec<CygvPathPredecessorCandidate>,
     lower_seed_decomposition_max_terms: usize,
@@ -1110,6 +1111,7 @@ struct PairExpandedLowerSeedProbe {
     error: Option<String>,
 }
 
+#[derive(Clone, Debug, Serialize)]
 struct PathSupportGeneratorProbe {
     support_size: Option<usize>,
     generator_count: Option<usize>,
@@ -1618,6 +1620,70 @@ fn path_support_generator_probe(
             lookup_sample: Vec::new(),
         },
     }
+}
+
+fn residual_path_support_generator_probe(
+    residual: Option<&CygvClosestKnownQnPredecessor>,
+    context: &ValidatedContext<'_>,
+    run_path_support_generators: bool,
+    seed_set: &HashSet<Vec<i64>>,
+    reduced_seed_set: &HashSet<Vec<i64>>,
+) -> Result<Option<PathSupportGeneratorProbe>, String> {
+    let Some(residual) = residual else {
+        return Ok(None);
+    };
+    let predecessor = dense_from_sparse(&residual.predecessor_nonzero, context.dimension)?;
+    let difference = dense_from_sparse(&residual.difference_nonzero, context.dimension)?;
+    let residual_target = checked_vector_sum(&predecessor, &difference)?;
+    let residual_degree = curve_degree(&residual_target, context.grading)?;
+    let candidate = CygvPathPredecessorCandidate {
+        predecessor_degree: residual.predecessor_degree,
+        difference_degree: residual.difference_degree,
+        series_distance: residual.series_distance.clone(),
+        predecessor_toric_gv: residual.predecessor_toric_gv.clone(),
+        difference_toric_gv: residual.difference_toric_gv.clone(),
+        predecessor_source_derived_gv: residual.predecessor_source_derived_gv.clone(),
+        difference_source_derived_gv: residual.difference_source_derived_gv.clone(),
+        predecessor_known_qn_history_status: residual.predecessor_known_qn_history_status.clone(),
+        difference_known_qn_history_status: residual.difference_known_qn_history_status.clone(),
+        known_qn_history_pair_status: known_qn_history_pair_status(
+            &residual.predecessor_known_qn_history_status,
+            &residual.difference_known_qn_history_status,
+        ),
+        compact_qn_polynomial_pair_status: compact_qn_polynomial_pair_status(
+            &residual.predecessor_known_qn_history_status,
+            &residual.difference_known_qn_history_status,
+        ),
+        predecessor_is_seed: seed_set.contains(&predecessor),
+        difference_is_seed: seed_set.contains(&difference),
+        predecessor_is_reduced_seed: reduced_seed_set.contains(&predecessor),
+        difference_is_reduced_seed: reduced_seed_set.contains(&difference),
+        predecessor_first_generation_seed_sum: first_generation_seed_sum_decomposition(
+            &predecessor,
+            context.grading,
+            seed_set,
+            reduced_seed_set,
+            &context.covered_toric_gv_by_basis,
+            &context.source_derived_gv_by_basis,
+        )?,
+        difference_first_generation_seed_sum: first_generation_seed_sum_decomposition(
+            &difference,
+            context.grading,
+            seed_set,
+            reduced_seed_set,
+            &context.covered_toric_gv_by_basis,
+            &context.source_derived_gv_by_basis,
+        )?,
+        predecessor_nonzero: residual.predecessor_nonzero.clone(),
+        difference_nonzero: residual.difference_nonzero.clone(),
+    };
+    Ok(Some(path_support_generator_probe(
+        &residual_target,
+        residual_degree,
+        &[candidate],
+        context,
+        run_path_support_generators,
+    )))
 }
 
 fn path_support_generator_probe_inner(
@@ -7652,6 +7718,7 @@ fn cygv_path_history_probe(
             closest_series_difference_nonzero: None,
             closest_known_qn_predecessor: None,
             closest_known_qn_residual_predecessor: None,
+            closest_known_qn_residual_path_support_probe: None,
             predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
             predecessor_candidate_sample: Vec::new(),
             lower_seed_decomposition_max_terms: 4,
@@ -7746,6 +7813,7 @@ fn cygv_path_history_probe_inner(
             closest_series_difference_nonzero: None,
             closest_known_qn_predecessor: None,
             closest_known_qn_residual_predecessor: None,
+            closest_known_qn_residual_path_support_probe: None,
             predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
             predecessor_candidate_sample: Vec::new(),
             lower_seed_decomposition_max_terms: 4,
@@ -7814,6 +7882,7 @@ fn cygv_path_history_probe_inner(
             closest_series_difference_nonzero: None,
             closest_known_qn_predecessor: None,
             closest_known_qn_residual_predecessor: None,
+            closest_known_qn_residual_path_support_probe: None,
             predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
             predecessor_candidate_sample: Vec::new(),
             lower_seed_decomposition_max_terms: 4,
@@ -7912,6 +7981,13 @@ fn cygv_path_history_probe_inner(
         &context.covered_toric_gv_by_basis,
         &context.source_derived_gv_by_basis,
     )?;
+    let closest_known_qn_residual_path_support_probe = residual_path_support_generator_probe(
+        closest_known_qn_residual_predecessor.as_ref(),
+        context,
+        run_path_support_generators,
+        &seen,
+        &reduced_seeds,
+    )?;
     let path_support_generators = path_support_generator_probe(
         target,
         sample.degree,
@@ -7952,6 +8028,7 @@ fn cygv_path_history_probe_inner(
                 .map(sparse_from_dense),
             closest_known_qn_predecessor: predecessor_stats.closest_known_qn_predecessor,
             closest_known_qn_residual_predecessor,
+            closest_known_qn_residual_path_support_probe,
             predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
             predecessor_candidate_sample: predecessor_stats.candidate_sample,
             lower_seed_decomposition_max_terms: 4,
@@ -8041,6 +8118,7 @@ fn cygv_path_history_probe_inner(
             .map(sparse_from_dense),
         closest_known_qn_predecessor: predecessor_stats.closest_known_qn_predecessor,
         closest_known_qn_residual_predecessor,
+        closest_known_qn_residual_path_support_probe,
         predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
         predecessor_candidate_sample: predecessor_stats.candidate_sample,
         lower_seed_decomposition_max_terms: 4,
@@ -13852,6 +13930,19 @@ mod tests {
                 .as_deref(),
             Some("-2")
         );
+
+        let seed_set = [vec![0, 1], vec![1, 0]].into_iter().collect::<HashSet<_>>();
+        let residual_probe = residual_path_support_generator_probe(
+            Some(&residual),
+            &context,
+            false,
+            &seed_set,
+            &seed_set,
+        )
+        .unwrap()
+        .expect("residual split should produce a residual subtarget probe");
+        assert_eq!(residual_probe.status, None);
+        assert_eq!(residual_probe.gv, None);
     }
 
     #[test]

@@ -347,6 +347,16 @@ and matrix-basis pipeline are no longer open.
    same toric degree-two classes above. This confirms the remaining gap is qN
    polynomial history in the certified compact/chamber semigroup, not scalar GV
    values for the lower leaves.
+   The latest residual-subtarget path-support probe makes that statement more
+   concrete without closing the blocker. For target `7`, the degree-eight
+   residual itself runs through a 7-support, 8-generator diagnostic domain and
+   returns `GV=-2` after materializing 10 qN polynomials. For target `8`, the
+   analogous residual runs through a 6-support, 6-generator domain and also
+   returns `GV=-2` after materializing 6 qN polynomials. The original
+   degree-ten target-support probes in the same reports still return `GV=0`
+   with no target qN polynomial, so the new result shows that the residual can
+   be observed as a lower subtarget but does not certify the McAllister
+   corrected-chamber target history.
    The source-ray summary now shows that shared ray has local charge signature
    `[-1,-1,-1,1,2]` and a matching CMS check. The residual-source predecessor
    queue now shows all three occurrences have shared origin-circuit witness

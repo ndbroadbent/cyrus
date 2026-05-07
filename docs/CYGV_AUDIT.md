@@ -2630,6 +2630,21 @@ and `43` missing instanton coefficients; target `8` has `33` readouts split as
 `6`, `16`, and `11`. This gives a direct compact-history audit for the
 degree-four, degree-six, and degree-eight composite classes rather than
 requiring those decisions to be inferred from qN samples alone.
+The residual-subtarget probe now reruns the same path-support machinery with
+the closest-known degree-eight residual as the target instead of the original
+degree-ten class. In
+`/tmp/cyrus_gv_context_target7_residual_subtarget_report.json`, the residual
+uses support size `7` with `8` supplied generators, materializes `10` qN
+polynomials, and returns `GV=-2` with
+`target_gv_coefficient_status=integer_nonzero_gv` and one target qN term. In
+`/tmp/cyrus_gv_context_target8_residual_subtarget_report.json`, the analogous
+residual uses support size `6` with `6` generators, materializes `6` qN
+polynomials, and also returns `GV=-2` with a nonzero target coefficient. This
+proves that the residual composites can be made visible in a small diagnostic
+domain, but it does not certify the original degree-ten corrected-chamber
+history: the same reports still give target-support `GV=0`,
+`target_instanton_coefficient=0`, and no target qN polynomial for the
+degree-ten classes themselves.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use
