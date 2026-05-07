@@ -658,4 +658,9 @@ to make the remaining GV layer more first-principles:
    shared-facet queue: `33` unique non-known generators over `66` occurrences,
    consisting of the nine missing targets, `4` uncovered-source-ray hits, and
    `20` source degree-bounded rays still lacking toric/source-derived GV values.
+   The first-principles export now also emits complete stats for those `20`
+   source rays. They are all origin-circuit rows, all still lack the certified
+   local q-matrix phase/intersection tensor/chamber certificate, and their CMS
+   checks expose `4` integral inferred-degree matches with formula value `3`,
+   `2` non-integral inferred-degree matches, and `22` no-solution checks.
    generators over `7360` occurrences.

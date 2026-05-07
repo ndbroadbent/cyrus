@@ -2407,6 +2407,16 @@ occurrences: `9` are the original missing targets, `4` match uncovered source
 rays, and `20` remain source degree-bounded rays without a toric/source-derived
 GV value. Their degrees are concentrated in `8..26`, giving a concrete next
 source-ray closure queue.
+A fresh context export now computes first-principles stats for exactly those
+`20` shared-facet source rays rather than leaving them as bare basis supports.
+All `20` are origin-circuit rows and all remain blocked on the same three local
+`cygv` inputs: `local_q_matrix_phase`, `local_intersection_tensor`, and
+`local_chamber_certificate`. The CMS divisor checks are now explicit: `4`
+integral solutions match the inferred normal degree, `2` rational
+non-integral solutions match the inferred degree, and `22` candidate checks
+have no rational divisor solution. The four integral rows all have the
+origin-circuit pattern `origin=-1;neg={-3: 1};pos={1: 4}` with formula value
+`3`; these are source-derived candidates, not yet promoted into the GV map.
 The same active-leaf records now run the existing one-parameter unit-tensor
 phase probe against those lower source rays. This is still diagnostic-only,
 because the local intersection tensor and chamber certificate are not

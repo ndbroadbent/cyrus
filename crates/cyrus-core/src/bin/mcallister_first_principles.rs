@@ -729,6 +729,7 @@ struct ChamberGvDiagnostic {
     missing_target_stats: Option<MissingGvTargetStats>,
     uncovered_source_ray_stats_degree_bound_for_missing: Option<i128>,
     uncovered_source_ray_stats_for_missing: Option<MissingGvTargetStats>,
+    shared_facet_unresolved_source_ray_stats_for_missing: Option<MissingGvTargetStats>,
     uncovered_source_ray_toric_diagnostic_sample: Option<Vec<ToricGvDiagnosticContextSample>>,
     degree_bounded_toric_gv_diagnostic_context_for_missing:
         Option<Vec<ToricGvDiagnosticContextSample>>,
@@ -812,6 +813,7 @@ struct CorrectedChamberGvContextExport<'a> {
     missing_target_stats: Option<&'a MissingGvTargetStats>,
     uncovered_source_ray_stats_degree_bound_for_missing: Option<i128>,
     uncovered_source_ray_stats_for_missing: Option<&'a MissingGvTargetStats>,
+    shared_facet_unresolved_source_ray_stats_for_missing: Option<&'a MissingGvTargetStats>,
     uncovered_source_ray_toric_diagnostic_sample: Option<&'a Vec<ToricGvDiagnosticContextSample>>,
 }
 
@@ -5625,6 +5627,99 @@ fn active_noncovered_dependency_source_ray_classes(
     Ok(out)
 }
 
+fn shared_facet_unresolved_source_ray_classes(
+    target_stats: &MissingGvTargetStats,
+    degree_bounded_ray_context: &[DegreeBoundedMoriRayContextSample],
+    covered_toric_context: &[CoveredToricGvContextSample],
+    source_derived_toric_context: &[ToricGvDiagnosticContextSample],
+    already_diagnosed_source_stats: &MissingGvTargetStats,
+    ambient_dim: usize,
+) -> Result<Vec<Vec<i64>>, String> {
+    let mut known_basis_supports = covered_toric_context
+        .iter()
+        .map(|sample| sample.basis_nonzero.clone())
+        .collect::<HashSet<_>>();
+    known_basis_supports.extend(
+        source_derived_toric_context
+            .iter()
+            .map(|sample| sample.basis_nonzero.clone()),
+    );
+    known_basis_supports.extend(
+        target_stats
+            .sample
+            .iter()
+            .map(|sample| sample.basis_nonzero.clone()),
+    );
+    known_basis_supports.extend(
+        already_diagnosed_source_stats
+            .sample
+            .iter()
+            .map(|sample| sample.basis_nonzero.clone()),
+    );
+
+    let mut out = HashSet::new();
+    for (target_idx, target) in target_stats.sample.iter().enumerate() {
+        for witness in missing_target_origin_circuit_witnesses(target) {
+            let shared_facet = origin_circuit_witness_shared_facet_support(witness);
+            for ray in degree_bounded_ray_context {
+                if ray.degree <= 0 || ray.degree > target.degree {
+                    continue;
+                }
+                if known_basis_supports.contains(&ray.basis_nonzero) {
+                    continue;
+                }
+                if !ray
+                    .ambient_nonzero
+                    .iter()
+                    .all(|(idx, _)| shared_facet.contains(idx))
+                {
+                    continue;
+                }
+                out.insert(dense_i64_from_sparse(
+                    &ray.ambient_nonzero,
+                    ambient_dim,
+                    &format!("shared-facet source ray for target {target_idx}"),
+                )?);
+            }
+        }
+    }
+    let mut out = out.into_iter().collect::<Vec<_>>();
+    out.sort();
+    Ok(out)
+}
+
+fn missing_target_origin_circuit_witnesses(
+    sample: &MissingGvTargetSample,
+) -> Vec<&OriginCircuitWitnessSample> {
+    sample
+        .origin_circuit_witnesses
+        .as_ref()
+        .filter(|witnesses| !witnesses.is_empty())
+        .map(|witnesses| witnesses.iter().collect())
+        .or_else(|| {
+            sample
+                .origin_circuit_first_witness
+                .as_ref()
+                .map(|witness| vec![witness])
+        })
+        .unwrap_or_default()
+}
+
+fn origin_circuit_witness_shared_facet_support(
+    witness: &OriginCircuitWitnessSample,
+) -> HashSet<usize> {
+    let first_facet = witness.first_facet.iter().copied().collect::<HashSet<_>>();
+    let second_facet = witness.second_facet.iter().copied().collect::<HashSet<_>>();
+    let mut shared_facet = first_facet
+        .intersection(&second_facet)
+        .copied()
+        .collect::<HashSet<_>>();
+    shared_facet.insert(0);
+    shared_facet.insert(witness.first_facet_exclusive_point);
+    shared_facet.insert(witness.second_facet_exclusive_point);
+    shared_facet
+}
+
 fn merge_unique_ambient_classes(mut lhs: Vec<Vec<i64>>, rhs: Vec<Vec<i64>>) -> Vec<Vec<i64>> {
     let mut seen = lhs.iter().cloned().collect::<HashSet<_>>();
     for class in rhs {
@@ -7030,6 +7125,7 @@ fn diagnose_chamber_gv_volume_correction(
     let mut missing_target_stats = None;
     let mut uncovered_source_ray_stats_degree_bound_for_missing = None;
     let mut uncovered_source_ray_stats_for_missing = None;
+    let mut shared_facet_unresolved_source_ray_stats_for_missing = None;
     let mut uncovered_source_ray_toric_diagnostic_sample = None;
     let mut degree_bounded_toric_gv_diagnostic_context_for_missing = None;
     let mut covered_toric_gv_divisor_representation_baseline = None;
@@ -7196,6 +7292,38 @@ fn diagnose_chamber_gv_volume_correction(
             false,
             missing_target_sample_limit,
         )?;
+        let shared_facet_unresolved_source_ray_classes =
+            shared_facet_unresolved_source_ray_classes(
+                &target_stats,
+                &degree_bounded_ambient_ray_context,
+                &covered_toric_gv_context,
+                degree_bounded_toric_gv_diagnostic_context_for_missing
+                    .as_deref()
+                    .unwrap_or(&[]),
+                &uncovered_source_ray_stats,
+                ambient_dimension,
+            )?;
+        let shared_facet_unresolved_source_ray_cms_intersection_checks_by_class =
+            cms_general_divisor_intersection_checks_by_class(
+                &shared_facet_unresolved_source_ray_classes,
+                &origin_circuits_by_class,
+                &corrected_kappa_full,
+                &intersection.basis,
+            )?;
+        let shared_facet_unresolved_source_ray_stats = missing_gv_target_stats(
+            &shared_facet_unresolved_source_ray_classes,
+            &geom.triangulation_points,
+            &basis_rays,
+            &intersection.basis,
+            &grading,
+            Some(kahler),
+            Some(gamma),
+            origin_idx,
+            &origin_circuits_by_class,
+            &shared_facet_unresolved_source_ray_cms_intersection_checks_by_class,
+            false,
+            missing_target_sample_limit,
+        )?;
         basis_rays_for_missing_degree_bound = Some(summary.max_degree);
         basis_rays_for_missing_degree_bounded = Some(degree_bounded_basis_rays);
         degree_bounded_mori_ray_context_for_missing = Some(degree_bounded_ambient_ray_context);
@@ -7208,6 +7336,8 @@ fn diagnose_chamber_gv_volume_correction(
         missing_target_stats = Some(target_stats);
         uncovered_source_ray_stats_degree_bound_for_missing = Some(lower_source_ray_degree_bound);
         uncovered_source_ray_stats_for_missing = Some(uncovered_source_ray_stats);
+        shared_facet_unresolved_source_ray_stats_for_missing =
+            Some(shared_facet_unresolved_source_ray_stats);
     }
 
     let general_gv_requested = general_min_points.is_some() || general_max_deg.is_some();
@@ -7716,6 +7846,7 @@ fn diagnose_chamber_gv_volume_correction(
         missing_target_stats,
         uncovered_source_ray_stats_degree_bound_for_missing,
         uncovered_source_ray_stats_for_missing,
+        shared_facet_unresolved_source_ray_stats_for_missing,
         uncovered_source_ray_toric_diagnostic_sample,
         basis_mori_rays_for_missing_degree_bound: basis_rays_for_missing_degree_bound,
         basis_mori_rays_for_missing_degree_bounded: basis_rays_for_missing_degree_bounded,
@@ -8508,6 +8639,9 @@ fn write_corrected_chamber_gv_context_export(
             .uncovered_source_ray_stats_degree_bound_for_missing,
         uncovered_source_ray_stats_for_missing: diag
             .uncovered_source_ray_stats_for_missing
+            .as_ref(),
+        shared_facet_unresolved_source_ray_stats_for_missing: diag
+            .shared_facet_unresolved_source_ray_stats_for_missing
             .as_ref(),
         uncovered_source_ray_toric_diagnostic_sample: diag
             .uncovered_source_ray_toric_diagnostic_sample
@@ -11312,6 +11446,7 @@ mod tests {
             missing_target_stats: None,
             uncovered_source_ray_stats_degree_bound_for_missing: Some(4),
             uncovered_source_ray_stats_for_missing: None,
+            shared_facet_unresolved_source_ray_stats_for_missing: None,
             uncovered_source_ray_toric_diagnostic_sample: Some(vec![
                 ToricGvDiagnosticContextSample {
                     degree: 4,
@@ -11913,6 +12048,149 @@ mod tests {
             merge_unique_ambient_classes(vec![vec![-1, 0, 1, 0]], active_classes),
             vec![vec![-1, 0, 0, 1], vec![-1, 0, 1, 0]]
         );
+    }
+
+    #[test]
+    fn shared_facet_unresolved_source_rays_skip_existing_source_context() {
+        let witness = OriginCircuitWitnessSample {
+            first_facet_exclusive_point: 1,
+            second_facet_exclusive_point: 3,
+            shared_two_simplex: vec![2],
+            first_facet: vec![1, 2],
+            second_facet: vec![2, 3],
+            first_facet_size: 2,
+            second_facet_size: 2,
+            sparse_relation: vec![(0, -1), (1, 1), (3, 1)],
+            relation_points: Vec::new(),
+        };
+        let target_stats = MissingGvTargetStats {
+            target_count: 1,
+            targets_that_are_mori_generators: 0,
+            targets_that_are_origin_circuits: 1,
+            targets_real_cone_decomposable_by_other_generators: 0,
+            targets_that_are_lp_extremal_mori_generators: 0,
+            real_cone_decomposition_active_generator_min: None,
+            real_cone_decomposition_active_generator_max: None,
+            origin_circuit_resolved_conifold_count: 0,
+            min_generators_le_target_degree: 0,
+            max_generators_le_target_degree: 0,
+            origin_coefficient_counts: BTreeMap::new(),
+            origin_circuit_pattern_counts: BTreeMap::new(),
+            origin_circuit_affine_rank_counts: BTreeMap::new(),
+            branch_status_counts: BTreeMap::new(),
+            branch_bucket_counts: BTreeMap::new(),
+            real_cone_decomposition_exact_kind_counts: BTreeMap::new(),
+            sample: vec![MissingGvTargetSample {
+                degree: 4,
+                generators_le_degree: 0,
+                is_mori_generator: false,
+                origin_circuit_pattern: None,
+                origin_circuit_witness_count: Some(1),
+                origin_circuit_first_witness: Some(witness),
+                origin_circuit_witnesses: None,
+                origin_circuit_affine_support: None,
+                cms_general_divisor_shape_candidates: None,
+                cms_general_divisor_intersection_checks: None,
+                branch_diagnostic: None,
+                real_cone_decomposable_by_other_generators: false,
+                real_cone_decomposition_active_generators: None,
+                real_cone_decomposition_active_generator_basis_nonzero: None,
+                real_cone_decomposition_exact_coefficients: None,
+                real_cone_decomposition_exact_kind: None,
+                ambient_nonzero: vec![(0, -1), (1, 1), (3, 1)],
+                basis_nonzero: vec![(2, 1)],
+            }],
+        };
+        let degree_bounded_context = vec![
+            DegreeBoundedMoriRayContextSample {
+                degree: 1,
+                ambient_nonzero: vec![(0, -1), (1, 1)],
+                basis_nonzero: vec![(0, 1)],
+            },
+            DegreeBoundedMoriRayContextSample {
+                degree: 1,
+                ambient_nonzero: vec![(0, -1), (2, 1)],
+                basis_nonzero: vec![(1, 1)],
+            },
+            DegreeBoundedMoriRayContextSample {
+                degree: 1,
+                ambient_nonzero: vec![(0, -1), (3, 1)],
+                basis_nonzero: vec![(3, 1)],
+            },
+            DegreeBoundedMoriRayContextSample {
+                degree: 2,
+                ambient_nonzero: vec![(0, -1), (2, 1), (3, 1)],
+                basis_nonzero: vec![(4, 1)],
+            },
+            DegreeBoundedMoriRayContextSample {
+                degree: 2,
+                ambient_nonzero: vec![(0, -1), (4, 1)],
+                basis_nonzero: vec![(5, 1)],
+            },
+        ];
+        let covered_context = vec![CoveredToricGvContextSample {
+            degree: 1,
+            gv: "7".to_string(),
+            ambient_nonzero: vec![(0, -1), (1, 1)],
+            basis_nonzero: vec![(0, 1)],
+        }];
+        let source_derived_toric_context = vec![ToricGvDiagnosticContextSample {
+            degree: 1,
+            gv: "-2".to_string(),
+            source_bucket: "two_face".to_string(),
+            source_summary: "diagnostic".to_string(),
+            ambient_nonzero: vec![(0, -1), (2, 1)],
+            basis_nonzero: vec![(1, 1)],
+        }];
+        let already_diagnosed_source_stats = MissingGvTargetStats {
+            target_count: 1,
+            targets_that_are_mori_generators: 1,
+            targets_that_are_origin_circuits: 0,
+            targets_real_cone_decomposable_by_other_generators: 0,
+            targets_that_are_lp_extremal_mori_generators: 1,
+            real_cone_decomposition_active_generator_min: None,
+            real_cone_decomposition_active_generator_max: None,
+            origin_circuit_resolved_conifold_count: 0,
+            min_generators_le_target_degree: 0,
+            max_generators_le_target_degree: 0,
+            origin_coefficient_counts: BTreeMap::new(),
+            origin_circuit_pattern_counts: BTreeMap::new(),
+            origin_circuit_affine_rank_counts: BTreeMap::new(),
+            branch_status_counts: BTreeMap::new(),
+            branch_bucket_counts: BTreeMap::new(),
+            real_cone_decomposition_exact_kind_counts: BTreeMap::new(),
+            sample: vec![MissingGvTargetSample {
+                degree: 1,
+                generators_le_degree: 0,
+                is_mori_generator: true,
+                origin_circuit_pattern: None,
+                origin_circuit_witness_count: None,
+                origin_circuit_first_witness: None,
+                origin_circuit_witnesses: None,
+                origin_circuit_affine_support: None,
+                cms_general_divisor_shape_candidates: None,
+                cms_general_divisor_intersection_checks: None,
+                branch_diagnostic: None,
+                real_cone_decomposable_by_other_generators: false,
+                real_cone_decomposition_active_generators: None,
+                real_cone_decomposition_active_generator_basis_nonzero: None,
+                real_cone_decomposition_exact_coefficients: None,
+                real_cone_decomposition_exact_kind: None,
+                ambient_nonzero: vec![(0, -1), (3, 1)],
+                basis_nonzero: vec![(3, 1)],
+            }],
+        };
+
+        let classes = shared_facet_unresolved_source_ray_classes(
+            &target_stats,
+            &degree_bounded_context,
+            &covered_context,
+            &source_derived_toric_context,
+            &already_diagnosed_source_stats,
+            5,
+        )
+        .unwrap();
+        assert_eq!(classes, vec![vec![-1, 0, 1, 1, 0]]);
     }
 
     #[test]

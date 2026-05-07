@@ -47,6 +47,8 @@ struct CorrectedChamberGvContext {
     degree_bounded_toric_gv_diagnostic_context_for_missing:
         Option<Vec<ToricGvDiagnosticContextSample>>,
     uncovered_source_ray_stats_for_missing: Option<MissingGvTargetStats>,
+    #[serde(default)]
+    shared_facet_unresolved_source_ray_stats_for_missing: Option<MissingGvTargetStats>,
     gv_q_matrix_for_missing: Option<Vec<Vec<i64>>>,
     grading_for_missing: Option<Vec<i64>>,
     corrected_kappa_basis_for_missing: Option<Vec<SparseIntersectionEntry>>,
@@ -227,6 +229,20 @@ struct ContextReport {
     cms_general_divisor_intersection_check_status_counts: BTreeMap<String, usize>,
     origin_circuit_witness_relation_status_counts: BTreeMap<String, usize>,
     uncovered_source_ray_origin_circuit_witness_relation_status_counts: BTreeMap<String, usize>,
+    shared_facet_unresolved_source_ray_target_count: Option<usize>,
+    shared_facet_unresolved_source_ray_origin_circuit_pattern_counts: BTreeMap<String, usize>,
+    shared_facet_unresolved_source_ray_origin_circuit_witness_relation_status_counts:
+        BTreeMap<String, usize>,
+    shared_facet_unresolved_source_ray_local_cygv_charge_signature_counts: BTreeMap<String, usize>,
+    shared_facet_unresolved_source_ray_local_cygv_actual_call_readiness_counts:
+        BTreeMap<String, usize>,
+    shared_facet_unresolved_source_ray_local_cygv_missing_source_input_counts:
+        BTreeMap<String, usize>,
+    shared_facet_unresolved_source_ray_cms_general_divisor_candidate_status_counts:
+        BTreeMap<String, usize>,
+    shared_facet_unresolved_source_ray_cms_general_divisor_intersection_check_status_counts:
+        BTreeMap<String, usize>,
+    shared_facet_unresolved_source_ray_sample: Vec<TargetReport>,
     origin_circuit_facet_context_status_counts: BTreeMap<String, usize>,
     origin_circuit_witness_relation_support_face_certificate_status_counts: BTreeMap<String, usize>,
     origin_circuit_witness_shared_facet_face_certificate_status_counts: BTreeMap<String, usize>,
@@ -4911,6 +4927,9 @@ fn validate_context<'a>(
         intersection,
         stats,
         uncovered_source_ray_stats: context.uncovered_source_ray_stats_for_missing.as_ref(),
+        shared_facet_unresolved_source_ray_stats: context
+            .shared_facet_unresolved_source_ray_stats_for_missing
+            .as_ref(),
     })
 }
 
@@ -5034,6 +5053,7 @@ struct ValidatedContext<'a> {
     intersection: Intersection,
     stats: &'a MissingGvTargetStats,
     uncovered_source_ray_stats: Option<&'a MissingGvTargetStats>,
+    shared_facet_unresolved_source_ray_stats: Option<&'a MissingGvTargetStats>,
 }
 
 fn report_target(
@@ -7459,26 +7479,26 @@ fn build_report(
             closure_generation_limit,
         ));
     }
-    let local_cygv_charge_signature_counts =
+    let missing_local_cygv_charge_signature_counts =
         local_cygv_charge_signature_counts(&validated.stats.sample, target_index_filter);
     let local_cygv_target_candidate_status_counts = local_cygv_target_candidate_status_counts(
         targets
             .iter()
             .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
     );
-    let local_cygv_actual_call_readiness_counts = local_cygv_actual_call_readiness_counts(
+    let missing_local_cygv_actual_call_readiness_counts = local_cygv_actual_call_readiness_counts(
         targets
             .iter()
             .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
     );
-    let local_cygv_missing_source_input_counts = local_cygv_missing_source_input_counts(
+    let missing_local_cygv_missing_source_input_counts = local_cygv_missing_source_input_counts(
         targets
             .iter()
             .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
     );
-    let cms_general_divisor_candidate_status_counts =
+    let missing_cms_general_divisor_candidate_status_counts =
         cms_general_divisor_candidate_status_counts(&targets);
-    let cms_general_divisor_intersection_check_status_counts =
+    let missing_cms_general_divisor_intersection_check_status_counts =
         cms_general_divisor_intersection_check_status_counts(&targets);
     let missing_origin_circuit_witness_relation_status_counts =
         origin_circuit_witness_relation_status_counts(&validated.stats.sample, target_index_filter);
@@ -7486,6 +7506,72 @@ fn build_report(
         .uncovered_source_ray_stats
         .map(|stats| origin_circuit_witness_relation_status_counts(&stats.sample, None))
         .unwrap_or_default();
+    let shared_facet_unresolved_source_ray_target_count = validated
+        .shared_facet_unresolved_source_ray_stats
+        .map(|stats| stats.target_count);
+    let shared_facet_unresolved_source_ray_origin_circuit_pattern_counts = validated
+        .shared_facet_unresolved_source_ray_stats
+        .map(|stats| origin_circuit_pattern_counts(&stats.sample))
+        .unwrap_or_default();
+    let shared_facet_unresolved_source_ray_origin_circuit_witness_relation_status_counts =
+        validated
+            .shared_facet_unresolved_source_ray_stats
+            .map(|stats| origin_circuit_witness_relation_status_counts(&stats.sample, None))
+            .unwrap_or_default();
+    let shared_facet_unresolved_source_ray_local_cygv_charge_signature_counts = validated
+        .shared_facet_unresolved_source_ray_stats
+        .map(|stats| local_cygv_charge_signature_counts(&stats.sample, None))
+        .unwrap_or_default();
+    let mut shared_facet_unresolved_source_ray_sample = Vec::new();
+    if let Some(stats) = validated.shared_facet_unresolved_source_ray_stats {
+        for (idx, sample) in stats.sample.iter().enumerate() {
+            shared_facet_unresolved_source_ray_sample.push(report_target(
+                idx,
+                sample,
+                validated,
+                false,
+                false,
+                None,
+                None,
+                false,
+                false,
+                origin_support_certificate_limit,
+                false,
+                target_extremal_generator_limit,
+                None,
+                false,
+                false,
+                false,
+                false,
+                false,
+                None,
+                None,
+                None,
+                &mut semigroup_measurement_cache,
+                &mut semigroup_ladder_cache,
+                element_limit,
+                closure_generation_limit,
+            ));
+        }
+    }
+    let shared_facet_unresolved_source_ray_local_cygv_actual_call_readiness_counts =
+        local_cygv_actual_call_readiness_counts(
+            shared_facet_unresolved_source_ray_sample
+                .iter()
+                .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
+        );
+    let shared_facet_unresolved_source_ray_local_cygv_missing_source_input_counts =
+        local_cygv_missing_source_input_counts(
+            shared_facet_unresolved_source_ray_sample
+                .iter()
+                .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
+        );
+    let shared_facet_unresolved_source_ray_cms_general_divisor_candidate_status_counts =
+        cms_general_divisor_candidate_status_counts(&shared_facet_unresolved_source_ray_sample);
+    let shared_facet_unresolved_source_ray_cms_general_divisor_intersection_check_status_counts =
+        cms_general_divisor_intersection_check_status_counts(
+            &shared_facet_unresolved_source_ray_sample,
+        );
     let origin_circuit_facet_context_status_counts =
         origin_circuit_facet_context_status_counts(&validated.stats.sample, target_index_filter);
     let origin_circuit_witness_domain_sample = origin_circuit_witness_domain_summaries(
@@ -7778,15 +7864,26 @@ fn build_report(
         active_decomposition_source_leaf_origin_omitted_unit_phase_probe_status_counts,
         active_decomposition_source_leaf_cms_solution_status_counts,
         active_decomposition_source_leaf_cms_candidate_status_counts,
-        local_cygv_charge_signature_counts,
+        local_cygv_charge_signature_counts: missing_local_cygv_charge_signature_counts,
         local_cygv_target_candidate_status_counts,
-        local_cygv_actual_call_readiness_counts,
-        local_cygv_missing_source_input_counts,
-        cms_general_divisor_candidate_status_counts,
-        cms_general_divisor_intersection_check_status_counts,
+        local_cygv_actual_call_readiness_counts: missing_local_cygv_actual_call_readiness_counts,
+        local_cygv_missing_source_input_counts: missing_local_cygv_missing_source_input_counts,
+        cms_general_divisor_candidate_status_counts:
+            missing_cms_general_divisor_candidate_status_counts,
+        cms_general_divisor_intersection_check_status_counts:
+            missing_cms_general_divisor_intersection_check_status_counts,
         origin_circuit_witness_relation_status_counts:
             missing_origin_circuit_witness_relation_status_counts,
         uncovered_source_ray_origin_circuit_witness_relation_status_counts,
+        shared_facet_unresolved_source_ray_target_count,
+        shared_facet_unresolved_source_ray_origin_circuit_pattern_counts,
+        shared_facet_unresolved_source_ray_origin_circuit_witness_relation_status_counts,
+        shared_facet_unresolved_source_ray_local_cygv_charge_signature_counts,
+        shared_facet_unresolved_source_ray_local_cygv_actual_call_readiness_counts,
+        shared_facet_unresolved_source_ray_local_cygv_missing_source_input_counts,
+        shared_facet_unresolved_source_ray_cms_general_divisor_candidate_status_counts,
+        shared_facet_unresolved_source_ray_cms_general_divisor_intersection_check_status_counts,
+        shared_facet_unresolved_source_ray_sample,
         origin_circuit_facet_context_status_counts,
         origin_circuit_witness_relation_support_face_certificate_status_counts,
         origin_circuit_witness_shared_facet_face_certificate_status_counts,
@@ -8001,6 +8098,18 @@ fn origin_circuit_witness_relation_status_counts(
         *counts
             .entry(origin_circuit_witness_relation_status(sample))
             .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn origin_circuit_pattern_counts(samples: &[MissingGvTargetSample]) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for sample in samples {
+        let key = sample
+            .origin_circuit_pattern
+            .clone()
+            .unwrap_or_else(|| "not_origin_circuit".to_string());
+        *counts.entry(key).or_insert(0usize) += 1;
     }
     counts
 }
@@ -8567,6 +8676,7 @@ mod tests {
             uncovered_source_ray_toric_diagnostic_sample: None,
             degree_bounded_toric_gv_diagnostic_context_for_missing: None,
             uncovered_source_ray_stats_for_missing: None,
+            shared_facet_unresolved_source_ray_stats_for_missing: None,
             gv_q_matrix_for_missing: Some(vec![vec![1, 0], vec![0, 1]]),
             grading_for_missing: Some(vec![1, 1]),
             corrected_kappa_basis_for_missing: Some(Vec::new()),
@@ -8808,6 +8918,7 @@ mod tests {
             intersection: Intersection::new(2),
             stats: &stats,
             uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
         };
         let sample = MissingGvTargetSample {
             degree: 2,
@@ -9844,6 +9955,7 @@ mod tests {
             intersection: Intersection::new(2),
             stats: &stats,
             uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
         };
         let decomposition = LowerSeedDecompositionProbe {
             status: "found_lower_seed_decomposition".to_string(),
@@ -9907,6 +10019,7 @@ mod tests {
             intersection: Intersection::new(2),
             stats: &stats,
             uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
         };
         let mut cache = HashMap::new();
 
@@ -9992,6 +10105,7 @@ mod tests {
             intersection: Intersection::new(2),
             stats: &stats,
             uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
         };
 
         let probe = target_extremal_ray_certificate_probe(
@@ -10072,6 +10186,7 @@ mod tests {
             intersection: Intersection::new(2),
             stats: &stats,
             uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
         };
 
         let probe = target_extremal_ray_certificate_probe(
@@ -10671,6 +10786,7 @@ mod tests {
             intersection: Intersection::new(3),
             stats: &stats,
             uncovered_source_ray_stats: Some(&uncovered_stats),
+            shared_facet_unresolved_source_ray_stats: None,
         };
 
         let counts =
@@ -11426,6 +11542,7 @@ mod tests {
             intersection: Intersection::new(2),
             stats: &stats,
             uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
         };
 
         let target = vec![1, 1];
@@ -11579,6 +11696,7 @@ mod tests {
             intersection: Intersection::new(2),
             stats: &stats,
             uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
         };
 
         let target = vec![1, 1];
@@ -11646,6 +11764,7 @@ mod tests {
             intersection: Intersection::new(2),
             stats: &stats,
             uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
         };
 
         let target = vec![1, 1];
@@ -12000,6 +12119,7 @@ mod tests {
             intersection,
             stats: &stats,
             uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
         };
 
         let mut semigroup_measurement_cache = HashMap::new();
@@ -12137,6 +12257,7 @@ mod tests {
             intersection,
             stats: &stats,
             uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
         };
         let mut semigroup_measurement_cache = HashMap::new();
         let mut semigroup_ladder_cache = HashMap::new();
