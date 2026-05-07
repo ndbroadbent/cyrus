@@ -296,6 +296,9 @@ struct ContextReport {
     origin_shared_facet_face_certificate_status_counts: BTreeMap<String, usize>,
     origin_facet_union_face_certificate_status_counts: BTreeMap<String, usize>,
     cygv_path_history_status_counts: BTreeMap<String, usize>,
+    cygv_path_support_status_counts: BTreeMap<String, usize>,
+    cygv_path_support_gw_noninteger_candidate_count_counts: BTreeMap<String, usize>,
+    cygv_path_support_gw_coefficient_trace_error_counts: BTreeMap<String, usize>,
     cygv_path_support_target_pre_subtraction_formula_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_decomposition_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_diamond_status_counts: BTreeMap<String, usize>,
@@ -10879,6 +10882,33 @@ fn build_report(
         }),
         "not_run",
     );
+    let cygv_path_support_status_counts = optional_status_counts(
+        targets.iter().map(|target| {
+            target
+                .cygv_path_history_probe
+                .as_ref()
+                .and_then(|probe| probe.path_support_status.as_deref())
+        }),
+        "not_run",
+    );
+    let cygv_path_support_gw_noninteger_candidate_count_counts = optional_usize_count_counts(
+        targets.iter().map(|target| {
+            target
+                .cygv_path_history_probe
+                .as_ref()
+                .and_then(|probe| probe.path_support_gw_noninteger_candidate_count)
+        }),
+        "not_run",
+    );
+    let cygv_path_support_gw_coefficient_trace_error_counts = optional_status_counts(
+        targets.iter().map(|target| {
+            target
+                .cygv_path_history_probe
+                .as_ref()
+                .and_then(|probe| probe.path_support_gw_coefficient_trace_error.as_deref())
+        }),
+        "none",
+    );
     let cygv_path_support_target_pre_subtraction_formula_status_counts = optional_status_counts(
         targets.iter().map(|target| {
             target.cygv_path_history_probe.as_ref().and_then(|probe| {
@@ -11270,6 +11300,9 @@ fn build_report(
         origin_shared_facet_face_certificate_status_counts,
         origin_facet_union_face_certificate_status_counts,
         cygv_path_history_status_counts,
+        cygv_path_support_status_counts,
+        cygv_path_support_gw_noninteger_candidate_count_counts,
+        cygv_path_support_gw_coefficient_trace_error_counts,
         cygv_path_support_target_pre_subtraction_formula_status_counts,
         cygv_lower_seed_decomposition_status_counts,
         cygv_lower_seed_diamond_status_counts,
@@ -11471,6 +11504,18 @@ fn optional_status_counts<'a>(
         *counts
             .entry(status.unwrap_or(missing_status).to_string())
             .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn optional_usize_count_counts(
+    values: impl IntoIterator<Item = Option<usize>>,
+    missing_status: &str,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for value in values {
+        let key = value.map_or_else(|| missing_status.to_string(), |value| value.to_string());
+        *counts.entry(key).or_insert(0usize) += 1;
     }
     counts
 }
@@ -13533,6 +13578,15 @@ mod tests {
             Some(2)
         );
         assert_eq!(counts.get("hkty_error").copied(), Some(1));
+        assert_eq!(counts.get("not_run").copied(), Some(1));
+    }
+
+    #[test]
+    fn optional_usize_count_counts_aggregates_missing_and_exact_values() {
+        let counts = optional_usize_count_counts([Some(9), None, Some(0), Some(9)], "not_run");
+
+        assert_eq!(counts.get("9").copied(), Some(2));
+        assert_eq!(counts.get("0").copied(), Some(1));
         assert_eq!(counts.get("not_run").copied(), Some(1));
     }
 
