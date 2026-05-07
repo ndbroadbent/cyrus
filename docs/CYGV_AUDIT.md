@@ -2210,8 +2210,13 @@ path-support source-ray queue now carries those successful solution summaries
 forward as well: on the target-`7` schema-3 report, the shared degree-six ray
 `[(54,-2),(203,1),(206,1),(209,1)]` reports shrinking divisor `56`, divisor
 basis solution `[(55,"1")]`, ambient solution `[(57,"1")]`, and normal degree
-`0`, while still listing the missing `local_q_matrix_phase`,
-`local_intersection_tensor`, and `local_chamber_certificate` inputs.
+`0`. The same report now contracts that divisor solution with the corrected
+basis intersection tensor and records cubic self-intersection `D^3=3`; the
+other target-`7` lower source-ray solution has `D^3=26`. These are
+source-derived local-intersection candidates, not a certified local `cygv`
+intersection tensor yet, so the skeleton still lists the missing
+`local_q_matrix_phase`, `local_intersection_tensor`, and
+`local_chamber_certificate` inputs.
 
 The stable-Weyl/flop-continuation route is now surfaced as a report-level
 readiness count rather than only per-target arrays. On the schema-3 context all

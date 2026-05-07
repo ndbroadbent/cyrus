@@ -70,7 +70,10 @@ run pass. Any remaining mismatch must be explicit and localizable.
    source-ray queue feeding the degree-10 path history, successful
    CMS-general-divisor checks now carry their divisor-basis and ambient-basis
    solution coefficients into the context report, preserving the chamber/input
-   evidence needed by the next local intersection-certificate step.
+   evidence needed by the next local intersection-certificate step. The same
+   summaries now include the divisor cubic self-intersection computed from the
+   corrected basis κ tensor, but this remains candidate evidence until the full
+   local `cygv` intersection tensor and chamber certificate are derived.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for

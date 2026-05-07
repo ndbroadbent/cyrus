@@ -548,6 +548,7 @@ struct CmsGeneralDivisorSolutionSummary {
     solution_basis_nonzero: Vec<(usize, String)>,
     solution_ambient_basis_nonzero: Vec<(usize, String)>,
     computed_other_normal_degree: String,
+    solution_basis_cubic_self_intersection: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1341,7 +1342,8 @@ fn path_support_source_class_context(
             matching_uncovered_source_ray
                 .as_ref()
                 .and_then(|entry| entry.1.cms_general_divisor_intersection_checks.as_deref()),
-        );
+            &context.intersection,
+        )?;
     let (
         matching_uncovered_source_ray_local_charge_signature,
         matching_uncovered_source_ray_local_cygv_readiness,
@@ -1466,28 +1468,77 @@ fn missing_sample_cms_check_status_counts(
 
 fn cms_general_divisor_solution_summaries(
     checks: Option<&[CmsGeneralDivisorIntersectionCheck]>,
-) -> Vec<CmsGeneralDivisorSolutionSummary> {
+    intersection: &Intersection,
+) -> Result<Vec<CmsGeneralDivisorSolutionSummary>, String> {
     let Some(checks) = checks else {
-        return Vec::new();
+        return Ok(Vec::new());
     };
-    let mut summaries = checks
-        .iter()
-        .filter(|check| {
-            cms_general_divisor_intersection_check_status(check)
-                == "cms_general_divisor_integral_solution_matches_inferred_degree"
-        })
-        .filter_map(|check| {
-            Some(CmsGeneralDivisorSolutionSummary {
-                shrinking_divisor_index: check.shrinking_divisor_index,
-                solution_basis_nonzero: check.solution_basis_nonzero.clone()?,
-                solution_ambient_basis_nonzero: check.solution_ambient_basis_nonzero.clone()?,
-                computed_other_normal_degree: check.computed_other_normal_degree.clone()?,
-            })
-        })
-        .collect::<Vec<_>>();
+    let mut summaries = Vec::new();
+    for check in checks {
+        if cms_general_divisor_intersection_check_status(check)
+            != "cms_general_divisor_integral_solution_matches_inferred_degree"
+        {
+            continue;
+        }
+        let Some(solution_basis_nonzero) = check.solution_basis_nonzero.clone() else {
+            continue;
+        };
+        let Some(solution_ambient_basis_nonzero) = check.solution_ambient_basis_nonzero.clone()
+        else {
+            continue;
+        };
+        let Some(computed_other_normal_degree) = check.computed_other_normal_degree.clone() else {
+            continue;
+        };
+        summaries.push(CmsGeneralDivisorSolutionSummary {
+            shrinking_divisor_index: check.shrinking_divisor_index,
+            solution_basis_cubic_self_intersection: divisor_cubic_self_intersection(
+                intersection,
+                &solution_basis_nonzero,
+            )?,
+            solution_basis_nonzero,
+            solution_ambient_basis_nonzero,
+            computed_other_normal_degree,
+        });
+    }
     summaries.sort();
     summaries.dedup();
-    summaries
+    Ok(summaries)
+}
+
+fn divisor_cubic_self_intersection(
+    intersection: &Intersection,
+    solution_basis_nonzero: &[(usize, String)],
+) -> Result<String, String> {
+    let zero = MalachiteRational::from(0);
+    let mut coefficients = Vec::new();
+    let mut seen = HashSet::new();
+    for (idx, value) in solution_basis_nonzero {
+        if *idx >= intersection.dim() {
+            return Err(format!(
+                "CMS solution basis index {idx} is out of bounds for intersection dimension {}",
+                intersection.dim()
+            ));
+        }
+        if !seen.insert(*idx) {
+            return Err(format!(
+                "CMS solution basis index {idx} appears more than once"
+            ));
+        }
+        let coefficient = parse_rational(value)?;
+        if coefficient != zero {
+            coefficients.push((*idx, coefficient));
+        }
+    }
+    let mut value = zero.clone();
+    for (i, coeff_i) in &coefficients {
+        for (j, coeff_j) in &coefficients {
+            for (k, coeff_k) in &coefficients {
+                value += coeff_i * coeff_j * coeff_k * intersection.get(*i, *j, *k).get();
+            }
+        }
+    }
+    Ok(value.to_string())
 }
 
 fn matching_missing_target_for_curve<'a>(
@@ -8367,6 +8418,7 @@ mod tests {
                     solution_basis_nonzero: vec![(0, "1".to_string())],
                     solution_ambient_basis_nonzero: vec![(5, "1".to_string())],
                     computed_other_normal_degree: "0".to_string(),
+                    solution_basis_cubic_self_intersection: "0".to_string(),
                 },
             ],
             matching_uncovered_source_ray_local_charge_signature: Some("-2,-1,1,1,1".to_string()),
@@ -8413,6 +8465,7 @@ mod tests {
                 solution_basis_nonzero: vec![(0, "1".to_string())],
                 solution_ambient_basis_nonzero: vec![(5, "1".to_string())],
                 computed_other_normal_degree: "0".to_string(),
+                solution_basis_cubic_self_intersection: "0".to_string(),
             }]
         );
         assert_eq!(
@@ -8467,6 +8520,23 @@ mod tests {
             cms_general_divisor_intersection_check_status(&matching_solution),
             "cms_general_divisor_integral_solution_matches_inferred_degree"
         );
+    }
+
+    #[test]
+    fn divisor_cubic_self_intersection_contracts_solution_with_kappa() {
+        let mut intersection = Intersection::new(2);
+        intersection.set(0, 0, 0, Rational::<Finite>::new(MalachiteRational::from(2)));
+        intersection.set(0, 0, 1, Rational::<Finite>::new(MalachiteRational::from(3)));
+        intersection.set(0, 1, 1, Rational::<Finite>::new(MalachiteRational::from(5)));
+        intersection.set(1, 1, 1, Rational::<Finite>::new(MalachiteRational::from(7)));
+
+        let cubic = divisor_cubic_self_intersection(
+            &intersection,
+            &[(0, "2".to_string()), (1, "-1".to_string())],
+        )
+        .unwrap();
+
+        assert_eq!(cubic, "3");
     }
 
     #[test]
