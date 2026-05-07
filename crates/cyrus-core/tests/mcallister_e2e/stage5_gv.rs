@@ -1127,7 +1127,8 @@ fn stage5_gv_computation_roadmap() {
         /// Bitmask of completed components:
         /// cygv=1, mori=2, grading=4, pipeline=8, small-toric-curves=16,
         /// small-toric-gvs=32, primal-general-gv-fallback-wiring=64,
-        /// potent-ray-convergence-checks=128, one-dimensional-ray-gv-series=256.
+        /// potent-ray-convergence-checks=128, one-dimensional-ray-gv-series=256,
+        /// mirror-side-gv-checkpoint=512.
         completed_components: u16,
         verified_components: Vec<&'static str>,
         remaining_gaps: Vec<&'static str>,
@@ -1138,8 +1139,9 @@ fn stage5_gv_computation_roadmap() {
     // small toric curve GV checkpoint (32), and general primal GV fallback
     // wiring from basis-coordinate cygv output to ambient curve classes (64),
     // potent-ray convergence checks over supplied samples (128), and reusable
-    // one-dimensional ray GV series computation (256).
-    let completed = 1u16 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256;
+    // one-dimensional ray GV series computation (256), plus opt-in mirror-side
+    // GV checkpoint validation through the mcallister_gv binary (512).
+    let completed = 1u16 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 512;
 
     let roadmap = GvComputationRoadmap {
         status: "In Progress - Cyrus computes GV inputs, McAllister-sized validation is expensive",
@@ -1161,6 +1163,7 @@ fn stage5_gv_computation_roadmap() {
             "DDM preserves ray orientation when normalizing primitive integer rays; sign-flipping was a correctness bug and is now unit-tested",
             "compute_gv_invariants runs the upstream cygv HKTY modules and maps cygv construction/inversion failures and remaining unwind panics into Result errors",
             "Cyrus' direct cygv HKTY call chain is regression-tested against cygv::compute_gv_rat_threefold on the quintic degree-one GV 2875 case",
+            "The opt-in stage5_mirror_gv_checkpoint_matches_cygv_min_points test runs mcallister_gv --min-points 20000 and verifies the computed 4-214-647 mirror-side GV table matches all 5177 dual_curves.dat / dual_curves_gv.dat checkpoint rows",
             "McAllister 4-214-647 small toric curve classes are computed from Cyrus Mori-cap rays and verified pair-decomposable pruning",
             "McAllister 4-214-647 small toric curve GV values are computed from toric two-face/origin-circuit formulas and match small_curves_gv.dat as a checkpoint",
             "CYTools-style height projection from heights plus curve-basis effective-cone rows reproduces McAllister 4-214-647 kahler_param.dat exactly as an uncorrected-branch checkpoint",
