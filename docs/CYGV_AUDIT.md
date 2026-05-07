@@ -2817,6 +2817,18 @@ remaining issue to domain-dependent compact qN history: the tiny diamond's
 scalar GV and one-term qN are real `cygv` outputs, but they are not the same
 parent-domain qN polynomial that participates in the degree-ten target
 subtraction.
+The same comparison now serializes parent-only and diamond-only term
+signatures. Regenerating targets `7` and `8` gives main-path comparison counts
+`{"different_qn_term_counts":2,"not_compared":1}` for both targets, with empty
+diamond-only samples for the compared rows. For the target `7` degree-eight
+composite source, the parent-only terms are
+`[(44,2),(203,1),(206,-3),(209,1)]` with coefficient `+1` and
+`[(44,1),(203,-1),(206,-1),(209,1)]` with coefficient `-1`. For target `8`,
+the degree-eight composite has parent-only term
+`[(203,-3),(206,1),(209,1)]` with coefficient `+1`. These are exactly the
+kind of domain-specific qN monomials that the tiny lower-leaf diamond cannot
+generate, so the next candidate domain must explain those parent-only terms
+rather than only the scalar source GV.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use

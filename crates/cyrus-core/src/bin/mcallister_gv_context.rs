@@ -36,6 +36,7 @@ const CYGV_PATH_SUPPORT_QN_TRACE_TERM_SAMPLE_LIMIT: usize = 16;
 const CYGV_PATH_SUPPORT_GV_COEFFICIENT_TRACE_SAMPLE_LIMIT: usize = 32;
 const CYGV_PATH_SUPPORT_TARGET_MONOMIAL_QN_SOURCE_SAMPLE_LIMIT: usize = 16;
 const CYGV_BOUNDED_DECOMPOSITION_DIAMOND_ELEMENT_LIMIT: usize = 64;
+const CYGV_BOUNDED_DIAMOND_PARENT_QN_DIFF_SAMPLE_LIMIT: usize = 16;
 const ORIGIN_CIRCUIT_WITNESS_DOMAIN_UNRESOLVED_SAMPLE_LIMIT: usize = 64;
 const ORIGIN_CIRCUIT_WITNESS_DOMAIN_OCCURRENCE_SAMPLE_LIMIT: usize = 8;
 
@@ -826,6 +827,10 @@ struct CygvPathSupportTargetMonomialQnSource {
     source_first_generation_seed_sum: Option<CygvSeedSumDecomposition>,
     source_bounded_seed_decomposition: Option<CygvBoundedSeedDecompositionSummary>,
     source_bounded_diamond_parent_qn_comparison_status: Option<String>,
+    source_bounded_diamond_parent_only_qn_term_signature_sample:
+        Vec<CygvPathSupportQnTraceTermSignature>,
+    source_bounded_diamond_diamond_only_qn_term_signature_sample:
+        Vec<CygvPathSupportQnTraceTermSignature>,
 }
 
 struct CygvPathSupportTargetLi2SubtractionBalance {
@@ -4357,6 +4362,8 @@ fn path_support_target_monomial_qn_sources(
                 source_first_generation_seed_sum: None,
                 source_bounded_seed_decomposition: None,
                 source_bounded_diamond_parent_qn_comparison_status: None,
+                source_bounded_diamond_parent_only_qn_term_signature_sample: Vec::new(),
+                source_bounded_diamond_diamond_only_qn_term_signature_sample: Vec::new(),
             })
         })
         .collect()
@@ -4551,50 +4558,110 @@ fn annotate_target_monomial_qn_sources_with_seed_decompositions(
         )?;
         let bounded_seed_decomposition =
             bounded_seed_decomposition_summary(&curve, seed_set, 4, Some(context))?;
-        source.source_bounded_diamond_parent_qn_comparison_status =
-            bounded_diamond_parent_qn_comparison_status(source, &bounded_seed_decomposition);
+        let comparison = bounded_diamond_parent_qn_comparison(source, &bounded_seed_decomposition);
+        source.source_bounded_diamond_parent_qn_comparison_status = comparison.status;
+        source.source_bounded_diamond_parent_only_qn_term_signature_sample =
+            comparison.parent_only_term_signature_sample;
+        source.source_bounded_diamond_diamond_only_qn_term_signature_sample =
+            comparison.diamond_only_term_signature_sample;
         source.source_bounded_seed_decomposition = Some(bounded_seed_decomposition);
     }
     Ok(())
 }
 
-fn bounded_diamond_parent_qn_comparison_status(
+struct CygvBoundedDiamondParentQnComparison {
+    status: Option<String>,
+    parent_only_term_signature_sample: Vec<CygvPathSupportQnTraceTermSignature>,
+    diamond_only_term_signature_sample: Vec<CygvPathSupportQnTraceTermSignature>,
+}
+
+fn bounded_diamond_parent_qn_comparison(
     source: &CygvPathSupportTargetMonomialQnSource,
     bounded: &CygvBoundedSeedDecompositionSummary,
-) -> Option<String> {
+) -> CygvBoundedDiamondParentQnComparison {
     if bounded.diamond_status.as_deref() != Some("computed_bounded_decomposition_diamond_qn_trace")
     {
-        return None;
+        return CygvBoundedDiamondParentQnComparison {
+            status: None,
+            parent_only_term_signature_sample: Vec::new(),
+            diamond_only_term_signature_sample: Vec::new(),
+        };
     }
     let diamond_qn = bounded
         .diamond_qn_trace_sample
         .iter()
         .find(|sample| sample.curve_nonzero.as_slice() == source.curve_nonzero.as_slice());
     let Some(diamond_qn) = diamond_qn else {
-        return Some(
-            if bounded.diamond_target_qn_trace_term_count.is_some() {
-                "bounded_diamond_target_qn_sample_truncated"
-            } else {
-                "missing_in_bounded_diamond"
-            }
-            .to_string(),
-        );
+        return CygvBoundedDiamondParentQnComparison {
+            status: Some(
+                if bounded.diamond_target_qn_trace_term_count.is_some() {
+                    "bounded_diamond_target_qn_sample_truncated"
+                } else {
+                    "missing_in_bounded_diamond"
+                }
+                .to_string(),
+            ),
+            parent_only_term_signature_sample: source.source_qn_term_signature_sample.clone(),
+            diamond_only_term_signature_sample: Vec::new(),
+        };
     };
+    let diamond_terms = qn_trace_term_signatures(Some(diamond_qn));
+    let parent_only_term_signature_sample = qn_term_signature_multiset_difference(
+        &source.source_qn_term_signature_sample,
+        &diamond_terms,
+        CYGV_BOUNDED_DIAMOND_PARENT_QN_DIFF_SAMPLE_LIMIT,
+    );
+    let diamond_only_term_signature_sample = qn_term_signature_multiset_difference(
+        &diamond_terms,
+        &source.source_qn_term_signature_sample,
+        CYGV_BOUNDED_DIAMOND_PARENT_QN_DIFF_SAMPLE_LIMIT,
+    );
     if source.term_count != diamond_qn.term_count {
-        return Some("different_qn_term_counts".to_string());
+        return CygvBoundedDiamondParentQnComparison {
+            status: Some("different_qn_term_counts".to_string()),
+            parent_only_term_signature_sample,
+            diamond_only_term_signature_sample,
+        };
     }
     if !source.source_qn_term_sample_complete || !qn_trace_sample_is_complete(Some(diamond_qn)) {
-        return Some("same_count_but_sample_truncated".to_string());
+        return CygvBoundedDiamondParentQnComparison {
+            status: Some("same_count_but_sample_truncated".to_string()),
+            parent_only_term_signature_sample,
+            diamond_only_term_signature_sample,
+        };
     }
-    let diamond_terms = qn_trace_term_signatures(Some(diamond_qn));
-    Some(
-        if source.source_qn_term_signature_sample == diamond_terms {
-            "same_qn_term_signatures"
-        } else {
-            "same_count_different_qn_term_signatures"
+    CygvBoundedDiamondParentQnComparison {
+        status: Some(
+            if source.source_qn_term_signature_sample == diamond_terms {
+                "same_qn_term_signatures"
+            } else {
+                "same_count_different_qn_term_signatures"
+            }
+            .to_string(),
+        ),
+        parent_only_term_signature_sample,
+        diamond_only_term_signature_sample,
+    }
+}
+
+fn qn_term_signature_multiset_difference(
+    left: &[CygvPathSupportQnTraceTermSignature],
+    right: &[CygvPathSupportQnTraceTermSignature],
+    limit: usize,
+) -> Vec<CygvPathSupportQnTraceTermSignature> {
+    let mut right_remaining = right.to_vec();
+    let mut difference = Vec::new();
+    for term in left {
+        if let Some(pos) = right_remaining
+            .iter()
+            .position(|candidate| candidate == term)
+        {
+            right_remaining.remove(pos);
+        } else if difference.len() < limit {
+            difference.push(term.clone());
         }
-        .to_string(),
-    )
+    }
+    difference
 }
 
 fn target_monomial_qn_source_diamond_parent_qn_comparison_status_counts(
@@ -16551,9 +16618,42 @@ mod tests {
             }],
         };
 
+        let comparison = bounded_diamond_parent_qn_comparison(&sources[0], &bounded);
         assert_eq!(
-            bounded_diamond_parent_qn_comparison_status(&sources[0], &bounded).as_deref(),
+            comparison.status.as_deref(),
             Some("different_qn_term_counts")
+        );
+        assert_eq!(
+            comparison.parent_only_term_signature_sample,
+            vec![CygvPathSupportQnTraceTermSignature {
+                exponent_nonzero: vec![(0, 2)],
+                coefficient: "-1".to_string(),
+            }]
+        );
+        assert!(comparison.diamond_only_term_signature_sample.is_empty());
+
+        assert_eq!(
+            qn_term_signature_multiset_difference(
+                &[
+                    CygvPathSupportQnTraceTermSignature {
+                        exponent_nonzero: vec![(0, 1)],
+                        coefficient: "1".to_string(),
+                    },
+                    CygvPathSupportQnTraceTermSignature {
+                        exponent_nonzero: vec![(0, 1)],
+                        coefficient: "1".to_string(),
+                    },
+                ],
+                &[CygvPathSupportQnTraceTermSignature {
+                    exponent_nonzero: vec![(0, 1)],
+                    coefficient: "1".to_string(),
+                }],
+                16,
+            ),
+            vec![CygvPathSupportQnTraceTermSignature {
+                exponent_nonzero: vec![(0, 1)],
+                coefficient: "1".to_string(),
+            }]
         );
 
         let mut compared_source = sources[0].clone();
