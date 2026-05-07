@@ -2200,6 +2200,13 @@ implementation target is not another scalar source-value classifier; it is the
 source-derived local phase/intersection/chamber package for these
 one-parameter origin-circuit charge models.
 
+The first-principles context export now preserves the actual rational divisor
+solution behind each CMS-general-divisor intersection check. Successful checks
+serialize both the nonzero solution in divisor-basis coordinates and the
+corresponding ambient basis indices. This does not promote a GV value, but it
+keeps the source-derived divisor data needed by the next chamber/intersection
+certificate step instead of reducing the check to a scalar status.
+
 The stable-Weyl/flop-continuation route is now surfaced as a report-level
 readiness count rather than only per-target arrays. On the schema-3 context all
 nine remaining targets have CMS-style formula candidates, but the 14 exact

@@ -253,7 +253,10 @@ and matrix-basis pipeline are no longer open.
    `local_q_matrix_phase`, `local_intersection_tensor`, and
    `local_chamber_certificate` before an actual local `cygv` call can be
    promoted. The one-parameter unit semigroup generator `[[1]]` and grading
-   `[1]` are now source-derived for this local skeleton.
+   `[1]` are now source-derived for this local skeleton. The context export now
+   also keeps the nonzero rational divisor-basis and ambient-basis coefficients
+   from successful CMS-general-divisor solves, so the next chamber/intersection
+   step has the source-derived divisor data rather than only a pass/fail status.
    These lower classes are now classified against the exported source-ray
    context: for both degree-10 targets the sampled lookups split as four known
    toric source rays, four non-toric source rays, and eight composite classes

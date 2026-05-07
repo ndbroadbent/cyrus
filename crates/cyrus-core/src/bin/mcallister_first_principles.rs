@@ -995,6 +995,8 @@ struct CmsGeneralDivisorIntersectionCheck {
     shrinking_divisor_index: usize,
     has_rational_divisor_solution: bool,
     solution_basis_support_len: Option<usize>,
+    solution_basis_nonzero: Option<Vec<(usize, String)>>,
+    solution_ambient_basis_nonzero: Option<Vec<(usize, String)>>,
     solution_is_integral: Option<bool>,
     computed_other_normal_degree: Option<String>,
     matches_inferred_other_normal_degree: Option<bool>,
@@ -3213,6 +3215,8 @@ fn cms_general_divisor_intersection_check(
             shrinking_divisor_index: i,
             has_rational_divisor_solution: false,
             solution_basis_support_len: None,
+            solution_basis_nonzero: None,
+            solution_ambient_basis_nonzero: None,
             solution_is_integral: None,
             computed_other_normal_degree: None,
             matches_inferred_other_normal_degree: None,
@@ -3223,16 +3227,42 @@ fn cms_general_divisor_intersection_check(
         .iter()
         .filter(|value| **value != 0)
         .count();
+    let solution_basis_nonzero = sparse_rational_strings_by_index(&solution.coefficients);
+    let solution_ambient_basis_nonzero = solution_basis_nonzero
+        .iter()
+        .map(|(basis_pos, value)| {
+            basis
+                .get(*basis_pos)
+                .map(|&ambient_idx| (ambient_idx, value.clone()))
+                .ok_or_else(|| {
+                    format!(
+                        "CMS divisor solution basis position {basis_pos} is out of bounds for basis length {}",
+                        basis.len()
+                    )
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     let solution_is_integral = solution.coefficients.iter().all(rational_is_integer);
     let inferred_m = malachite::Rational::from(candidate.inferred_other_normal_degree);
     Ok(CmsGeneralDivisorIntersectionCheck {
         shrinking_divisor_index: i,
         has_rational_divisor_solution: true,
         solution_basis_support_len: Some(support_len),
+        solution_basis_nonzero: Some(solution_basis_nonzero),
+        solution_ambient_basis_nonzero: Some(solution_ambient_basis_nonzero),
         solution_is_integral: Some(solution_is_integral),
         computed_other_normal_degree: Some(solution.other_normal_degree.to_string()),
         matches_inferred_other_normal_degree: Some(solution.other_normal_degree == inferred_m),
     })
+}
+
+fn sparse_rational_strings_by_index(values: &[malachite::Rational]) -> Vec<(usize, String)> {
+    values
+        .iter()
+        .enumerate()
+        .filter(|(_, value)| **value != 0)
+        .map(|(idx, value)| (idx, value.to_string()))
+        .collect()
 }
 
 fn compute_covered_toric_gv_divisor_representation_baseline(
@@ -11717,6 +11747,11 @@ mod tests {
                 shrinking_divisor_index: 2,
                 has_rational_divisor_solution: true,
                 solution_basis_support_len: Some(2),
+                solution_basis_nonzero: Some(vec![(0, "1".to_string()), (1, "1".to_string()),]),
+                solution_ambient_basis_nonzero: Some(vec![
+                    (1, "1".to_string()),
+                    (2, "1".to_string()),
+                ]),
                 solution_is_integral: Some(true),
                 computed_other_normal_degree: Some("1".to_string()),
                 matches_inferred_other_normal_degree: Some(true),

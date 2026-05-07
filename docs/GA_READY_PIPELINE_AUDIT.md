@@ -522,7 +522,10 @@ to make the remaining GV layer more first-principles:
    signature `[-1,-1,-1,1,2]` and matching CMS checks, but still lacks
    `local_q_matrix_phase`, `local_intersection_tensor`, and
    `local_chamber_certificate`. Its one-parameter unit semigroup generator and
-   grading vector are now source-derived.
+   grading vector are now source-derived. The first-principles context export
+   now serializes the nonzero divisor-basis and ambient-basis coefficients from
+   successful CMS-general-divisor solves, preserving the source-derived divisor
+   input needed by the next chamber/intersection certificate step.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.
    The exact classical-data transform is now available as
