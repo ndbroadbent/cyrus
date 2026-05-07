@@ -329,7 +329,11 @@ leaves. The previous degree-4 leaf with ambient support
 `[(6,1),(200,1),(210,-2)]` is now classified from a two-face toric diagnostic
 with `GV=-2`. The remaining source-ray work is therefore
 local phase/intersection/chamber certification for the higher-rank
-origin-circuit leaves, not finding which lower leaves are involved. The
+origin-circuit leaves, not finding which lower leaves are involved. The context
+export now keeps the complete `origin_circuit_witnesses` list for sampled
+missing/source rows, not just the first witness, so later chamber certification
+can compare alternate facet-pair witnesses for multi-witness rows such as the
+degree-14 `[-1,-2,1,1,1]` dependency. The
 enriched active-leaf report
 now also carries the matching source rays' local q rows and CMS check counts:
 two origin-circuit lower leaves are primitive `neg2` q-row candidates, while

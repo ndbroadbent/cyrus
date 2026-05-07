@@ -2339,6 +2339,13 @@ intersections, so cygv's compact coefficient layer would ignore the primitive
 term without a different certified phase/chamber model. This narrows the next
 step to local phase/intersection/chamber certification for a known set of
 source rows, not discovery of additional active leaves.
+The first-principles context export now also preserves the full
+`origin_circuit_witnesses` list for every sampled missing/source row, while
+keeping the legacy `origin_circuit_first_witness` field for compatibility. This
+matters for rows such as the degree-14 `[-1,-2,1,1,1]` source dependency,
+which has two facet-pair witnesses; the local chamber step should inspect both
+source-derived witnesses rather than committing to whichever one was serialized
+first.
 The same active-leaf records now run the existing one-parameter unit-tensor
 phase probe against those lower source rays. This is still diagnostic-only,
 because the local intersection tensor and chamber certificate are not

@@ -611,4 +611,8 @@ to make the remaining GV layer more first-principles:
    toric diagnostic with `GV=-2`. The sample also records ambient
    origin-relation patterns, showing that the remaining uncovered source-ray
    dependencies all have origin-circuit charge shapes that need local
-   chamber/GV treatment.
+   chamber/GV treatment. The first-principles export now preserves every
+   origin-circuit facet-pair witness in `origin_circuit_witnesses`, in addition
+   to the compatibility `origin_circuit_first_witness` field, so multi-witness
+   source rows such as the degree-14 `[-1,-2,1,1,1]` dependency keep the
+   alternate local chamber data needed by the next certificate step.

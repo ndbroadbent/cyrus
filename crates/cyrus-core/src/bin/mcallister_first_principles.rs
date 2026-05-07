@@ -949,6 +949,7 @@ struct MissingGvTargetSample {
     origin_circuit_pattern: Option<String>,
     origin_circuit_witness_count: Option<usize>,
     origin_circuit_first_witness: Option<OriginCircuitWitnessSample>,
+    origin_circuit_witnesses: Option<Vec<OriginCircuitWitnessSample>>,
     origin_circuit_affine_support: Option<OriginCircuitAffineSupportSample>,
     cms_general_divisor_shape_candidates: Option<Vec<CmsGeneralDivisorShapeCandidate>>,
     cms_general_divisor_intersection_checks: Option<Vec<CmsGeneralDivisorIntersectionCheck>>,
@@ -2672,6 +2673,15 @@ fn missing_gv_target_stats(
         let origin_circuit_first_witness = origin_circuit_diagnostic
             .and_then(|diagnostic| diagnostic.witnesses.first())
             .map(origin_circuit_witness_sample);
+        let origin_circuit_witnesses = origin_circuit_diagnostic
+            .map(|diagnostic| {
+                diagnostic
+                    .witnesses
+                    .iter()
+                    .map(origin_circuit_witness_sample)
+                    .collect::<Vec<_>>()
+            })
+            .filter(|witnesses| !witnesses.is_empty());
         let origin_circuit_affine_support = if origin_circuit_diagnostic.is_some() {
             let affine_diagnostic =
                 cyrus_core::diagnose_affine_toric_circuit(ambient_class, triangulation_points)
@@ -2725,6 +2735,7 @@ fn missing_gv_target_stats(
                 origin_circuit_pattern: origin_circuit_pattern_label,
                 origin_circuit_witness_count,
                 origin_circuit_first_witness,
+                origin_circuit_witnesses,
                 origin_circuit_affine_support,
                 cms_general_divisor_shape_candidates,
                 cms_general_divisor_intersection_checks,
@@ -11670,6 +11681,7 @@ mod tests {
                     origin_circuit_pattern: None,
                     origin_circuit_witness_count: None,
                     origin_circuit_first_witness: None,
+                    origin_circuit_witnesses: None,
                     origin_circuit_affine_support: None,
                     cms_general_divisor_shape_candidates: None,
                     cms_general_divisor_intersection_checks: None,
@@ -11695,6 +11707,7 @@ mod tests {
                     origin_circuit_pattern: None,
                     origin_circuit_witness_count: None,
                     origin_circuit_first_witness: None,
+                    origin_circuit_witnesses: None,
                     origin_circuit_affine_support: None,
                     cms_general_divisor_shape_candidates: None,
                     cms_general_divisor_intersection_checks: None,
@@ -11766,6 +11779,7 @@ mod tests {
                     origin_circuit_pattern: None,
                     origin_circuit_witness_count: None,
                     origin_circuit_first_witness: None,
+                    origin_circuit_witnesses: None,
                     origin_circuit_affine_support: None,
                     cms_general_divisor_shape_candidates: None,
                     cms_general_divisor_intersection_checks: None,
@@ -11795,6 +11809,7 @@ mod tests {
                     origin_circuit_pattern: None,
                     origin_circuit_witness_count: None,
                     origin_circuit_first_witness: None,
+                    origin_circuit_witnesses: None,
                     origin_circuit_affine_support: None,
                     cms_general_divisor_shape_candidates: None,
                     cms_general_divisor_intersection_checks: None,
@@ -11904,6 +11919,26 @@ mod tests {
             Point::new(vec![0, 1]),
         ];
         let class = vec![-1, -1, 1, 1];
+        let first_witness = cyrus_core::OriginCircuitCurveWitness {
+            class: class.clone(),
+            first_facet_exclusive_point: 2,
+            second_facet_exclusive_point: 3,
+            shared_two_simplex: vec![1],
+            first_facet: vec![1, 2],
+            second_facet: vec![1, 3],
+            sparse_relation: vec![(0, -1), (1, -1), (2, 1), (3, 1)],
+            relation_points: Vec::new(),
+        };
+        let second_witness = cyrus_core::OriginCircuitCurveWitness {
+            class: class.clone(),
+            first_facet_exclusive_point: 3,
+            second_facet_exclusive_point: 2,
+            shared_two_simplex: vec![1],
+            first_facet: vec![1, 3],
+            second_facet: vec![1, 2],
+            sparse_relation: vec![(0, -1), (1, -1), (2, 1), (3, 1)],
+            relation_points: Vec::new(),
+        };
         let mut origin_circuits_by_class = HashMap::new();
         origin_circuits_by_class.insert(
             class.clone(),
@@ -11913,7 +11948,7 @@ mod tests {
                 negative_coefficient_counts: BTreeMap::from([(-1, 1)]),
                 positive_coefficient_counts: BTreeMap::from([(1, 2)]),
                 is_resolved_conifold_pattern: true,
-                witnesses: Vec::new(),
+                witnesses: vec![first_witness, second_witness],
             },
         );
 
@@ -11953,6 +11988,14 @@ mod tests {
             assert_eq!(point.coordinates.len(), 2);
         }
         assert!(support.local_coordinates_2d.is_some());
+        assert_eq!(stats.sample[0].origin_circuit_witness_count, Some(2));
+        assert_eq!(
+            stats.sample[0]
+                .origin_circuit_witnesses
+                .as_ref()
+                .map(Vec::len),
+            Some(2)
+        );
     }
 
     #[test]
