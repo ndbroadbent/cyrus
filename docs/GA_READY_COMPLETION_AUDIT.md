@@ -406,6 +406,13 @@ and matrix-basis pipeline are no longer open.
    term and the final target-`7` monomial, but still omits the sibling
    non-source degree-ten cancellation monomial
    `[(44,1),(203,-1),(206,-1),(209,1)]` with coefficient `-1`.
+   The parent-only offset classifier now shows these degree-ten monomials are
+   source-plus-known-degree-two-toric offsets: target `7`'s final-target
+   offset is `[(44,1),(54,1),(206,-2)]` with `GV=-2`, the omitted sibling
+   offset is `[(54,1),(203,-2)]` with `GV=-2`, and target `8` uses that same
+   `[(54,1),(203,-2)]` offset. The next missing object is the chamber history
+   that couples a degree-eight composite to several known degree-two toric
+   offsets in one parent qN polynomial.
    The target-coefficient balance reconstructs the small-domain
    pre-subtraction readouts: target `7` has lower-source sum `3`,
    post-subtraction coefficient `0`, pivot component `2`, and

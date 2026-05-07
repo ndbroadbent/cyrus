@@ -1190,6 +1190,11 @@ struct CygvQnTermSignatureContext {
     coefficient: String,
     degree: i128,
     known_qn_history_status: String,
+    offset_from_source_nonzero: Option<Vec<(usize, i64)>>,
+    offset_from_source_degree: Option<i128>,
+    offset_from_source_toric_gv: Option<String>,
+    offset_from_source_derived_gv: Option<String>,
+    offset_from_source_known_qn_history_status: Option<String>,
     source_class_status: String,
     matching_missing_target_index: Option<usize>,
     matching_missing_target_degree: Option<i128>,
@@ -4606,6 +4611,7 @@ fn annotate_target_monomial_qn_sources_with_seed_decompositions(
                 context,
                 seed_set,
                 reduced_seed_set,
+                Some(&curve),
             )?;
         source.source_parent_qn_term_semigroup_probe =
             source_parent_qn_term_semigroup_probe(source, context)?;
@@ -4716,6 +4722,7 @@ fn qn_term_signature_context_sample(
     context: &ValidatedContext<'_>,
     seed_set: &HashSet<Vec<i64>>,
     reduced_seed_set: &HashSet<Vec<i64>>,
+    source_curve: Option<&[i64]>,
 ) -> Result<Vec<CygvQnTermSignatureContext>, String> {
     signatures
         .iter()
@@ -4723,6 +4730,26 @@ fn qn_term_signature_context_sample(
             let curve = dense_from_sparse(&signature.exponent_nonzero, context.dimension)?;
             let degree = curve_degree(&curve, context.grading)?;
             let source_context = path_support_source_class_context(&curve, context)?;
+            let offset_context = source_curve
+                .map(|source_curve| {
+                    let offset = checked_vector_difference(&curve, source_curve)?;
+                    let offset_toric_gv = context.covered_toric_gv_by_basis.get(&offset).cloned();
+                    let offset_source_derived_gv =
+                        context.source_derived_gv_by_basis.get(&offset).cloned();
+                    let offset_known_qn_history_status = known_qn_history_status(
+                        offset_toric_gv.as_deref(),
+                        offset_source_derived_gv.as_deref(),
+                    )?
+                    .to_string();
+                    Ok::<_, String>((
+                        sparse_from_dense(&offset),
+                        curve_degree(&offset, context.grading)?,
+                        offset_toric_gv,
+                        offset_source_derived_gv,
+                        offset_known_qn_history_status,
+                    ))
+                })
+                .transpose()?;
             Ok(CygvQnTermSignatureContext {
                 exponent_nonzero: signature.exponent_nonzero.clone(),
                 coefficient: signature.coefficient.clone(),
@@ -4738,6 +4765,19 @@ fn qn_term_signature_context_sample(
                         .map(String::as_str),
                 )?
                 .to_string(),
+                offset_from_source_nonzero: offset_context
+                    .as_ref()
+                    .map(|context| context.0.clone()),
+                offset_from_source_degree: offset_context.as_ref().map(|context| context.1),
+                offset_from_source_toric_gv: offset_context
+                    .as_ref()
+                    .and_then(|context| context.2.clone()),
+                offset_from_source_derived_gv: offset_context
+                    .as_ref()
+                    .and_then(|context| context.3.clone()),
+                offset_from_source_known_qn_history_status: offset_context
+                    .as_ref()
+                    .map(|context| context.4.clone()),
                 source_class_status: source_context.status,
                 matching_missing_target_index: source_context.matching_missing_target_index,
                 matching_missing_target_degree: source_context.matching_missing_target_degree,
@@ -17037,7 +17077,10 @@ mod tests {
             q_matrix: &q_matrix,
             degree_bounded_rays: &degree_bounded_rays,
             degree_bounded_ray_context: None,
-            covered_toric_gv_by_basis: HashMap::from([(vec![2], "7".to_string())]),
+            covered_toric_gv_by_basis: HashMap::from([
+                (vec![1], "5".to_string()),
+                (vec![2], "7".to_string()),
+            ]),
             source_derived_gv_by_basis: HashMap::new(),
             intersection: Intersection::new(1),
             stats: &stats,
@@ -17049,6 +17092,7 @@ mod tests {
             &context,
             &HashSet::from([vec![2]]),
             &HashSet::new(),
+            Some(&[1]),
         )
         .expect("parent-only qN term context should classify the extra monomial");
         assert_eq!(term_context.len(), 1);
@@ -17064,6 +17108,21 @@ mod tests {
         assert_eq!(term_context[0].matching_missing_target_index, Some(0));
         assert!(term_context[0].source_is_seed);
         assert!(!term_context[0].source_is_reduced_seed);
+        assert_eq!(
+            term_context[0].offset_from_source_nonzero,
+            Some(vec![(0, 1)])
+        );
+        assert_eq!(term_context[0].offset_from_source_degree, Some(1));
+        assert_eq!(
+            term_context[0].offset_from_source_toric_gv.as_deref(),
+            Some("5")
+        );
+        assert_eq!(
+            term_context[0]
+                .offset_from_source_known_qn_history_status
+                .as_deref(),
+            Some("known_nonzero_toric_gv")
+        );
 
         let mut compared_source = sources[0].clone();
         compared_source.source_bounded_diamond_parent_qn_comparison_status =

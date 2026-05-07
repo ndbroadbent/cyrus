@@ -2870,6 +2870,16 @@ the parent-domain non-source degree-ten monomial
 parent-history coupling is therefore not just whether the final target
 monomial appears; it must also produce the sibling non-source cancellation term
 in the same certified compact history.
+The parent-only context now records each extra monomial's offset from the
+target-monomial source curve. This shows the degree-ten parent-only terms are
+source-plus-known-degree-two-toric offsets, not unrelated new leaves. For
+target `7`'s degree-eight source, the final target monomial has offset
+`[(44,1),(54,1),(206,-2)]` with `GV=-2`, and the missing sibling cancellation
+monomial has offset `[(54,1),(203,-2)]`, also with `GV=-2`. Target `8`'s
+degree-eight source has its final target monomial with that same
+`[(54,1),(203,-2)]`, `GV=-2` offset. The blocker has therefore narrowed to a
+certified chamber history coupling the degree-eight composite with multiple
+known degree-two toric offsets.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use
