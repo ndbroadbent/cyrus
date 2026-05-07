@@ -831,6 +831,7 @@ struct CygvPathSupportTargetMonomialQnSource {
         Vec<CygvPathSupportQnTraceTermSignature>,
     source_bounded_diamond_diamond_only_qn_term_signature_sample:
         Vec<CygvPathSupportQnTraceTermSignature>,
+    source_bounded_diamond_parent_only_qn_term_context_sample: Vec<CygvQnTermSignatureContext>,
 }
 
 struct CygvPathSupportTargetLi2SubtractionBalance {
@@ -1166,6 +1167,23 @@ struct CygvResidualQnDomainComparison {
 struct CygvPathSupportQnTraceTermSignature {
     exponent_nonzero: Vec<(usize, i64)>,
     coefficient: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CygvQnTermSignatureContext {
+    exponent_nonzero: Vec<(usize, i64)>,
+    coefficient: String,
+    degree: i128,
+    known_qn_history_status: String,
+    source_class_status: String,
+    matching_missing_target_index: Option<usize>,
+    matching_missing_target_degree: Option<i128>,
+    matching_missing_target_exact_kind: Option<String>,
+    matching_uncovered_source_ray_index: Option<usize>,
+    matching_uncovered_source_ray_degree: Option<i128>,
+    matching_uncovered_source_ray_exact_kind: Option<String>,
+    source_is_seed: bool,
+    source_is_reduced_seed: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -4364,6 +4382,7 @@ fn path_support_target_monomial_qn_sources(
                 source_bounded_diamond_parent_qn_comparison_status: None,
                 source_bounded_diamond_parent_only_qn_term_signature_sample: Vec::new(),
                 source_bounded_diamond_diamond_only_qn_term_signature_sample: Vec::new(),
+                source_bounded_diamond_parent_only_qn_term_context_sample: Vec::new(),
             })
         })
         .collect()
@@ -4564,6 +4583,13 @@ fn annotate_target_monomial_qn_sources_with_seed_decompositions(
             comparison.parent_only_term_signature_sample;
         source.source_bounded_diamond_diamond_only_qn_term_signature_sample =
             comparison.diamond_only_term_signature_sample;
+        source.source_bounded_diamond_parent_only_qn_term_context_sample =
+            qn_term_signature_context_sample(
+                &source.source_bounded_diamond_parent_only_qn_term_signature_sample,
+                context,
+                seed_set,
+                reduced_seed_set,
+            )?;
         source.source_bounded_seed_decomposition = Some(bounded_seed_decomposition);
     }
     Ok(())
@@ -4662,6 +4688,51 @@ fn qn_term_signature_multiset_difference(
         }
     }
     difference
+}
+
+fn qn_term_signature_context_sample(
+    signatures: &[CygvPathSupportQnTraceTermSignature],
+    context: &ValidatedContext<'_>,
+    seed_set: &HashSet<Vec<i64>>,
+    reduced_seed_set: &HashSet<Vec<i64>>,
+) -> Result<Vec<CygvQnTermSignatureContext>, String> {
+    signatures
+        .iter()
+        .map(|signature| {
+            let curve = dense_from_sparse(&signature.exponent_nonzero, context.dimension)?;
+            let degree = curve_degree(&curve, context.grading)?;
+            let source_context = path_support_source_class_context(&curve, context)?;
+            Ok(CygvQnTermSignatureContext {
+                exponent_nonzero: signature.exponent_nonzero.clone(),
+                coefficient: signature.coefficient.clone(),
+                degree,
+                known_qn_history_status: known_qn_history_status(
+                    context
+                        .covered_toric_gv_by_basis
+                        .get(&curve)
+                        .map(String::as_str),
+                    context
+                        .source_derived_gv_by_basis
+                        .get(&curve)
+                        .map(String::as_str),
+                )?
+                .to_string(),
+                source_class_status: source_context.status,
+                matching_missing_target_index: source_context.matching_missing_target_index,
+                matching_missing_target_degree: source_context.matching_missing_target_degree,
+                matching_missing_target_exact_kind: source_context
+                    .matching_missing_target_exact_kind,
+                matching_uncovered_source_ray_index: source_context
+                    .matching_uncovered_source_ray_index,
+                matching_uncovered_source_ray_degree: source_context
+                    .matching_uncovered_source_ray_degree,
+                matching_uncovered_source_ray_exact_kind: source_context
+                    .matching_uncovered_source_ray_exact_kind,
+                source_is_seed: seed_set.contains(&curve),
+                source_is_reduced_seed: reduced_seed_set.contains(&curve),
+            })
+        })
+        .collect()
 }
 
 fn target_monomial_qn_source_diamond_parent_qn_comparison_status_counts(
@@ -16655,6 +16726,50 @@ mod tests {
                 coefficient: "1".to_string(),
             }]
         );
+
+        let stats = MissingGvTargetStats {
+            target_count: 1,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: vec![minimal_missing_sample(vec![(0, 2)])],
+        };
+        let grading = vec![1];
+        let q_matrix: Vec<Vec<i64>> = Vec::new();
+        let degree_bounded_rays = vec![vec![2]];
+        let context = ValidatedContext {
+            dimension: 1,
+            degree_bound: 2,
+            q_cols: 0,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: None,
+            covered_toric_gv_by_basis: HashMap::from([(vec![2], "7".to_string())]),
+            source_derived_gv_by_basis: HashMap::new(),
+            intersection: Intersection::new(1),
+            stats: &stats,
+            uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
+        };
+        let term_context = qn_term_signature_context_sample(
+            &comparison.parent_only_term_signature_sample,
+            &context,
+            &HashSet::from([vec![2]]),
+            &HashSet::new(),
+        )
+        .expect("parent-only qN term context should classify the extra monomial");
+        assert_eq!(term_context.len(), 1);
+        assert_eq!(term_context[0].degree, 2);
+        assert_eq!(
+            term_context[0].known_qn_history_status,
+            "known_nonzero_toric_gv"
+        );
+        assert_eq!(
+            term_context[0].source_class_status,
+            "source_ray_context_missing_but_matches_missing_target"
+        );
+        assert_eq!(term_context[0].matching_missing_target_index, Some(0));
+        assert!(term_context[0].source_is_seed);
+        assert!(!term_context[0].source_is_reduced_seed);
 
         let mut compared_source = sources[0].clone();
         compared_source.source_bounded_diamond_parent_qn_comparison_status =

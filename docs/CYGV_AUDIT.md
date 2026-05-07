@@ -2829,6 +2829,16 @@ the degree-eight composite has parent-only term
 kind of domain-specific qN monomials that the tiny lower-leaf diamond cannot
 generate, so the next candidate domain must explain those parent-only terms
 rather than only the scalar source GV.
+Those parent-only terms now carry the same source classification context. On
+the target `7` report, the extra degree-ten terms include both missing rays
+`7` and `8` as raw/reduced seeds, while the remaining extra degree-eight and
+degree-ten terms are not source degree-bounded rays. On target `8`, the extra
+degree-ten parent-only term is the target `8` missing ray itself, again as a
+raw/reduced seed, while the extra degree-eight term is not a source
+degree-bounded ray. This makes the next compact-history domain requirement more
+specific: it must include the final missing target qN monomial as part of the
+parent source's qN polynomial history, not merely close over lower source and
+toric leaves.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use
