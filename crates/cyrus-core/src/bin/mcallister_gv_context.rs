@@ -294,6 +294,7 @@ struct ContextReport {
     origin_shared_facet_face_certificate_status_counts: BTreeMap<String, usize>,
     origin_facet_union_face_certificate_status_counts: BTreeMap<String, usize>,
     cygv_path_history_status_counts: BTreeMap<String, usize>,
+    cygv_path_support_target_pre_subtraction_formula_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_decomposition_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_diamond_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_diamond_gv_counts: BTreeMap<String, usize>,
@@ -10674,6 +10675,16 @@ fn build_report(
         }),
         "not_run",
     );
+    let cygv_path_support_target_pre_subtraction_formula_status_counts = optional_status_counts(
+        targets.iter().map(|target| {
+            target.cygv_path_history_probe.as_ref().and_then(|probe| {
+                probe
+                    .path_support_target_reconstructed_pre_subtraction_formula_status
+                    .as_deref()
+            })
+        }),
+        "not_run",
+    );
     let cygv_lower_seed_decomposition_status_counts = optional_status_counts(
         targets.iter().map(|target| {
             target
@@ -11055,6 +11066,7 @@ fn build_report(
         origin_shared_facet_face_certificate_status_counts,
         origin_facet_union_face_certificate_status_counts,
         cygv_path_history_status_counts,
+        cygv_path_support_target_pre_subtraction_formula_status_counts,
         cygv_lower_seed_decomposition_status_counts,
         cygv_lower_seed_diamond_status_counts,
         cygv_lower_seed_diamond_gv_counts,
