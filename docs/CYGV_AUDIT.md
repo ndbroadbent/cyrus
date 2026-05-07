@@ -2387,6 +2387,17 @@ solutions have divisor cubics `27` and `81`; the nonintegral solution has
 cubic `77/27`. Their candidate statuses are explicitly
 `diagnostic_from_*_not_promoted`, so these records preserve chamber evidence
 without becoming GV fallbacks.
+An opt-in target-level integer tensor scan now runs the same one-parameter
+local skeletons through the actual compact `cygv` call while varying the single
+intersection tensor entry over a bounded integer range. On the fresh
+all-witness solved-t context with `--local-tensor-scan-bound 8`, the aggregate
+is
+`local_cygv_target_integer_tensor_scan_status_counts =
+{"integer_tensor_scan_has_expected_match_but_uncertified":4,
+"integer_tensor_scan_no_expected_match":5}`. The four matches all occur at
+tensor value `1` and remain explicitly uncertified because the local
+q-phase/chamber certificate is still absent. The five mismatches rule out a
+single scalar tensor normalization as the full corrected-chamber GV solution.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

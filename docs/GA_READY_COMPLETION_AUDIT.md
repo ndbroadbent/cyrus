@@ -352,6 +352,12 @@ GV values. The same active-leaf report now retains non-promotable CMS rational
 solutions: two integral solutions mismatch the inferred normal degree, one is
 nonintegral, and five leaves have no CMS solution summary. Their candidate
 statuses are marked `diagnostic_from_*_not_promoted`.
+An opt-in target-level integer tensor scan now checks whether a bounded scalar
+normalization of the one-parameter local tensor could explain the nine missing
+targets. With scan bound `8`, four targets match their CMS formula candidate
+at tensor value `1`, but five do not match any integer tensor in the scan
+range. Those four matches are still uncertified, so this narrows the work but
+does not close the corrected-chamber GV blocker.
 
 ## Next Concrete Action
 

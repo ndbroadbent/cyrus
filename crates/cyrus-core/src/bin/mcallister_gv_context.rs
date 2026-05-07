@@ -246,6 +246,8 @@ struct ContextReport {
     local_cygv_target_unit_phase_probe_status_counts: BTreeMap<String, usize>,
     local_cygv_target_origin_omitted_unit_phase_probe_status_counts: BTreeMap<String, usize>,
     local_cygv_target_unit_phase_probe_sample: Vec<LocalCygvTargetUnitPhaseProbeSummary>,
+    local_cygv_target_integer_tensor_scan_status_counts: BTreeMap<String, usize>,
+    local_cygv_target_integer_tensor_scan_sample: Vec<LocalCygvIntegerTensorScanSummary>,
     local_cytools_origin_circuit_status_counts: BTreeMap<String, usize>,
     local_cygv_grading_vector_status_counts: BTreeMap<String, usize>,
     targets: Vec<TargetReport>,
@@ -628,6 +630,24 @@ struct LocalCygvUnitPhaseProbe {
     origin_omitted_unit_tensor_probe_status: String,
     origin_omitted_unit_tensor_error: Option<String>,
     expected_toric_gv1_formula_values: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvIntegerTensorScanSummary {
+    target_index: usize,
+    degree: i128,
+    status: String,
+    scan_bound: i64,
+    expected_toric_gv1_formula_values: Vec<String>,
+    entries: Vec<LocalCygvIntegerTensorScanEntry>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvIntegerTensorScanEntry {
+    tensor_value: i64,
+    candidate_gv: Option<String>,
+    status: String,
+    error: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -6976,6 +6996,8 @@ fn build_report(
     cygv_degree_ladder_max_degree: Option<i128>,
     semigroup_measure_max_target_degree: Option<i128>,
     semigroup_measure_max_seed_count: Option<usize>,
+    scan_local_integer_tensors: bool,
+    local_tensor_scan_bound: i64,
     element_limit: usize,
     closure_generation_limit: Option<usize>,
 ) -> ContextReport {
@@ -7168,6 +7190,17 @@ fn build_report(
         local_cygv_target_origin_omitted_unit_phase_probe_status_counts(
             &local_cygv_target_unit_phase_probe_sample,
         );
+    let local_cygv_target_integer_tensor_scan_sample = local_cygv_integer_tensor_scan_summaries(
+        &targets,
+        scan_local_integer_tensors,
+        local_tensor_scan_bound,
+    );
+    let local_cygv_target_integer_tensor_scan_status_counts =
+        local_cygv_integer_tensor_scan_status_counts(
+            &local_cygv_target_integer_tensor_scan_sample,
+            targets.len(),
+            scan_local_integer_tensors,
+        );
     let local_cytools_origin_circuit_status_counts = local_cytools_origin_circuit_status_counts(
         targets
             .iter()
@@ -7275,6 +7308,8 @@ fn build_report(
         local_cygv_target_unit_phase_probe_status_counts,
         local_cygv_target_origin_omitted_unit_phase_probe_status_counts,
         local_cygv_target_unit_phase_probe_sample,
+        local_cygv_target_integer_tensor_scan_status_counts,
+        local_cygv_target_integer_tensor_scan_sample,
         local_cytools_origin_circuit_status_counts,
         local_cygv_grading_vector_status_counts,
         targets,
@@ -7737,6 +7772,133 @@ fn local_cygv_target_origin_omitted_unit_phase_probe_status_counts(
     counts
 }
 
+fn local_cygv_integer_tensor_scan_status_counts(
+    scans: &[LocalCygvIntegerTensorScanSummary],
+    target_count: usize,
+    scan_enabled: bool,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    if !scan_enabled {
+        counts.insert("not_run".to_string(), target_count);
+        return counts;
+    }
+    for scan in scans {
+        *counts.entry(scan.status.clone()).or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_integer_tensor_scan_summaries(
+    targets: &[TargetReport],
+    scan_enabled: bool,
+    scan_bound: i64,
+) -> Vec<LocalCygvIntegerTensorScanSummary> {
+    if !scan_enabled {
+        return Vec::new();
+    }
+    targets
+        .iter()
+        .map(|target| local_cygv_integer_tensor_scan_summary(target, scan_bound))
+        .collect()
+}
+
+fn local_cygv_integer_tensor_scan_summary(
+    target: &TargetReport,
+    scan_bound: i64,
+) -> LocalCygvIntegerTensorScanSummary {
+    let expected_values = target_expected_toric_gv1_formula_values(target);
+    let blocked = |status: &str| LocalCygvIntegerTensorScanSummary {
+        target_index: target.index,
+        degree: target.degree,
+        status: status.to_string(),
+        scan_bound,
+        expected_toric_gv1_formula_values: expected_values.clone(),
+        entries: Vec::new(),
+    };
+    if scan_bound <= 0 {
+        return blocked("integer_tensor_scan_invalid_bound");
+    }
+    if expected_values.is_empty() {
+        return blocked("integer_tensor_scan_no_expected_formula_values");
+    }
+    let Some(skeleton) = target.local_cygv_input_skeleton.as_ref() else {
+        return blocked("integer_tensor_scan_missing_skeleton");
+    };
+    let Some(q_matrix) = skeleton.local_cygv_wrapper_q_matrix_candidate.as_ref() else {
+        return blocked("integer_tensor_scan_missing_q_matrix");
+    };
+    if q_matrix.len() != 1 {
+        return blocked("integer_tensor_scan_not_one_parameter_q_matrix");
+    }
+    let Some(grading_vector) = skeleton.local_grading_vector_candidate.as_ref() else {
+        return blocked("integer_tensor_scan_missing_grading_vector");
+    };
+    let Some(generators) = skeleton.local_semigroup_generators_candidate.as_ref() else {
+        return blocked("integer_tensor_scan_missing_semigroup_generators");
+    };
+    if generators.as_slice() != [vec![1]] {
+        return blocked("integer_tensor_scan_not_unit_primitive_semigroup");
+    }
+
+    let semigroup_elements = vec![vec![0], vec![1]];
+    let mut entries = Vec::new();
+    for tensor_value in -scan_bound..=scan_bound {
+        if tensor_value == 0 {
+            continue;
+        }
+        match one_parameter_primitive_cygv_value(
+            q_matrix,
+            grading_vector,
+            &semigroup_elements,
+            MalachiteRational::from(tensor_value),
+        ) {
+            Ok(candidate_gv) => {
+                let status = if expected_values
+                    .iter()
+                    .any(|expected| expected == &candidate_gv)
+                {
+                    "integer_tensor_scan_matches_expected_formula_but_uncertified"
+                } else {
+                    "integer_tensor_scan_mismatch"
+                };
+                entries.push(LocalCygvIntegerTensorScanEntry {
+                    tensor_value,
+                    candidate_gv: Some(candidate_gv),
+                    status: status.to_string(),
+                    error: None,
+                });
+            }
+            Err(error) => entries.push(LocalCygvIntegerTensorScanEntry {
+                tensor_value,
+                candidate_gv: None,
+                status: "integer_tensor_scan_hkty_error".to_string(),
+                error: Some(error),
+            }),
+        }
+    }
+    let status = if entries
+        .iter()
+        .any(|entry| entry.status == "integer_tensor_scan_matches_expected_formula_but_uncertified")
+    {
+        "integer_tensor_scan_has_expected_match_but_uncertified"
+    } else if entries
+        .iter()
+        .all(|entry| entry.status == "integer_tensor_scan_hkty_error")
+    {
+        "integer_tensor_scan_all_hkty_error"
+    } else {
+        "integer_tensor_scan_no_expected_match"
+    };
+    LocalCygvIntegerTensorScanSummary {
+        target_index: target.index,
+        degree: target.degree,
+        status: status.to_string(),
+        scan_bound,
+        expected_toric_gv1_formula_values: expected_values,
+        entries,
+    }
+}
+
 fn local_cytools_origin_circuit_status_counts<'a>(
     skeletons: impl IntoIterator<Item = &'a LocalCygvInputSkeleton>,
 ) -> BTreeMap<String, usize> {
@@ -7770,7 +7932,7 @@ fn target_index_selected(index: usize, target_index_filter: Option<usize>) -> bo
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--origin-support-certificate-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--closure-generation-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
+            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--origin-support-certificate-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--scan-local-integer-tensors] [--local-tensor-scan-bound N] [--element-limit N] [--closure-generation-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
         );
         std::process::exit(2);
     };
@@ -7799,6 +7961,8 @@ fn main() {
         parse_arg_value::<i128>("--semigroup-measure-max-target-degree");
     let semigroup_measure_max_seed_count =
         parse_arg_value::<usize>("--semigroup-measure-max-seeds");
+    let scan_local_integer_tensors = parse_flag("--scan-local-integer-tensors");
+    let local_tensor_scan_bound = parse_arg_value::<i64>("--local-tensor-scan-bound").unwrap_or(8);
     let element_limit = parse_arg_value::<usize>("--element-limit").unwrap_or(256);
     let closure_generation_limit = parse_arg_value::<usize>("--closure-generation-limit");
     let out_path = parse_arg_value::<PathBuf>("--out");
@@ -7833,6 +7997,8 @@ fn main() {
         cygv_degree_ladder_max_degree,
         semigroup_measure_max_target_degree,
         semigroup_measure_max_seed_count,
+        scan_local_integer_tensors,
+        local_tensor_scan_bound,
         element_limit,
         closure_generation_limit,
     );
@@ -9079,6 +9245,43 @@ mod tests {
         assert_eq!(
             probe.origin_omitted_unit_tensor_probe_status,
             "origin_omitted_unit_tensor_probe_matches_expected_formula_set_but_phase_uncertified"
+        );
+    }
+
+    #[test]
+    fn local_cygv_integer_tensor_scan_status_counts_are_opt_in() {
+        let scans = vec![
+            LocalCygvIntegerTensorScanSummary {
+                target_index: 0,
+                degree: 10,
+                status: "integer_tensor_scan_has_expected_match_but_uncertified".to_string(),
+                scan_bound: 8,
+                expected_toric_gv1_formula_values: vec!["3".to_string()],
+                entries: Vec::new(),
+            },
+            LocalCygvIntegerTensorScanSummary {
+                target_index: 1,
+                degree: 18,
+                status: "integer_tensor_scan_no_expected_match".to_string(),
+                scan_bound: 8,
+                expected_toric_gv1_formula_values: vec!["-2".to_string(), "1".to_string()],
+                entries: Vec::new(),
+            },
+        ];
+
+        let disabled = local_cygv_integer_tensor_scan_status_counts(&scans, 9, false);
+        assert_eq!(disabled, BTreeMap::from([("not_run".to_string(), 9)]));
+
+        let enabled = local_cygv_integer_tensor_scan_status_counts(&scans, 9, true);
+        assert_eq!(
+            enabled,
+            BTreeMap::from([
+                (
+                    "integer_tensor_scan_has_expected_match_but_uncertified".to_string(),
+                    1
+                ),
+                ("integer_tensor_scan_no_expected_match".to_string(), 1),
+            ])
         );
     }
 

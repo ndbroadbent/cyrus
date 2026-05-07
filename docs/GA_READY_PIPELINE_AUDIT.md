@@ -566,6 +566,12 @@ to make the remaining GV layer more first-principles:
    rows in the origin-included convention and only one compact no-origin row in
    the origin-omitted convention; the other four compact no-origin rows still
    mismatch their formula candidate sets.
+   The follow-up opt-in local integer tensor scan confirms this is not just a
+   missing scalar normalization: with tensor values scanned over `-8..8`, four
+   of the nine targets match their CMS formula candidate at tensor value `1`,
+   but five targets have no matching integer tensor in that range. All four
+   matches remain marked uncertified because the local q-phase, intersection
+   tensor, and chamber certificate are not source-derived yet.
    The first-principles context export
    now serializes the nonzero divisor-basis and ambient-basis coefficients from
    successful CMS-general-divisor solves, preserving the source-derived divisor
