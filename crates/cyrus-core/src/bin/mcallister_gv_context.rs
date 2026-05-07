@@ -549,6 +549,14 @@ struct CmsGeneralDivisorSolutionSummary {
     solution_ambient_basis_nonzero: Vec<(usize, String)>,
     computed_other_normal_degree: String,
     solution_basis_cubic_self_intersection: String,
+    local_intersection_tensor_candidate_status: String,
+    local_intersection_tensor_candidate: Option<Vec<LocalCygvIntersectionTensorEntry>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+struct LocalCygvIntersectionTensorEntry {
+    indices: [usize; 3],
+    value: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1339,9 +1347,7 @@ fn path_support_source_class_context(
         );
     let matching_uncovered_source_ray_cms_solution_summaries =
         cms_general_divisor_solution_summaries(
-            matching_uncovered_source_ray
-                .as_ref()
-                .and_then(|entry| entry.1.cms_general_divisor_intersection_checks.as_deref()),
+            matching_uncovered_source_ray.as_ref().map(|entry| entry.1),
             &context.intersection,
         )?;
     let (
@@ -1467,9 +1473,13 @@ fn missing_sample_cms_check_status_counts(
 }
 
 fn cms_general_divisor_solution_summaries(
-    checks: Option<&[CmsGeneralDivisorIntersectionCheck]>,
+    sample: Option<&MissingGvTargetSample>,
     intersection: &Intersection,
 ) -> Result<Vec<CmsGeneralDivisorSolutionSummary>, String> {
+    let Some(sample) = sample else {
+        return Ok(Vec::new());
+    };
+    let checks = sample.cms_general_divisor_intersection_checks.as_deref();
     let Some(checks) = checks else {
         return Ok(Vec::new());
     };
@@ -1490,12 +1500,18 @@ fn cms_general_divisor_solution_summaries(
         let Some(computed_other_normal_degree) = check.computed_other_normal_degree.clone() else {
             continue;
         };
+        let solution_basis_cubic_self_intersection =
+            divisor_cubic_self_intersection(intersection, &solution_basis_nonzero)?;
+        let (local_intersection_tensor_candidate, local_intersection_tensor_candidate_status) =
+            local_cygv_intersection_tensor_candidate_from_cms_divisor(
+                sample,
+                &solution_basis_cubic_self_intersection,
+            )?;
         summaries.push(CmsGeneralDivisorSolutionSummary {
             shrinking_divisor_index: check.shrinking_divisor_index,
-            solution_basis_cubic_self_intersection: divisor_cubic_self_intersection(
-                intersection,
-                &solution_basis_nonzero,
-            )?,
+            solution_basis_cubic_self_intersection,
+            local_intersection_tensor_candidate_status,
+            local_intersection_tensor_candidate,
             solution_basis_nonzero,
             solution_ambient_basis_nonzero,
             computed_other_normal_degree,
@@ -1504,6 +1520,49 @@ fn cms_general_divisor_solution_summaries(
     summaries.sort();
     summaries.dedup();
     Ok(summaries)
+}
+
+fn local_cygv_intersection_tensor_candidate_from_cms_divisor(
+    sample: &MissingGvTargetSample,
+    divisor_cubic_self_intersection: &str,
+) -> Result<(Option<Vec<LocalCygvIntersectionTensorEntry>>, String), String> {
+    let Some(support) = sample.origin_circuit_affine_support.as_ref() else {
+        return Ok((
+            None,
+            "local_intersection_candidate_missing_affine_support".to_string(),
+        ));
+    };
+    let Some(skeleton) = local_cygv_input_skeleton(sample, Some(support))? else {
+        return Ok((
+            None,
+            "local_intersection_candidate_missing_skeleton".to_string(),
+        ));
+    };
+    let has_unit_semigroup = skeleton
+        .local_semigroup_generators_candidate
+        .as_ref()
+        .is_some_and(|generators| generators.as_slice() == [vec![1]]);
+    let has_unit_grading = skeleton
+        .local_grading_vector_candidate
+        .as_ref()
+        .is_some_and(|grading| grading.as_slice() == [1]);
+    let has_one_parameter_q_layout = skeleton
+        .local_cygv_wrapper_q_matrix_candidate
+        .as_ref()
+        .is_some_and(|q_matrix| q_matrix.len() == 1);
+    if !(has_unit_semigroup && has_unit_grading && has_one_parameter_q_layout) {
+        return Ok((
+            None,
+            "local_intersection_candidate_not_one_parameter_source_derived_skeleton".to_string(),
+        ));
+    }
+    Ok((
+        Some(vec![LocalCygvIntersectionTensorEntry {
+            indices: [0, 0, 0],
+            value: divisor_cubic_self_intersection.to_string(),
+        }]),
+        "candidate_from_cms_divisor_cubic_needs_phase_and_chamber_certificate".to_string(),
+    ))
 }
 
 fn divisor_cubic_self_intersection(
@@ -8419,6 +8478,15 @@ mod tests {
                     solution_ambient_basis_nonzero: vec![(5, "1".to_string())],
                     computed_other_normal_degree: "0".to_string(),
                     solution_basis_cubic_self_intersection: "0".to_string(),
+                    local_intersection_tensor_candidate_status:
+                        "candidate_from_cms_divisor_cubic_needs_phase_and_chamber_certificate"
+                            .to_string(),
+                    local_intersection_tensor_candidate: Some(vec![
+                        LocalCygvIntersectionTensorEntry {
+                            indices: [0, 0, 0],
+                            value: "0".to_string(),
+                        },
+                    ]),
                 },
             ],
             matching_uncovered_source_ray_local_charge_signature: Some("-2,-1,1,1,1".to_string()),
@@ -8466,6 +8534,13 @@ mod tests {
                 solution_ambient_basis_nonzero: vec![(5, "1".to_string())],
                 computed_other_normal_degree: "0".to_string(),
                 solution_basis_cubic_self_intersection: "0".to_string(),
+                local_intersection_tensor_candidate_status:
+                    "candidate_from_cms_divisor_cubic_needs_phase_and_chamber_certificate"
+                        .to_string(),
+                local_intersection_tensor_candidate: Some(vec![LocalCygvIntersectionTensorEntry {
+                    indices: [0, 0, 0],
+                    value: "0".to_string(),
+                }]),
             }]
         );
         assert_eq!(
@@ -8537,6 +8612,90 @@ mod tests {
         .unwrap();
 
         assert_eq!(cubic, "3");
+    }
+
+    #[test]
+    fn cms_solution_summary_adds_one_parameter_intersection_tensor_candidate() {
+        let mut sample = minimal_missing_sample(vec![(0, 1)]);
+        sample.origin_circuit_first_witness = Some(OriginCircuitWitnessSample {
+            first_facet_exclusive_point: 2,
+            second_facet_exclusive_point: 4,
+            shared_two_simplex: vec![1, 3],
+            first_facet: Vec::new(),
+            second_facet: Vec::new(),
+            first_facet_size: 2,
+            second_facet_size: 2,
+            sparse_relation: vec![(0, -1), (1, 2), (2, 1), (3, -3), (4, 1)],
+            relation_points: vec![
+                OriginCircuitRelationPointSample {
+                    point_index: 0,
+                    coefficient: -1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 1,
+                    coefficient: 2,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 2,
+                    coefficient: 1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 3,
+                    coefficient: -3,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 4,
+                    coefficient: 1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+            ],
+        });
+        sample.origin_circuit_affine_support = Some(OriginCircuitAffineSupportSample {
+            affine_rank: 3,
+            coefficient_counts: BTreeMap::new(),
+            local_charge_basis: vec![vec![1, -2, -1, 3, -1]],
+            local_coordinates: Vec::new(),
+            local_coordinates_2d: None,
+        });
+        sample.cms_general_divisor_intersection_checks =
+            Some(vec![CmsGeneralDivisorIntersectionCheck {
+                shrinking_divisor_index: 4,
+                has_rational_divisor_solution: true,
+                solution_basis_support_len: Some(1),
+                solution_basis_nonzero: Some(vec![(0, "1".to_string())]),
+                solution_ambient_basis_nonzero: Some(vec![(4, "1".to_string())]),
+                solution_is_integral: Some(true),
+                computed_other_normal_degree: Some("0".to_string()),
+                matches_inferred_other_normal_degree: Some(true),
+            }]);
+        let mut intersection = Intersection::new(1);
+        intersection.set(0, 0, 0, Rational::<Finite>::new(MalachiteRational::from(3)));
+
+        let summaries =
+            cms_general_divisor_solution_summaries(Some(&sample), &intersection).unwrap();
+
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].solution_basis_cubic_self_intersection, "3");
+        assert_eq!(
+            summaries[0].local_intersection_tensor_candidate_status,
+            "candidate_from_cms_divisor_cubic_needs_phase_and_chamber_certificate"
+        );
+        assert_eq!(
+            summaries[0].local_intersection_tensor_candidate,
+            Some(vec![LocalCygvIntersectionTensorEntry {
+                indices: [0, 0, 0],
+                value: "3".to_string(),
+            }])
+        );
     }
 
     #[test]

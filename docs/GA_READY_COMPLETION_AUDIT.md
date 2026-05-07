@@ -184,8 +184,9 @@ and matrix-basis pipeline are no longer open.
    divisor-basis and ambient-basis evidence rather than only scalar CMS status
    counts. The context report also contracts those solved divisors with the
    corrected basis intersection tensor and records their cubic
-   self-intersections as candidate local-intersection evidence, while keeping
-   the local `cygv` intersection tensor uncertified. The first seed-sum
+   self-intersections as structured one-entry local-intersection tensor
+   candidates, with a status that still requires the local phase and chamber
+   certificate before promotion. The first seed-sum
    sample for the degree-8 side splits it as another toric-covered degree-2
    reduced seed plus an uncovered degree-6 seed that does not survive pair
    reduction; that degree-6 seed pair-reduces into degree-4 and degree-2

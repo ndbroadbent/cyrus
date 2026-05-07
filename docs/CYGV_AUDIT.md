@@ -2212,9 +2212,12 @@ forward as well: on the target-`7` schema-3 report, the shared degree-six ray
 basis solution `[(55,"1")]`, ambient solution `[(57,"1")]`, and normal degree
 `0`. The same report now contracts that divisor solution with the corrected
 basis intersection tensor and records cubic self-intersection `D^3=3`; the
-other target-`7` lower source-ray solution has `D^3=26`. These are
-source-derived local-intersection candidates, not a certified local `cygv`
-intersection tensor yet, so the skeleton still lists the missing
+other target-`7` lower source-ray solution has `D^3=26`. For the source-derived
+one-parameter skeletons, the report also serializes explicit one-entry local
+intersection tensor candidates such as `{indices:[0,0,0], value:"3"}` with
+status `candidate_from_cms_divisor_cubic_needs_phase_and_chamber_certificate`.
+These are source-derived local-intersection candidates, not a certified local
+`cygv` intersection tensor yet, so the skeleton still lists the missing
 `local_q_matrix_phase`, `local_intersection_tensor`, and
 `local_chamber_certificate` inputs.
 
