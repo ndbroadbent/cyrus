@@ -317,7 +317,15 @@ and matrix-basis pipeline are no longer open.
    The coefficients are now paired with exact `Li2(q_N)` terms traced inside
    `cygv`: Li2 target coefficients `-5/2`, `-1`, and `1`, with pivot
    subtraction coefficients `5`, `0`, `-2` for target `7` and `-10`, `2`, `2`
-   for target `8`.
+   for target `8`. The report now also records the target-degree GV candidate
+   read directly from cygv's mutable instanton polynomial. In both small
+   path-support domains that readout is exactly zero:
+   `path_support_target_instanton_coefficient=0`,
+   `path_support_target_gv_candidate=0`, and
+   `path_support_target_gv_coefficient_status=integer_zero_or_absent_gv`.
+   Thus the current path-support domains are internally consistent zero-GV
+   histories after lower `Li2(q_N)` subtraction; the remaining blocker is the
+   certified corrected-chamber semigroup/history, not qN trace visibility.
    The path-history report now also mirrors `cygv`'s nearest live-`q_N`
    predecessor selection. The closest certified qN predecessor for target `7`
    is the toric degree-two class `[(44,1),(54,1),(206,-2)]` with an unknown

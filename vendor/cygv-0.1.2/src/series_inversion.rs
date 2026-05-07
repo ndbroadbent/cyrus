@@ -31,6 +31,20 @@ pub struct QnPolynomialTrace<T> {
     pub li2_terms: Vec<QnPolynomialTerm<T>>,
 }
 
+/// The inverse-series GV candidate read from the mutable instanton polynomial.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GvCoefficientTrace<T> {
+    pub element_index: usize,
+    pub degree: u32,
+    pub element: Vec<i32>,
+    pub insertion_index: usize,
+    pub pivot_component: i32,
+    pub instanton_coefficient: Option<T>,
+    pub gv_candidate: Option<T>,
+    pub rounded_gv_candidate: Option<T>,
+    pub status: &'static str,
+}
+
 fn trace_polynomial_terms<T>(
     polynomial: &Polynomial<T>,
     poly_props: &PolynomialProperties<T>,
@@ -77,6 +91,39 @@ where
         element,
         terms: trace_polynomial_terms(qn, poly_props),
         li2_terms: trace_polynomial_terms(li2qn, poly_props),
+    }
+}
+
+fn trace_gv_coefficient<T>(
+    element_index: usize,
+    insertion_index: usize,
+    pivot_component: i32,
+    instanton_coefficient: Option<&T>,
+    gv_candidate: Option<&T>,
+    rounded_gv_candidate: Option<&T>,
+    status: &'static str,
+    poly_props: &PolynomialProperties<T>,
+) -> GvCoefficientTrace<T>
+where
+    T: PolynomialCoeff<T>,
+{
+    let element = poly_props
+        .semigroup
+        .elements
+        .column(element_index)
+        .iter()
+        .copied()
+        .collect();
+    GvCoefficientTrace {
+        element_index,
+        degree: poly_props.semigroup.degrees[element_index],
+        element,
+        insertion_index,
+        pivot_component,
+        instanton_coefficient: instanton_coefficient.cloned(),
+        gv_candidate: gv_candidate.cloned(),
+        rounded_gv_candidate: rounded_gv_candidate.cloned(),
+        status,
     }
 }
 
@@ -222,7 +269,7 @@ where
     T: PolynomialCoeff<T>,
 {
     invert_series_inner::<T, FIND_GV, IS_THREEFOLD>(inst_data, poly_props, all_pools, false)
-        .map(|(gv, _qn_trace)| gv)
+        .map(|(gv, _qn_trace, _gv_coefficient_trace)| gv)
 }
 
 /// Find inverse-series coefficients and export the compact `q_N` polynomials
@@ -231,7 +278,14 @@ pub fn invert_series_with_qn_trace<T, const FIND_GV: bool, const IS_THREEFOLD: b
     inst_data: InstantonData<T>,
     poly_props: &PolynomialProperties<T>,
     all_pools: &mut (NumberPool<T>, Vec<NumberPool<T>>),
-) -> Result<(HashMap<(usize, usize), T>, Vec<QnPolynomialTrace<T>>), SeriesInversionError>
+) -> Result<
+    (
+        HashMap<(usize, usize), T>,
+        Vec<QnPolynomialTrace<T>>,
+        Vec<GvCoefficientTrace<T>>,
+    ),
+    SeriesInversionError,
+>
 where
     T: PolynomialCoeff<T>,
 {
@@ -244,12 +298,20 @@ fn invert_series_inner<T, const FIND_GV: bool, const IS_THREEFOLD: bool>(
     poly_props: &PolynomialProperties<T>,
     all_pools: &mut (NumberPool<T>, Vec<NumberPool<T>>),
     collect_qn_trace: bool,
-) -> Result<(HashMap<(usize, usize), T>, Vec<QnPolynomialTrace<T>>), SeriesInversionError>
+) -> Result<
+    (
+        HashMap<(usize, usize), T>,
+        Vec<QnPolynomialTrace<T>>,
+        Vec<GvCoefficientTrace<T>>,
+    ),
+    SeriesInversionError,
+>
 where
     T: PolynomialCoeff<T>,
 {
     let mut final_gv = HashMap::new();
     let mut qn_trace = Vec::new();
+    let mut gv_coefficient_trace = Vec::new();
 
     let h11 = poly_props.semigroup.elements.nrows();
     let n_previous_levels = if h11 < 4 {
@@ -260,6 +322,7 @@ where
         10
     };
     let mut tmp_gv = poly_props.zero_cutoff.clone();
+    let mut tmp_gv_candidate = poly_props.zero_cutoff.clone();
     let mut tmp_gv_rounded = poly_props.zero_cutoff.clone();
     let mut previous_qn: VecDeque<_> = (1..=n_previous_levels).map(|_| HashMap::new()).collect();
     let mut previous_qn_ind: VecDeque<_> = (1..=n_previous_levels).map(|_| Vec::new()).collect();
@@ -307,22 +370,71 @@ where
                     .find(|(_, c)| *c != 0)
                     .unwrap();
                 let Some(gv_ref) = inst[kk.0].coeffs.get(&(j)) else {
+                    if collect_qn_trace {
+                        gv_coefficient_trace.push(trace_gv_coefficient(
+                            j,
+                            kk.0,
+                            kk.1,
+                            None,
+                            None,
+                            None,
+                            "missing_instanton_coefficient",
+                            poly_props,
+                        ));
+                    }
                     continue;
                 };
                 tmp_gv.assign(gv_ref);
                 tmp_gv /= kk.1;
+                tmp_gv_candidate.assign(&tmp_gv);
                 if FIND_GV {
                     tmp_gv_rounded.assign(&tmp_gv);
                     tmp_gv_rounded.round_mut();
                     tmp_gv -= &tmp_gv_rounded;
                     tmp_gv.abs_mut();
                     if tmp_gv > 1e-3 {
+                        if collect_qn_trace {
+                            gv_coefficient_trace.push(trace_gv_coefficient(
+                                j,
+                                kk.0,
+                                kk.1,
+                                Some(gv_ref),
+                                Some(&tmp_gv_candidate),
+                                Some(&tmp_gv_rounded),
+                                "non_integer_gv_candidate",
+                                poly_props,
+                            ));
+                        }
                         return Err(SeriesInversionError::NonIntegerGVError);
                     }
                     tmp_gv.assign(&tmp_gv_rounded);
                     tmp_gv.abs_mut();
                     if tmp_gv < 0.5 {
+                        if collect_qn_trace {
+                            gv_coefficient_trace.push(trace_gv_coefficient(
+                                j,
+                                kk.0,
+                                kk.1,
+                                Some(gv_ref),
+                                Some(&tmp_gv_candidate),
+                                Some(&tmp_gv_rounded),
+                                "integer_zero_or_absent_gv",
+                                poly_props,
+                            ));
+                        }
                         continue;
+                    }
+                    if collect_qn_trace {
+                        gv_coefficient_trace.push(trace_gv_coefficient(
+                            j,
+                            kk.0,
+                            kk.1,
+                            Some(gv_ref),
+                            Some(&tmp_gv_candidate),
+                            Some(&tmp_gv_rounded),
+                            "integer_nonzero_gv",
+                            poly_props,
+                        ));
                     }
                     final_gv.insert((j, 0), tmp_gv_rounded.clone());
                     qn_to_compute.push(j);
@@ -331,7 +443,31 @@ where
                     tmp_gv_rounded.assign(&tmp_gv);
                     tmp_gv_rounded.abs_mut();
                     if tmp_gv_rounded <= poly_props.zero_cutoff {
+                        if collect_qn_trace {
+                            gv_coefficient_trace.push(trace_gv_coefficient(
+                                j,
+                                kk.0,
+                                kk.1,
+                                Some(gv_ref),
+                                Some(&tmp_gv),
+                                None,
+                                "zero_or_absent_gw",
+                                poly_props,
+                            ));
+                        }
                         continue;
+                    }
+                    if collect_qn_trace {
+                        gv_coefficient_trace.push(trace_gv_coefficient(
+                            j,
+                            kk.0,
+                            kk.1,
+                            Some(gv_ref),
+                            Some(&tmp_gv),
+                            None,
+                            "nonzero_gw",
+                            poly_props,
+                        ));
                     }
                     final_gv.insert((j, 0), tmp_gv.clone());
                     qn_to_compute.push(j);
@@ -441,5 +577,7 @@ where
     }
 
     qn_trace.sort_unstable_by_key(|entry| (entry.degree, entry.element_index));
-    Ok((final_gv, qn_trace))
+    gv_coefficient_trace
+        .sort_unstable_by_key(|entry| (entry.degree, entry.element_index, entry.insertion_index));
+    Ok((final_gv, qn_trace, gv_coefficient_trace))
 }

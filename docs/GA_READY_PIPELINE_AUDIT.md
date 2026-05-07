@@ -409,7 +409,12 @@ to make the remaining GV layer more first-principles:
    target coefficients are `-5/2`, `-1`, and `1`; target `7`'s pivot
    subtraction coefficients are `5`, `0`, and `-2`, while target `8`'s are
    `-10`, `2`, and `2`. This exposes the series-inversion
-   cancellation/history that must be reproduced in a certified chamber.
+   cancellation/history that must be reproduced in a certified chamber. The
+   same trace now records the target-degree GV candidate read from cygv's
+   mutable instanton polynomial: in both small path-support domains the target
+   instanton coefficient and GV candidate are exactly `0`, with
+   `integer_zero_or_absent_gv` status. The current small domains are therefore
+   internally consistent zero histories, not failed target lookups.
    A direct cygv semigroup-size diagnostic now confirms why: the degree-10
    missing targets already have `720` seed rows at or below the target degree,
    and an unguarded cygv semigroup closure measurement did not finish within

@@ -77,6 +77,29 @@ pub struct CygvQnTracePolynomial {
     pub li2_terms: Vec<CygvQnTraceTerm>,
 }
 
+/// Inverse-series GV candidate read from cygv's mutable instanton polynomial.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CygvGvCoefficientTrace {
+    /// Index of the curve element whose coefficient was read.
+    pub element_index: usize,
+    /// Grading degree of the curve element.
+    pub degree: u32,
+    /// Semigroup exponent vector of the curve element.
+    pub element: Vec<i32>,
+    /// Instanton polynomial coordinate used by cygv to read the coefficient.
+    pub insertion_index: usize,
+    /// First nonzero component of `element`, used as the divisor.
+    pub pivot_component: i32,
+    /// Exact mutable instanton coefficient at this element, if present.
+    pub instanton_coefficient: Option<String>,
+    /// Exact GV candidate before rounding/filtering, if present.
+    pub gv_candidate: Option<String>,
+    /// Rounded GV candidate used by cygv's integrality check, if present.
+    pub rounded_gv_candidate: Option<String>,
+    /// cygv decision status for this candidate.
+    pub status: String,
+}
+
 /// GV output together with the compact `q_N` polynomials cygv materialized.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GvInvariantsWithQnTrace {
@@ -84,6 +107,8 @@ pub struct GvInvariantsWithQnTrace {
     pub invariants: Vec<(Vec<i32>, Integer)>,
     /// Compact `q_N` polynomials materialized while computing those invariants.
     pub qn_trace: Vec<CygvQnTracePolynomial>,
+    /// GV coefficient candidates read before `q_N` materialization.
+    pub gv_coefficient_trace: Vec<CygvGvCoefficientTrace>,
 }
 
 /// Compute the Mori cone cap generators (rays) using the CYTools algorithm.
@@ -11924,7 +11949,7 @@ fn compute_cygv_rat_threefold_raw_from_semigroup_unchecked(
     )
     .map_err(|e| Error::InvalidInput(format!("{context}: cygv instanton data failed: {e}")))?;
 
-    let (gv, raw_qn_trace) = if collect_qn_trace {
+    let (gv, raw_qn_trace, raw_gv_coefficient_trace) = if collect_qn_trace {
         cygv::series_inversion::invert_series_with_qn_trace::<RugRational, true, true>(
             inst_data,
             &poly_props,
@@ -11936,7 +11961,7 @@ fn compute_cygv_rat_threefold_raw_from_semigroup_unchecked(
             &poly_props,
             &mut all_pools,
         )
-        .map(|gv| (gv, Vec::new()))
+        .map(|gv| (gv, Vec::new(), Vec::new()))
     }
     .map_err(|e| Error::InvalidInput(format!("{context}: cygv series inversion failed: {e}")))?;
 
@@ -11987,10 +12012,31 @@ fn compute_cygv_rat_threefold_raw_from_semigroup_unchecked(
                 .collect(),
         })
         .collect();
+    let gv_coefficient_trace = raw_gv_coefficient_trace
+        .into_iter()
+        .map(|trace| CygvGvCoefficientTrace {
+            element_index: trace.element_index,
+            degree: trace.degree,
+            element: trace.element,
+            insertion_index: trace.insertion_index,
+            pivot_component: trace.pivot_component,
+            instanton_coefficient: trace
+                .instanton_coefficient
+                .map(|coefficient| coefficient.to_string()),
+            gv_candidate: trace
+                .gv_candidate
+                .map(|coefficient| coefficient.to_string()),
+            rounded_gv_candidate: trace
+                .rounded_gv_candidate
+                .map(|coefficient| coefficient.to_string()),
+            status: trace.status.to_string(),
+        })
+        .collect();
 
     Ok(GvInvariantsWithQnTrace {
         invariants: out,
         qn_trace,
+        gv_coefficient_trace,
     })
 }
 
@@ -16789,6 +16835,27 @@ mod tests {
                 coefficient: "1".to_string(),
             }]
         );
+        assert_eq!(traced.gv_coefficient_trace.len(), 1);
+        assert_eq!(traced.gv_coefficient_trace[0].element, vec![1]);
+        assert_eq!(traced.gv_coefficient_trace[0].insertion_index, 0);
+        assert_eq!(traced.gv_coefficient_trace[0].pivot_component, 1);
+        assert_eq!(
+            traced.gv_coefficient_trace[0]
+                .instanton_coefficient
+                .as_deref(),
+            Some("2875")
+        );
+        assert_eq!(
+            traced.gv_coefficient_trace[0].gv_candidate.as_deref(),
+            Some("2875")
+        );
+        assert_eq!(
+            traced.gv_coefficient_trace[0]
+                .rounded_gv_candidate
+                .as_deref(),
+            Some("2875")
+        );
+        assert_eq!(traced.gv_coefficient_trace[0].status, "integer_nonzero_gv");
     }
 
     #[test]
@@ -16826,6 +16893,9 @@ mod tests {
         assert_eq!(traced.qn_trace[0].element, vec![1]);
         assert_eq!(traced.qn_trace[0].terms.len(), 1);
         assert_eq!(traced.qn_trace[0].li2_terms.len(), 1);
+        assert_eq!(traced.gv_coefficient_trace.len(), 1);
+        assert_eq!(traced.gv_coefficient_trace[0].element, vec![1]);
+        assert_eq!(traced.gv_coefficient_trace[0].status, "integer_nonzero_gv");
     }
 
     #[test]

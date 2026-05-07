@@ -27,10 +27,12 @@ degree-one `2875` case, so the error-handling wrapper stays pinned to upstream
 Cyrus now vendors `cygv` 0.1.2 under `vendor/cygv-0.1.2` via a Cargo patch.
 The patch keeps the HKTY algorithm in the `cygv` crate and adds a narrow
 `series_inversion::invert_series_with_qn_trace` API that exports compact
-`q_N` polynomials materialized by cygv's own series inversion. The Cyrus
+`q_N` polynomials and GV coefficient readouts materialized by cygv's own
+series inversion. The Cyrus
 wrapper `compute_gv_invariants_with_explicit_semigroup_qn_trace` is checked on
 the quintic degree-one case: it still returns GV `2875` and exports the actual
-degree-one `q_N` polynomial.
+degree-one `q_N` polynomial plus the exact instanton coefficient/GV candidate
+that produces it.
 
 ## CYTools Contract
 
@@ -2591,6 +2593,19 @@ pivot-coordinate subtraction coefficients `-10`, `2`, and `2`. This is exactly
 the `cygv` series-inversion mechanism we need to certify in the real chamber:
 the target can be affected by lower `Li2(q_N)` history even when no target
 `q_N` polynomial is materialized.
+The path-support reports now also trace the GV candidate read directly from
+cygv's mutable instanton polynomial at the target degree. In these same small
+domains, both targets reach the target-degree readout with
+`path_support_target_gv_coefficient_status=integer_zero_or_absent_gv`,
+`path_support_target_instanton_coefficient=0`, and
+`path_support_target_gv_candidate=0`. For target `7`, the pivot coordinate is
+`44` with target component `2`; for target `8`, the pivot coordinate is `203`
+with target component `-3`. Thus the small path-support domains are internally
+consistent zero-GV histories: the lower `Li2(q_N)` subtractions cancel the
+target coefficient before cygv decides whether a target `q_N` polynomial is
+needed. The unresolved object is still the certified corrected-chamber
+semigroup/history whose lower `q_N` sequence gives McAllister's nonzero target
+correction, not a missing scalar lookup inside the current path-support run.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use
