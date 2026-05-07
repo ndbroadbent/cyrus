@@ -2112,6 +2112,9 @@ fn active_decomposition_generator_source_status(
     if context.covered_toric_gv_by_basis.contains_key(curve) {
         return Ok("active_generator_known_toric_covered".to_string());
     }
+    if context.source_derived_gv_by_basis.contains_key(curve) {
+        return Ok("active_generator_known_source_derived_gv".to_string());
+    }
     if matching_missing_target_for_curve(curve, context)?.is_some() {
         return Ok("active_generator_matches_missing_target".to_string());
     }
@@ -9212,15 +9215,17 @@ mod tests {
             cms_general_divisor_intersection_checks: None,
             branch_diagnostic: None,
             real_cone_decomposable_by_other_generators: true,
-            real_cone_decomposition_active_generators: Some(5),
+            real_cone_decomposition_active_generators: Some(6),
             real_cone_decomposition_active_generator_basis_nonzero: Some(vec![
                 vec![(0, 1)],
                 vec![(0, 1), (1, 1)],
                 vec![(1, 1)],
+                vec![(1, 2)],
                 vec![(2, 1)],
                 vec![(0, 1), (2, 1)],
             ]),
             real_cone_decomposition_exact_coefficients: Some(vec![
+                "1".to_string(),
                 "1".to_string(),
                 "1".to_string(),
                 "1".to_string(),
@@ -9250,15 +9255,34 @@ mod tests {
             ambient_nonzero: Vec::new(),
             basis_nonzero: vec![(1, 1)],
         };
+        let second_uncovered_sample = MissingGvTargetSample {
+            degree: 2,
+            generators_le_degree: 1,
+            is_mori_generator: false,
+            origin_circuit_pattern: None,
+            origin_circuit_witness_count: None,
+            origin_circuit_first_witness: None,
+            origin_circuit_affine_support: None,
+            cms_general_divisor_shape_candidates: None,
+            cms_general_divisor_intersection_checks: None,
+            branch_diagnostic: None,
+            real_cone_decomposable_by_other_generators: false,
+            real_cone_decomposition_active_generators: None,
+            real_cone_decomposition_active_generator_basis_nonzero: None,
+            real_cone_decomposition_exact_coefficients: None,
+            real_cone_decomposition_exact_kind: None,
+            ambient_nonzero: Vec::new(),
+            basis_nonzero: vec![(1, 2)],
+        };
         let stats = MissingGvTargetStats {
             target_count: 1,
             real_cone_decomposition_exact_kind_counts: HashMap::new(),
             sample: vec![target_sample],
         };
         let uncovered_stats = MissingGvTargetStats {
-            target_count: 1,
+            target_count: 2,
             real_cone_decomposition_exact_kind_counts: HashMap::new(),
-            sample: vec![uncovered_sample],
+            sample: vec![uncovered_sample, second_uncovered_sample],
         };
         let ray_context = vec![DegreeBoundedMoriRayContextSample {
             degree: 1,
@@ -9270,6 +9294,8 @@ mod tests {
         let degree_bounded_rays = Vec::new();
         let mut covered_toric_gv_by_basis = HashMap::new();
         covered_toric_gv_by_basis.insert(vec![1, 0, 0], "7".to_string());
+        let mut source_derived_gv_by_basis = HashMap::new();
+        source_derived_gv_by_basis.insert(vec![0, 1, 0], "5".to_string());
         let context = ValidatedContext {
             dimension: 3,
             degree_bound: 2,
@@ -9279,7 +9305,7 @@ mod tests {
             degree_bounded_rays: &degree_bounded_rays,
             degree_bounded_ray_context: Some(&ray_context),
             covered_toric_gv_by_basis,
-            source_derived_gv_by_basis: HashMap::new(),
+            source_derived_gv_by_basis,
             intersection: Intersection::new(3),
             stats: &stats,
             uncovered_source_ray_stats: Some(&uncovered_stats),
@@ -9291,6 +9317,7 @@ mod tests {
             counts,
             BTreeMap::from([
                 ("active_generator_known_toric_covered".to_string(), 1),
+                ("active_generator_known_source_derived_gv".to_string(), 1),
                 ("active_generator_matches_missing_target".to_string(), 1),
                 (
                     "active_generator_matches_uncovered_source_ray".to_string(),

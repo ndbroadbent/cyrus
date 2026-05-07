@@ -575,8 +575,8 @@ to make the remaining GV layer more first-principles:
    rows with target GV `0` and two `hkty_error` rows with non-integral compact
    HKTY output, while the four rational-cone targets remain skipped. This
    keeps the decomposition-diamond path as a diagnostic, not a promoted GV
-   computation. The active decomposition generators now aggregate as 12
-   toric-covered, two matching other missing targets, two matching uncovered
-   source rays, and six source rays that are still not toric-covered. This
-   shifts the actionable GV work to certifying those lower source-ray leaves
-   and their chamber history.
+   computation. The active decomposition generators now aggregate as one
+   source-derived GV leaf, 12 toric-covered leaves, two matching other missing
+   targets, one matching uncovered source ray, and six source rays that are
+   still not toric-covered. This shifts the actionable GV work to certifying
+   those lower source-ray leaves and their chamber history.

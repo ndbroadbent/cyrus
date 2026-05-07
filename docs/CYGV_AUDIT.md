@@ -2298,10 +2298,11 @@ integrality check, so the decomposition diamond is not the missing chamber
 context either.
 The same report now aggregates the active decomposition generators themselves:
 `active_decomposition_generator_source_status_counts =
-{"active_generator_known_toric_covered":12,
+{"active_generator_known_source_derived_gv":1,
+"active_generator_known_toric_covered":12,
 "active_generator_matches_missing_target":2,
-"active_generator_matches_uncovered_source_ray":2,
+"active_generator_matches_uncovered_source_ray":1,
 "active_generator_source_ray_not_toric_covered":6}`. The unresolved target
 classes therefore depend on a smaller lower-source-ray graph, with most leaves
-already toric-covered but eight lower generators still requiring source-derived
-GV/chamber treatment.
+already toric-covered or source-derived but seven lower generators still
+requiring source-derived GV/chamber treatment.

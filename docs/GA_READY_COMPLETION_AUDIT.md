@@ -313,9 +313,10 @@ aggregated as `target_status_counts`: three integer-semigroup diamonds compute
 target GV `0`, two fail compact HKTY with a non-integral invariant, and the
 four rational-cone targets are skipped. That diagnostic does not resolve the
 remaining GV rows. The active decomposition generators now classify as 12
-toric-covered leaves, two other missing targets, two uncovered source rays, and
-six source rays that are not yet toric-covered, so the remaining implementation
-work has moved to those lower source-ray/chamber leaves.
+toric-covered leaves, one source-derived GV leaf, two other missing targets,
+one uncovered source ray, and six source rays that are not yet toric-covered,
+so the remaining implementation work has moved to those lower
+source-ray/chamber leaves.
 
 ## Next Concrete Action
 
