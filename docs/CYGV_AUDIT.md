@@ -1697,6 +1697,11 @@ cygv-materialized qN polynomials; it also has no target qN polynomial. This
 rules out the sampled path-support generator domain as the missing compact HKTY
 history. Like the lower-seed diamonds, it is a negative diagnostic unless a
 source certificate promotes the supplied semigroup.
+A reduced two-target report over these degree-10 targets aggregates the
+small-domain qN curves directly: 17 qN-polynomial occurrences collapse to 11
+unique curves, with 6 curves appearing in both target-support domains. The
+shared curves have degrees 2, 4, 6, 6, 8, and 8, while the target qN
+polynomials remain absent because both small-domain target GVs are zero.
 
 After rebuilding `mcallister_gv_context`, the dry-run report now preserves the
 origin-circuit provenance exported by `mcallister_first_principles`. A fresh

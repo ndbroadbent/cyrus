@@ -321,6 +321,11 @@ struct ContextReport {
     path_support_uncovered_source_ray_local_cygv_primitive_probe_status_counts:
         BTreeMap<String, usize>,
     path_support_uncovered_source_ray_sample: Vec<CygvPathSupportSourceRaySummary>,
+    path_support_qn_trace_curve_unique_count: usize,
+    path_support_qn_trace_curve_occurrence_count: usize,
+    path_support_qn_trace_curve_degree_counts: BTreeMap<u32, usize>,
+    path_support_qn_trace_curve_target_count_counts: BTreeMap<usize, usize>,
+    path_support_qn_trace_curve_sample: Vec<CygvPathSupportQnTraceCurveSummary>,
     local_cygv_q_matrix_orientation_status_counts: BTreeMap<String, usize>,
     local_cygv_q_matrix_layout_status_counts: BTreeMap<String, usize>,
     local_cygv_q_matrix_phase_status_counts: BTreeMap<String, usize>,
@@ -702,6 +707,17 @@ struct CygvPathSupportQnTraceTermSample {
     coefficient: String,
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct CygvPathSupportQnTraceCurveSummary {
+    degree: u32,
+    curve_nonzero: Vec<(usize, i64)>,
+    occurrence_count: usize,
+    target_count: usize,
+    target_indices: Vec<usize>,
+    term_count_counts: BTreeMap<usize, usize>,
+    first_term_sample: Vec<CygvPathSupportQnTraceTermSample>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 struct CmsGeneralDivisorSolutionSummary {
     shrinking_divisor_index: usize,
@@ -930,6 +946,15 @@ struct CygvClosestKnownQnResidualSourcePredecessorSummaryBuilder {
     matching_uncovered_source_ray_local_unit_phase_probe: Option<LocalCygvUnitPhaseProbe>,
     curve_nonzero: Vec<(usize, i64)>,
     occurrences: Vec<CygvClosestKnownQnResidualSourcePredecessorOccurrence>,
+}
+
+struct CygvPathSupportQnTraceCurveSummaryBuilder {
+    degree: u32,
+    curve_nonzero: Vec<(usize, i64)>,
+    occurrence_count: usize,
+    target_indices: BTreeSet<usize>,
+    term_count_counts: BTreeMap<usize, usize>,
+    first_term_sample: Vec<CygvPathSupportQnTraceTermSample>,
 }
 
 struct PathSupportSourceClassContext {
@@ -3198,6 +3223,77 @@ fn path_support_uncovered_source_ray_local_cygv_primitive_probe_status_counts(
                 });
             *counts.entry(status.to_string()).or_insert(0) += 1;
         }
+    }
+    counts
+}
+
+fn path_support_qn_trace_curve_summaries(
+    targets: &[TargetReport],
+) -> Vec<CygvPathSupportQnTraceCurveSummary> {
+    let mut builders: BTreeMap<Vec<(usize, i64)>, CygvPathSupportQnTraceCurveSummaryBuilder> =
+        BTreeMap::new();
+    for target in targets {
+        let Some(probe) = target.cygv_path_history_probe.as_ref() else {
+            continue;
+        };
+        for qn_poly in &probe.path_support_qn_trace_sample {
+            let entry = builders
+                .entry(qn_poly.curve_nonzero.clone())
+                .or_insert_with(|| CygvPathSupportQnTraceCurveSummaryBuilder {
+                    degree: qn_poly.degree,
+                    curve_nonzero: qn_poly.curve_nonzero.clone(),
+                    occurrence_count: 0,
+                    target_indices: BTreeSet::new(),
+                    term_count_counts: BTreeMap::new(),
+                    first_term_sample: qn_poly.term_sample.clone(),
+                });
+            debug_assert_eq!(entry.degree, qn_poly.degree);
+            entry.occurrence_count += 1;
+            entry.target_indices.insert(target.index);
+            *entry
+                .term_count_counts
+                .entry(qn_poly.term_count)
+                .or_insert(0) += 1;
+        }
+    }
+    let mut out = builders
+        .into_values()
+        .map(|builder| CygvPathSupportQnTraceCurveSummary {
+            degree: builder.degree,
+            curve_nonzero: builder.curve_nonzero,
+            occurrence_count: builder.occurrence_count,
+            target_count: builder.target_indices.len(),
+            target_indices: builder.target_indices.into_iter().collect(),
+            term_count_counts: builder.term_count_counts,
+            first_term_sample: builder.first_term_sample,
+        })
+        .collect::<Vec<_>>();
+    out.sort_by(|lhs, rhs| {
+        rhs.target_count
+            .cmp(&lhs.target_count)
+            .then_with(|| rhs.occurrence_count.cmp(&lhs.occurrence_count))
+            .then_with(|| lhs.degree.cmp(&rhs.degree))
+            .then_with(|| lhs.curve_nonzero.cmp(&rhs.curve_nonzero))
+    });
+    out
+}
+
+fn path_support_qn_trace_curve_degree_counts(
+    summaries: &[CygvPathSupportQnTraceCurveSummary],
+) -> BTreeMap<u32, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts.entry(summary.degree).or_insert(0) += 1;
+    }
+    counts
+}
+
+fn path_support_qn_trace_curve_target_count_counts(
+    summaries: &[CygvPathSupportQnTraceCurveSummary],
+) -> BTreeMap<usize, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts.entry(summary.target_count).or_insert(0) += 1;
     }
     counts
 }
@@ -9178,6 +9274,16 @@ fn build_report(
         path_support_uncovered_source_ray_local_cygv_primitive_probe_status_counts(
             &path_support_uncovered_source_ray_sample,
         );
+    let path_support_qn_trace_curve_sample = path_support_qn_trace_curve_summaries(&targets);
+    let path_support_qn_trace_curve_unique_count = path_support_qn_trace_curve_sample.len();
+    let path_support_qn_trace_curve_occurrence_count = path_support_qn_trace_curve_sample
+        .iter()
+        .map(|summary| summary.occurrence_count)
+        .sum();
+    let path_support_qn_trace_curve_degree_counts =
+        path_support_qn_trace_curve_degree_counts(&path_support_qn_trace_curve_sample);
+    let path_support_qn_trace_curve_target_count_counts =
+        path_support_qn_trace_curve_target_count_counts(&path_support_qn_trace_curve_sample);
     let local_cygv_q_matrix_orientation_status_counts =
         local_cygv_q_matrix_orientation_status_counts(
             targets
@@ -9414,6 +9520,11 @@ fn build_report(
         path_support_uncovered_source_ray_path_support_gv_counts,
         path_support_uncovered_source_ray_local_cygv_primitive_probe_status_counts,
         path_support_uncovered_source_ray_sample,
+        path_support_qn_trace_curve_unique_count,
+        path_support_qn_trace_curve_occurrence_count,
+        path_support_qn_trace_curve_degree_counts,
+        path_support_qn_trace_curve_target_count_counts,
+        path_support_qn_trace_curve_sample,
         local_cygv_q_matrix_orientation_status_counts,
         local_cygv_q_matrix_layout_status_counts,
         local_cygv_q_matrix_phase_status_counts,
