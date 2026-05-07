@@ -186,7 +186,11 @@ run pass. Any remaining mismatch must be explicit and localizable.
    pre-subtraction candidate `3/2`; target 8 has lower-source sum `-6`, pivot
    component `-3`, and pre-subtraction candidate `2`. This pins the small
    domains as internally consistent zero histories, not as the missing
-   corrected-chamber target values.
+   corrected-chamber target values. The report now compares these reconstructed
+   candidates against the CMS-general-divisor formula candidates as well:
+   target 7 reports `3/2` versus formula `3`, and target 8 reports `2` versus
+   formula `3`, so neither sampled domain is a disguised corrected-chamber
+   formula domain.
    The same report is not yet scalable across all nine misses: the all-target
    schema-4 run timed out at 900 seconds, targets 2-5 time out under 180-second
    per-target probes, and targets 0/1/6 hit non-integer HKTY errors in their

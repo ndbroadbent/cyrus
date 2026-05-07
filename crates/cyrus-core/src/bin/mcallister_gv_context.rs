@@ -612,6 +612,9 @@ struct CygvPathHistoryProbe {
     path_support_target_reconstructed_pre_subtraction_instanton_coefficient: Option<String>,
     path_support_target_reconstructed_pre_subtraction_gv_candidate: Option<String>,
     path_support_target_li2_subtraction_balance_status: Option<String>,
+    path_support_target_reconstructed_pre_subtraction_formula_values: Vec<String>,
+    path_support_target_reconstructed_pre_subtraction_formula_value_sum: Option<String>,
+    path_support_target_reconstructed_pre_subtraction_formula_status: Option<String>,
     path_support_gv_coefficient_trace_count: Option<usize>,
     path_support_gv_coefficient_status_counts: BTreeMap<String, usize>,
     path_support_gv_coefficient_trace_sample: Vec<CygvPathSupportGvCoefficientTraceSample>,
@@ -8324,6 +8327,9 @@ fn cygv_path_history_probe(
             path_support_target_reconstructed_pre_subtraction_instanton_coefficient: None,
             path_support_target_reconstructed_pre_subtraction_gv_candidate: None,
             path_support_target_li2_subtraction_balance_status: None,
+            path_support_target_reconstructed_pre_subtraction_formula_values: Vec::new(),
+            path_support_target_reconstructed_pre_subtraction_formula_value_sum: None,
+            path_support_target_reconstructed_pre_subtraction_formula_status: None,
             path_support_gv_coefficient_trace_count: None,
             path_support_gv_coefficient_status_counts: BTreeMap::new(),
             path_support_gv_coefficient_trace_sample: Vec::new(),
@@ -8423,6 +8429,9 @@ fn cygv_path_history_probe_inner(
             path_support_target_reconstructed_pre_subtraction_instanton_coefficient: None,
             path_support_target_reconstructed_pre_subtraction_gv_candidate: None,
             path_support_target_li2_subtraction_balance_status: None,
+            path_support_target_reconstructed_pre_subtraction_formula_values: Vec::new(),
+            path_support_target_reconstructed_pre_subtraction_formula_value_sum: None,
+            path_support_target_reconstructed_pre_subtraction_formula_status: None,
             path_support_gv_coefficient_trace_count: None,
             path_support_gv_coefficient_status_counts: BTreeMap::new(),
             path_support_gv_coefficient_trace_sample: Vec::new(),
@@ -8498,6 +8507,9 @@ fn cygv_path_history_probe_inner(
             path_support_target_reconstructed_pre_subtraction_instanton_coefficient: None,
             path_support_target_reconstructed_pre_subtraction_gv_candidate: None,
             path_support_target_li2_subtraction_balance_status: None,
+            path_support_target_reconstructed_pre_subtraction_formula_values: Vec::new(),
+            path_support_target_reconstructed_pre_subtraction_formula_value_sum: None,
+            path_support_target_reconstructed_pre_subtraction_formula_status: None,
             path_support_gv_coefficient_trace_count: None,
             path_support_gv_coefficient_status_counts: BTreeMap::new(),
             path_support_gv_coefficient_trace_sample: Vec::new(),
@@ -8579,6 +8591,16 @@ fn cygv_path_history_probe_inner(
         context,
         run_path_support_generators,
     );
+    let expected_formula_values = sample_expected_toric_gv1_formula_values(sample);
+    let expected_formula_sum = sample_expected_toric_gv1_formula_value_sum(sample);
+    let path_support_target_reconstructed_pre_subtraction_formula_status =
+        path_support_pre_subtraction_formula_status(
+            path_support_generators
+                .target_reconstructed_pre_subtraction_gv_candidate
+                .as_ref(),
+            &expected_formula_values,
+            expected_formula_sum.as_ref(),
+        )?;
     let closest_known_qn_residual_qn_domain_comparison = residual_qn_domain_comparison(
         closest_known_qn_residual_predecessor.as_ref(),
         &path_support_generators,
@@ -8668,6 +8690,13 @@ fn cygv_path_history_probe_inner(
                 .target_reconstructed_pre_subtraction_gv_candidate,
             path_support_target_li2_subtraction_balance_status: path_support_generators
                 .target_li2_subtraction_balance_status,
+            path_support_target_reconstructed_pre_subtraction_formula_values:
+                expected_formula_values,
+            path_support_target_reconstructed_pre_subtraction_formula_value_sum:
+                expected_formula_sum,
+            path_support_target_reconstructed_pre_subtraction_formula_status: Some(
+                path_support_target_reconstructed_pre_subtraction_formula_status,
+            ),
             path_support_gv_coefficient_trace_count: path_support_generators
                 .gv_coefficient_trace_count,
             path_support_gv_coefficient_status_counts: path_support_generators
@@ -8767,6 +8796,11 @@ fn cygv_path_history_probe_inner(
             .target_reconstructed_pre_subtraction_gv_candidate,
         path_support_target_li2_subtraction_balance_status: path_support_generators
             .target_li2_subtraction_balance_status,
+        path_support_target_reconstructed_pre_subtraction_formula_values: expected_formula_values,
+        path_support_target_reconstructed_pre_subtraction_formula_value_sum: expected_formula_sum,
+        path_support_target_reconstructed_pre_subtraction_formula_status: Some(
+            path_support_target_reconstructed_pre_subtraction_formula_status,
+        ),
         path_support_gv_coefficient_trace_count: path_support_generators.gv_coefficient_trace_count,
         path_support_gv_coefficient_status_counts: path_support_generators
             .gv_coefficient_status_counts,
@@ -11658,6 +11692,31 @@ fn sample_expected_toric_gv1_formula_values(sample: &MissingGvTargetSample) -> V
 
 fn sample_expected_toric_gv1_formula_value_sum(sample: &MissingGvTargetSample) -> Option<String> {
     expected_toric_gv1_formula_value_sum(sample.cms_general_divisor_shape_candidates.as_deref())
+}
+
+fn path_support_pre_subtraction_formula_status(
+    pre_subtraction_candidate: Option<&String>,
+    expected_values: &[String],
+    expected_sum: Option<&String>,
+) -> Result<String, String> {
+    let Some(pre_subtraction_candidate) = pre_subtraction_candidate else {
+        return Ok("missing_pre_subtraction_candidate".to_string());
+    };
+    if expected_values.is_empty() {
+        return Ok("missing_formula_candidate".to_string());
+    }
+    let candidate = parse_rational(pre_subtraction_candidate)?;
+    for value in expected_values {
+        if candidate == parse_rational(value)? {
+            return Ok("pre_subtraction_candidate_matches_formula_candidate".to_string());
+        }
+    }
+    if let Some(expected_sum) = expected_sum {
+        if candidate == parse_rational(expected_sum)? {
+            return Ok("pre_subtraction_candidate_matches_formula_sum".to_string());
+        }
+    }
+    Ok("pre_subtraction_candidate_mismatches_formula_candidates".to_string())
 }
 
 fn expected_toric_gv1_formula_values(

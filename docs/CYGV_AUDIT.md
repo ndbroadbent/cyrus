@@ -2633,6 +2633,12 @@ coefficient `0` and pivot component `-3`, the pre-subtraction candidate was
 `2`. These are diagnostics of the sampled path-support domains, not promoted
 corrected-chamber GV values: they show exactly how the sampled lower history
 drives the target readout to zero.
+The same diagnostic compares those reconstructed pre-subtraction candidates to
+the CMS-general-divisor formula candidates already serialized for the missing
+target rows. Both degree-ten rows mismatch: target `7` has pre-subtraction
+candidate `3/2` against formula value `3`, and target `8` has candidate `2`
+against formula value `3`. This further rules out the sampled path-support
+domain as a disguised version of the desired corrected-chamber source formula.
 The report now also exports a bounded sample and status counts for all GV
 coefficient readouts in the path-support `cygv` call. Target `7` has `79`
 coefficient readouts split as `11` integer-nonzero, `25` integer-zero/absent,

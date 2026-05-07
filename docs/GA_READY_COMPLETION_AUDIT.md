@@ -386,7 +386,11 @@ and matrix-basis pipeline are no longer open.
    pre-subtraction candidate `3/2`; target `8` has lower-source sum `-6`,
    pivot component `-3`, and pre-subtraction candidate `2`. These are not
    promoted GV values; they are evidence that the sampled domains cancel to
-   zero before target qN materialization.
+   zero before target qN materialization. The report also compares these
+   pre-subtraction candidates with the CMS-general-divisor formula candidates:
+   target `7` is `3/2` versus formula `3`, and target `8` is `2` versus
+   formula `3`. So the sampled path-support domains are neither the final
+   `cygv` target history nor the local formula source domain.
    This comparison is currently bounded to the
    target `7`/`8` degree-ten pair: the all-target run timed out at `900s`,
    targets `2`-`5` time out under `180s` per-target probes, and targets
