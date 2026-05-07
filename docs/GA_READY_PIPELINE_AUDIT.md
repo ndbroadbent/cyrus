@@ -629,3 +629,12 @@ to make the remaining GV layer more first-principles:
    missing targets all share their local relation across witnesses; the
    remaining blocker is certifying the facet/chamber phase and local
    intersection tensor for that relation.
+   A follow-up per-witness domain diagnostic now checks each serialized
+   origin-circuit witness separately. The 14 witness domains have relation
+   support rank `1`; shared-facet domains range from `12` to `367` generators
+   and ranks `9`, `13`, `26`, or `146`. With the existing LP/exact certificate
+   path and a `512` generator guard, no relation or shared-facet witness domain
+   certifies a supporting face. The two degree-10 facet-union domains under the
+   same guard also fail certification, while larger facet unions remain skipped
+   explicitly. This rules out hiding the chamber certificate in one selected
+   facet-pair witness.

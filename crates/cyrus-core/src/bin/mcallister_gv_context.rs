@@ -222,6 +222,10 @@ struct ContextReport {
     origin_circuit_witness_relation_status_counts: BTreeMap<String, usize>,
     uncovered_source_ray_origin_circuit_witness_relation_status_counts: BTreeMap<String, usize>,
     origin_circuit_facet_context_status_counts: BTreeMap<String, usize>,
+    origin_circuit_witness_relation_support_face_certificate_status_counts: BTreeMap<String, usize>,
+    origin_circuit_witness_shared_facet_face_certificate_status_counts: BTreeMap<String, usize>,
+    origin_circuit_witness_facet_union_face_certificate_status_counts: BTreeMap<String, usize>,
+    origin_circuit_witness_domain_sample: Vec<OriginCircuitWitnessDomainSummary>,
     active_support_status_counts: BTreeMap<String, usize>,
     active_support_face_certificate_status_counts: BTreeMap<String, usize>,
     target_extremal_ray_certificate_status_counts: BTreeMap<String, usize>,
@@ -3168,6 +3172,28 @@ struct OriginCircuitAmbientSupportCertificateStatuses {
     facet_union: Option<String>,
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct OriginCircuitWitnessDomainSummary {
+    target_index: usize,
+    degree: i128,
+    witness_index: usize,
+    first_facet_exclusive_point: usize,
+    second_facet_exclusive_point: usize,
+    facet_context_status: String,
+    relation_support_size: usize,
+    shared_facet_support_size: usize,
+    facet_union_support_size: usize,
+    relation_generator_count: Option<usize>,
+    shared_facet_generator_count: Option<usize>,
+    facet_union_generator_count: Option<usize>,
+    relation_rank: Option<usize>,
+    shared_facet_rank: Option<usize>,
+    facet_union_rank: Option<usize>,
+    relation_support_face_certificate_status: String,
+    shared_facet_face_certificate_status: String,
+    facet_union_face_certificate_status: String,
+}
+
 struct OriginCircuitAmbientSupportSets {
     relation_support: HashSet<usize>,
     shared_facet: HashSet<usize>,
@@ -3245,6 +3271,200 @@ fn origin_circuit_ambient_support_sets(
         shared_facet,
         facet_union,
     })
+}
+
+fn origin_circuit_witness_ambient_support_sets(
+    witness: &OriginCircuitWitnessSample,
+) -> OriginCircuitAmbientSupportSets {
+    let relation_support = origin_circuit_witness_relation_signature(witness)
+        .into_iter()
+        .map(|(idx, _)| idx)
+        .collect::<HashSet<_>>();
+    let first_facet = witness.first_facet.iter().copied().collect::<HashSet<_>>();
+    let second_facet = witness.second_facet.iter().copied().collect::<HashSet<_>>();
+    let mut shared_facet = first_facet
+        .intersection(&second_facet)
+        .copied()
+        .collect::<HashSet<_>>();
+    shared_facet.insert(0);
+    shared_facet.insert(witness.first_facet_exclusive_point);
+    shared_facet.insert(witness.second_facet_exclusive_point);
+    let mut facet_union = first_facet
+        .union(&second_facet)
+        .copied()
+        .collect::<HashSet<_>>();
+    facet_union.insert(0);
+
+    OriginCircuitAmbientSupportSets {
+        relation_support,
+        shared_facet,
+        facet_union,
+    }
+}
+
+fn origin_circuit_witness_domain_summaries(
+    samples: &[MissingGvTargetSample],
+    context: &ValidatedContext<'_>,
+    target_index_filter: Option<usize>,
+    certify_domains: bool,
+    generator_limit: usize,
+) -> Vec<OriginCircuitWitnessDomainSummary> {
+    let mut summaries = Vec::new();
+    for (target_index, sample) in samples.iter().enumerate() {
+        if target_index_filter.is_some_and(|filter| filter != target_index) {
+            continue;
+        }
+        for (witness_index, witness) in origin_circuit_witnesses(sample).into_iter().enumerate() {
+            summaries.push(origin_circuit_witness_domain_summary(
+                target_index,
+                sample.degree,
+                witness_index,
+                witness,
+                context,
+                certify_domains,
+                generator_limit,
+            ));
+        }
+    }
+    summaries
+}
+
+fn origin_circuit_witness_domain_summary(
+    target_index: usize,
+    degree: i128,
+    witness_index: usize,
+    witness: &OriginCircuitWitnessSample,
+    context: &ValidatedContext<'_>,
+    certify_domains: bool,
+    generator_limit: usize,
+) -> OriginCircuitWitnessDomainSummary {
+    let supports = origin_circuit_witness_ambient_support_sets(witness);
+    let relation = origin_circuit_witness_domain_stats(
+        context,
+        degree,
+        &supports.relation_support,
+        certify_domains,
+        generator_limit,
+    );
+    let shared = origin_circuit_witness_domain_stats(
+        context,
+        degree,
+        &supports.shared_facet,
+        certify_domains,
+        generator_limit,
+    );
+    let union = origin_circuit_witness_domain_stats(
+        context,
+        degree,
+        &supports.facet_union,
+        certify_domains,
+        generator_limit,
+    );
+    OriginCircuitWitnessDomainSummary {
+        target_index,
+        degree,
+        witness_index,
+        first_facet_exclusive_point: witness.first_facet_exclusive_point,
+        second_facet_exclusive_point: witness.second_facet_exclusive_point,
+        facet_context_status: origin_circuit_witness_facet_context_status(witness).to_string(),
+        relation_support_size: supports.relation_support.len(),
+        shared_facet_support_size: supports.shared_facet.len(),
+        facet_union_support_size: supports.facet_union.len(),
+        relation_generator_count: relation.generator_count,
+        shared_facet_generator_count: shared.generator_count,
+        facet_union_generator_count: union.generator_count,
+        relation_rank: relation.rank,
+        shared_facet_rank: shared.rank,
+        facet_union_rank: union.rank,
+        relation_support_face_certificate_status: relation.certificate_status,
+        shared_facet_face_certificate_status: shared.certificate_status,
+        facet_union_face_certificate_status: union.certificate_status,
+    }
+}
+
+struct OriginCircuitWitnessDomainStats {
+    generator_count: Option<usize>,
+    rank: Option<usize>,
+    certificate_status: String,
+}
+
+fn origin_circuit_witness_domain_stats(
+    context: &ValidatedContext<'_>,
+    degree: i128,
+    allowed_ambient_support: &HashSet<usize>,
+    certify_domain: bool,
+    generator_limit: usize,
+) -> OriginCircuitWitnessDomainStats {
+    let Some(ray_context) = context.degree_bounded_ray_context else {
+        return OriginCircuitWitnessDomainStats {
+            generator_count: None,
+            rank: None,
+            certificate_status: "missing_degree_bounded_mori_ray_context".to_string(),
+        };
+    };
+    let generators = degree_bounded_ray_context_support_generators(
+        ray_context,
+        degree,
+        allowed_ambient_support,
+        context.dimension,
+    );
+    let generators = match generators {
+        Ok(generators) => generators,
+        Err(error) => {
+            return OriginCircuitWitnessDomainStats {
+                generator_count: None,
+                rank: None,
+                certificate_status: format!(
+                    "origin_witness_domain_error_{}",
+                    status_error_fragment(&error)
+                ),
+            };
+        }
+    };
+    let rank = if generators.is_empty() {
+        None
+    } else {
+        match curve_row_span_rank(&generators) {
+            Ok(rank) => Some(rank),
+            Err(error) => {
+                return OriginCircuitWitnessDomainStats {
+                    generator_count: Some(generators.len()),
+                    rank: None,
+                    certificate_status: format!(
+                        "origin_witness_domain_error_{}",
+                        status_error_fragment(&error.to_string())
+                    ),
+                };
+            }
+        }
+    };
+    let certificate_status = if certify_domain {
+        origin_circuit_ambient_support_face_certificate_status(
+            ray_context,
+            degree,
+            allowed_ambient_support,
+            context,
+            generator_limit,
+        )
+    } else {
+        "not_run".to_string()
+    };
+    OriginCircuitWitnessDomainStats {
+        generator_count: Some(generators.len()),
+        rank,
+        certificate_status,
+    }
+}
+
+fn origin_circuit_witness_domain_status_counts(
+    summaries: &[OriginCircuitWitnessDomainSummary],
+    status: impl Fn(&OriginCircuitWitnessDomainSummary) -> &str,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts.entry(status(summary).to_string()).or_insert(0usize) += 1;
+    }
+    counts
 }
 
 fn degree_bounded_ray_context_support_count(
@@ -6984,6 +7204,7 @@ fn build_report(
     support_overlap_max_target_degree: Option<i128>,
     support_overlap_pair_reduce_for_run: bool,
     certify_origin_support_domains: bool,
+    certify_origin_witness_domains: bool,
     origin_support_certificate_limit: usize,
     certify_target_extremal_rays: bool,
     target_extremal_generator_limit: usize,
@@ -7065,6 +7286,28 @@ fn build_report(
         .unwrap_or_default();
     let origin_circuit_facet_context_status_counts =
         origin_circuit_facet_context_status_counts(&validated.stats.sample, target_index_filter);
+    let origin_circuit_witness_domain_sample = origin_circuit_witness_domain_summaries(
+        &validated.stats.sample,
+        validated,
+        target_index_filter,
+        certify_origin_witness_domains,
+        origin_support_certificate_limit,
+    );
+    let origin_circuit_witness_relation_support_face_certificate_status_counts =
+        origin_circuit_witness_domain_status_counts(
+            &origin_circuit_witness_domain_sample,
+            |summary| &summary.relation_support_face_certificate_status,
+        );
+    let origin_circuit_witness_shared_facet_face_certificate_status_counts =
+        origin_circuit_witness_domain_status_counts(
+            &origin_circuit_witness_domain_sample,
+            |summary| &summary.shared_facet_face_certificate_status,
+        );
+    let origin_circuit_witness_facet_union_face_certificate_status_counts =
+        origin_circuit_witness_domain_status_counts(
+            &origin_circuit_witness_domain_sample,
+            |summary| &summary.facet_union_face_certificate_status,
+        );
     let active_support_status_counts = optional_status_counts(
         targets
             .iter()
@@ -7285,6 +7528,10 @@ fn build_report(
             missing_origin_circuit_witness_relation_status_counts,
         uncovered_source_ray_origin_circuit_witness_relation_status_counts,
         origin_circuit_facet_context_status_counts,
+        origin_circuit_witness_relation_support_face_certificate_status_counts,
+        origin_circuit_witness_shared_facet_face_certificate_status_counts,
+        origin_circuit_witness_facet_union_face_certificate_status_counts,
+        origin_circuit_witness_domain_sample,
         active_support_status_counts,
         active_support_face_certificate_status_counts,
         target_extremal_ray_certificate_status_counts,
@@ -7932,7 +8179,7 @@ fn target_index_selected(index: usize, target_index_filter: Option<usize>) -> bo
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--origin-support-certificate-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--scan-local-integer-tensors] [--local-tensor-scan-bound N] [--element-limit N] [--closure-generation-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
+            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--certify-origin-witness-domains] [--origin-support-certificate-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--scan-local-integer-tensors] [--local-tensor-scan-bound N] [--element-limit N] [--closure-generation-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
         );
         std::process::exit(2);
     };
@@ -7945,6 +8192,7 @@ fn main() {
     let support_overlap_max_target_degree =
         parse_arg_value::<i128>("--support-overlap-max-target-degree");
     let certify_origin_support_domains = parse_flag("--certify-origin-support-domains");
+    let certify_origin_witness_domains = parse_flag("--certify-origin-witness-domains");
     let origin_support_certificate_limit =
         parse_arg_value::<usize>("--origin-support-certificate-limit").unwrap_or(256);
     let certify_target_extremal_rays = parse_flag("--certify-target-extremal-rays");
@@ -7985,6 +8233,7 @@ fn main() {
         support_overlap_max_target_degree,
         support_overlap_pair_reduce_for_run,
         certify_origin_support_domains,
+        certify_origin_witness_domains,
         origin_support_certificate_limit,
         certify_target_extremal_rays,
         target_extremal_generator_limit,
@@ -11230,6 +11479,46 @@ mod tests {
         assert_eq!(supports.relation_support, HashSet::from([0, 4, 7]));
         assert_eq!(supports.shared_facet, HashSet::from([0, 1, 2, 4, 5, 6, 7]));
         assert_eq!(supports.facet_union, HashSet::from([0, 1, 2, 6, 7]));
+    }
+
+    #[test]
+    fn origin_circuit_witness_domain_supports_are_per_witness() {
+        let witness = OriginCircuitWitnessSample {
+            first_facet_exclusive_point: 4,
+            second_facet_exclusive_point: 5,
+            shared_two_simplex: vec![1, 2],
+            first_facet: vec![1, 2, 4, 6],
+            second_facet: vec![1, 2, 5, 7],
+            first_facet_size: 4,
+            second_facet_size: 4,
+            sparse_relation: vec![(0, -2), (4, 1), (5, 1)],
+            relation_points: vec![
+                OriginCircuitRelationPointSample {
+                    point_index: 0,
+                    coefficient: -2,
+                    coordinates: vec![0, 0],
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 4,
+                    coefficient: 1,
+                    coordinates: vec![1, 0],
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 5,
+                    coefficient: 1,
+                    coordinates: vec![0, 1],
+                    face_dimension: None,
+                },
+            ],
+        };
+
+        let supports = origin_circuit_witness_ambient_support_sets(&witness);
+
+        assert_eq!(supports.relation_support, HashSet::from([0, 4, 5]));
+        assert_eq!(supports.shared_facet, HashSet::from([0, 1, 2, 4, 5]));
+        assert_eq!(supports.facet_union, HashSet::from([0, 1, 2, 4, 5, 6, 7]));
     }
 
     #[test]

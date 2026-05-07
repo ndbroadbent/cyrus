@@ -2361,6 +2361,19 @@ for the nine missing targets, and
 the multi-witness rows seen so far do not produce competing local charge
 relations; the remaining ambiguity is facet/chamber/phase data for the same
 relation, not which relation to feed to cygv.
+The context reader now also has an opt-in per-witness domain diagnostic. This
+separates each origin-circuit witness's relation support, shared-facet
+neighborhood, and facet-union neighborhood instead of only reporting the union
+over witnesses. On the fresh all-witness solved-t context there are 14 witness
+domains. Relation supports all contain one degree-bounded generator of rank
+`1`. Shared-facet domains have generator counts/ranks `12/9`, `20/13`,
+`48/26`, `341/146`, `360/146`, `363/146`, or `367/146`. With
+`--certify-origin-witness-domains --origin-support-certificate-limit 512`, all
+relation and shared-facet domains return LP no-certificate statuses. The two
+degree-10 facet-union domains under the guard also return no certificate
+(`rank_177` or `rank_194`); larger facet unions are explicitly skipped by the
+guard. Thus the missing chamber is not exposed merely by selecting an
+individual facet-pair witness.
 The same active-leaf records now run the existing one-parameter unit-tensor
 phase probe against those lower source rays. This is still diagnostic-only,
 because the local intersection tensor and chamber certificate are not
