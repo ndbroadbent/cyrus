@@ -248,6 +248,11 @@ and matrix-basis pipeline are no longer open.
    same toric degree-two classes above. This confirms the remaining gap is qN
    polynomial history in the certified compact/chamber semigroup, not scalar GV
    values for the lower leaves.
+   The source-ray summary now shows that shared ray has local charge signature
+   `[-1,-1,-1,1,2]` and a matching CMS check, but is still blocked on
+   `local_semigroup_generators`, `local_q_matrix_phase`,
+   `local_intersection_tensor`, and `local_chamber_certificate` before an
+   actual local `cygv` call can be promoted.
    These lower classes are now classified against the exported source-ray
    context: for both degree-10 targets the sampled lookups split as four known
    toric source rays, four non-toric source rays, and eight composite classes

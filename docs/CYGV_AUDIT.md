@@ -2185,6 +2185,18 @@ GV values for the lower leaves, but still lacks the compact/chamber qN
 polynomial history for the source-derived degree-six ray and the degree-eight
 composites.
 
+The path-support source-ray summary now carries local source-input readiness
+for those lower rays. The shared degree-six source ray has local charge
+signature `[-1,-1,-1,1,2]`, a CMS divisor check that matches the inferred
+degree, and path-support GV `-2`, but its actual local `cygv` call is still
+blocked on `local_semigroup_generators`, `local_q_matrix_phase`,
+`local_intersection_tensor`, and `local_chamber_certificate`. The neighboring
+degree-six source rays with resolved-conifold-like signature
+`[-1,-1,-1,1,1,1]` report the same missing local inputs. Thus the immediate
+implementation target is not another scalar source-value classifier; it is the
+source-derived local semigroup/chamber package for these one-parameter
+origin-circuit charge models.
+
 The stable-Weyl/flop-continuation route is now surfaced as a report-level
 readiness count rather than only per-target arrays. On the schema-3 context all
 nine remaining targets have CMS-style formula candidates, but the 14 exact

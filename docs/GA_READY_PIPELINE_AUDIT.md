@@ -515,7 +515,11 @@ to make the remaining GV layer more first-principles:
    `[(54,-2),(203,1),(206,1),(209,1)]` and leave those toric degree-two
    classes. The next compact-HKTY task is therefore the qN polynomial history
    for that source-derived degree-six ray and its degree-eight composites inside
-   a certified semigroup/chamber.
+   a certified semigroup/chamber. The new source-ray readiness fields sharpen
+   this to a concrete input list: the shared degree-six ray has local charge
+   signature `[-1,-1,-1,1,2]` and matching CMS checks, but still lacks
+   `local_semigroup_generators`, `local_q_matrix_phase`,
+   `local_intersection_tensor`, and `local_chamber_certificate`.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.
    The exact classical-data transform is now available as
