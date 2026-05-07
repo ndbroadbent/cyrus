@@ -29,6 +29,7 @@ use cyrus_core::{
 };
 
 const CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT: usize = 32;
+const CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT: usize = 32;
 const CYGV_PATH_SUPPORT_QN_TRACE_SAMPLE_LIMIT: usize = 16;
 const CYGV_PATH_SUPPORT_QN_TRACE_TERM_SAMPLE_LIMIT: usize = 16;
 const CYGV_PATH_SUPPORT_GV_COEFFICIENT_TRACE_SAMPLE_LIMIT: usize = 32;
@@ -597,6 +598,10 @@ struct CygvPathHistoryProbe {
     pair_expanded_lower_seed_diamond_error: Option<String>,
     path_support_size: Option<usize>,
     path_support_generator_count: Option<usize>,
+    path_support_indices: Vec<usize>,
+    path_support_generator_degree_counts: BTreeMap<i128, usize>,
+    path_support_generator_sample_limit: usize,
+    path_support_generator_nonzero_sample: Vec<Vec<(usize, i64)>>,
     path_support_status: Option<String>,
     path_support_gv: Option<String>,
     path_support_qn_trace_polynomial_count: Option<usize>,
@@ -1210,6 +1215,10 @@ struct PairExpandedLowerSeedProbe {
 struct PathSupportGeneratorProbe {
     support_size: Option<usize>,
     generator_count: Option<usize>,
+    support_indices: Vec<usize>,
+    generator_degree_counts: BTreeMap<i128, usize>,
+    generator_sample_limit: usize,
+    generator_nonzero_sample: Vec<Vec<(usize, i64)>>,
     status: Option<String>,
     gv: Option<String>,
     qn_trace_polynomial_count: Option<usize>,
@@ -1675,6 +1684,10 @@ fn path_support_generator_probe(
         return PathSupportGeneratorProbe {
             support_size: None,
             generator_count: None,
+            support_indices: Vec::new(),
+            generator_degree_counts: BTreeMap::new(),
+            generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+            generator_nonzero_sample: Vec::new(),
             status: None,
             gv: None,
             qn_trace_polynomial_count: None,
@@ -1713,6 +1726,10 @@ fn path_support_generator_probe(
         Err(error) => PathSupportGeneratorProbe {
             support_size: None,
             generator_count: None,
+            support_indices: Vec::new(),
+            generator_degree_counts: BTreeMap::new(),
+            generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+            generator_nonzero_sample: Vec::new(),
             status: Some("error".to_string()),
             gv: None,
             qn_trace_polynomial_count: None,
@@ -2126,6 +2143,32 @@ fn qn_domain_comparison_status(
     }
 }
 
+fn sorted_path_support_indices(support: &HashSet<usize>) -> Vec<usize> {
+    let mut indices = support.iter().copied().collect::<Vec<_>>();
+    indices.sort_unstable();
+    indices
+}
+
+fn path_support_generator_degree_counts(
+    generators: &[Vec<i64>],
+    grading: &[i64],
+) -> Result<BTreeMap<i128, usize>, String> {
+    let mut counts = BTreeMap::new();
+    for generator in generators {
+        let degree = curve_degree(generator, grading)?;
+        *counts.entry(degree).or_insert(0) += 1;
+    }
+    Ok(counts)
+}
+
+fn path_support_generator_nonzero_sample(generators: &[Vec<i64>]) -> Vec<Vec<(usize, i64)>> {
+    generators
+        .iter()
+        .take(CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT)
+        .map(|generator| sparse_from_dense(generator))
+        .collect()
+}
+
 fn path_support_generator_probe_inner(
     target: &[i64],
     target_degree: i128,
@@ -2137,6 +2180,10 @@ fn path_support_generator_probe_inner(
         return Ok(PathSupportGeneratorProbe {
             support_size: Some(0),
             generator_count: Some(0),
+            support_indices: Vec::new(),
+            generator_degree_counts: BTreeMap::new(),
+            generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+            generator_nonzero_sample: Vec::new(),
             status: Some("skipped_empty_path_support".to_string()),
             gv: None,
             qn_trace_polynomial_count: None,
@@ -2190,6 +2237,10 @@ fn path_support_generator_probe_inner(
     }
     generators.sort();
     generators.dedup();
+    let support_indices = sorted_path_support_indices(&support);
+    let generator_degree_counts =
+        path_support_generator_degree_counts(&generators, context.grading)?;
+    let generator_nonzero_sample = path_support_generator_nonzero_sample(&generators);
     let max_deg = u32::try_from(target_degree)
         .map_err(|_| format!("target degree {target_degree} does not fit in u32"))?;
     let target_i32 = curve_i64_to_i32(target, "path-support target")?;
@@ -2212,6 +2263,10 @@ fn path_support_generator_probe_inner(
             return Ok(PathSupportGeneratorProbe {
                 support_size: Some(support.len()),
                 generator_count: Some(generators.len()),
+                support_indices: support_indices.clone(),
+                generator_degree_counts: generator_degree_counts.clone(),
+                generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+                generator_nonzero_sample: generator_nonzero_sample.clone(),
                 status: Some("hkty_error".to_string()),
                 gv: None,
                 qn_trace_polynomial_count: None,
@@ -2249,6 +2304,10 @@ fn path_support_generator_probe_inner(
             return Ok(PathSupportGeneratorProbe {
                 support_size: Some(support.len()),
                 generator_count: Some(generators.len()),
+                support_indices: support_indices.clone(),
+                generator_degree_counts: generator_degree_counts.clone(),
+                generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+                generator_nonzero_sample: generator_nonzero_sample.clone(),
                 status: Some("hkty_panic".to_string()),
                 gv: None,
                 qn_trace_polynomial_count: None,
@@ -2357,6 +2416,10 @@ fn path_support_generator_probe_inner(
     Ok(PathSupportGeneratorProbe {
         support_size: Some(support.len()),
         generator_count: Some(generators.len()),
+        support_indices,
+        generator_degree_counts,
+        generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+        generator_nonzero_sample,
         status: Some("computed_path_support_generators".to_string()),
         gv: Some(gv),
         qn_trace_polynomial_count: Some(qn_trace_polynomial_count),
@@ -8312,6 +8375,10 @@ fn cygv_path_history_probe(
             pair_expanded_lower_seed_diamond_error: None,
             path_support_size: None,
             path_support_generator_count: None,
+            path_support_indices: Vec::new(),
+            path_support_generator_degree_counts: BTreeMap::new(),
+            path_support_generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+            path_support_generator_nonzero_sample: Vec::new(),
             path_support_status: None,
             path_support_gv: None,
             path_support_qn_trace_polynomial_count: None,
@@ -8414,6 +8481,10 @@ fn cygv_path_history_probe_inner(
             pair_expanded_lower_seed_diamond_error: None,
             path_support_size: None,
             path_support_generator_count: None,
+            path_support_indices: Vec::new(),
+            path_support_generator_degree_counts: BTreeMap::new(),
+            path_support_generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+            path_support_generator_nonzero_sample: Vec::new(),
             path_support_status: None,
             path_support_gv: None,
             path_support_qn_trace_polynomial_count: None,
@@ -8492,6 +8563,10 @@ fn cygv_path_history_probe_inner(
             pair_expanded_lower_seed_diamond_error: None,
             path_support_size: None,
             path_support_generator_count: None,
+            path_support_indices: Vec::new(),
+            path_support_generator_degree_counts: BTreeMap::new(),
+            path_support_generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+            path_support_generator_nonzero_sample: Vec::new(),
             path_support_status: None,
             path_support_gv: None,
             path_support_qn_trace_polynomial_count: None,
@@ -8665,6 +8740,10 @@ fn cygv_path_history_probe_inner(
             pair_expanded_lower_seed_diamond_error: pair_expanded_lower_seed_diamond.error,
             path_support_size: path_support_generators.support_size,
             path_support_generator_count: path_support_generators.generator_count,
+            path_support_indices: path_support_generators.support_indices,
+            path_support_generator_degree_counts: path_support_generators.generator_degree_counts,
+            path_support_generator_sample_limit: path_support_generators.generator_sample_limit,
+            path_support_generator_nonzero_sample: path_support_generators.generator_nonzero_sample,
             path_support_status: path_support_generators.status,
             path_support_gv: path_support_generators.gv,
             path_support_qn_trace_polynomial_count: path_support_generators
@@ -8773,6 +8852,10 @@ fn cygv_path_history_probe_inner(
         pair_expanded_lower_seed_diamond_error: pair_expanded_lower_seed_diamond.error,
         path_support_size: path_support_generators.support_size,
         path_support_generator_count: path_support_generators.generator_count,
+        path_support_indices: path_support_generators.support_indices,
+        path_support_generator_degree_counts: path_support_generators.generator_degree_counts,
+        path_support_generator_sample_limit: path_support_generators.generator_sample_limit,
+        path_support_generator_nonzero_sample: path_support_generators.generator_nonzero_sample,
         path_support_status: path_support_generators.status,
         path_support_gv: path_support_generators.gv,
         path_support_qn_trace_polynomial_count: path_support_generators.qn_trace_polynomial_count,
@@ -14932,6 +15015,10 @@ mod tests {
             PathSupportGeneratorProbe {
                 support_size: None,
                 generator_count: None,
+                support_indices: Vec::new(),
+                generator_degree_counts: BTreeMap::new(),
+                generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+                generator_nonzero_sample: Vec::new(),
                 status: None,
                 gv: None,
                 qn_trace_polynomial_count: None,
@@ -15016,6 +15103,10 @@ mod tests {
             PathSupportGeneratorProbe {
                 support_size: None,
                 generator_count: None,
+                support_indices: Vec::new(),
+                generator_degree_counts: BTreeMap::new(),
+                generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+                generator_nonzero_sample: Vec::new(),
                 status: Some("computed_path_support_generators".to_string()),
                 gv: None,
                 qn_trace_polynomial_count: None,
@@ -15262,6 +15353,13 @@ mod tests {
             probe.status.as_deref(),
             Some("computed_path_support_generators")
         );
+        assert_eq!(probe.support_indices, vec![0]);
+        assert_eq!(probe.generator_degree_counts, BTreeMap::from([(1, 1)]));
+        assert_eq!(
+            probe.generator_sample_limit,
+            CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT
+        );
+        assert_eq!(probe.generator_nonzero_sample, vec![vec![(0, 1)]]);
         assert_eq!(probe.gv.as_deref(), Some("2875"));
         assert_eq!(probe.qn_trace_polynomial_count, Some(1));
         assert_eq!(
