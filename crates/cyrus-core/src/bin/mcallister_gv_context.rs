@@ -535,10 +535,19 @@ struct CygvPathSupportLookup {
     matching_uncovered_source_ray_origin_circuit_pattern: Option<String>,
     matching_uncovered_source_ray_exact_kind: Option<String>,
     matching_uncovered_source_ray_cms_check_status_counts: BTreeMap<String, usize>,
+    matching_uncovered_source_ray_cms_solution_summaries: Vec<CmsGeneralDivisorSolutionSummary>,
     matching_uncovered_source_ray_local_charge_signature: Option<String>,
     matching_uncovered_source_ray_local_cygv_readiness: Option<String>,
     matching_uncovered_source_ray_local_missing_inputs: Vec<String>,
     curve_nonzero: Vec<(usize, i64)>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+struct CmsGeneralDivisorSolutionSummary {
+    shrinking_divisor_index: usize,
+    solution_basis_nonzero: Vec<(usize, String)>,
+    solution_ambient_basis_nonzero: Vec<(usize, String)>,
+    computed_other_normal_degree: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -551,6 +560,7 @@ struct CygvPathSupportSourceRaySummary {
     uncovered_source_ray_origin_circuit_pattern: Option<String>,
     uncovered_source_ray_exact_kind: Option<String>,
     uncovered_source_ray_cms_check_status_counts: BTreeMap<String, usize>,
+    uncovered_source_ray_cms_solution_summaries: Vec<CmsGeneralDivisorSolutionSummary>,
     uncovered_source_ray_local_charge_signature: Option<String>,
     uncovered_source_ray_local_cygv_readiness_counts: BTreeMap<String, usize>,
     uncovered_source_ray_local_missing_input_counts: BTreeMap<String, usize>,
@@ -574,6 +584,7 @@ struct CygvPathSupportSourceRaySummaryBuilder {
     uncovered_source_ray_origin_circuit_pattern: Option<String>,
     uncovered_source_ray_exact_kind: Option<String>,
     uncovered_source_ray_cms_check_status_counts: BTreeMap<String, usize>,
+    uncovered_source_ray_cms_solution_summaries: Vec<CmsGeneralDivisorSolutionSummary>,
     uncovered_source_ray_local_charge_signature: Option<String>,
     uncovered_source_ray_local_cygv_readiness_counts: BTreeMap<String, usize>,
     uncovered_source_ray_local_missing_input_counts: BTreeMap<String, usize>,
@@ -594,6 +605,7 @@ struct PathSupportSourceClassContext {
     matching_uncovered_source_ray_origin_circuit_pattern: Option<String>,
     matching_uncovered_source_ray_exact_kind: Option<String>,
     matching_uncovered_source_ray_cms_check_status_counts: BTreeMap<String, usize>,
+    matching_uncovered_source_ray_cms_solution_summaries: Vec<CmsGeneralDivisorSolutionSummary>,
     matching_uncovered_source_ray_local_charge_signature: Option<String>,
     matching_uncovered_source_ray_local_cygv_readiness: Option<String>,
     matching_uncovered_source_ray_local_missing_inputs: Vec<String>,
@@ -1299,6 +1311,8 @@ fn push_path_support_lookup(
             .matching_uncovered_source_ray_exact_kind,
         matching_uncovered_source_ray_cms_check_status_counts: source_context
             .matching_uncovered_source_ray_cms_check_status_counts,
+        matching_uncovered_source_ray_cms_solution_summaries: source_context
+            .matching_uncovered_source_ray_cms_solution_summaries,
         matching_uncovered_source_ray_local_charge_signature: source_context
             .matching_uncovered_source_ray_local_charge_signature,
         matching_uncovered_source_ray_local_cygv_readiness: source_context
@@ -1318,6 +1332,12 @@ fn path_support_source_class_context(
     let matching_uncovered_source_ray = matching_uncovered_source_ray_for_curve(curve, context)?;
     let matching_uncovered_source_ray_cms_check_status_counts =
         missing_sample_cms_check_status_counts(
+            matching_uncovered_source_ray
+                .as_ref()
+                .and_then(|entry| entry.1.cms_general_divisor_intersection_checks.as_deref()),
+        );
+    let matching_uncovered_source_ray_cms_solution_summaries =
+        cms_general_divisor_solution_summaries(
             matching_uncovered_source_ray
                 .as_ref()
                 .and_then(|entry| entry.1.cms_general_divisor_intersection_checks.as_deref()),
@@ -1358,6 +1378,7 @@ fn path_support_source_class_context(
                 .as_ref()
                 .and_then(|entry| entry.1.real_cone_decomposition_exact_kind.clone()),
             matching_uncovered_source_ray_cms_check_status_counts,
+            matching_uncovered_source_ray_cms_solution_summaries,
             matching_uncovered_source_ray_local_charge_signature,
             matching_uncovered_source_ray_local_cygv_readiness,
             matching_uncovered_source_ray_local_missing_inputs,
@@ -1402,6 +1423,7 @@ fn path_support_source_class_context(
             .as_ref()
             .and_then(|entry| entry.1.real_cone_decomposition_exact_kind.clone()),
         matching_uncovered_source_ray_cms_check_status_counts,
+        matching_uncovered_source_ray_cms_solution_summaries,
         matching_uncovered_source_ray_local_charge_signature,
         matching_uncovered_source_ray_local_cygv_readiness,
         matching_uncovered_source_ray_local_missing_inputs,
@@ -1440,6 +1462,32 @@ fn missing_sample_cms_check_status_counts(
             .or_insert(0) += 1;
     }
     counts
+}
+
+fn cms_general_divisor_solution_summaries(
+    checks: Option<&[CmsGeneralDivisorIntersectionCheck]>,
+) -> Vec<CmsGeneralDivisorSolutionSummary> {
+    let Some(checks) = checks else {
+        return Vec::new();
+    };
+    let mut summaries = checks
+        .iter()
+        .filter(|check| {
+            cms_general_divisor_intersection_check_status(check)
+                == "cms_general_divisor_integral_solution_matches_inferred_degree"
+        })
+        .filter_map(|check| {
+            Some(CmsGeneralDivisorSolutionSummary {
+                shrinking_divisor_index: check.shrinking_divisor_index,
+                solution_basis_nonzero: check.solution_basis_nonzero.clone()?,
+                solution_ambient_basis_nonzero: check.solution_ambient_basis_nonzero.clone()?,
+                computed_other_normal_degree: check.computed_other_normal_degree.clone()?,
+            })
+        })
+        .collect::<Vec<_>>();
+    summaries.sort();
+    summaries.dedup();
+    summaries
 }
 
 fn matching_missing_target_for_curve<'a>(
@@ -1534,6 +1582,8 @@ fn path_support_uncovered_source_ray_summaries(
             uncovered_source_ray_exact_kind: builder.uncovered_source_ray_exact_kind,
             uncovered_source_ray_cms_check_status_counts: builder
                 .uncovered_source_ray_cms_check_status_counts,
+            uncovered_source_ray_cms_solution_summaries: builder
+                .uncovered_source_ray_cms_solution_summaries,
             uncovered_source_ray_local_charge_signature: builder
                 .uncovered_source_ray_local_charge_signature,
             uncovered_source_ray_local_cygv_readiness_counts: builder
@@ -1575,6 +1625,7 @@ fn add_path_support_uncovered_source_ray_lookup(
                 .matching_uncovered_source_ray_exact_kind
                 .clone(),
             uncovered_source_ray_cms_check_status_counts: BTreeMap::new(),
+            uncovered_source_ray_cms_solution_summaries: Vec::new(),
             uncovered_source_ray_local_charge_signature: lookup
                 .matching_uncovered_source_ray_local_charge_signature
                 .clone(),
@@ -1608,6 +1659,18 @@ fn add_path_support_uncovered_source_ray_lookup(
             .entry(status.clone())
             .or_insert(0) += count;
     }
+    for solution in &lookup.matching_uncovered_source_ray_cms_solution_summaries {
+        if !entry
+            .uncovered_source_ray_cms_solution_summaries
+            .contains(solution)
+        {
+            entry
+                .uncovered_source_ray_cms_solution_summaries
+                .push(solution.clone());
+        }
+    }
+    entry.uncovered_source_ray_cms_solution_summaries.sort();
+    entry.uncovered_source_ray_cms_solution_summaries.dedup();
     if let Some(readiness) = &lookup.matching_uncovered_source_ray_local_cygv_readiness {
         *entry
             .uncovered_source_ray_local_cygv_readiness_counts
@@ -8298,6 +8361,14 @@ mod tests {
             matching_uncovered_source_ray_origin_circuit_pattern: None,
             matching_uncovered_source_ray_exact_kind: None,
             matching_uncovered_source_ray_cms_check_status_counts: BTreeMap::new(),
+            matching_uncovered_source_ray_cms_solution_summaries: vec![
+                CmsGeneralDivisorSolutionSummary {
+                    shrinking_divisor_index: 5,
+                    solution_basis_nonzero: vec![(0, "1".to_string())],
+                    solution_ambient_basis_nonzero: vec![(5, "1".to_string())],
+                    computed_other_normal_degree: "0".to_string(),
+                },
+            ],
             matching_uncovered_source_ray_local_charge_signature: Some("-2,-1,1,1,1".to_string()),
             matching_uncovered_source_ray_local_cygv_readiness: Some(
                 "blocked_missing_source_derived_inputs".to_string(),
@@ -8334,6 +8405,15 @@ mod tests {
         assert_eq!(
             summary.path_support_gv_counts,
             BTreeMap::from([("1".to_string(), 1), ("-2".to_string(), 1)])
+        );
+        assert_eq!(
+            summary.uncovered_source_ray_cms_solution_summaries,
+            vec![CmsGeneralDivisorSolutionSummary {
+                shrinking_divisor_index: 5,
+                solution_basis_nonzero: vec![(0, "1".to_string())],
+                solution_ambient_basis_nonzero: vec![(5, "1".to_string())],
+                computed_other_normal_degree: "0".to_string(),
+            }]
         );
         assert_eq!(
             summary

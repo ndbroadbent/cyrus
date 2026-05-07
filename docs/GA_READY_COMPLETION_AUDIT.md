@@ -178,7 +178,11 @@ and matrix-basis pipeline are no longer open.
    history, not just the nine target classes. The nearest `8+2` samples now
    show that the degree-2 side is a toric-covered pair-reduced seed, while the
    degree-8 side is not a supplied seed, so that lower-degree history is
-   composite rather than a single uncovered Mori generator. The first seed-sum
+   composite rather than a single uncovered Mori generator. The source-ray
+   queue now preserves successful CMS-general-divisor solution coefficients for
+   these lower classes, so the next chamber/intersection step can use actual
+   divisor-basis and ambient-basis evidence rather than only scalar CMS status
+   counts. The first seed-sum
    sample for the degree-8 side splits it as another toric-covered degree-2
    reduced seed plus an uncovered degree-6 seed that does not survive pair
    reduction; that degree-6 seed pair-reduces into degree-4 and degree-2

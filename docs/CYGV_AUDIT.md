@@ -2205,7 +2205,13 @@ solution behind each CMS-general-divisor intersection check. Successful checks
 serialize both the nonzero solution in divisor-basis coordinates and the
 corresponding ambient basis indices. This does not promote a GV value, but it
 keeps the source-derived divisor data needed by the next chamber/intersection
-certificate step instead of reducing the check to a scalar status.
+certificate step instead of reducing the check to a scalar status. The
+path-support source-ray queue now carries those successful solution summaries
+forward as well: on the target-`7` schema-3 report, the shared degree-six ray
+`[(54,-2),(203,1),(206,1),(209,1)]` reports shrinking divisor `56`, divisor
+basis solution `[(55,"1")]`, ambient solution `[(57,"1")]`, and normal degree
+`0`, while still listing the missing `local_q_matrix_phase`,
+`local_intersection_tensor`, and `local_chamber_certificate` inputs.
 
 The stable-Weyl/flop-continuation route is now surfaced as a report-level
 readiness count rather than only per-target arrays. On the schema-3 context all

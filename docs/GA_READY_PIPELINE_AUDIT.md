@@ -66,7 +66,11 @@ run pass. Any remaining mismatch must be explicit and localizable.
    `toric_covered=410`, `toric_missing=9`), with target grading degrees
    `10..26`. The CMS-general-divisor candidate checks currently fail exact
    divisor-intersection verification for every missing target, so those
-   candidate `1/-2/3` values cannot be promoted.
+   candidate `1/-2/3` values cannot be promoted. For the lower degree-six
+   source-ray queue feeding the degree-10 path history, successful
+   CMS-general-divisor checks now carry their divisor-basis and ambient-basis
+   solution coefficients into the context report, preserving the chamber/input
+   evidence needed by the next local intersection-certificate step.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for
