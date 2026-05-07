@@ -267,12 +267,13 @@ local affine charge basis because the sampled support has `points = affine_rank
 rank-two CKYZ/potent-ray machinery cannot simply be reused for these missing
 nilpotent origin circuits. A bounded origin-support LP-certificate pass on the
 schema-3 context found no promoted exact certificate. The LP diagnostic now
-treats HiGHS `NoSolutionFound` as a no-certificate outcome rather than a hard
-runtime error, because every candidate normal still has to be verified exactly
-before promotion. Raising the origin-support guard to `4096` for the two
-degree-10 misses checks the larger facet-union domains too: target `7` has
-relation/shared/union ranks `1/13/194`, target `8` has ranks `1/9/177`, and
-all six domains report `origin_support_lp_no_certificate_*`. The next
+treats HiGHS `NoSolutionFound` and finite solver statuses such as `Unknown` as
+no-certificate outcomes rather than hard runtime errors, because every
+candidate normal still has to be verified exactly before promotion. Raising the
+origin-support guard to `4096` for the two degree-10 misses checks the larger
+facet-union domains too: target `7` has relation/shared/union ranks
+`1/13/194`, target `8` has ranks `1/9/177`, and all six domains report
+`origin_support_lp_no_certificate_*`. The next
 source-derived object therefore remains the higher-rank local semigroup or
 flop/chamber context for these origin-circuit supports, not a promoted
 LP-witness fallback.

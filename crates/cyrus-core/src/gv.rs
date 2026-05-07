@@ -8589,7 +8589,7 @@ pub fn diagnose_supporting_mori_face_by_lp_search(
             diagnostic.full_status = "lp_solution_rounding_no_certificate".to_string();
         }
         other => {
-            diagnostic.full_status = other.status().to_string();
+            diagnostic.full_status = other.status();
         }
     }
 
@@ -8613,7 +8613,7 @@ pub fn diagnose_supporting_mori_face_by_lp_search(
             diagnostic.aggregate_status = "lp_solution_rounding_no_certificate".to_string();
         }
         other => {
-            diagnostic.aggregate_status = other.status().to_string();
+            diagnostic.aggregate_status = other.status();
         }
     }
 
@@ -8650,7 +8650,7 @@ pub fn diagnose_supporting_mori_face_by_lp_search(
             other => {
                 *diagnostic
                     .anchor_status_counts
-                    .entry(other.status().to_string())
+                    .entry(other.status())
                     .or_insert(0) += 1;
             }
         }
@@ -8737,15 +8737,35 @@ enum SupportingFaceLpNormalSearchOutcome {
     LpNoSolution,
     RepeatedViolation,
     CuttingRoundLimit,
+    SolverOther(String),
+}
+
+fn lp_status_error_fragment(error: &str) -> String {
+    let mut out = String::new();
+    for ch in error.chars() {
+        let mapped = if ch.is_ascii_alphanumeric() {
+            ch.to_ascii_lowercase()
+        } else {
+            '_'
+        };
+        if mapped == '_' && out.ends_with('_') {
+            continue;
+        }
+        out.push(mapped);
+    }
+    out.trim_matches('_').to_string()
 }
 
 impl SupportingFaceLpNormalSearchOutcome {
-    fn status(&self) -> &'static str {
+    fn status(&self) -> String {
         match self {
-            Self::Found(_) => "lp_solution",
-            Self::LpNoSolution => "lp_no_solution",
-            Self::RepeatedViolation => "lp_repeated_violation",
-            Self::CuttingRoundLimit => "lp_cutting_round_limit",
+            Self::Found(_) => "lp_solution".to_string(),
+            Self::LpNoSolution => "lp_no_solution".to_string(),
+            Self::RepeatedViolation => "lp_repeated_violation".to_string(),
+            Self::CuttingRoundLimit => "lp_cutting_round_limit".to_string(),
+            Self::SolverOther(message) => {
+                format!("lp_solver_other_{}", lp_status_error_fragment(message))
+            }
         }
     }
 }
@@ -8780,10 +8800,7 @@ fn solve_supporting_face_normal_full_lp(
         &all_ray_indices,
     )?;
 
-    match solve_supporting_face_normal_lp_model(model, &normal_vars.normal)? {
-        Some(normal) => Ok(SupportingFaceLpNormalSearchOutcome::Found(normal)),
-        None => Ok(SupportingFaceLpNormalSearchOutcome::LpNoSolution),
-    }
+    solve_supporting_face_normal_lp_model(model, &normal_vars.normal)
 }
 
 fn solve_supporting_face_normal_aggregate_lp_detailed(
@@ -8795,15 +8812,15 @@ fn solve_supporting_face_normal_aggregate_lp_detailed(
     let mut enforced_ray_indices = Vec::new();
     let mut enforced_ray_set = HashSet::new();
     for _ in 0..options.cutting_rounds {
-        let Some(normal) = solve_supporting_face_normal_aggregate_lp_with_enforced_rays(
+        let normal = match solve_supporting_face_normal_aggregate_lp_with_enforced_rays(
             face_generators,
             mori_generators,
             &aggregate,
             &enforced_ray_indices,
             options,
-        )?
-        else {
-            return Ok(SupportingFaceLpNormalSearchOutcome::LpNoSolution);
+        )? {
+            SupportingFaceLpNormalSearchOutcome::Found(normal) => normal,
+            other => return Ok(other),
         };
         let Some(violating_idx) = most_negative_lp_normal_violation(&normal, mori_generators)
         else {
@@ -8846,7 +8863,7 @@ fn solve_supporting_face_normal_aggregate_lp_with_enforced_rays(
     aggregate: &[i128],
     enforced_ray_indices: &[usize],
     options: &SupportingMoriFaceLpSearchOptions,
-) -> Result<Option<Vec<f64>>> {
+) -> Result<SupportingFaceLpNormalSearchOutcome> {
     let normal_vars = supporting_face_normal_vars(aggregate.len(), options)?;
     let vars = normal_vars.variables;
     let mut objective = Expression::from(0.0);
@@ -8881,15 +8898,15 @@ fn solve_supporting_face_normal_lp_detailed(
     let mut enforced_ray_indices = Vec::new();
     let mut enforced_ray_set = HashSet::new();
     for _ in 0..options.cutting_rounds {
-        let Some(normal) = solve_supporting_face_normal_lp_with_enforced_rays(
+        let normal = match solve_supporting_face_normal_lp_with_enforced_rays(
             face_generators,
             mori_generators,
             anchor,
             &enforced_ray_indices,
             options,
-        )?
-        else {
-            return Ok(SupportingFaceLpNormalSearchOutcome::LpNoSolution);
+        )? {
+            SupportingFaceLpNormalSearchOutcome::Found(normal) => normal,
+            other => return Ok(other),
         };
         let Some(violating_idx) = most_negative_lp_normal_violation(&normal, mori_generators)
         else {
@@ -8909,7 +8926,7 @@ fn solve_supporting_face_normal_lp_with_enforced_rays(
     anchor: &[i64],
     enforced_ray_indices: &[usize],
     options: &SupportingMoriFaceLpSearchOptions,
-) -> Result<Option<Vec<f64>>> {
+) -> Result<SupportingFaceLpNormalSearchOutcome> {
     let normal_vars = supporting_face_normal_vars(anchor.len(), options)?;
     let vars = normal_vars.variables;
     let mut objective = Expression::from(0.0);
@@ -9005,15 +9022,22 @@ fn add_supporting_face_enforced_ray_constraints<M: SolverModel>(
 fn solve_supporting_face_normal_lp_model<M: SolverModel<Error = ResolutionError>>(
     model: M,
     normal_vars: &[Variable],
-) -> Result<Option<Vec<f64>>> {
+) -> Result<SupportingFaceLpNormalSearchOutcome> {
     let solution = match model.solve() {
         Ok(solution) => solution,
-        Err(ResolutionError::Infeasible) => return Ok(None),
-        Err(ResolutionError::Other("NoSolutionFound")) => return Ok(None),
-        Err(err) => {
-            return Err(Error::InvalidInput(format!(
-                "supporting Mori face normal LP failed: {err}"
-            )));
+        Err(ResolutionError::Infeasible | ResolutionError::Unbounded) => {
+            return Ok(SupportingFaceLpNormalSearchOutcome::LpNoSolution);
+        }
+        Err(ResolutionError::Other("NoSolutionFound")) => {
+            return Ok(SupportingFaceLpNormalSearchOutcome::LpNoSolution);
+        }
+        Err(ResolutionError::Other(message)) => {
+            return Ok(SupportingFaceLpNormalSearchOutcome::SolverOther(
+                message.to_string(),
+            ));
+        }
+        Err(ResolutionError::Str(message)) => {
+            return Ok(SupportingFaceLpNormalSearchOutcome::SolverOther(message));
         }
     };
     let normal = normal_vars
@@ -9021,7 +9045,7 @@ fn solve_supporting_face_normal_lp_model<M: SolverModel<Error = ResolutionError>
         .map(|var| solution.value(*var))
         .collect::<Vec<_>>();
     if normal.iter().all(|value| value.is_finite()) {
-        Ok(Some(normal))
+        Ok(SupportingFaceLpNormalSearchOutcome::Found(normal))
     } else {
         Err(Error::InvalidInput(
             "supporting Mori face normal LP returned a non-finite value".into(),

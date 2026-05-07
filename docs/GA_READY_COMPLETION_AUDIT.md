@@ -171,11 +171,13 @@ and matrix-basis pipeline are no longer open.
    LP-assisted supporting-face search whose successful outputs are exact
    integer certificates, but the current schema-3 McAllister origin-support
    pass still finds no promoted certificate for the remaining relation
-   supports. The LP diagnostic now treats HiGHS `NoSolutionFound` as
-   no-certificate rather than a hard error, and raising the origin-support guard
-   to `4096` for the two degree-10 targets checks their larger source domains
-   without promotion: target `7` has relation/shared/union ranks `1/13/194`,
-   target `8` has ranks `1/9/177`, and all checked domains return
+   supports. The LP diagnostic now treats HiGHS `NoSolutionFound` and other
+   finite solver statuses such as `Unknown` as no-certificate outcomes rather
+   than hard errors, because only exact integer-verified normals may be
+   promoted. Raising the origin-support guard to `4096` for the two degree-10
+   targets checks their larger source domains without promotion: target `7`
+   has relation/shared/union ranks `1/13/194`, target `8` has ranks
+   `1/9/177`, and all checked domains return
    `origin_support_lp_no_certificate_*`.
    The context tool now also has an opt-in exact extremal-ray probe. For the
    current schema-3 context it verifies that all nine remaining targets are
@@ -446,6 +448,15 @@ and matrix-basis pipeline are no longer open.
    `full_status=lp_no_solution` for their offset-generator rows. These qN
    shape matches are therefore explanatory artifacts, not promotable chamber
    semigroups.
+   The origin-support certificate path now uses the same status policy:
+   rerunning target `7` and `8` on the schema-4 context with the `4096` guard
+   reports target `7` relation/shared/union statuses
+   `skipped_single_generator_higher_codimension`, `lp_no_certificate_rank_13`,
+   and `lp_no_certificate_rank_194`; target `8` reports
+   `skipped_single_generator_higher_codimension`, `lp_no_certificate_rank_9`,
+   and `lp_no_certificate_rank_177`. The previous target-`7` shared-facet
+   optimizer `Unknown` no longer aborts the report, but it also does not
+   certify a face.
    The offset-generator report now also records the exact sparse generators,
    generator degree buckets, and a raw `FIND_GV=false` GW coefficient trace for
    the provided-generator domain. Fresh target `7`/`8` runs show that the
