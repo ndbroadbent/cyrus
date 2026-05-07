@@ -297,6 +297,7 @@ struct ContextReport {
     path_support_uncovered_source_ray_sample: Vec<CygvPathSupportSourceRaySummary>,
     local_cygv_q_matrix_orientation_status_counts: BTreeMap<String, usize>,
     local_cygv_q_matrix_layout_status_counts: BTreeMap<String, usize>,
+    local_cygv_q_matrix_phase_status_counts: BTreeMap<String, usize>,
     local_cygv_origin_point_status_counts: BTreeMap<String, usize>,
     local_cygv_origin_omitted_compact_shape_status_counts: BTreeMap<String, usize>,
     local_cygv_target_unit_phase_probe_status_counts: BTreeMap<String, usize>,
@@ -434,6 +435,8 @@ struct LocalCygvInputSkeleton {
     local_cygv_q_matrix_rows_candidate: Option<Vec<Vec<i64>>>,
     local_cygv_wrapper_q_matrix_candidate: Option<Vec<Vec<i64>>>,
     local_cygv_q_matrix_layout_status: String,
+    local_cygv_phase_q_matrix_candidate: Option<Vec<Vec<i64>>>,
+    local_cygv_q_matrix_phase_status: String,
     local_grading_vector_candidate: Option<Vec<i64>>,
     local_grading_vector_status: String,
     remaining_uncertified_inputs: Vec<String>,
@@ -1853,9 +1856,11 @@ fn local_cygv_primitive_probe_from_cms_divisor(
     expected_toric_gv1_formula_value: Option<i64>,
 ) -> Result<LocalCygvPrimitiveProbe, String> {
     let q_matrix = skeleton
-        .local_cygv_wrapper_q_matrix_candidate
+        .local_cygv_phase_q_matrix_candidate
         .clone()
-        .ok_or_else(|| "local primitive cygv probe is missing q-matrix candidate".to_string())?;
+        .ok_or_else(|| {
+            "local primitive cygv probe is missing phase-selected q-matrix candidate".to_string()
+        })?;
     let grading_vector = skeleton
         .local_grading_vector_candidate
         .clone()
@@ -1994,19 +1999,25 @@ fn local_cygv_primitive_probe_from_cms_divisor(
 fn local_origin_omitted_wrapper_q_matrix(
     skeleton: &LocalCygvInputSkeleton,
 ) -> Result<Option<Vec<Vec<i64>>>, String> {
-    let Some(origin_position) = skeleton
-        .support_point_indices
+    let Some(q_matrix) = skeleton.local_cygv_wrapper_q_matrix_candidate.as_ref() else {
+        return Ok(None);
+    };
+    local_origin_omitted_wrapper_q_matrix_from_parts(&skeleton.support_point_indices, q_matrix)
+}
+
+fn local_origin_omitted_wrapper_q_matrix_from_parts(
+    support_point_indices: &[usize],
+    q_matrix: &[Vec<i64>],
+) -> Result<Option<Vec<Vec<i64>>>, String> {
+    let Some(origin_position) = support_point_indices
         .iter()
         .position(|&point_index| point_index == 0)
     else {
         return Ok(None);
     };
-    let Some(q_matrix) = skeleton.local_cygv_wrapper_q_matrix_candidate.as_ref() else {
-        return Ok(None);
-    };
     if q_matrix
         .iter()
-        .any(|row| row.len() != skeleton.support_point_indices.len())
+        .any(|row| row.len() != support_point_indices.len())
     {
         return Err("local origin-omitted q matrix support width mismatch".to_string());
     }
@@ -2030,7 +2041,7 @@ fn local_cygv_unit_phase_probe_from_skeleton(
     skeleton: &LocalCygvInputSkeleton,
     expected_toric_gv1_formula_values: Vec<String>,
 ) -> LocalCygvUnitPhaseProbe {
-    let q_matrix = skeleton.local_cygv_wrapper_q_matrix_candidate.clone();
+    let q_matrix = skeleton.local_cygv_phase_q_matrix_candidate.clone();
     let grading_vector = skeleton.local_grading_vector_candidate.clone();
     let semigroup_elements = skeleton
         .local_semigroup_generators_candidate
@@ -4485,6 +4496,11 @@ fn local_cygv_input_skeleton(
         &orientation_candidates,
         local_q_matrix_orientation_candidate,
     );
+    let (local_cygv_phase_q_matrix_candidate, local_cygv_q_matrix_phase_status) =
+        local_cygv_q_matrix_phase_candidate(
+            &support_point_indices,
+            local_cygv_wrapper_q_matrix_candidate.as_deref(),
+        );
     let (local_grading_vector_candidate, local_grading_vector_status) =
         local_cygv_grading_vector_candidate(&orientation_candidates);
     let mut remaining_uncertified_inputs = Vec::new();
@@ -4494,9 +4510,7 @@ fn local_cygv_input_skeleton(
     if local_grading_vector_candidate.is_none() {
         remaining_uncertified_inputs.push("local_grading_vector".to_string());
     }
-    if local_q_matrix_orientation_candidate.is_some() {
-        remaining_uncertified_inputs.push("local_q_matrix_phase".to_string());
-    } else {
+    if local_cygv_phase_q_matrix_candidate.is_none() {
         remaining_uncertified_inputs.push("local_q_matrix_orientation_and_phase".to_string());
     }
     remaining_uncertified_inputs.extend([
@@ -4521,6 +4535,8 @@ fn local_cygv_input_skeleton(
         local_cygv_q_matrix_rows_candidate,
         local_cygv_wrapper_q_matrix_candidate,
         local_cygv_q_matrix_layout_status,
+        local_cygv_phase_q_matrix_candidate,
+        local_cygv_q_matrix_phase_status,
         local_grading_vector_candidate,
         local_grading_vector_status,
         remaining_uncertified_inputs,
@@ -4611,6 +4627,60 @@ fn local_cygv_q_matrix_layout_candidate(
         Some(wrapper_q_matrix),
         "source_derived_oriented_q_matrix_layout".to_string(),
     )
+}
+
+fn local_cygv_q_matrix_phase_candidate(
+    support_point_indices: &[usize],
+    wrapper_q_matrix: Option<&[Vec<i64>]>,
+) -> (Option<Vec<Vec<i64>>>, String) {
+    let Some(wrapper_q_matrix) = wrapper_q_matrix else {
+        return (
+            None,
+            "local_q_matrix_phase_blocked_no_wrapper_q_matrix".to_string(),
+        );
+    };
+    let mut candidates = Vec::new();
+    if local_cygv_q_matrix_cy_dimension(wrapper_q_matrix) == Some(3) {
+        candidates.push((
+            "including_origin",
+            wrapper_q_matrix
+                .iter()
+                .map(std::clone::Clone::clone)
+                .collect::<Vec<_>>(),
+        ));
+    }
+    if let Ok(Some(origin_omitted)) =
+        local_origin_omitted_wrapper_q_matrix_from_parts(support_point_indices, wrapper_q_matrix)
+    {
+        if local_cygv_q_matrix_cy_dimension(&origin_omitted) == Some(3) {
+            candidates.push(("omitting_origin", origin_omitted));
+        }
+    }
+
+    match candidates.as_slice() {
+        [] => (
+            None,
+            "local_q_matrix_phase_blocked_no_compact_threefold_phase".to_string(),
+        ),
+        [(label, matrix)] => (
+            Some(matrix.clone()),
+            format!("source_derived_unique_compact_threefold_phase_{label}"),
+        ),
+        _ => (
+            None,
+            "local_q_matrix_phase_ambiguous_multiple_compact_threefold_phases".to_string(),
+        ),
+    }
+}
+
+fn local_cygv_q_matrix_cy_dimension(q_matrix: &[Vec<i64>]) -> Option<i64> {
+    let first_row = q_matrix.first()?;
+    if first_row.is_empty() || q_matrix.iter().any(|row| row.len() != first_row.len()) {
+        return None;
+    }
+    let h11 = i64::try_from(q_matrix.len()).ok()?;
+    let h11pd = i64::try_from(first_row.len()).ok()?;
+    Some(h11pd - h11 - 1)
 }
 
 fn local_cytools_origin_circuit_status(
@@ -8037,6 +8107,11 @@ fn build_report(
             .iter()
             .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
     );
+    let local_cygv_q_matrix_phase_status_counts = local_cygv_q_matrix_phase_status_counts(
+        targets
+            .iter()
+            .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
+    );
     let local_cygv_origin_point_status_counts = local_cygv_origin_point_status_counts(
         targets
             .iter()
@@ -8221,6 +8296,7 @@ fn build_report(
         path_support_uncovered_source_ray_sample,
         local_cygv_q_matrix_orientation_status_counts,
         local_cygv_q_matrix_layout_status_counts,
+        local_cygv_q_matrix_phase_status_counts,
         local_cygv_origin_point_status_counts,
         local_cygv_origin_omitted_compact_shape_status_counts,
         local_cygv_target_unit_phase_probe_status_counts,
@@ -8584,6 +8660,18 @@ fn local_cygv_q_matrix_layout_status_counts<'a>(
     counts
 }
 
+fn local_cygv_q_matrix_phase_status_counts<'a>(
+    skeletons: impl IntoIterator<Item = &'a LocalCygvInputSkeleton>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for skeleton in skeletons {
+        *counts
+            .entry(skeleton.local_cygv_q_matrix_phase_status.clone())
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
 fn local_cygv_origin_point_status_counts<'a>(
     skeletons: impl IntoIterator<Item = &'a LocalCygvInputSkeleton>,
 ) -> BTreeMap<String, usize> {
@@ -8783,7 +8871,7 @@ fn local_cygv_integer_tensor_scan_summary(
     let Some(skeleton) = target.local_cygv_input_skeleton.as_ref() else {
         return blocked("integer_tensor_scan_missing_skeleton");
     };
-    let Some(q_matrix) = skeleton.local_cygv_wrapper_q_matrix_candidate.as_ref() else {
+    let Some(q_matrix) = skeleton.local_cygv_phase_q_matrix_candidate.as_ref() else {
         return blocked("integer_tensor_scan_missing_q_matrix");
     };
     if q_matrix.len() != 1 {
@@ -9048,6 +9136,10 @@ mod tests {
         support_point_indices: Vec<usize>,
         wrapper_q_matrix: Option<Vec<Vec<i64>>>,
     ) -> LocalCygvInputSkeleton {
+        let (phase_q_matrix, phase_status) = local_cygv_q_matrix_phase_candidate(
+            &support_point_indices,
+            wrapper_q_matrix.as_deref(),
+        );
         LocalCygvInputSkeleton {
             support_contains_origin_point: support_point_indices.contains(&0),
             support_point_indices,
@@ -9067,6 +9159,8 @@ mod tests {
             local_cygv_q_matrix_rows_candidate: None,
             local_cygv_wrapper_q_matrix_candidate: wrapper_q_matrix,
             local_cygv_q_matrix_layout_status: String::new(),
+            local_cygv_phase_q_matrix_candidate: phase_q_matrix,
+            local_cygv_q_matrix_phase_status: phase_status,
             local_grading_vector_candidate: Some(vec![1]),
             local_grading_vector_status: "source_derived_primitive_one_parameter_grading"
                 .to_string(),
@@ -9662,10 +9756,18 @@ mod tests {
                 .any(|input| input == "local_q_matrix_orientation_and_phase")
         );
         assert!(
-            skeleton
+            !skeleton
                 .remaining_uncertified_inputs
                 .iter()
                 .any(|input| input == "local_q_matrix_phase")
+        );
+        assert_eq!(
+            skeleton.local_cygv_phase_q_matrix_candidate,
+            Some(vec![vec![-1, 2, 1, -3, 1]])
+        );
+        assert_eq!(
+            skeleton.local_cygv_q_matrix_phase_status,
+            "source_derived_unique_compact_threefold_phase_including_origin"
         );
         assert_eq!(skeleton.orientation_candidates.len(), 2);
         let positive_target = &skeleton.orientation_candidates[0];
@@ -9763,6 +9865,8 @@ mod tests {
             local_cygv_q_matrix_rows_candidate: None,
             local_cygv_wrapper_q_matrix_candidate: None,
             local_cygv_q_matrix_layout_status: String::new(),
+            local_cygv_phase_q_matrix_candidate: None,
+            local_cygv_q_matrix_phase_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -9788,6 +9892,8 @@ mod tests {
             local_cygv_q_matrix_rows_candidate: None,
             local_cygv_wrapper_q_matrix_candidate: None,
             local_cygv_q_matrix_layout_status: String::new(),
+            local_cygv_phase_q_matrix_candidate: None,
+            local_cygv_q_matrix_phase_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -9840,6 +9946,8 @@ mod tests {
             local_cygv_q_matrix_rows_candidate: None,
             local_cygv_wrapper_q_matrix_candidate: None,
             local_cygv_q_matrix_layout_status: String::new(),
+            local_cygv_phase_q_matrix_candidate: None,
+            local_cygv_q_matrix_phase_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: vec!["local_intersection_tensor".to_string()],
@@ -9862,6 +9970,8 @@ mod tests {
             local_cygv_q_matrix_rows_candidate: None,
             local_cygv_wrapper_q_matrix_candidate: None,
             local_cygv_q_matrix_layout_status: String::new(),
+            local_cygv_phase_q_matrix_candidate: None,
+            local_cygv_q_matrix_phase_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -9887,6 +9997,8 @@ mod tests {
             local_cygv_q_matrix_rows_candidate: None,
             local_cygv_wrapper_q_matrix_candidate: None,
             local_cygv_q_matrix_layout_status: String::new(),
+            local_cygv_phase_q_matrix_candidate: None,
+            local_cygv_q_matrix_phase_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -9943,6 +10055,8 @@ mod tests {
             local_cygv_q_matrix_rows_candidate: None,
             local_cygv_wrapper_q_matrix_candidate: None,
             local_cygv_q_matrix_layout_status: String::new(),
+            local_cygv_phase_q_matrix_candidate: None,
+            local_cygv_q_matrix_phase_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: vec![
@@ -9968,6 +10082,8 @@ mod tests {
             local_cygv_q_matrix_rows_candidate: None,
             local_cygv_wrapper_q_matrix_candidate: None,
             local_cygv_q_matrix_layout_status: String::new(),
+            local_cygv_phase_q_matrix_candidate: None,
+            local_cygv_q_matrix_phase_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: vec![
@@ -10025,6 +10141,8 @@ mod tests {
             local_cygv_q_matrix_rows_candidate: None,
             local_cygv_wrapper_q_matrix_candidate: None,
             local_cygv_q_matrix_layout_status: String::new(),
+            local_cygv_phase_q_matrix_candidate: None,
+            local_cygv_q_matrix_phase_status: String::new(),
             local_grading_vector_candidate: Some(vec![1]),
             local_grading_vector_status: "source_derived_primitive_one_parameter_grading"
                 .to_string(),
@@ -10048,6 +10166,8 @@ mod tests {
             local_cygv_q_matrix_rows_candidate: None,
             local_cygv_wrapper_q_matrix_candidate: None,
             local_cygv_q_matrix_layout_status: String::new(),
+            local_cygv_phase_q_matrix_candidate: None,
+            local_cygv_q_matrix_phase_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: "local_grading_blocked_no_positive_primitive_target"
                 .to_string(),
@@ -10071,6 +10191,8 @@ mod tests {
             local_cygv_q_matrix_rows_candidate: None,
             local_cygv_wrapper_q_matrix_candidate: None,
             local_cygv_q_matrix_layout_status: String::new(),
+            local_cygv_phase_q_matrix_candidate: None,
+            local_cygv_q_matrix_phase_status: String::new(),
             local_grading_vector_candidate: Some(vec![1]),
             local_grading_vector_status: "source_derived_primitive_one_parameter_grading"
                 .to_string(),
@@ -10117,6 +10239,8 @@ mod tests {
             local_cygv_wrapper_q_matrix_candidate: Some(vec![vec![-1, 2]]),
             local_cygv_q_matrix_layout_status: "source_derived_oriented_q_matrix_layout"
                 .to_string(),
+            local_cygv_phase_q_matrix_candidate: None,
+            local_cygv_q_matrix_phase_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -10141,6 +10265,8 @@ mod tests {
             local_cygv_wrapper_q_matrix_candidate: None,
             local_cygv_q_matrix_layout_status: "local_q_matrix_layout_blocked_no_orientation"
                 .to_string(),
+            local_cygv_phase_q_matrix_candidate: None,
+            local_cygv_q_matrix_phase_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -10167,6 +10293,8 @@ mod tests {
             local_cygv_wrapper_q_matrix_candidate: Some(vec![vec![-1, 1]]),
             local_cygv_q_matrix_layout_status: "source_derived_oriented_q_matrix_layout"
                 .to_string(),
+            local_cygv_phase_q_matrix_candidate: None,
+            local_cygv_q_matrix_phase_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -10276,10 +10404,10 @@ mod tests {
 
         let probe = local_cygv_unit_phase_probe_from_skeleton(&resolved_like, vec!["1".into()]);
 
-        assert_eq!(probe.unit_tensor_candidate_gv.as_deref(), Some("0"));
+        assert_eq!(probe.unit_tensor_candidate_gv.as_deref(), Some("1"));
         assert_eq!(
             probe.unit_tensor_probe_status,
-            "unit_tensor_probe_mismatch_expected_formula_set"
+            "unit_tensor_probe_matches_expected_formula_set_but_uncertified"
         );
         assert_eq!(
             probe.origin_omitted_q_matrix,
@@ -10295,7 +10423,7 @@ mod tests {
         );
         assert_eq!(
             probe.unit_tensor_effective_tensor_requirements[0].status,
-            "effective_tensor_no_scalar_match_unit_gv_zero"
+            "effective_tensor_integral_candidate_but_uncertified"
         );
         assert_eq!(
             probe.origin_omitted_unit_tensor_effective_tensor_requirements[0]
@@ -11909,9 +12037,9 @@ mod tests {
             .as_ref()
             .expect("one-parameter CMS summary should run primitive cygv probe");
 
-        assert_eq!(probe.q_matrix, vec![vec![-1, 1, -1, 1, -1, 1]]);
-        assert_eq!(probe.candidate_gv.as_deref(), Some("0"));
-        assert_eq!(probe.unit_tensor_candidate_gv.as_deref(), Some("0"));
+        assert_eq!(probe.q_matrix, vec![vec![1, -1, 1, -1, 1]]);
+        assert_eq!(probe.candidate_gv.as_deref(), Some("26"));
+        assert_eq!(probe.unit_tensor_candidate_gv.as_deref(), Some("1"));
         assert_eq!(
             probe.origin_omitted_unit_tensor_candidate_gv.as_deref(),
             Some("1")
