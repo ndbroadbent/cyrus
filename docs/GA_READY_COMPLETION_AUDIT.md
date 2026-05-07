@@ -201,7 +201,11 @@ and matrix-basis pipeline are no longer open.
    The all-target origin-omitted shape aggregate splits the nine unresolved
    origin circuits into five compact-threefold-shaped no-origin rows and four
    CY-dimension-2 rows, so the remaining phase work is now split rather than a
-   single generic bucket.
+   single generic bucket. A target-level unit-tensor phase probe then shows
+   that the four CY-dimension-2 rows match their formula candidate set only in
+   the origin-included convention, while only one of the five compact
+   no-origin rows matches after origin omission. The other four compact
+   no-origin rows still mismatch, so a single origin-column rule is not enough.
    The first seed-sum
    sample for the degree-8 side splits it as another toric-covered degree-2
    reduced seed plus an uncovered degree-6 seed that does not survive pair

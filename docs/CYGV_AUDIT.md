@@ -2247,7 +2247,7 @@ problem, while the resolved-conifold-like ray points specifically at the
 origin-column phase convention. Neither is promoted without a chamber
 certificate.
 The all-target shape report
-(`/tmp/cyrus_gv_context_schema3_origin_omitted_shape_report.json`) now records
+(`/tmp/cyrus_gv_context_schema3_target_unit_phase_probe_report.json`) now records
 this source-derived split directly:
 `local_cygv_origin_omitted_compact_shape_status_counts =
 {"origin_omitted_compact_threefold_hypersurface_shape":5,
@@ -2255,6 +2255,15 @@ this source-derived split directly:
 origin circuits are no longer a single local-phase bucket: five have a
 CYTools-style no-origin compact-threefold `q` shape, while four require a
 different local/noncompact or chamber-continuation construction.
+The same report runs a target-level unit-tensor phase probe against the CMS
+formula candidate set without using that set to choose a value. The
+origin-included unit tensor matches the formula set for the four CY-dimension-2
+rows (`unit_tensor_probe_matches_expected_formula_set_but_uncertified=4`) and
+mismatches for the five compact no-origin rows. Conversely, origin omission
+matches only one compact no-origin target and mismatches the other four compact
+no-origin targets, while the four CY-dimension-2 rows hit the expected `cygv`
+dimension guard. This rules out a single origin-column convention or unit
+normalization as the whole remaining GV solution.
 These are source-derived local-intersection candidates, not a certified local
 `cygv` intersection tensor yet, so the skeleton still lists the missing
 `local_q_matrix_phase`, `local_intersection_tensor`, and

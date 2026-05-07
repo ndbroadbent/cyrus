@@ -219,6 +219,9 @@ struct ContextReport {
     local_cygv_q_matrix_layout_status_counts: BTreeMap<String, usize>,
     local_cygv_origin_point_status_counts: BTreeMap<String, usize>,
     local_cygv_origin_omitted_compact_shape_status_counts: BTreeMap<String, usize>,
+    local_cygv_target_unit_phase_probe_status_counts: BTreeMap<String, usize>,
+    local_cygv_target_origin_omitted_unit_phase_probe_status_counts: BTreeMap<String, usize>,
+    local_cygv_target_unit_phase_probe_sample: Vec<LocalCygvTargetUnitPhaseProbeSummary>,
     local_cytools_origin_circuit_status_counts: BTreeMap<String, usize>,
     local_cygv_grading_vector_status_counts: BTreeMap<String, usize>,
     targets: Vec<TargetReport>,
@@ -578,6 +581,26 @@ struct LocalCygvPrimitiveProbe {
     error: Option<String>,
     unit_tensor_error: Option<String>,
     origin_omitted_unit_tensor_error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvTargetUnitPhaseProbeSummary {
+    target_index: usize,
+    degree: i128,
+    probe: LocalCygvUnitPhaseProbe,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvUnitPhaseProbe {
+    q_matrix: Option<Vec<Vec<i64>>>,
+    unit_tensor_candidate_gv: Option<String>,
+    unit_tensor_probe_status: String,
+    unit_tensor_error: Option<String>,
+    origin_omitted_q_matrix: Option<Vec<Vec<i64>>>,
+    origin_omitted_unit_tensor_candidate_gv: Option<String>,
+    origin_omitted_unit_tensor_probe_status: String,
+    origin_omitted_unit_tensor_error: Option<String>,
+    expected_toric_gv1_formula_values: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1810,6 +1833,139 @@ fn local_origin_omitted_wrapper_q_matrix(
         omitted.push(new_row);
     }
     Ok(Some(omitted))
+}
+
+fn local_cygv_unit_phase_probe_from_skeleton(
+    skeleton: &LocalCygvInputSkeleton,
+    expected_toric_gv1_formula_values: Vec<String>,
+) -> LocalCygvUnitPhaseProbe {
+    let q_matrix = skeleton.local_cygv_wrapper_q_matrix_candidate.clone();
+    let grading_vector = skeleton.local_grading_vector_candidate.clone();
+    let semigroup_elements = skeleton
+        .local_semigroup_generators_candidate
+        .as_ref()
+        .filter(|generators| generators.as_slice() == [vec![1]])
+        .map(|_| vec![vec![0], vec![1]]);
+
+    let (unit_tensor_candidate_gv, unit_tensor_probe_status, unit_tensor_error) =
+        match (&q_matrix, &grading_vector, &semigroup_elements) {
+            (Some(q_matrix), Some(grading_vector), Some(semigroup_elements))
+                if q_matrix.len() == 1 =>
+            {
+                match one_parameter_primitive_cygv_value(
+                    q_matrix,
+                    grading_vector,
+                    semigroup_elements,
+                    MalachiteRational::from(1),
+                ) {
+                    Ok(value) => {
+                        let status =
+                            unit_phase_probe_status(&value, &expected_toric_gv1_formula_values);
+                        (Some(value), status, None)
+                    }
+                    Err(error) => (
+                        None,
+                        "unit_tensor_probe_hkty_error".to_string(),
+                        Some(error),
+                    ),
+                }
+            }
+            (Some(_), Some(_), Some(_)) => (
+                None,
+                "unit_tensor_probe_not_run_not_one_parameter_q_matrix".to_string(),
+                None,
+            ),
+            _ => (
+                None,
+                "unit_tensor_probe_not_run_missing_source_inputs".to_string(),
+                None,
+            ),
+        };
+
+    let origin_omitted_q_matrix = local_origin_omitted_wrapper_q_matrix(skeleton)
+        .ok()
+        .flatten();
+    let (
+        origin_omitted_unit_tensor_candidate_gv,
+        origin_omitted_unit_tensor_probe_status,
+        origin_omitted_unit_tensor_error,
+    ) = match (
+        &origin_omitted_q_matrix,
+        &grading_vector,
+        &semigroup_elements,
+    ) {
+        (Some(q_matrix), Some(grading_vector), Some(semigroup_elements)) if q_matrix.len() == 1 => {
+            match one_parameter_primitive_cygv_value(
+                q_matrix,
+                grading_vector,
+                semigroup_elements,
+                MalachiteRational::from(1),
+            ) {
+                Ok(value) => {
+                    let status = origin_omitted_unit_phase_probe_status(
+                        &value,
+                        &expected_toric_gv1_formula_values,
+                    );
+                    (Some(value), status, None)
+                }
+                Err(error) => (
+                    None,
+                    "origin_omitted_unit_tensor_probe_hkty_error".to_string(),
+                    Some(error),
+                ),
+            }
+        }
+        (Some(_), Some(_), Some(_)) => (
+            None,
+            "origin_omitted_unit_tensor_probe_not_run_not_one_parameter_q_matrix".to_string(),
+            None,
+        ),
+        (None, _, _) => (
+            None,
+            "origin_omitted_unit_tensor_probe_not_run_no_origin_column".to_string(),
+            None,
+        ),
+        _ => (
+            None,
+            "origin_omitted_unit_tensor_probe_not_run_missing_source_inputs".to_string(),
+            None,
+        ),
+    };
+
+    LocalCygvUnitPhaseProbe {
+        q_matrix,
+        unit_tensor_candidate_gv,
+        unit_tensor_probe_status,
+        unit_tensor_error,
+        origin_omitted_q_matrix,
+        origin_omitted_unit_tensor_candidate_gv,
+        origin_omitted_unit_tensor_probe_status,
+        origin_omitted_unit_tensor_error,
+        expected_toric_gv1_formula_values,
+    }
+}
+
+fn unit_phase_probe_status(value: &str, expected_values: &[String]) -> String {
+    if expected_values.is_empty() {
+        return "unit_tensor_probe_computed_without_expected_formula".to_string();
+    }
+    if expected_values.iter().any(|expected| expected == value) {
+        "unit_tensor_probe_matches_expected_formula_set_but_uncertified".to_string()
+    } else {
+        "unit_tensor_probe_mismatch_expected_formula_set".to_string()
+    }
+}
+
+fn origin_omitted_unit_phase_probe_status(value: &str, expected_values: &[String]) -> String {
+    if expected_values.is_empty() {
+        return "origin_omitted_unit_tensor_probe_computed_without_expected_formula".to_string();
+    }
+    if expected_values.iter().any(|expected| expected == value) {
+        "origin_omitted_unit_tensor_probe_matches_expected_formula_set_but_phase_uncertified"
+            .to_string()
+    } else {
+        "origin_omitted_unit_tensor_probe_mismatch_expected_formula_set".to_string()
+    }
 }
 
 fn one_parameter_primitive_cygv_value(
@@ -6527,6 +6683,16 @@ fn build_report(
                 .iter()
                 .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
         );
+    let local_cygv_target_unit_phase_probe_sample =
+        local_cygv_target_unit_phase_probe_summaries(&targets);
+    let local_cygv_target_unit_phase_probe_status_counts =
+        local_cygv_target_unit_phase_probe_status_counts(
+            &local_cygv_target_unit_phase_probe_sample,
+        );
+    let local_cygv_target_origin_omitted_unit_phase_probe_status_counts =
+        local_cygv_target_origin_omitted_unit_phase_probe_status_counts(
+            &local_cygv_target_unit_phase_probe_sample,
+        );
     let local_cytools_origin_circuit_status_counts = local_cytools_origin_circuit_status_counts(
         targets
             .iter()
@@ -6589,6 +6755,9 @@ fn build_report(
         local_cygv_q_matrix_layout_status_counts,
         local_cygv_origin_point_status_counts,
         local_cygv_origin_omitted_compact_shape_status_counts,
+        local_cygv_target_unit_phase_probe_status_counts,
+        local_cygv_target_origin_omitted_unit_phase_probe_status_counts,
+        local_cygv_target_unit_phase_probe_sample,
         local_cytools_origin_circuit_status_counts,
         local_cygv_grading_vector_status_counts,
         targets,
@@ -6889,6 +7058,63 @@ fn local_cygv_origin_omitted_compact_shape_status(skeleton: &LocalCygvInputSkele
     }
 }
 
+fn local_cygv_target_unit_phase_probe_summaries(
+    targets: &[TargetReport],
+) -> Vec<LocalCygvTargetUnitPhaseProbeSummary> {
+    let mut summaries = Vec::new();
+    for target in targets {
+        let Some(skeleton) = target.local_cygv_input_skeleton.as_ref() else {
+            continue;
+        };
+        let expected_values = target_expected_toric_gv1_formula_values(target);
+        let probe = local_cygv_unit_phase_probe_from_skeleton(skeleton, expected_values);
+        summaries.push(LocalCygvTargetUnitPhaseProbeSummary {
+            target_index: target.index,
+            degree: target.degree,
+            probe,
+        });
+    }
+    summaries
+}
+
+fn target_expected_toric_gv1_formula_values(target: &TargetReport) -> Vec<String> {
+    let mut values = target
+        .cms_general_divisor_shape_candidates
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|candidate| candidate.toric_gv1_formula_value)
+        .map(|value| value.to_string())
+        .collect::<Vec<_>>();
+    values.sort();
+    values.dedup();
+    values
+}
+
+fn local_cygv_target_unit_phase_probe_status_counts(
+    probes: &[LocalCygvTargetUnitPhaseProbeSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes {
+        *counts
+            .entry(probe.probe.unit_tensor_probe_status.clone())
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_target_origin_omitted_unit_phase_probe_status_counts(
+    probes: &[LocalCygvTargetUnitPhaseProbeSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes {
+        *counts
+            .entry(probe.probe.origin_omitted_unit_tensor_probe_status.clone())
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
 fn local_cytools_origin_circuit_status_counts<'a>(
     skeletons: impl IntoIterator<Item = &'a LocalCygvInputSkeleton>,
 ) -> BTreeMap<String, usize> {
@@ -7079,16 +7305,18 @@ mod tests {
             target_relation_coefficients: None,
             target_relation_in_charge_basis: None,
             target_relation_status: String::new(),
-            local_semigroup_generators_candidate: None,
-            local_semigroup_generator_status: String::new(),
+            local_semigroup_generators_candidate: Some(vec![vec![1]]),
+            local_semigroup_generator_status: "source_derived_one_parameter_unit_semigroup"
+                .to_string(),
             orientation_candidates: Vec::new(),
             local_q_matrix_orientation_candidate: None,
             local_q_matrix_orientation_status: String::new(),
             local_cygv_q_matrix_rows_candidate: None,
             local_cygv_wrapper_q_matrix_candidate: wrapper_q_matrix,
             local_cygv_q_matrix_layout_status: String::new(),
-            local_grading_vector_candidate: None,
-            local_grading_vector_status: String::new(),
+            local_grading_vector_candidate: Some(vec![1]),
+            local_grading_vector_status: "source_derived_primitive_one_parameter_grading"
+                .to_string(),
             remaining_uncertified_inputs: Vec::new(),
         }
     }
@@ -8175,6 +8403,34 @@ mod tests {
         assert_eq!(
             counts.get("origin_omitted_q_matrix_not_available").copied(),
             Some(1)
+        );
+    }
+
+    #[test]
+    fn local_cygv_unit_phase_probe_compares_expected_formula_set() {
+        let resolved_like = skeleton_with_origin_phase_probe(
+            vec![0, 1, 2, 3, 4, 5],
+            Some(vec![vec![-1, 1, -1, 1, -1, 1]]),
+        );
+
+        let probe = local_cygv_unit_phase_probe_from_skeleton(&resolved_like, vec!["1".into()]);
+
+        assert_eq!(probe.unit_tensor_candidate_gv.as_deref(), Some("0"));
+        assert_eq!(
+            probe.unit_tensor_probe_status,
+            "unit_tensor_probe_mismatch_expected_formula_set"
+        );
+        assert_eq!(
+            probe.origin_omitted_q_matrix,
+            Some(vec![vec![1, -1, 1, -1, 1]])
+        );
+        assert_eq!(
+            probe.origin_omitted_unit_tensor_candidate_gv.as_deref(),
+            Some("1")
+        );
+        assert_eq!(
+            probe.origin_omitted_unit_tensor_probe_status,
+            "origin_omitted_unit_tensor_probe_matches_expected_formula_set_but_phase_uncertified"
         );
     }
 

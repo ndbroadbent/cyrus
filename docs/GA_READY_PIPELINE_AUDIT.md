@@ -539,6 +539,10 @@ to make the remaining GV layer more first-principles:
    phase/chamber diagnostics, not promoted GV values. Across all nine
    unresolved origin circuits, the origin-omitted shape aggregate now reports
    five compact-threefold-shaped no-origin rows and four CY-dimension-2 rows.
+   The target-level unit-tensor phase probe matches the four CY-dimension-2
+   rows in the origin-included convention and only one compact no-origin row in
+   the origin-omitted convention; the other four compact no-origin rows still
+   mismatch their formula candidate sets.
    The first-principles context export
    now serializes the nonzero divisor-basis and ambient-basis coefficients from
    successful CMS-general-divisor solves, preserving the source-derived divisor
