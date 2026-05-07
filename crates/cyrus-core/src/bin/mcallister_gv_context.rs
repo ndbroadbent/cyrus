@@ -414,6 +414,7 @@ struct TargetReport {
     origin_circuit_affine_support: Option<OriginCircuitAffineSupportSample>,
     local_cygv_hypersurface_shape: Option<LocalCygvHypersurfaceShape>,
     local_cygv_input_skeleton: Option<LocalCygvInputSkeleton>,
+    local_cygv_integer_tensor_scan: Option<LocalCygvIntegerTensorScanSummary>,
     cms_general_divisor_shape_candidates: Option<Vec<CmsGeneralDivisorShapeCandidate>>,
     cms_general_divisor_intersection_checks: Option<Vec<CmsGeneralDivisorIntersectionCheck>>,
     cms_general_divisor_solution_summaries: Vec<CmsGeneralDivisorSolutionSummary>,
@@ -9356,6 +9357,7 @@ fn report_target(
                 origin_circuit_affine_support,
                 local_cygv_hypersurface_shape: None,
                 local_cygv_input_skeleton,
+                local_cygv_integer_tensor_scan: None,
                 cms_general_divisor_shape_candidates: sample
                     .cms_general_divisor_shape_candidates
                     .clone(),
@@ -9436,6 +9438,7 @@ fn report_target(
                 origin_circuit_affine_support,
                 local_cygv_hypersurface_shape,
                 local_cygv_input_skeleton,
+                local_cygv_integer_tensor_scan: None,
                 cms_general_divisor_shape_candidates: sample
                     .cms_general_divisor_shape_candidates
                     .clone(),
@@ -9516,6 +9519,7 @@ fn report_target(
                 origin_circuit_affine_support,
                 local_cygv_hypersurface_shape,
                 local_cygv_input_skeleton,
+                local_cygv_integer_tensor_scan: None,
                 cms_general_divisor_shape_candidates: sample
                     .cms_general_divisor_shape_candidates
                     .clone(),
@@ -9600,6 +9604,7 @@ fn report_target(
                 origin_circuit_affine_support,
                 local_cygv_hypersurface_shape,
                 local_cygv_input_skeleton,
+                local_cygv_integer_tensor_scan: None,
                 cms_general_divisor_shape_candidates: sample
                     .cms_general_divisor_shape_candidates
                     .clone(),
@@ -9699,6 +9704,7 @@ fn report_target(
         origin_circuit_affine_support,
         local_cygv_hypersurface_shape,
         local_cygv_input_skeleton,
+        local_cygv_integer_tensor_scan: None,
         cms_general_divisor_shape_candidates: sample.cms_general_divisor_shape_candidates.clone(),
         cms_general_divisor_intersection_checks: sample
             .cms_general_divisor_intersection_checks
@@ -13325,6 +13331,16 @@ fn build_report(
         scan_local_integer_tensors,
         local_tensor_scan_bound,
     );
+    if scan_local_integer_tensors {
+        let scans_by_target = local_cygv_target_integer_tensor_scan_sample
+            .iter()
+            .cloned()
+            .map(|scan| (scan.target_index, scan))
+            .collect::<HashMap<_, _>>();
+        for target in &mut targets {
+            target.local_cygv_integer_tensor_scan = scans_by_target.get(&target.index).cloned();
+        }
+    }
     let local_cygv_target_integer_tensor_scan_status_counts =
         local_cygv_integer_tensor_scan_status_counts(
             &local_cygv_target_integer_tensor_scan_sample,
