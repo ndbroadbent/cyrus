@@ -3037,7 +3037,16 @@ relation/shared-facet domains have the wrong compact history before any larger
 facet-union question. A target `8` smoke report with
 `--supporting-face-lp-anchor-attempts 2 --supporting-face-lp-cutting-rounds 1`
 now verifies that the origin-witness diagnostic path uses the requested CLI LP
-limits; the shared and union domains both report two anchor attempts.
+limits; the shared and union domains both report two anchor attempts. Raising
+the certificate-only budget to `64` anchors and `256` cutting rounds gives a
+stable no-certificate result for the two degree-10 targets:
+`/tmp/cyrus_gv_context_target8_origin_witness_lp256_report.json` reports
+target `8` shared-facet and facet-union domains with full/aggregate
+`lp_no_solution` and all `64` anchors at `lp_no_solution`, while
+`/tmp/cyrus_gv_context_target7_origin_witness_lp256_report.json` reports
+target `7` facet unions the same way and target `7` shared facets with full LP
+`lp_solver_other_unknown`, aggregate `lp_no_solution`, and all `64` anchors at
+`lp_no_solution`.
 Thus the current blocker is not hidden by a missing scalar source readout: the
 candidate domains contain fractional lower coefficient history and still lack
 a supporting-face/chamber certificate.

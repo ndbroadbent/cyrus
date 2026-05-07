@@ -917,4 +917,8 @@ to make the remaining GV layer more first-principles:
    corrected chamber. A smoke run with
    `--supporting-face-lp-anchor-attempts 2 --supporting-face-lp-cutting-rounds 1`
    now confirms the origin-witness diagnostics honor the CLI LP search limits
-   instead of using hardcoded defaults.
+   instead of using hardcoded defaults. Raising the certificate-only budget to
+   `64` anchors and `256` cutting rounds keeps target `8` shared/union domains
+   at full/aggregate/anchor `lp_no_solution`; target `7` union domains match
+   that, and target `7` shared domains retain full LP `Unknown` but have
+   aggregate and all `64` anchors at `lp_no_solution`.

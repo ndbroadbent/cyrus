@@ -685,7 +685,12 @@ face certificates still fail, but they rule out the small relation/shared-facet
 domains as the corrected McAllister compact histories. Origin-witness
 certificate diagnostics now also honor the `--supporting-face-lp-*` CLI
 limits; a target `8` smoke run with `2` anchors and `1` cutting round reports
-exactly two anchor attempts in the shared and union domains.
+exactly two anchor attempts in the shared and union domains. Higher-budget
+certificate-only target `7`/`8` probes with `64` anchors and `256` cutting
+rounds still do not promote a witness domain: target `8` shared/union domains
+are all `lp_no_solution`, target `7` union domains are all `lp_no_solution`,
+and target `7` shared domains retain full LP `Unknown` but have aggregate and
+all `64` anchors at `lp_no_solution`.
 
 ## Next Concrete Action
 
