@@ -440,7 +440,10 @@ and matrix-basis pipeline are no longer open.
    The classified raw GW sample marks that curve as
    `unknown_not_toric_covered` and `source_ray_matches_missing_target`, i.e.
    the first integrality failure is the target-`8` missing ray inside the
-   lower coefficient history of this candidate source domain.
+   lower coefficient history of this candidate source domain. Full-trace
+   counts classify all `9` fractional candidates as
+   `unknown_not_toric_covered`; `8` are `not_source_degree_bounded_ray` and
+   `1` is `source_ray_matches_missing_target`.
    These traces explain why the candidate domains cannot be promoted without a
    source-derived supporting-face/chamber certificate.
    The target-coefficient balance reconstructs the small-domain

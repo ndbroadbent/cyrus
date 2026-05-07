@@ -207,6 +207,9 @@ run pass. Any remaining mismatch must be explicit and localizable.
    degree-eight failure as
    `element_nonzero=[(203,-3),(206,1),(209,1)]` with candidate `4/3`; the
    classified GW sample marks that curve as `unknown_not_toric_covered` and
+   `source_ray_matches_missing_target`. The full target-`8` degree-eight
+   count map has all `9` fractional candidates in `unknown_not_toric_covered`,
+   split as `8` `not_source_degree_bounded_ray` and `1`
    `source_ray_matches_missing_target`. All candidate domains remain without
    supporting-face certificates. This keeps the blocker at certified
    chamber-semigroup construction, not scalar source-GV recovery.

@@ -868,6 +868,8 @@ struct CygvSourceQnTermSemigroupProbe {
     generator_face_certificate_positive_count: Option<usize>,
     gw_coefficient_trace_count: Option<usize>,
     gw_noninteger_candidate_count: Option<usize>,
+    gw_noninteger_known_qn_history_status_counts: BTreeMap<String, usize>,
+    gw_noninteger_source_class_status_counts: BTreeMap<String, usize>,
     gw_noninteger_candidate_sample: Vec<CygvPathSupportGvCoefficientTraceSample>,
     gw_coefficient_trace_error: Option<String>,
     source_gw_coefficient_status: Option<String>,
@@ -2361,11 +2363,35 @@ fn path_support_generator_nonzero_sample(generators: &[Vec<i64>]) -> Vec<Vec<(us
 struct PathSupportGwCoefficientDiagnostic {
     trace_count: Option<usize>,
     noninteger_candidate_count: Option<usize>,
+    noninteger_known_qn_history_status_counts: BTreeMap<String, usize>,
+    noninteger_source_class_status_counts: BTreeMap<String, usize>,
     noninteger_candidate_sample: Vec<CygvPathSupportGvCoefficientTraceSample>,
     error: Option<String>,
     target_status: Option<String>,
     target_instanton_coefficient: Option<String>,
     target_gw_candidate: Option<String>,
+}
+
+fn gw_noninteger_classification_counts(
+    trace: &[CygvGvCoefficientTrace],
+    context: &ValidatedContext<'_>,
+) -> (BTreeMap<String, usize>, BTreeMap<String, usize>) {
+    let mut known_counts = BTreeMap::new();
+    let mut source_counts = BTreeMap::new();
+    for entry in trace
+        .iter()
+        .filter(|entry| gv_coefficient_trace_has_noninteger_candidate(entry))
+    {
+        let (known_status, source_status) =
+            gv_coefficient_trace_classification(entry, Some(context));
+        let known_status =
+            known_status.unwrap_or_else(|| "known_qn_history_status_missing".to_string());
+        let source_status =
+            source_status.unwrap_or_else(|| "source_class_status_missing".to_string());
+        *known_counts.entry(known_status).or_insert(0) += 1;
+        *source_counts.entry(source_status).or_insert(0) += 1;
+    }
+    (known_counts, source_counts)
 }
 
 fn path_support_gw_coefficient_diagnostic(
@@ -2387,6 +2413,8 @@ fn path_support_gw_coefficient_diagnostic(
                 .iter()
                 .filter(|entry| gv_coefficient_trace_has_noninteger_candidate(entry))
                 .count();
+            let (known_counts, source_counts) =
+                gw_noninteger_classification_counts(&trace, context);
             let sample = path_support_gw_noninteger_candidate_sample(&trace, context);
             let target_trace = trace
                 .iter()
@@ -2394,6 +2422,8 @@ fn path_support_gw_coefficient_diagnostic(
             PathSupportGwCoefficientDiagnostic {
                 trace_count: Some(trace.len()),
                 noninteger_candidate_count: Some(noninteger_count),
+                noninteger_known_qn_history_status_counts: known_counts,
+                noninteger_source_class_status_counts: source_counts,
                 noninteger_candidate_sample: sample,
                 error: None,
                 target_status: target_trace.map(|entry| entry.status.clone()),
@@ -2405,6 +2435,8 @@ fn path_support_gw_coefficient_diagnostic(
         Err(error) => PathSupportGwCoefficientDiagnostic {
             trace_count: None,
             noninteger_candidate_count: None,
+            noninteger_known_qn_history_status_counts: BTreeMap::new(),
+            noninteger_source_class_status_counts: BTreeMap::new(),
             noninteger_candidate_sample: Vec::new(),
             error: Some(error.to_string()),
             target_status: None,
@@ -5182,6 +5214,8 @@ fn source_qn_term_provided_generator_probe_from_generators(
             generator_face_certificate_positive_count: face_certificate.positive_count,
             gw_coefficient_trace_count: None,
             gw_noninteger_candidate_count: None,
+            gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
+            gw_noninteger_source_class_status_counts: BTreeMap::new(),
             gw_noninteger_candidate_sample: Vec::new(),
             gw_coefficient_trace_error: None,
             source_gw_coefficient_status: None,
@@ -5210,6 +5244,8 @@ fn source_qn_term_provided_generator_probe_from_generators(
             generator_face_certificate_positive_count: face_certificate.positive_count,
             gw_coefficient_trace_count: None,
             gw_noninteger_candidate_count: None,
+            gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
+            gw_noninteger_source_class_status_counts: BTreeMap::new(),
             gw_noninteger_candidate_sample: Vec::new(),
             gw_coefficient_trace_error: None,
             source_gw_coefficient_status: None,
@@ -5241,6 +5277,8 @@ fn source_qn_term_provided_generator_probe_from_generators(
             generator_face_certificate_positive_count: face_certificate.positive_count,
             gw_coefficient_trace_count: None,
             gw_noninteger_candidate_count: None,
+            gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
+            gw_noninteger_source_class_status_counts: BTreeMap::new(),
             gw_noninteger_candidate_sample: Vec::new(),
             gw_coefficient_trace_error: None,
             source_gw_coefficient_status: None,
@@ -5294,6 +5332,10 @@ fn source_qn_term_provided_generator_probe_from_generators(
                 generator_face_certificate_positive_count: face_certificate.positive_count,
                 gw_coefficient_trace_count: gw_diagnostic.trace_count,
                 gw_noninteger_candidate_count: gw_diagnostic.noninteger_candidate_count,
+                gw_noninteger_known_qn_history_status_counts: gw_diagnostic
+                    .noninteger_known_qn_history_status_counts,
+                gw_noninteger_source_class_status_counts: gw_diagnostic
+                    .noninteger_source_class_status_counts,
                 gw_noninteger_candidate_sample: gw_diagnostic.noninteger_candidate_sample,
                 gw_coefficient_trace_error: gw_diagnostic.error,
                 source_gw_coefficient_status: gw_diagnostic.target_status,
@@ -5331,6 +5373,10 @@ fn source_qn_term_provided_generator_probe_from_generators(
                 generator_face_certificate_positive_count: face_certificate.positive_count,
                 gw_coefficient_trace_count: gw_diagnostic.trace_count,
                 gw_noninteger_candidate_count: gw_diagnostic.noninteger_candidate_count,
+                gw_noninteger_known_qn_history_status_counts: gw_diagnostic
+                    .noninteger_known_qn_history_status_counts,
+                gw_noninteger_source_class_status_counts: gw_diagnostic
+                    .noninteger_source_class_status_counts,
                 gw_noninteger_candidate_sample: gw_diagnostic.noninteger_candidate_sample,
                 gw_coefficient_trace_error: gw_diagnostic.error,
                 source_gw_coefficient_status: gw_diagnostic.target_status,
@@ -5386,6 +5432,10 @@ fn source_qn_term_provided_generator_probe_from_generators(
         generator_face_certificate_positive_count: face_certificate.positive_count,
         gw_coefficient_trace_count: gw_diagnostic.trace_count,
         gw_noninteger_candidate_count: gw_diagnostic.noninteger_candidate_count,
+        gw_noninteger_known_qn_history_status_counts: gw_diagnostic
+            .noninteger_known_qn_history_status_counts,
+        gw_noninteger_source_class_status_counts: gw_diagnostic
+            .noninteger_source_class_status_counts,
         gw_noninteger_candidate_sample: gw_diagnostic.noninteger_candidate_sample,
         gw_coefficient_trace_error: gw_diagnostic.error,
         source_gw_coefficient_status: gw_diagnostic.target_status,
@@ -5425,6 +5475,8 @@ fn source_qn_term_semigroup_probe_from_elements(
             generator_face_certificate_positive_count: None,
             gw_coefficient_trace_count: None,
             gw_noninteger_candidate_count: None,
+            gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
+            gw_noninteger_source_class_status_counts: BTreeMap::new(),
             gw_noninteger_candidate_sample: Vec::new(),
             gw_coefficient_trace_error: None,
             source_gw_coefficient_status: None,
@@ -5453,6 +5505,8 @@ fn source_qn_term_semigroup_probe_from_elements(
             generator_face_certificate_positive_count: None,
             gw_coefficient_trace_count: None,
             gw_noninteger_candidate_count: None,
+            gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
+            gw_noninteger_source_class_status_counts: BTreeMap::new(),
             gw_noninteger_candidate_sample: Vec::new(),
             gw_coefficient_trace_error: None,
             source_gw_coefficient_status: None,
@@ -5484,6 +5538,8 @@ fn source_qn_term_semigroup_probe_from_elements(
             generator_face_certificate_positive_count: None,
             gw_coefficient_trace_count: None,
             gw_noninteger_candidate_count: None,
+            gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
+            gw_noninteger_source_class_status_counts: BTreeMap::new(),
             gw_noninteger_candidate_sample: Vec::new(),
             gw_coefficient_trace_error: None,
             source_gw_coefficient_status: None,
@@ -5528,6 +5584,8 @@ fn source_qn_term_semigroup_probe_from_elements(
                 generator_face_certificate_positive_count: None,
                 gw_coefficient_trace_count: None,
                 gw_noninteger_candidate_count: None,
+                gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
+                gw_noninteger_source_class_status_counts: BTreeMap::new(),
                 gw_noninteger_candidate_sample: Vec::new(),
                 gw_coefficient_trace_error: None,
                 source_gw_coefficient_status: None,
@@ -5559,6 +5617,8 @@ fn source_qn_term_semigroup_probe_from_elements(
                 generator_face_certificate_positive_count: None,
                 gw_coefficient_trace_count: None,
                 gw_noninteger_candidate_count: None,
+                gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
+                gw_noninteger_source_class_status_counts: BTreeMap::new(),
                 gw_noninteger_candidate_sample: Vec::new(),
                 gw_coefficient_trace_error: None,
                 source_gw_coefficient_status: None,
@@ -5614,6 +5674,8 @@ fn source_qn_term_semigroup_probe_from_elements(
         generator_face_certificate_positive_count: None,
         gw_coefficient_trace_count: None,
         gw_noninteger_candidate_count: None,
+        gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
+        gw_noninteger_source_class_status_counts: BTreeMap::new(),
         gw_noninteger_candidate_sample: Vec::new(),
         gw_coefficient_trace_error: None,
         source_gw_coefficient_status: None,
@@ -16316,6 +16378,58 @@ mod tests {
     }
 
     #[test]
+    fn gw_noninteger_classification_counts_classify_full_trace() {
+        let stats = MissingGvTargetStats {
+            target_count: 1,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: vec![minimal_missing_sample(vec![(0, 1)])],
+        };
+        let grading = vec![1];
+        let q_matrix: Vec<Vec<i64>> = Vec::new();
+        let degree_bounded_rays = vec![vec![1]];
+        let context = ValidatedContext {
+            dimension: 1,
+            degree_bound: 1,
+            q_cols: 0,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: None,
+            covered_toric_gv_by_basis: HashMap::new(),
+            source_derived_gv_by_basis: HashMap::new(),
+            intersection: Intersection::new(1),
+            stats: &stats,
+            uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
+        };
+        let trace = vec![CygvGvCoefficientTrace {
+            element_index: 0,
+            degree: 1,
+            element: vec![1],
+            insertion_index: 0,
+            pivot_component: 1,
+            instanton_coefficient: Some("1/2".to_string()),
+            gv_candidate: Some("1/2".to_string()),
+            rounded_gv_candidate: Some("1".to_string()),
+            status: "nonzero_gw".to_string(),
+        }];
+
+        let (known_counts, source_counts) = gw_noninteger_classification_counts(&trace, &context);
+
+        assert_eq!(
+            known_counts,
+            BTreeMap::from([("unknown_not_toric_covered".to_string(), 1)])
+        );
+        assert_eq!(
+            source_counts,
+            BTreeMap::from([(
+                "source_ray_context_missing_but_matches_missing_target".to_string(),
+                1,
+            )])
+        );
+    }
+
+    #[test]
     fn source_derived_gv_requires_integral_matching_cms_certificate() {
         let mut sample = minimal_missing_sample(vec![(0, 2)]);
         sample.cms_general_divisor_shape_candidates = Some(vec![
@@ -17405,6 +17519,16 @@ mod tests {
         assert_eq!(offset_probe.generator_nonzero_sample, vec![vec![(0, 1)]]);
         assert_eq!(offset_probe.gw_coefficient_trace_count, Some(1));
         assert_eq!(offset_probe.gw_noninteger_candidate_count, Some(0));
+        assert!(
+            offset_probe
+                .gw_noninteger_known_qn_history_status_counts
+                .is_empty()
+        );
+        assert!(
+            offset_probe
+                .gw_noninteger_source_class_status_counts
+                .is_empty()
+        );
         assert!(offset_probe.gw_noninteger_candidate_sample.is_empty());
         assert_eq!(offset_probe.gw_coefficient_trace_error, None);
         assert_eq!(

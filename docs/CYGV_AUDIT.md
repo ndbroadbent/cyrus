@@ -2925,6 +2925,10 @@ The classified raw GW sample marks this same curve as
 `source_class_status=source_ray_matches_missing_target`, so the first
 integrality failure is the target-`8` missing ray appearing as lower
 coefficient history inside the candidate degree-eight source domain.
+Full-trace classification counts make this stronger: all `9` fractional
+target-`8` degree-eight GW candidates are `unknown_not_toric_covered`; among
+them, `8` are `not_source_degree_bounded_ray` and `1` is the
+`source_ray_matches_missing_target` row above.
 Thus the current blocker is not hidden by a missing scalar source readout: the
 candidate domains contain fractional lower coefficient history and still lack
 a supporting-face/chamber certificate.
