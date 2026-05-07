@@ -484,7 +484,13 @@ to make the remaining GV layer more first-principles:
    `7` and `8` has two unique degree-six source rays, four sampled occurrences,
    and diagnostic small-domain GV counts `{"1":2,"-2":2}`; the source ray
    `[(54,-2),(203,1),(206,1),(209,1)]` appears in both target queues. This gives
-   the next compact-GV step a concrete shared lower-history target.
+   the next compact-GV step a concrete shared lower-history target. A fresh
+   release context export now bounds auxiliary source-ray classification below
+   the first missing-target degree (`9`), classifies `240` uncovered lower source
+   rays, and annotates the target `7`/`8` queue with source-derived origin/CMS
+   status. The `GV=1` lower rays are resolved-conifold origin circuits; the
+   shared `GV=-2` ray has integral CMS divisor checks matching the inferred
+   degree.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.
    The exact classical-data transform is now available as

@@ -727,6 +727,8 @@ struct ChamberGvDiagnostic {
     missing_required_degree_min: Option<i128>,
     missing_required_degree_max: Option<i128>,
     missing_target_stats: Option<MissingGvTargetStats>,
+    uncovered_source_ray_stats_degree_bound_for_missing: Option<i128>,
+    uncovered_source_ray_stats_for_missing: Option<MissingGvTargetStats>,
     basis_mori_rays_for_missing_degree_bound: Option<i128>,
     basis_mori_rays_for_missing_degree_bounded: Option<Vec<Vec<i64>>>,
     degree_bounded_mori_ray_context_for_missing: Option<Vec<DegreeBoundedMoriRayContextSample>>,
@@ -793,6 +795,8 @@ struct CorrectedChamberGvContextExport<'a> {
     missing_target_sample_limit: usize,
     missing_target_sample_is_complete: Option<bool>,
     missing_target_stats: Option<&'a MissingGvTargetStats>,
+    uncovered_source_ray_stats_degree_bound_for_missing: Option<i128>,
+    uncovered_source_ray_stats_for_missing: Option<&'a MissingGvTargetStats>,
 }
 
 struct ChamberToricGvSelection {
@@ -2465,6 +2469,7 @@ fn missing_gv_target_stats(
     origin_idx: usize,
     origin_circuits_by_class: &HashMap<Vec<i64>, cyrus_core::OriginCircuitCurveDiagnostic>,
     cms_intersection_checks_by_class: &HashMap<Vec<i64>, Vec<CmsGeneralDivisorIntersectionCheck>>,
+    check_real_cone_decomposition: bool,
     sample_limit: usize,
 ) -> Result<MissingGvTargetStats, String> {
     if basis.len() != grading.len() {
@@ -2572,12 +2577,16 @@ fn missing_gv_target_stats(
         if is_mori_generator {
             targets_that_are_mori_generators += 1;
         }
-        let real_cone_decomposition = real_cone_decomposition_by_other_degree_bounded_generators(
-            &basis_class,
-            basis_rays,
-            grading,
-            degree,
-        )?;
+        let real_cone_decomposition = if check_real_cone_decomposition {
+            real_cone_decomposition_by_other_degree_bounded_generators(
+                &basis_class,
+                basis_rays,
+                grading,
+                degree,
+            )?
+        } else {
+            None
+        };
         let real_cone_decomposable = real_cone_decomposition.is_some();
         if real_cone_decomposable {
             targets_real_cone_decomposable_by_other_generators += 1;
@@ -5464,6 +5473,27 @@ fn degree_bounded_mori_ray_context_samples(
     Ok(samples)
 }
 
+fn uncovered_degree_bounded_source_ray_classes(
+    ambient_rays: &[Vec<i64>],
+    covered_gvs: &[(Vec<i64>, malachite::Integer)],
+    basis: &[usize],
+    grading: &[i64],
+    max_degree: i128,
+) -> Result<Vec<Vec<i64>>, String> {
+    let covered_classes = covered_gvs
+        .iter()
+        .map(|(class, _)| class.clone())
+        .collect::<HashSet<_>>();
+    let mut out = Vec::new();
+    for ambient_ray in ambient_rays {
+        let degree = ambient_curve_grading_degree(ambient_ray, basis, grading)?;
+        if degree <= max_degree && !covered_classes.contains(ambient_ray) {
+            out.push(ambient_ray.clone());
+        }
+    }
+    Ok(out)
+}
+
 fn covered_toric_gv_context_samples(
     covered_gvs: &[(Vec<i64>, malachite::Integer)],
     basis: &[usize],
@@ -6807,6 +6837,8 @@ fn diagnose_chamber_gv_volume_correction(
     let mut corrected_kappa_basis_for_missing = None;
     let mut degree_summary = None;
     let mut missing_target_stats = None;
+    let mut uncovered_source_ray_stats_degree_bound_for_missing = None;
+    let mut uncovered_source_ray_stats_for_missing = None;
     let mut covered_toric_gv_divisor_representation_baseline = None;
     if !missing_gv_classes.is_empty() {
         let origin_idx = geom
@@ -6879,6 +6911,14 @@ fn diagnose_chamber_gv_volume_correction(
             &grading,
             summary.max_degree,
         )?;
+        let lower_source_ray_degree_bound = summary.min_degree.saturating_sub(1);
+        let uncovered_source_ray_classes = uncovered_degree_bounded_source_ray_classes(
+            &ambient_rays,
+            &small_curve_gvs,
+            &intersection.basis,
+            &grading,
+            lower_source_ray_degree_bound,
+        )?;
         let covered_toric_gv_context = covered_toric_gv_context_samples(
             &small_curve_gvs,
             &intersection.basis,
@@ -6897,6 +6937,28 @@ fn diagnose_chamber_gv_volume_correction(
             origin_idx,
             &origin_circuits_by_class,
             &cms_intersection_checks_by_class,
+            true,
+            missing_target_sample_limit,
+        )?;
+        let uncovered_source_ray_cms_intersection_checks_by_class =
+            cms_general_divisor_intersection_checks_by_class(
+                &uncovered_source_ray_classes,
+                &origin_circuits_by_class,
+                &corrected_kappa_full,
+                &intersection.basis,
+            )?;
+        let uncovered_source_ray_stats = missing_gv_target_stats(
+            &uncovered_source_ray_classes,
+            &geom.triangulation_points,
+            &basis_rays,
+            &intersection.basis,
+            &grading,
+            Some(kahler),
+            Some(gamma),
+            origin_idx,
+            &origin_circuits_by_class,
+            &uncovered_source_ray_cms_intersection_checks_by_class,
+            false,
             missing_target_sample_limit,
         )?;
         basis_rays_for_missing_degree_bound = Some(summary.max_degree);
@@ -6909,6 +6971,8 @@ fn diagnose_chamber_gv_volume_correction(
         degree_summary = Some(summary);
         basis_ray_stats = Some(ray_stats);
         missing_target_stats = Some(target_stats);
+        uncovered_source_ray_stats_degree_bound_for_missing = Some(lower_source_ray_degree_bound);
+        uncovered_source_ray_stats_for_missing = Some(uncovered_source_ray_stats);
     }
 
     let general_gv_requested = general_min_points.is_some() || general_max_deg.is_some();
@@ -7415,6 +7479,8 @@ fn diagnose_chamber_gv_volume_correction(
         missing_required_degree_min,
         missing_required_degree_max,
         missing_target_stats,
+        uncovered_source_ray_stats_degree_bound_for_missing,
+        uncovered_source_ray_stats_for_missing,
         basis_mori_rays_for_missing_degree_bound: basis_rays_for_missing_degree_bound,
         basis_mori_rays_for_missing_degree_bounded: basis_rays_for_missing_degree_bounded,
         degree_bounded_mori_ray_context_for_missing,
@@ -8198,6 +8264,11 @@ fn write_corrected_chamber_gv_context_export(
         missing_target_sample_limit,
         missing_target_sample_is_complete,
         missing_target_stats: diag.missing_target_stats.as_ref(),
+        uncovered_source_ray_stats_degree_bound_for_missing: diag
+            .uncovered_source_ray_stats_degree_bound_for_missing,
+        uncovered_source_ray_stats_for_missing: diag
+            .uncovered_source_ray_stats_for_missing
+            .as_ref(),
     };
     if let Some(parent) = path.parent()
         && !parent.as_os_str().is_empty()
@@ -11273,6 +11344,7 @@ mod tests {
             0,
             &HashMap::new(),
             &HashMap::new(),
+            true,
             4,
         )
         .unwrap();
@@ -11350,6 +11422,32 @@ mod tests {
     }
 
     #[test]
+    fn missing_gv_target_stats_can_skip_real_cone_decomposition_for_source_rays() {
+        let stats = missing_gv_target_stats(
+            &[vec![0, 2, 0]],
+            &[],
+            &[vec![1, 0], vec![0, 1], vec![1, 1]],
+            &[1, 2],
+            &[2, 3],
+            None,
+            None,
+            0,
+            &HashMap::new(),
+            &HashMap::new(),
+            false,
+            1,
+        )
+        .unwrap();
+
+        assert_eq!(stats.targets_real_cone_decomposable_by_other_generators, 0);
+        assert_eq!(
+            stats.sample[0].real_cone_decomposable_by_other_generators,
+            false
+        );
+        assert_eq!(stats.sample[0].real_cone_decomposition_exact_kind, None);
+    }
+
+    #[test]
     fn missing_gv_target_stats_records_branch_cut_status() {
         let kahler = vec![F64::<Finite>::new(-0.1).expect("finite")];
         let gamma = vec![I64::<Finite>::new(0)];
@@ -11364,6 +11462,7 @@ mod tests {
             1,
             &HashMap::new(),
             &HashMap::new(),
+            true,
             1,
         )
         .unwrap();
@@ -11424,6 +11523,7 @@ mod tests {
             0,
             &origin_circuits_by_class,
             &HashMap::new(),
+            true,
             1,
         )
         .unwrap();

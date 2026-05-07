@@ -39,6 +39,7 @@ struct CorrectedChamberGvContext {
     basis_mori_rays_for_missing_degree_bounded: Option<Vec<Vec<i64>>>,
     degree_bounded_mori_ray_context_for_missing: Option<Vec<DegreeBoundedMoriRayContextSample>>,
     covered_toric_gv_context_for_missing: Option<Vec<CoveredToricGvContextSample>>,
+    uncovered_source_ray_stats_for_missing: Option<MissingGvTargetStats>,
     gv_q_matrix_for_missing: Option<Vec<Vec<i64>>>,
     grading_for_missing: Option<Vec<i64>>,
     corrected_kappa_basis_for_missing: Option<Vec<SparseIntersectionEntry>>,
@@ -495,6 +496,11 @@ struct CygvPathSupportLookup {
     matching_missing_target_degree: Option<i128>,
     matching_missing_target_origin_circuit_pattern: Option<String>,
     matching_missing_target_exact_kind: Option<String>,
+    matching_uncovered_source_ray_index: Option<usize>,
+    matching_uncovered_source_ray_degree: Option<i128>,
+    matching_uncovered_source_ray_origin_circuit_pattern: Option<String>,
+    matching_uncovered_source_ray_exact_kind: Option<String>,
+    matching_uncovered_source_ray_cms_check_status_counts: BTreeMap<String, usize>,
     curve_nonzero: Vec<(usize, i64)>,
 }
 
@@ -505,6 +511,9 @@ struct CygvPathSupportSourceRaySummary {
     known_qn_history_status_counts: BTreeMap<String, usize>,
     path_support_lookup_status_counts: BTreeMap<String, usize>,
     path_support_gv_counts: BTreeMap<String, usize>,
+    uncovered_source_ray_origin_circuit_pattern: Option<String>,
+    uncovered_source_ray_exact_kind: Option<String>,
+    uncovered_source_ray_cms_check_status_counts: BTreeMap<String, usize>,
     source_ray_ambient_nonzero: Vec<(usize, i64)>,
     curve_nonzero: Vec<(usize, i64)>,
     occurrences: Vec<CygvPathSupportSourceRayOccurrence>,
@@ -522,6 +531,9 @@ struct CygvPathSupportSourceRaySummaryBuilder {
     known_qn_history_status_counts: BTreeMap<String, usize>,
     path_support_lookup_status_counts: BTreeMap<String, usize>,
     path_support_gv_counts: BTreeMap<String, usize>,
+    uncovered_source_ray_origin_circuit_pattern: Option<String>,
+    uncovered_source_ray_exact_kind: Option<String>,
+    uncovered_source_ray_cms_check_status_counts: BTreeMap<String, usize>,
     source_ray_ambient_nonzero: Vec<(usize, i64)>,
     curve_nonzero: Vec<(usize, i64)>,
     occurrences: Vec<CygvPathSupportSourceRayOccurrence>,
@@ -534,6 +546,11 @@ struct PathSupportSourceClassContext {
     matching_missing_target_degree: Option<i128>,
     matching_missing_target_origin_circuit_pattern: Option<String>,
     matching_missing_target_exact_kind: Option<String>,
+    matching_uncovered_source_ray_index: Option<usize>,
+    matching_uncovered_source_ray_degree: Option<i128>,
+    matching_uncovered_source_ray_origin_circuit_pattern: Option<String>,
+    matching_uncovered_source_ray_exact_kind: Option<String>,
+    matching_uncovered_source_ray_cms_check_status_counts: BTreeMap<String, usize>,
 }
 
 struct CygvPathPredecessorStats {
@@ -1223,6 +1240,14 @@ fn push_path_support_lookup(
         matching_missing_target_origin_circuit_pattern: source_context
             .matching_missing_target_origin_circuit_pattern,
         matching_missing_target_exact_kind: source_context.matching_missing_target_exact_kind,
+        matching_uncovered_source_ray_index: source_context.matching_uncovered_source_ray_index,
+        matching_uncovered_source_ray_degree: source_context.matching_uncovered_source_ray_degree,
+        matching_uncovered_source_ray_origin_circuit_pattern: source_context
+            .matching_uncovered_source_ray_origin_circuit_pattern,
+        matching_uncovered_source_ray_exact_kind: source_context
+            .matching_uncovered_source_ray_exact_kind,
+        matching_uncovered_source_ray_cms_check_status_counts: source_context
+            .matching_uncovered_source_ray_cms_check_status_counts,
         curve_nonzero: curve_nonzero.to_vec(),
     });
     Ok(())
@@ -1233,6 +1258,13 @@ fn path_support_source_class_context(
     context: &ValidatedContext<'_>,
 ) -> Result<PathSupportSourceClassContext, String> {
     let matching_missing_target = matching_missing_target_for_curve(curve, context)?;
+    let matching_uncovered_source_ray = matching_uncovered_source_ray_for_curve(curve, context)?;
+    let matching_uncovered_source_ray_cms_check_status_counts =
+        missing_sample_cms_check_status_counts(
+            matching_uncovered_source_ray
+                .as_ref()
+                .and_then(|entry| entry.1.cms_general_divisor_intersection_checks.as_deref()),
+        );
     let Some(ray_context) = context.degree_bounded_ray_context else {
         return Ok(PathSupportSourceClassContext {
             status: if matching_missing_target.is_some() {
@@ -1251,6 +1283,19 @@ fn path_support_source_class_context(
             matching_missing_target_exact_kind: matching_missing_target
                 .as_ref()
                 .and_then(|entry| entry.1.real_cone_decomposition_exact_kind.clone()),
+            matching_uncovered_source_ray_index: matching_uncovered_source_ray
+                .as_ref()
+                .map(|entry| entry.0),
+            matching_uncovered_source_ray_degree: matching_uncovered_source_ray
+                .as_ref()
+                .map(|entry| entry.1.degree),
+            matching_uncovered_source_ray_origin_circuit_pattern: matching_uncovered_source_ray
+                .as_ref()
+                .and_then(|entry| entry.1.origin_circuit_pattern.clone()),
+            matching_uncovered_source_ray_exact_kind: matching_uncovered_source_ray
+                .as_ref()
+                .and_then(|entry| entry.1.real_cone_decomposition_exact_kind.clone()),
+            matching_uncovered_source_ray_cms_check_status_counts,
         });
     };
 
@@ -1279,7 +1324,35 @@ fn path_support_source_class_context(
         matching_missing_target_exact_kind: matching_missing_target
             .as_ref()
             .and_then(|entry| entry.1.real_cone_decomposition_exact_kind.clone()),
+        matching_uncovered_source_ray_index: matching_uncovered_source_ray
+            .as_ref()
+            .map(|entry| entry.0),
+        matching_uncovered_source_ray_degree: matching_uncovered_source_ray
+            .as_ref()
+            .map(|entry| entry.1.degree),
+        matching_uncovered_source_ray_origin_circuit_pattern: matching_uncovered_source_ray
+            .as_ref()
+            .and_then(|entry| entry.1.origin_circuit_pattern.clone()),
+        matching_uncovered_source_ray_exact_kind: matching_uncovered_source_ray
+            .as_ref()
+            .and_then(|entry| entry.1.real_cone_decomposition_exact_kind.clone()),
+        matching_uncovered_source_ray_cms_check_status_counts,
     })
+}
+
+fn missing_sample_cms_check_status_counts(
+    checks: Option<&[CmsGeneralDivisorIntersectionCheck]>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    let Some(checks) = checks else {
+        return counts;
+    };
+    for check in checks {
+        *counts
+            .entry(cms_general_divisor_intersection_check_status(check).to_string())
+            .or_insert(0) += 1;
+    }
+    counts
 }
 
 fn matching_missing_target_for_curve<'a>(
@@ -1287,6 +1360,22 @@ fn matching_missing_target_for_curve<'a>(
     context: &'a ValidatedContext<'_>,
 ) -> Result<Option<(usize, &'a MissingGvTargetSample)>, String> {
     for (index, sample) in context.stats.sample.iter().enumerate() {
+        let sample_curve = dense_from_sparse(&sample.basis_nonzero, context.dimension)?;
+        if sample_curve == curve {
+            return Ok(Some((index, sample)));
+        }
+    }
+    Ok(None)
+}
+
+fn matching_uncovered_source_ray_for_curve<'a>(
+    curve: &[i64],
+    context: &'a ValidatedContext<'_>,
+) -> Result<Option<(usize, &'a MissingGvTargetSample)>, String> {
+    let Some(stats) = context.uncovered_source_ray_stats else {
+        return Ok(None);
+    };
+    for (index, sample) in stats.sample.iter().enumerate() {
         let sample_curve = dense_from_sparse(&sample.basis_nonzero, context.dimension)?;
         if sample_curve == curve {
             return Ok(Some((index, sample)));
@@ -1349,6 +1438,11 @@ fn path_support_uncovered_source_ray_summaries(
             known_qn_history_status_counts: builder.known_qn_history_status_counts,
             path_support_lookup_status_counts: builder.path_support_lookup_status_counts,
             path_support_gv_counts: builder.path_support_gv_counts,
+            uncovered_source_ray_origin_circuit_pattern: builder
+                .uncovered_source_ray_origin_circuit_pattern,
+            uncovered_source_ray_exact_kind: builder.uncovered_source_ray_exact_kind,
+            uncovered_source_ray_cms_check_status_counts: builder
+                .uncovered_source_ray_cms_check_status_counts,
             source_ray_ambient_nonzero: builder.source_ray_ambient_nonzero,
             curve_nonzero: builder.curve_nonzero,
             occurrences: builder.occurrences,
@@ -1377,6 +1471,13 @@ fn add_path_support_uncovered_source_ray_lookup(
             known_qn_history_status_counts: BTreeMap::new(),
             path_support_lookup_status_counts: BTreeMap::new(),
             path_support_gv_counts: BTreeMap::new(),
+            uncovered_source_ray_origin_circuit_pattern: lookup
+                .matching_uncovered_source_ray_origin_circuit_pattern
+                .clone(),
+            uncovered_source_ray_exact_kind: lookup
+                .matching_uncovered_source_ray_exact_kind
+                .clone(),
+            uncovered_source_ray_cms_check_status_counts: BTreeMap::new(),
             source_ray_ambient_nonzero: lookup
                 .source_ray_ambient_nonzero
                 .clone()
@@ -1385,6 +1486,21 @@ fn add_path_support_uncovered_source_ray_lookup(
             occurrences: Vec::new(),
         });
     debug_assert_eq!(entry.degree, lookup.degree);
+    if entry.uncovered_source_ray_origin_circuit_pattern.is_none() {
+        entry.uncovered_source_ray_origin_circuit_pattern = lookup
+            .matching_uncovered_source_ray_origin_circuit_pattern
+            .clone();
+    }
+    if entry.uncovered_source_ray_exact_kind.is_none() {
+        entry.uncovered_source_ray_exact_kind =
+            lookup.matching_uncovered_source_ray_exact_kind.clone();
+    }
+    for (status, count) in &lookup.matching_uncovered_source_ray_cms_check_status_counts {
+        *entry
+            .uncovered_source_ray_cms_check_status_counts
+            .entry(status.clone())
+            .or_insert(0) += count;
+    }
     *entry
         .known_qn_history_status_counts
         .entry(lookup.known_qn_history_status.clone())
@@ -3147,6 +3263,7 @@ fn validate_context<'a>(
         covered_toric_gv_by_basis,
         intersection,
         stats,
+        uncovered_source_ray_stats: context.uncovered_source_ray_stats_for_missing.as_ref(),
     })
 }
 
@@ -3161,6 +3278,7 @@ struct ValidatedContext<'a> {
     covered_toric_gv_by_basis: HashMap<Vec<i64>, String>,
     intersection: Intersection,
     stats: &'a MissingGvTargetStats,
+    uncovered_source_ray_stats: Option<&'a MissingGvTargetStats>,
 }
 
 fn report_target(
@@ -5957,6 +6075,7 @@ mod tests {
             basis_mori_rays_for_missing_degree_bounded: Some(vec![vec![1, 0], vec![0, 1]]),
             degree_bounded_mori_ray_context_for_missing: ray_context,
             covered_toric_gv_context_for_missing: None,
+            uncovered_source_ray_stats_for_missing: None,
             gv_q_matrix_for_missing: Some(vec![vec![1, 0], vec![0, 1]]),
             grading_for_missing: Some(vec![1, 1]),
             corrected_kappa_basis_for_missing: Some(Vec::new()),
@@ -6105,6 +6224,7 @@ mod tests {
             covered_toric_gv_by_basis: HashMap::new(),
             intersection: Intersection::new(2),
             stats: &stats,
+            uncovered_source_ray_stats: None,
         };
         let sample = MissingGvTargetSample {
             degree: 2,
@@ -6996,6 +7116,7 @@ mod tests {
             covered_toric_gv_by_basis: HashMap::new(),
             intersection: Intersection::new(2),
             stats: &stats,
+            uncovered_source_ray_stats: None,
         };
         let decomposition = LowerSeedDecompositionProbe {
             status: "found_lower_seed_decomposition".to_string(),
@@ -7056,6 +7177,7 @@ mod tests {
             covered_toric_gv_by_basis,
             intersection: Intersection::new(2),
             stats: &stats,
+            uncovered_source_ray_stats: None,
         };
         let mut cache = HashMap::new();
 
@@ -7138,6 +7260,7 @@ mod tests {
             covered_toric_gv_by_basis,
             intersection: Intersection::new(2),
             stats: &stats,
+            uncovered_source_ray_stats: None,
         };
 
         let probe = target_extremal_ray_certificate_probe(
@@ -7215,6 +7338,7 @@ mod tests {
             covered_toric_gv_by_basis,
             intersection: Intersection::new(2),
             stats: &stats,
+            uncovered_source_ray_stats: None,
         };
 
         let probe = target_extremal_ray_certificate_probe(
@@ -7488,6 +7612,11 @@ mod tests {
             matching_missing_target_degree: None,
             matching_missing_target_origin_circuit_pattern: None,
             matching_missing_target_exact_kind: None,
+            matching_uncovered_source_ray_index: None,
+            matching_uncovered_source_ray_degree: None,
+            matching_uncovered_source_ray_origin_circuit_pattern: None,
+            matching_uncovered_source_ray_exact_kind: None,
+            matching_uncovered_source_ray_cms_check_status_counts: BTreeMap::new(),
             curve_nonzero: vec![(3, -1), (8, 1)],
         };
         add_path_support_uncovered_source_ray_lookup(&mut summaries, 7, &lookup);
@@ -7592,6 +7721,7 @@ mod tests {
             covered_toric_gv_by_basis,
             intersection: Intersection::new(2),
             stats: &stats,
+            uncovered_source_ray_stats: None,
         };
 
         let target = vec![1, 1];
@@ -7734,6 +7864,7 @@ mod tests {
             covered_toric_gv_by_basis: HashMap::new(),
             intersection: Intersection::new(2),
             stats: &stats,
+            uncovered_source_ray_stats: None,
         };
 
         let target = vec![1, 1];
@@ -7798,6 +7929,7 @@ mod tests {
             covered_toric_gv_by_basis: HashMap::new(),
             intersection: Intersection::new(2),
             stats: &stats,
+            uncovered_source_ray_stats: None,
         };
 
         let target = vec![1, 1];
@@ -7954,6 +8086,7 @@ mod tests {
             covered_toric_gv_by_basis: HashMap::new(),
             intersection,
             stats: &stats,
+            uncovered_source_ray_stats: None,
         };
 
         let mut semigroup_measurement_cache = HashMap::new();
@@ -8084,6 +8217,7 @@ mod tests {
             covered_toric_gv_by_basis: HashMap::new(),
             intersection,
             stats: &stats,
+            uncovered_source_ray_stats: None,
         };
         let mut semigroup_measurement_cache = HashMap::new();
         let mut semigroup_ladder_cache = HashMap::new();

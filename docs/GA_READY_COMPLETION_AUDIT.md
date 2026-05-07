@@ -213,6 +213,12 @@ and matrix-basis pipeline are no longer open.
    `[(54,-2),(203,1),(206,1),(209,1)]`, appears in both target queues, so the
    next compact-GV task is shared lower-degree history rather than nine
    independent final target rows.
+   The first-principles context export now bounds this auxiliary source-ray
+   classification below the first missing-target degree (`9` here), keeping the
+   heavy dump usable while classifying `240` uncovered lower source rays. The
+   target `7`/`8` queue now records source-derived origin/CMS status: the
+   `GV=1` lower rays are resolved-conifold origin circuits, and the shared
+   `GV=-2` ray has integral CMS divisor checks matching the inferred degree.
    These lower classes are now classified against the exported source-ray
    context: for both degree-10 targets the sampled lookups split as four known
    toric source rays, four non-toric source rays, and eight composite classes

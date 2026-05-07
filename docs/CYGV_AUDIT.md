@@ -2108,6 +2108,19 @@ Target `7` has degree-six source rays with basis supports
 compact-GV subproblem explicit: it is a lower-degree source-derived ray queue,
 not just a target-local artifact of the degree-10 rows.
 
+A fresh release export now also includes source-derived stats for uncovered
+source rays below the first missing-target degree. The bound is degree `9`, and
+the export classifies `240` such lower source rays with branch status
+`real_ok`. Feeding that context back through the target `7`/`8` path-support
+reports enriches the degree-six queue: the `GV=1` rays are resolved-conifold
+origin circuits with at least one integral CMS divisor check matching the
+inferred degree, while the shared `GV=-2` ray has pattern
+`origin=-1;neg={-2:1};pos={1:3};resolved_conifold=false` and two
+`cms_general_divisor_integral_solution_matches_inferred_degree` checks. This
+does not by itself certify the degree-10 compact target values, but it shows
+that part of the missing lower qN history is source-derivable rather than an
+opaque `cygv` artifact.
+
 The stable-Weyl/flop-continuation route is now surfaced as a report-level
 readiness count rather than only per-target arrays. On the schema-3 context all
 nine remaining targets have CMS-style formula candidates, but the 14 exact
