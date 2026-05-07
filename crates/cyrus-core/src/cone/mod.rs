@@ -831,17 +831,19 @@ fn sort_lattice_points(mut points: Vec<Vec<i64>>, grading_vector: &[i64]) -> Vec
 
 /// Normalize vectors by dividing by their GCD.
 fn normalize_vectors(vectors: Vec<Vec<i128>>) -> Vec<Vec<i128>> {
-    vectors
-        .into_iter()
-        .filter_map(|v| {
-            let g = gcd_vec(&v);
-            if g == 0 {
-                None // Skip zero vectors
-            } else {
-                Some(v.iter().map(|&x| x / g).collect())
-            }
-        })
-        .collect()
+    let mut seen = HashSet::new();
+    let mut normalized = Vec::new();
+    for v in vectors {
+        let g = gcd_vec(&v);
+        if g == 0 {
+            continue;
+        }
+        let row = v.iter().map(|&x| x / g).collect::<Vec<_>>();
+        if seen.insert(row.clone()) {
+            normalized.push(row);
+        }
+    }
+    normalized
 }
 
 /// Canonicalize vectors for stable hashing: normalize by GCD and sign.
@@ -1075,12 +1077,16 @@ mod tests {
         let v = vec![vec![2, 4, 6], vec![0, 0, 0], vec![3, 6, 9]];
         let normalized = normalize_vectors(v);
 
-        // Should have 2 vectors (zero vector removed)
-        assert_eq!(normalized.len(), 2);
-        // [2,4,6] / 2 = [1,2,3]
-        assert!(normalized.contains(&vec![1, 2, 3]));
-        // [3,6,9] / 3 = [1,2,3]
-        assert!(normalized.contains(&vec![1, 2, 3]));
+        assert_eq!(normalized, vec![vec![1, 2, 3]]);
+    }
+
+    #[test]
+    fn cone_construction_deduplicates_normalized_rows() {
+        let mut cone = Cone::from_rays(vec![vec![2, 0], vec![1, 0], vec![0, 3], vec![0, 1]]);
+        assert_eq!(cone.rays(), &[vec![1, 0], vec![0, 1]]);
+
+        let mut cone = Cone::from_hyperplanes(vec![vec![2, 0], vec![1, 0], vec![0, 3], vec![0, 1]]);
+        assert_eq!(cone.hyperplanes(), &[vec![1, 0], vec![0, 1]]);
     }
 
     #[test]
