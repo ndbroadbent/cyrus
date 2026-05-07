@@ -1183,6 +1183,9 @@ struct CygvResidualQnDomainTermClassification {
     matching_uncovered_source_ray_index: Option<usize>,
     matching_uncovered_source_ray_degree: Option<i128>,
     matching_uncovered_source_ray_exact_kind: Option<String>,
+    source_is_seed: Option<bool>,
+    source_is_reduced_seed: Option<bool>,
+    source_first_generation_seed_sum: Option<CygvSeedSumDecomposition>,
 }
 
 struct PathSupportSourceClassContext {
@@ -1892,6 +1895,8 @@ fn residual_qn_domain_comparison(
     parent_probe: &PathSupportGeneratorProbe,
     residual_probe: Option<&PathSupportGeneratorProbe>,
     context: &ValidatedContext<'_>,
+    seed_set: &HashSet<Vec<i64>>,
+    reduced_seed_set: &HashSet<Vec<i64>>,
 ) -> Result<Option<CygvResidualQnDomainComparison>, String> {
     let Some(residual) = residual else {
         return Ok(None);
@@ -1904,8 +1909,13 @@ fn residual_qn_domain_comparison(
         parent_probe,
         residual_probe,
     );
-    let parent_only_classifications =
-        residual_parent_only_qn_term_classifications(&comparison, parent_probe, context)?;
+    let parent_only_classifications = residual_parent_only_qn_term_classifications(
+        &comparison,
+        parent_probe,
+        context,
+        seed_set,
+        reduced_seed_set,
+    )?;
     comparison.parent_only_term_source_status_counts =
         parent_only_qn_term_source_status_counts(&parent_only_classifications);
     comparison.parent_only_term_parent_path_support_qn_trace_status_counts = optional_status_counts(
@@ -1982,6 +1992,8 @@ fn residual_parent_only_qn_term_classifications(
     comparison: &CygvResidualQnDomainComparison,
     parent_probe: &PathSupportGeneratorProbe,
     context: &ValidatedContext<'_>,
+    seed_set: &HashSet<Vec<i64>>,
+    reduced_seed_set: &HashSet<Vec<i64>>,
 ) -> Result<Vec<CygvResidualQnDomainTermClassification>, String> {
     let residual_dense = dense_from_sparse(&comparison.residual_nonzero, context.dimension)?;
     comparison
@@ -2007,6 +2019,14 @@ fn residual_parent_only_qn_term_classifications(
             let parent_path_support =
                 path_support_runtime_curve_lookup(parent_probe, &term.exponent_nonzero, context)?;
             let source_context = path_support_source_class_context(&curve, context)?;
+            let source_first_generation_seed_sum = first_generation_seed_sum_decomposition(
+                &curve,
+                context.grading,
+                seed_set,
+                reduced_seed_set,
+                &context.covered_toric_gv_by_basis,
+                &context.source_derived_gv_by_basis,
+            )?;
             Ok(CygvResidualQnDomainTermClassification {
                 exponent_nonzero: term.exponent_nonzero.clone(),
                 coefficient: term.coefficient.clone(),
@@ -2046,6 +2066,9 @@ fn residual_parent_only_qn_term_classifications(
                     .matching_uncovered_source_ray_degree,
                 matching_uncovered_source_ray_exact_kind: source_context
                     .matching_uncovered_source_ray_exact_kind,
+                source_is_seed: Some(seed_set.contains(&curve)),
+                source_is_reduced_seed: Some(reduced_seed_set.contains(&curve)),
+                source_first_generation_seed_sum,
             })
         })
         .collect()
@@ -9065,6 +9088,8 @@ fn cygv_path_history_probe_inner(
         &path_support_generators,
         closest_known_qn_residual_path_support_probe.as_ref(),
         context,
+        &seen,
+        &reduced_seeds,
     )?;
     if !closure.completed {
         return Ok(CygvPathHistoryProbe {
@@ -15713,9 +15738,16 @@ mod tests {
             shared_facet_unresolved_source_ray_stats: None,
         };
 
-        let classifications =
-            residual_parent_only_qn_term_classifications(&comparison, &parent, &context)
-                .expect("parent-only classification should use parent path-support maps");
+        let seed_set = [vec![1, 0]].into_iter().collect::<HashSet<_>>();
+        let reduced_seed_set = seed_set.clone();
+        let classifications = residual_parent_only_qn_term_classifications(
+            &comparison,
+            &parent,
+            &context,
+            &seed_set,
+            &reduced_seed_set,
+        )
+        .expect("parent-only classification should use parent path-support maps");
 
         assert_eq!(classifications.len(), 1);
         assert_eq!(
@@ -15773,6 +15805,13 @@ mod tests {
         assert_eq!(
             classifications[0].offset_known_qn_history_status,
             "known_nonzero_toric_gv"
+        );
+        assert_eq!(classifications[0].source_is_seed, Some(false));
+        assert_eq!(classifications[0].source_is_reduced_seed, Some(false));
+        assert!(
+            classifications[0]
+                .source_first_generation_seed_sum
+                .is_some()
         );
     }
 

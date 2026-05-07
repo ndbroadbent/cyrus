@@ -2774,6 +2774,14 @@ source-derived nonreduced seed; that degree-six seed then pair-reduces as
 degree `4 + 2` with known toric/source scalar GV leaves. This makes the
 remaining compact task precise: reproduce the degree-ordered `q_N` subtraction
 history of this composite chain, not discover another scalar GV leaf.
+The parent-only terms in the degree-eight residual qN comparison now carry the
+same seed context. For target `7`, the missing-target-shaped parent-only term
+is a raw and pair-reduced seed but has zero/absent parent-domain GV, while the
+nonzero generated sibling term has GV `-2` but is neither a seed nor a
+first-generation seed sum in the current source set. That separates the two
+objects in the residual polynomial: one is the missing target read as zero in
+the sampled parent domain, the other is a later-generation compact-history term
+with nonzero scalar output.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use
