@@ -8426,6 +8426,59 @@ fn compare_corrected_target_volume_checkpoint(
     }
 }
 
+fn compare_gv_target_correction_to_corrected_target_checkpoint(
+    label: &str,
+    data_dir: Option<&str>,
+    base_target_tau: &[F64<Pos>],
+    candidate_gv_correction: &[F64<Finite>],
+) {
+    let Some(dir) = data_dir.map(PathBuf::from) else {
+        return;
+    };
+    let target_path = dir.join("corrected_target_volumes.dat");
+    if !target_path.exists() {
+        return;
+    }
+    let checkpoint = read_csv_f64(&target_path)
+        .into_iter()
+        .map(|value| {
+            F64::<Finite>::new(value).expect("corrected target-volume checkpoint is finite")
+        })
+        .collect::<Vec<_>>();
+    if checkpoint.len() != base_target_tau.len()
+        || checkpoint.len() != candidate_gv_correction.len()
+    {
+        eprintln!(
+            "[COMPARE] corrected target-volume diagnostic GV correction length mismatch ({label}): checkpoint={} base={} candidate={}",
+            checkpoint.len(),
+            base_target_tau.len(),
+            candidate_gv_correction.len()
+        );
+        return;
+    }
+    let implied_gv_correction = base_target_tau
+        .iter()
+        .zip(checkpoint.iter())
+        .map(|(base, target)| {
+            F64::<Finite>::new(base.get() - target.get()).expect("implied GV correction is finite")
+        })
+        .collect::<Vec<_>>();
+    let summary = target_correction_delta_summary(&implied_gv_correction, candidate_gv_correction)
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "[ERROR] failed to compare corrected target-volume diagnostic GV correction ({label}): {e}"
+            );
+            std::process::exit(2);
+        });
+    eprintln!(
+        "[COMPARE] corrected target-volume implied GV correction delta ({label}): max_abs={} relative_l2={} max_abs_checkpoint_implied={} max_abs_candidate={}",
+        summary.max_abs_delta,
+        summary.relative_l2_delta,
+        summary.max_abs_reference,
+        summary.max_abs_candidate
+    );
+}
+
 fn compare_corrected_chamber_target_volume_checkpoint(
     label: &str,
     data_dir: Option<&str>,
@@ -9657,6 +9710,7 @@ fn stage_volume(
         gv_volume_correction,
         gamma_for_chamber_gv,
         kklt_basis_for_chamber_gv,
+        base_target_tau_for_chamber_gv,
         input_chamber_gv_target_correction,
     ) = if allow_downstream_kahler {
         let Some(data_dir_path) = data_dir.map(PathBuf::from) else {
@@ -9676,7 +9730,7 @@ fn stage_volume(
             &source_basis,
             &t_raw,
         );
-        (t, None, None, None, None)
+        (t, None, None, None, None, None)
     } else {
         let (c_i, kklt_basis) = load_kklt_inputs(data_dir, manifest_dir);
         let c_tau = cyrus_core::kklt::compute_c_tau(racetrack.rt_res.g_s, racetrack.w0);
@@ -10499,6 +10553,7 @@ fn stage_volume(
             Some(gv_volume_correction),
             Some(gamma),
             Some(kklt_basis),
+            Some(tau_target),
             Some(input_chamber_gv_target_correction),
         )
     };
@@ -10812,6 +10867,17 @@ fn stage_volume(
                     eprintln!(
                         "[INFO] corrected-chamber local formula-sum diagnostic GV target correction delta_vs_input_chamber (diagnostic, not promoted) = {:?}",
                         summary
+                    );
+                }
+                if let (Some(base_target_tau), Some(formula_sum_target_correction)) = (
+                    base_target_tau_for_chamber_gv.as_deref(),
+                    diag.formula_sum_diagnostic_gv_target_correction.as_deref(),
+                ) {
+                    compare_gv_target_correction_to_corrected_target_checkpoint(
+                        "corrected_chamber_formula_sum_diagnostic",
+                        data_dir,
+                        base_target_tau,
+                        formula_sum_target_correction,
                     );
                 }
             }
