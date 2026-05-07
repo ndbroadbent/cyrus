@@ -193,6 +193,7 @@ struct ContextReport {
     exact_kind_counts: HashMap<String, usize>,
     target_status_counts: BTreeMap<String, usize>,
     active_decomposition_generator_source_status_counts: BTreeMap<String, usize>,
+    active_decomposition_unresolved_source_leaf_sample: Vec<ActiveDecompositionSourceLeafSummary>,
     local_cygv_charge_signature_counts: BTreeMap<String, usize>,
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
     local_cygv_actual_call_readiness_counts: BTreeMap<String, usize>,
@@ -629,6 +630,33 @@ struct CygvPathSupportSourceRayOccurrence {
     target_index: usize,
     candidate_index: usize,
     side: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ActiveDecompositionSourceLeafSummary {
+    source_status: String,
+    occurrence_count: usize,
+    degree: Option<i128>,
+    curve_nonzero: Vec<(usize, i64)>,
+    source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
+    matching_missing_target_index: Option<usize>,
+    matching_missing_target_degree: Option<i128>,
+    matching_missing_target_exact_kind: Option<String>,
+    matching_uncovered_source_ray_index: Option<usize>,
+    matching_uncovered_source_ray_degree: Option<i128>,
+    matching_uncovered_source_ray_origin_circuit_pattern: Option<String>,
+    matching_uncovered_source_ray_exact_kind: Option<String>,
+    matching_uncovered_source_ray_local_cygv_readiness: Option<String>,
+    matching_uncovered_source_ray_local_missing_inputs: Vec<String>,
+    occurrences: Vec<ActiveDecompositionSourceLeafOccurrence>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ActiveDecompositionSourceLeafOccurrence {
+    target_index: usize,
+    target_degree: i128,
+    target_exact_kind: Option<String>,
+    active_generator_index: usize,
 }
 
 struct CygvPathSupportSourceRaySummaryBuilder {
@@ -2131,6 +2159,106 @@ fn active_decomposition_generator_source_status(
         return Ok("active_generator_source_ray_not_toric_covered".to_string());
     }
     Ok("active_generator_not_source_degree_bounded_ray".to_string())
+}
+
+fn active_decomposition_unresolved_source_leaf_summaries(
+    samples: &[MissingGvTargetSample],
+    context: &ValidatedContext<'_>,
+    target_index_filter: Option<usize>,
+) -> Vec<ActiveDecompositionSourceLeafSummary> {
+    let mut summaries: BTreeMap<Vec<i64>, ActiveDecompositionSourceLeafSummary> = BTreeMap::new();
+    for (target_index, sample) in samples.iter().enumerate() {
+        if !target_index_selected(target_index, target_index_filter) {
+            continue;
+        }
+        let Some(active_generators) = sample
+            .real_cone_decomposition_active_generator_basis_nonzero
+            .as_ref()
+        else {
+            continue;
+        };
+        for (active_generator_index, generator) in active_generators.iter().enumerate() {
+            let Ok(curve) = dense_from_sparse(generator, context.dimension) else {
+                continue;
+            };
+            let Ok(source_status) = active_decomposition_generator_source_status(&curve, context)
+            else {
+                continue;
+            };
+            if source_status == "active_generator_known_toric_covered"
+                || source_status == "active_generator_known_source_derived_gv"
+            {
+                continue;
+            }
+            let occurrence = ActiveDecompositionSourceLeafOccurrence {
+                target_index,
+                target_degree: sample.degree,
+                target_exact_kind: sample.real_cone_decomposition_exact_kind.clone(),
+                active_generator_index,
+            };
+            match summaries.entry(curve.clone()) {
+                std::collections::btree_map::Entry::Occupied(mut entry) => {
+                    let summary = entry.get_mut();
+                    summary.occurrence_count += 1;
+                    summary.occurrences.push(occurrence);
+                }
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    let source_context = path_support_source_class_context(&curve, context).ok();
+                    entry.insert(ActiveDecompositionSourceLeafSummary {
+                        source_status,
+                        occurrence_count: 1,
+                        degree: curve_degree(&curve, context.grading).ok(),
+                        curve_nonzero: sparse_from_dense(&curve),
+                        source_ray_ambient_nonzero: source_context
+                            .as_ref()
+                            .and_then(|context| context.source_ray_ambient_nonzero.clone()),
+                        matching_missing_target_index: source_context
+                            .as_ref()
+                            .and_then(|context| context.matching_missing_target_index),
+                        matching_missing_target_degree: source_context
+                            .as_ref()
+                            .and_then(|context| context.matching_missing_target_degree),
+                        matching_missing_target_exact_kind: source_context
+                            .as_ref()
+                            .and_then(|context| context.matching_missing_target_exact_kind.clone()),
+                        matching_uncovered_source_ray_index: source_context
+                            .as_ref()
+                            .and_then(|context| context.matching_uncovered_source_ray_index),
+                        matching_uncovered_source_ray_degree: source_context
+                            .as_ref()
+                            .and_then(|context| context.matching_uncovered_source_ray_degree),
+                        matching_uncovered_source_ray_origin_circuit_pattern: source_context
+                            .as_ref()
+                            .and_then(|context| {
+                                context
+                                    .matching_uncovered_source_ray_origin_circuit_pattern
+                                    .clone()
+                            }),
+                        matching_uncovered_source_ray_exact_kind: source_context.as_ref().and_then(
+                            |context| context.matching_uncovered_source_ray_exact_kind.clone(),
+                        ),
+                        matching_uncovered_source_ray_local_cygv_readiness: source_context
+                            .as_ref()
+                            .and_then(|context| {
+                                context
+                                    .matching_uncovered_source_ray_local_cygv_readiness
+                                    .clone()
+                            }),
+                        matching_uncovered_source_ray_local_missing_inputs: source_context
+                            .as_ref()
+                            .map(|context| {
+                                context
+                                    .matching_uncovered_source_ray_local_missing_inputs
+                                    .clone()
+                            })
+                            .unwrap_or_default(),
+                        occurrences: vec![occurrence],
+                    });
+                }
+            }
+        }
+    }
+    summaries.into_values().collect()
 }
 
 fn path_support_lookup_status(
@@ -6775,6 +6903,12 @@ fn build_report(
             validated,
             target_index_filter,
         );
+    let active_decomposition_unresolved_source_leaf_sample =
+        active_decomposition_unresolved_source_leaf_summaries(
+            &validated.stats.sample,
+            validated,
+            target_index_filter,
+        );
     ContextReport {
         schema_version: context.schema_version,
         dimension: validated.dimension,
@@ -6802,6 +6936,7 @@ fn build_report(
             .clone(),
         target_status_counts,
         active_decomposition_generator_source_status_counts,
+        active_decomposition_unresolved_source_leaf_sample,
         local_cygv_charge_signature_counts,
         local_cygv_target_candidate_status_counts,
         local_cygv_actual_call_readiness_counts,
@@ -9333,6 +9468,40 @@ mod tests {
                 ),
             ])
         );
+
+        let summaries =
+            active_decomposition_unresolved_source_leaf_summaries(&stats.sample, &context, None);
+        assert_eq!(summaries.len(), 4);
+        let summary_status_counts = summaries.iter().fold(BTreeMap::new(), |mut acc, summary| {
+            *acc.entry(summary.source_status.clone()).or_insert(0) += 1;
+            acc
+        });
+        assert_eq!(
+            summary_status_counts,
+            BTreeMap::from([
+                ("active_generator_matches_missing_target".to_string(), 1),
+                (
+                    "active_generator_matches_uncovered_source_ray".to_string(),
+                    1
+                ),
+                (
+                    "active_generator_source_ray_not_toric_covered".to_string(),
+                    1
+                ),
+                (
+                    "active_generator_not_source_degree_bounded_ray".to_string(),
+                    1
+                ),
+            ])
+        );
+        assert!(summaries.iter().any(|summary| {
+            summary.source_status == "active_generator_matches_missing_target"
+                && summary.matching_missing_target_index == Some(0)
+        }));
+        assert!(summaries.iter().any(|summary| {
+            summary.source_status == "active_generator_matches_uncovered_source_ray"
+                && summary.matching_uncovered_source_ray_index == Some(1)
+        }));
     }
 
     #[test]

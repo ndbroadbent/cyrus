@@ -316,7 +316,10 @@ remaining GV rows. The active decomposition generators now classify as 12
 toric-covered leaves, one source-derived GV leaf, two other missing targets,
 one uncovered source ray, and six source rays that are not yet toric-covered,
 so the remaining implementation work has moved to those lower
-source-ray/chamber leaves.
+source-ray/chamber leaves. The report now carries
+`active_decomposition_unresolved_source_leaf_sample`, which gives the exact
+curve and ambient support for each unresolved dependency; the current sample
+contains two missing-target links plus seven lower source-ray leaves.
 
 ## Next Concrete Action
 

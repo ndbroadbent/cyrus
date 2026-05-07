@@ -579,4 +579,9 @@ to make the remaining GV layer more first-principles:
    source-derived GV leaf, 12 toric-covered leaves, two matching other missing
    targets, one matching uncovered source ray, and six source rays that are
    still not toric-covered. This shifts the actionable GV work to certifying
-   those lower source-ray leaves and their chamber history.
+   those lower source-ray leaves and their chamber history. The report now
+   includes `active_decomposition_unresolved_source_leaf_sample`, which lists
+   the exact unresolved dependency leaves and their parent occurrences. In the
+   current context this sample contains two links back to other missing
+   targets, one uncovered degree-4 source ray without a CMS formula candidate,
+   and six not-yet-covered source rays of degrees 10, 10, 10, 10, 12, and 14.

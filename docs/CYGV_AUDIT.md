@@ -2306,3 +2306,13 @@ The same report now aggregates the active decomposition generators themselves:
 classes therefore depend on a smaller lower-source-ray graph, with most leaves
 already toric-covered or source-derived but seven lower generators still
 requiring source-derived GV/chamber treatment.
+The report now materializes those unresolved dependencies in
+`active_decomposition_unresolved_source_leaf_sample`, including the exact
+divisor-basis curve, ambient support, parent-target occurrences, and any
+matching missing-target or uncovered-source metadata. On the current
+McAllister context the sample has nine unresolved dependency entries: two are
+links back to other missing targets, one is an uncovered source ray of degree
+4 with no origin-circuit formula candidate, and six are degree-bounded source
+rays not yet toric-covered or source-derived (degrees 10, 10, 10, 10, 12, and
+14). This is now the concrete lower leaf set for the next GV implementation
+step.
