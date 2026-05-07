@@ -929,4 +929,11 @@ to make the remaining GV layer more first-principles:
    `64` anchors and `256` cutting rounds keeps target `8` shared/union domains
    at full/aggregate/anchor `lp_no_solution`; target `7` union domains match
    that, and target `7` shared domains retain full LP `Unknown` but have
-   aggregate and all `64` anchors at `lp_no_solution`.
+   aggregate and all `64` anchors at `lp_no_solution`. The new
+   `--scan-origin-witness-span-closure` diagnostic rules out one cheap
+   alternative for the two degree-10 cases: targets `7` and `8` each scan `720`
+   unique degree-bounded candidates, and their relation/shared/union domains
+   all report `span_closed_under_degree_bounded_context` with zero extra
+   same-span generators. So the target-7/8 issue is not that the small witness
+   domains forgot forced row-span members; it is still the absent
+   supporting-face/chamber-semigroup certificate.

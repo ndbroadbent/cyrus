@@ -27,8 +27,9 @@ use cyrus_core::{
     compute_gv_invariants_with_provided_generators,
     compute_gv_invariants_with_provided_generators_qn_trace,
     compute_gw_coefficient_trace_with_explicit_semigroup,
-    compute_gw_coefficient_trace_with_provided_generators, curve_row_span_rank,
-    diagnose_affine_toric_circuit, integer_math::solve_linear_system_rational, utils::gcd_list_int,
+    compute_gw_coefficient_trace_with_provided_generators, curve_in_rational_row_span,
+    curve_row_span_rank, diagnose_affine_toric_circuit, integer_math::solve_linear_system_rational,
+    utils::gcd_list_int,
 };
 
 const CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT: usize = 32;
@@ -41,6 +42,7 @@ const CYGV_BOUNDED_DECOMPOSITION_DIAMOND_ELEMENT_LIMIT: usize = 64;
 const CYGV_BOUNDED_DIAMOND_PARENT_QN_DIFF_SAMPLE_LIMIT: usize = 16;
 const ORIGIN_CIRCUIT_WITNESS_DOMAIN_UNRESOLVED_SAMPLE_LIMIT: usize = 64;
 const ORIGIN_CIRCUIT_WITNESS_DOMAIN_OCCURRENCE_SAMPLE_LIMIT: usize = 8;
+const ORIGIN_CIRCUIT_WITNESS_DOMAIN_SPAN_CLOSURE_SAMPLE_LIMIT: usize = 16;
 
 #[derive(Debug, Deserialize)]
 struct CorrectedChamberGvContext {
@@ -283,6 +285,9 @@ struct ContextReport {
     origin_circuit_witness_relation_support_face_certificate_status_counts: BTreeMap<String, usize>,
     origin_circuit_witness_shared_facet_face_certificate_status_counts: BTreeMap<String, usize>,
     origin_circuit_witness_facet_union_face_certificate_status_counts: BTreeMap<String, usize>,
+    origin_circuit_witness_relation_span_closure_status_counts: BTreeMap<String, usize>,
+    origin_circuit_witness_shared_facet_span_closure_status_counts: BTreeMap<String, usize>,
+    origin_circuit_witness_facet_union_span_closure_status_counts: BTreeMap<String, usize>,
     origin_circuit_witness_relation_cygv_status_counts: BTreeMap<String, usize>,
     origin_circuit_witness_shared_facet_cygv_status_counts: BTreeMap<String, usize>,
     origin_circuit_witness_facet_union_cygv_status_counts: BTreeMap<String, usize>,
@@ -7090,6 +7095,9 @@ struct OriginCircuitWitnessDomainSummary {
     relation_support_face_certificate_diagnostic: OriginCircuitWitnessSupportFaceCertificateProbe,
     shared_facet_face_certificate_diagnostic: OriginCircuitWitnessSupportFaceCertificateProbe,
     facet_union_face_certificate_diagnostic: OriginCircuitWitnessSupportFaceCertificateProbe,
+    relation_span_closure_probe: OriginCircuitWitnessDomainSpanClosureProbe,
+    shared_facet_span_closure_probe: OriginCircuitWitnessDomainSpanClosureProbe,
+    facet_union_span_closure_probe: OriginCircuitWitnessDomainSpanClosureProbe,
     relation_cygv_probe: Option<OriginCircuitWitnessDomainCygvProbe>,
     shared_facet_cygv_probe: Option<OriginCircuitWitnessDomainCygvProbe>,
     facet_union_cygv_probe: Option<OriginCircuitWitnessDomainCygvProbe>,
@@ -7125,6 +7133,39 @@ fn origin_circuit_witness_support_face_certificate_probe_empty(
         lp_anchor_attempt_count: None,
         lp_anchor_lp_solution_count: None,
         lp_anchor_status_counts: BTreeMap::new(),
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct OriginCircuitWitnessDomainSpanClosureProbe {
+    status: String,
+    scan_candidate_count: Option<usize>,
+    scanned_unique_generator_count: Option<usize>,
+    extra_generator_count: Option<usize>,
+    extra_source_status_counts: BTreeMap<String, usize>,
+    extra_degree_counts: BTreeMap<i128, usize>,
+    extra_sample: Vec<OriginCircuitWitnessDomainSpanClosureGeneratorSummary>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct OriginCircuitWitnessDomainSpanClosureGeneratorSummary {
+    degree: i128,
+    source_status: String,
+    ambient_nonzero: Vec<(usize, i64)>,
+    basis_nonzero: Vec<(usize, i64)>,
+}
+
+fn origin_circuit_witness_domain_span_closure_probe_empty(
+    status: String,
+) -> OriginCircuitWitnessDomainSpanClosureProbe {
+    OriginCircuitWitnessDomainSpanClosureProbe {
+        status,
+        scan_candidate_count: None,
+        scanned_unique_generator_count: None,
+        extra_generator_count: None,
+        extra_source_status_counts: BTreeMap::new(),
+        extra_degree_counts: BTreeMap::new(),
+        extra_sample: Vec::new(),
     }
 }
 
@@ -7338,6 +7379,7 @@ fn origin_circuit_witness_domain_summaries(
     supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
     run_cygv: bool,
     cygv_generator_limit: usize,
+    span_closure_scan_limit: Option<usize>,
 ) -> Vec<OriginCircuitWitnessDomainSummary> {
     let mut summaries = Vec::new();
     for (target_index, sample) in samples.iter().enumerate() {
@@ -7359,6 +7401,7 @@ fn origin_circuit_witness_domain_summaries(
                 supporting_face_lp_options,
                 run_cygv,
                 cygv_generator_limit,
+                span_closure_scan_limit,
             ));
         }
     }
@@ -7377,6 +7420,7 @@ fn origin_circuit_witness_domain_summary(
     supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
     run_cygv: bool,
     cygv_generator_limit: usize,
+    span_closure_scan_limit: Option<usize>,
 ) -> OriginCircuitWitnessDomainSummary {
     let supports = origin_circuit_witness_ambient_support_sets(witness);
     let relation = origin_circuit_witness_domain_stats(
@@ -7390,6 +7434,7 @@ fn origin_circuit_witness_domain_summary(
         cygv_generator_limit,
         target,
         "origin_witness_relation",
+        span_closure_scan_limit,
     );
     let shared = origin_circuit_witness_domain_stats(
         context,
@@ -7402,6 +7447,7 @@ fn origin_circuit_witness_domain_summary(
         cygv_generator_limit,
         target,
         "origin_witness_shared_facet",
+        span_closure_scan_limit,
     );
     let union = origin_circuit_witness_domain_stats(
         context,
@@ -7414,6 +7460,7 @@ fn origin_circuit_witness_domain_summary(
         cygv_generator_limit,
         target,
         "origin_witness_facet_union",
+        span_closure_scan_limit,
     );
     OriginCircuitWitnessDomainSummary {
         target_index,
@@ -7443,6 +7490,9 @@ fn origin_circuit_witness_domain_summary(
         relation_support_face_certificate_diagnostic: relation.certificate_diagnostic,
         shared_facet_face_certificate_diagnostic: shared.certificate_diagnostic,
         facet_union_face_certificate_diagnostic: union.certificate_diagnostic,
+        relation_span_closure_probe: relation.span_closure_probe,
+        shared_facet_span_closure_probe: shared.span_closure_probe,
+        facet_union_span_closure_probe: union.span_closure_probe,
         relation_cygv_probe: relation.cygv_probe,
         shared_facet_cygv_probe: shared.cygv_probe,
         facet_union_cygv_probe: union.cygv_probe,
@@ -7456,6 +7506,7 @@ struct OriginCircuitWitnessDomainStats {
     source_status_counts: BTreeMap<String, usize>,
     certificate_status: String,
     certificate_diagnostic: OriginCircuitWitnessSupportFaceCertificateProbe,
+    span_closure_probe: OriginCircuitWitnessDomainSpanClosureProbe,
     cygv_probe: Option<OriginCircuitWitnessDomainCygvProbe>,
 }
 
@@ -7578,6 +7629,7 @@ fn origin_circuit_witness_domain_stats(
     cygv_generator_limit: usize,
     target: Result<&[i64], &String>,
     cygv_label: &str,
+    span_closure_scan_limit: Option<usize>,
 ) -> OriginCircuitWitnessDomainStats {
     let Some(ray_context) = context.degree_bounded_ray_context else {
         return OriginCircuitWitnessDomainStats {
@@ -7587,6 +7639,9 @@ fn origin_circuit_witness_domain_stats(
             source_status_counts: BTreeMap::new(),
             certificate_status: "missing_degree_bounded_mori_ray_context".to_string(),
             certificate_diagnostic: origin_circuit_witness_support_face_certificate_probe_empty(
+                "missing_degree_bounded_mori_ray_context".to_string(),
+            ),
+            span_closure_probe: origin_circuit_witness_domain_span_closure_probe_empty(
                 "missing_degree_bounded_mori_ray_context".to_string(),
             ),
             cygv_probe: None,
@@ -7619,6 +7674,12 @@ fn origin_circuit_witness_domain_stats(
                         status_error_fragment(&error)
                     ),
                 ),
+                span_closure_probe: origin_circuit_witness_domain_span_closure_probe_empty(
+                    format!(
+                        "origin_witness_domain_error_{}",
+                        status_error_fragment(&error)
+                    ),
+                ),
                 cygv_probe: None,
             };
         }
@@ -7646,6 +7707,12 @@ fn origin_circuit_witness_domain_stats(
                             "origin_witness_domain_error_{}",
                             status_error_fragment(&error.to_string())
                         )),
+                    span_closure_probe: origin_circuit_witness_domain_span_closure_probe_empty(
+                        format!(
+                            "origin_witness_domain_error_{}",
+                            status_error_fragment(&error.to_string())
+                        ),
+                    ),
                     cygv_probe: None,
                 };
             }
@@ -7666,6 +7733,12 @@ fn origin_circuit_witness_domain_stats(
         origin_circuit_witness_support_face_certificate_probe_empty("not_run".to_string())
     };
     let certificate_status = certificate_diagnostic.status.clone();
+    let span_closure_probe = origin_circuit_witness_domain_span_closure_probe(
+        &generators,
+        context,
+        degree,
+        span_closure_scan_limit,
+    );
     let cygv_probe = origin_circuit_witness_domain_cygv_probe(
         &generators,
         target,
@@ -7682,6 +7755,7 @@ fn origin_circuit_witness_domain_stats(
         source_status_counts,
         certificate_status,
         certificate_diagnostic,
+        span_closure_probe,
         cygv_probe,
     }
 }
@@ -7839,6 +7913,138 @@ fn source_status_counts_for_generators(
         *counts.entry(status).or_insert(0usize) += 1;
     }
     counts
+}
+
+fn origin_circuit_witness_domain_span_closure_probe(
+    generators: &[Vec<i64>],
+    context: &ValidatedContext<'_>,
+    max_degree: i128,
+    scan_limit: Option<usize>,
+) -> OriginCircuitWitnessDomainSpanClosureProbe {
+    let Some(scan_limit) = scan_limit else {
+        return origin_circuit_witness_domain_span_closure_probe_empty("not_run".to_string());
+    };
+    if generators.is_empty() {
+        return origin_circuit_witness_domain_span_closure_probe_empty(
+            "span_closure_empty_generators".to_string(),
+        );
+    }
+    let Some(ray_context) = context.degree_bounded_ray_context else {
+        return origin_circuit_witness_domain_span_closure_probe_empty(
+            "missing_degree_bounded_mori_ray_context".to_string(),
+        );
+    };
+
+    let selected = generators.iter().cloned().collect::<HashSet<_>>();
+    let mut seen_candidates = HashSet::new();
+    let mut candidates = Vec::new();
+    for ray in ray_context {
+        if ray.degree <= 0 || ray.degree > max_degree {
+            continue;
+        }
+        let basis_ray = match dense_from_sparse(&ray.basis_nonzero, context.dimension) {
+            Ok(basis_ray) => basis_ray,
+            Err(error) => {
+                return origin_circuit_witness_domain_span_closure_probe_empty(format!(
+                    "span_closure_scan_error_{}",
+                    status_error_fragment(&error)
+                ));
+            }
+        };
+        if seen_candidates.insert(basis_ray.clone()) {
+            candidates.push((ray.degree, ray.ambient_nonzero.clone(), basis_ray));
+        }
+    }
+    let candidate_count = candidates.len();
+    if candidate_count > scan_limit {
+        return OriginCircuitWitnessDomainSpanClosureProbe {
+            status: format!(
+                "span_closure_skipped_scan_limit_{scan_limit}_actual_{candidate_count}"
+            ),
+            scan_candidate_count: Some(candidate_count),
+            scanned_unique_generator_count: None,
+            extra_generator_count: None,
+            extra_source_status_counts: BTreeMap::new(),
+            extra_degree_counts: BTreeMap::new(),
+            extra_sample: Vec::new(),
+        };
+    }
+
+    let mut extra_source_status_counts = BTreeMap::new();
+    let mut extra_degree_counts = BTreeMap::new();
+    let mut extra_sample = Vec::new();
+    let mut extra_count = 0usize;
+    for (degree, ambient_nonzero, basis_ray) in candidates {
+        if selected.contains(&basis_ray) {
+            continue;
+        }
+        let in_span = match curve_in_rational_row_span(&basis_ray, generators) {
+            Ok(in_span) => in_span,
+            Err(error) => {
+                return OriginCircuitWitnessDomainSpanClosureProbe {
+                    status: format!(
+                        "span_closure_scan_error_{}",
+                        status_error_fragment(&error.to_string())
+                    ),
+                    scan_candidate_count: Some(candidate_count),
+                    scanned_unique_generator_count: Some(candidate_count),
+                    extra_generator_count: Some(extra_count),
+                    extra_source_status_counts,
+                    extra_degree_counts,
+                    extra_sample,
+                };
+            }
+        };
+        if !in_span {
+            continue;
+        }
+        extra_count += 1;
+        *extra_degree_counts.entry(degree).or_insert(0) += 1;
+        let source_status = active_decomposition_generator_source_status(&basis_ray, context)
+            .unwrap_or_else(|error| {
+                format!(
+                    "generator_source_status_error_{}",
+                    status_error_fragment(&error)
+                )
+            });
+        *extra_source_status_counts
+            .entry(source_status.clone())
+            .or_insert(0) += 1;
+        if extra_sample.len() < ORIGIN_CIRCUIT_WITNESS_DOMAIN_SPAN_CLOSURE_SAMPLE_LIMIT {
+            extra_sample.push(OriginCircuitWitnessDomainSpanClosureGeneratorSummary {
+                degree,
+                source_status,
+                ambient_nonzero,
+                basis_nonzero: sparse_from_dense(&basis_ray),
+            });
+        }
+    }
+    extra_sample.sort_by(|left, right| {
+        (
+            left.degree,
+            left.source_status.as_str(),
+            left.basis_nonzero.as_slice(),
+        )
+            .cmp(&(
+                right.degree,
+                right.source_status.as_str(),
+                right.basis_nonzero.as_slice(),
+            ))
+    });
+
+    OriginCircuitWitnessDomainSpanClosureProbe {
+        status: if extra_count == 0 {
+            "span_closed_under_degree_bounded_context".to_string()
+        } else {
+            "span_closure_has_extra_generators".to_string()
+        },
+        scan_candidate_count: Some(candidate_count),
+        scanned_unique_generator_count: Some(candidate_count),
+        extra_generator_count: Some(extra_count),
+        extra_source_status_counts,
+        extra_degree_counts,
+        extra_sample,
+    }
 }
 
 fn origin_circuit_witness_domain_status_counts(
@@ -13122,6 +13328,7 @@ fn build_report(
     semigroup_measure_max_seed_count: Option<usize>,
     scan_local_integer_tensors: bool,
     local_tensor_scan_bound: i64,
+    origin_witness_span_closure_scan_limit: Option<usize>,
     element_limit: usize,
     closure_generation_limit: Option<usize>,
     supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
@@ -13326,6 +13533,7 @@ fn build_report(
         supporting_face_lp_options,
         run_origin_witness_cygv,
         origin_witness_cygv_generator_limit,
+        origin_witness_span_closure_scan_limit,
     );
     let origin_circuit_witness_relation_support_face_profile_counts =
         origin_circuit_witness_domain_status_counts(
@@ -13356,6 +13564,21 @@ fn build_report(
         origin_circuit_witness_domain_status_counts(
             &origin_circuit_witness_domain_sample,
             |summary| &summary.facet_union_face_certificate_status,
+        );
+    let origin_circuit_witness_relation_span_closure_status_counts =
+        origin_circuit_witness_domain_status_counts(
+            &origin_circuit_witness_domain_sample,
+            |summary| &summary.relation_span_closure_probe.status,
+        );
+    let origin_circuit_witness_shared_facet_span_closure_status_counts =
+        origin_circuit_witness_domain_status_counts(
+            &origin_circuit_witness_domain_sample,
+            |summary| &summary.shared_facet_span_closure_probe.status,
+        );
+    let origin_circuit_witness_facet_union_span_closure_status_counts =
+        origin_circuit_witness_domain_status_counts(
+            &origin_circuit_witness_domain_sample,
+            |summary| &summary.facet_union_span_closure_probe.status,
         );
     let origin_circuit_witness_relation_cygv_status_counts =
         origin_circuit_witness_domain_cygv_status_counts(
@@ -13935,6 +14158,9 @@ fn build_report(
         origin_circuit_witness_relation_support_face_certificate_status_counts,
         origin_circuit_witness_shared_facet_face_certificate_status_counts,
         origin_circuit_witness_facet_union_face_certificate_status_counts,
+        origin_circuit_witness_relation_span_closure_status_counts,
+        origin_circuit_witness_shared_facet_span_closure_status_counts,
+        origin_circuit_witness_facet_union_span_closure_status_counts,
         origin_circuit_witness_relation_cygv_status_counts,
         origin_circuit_witness_shared_facet_cygv_status_counts,
         origin_circuit_witness_facet_union_cygv_status_counts,
@@ -15286,7 +15512,7 @@ fn selected_target_indices(
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--trace-support-overlap-qn] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--certify-origin-witness-domains] [--origin-support-certificate-limit N] [--run-origin-witness-cygv] [--origin-witness-cygv-generator-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--supporting-face-lp-anchor-attempts N] [--supporting-face-lp-cutting-rounds N] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--scan-local-integer-tensors] [--local-tensor-scan-bound N] [--element-limit N] [--closure-generation-limit N] [--out path | --per-target-out-dir path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
+            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--trace-support-overlap-qn] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--certify-origin-witness-domains] [--origin-support-certificate-limit N] [--run-origin-witness-cygv] [--origin-witness-cygv-generator-limit N] [--scan-origin-witness-span-closure] [--origin-witness-span-closure-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--supporting-face-lp-anchor-attempts N] [--supporting-face-lp-cutting-rounds N] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--scan-local-integer-tensors] [--local-tensor-scan-bound N] [--element-limit N] [--closure-generation-limit N] [--out path | --per-target-out-dir path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
         );
         std::process::exit(2);
     };
@@ -15306,6 +15532,8 @@ fn main() {
     let run_origin_witness_cygv = parse_flag("--run-origin-witness-cygv");
     let origin_witness_cygv_generator_limit =
         parse_arg_value::<usize>("--origin-witness-cygv-generator-limit").unwrap_or(64);
+    let origin_witness_span_closure_scan_limit = parse_flag("--scan-origin-witness-span-closure")
+        .then(|| parse_arg_value::<usize>("--origin-witness-span-closure-limit").unwrap_or(512));
     let certify_target_extremal_rays = parse_flag("--certify-target-extremal-rays");
     let target_extremal_generator_limit =
         parse_arg_value::<usize>("--target-extremal-generator-limit").unwrap_or(256);
@@ -15390,6 +15618,7 @@ fn main() {
                 semigroup_measure_max_seed_count,
                 scan_local_integer_tensors,
                 local_tensor_scan_bound,
+                origin_witness_span_closure_scan_limit,
                 element_limit,
                 closure_generation_limit,
                 &supporting_face_lp_options,
@@ -15435,6 +15664,7 @@ fn main() {
         semigroup_measure_max_seed_count,
         scan_local_integer_tensors,
         local_tensor_scan_bound,
+        origin_witness_span_closure_scan_limit,
         element_limit,
         closure_generation_limit,
         &supporting_face_lp_options,
@@ -15825,6 +16055,7 @@ mod tests {
             &SupportingMoriFaceLpSearchOptions::default(),
             false,
             64,
+            Some(4),
         );
         assert_eq!(summaries.len(), 1);
         assert_eq!(
@@ -15839,6 +16070,34 @@ mod tests {
             summaries[0].facet_union_face_profile,
             "support_face_full_dimensional_generators_2_4"
         );
+        assert_eq!(
+            summaries[0].relation_span_closure_probe.status,
+            "span_closed_under_degree_bounded_context"
+        );
+        assert_eq!(
+            summaries[0].shared_facet_span_closure_probe.status,
+            "span_closure_has_extra_generators"
+        );
+        assert_eq!(
+            summaries[0]
+                .shared_facet_span_closure_probe
+                .extra_generator_count,
+            Some(1)
+        );
+        assert_eq!(
+            summaries[0].shared_facet_span_closure_probe.extra_sample[0].basis_nonzero,
+            vec![(0, 1), (1, 1)]
+        );
+        let skipped_span_probe = origin_circuit_witness_domain_span_closure_probe(
+            &[vec![1, 0]],
+            &context,
+            sample.degree,
+            Some(2),
+        );
+        assert_eq!(
+            skipped_span_probe.status,
+            "span_closure_skipped_scan_limit_2_actual_3"
+        );
         let certified_summaries = origin_circuit_witness_domain_summaries(
             std::slice::from_ref(&sample),
             &context,
@@ -15848,6 +16107,7 @@ mod tests {
             &SupportingMoriFaceLpSearchOptions::default(),
             false,
             64,
+            Some(4),
         );
         assert_eq!(
             certified_summaries[0]

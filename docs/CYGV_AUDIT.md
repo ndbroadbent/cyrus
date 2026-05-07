@@ -273,10 +273,14 @@ candidate normal still has to be verified exactly before promotion. Raising the
 origin-support guard to `4096` for the two degree-10 misses checks the larger
 facet-union domains too: target `7` has relation/shared/union ranks
 `1/13/194`, target `8` has ranks `1/9/177`, and all six domains report
-`origin_support_lp_no_certificate_*`. The next
+`origin_support_lp_no_certificate_*`. An opt-in exact rational span-closure scan
+now checks whether these same witness domains omit any degree-bounded Mori rows
+that are forced by their row span. For targets `7` and `8`, relation, shared
+facet, and facet union domains each scan `720` unique candidates and report
+`span_closed_under_degree_bounded_context` with zero extra generators. The next
 source-derived object therefore remains the higher-rank local semigroup or
 flop/chamber context for these origin-circuit supports, not a promoted
-LP-witness fallback.
+LP-witness fallback or a missing span-closure row.
 
 The missing-target diagnostic now also records the B-field parity and real-axis
 polylog branch status for these unresolved classes. For the current solved-t
