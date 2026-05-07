@@ -313,6 +313,7 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_target_unit_phase_probe_sample: Vec<LocalCygvTargetUnitPhaseProbeSummary>,
     local_cygv_target_integer_tensor_scan_status_counts: BTreeMap<String, usize>,
+    local_cygv_target_integer_tensor_formula_sum_scan_status_counts: BTreeMap<String, usize>,
     local_cygv_target_integer_tensor_scan_sample: Vec<LocalCygvIntegerTensorScanSummary>,
     local_cytools_origin_circuit_status_counts: BTreeMap<String, usize>,
     local_cygv_grading_vector_status_counts: BTreeMap<String, usize>,
@@ -725,8 +726,10 @@ struct LocalCygvIntegerTensorScanSummary {
     target_index: usize,
     degree: i128,
     status: String,
+    formula_sum_status: String,
     scan_bound: i64,
     expected_toric_gv1_formula_values: Vec<String>,
+    expected_toric_gv1_formula_value_sum: Option<String>,
     entries: Vec<LocalCygvIntegerTensorScanEntry>,
 }
 
@@ -735,6 +738,7 @@ struct LocalCygvIntegerTensorScanEntry {
     tensor_value: i64,
     candidate_gv: Option<String>,
     status: String,
+    matches_expected_formula_sum: bool,
     error: Option<String>,
 }
 
@@ -8233,6 +8237,12 @@ fn build_report(
             targets.len(),
             scan_local_integer_tensors,
         );
+    let local_cygv_target_integer_tensor_formula_sum_scan_status_counts =
+        local_cygv_integer_tensor_formula_sum_scan_status_counts(
+            &local_cygv_target_integer_tensor_scan_sample,
+            targets.len(),
+            scan_local_integer_tensors,
+        );
     let local_cytools_origin_circuit_status_counts = local_cytools_origin_circuit_status_counts(
         targets
             .iter()
@@ -8390,6 +8400,7 @@ fn build_report(
         local_cygv_target_origin_omitted_unit_formula_sum_effective_tensor_requirement_status_counts,
         local_cygv_target_unit_phase_probe_sample,
         local_cygv_target_integer_tensor_scan_status_counts,
+        local_cygv_target_integer_tensor_formula_sum_scan_status_counts,
         local_cygv_target_integer_tensor_scan_sample,
         local_cytools_origin_circuit_status_counts,
         local_cygv_grading_vector_status_counts,
@@ -9004,6 +9015,24 @@ fn local_cygv_integer_tensor_scan_status_counts(
     counts
 }
 
+fn local_cygv_integer_tensor_formula_sum_scan_status_counts(
+    scans: &[LocalCygvIntegerTensorScanSummary],
+    target_count: usize,
+    scan_enabled: bool,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    if !scan_enabled {
+        counts.insert("not_run".to_string(), target_count);
+        return counts;
+    }
+    for scan in scans {
+        *counts
+            .entry(scan.formula_sum_status.clone())
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
 fn local_cygv_integer_tensor_scan_summaries(
     targets: &[TargetReport],
     scan_enabled: bool,
@@ -9023,12 +9052,15 @@ fn local_cygv_integer_tensor_scan_summary(
     scan_bound: i64,
 ) -> LocalCygvIntegerTensorScanSummary {
     let expected_values = target_expected_toric_gv1_formula_values(target);
+    let expected_sum = target_expected_toric_gv1_formula_value_sum(target);
     let blocked = |status: &str| LocalCygvIntegerTensorScanSummary {
         target_index: target.index,
         degree: target.degree,
         status: status.to_string(),
+        formula_sum_status: status.to_string(),
         scan_bound,
         expected_toric_gv1_formula_values: expected_values.clone(),
+        expected_toric_gv1_formula_value_sum: expected_sum.clone(),
         entries: Vec::new(),
     };
     if scan_bound <= 0 {
@@ -9077,10 +9109,14 @@ fn local_cygv_integer_tensor_scan_summary(
                 } else {
                     "integer_tensor_scan_mismatch"
                 };
+                let matches_expected_formula_sum = expected_sum
+                    .as_ref()
+                    .is_some_and(|sum| sum == &candidate_gv);
                 entries.push(LocalCygvIntegerTensorScanEntry {
                     tensor_value,
                     candidate_gv: Some(candidate_gv),
                     status: status.to_string(),
+                    matches_expected_formula_sum,
                     error: None,
                 });
             }
@@ -9088,6 +9124,7 @@ fn local_cygv_integer_tensor_scan_summary(
                 tensor_value,
                 candidate_gv: None,
                 status: "integer_tensor_scan_hkty_error".to_string(),
+                matches_expected_formula_sum: false,
                 error: Some(error),
             }),
         }
@@ -9105,12 +9142,29 @@ fn local_cygv_integer_tensor_scan_summary(
     } else {
         "integer_tensor_scan_no_expected_match"
     };
+    let formula_sum_status = if expected_sum.is_none() {
+        "integer_tensor_scan_no_expected_formula_sum"
+    } else if entries
+        .iter()
+        .any(|entry| entry.matches_expected_formula_sum)
+    {
+        "integer_tensor_scan_has_formula_sum_match_but_uncertified"
+    } else if entries
+        .iter()
+        .all(|entry| entry.status == "integer_tensor_scan_hkty_error")
+    {
+        "integer_tensor_scan_formula_sum_all_hkty_error"
+    } else {
+        "integer_tensor_scan_no_formula_sum_match"
+    };
     LocalCygvIntegerTensorScanSummary {
         target_index: target.index,
         degree: target.degree,
         status: status.to_string(),
+        formula_sum_status: formula_sum_status.to_string(),
         scan_bound,
         expected_toric_gv1_formula_values: expected_values,
+        expected_toric_gv1_formula_value_sum: expected_sum,
         entries,
     }
 }
@@ -10678,16 +10732,21 @@ mod tests {
                 target_index: 0,
                 degree: 10,
                 status: "integer_tensor_scan_has_expected_match_but_uncertified".to_string(),
+                formula_sum_status: "integer_tensor_scan_has_formula_sum_match_but_uncertified"
+                    .to_string(),
                 scan_bound: 8,
                 expected_toric_gv1_formula_values: vec!["3".to_string()],
+                expected_toric_gv1_formula_value_sum: Some("3".to_string()),
                 entries: Vec::new(),
             },
             LocalCygvIntegerTensorScanSummary {
                 target_index: 1,
                 degree: 18,
                 status: "integer_tensor_scan_no_expected_match".to_string(),
+                formula_sum_status: "integer_tensor_scan_no_formula_sum_match".to_string(),
                 scan_bound: 8,
                 expected_toric_gv1_formula_values: vec!["-2".to_string(), "1".to_string()],
+                expected_toric_gv1_formula_value_sum: Some("-1".to_string()),
                 entries: Vec::new(),
             },
         ];
@@ -10704,6 +10763,22 @@ mod tests {
                     1
                 ),
                 ("integer_tensor_scan_no_expected_match".to_string(), 1),
+            ])
+        );
+
+        let disabled_sum =
+            local_cygv_integer_tensor_formula_sum_scan_status_counts(&scans, 9, false);
+        assert_eq!(disabled_sum, BTreeMap::from([("not_run".to_string(), 9)]));
+
+        let enabled_sum = local_cygv_integer_tensor_formula_sum_scan_status_counts(&scans, 9, true);
+        assert_eq!(
+            enabled_sum,
+            BTreeMap::from([
+                (
+                    "integer_tensor_scan_has_formula_sum_match_but_uncertified".to_string(),
+                    1
+                ),
+                ("integer_tensor_scan_no_formula_sum_match".to_string(), 1),
             ])
         );
     }
