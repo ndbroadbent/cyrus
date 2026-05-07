@@ -185,6 +185,9 @@ struct ContextReport {
     origin_relation_support_face_certificate_status_counts: BTreeMap<String, usize>,
     origin_shared_facet_face_certificate_status_counts: BTreeMap<String, usize>,
     origin_facet_union_face_certificate_status_counts: BTreeMap<String, usize>,
+    cygv_path_history_status_counts: BTreeMap<String, usize>,
+    cygv_lower_seed_decomposition_status_counts: BTreeMap<String, usize>,
+    cygv_lower_seed_diamond_status_counts: BTreeMap<String, usize>,
     local_cygv_q_matrix_orientation_status_counts: BTreeMap<String, usize>,
     local_cygv_q_matrix_layout_status_counts: BTreeMap<String, usize>,
     local_cygv_origin_point_status_counts: BTreeMap<String, usize>,
@@ -4174,6 +4177,33 @@ fn build_report(
             .map(|target| target.origin_facet_union_face_certificate_status.as_deref()),
         "not_run",
     );
+    let cygv_path_history_status_counts = optional_status_counts(
+        targets.iter().map(|target| {
+            target
+                .cygv_path_history_probe
+                .as_ref()
+                .map(|probe| probe.status.as_str())
+        }),
+        "not_run",
+    );
+    let cygv_lower_seed_decomposition_status_counts = optional_status_counts(
+        targets.iter().map(|target| {
+            target
+                .cygv_path_history_probe
+                .as_ref()
+                .map(|probe| probe.lower_seed_decomposition_status.as_str())
+        }),
+        "not_run",
+    );
+    let cygv_lower_seed_diamond_status_counts = optional_status_counts(
+        targets.iter().map(|target| {
+            target
+                .cygv_path_history_probe
+                .as_ref()
+                .and_then(|probe| probe.lower_seed_diamond_status.as_deref())
+        }),
+        "not_run",
+    );
     let local_cygv_q_matrix_orientation_status_counts =
         local_cygv_q_matrix_orientation_status_counts(
             targets
@@ -4232,6 +4262,9 @@ fn build_report(
         origin_relation_support_face_certificate_status_counts,
         origin_shared_facet_face_certificate_status_counts,
         origin_facet_union_face_certificate_status_counts,
+        cygv_path_history_status_counts,
+        cygv_lower_seed_decomposition_status_counts,
+        cygv_lower_seed_diamond_status_counts,
         local_cygv_q_matrix_orientation_status_counts,
         local_cygv_q_matrix_layout_status_counts,
         local_cygv_origin_point_status_counts,

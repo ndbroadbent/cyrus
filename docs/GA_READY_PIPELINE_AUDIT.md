@@ -224,7 +224,12 @@ to make the remaining GV layer more first-principles:
    LP active-generator decompositions and four rational-cone-only
    decompositions. That split is triage only, because cygv assigns GV values
    from a finite semigroup and degree-ordered subtraction history, not from a
-   sparse curve relation in isolation. A structured export now exists via
+   sparse curve relation in isolation. The path-history report now summarizes
+   closure and lower-seed diamond statuses at the top level; for the two
+   degree-10 targets, the bounded probe reaches the `10000` element cap with
+   `7608` previous-window elements, while the small lower-seed diamonds return
+   `GV=0` for one target and non-integral cygv output for the other. A
+   structured export now exists via
    `--dump-corrected-chamber-gv-context`; it records the local charge basis,
    target degree, degree-bounded projected Mori rays, exact active-generator
    decompositions, q-matrix, curve-basis matrix, grading vector, and sparse

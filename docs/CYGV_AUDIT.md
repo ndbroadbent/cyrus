@@ -1593,6 +1593,15 @@ For bounded source-history diagnostics that should not enter cygv's unbounded
 semigroup constructor first, use `--probe-cygv-path-history`. It runs the
 deterministic capped closure/predecessor probe directly and still obeys
 `--semigroup-measure-max-target-degree` and `--element-limit`.
+The context report also exposes top-level counts for path-history status,
+lower-seed decomposition status, and lower-seed diamond HKTY status. For the
+two degree-10 targets, the bounded path probe with `--element-limit 10000`
+reaches `10000` partial closure elements without completing; both targets are
+already present in that partial closure, and the previous-degree window
+contains `7608` elements. Both targets also admit short lower-seed
+decompositions, but those tiny domains are not valid substitutes for the full
+HKTY history: target `7` computes `GV=0` on a 6-element lower-seed diamond, and
+target `8` fails the 8-element diamond with non-integral cygv output.
 
 After rebuilding `mcallister_gv_context`, the dry-run report now preserves the
 origin-circuit provenance exported by `mcallister_first_principles`. A fresh
