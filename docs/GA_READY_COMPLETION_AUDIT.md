@@ -139,7 +139,10 @@ and matrix-basis pipeline are no longer open.
    have shared origin-circuit witness relations plus
    `source_derived_full_facet_context`. They are now blocked specifically on
    extracting/certifying the source-derived `local_intersection_tensor` and
-   `local_chamber_certificate`.
+   `local_chamber_certificate`. The source-derived GV-history importer now
+   requires that same witness/facet context before accepting a CMS-derived
+   scalar GV value, so shape-only CMS matches remain diagnostic rather than
+   known qN history.
 2. **Exact corrected KKLT volume.** The no-replay path computes a corrected
    volume but still has a documented instanton/chamber residual.
 3. **Generic matrix-basis pipeline.** Matrix divisor-basis primitives now cover
@@ -296,6 +299,9 @@ and matrix-basis pipeline are no longer open.
    queue now shows all three occurrences have shared origin-circuit witness
    relations and `source_derived_full_facet_context`, so the actual remaining
    inputs are `local_intersection_tensor` and `local_chamber_certificate`. The
+   source-derived scalar GV map now enforces this full facet context before a
+   CMS-derived value enters qN-history status, and the guarded 4-214-647 report
+   still records the same two source predecessors across three occurrences. The
    CMS divisor cubic suggests tensor value `3`,
    but the raw-cubic primitive probe gives `GV=-6`; the unit-tensor probe gives
    the expected `GV=-2` and remains unpromoted until the chamber/tensor source is

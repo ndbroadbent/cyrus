@@ -5428,6 +5428,15 @@ fn add_toric_diagnostic_context_gvs(
 }
 
 fn source_derived_gv_for_sample(sample: &MissingGvTargetSample) -> Result<Option<String>, String> {
+    let witness_relation_status = origin_circuit_witness_relation_status(sample);
+    if witness_relation_status != "single_origin_circuit_witness"
+        && witness_relation_status != "all_origin_circuit_witnesses_share_relation"
+    {
+        return Ok(None);
+    }
+    if origin_circuit_facet_context_status(sample) != "source_derived_full_facet_context" {
+        return Ok(None);
+    }
     let Some(candidates) = sample.cms_general_divisor_shape_candidates.as_deref() else {
         return Ok(None);
     };
@@ -11836,6 +11845,47 @@ mod tests {
             },
         ]);
 
+        assert_eq!(
+            source_derived_gv_for_sample(&sample).unwrap(),
+            None,
+            "shape/CMS checks without full facet context are diagnostic only"
+        );
+        sample.origin_circuit_first_witness = Some(OriginCircuitWitnessSample {
+            first_facet_exclusive_point: 6,
+            second_facet_exclusive_point: 7,
+            shared_two_simplex: vec![1, 5],
+            first_facet: vec![1, 5, 6],
+            second_facet: vec![1, 5, 7],
+            first_facet_size: 3,
+            second_facet_size: 3,
+            sparse_relation: vec![(0, -1), (5, -2), (6, 1), (7, 1)],
+            relation_points: vec![
+                OriginCircuitRelationPointSample {
+                    point_index: 0,
+                    coefficient: -1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 5,
+                    coefficient: -2,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 6,
+                    coefficient: 1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 7,
+                    coefficient: 1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+            ],
+        });
         assert_eq!(
             source_derived_gv_for_sample(&sample).unwrap().as_deref(),
             Some("-2")

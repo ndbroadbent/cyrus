@@ -119,7 +119,10 @@ run pass. Any remaining mismatch must be explicit and localizable.
    occurrence has shared origin-circuit witness relations plus
    `source_derived_full_facet_context`. The remaining blocker is therefore
    `local_intersection_tensor` and `local_chamber_certificate` extraction from
-   that source context.
+   that source context. The source-derived GV-history importer now requires the
+   same full witness/facet context before accepting a CMS-derived scalar value,
+   and the guarded report preserves the same two predecessors and three
+   occurrences.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for
@@ -579,6 +582,9 @@ to make the remaining GV layer more first-principles:
    `local_intersection_tensor` and `local_chamber_certificate`. The residual
    predecessor queue also shows target `6` has an analogous degree-four source
    predecessor with the same local signature, facet context, and blockers. The
+   source-derived GV importer now refuses CMS shape/check rows without full
+   origin-circuit facet context, so these lower rays enter qN history only
+   because the source context is present. The
    CMS divisor cubic
    suggests tensor value `3`, but the raw-cubic primitive probe gives `GV=-6`;
    the unit-tensor probe gives the expected `GV=-2` and is not promotable without

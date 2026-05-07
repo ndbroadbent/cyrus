@@ -2203,6 +2203,12 @@ degree-six source rays with resolved-conifold-like signature
 implementation target is not another scalar source-value classifier; it is the
 source-derived local phase/intersection/chamber package for these
 one-parameter origin-circuit charge models.
+The source-derived scalar GV importer is now guarded by the same source
+evidence: CMS shape/check rows are accepted as known qN history only when the
+sample also has a single/shared origin-circuit witness relation and
+`source_derived_full_facet_context`. A guarded 4-214-647 report preserves the
+same residual-source predecessor queue, so the added guard removes a possible
+shape-only shortcut without changing the live blocker.
 
 The first-principles context export now preserves the actual rational divisor
 solution behind each CMS-general-divisor intersection check. Successful checks
