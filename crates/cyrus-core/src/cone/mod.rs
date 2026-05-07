@@ -20,7 +20,32 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 
-const HYPERPLANE_CACHE_VERSION: &str = "hyperplanes-exact-v2";
+const HYPERPLANE_CACHE_VERSION: &str = "hyperplanes-exact-v3";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum ConeDualBackend {
+    Ddm,
+    PplLcdd,
+}
+
+impl ConeDualBackend {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Ddm => "ddm",
+            Self::PplLcdd => "ppl_lcdd",
+        }
+    }
+}
+
+fn cone_dual_backend_from_env() -> ConeDualBackend {
+    match env::var("CYRUS_CONE_DUAL_BACKEND").as_deref() {
+        Ok("ppl_lcdd") => ConeDualBackend::PplLcdd,
+        Ok("ddm") | Err(_) => ConeDualBackend::Ddm,
+        Ok(other) => {
+            panic!("unsupported CYRUS_CONE_DUAL_BACKEND={other}; expected ddm or ppl_lcdd")
+        }
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
@@ -872,6 +897,7 @@ fn canonicalize_vectors(vectors: &[Vec<i128>]) -> Vec<Vec<i128>> {
 fn hyperplane_cache_paths(rays: &[Vec<i128>]) -> (PathBuf, PathBuf) {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     HYPERPLANE_CACHE_VERSION.hash(&mut hasher);
+    cone_dual_backend_from_env().as_str().hash(&mut hasher);
     let mut key_rays = canonicalize_vectors(rays);
     key_rays.sort();
     let key_len = key_rays.len();
@@ -921,9 +947,193 @@ fn compute_hyperplanes_from_rays(
         "[DEBUG] hyperplanes: dualizing rays (input count={})",
         rays_ref.len()
     );
-    let hyperplanes = ddm::dualize(rays_ref, ambient_dim);
+    let hyperplanes = match cone_dual_backend_from_env() {
+        ConeDualBackend::PplLcdd => compute_hyperplanes_from_rays_ppl_lcdd(rays_ref, ambient_dim)
+            .unwrap_or_else(|err| panic!("ppl_lcdd cone dualization failed: {err}")),
+        ConeDualBackend::Ddm => ddm::dualize(rays_ref, ambient_dim),
+    };
     write_hyperplanes_cache(cache_dir, cache_path, &hyperplanes);
     hyperplanes
+}
+
+fn compute_hyperplanes_from_rays_ppl_lcdd(
+    rays_ref: &[Vec<i128>],
+    ambient_dim: usize,
+) -> Result<Vec<Vec<i128>>> {
+    for row in rays_ref {
+        if row.len() != ambient_dim {
+            return Err(Error::InvalidInput(
+                "ppl_lcdd cone dualization requires consistent ray dimensions".into(),
+            ));
+        }
+    }
+
+    let binary = env::var("CYRUS_PPL_LCDD").unwrap_or_else(|_| "ppl_lcdd".to_string());
+    let mut command = Command::new(binary);
+    if let Ok(seconds) = env::var("CYRUS_PPL_LCDD_MAX_CPU_SEC") {
+        command.arg(format!("--max-cpu={seconds}"));
+    }
+    if let Ok(megabytes) = env::var("CYRUS_PPL_LCDD_MAX_MEMORY_MB") {
+        command.arg(format!("--max-memory={megabytes}"));
+    }
+    let mut child = command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|err| Error::InvalidInput(format!("failed to spawn ppl_lcdd: {err}")))?;
+
+    {
+        let stdin = child
+            .stdin
+            .as_mut()
+            .ok_or_else(|| Error::InvalidInput("failed to open ppl_lcdd stdin".into()))?;
+        stdin
+            .write_all(cdd_v_representation(rays_ref, ambient_dim).as_bytes())
+            .map_err(|err| Error::InvalidInput(format!("failed to write ppl_lcdd input: {err}")))?;
+    }
+
+    let output = child
+        .wait_with_output()
+        .map_err(|err| Error::InvalidInput(format!("failed to wait for ppl_lcdd: {err}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(Error::InvalidInput(format!(
+            "ppl_lcdd exited with status {}: {stderr}",
+            output.status
+        )));
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    parse_ppl_lcdd_h_representation(&stdout, ambient_dim)
+}
+
+fn cdd_v_representation(rays_ref: &[Vec<i128>], ambient_dim: usize) -> String {
+    let mut out = String::new();
+    out.push_str("V-representation\nbegin\n");
+    out.push_str(&format!("{} {} integer\n", rays_ref.len(), ambient_dim + 1));
+    for ray in rays_ref {
+        out.push('0');
+        for value in ray {
+            out.push(' ');
+            out.push_str(&value.to_string());
+        }
+        out.push('\n');
+    }
+    out.push_str("end\n");
+    out
+}
+
+fn parse_ppl_lcdd_h_representation(output: &str, ambient_dim: usize) -> Result<Vec<Vec<i128>>> {
+    let mut linearity_rows = HashSet::new();
+    let mut lines = output
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty());
+    let Some(header) = lines.next() else {
+        return Err(Error::InvalidInput("ppl_lcdd output is empty".into()));
+    };
+    if header != "H-representation" {
+        return Err(Error::InvalidInput(format!(
+            "ppl_lcdd returned {header:?}, expected H-representation"
+        )));
+    }
+
+    for line in lines.by_ref() {
+        if line == "begin" {
+            break;
+        }
+        let fields = line.split_whitespace().collect::<Vec<_>>();
+        if fields.first() == Some(&"linearity") {
+            if fields.len() < 2 {
+                return Err(Error::InvalidInput(
+                    "ppl_lcdd linearity header is malformed".into(),
+                ));
+            }
+            let count = fields[1].parse::<usize>().map_err(|err| {
+                Error::InvalidInput(format!("ppl_lcdd linearity count parse failed: {err}"))
+            })?;
+            if fields.len() != count + 2 {
+                return Err(Error::InvalidInput(
+                    "ppl_lcdd linearity row count mismatch".into(),
+                ));
+            }
+            for field in &fields[2..] {
+                let row = field.parse::<usize>().map_err(|err| {
+                    Error::InvalidInput(format!("ppl_lcdd linearity row parse failed: {err}"))
+                })?;
+                if row == 0 {
+                    return Err(Error::InvalidInput(
+                        "ppl_lcdd linearity rows are one-based".into(),
+                    ));
+                }
+                linearity_rows.insert(row);
+            }
+        }
+    }
+
+    let Some(shape_line) = lines.next() else {
+        return Err(Error::InvalidInput(
+            "ppl_lcdd output is missing shape line".into(),
+        ));
+    };
+    let shape = shape_line.split_whitespace().collect::<Vec<_>>();
+    if shape.len() != 3 || shape[2] != "integer" {
+        return Err(Error::InvalidInput(
+            "ppl_lcdd H-representation shape line is malformed".into(),
+        ));
+    }
+    let row_count = shape[0]
+        .parse::<usize>()
+        .map_err(|err| Error::InvalidInput(format!("ppl_lcdd row count parse failed: {err}")))?;
+    let col_count = shape[1]
+        .parse::<usize>()
+        .map_err(|err| Error::InvalidInput(format!("ppl_lcdd column count parse failed: {err}")))?;
+    if col_count != ambient_dim + 1 {
+        return Err(Error::InvalidInput(format!(
+            "ppl_lcdd H-representation has {col_count} columns, expected {}",
+            ambient_dim + 1
+        )));
+    }
+
+    let mut hyperplanes = Vec::new();
+    for row_idx in 1..=row_count {
+        let Some(row_line) = lines.next() else {
+            return Err(Error::InvalidInput(
+                "ppl_lcdd output ended before all rows were read".into(),
+            ));
+        };
+        let values = row_line
+            .split_whitespace()
+            .map(|field| {
+                field.parse::<i128>().map_err(|err| {
+                    Error::InvalidInput(format!("ppl_lcdd row entry parse failed: {err}"))
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        if values.len() != col_count {
+            return Err(Error::InvalidInput(
+                "ppl_lcdd row length does not match shape line".into(),
+            ));
+        }
+        if values[0] != 0 {
+            return Err(Error::InvalidInput(
+                "ppl_lcdd returned affine H-representation for a cone".into(),
+            ));
+        }
+        let row = values[1..].to_vec();
+        if linearity_rows.contains(&row_idx) {
+            hyperplanes.push(row.iter().map(|&value| -value).collect::<Vec<_>>());
+        }
+        hyperplanes.push(row);
+    }
+
+    match lines.next() {
+        Some("end") => Ok(normalize_vectors(hyperplanes)),
+        Some(other) => Err(Error::InvalidInput(format!(
+            "ppl_lcdd output has unexpected row after H-representation: {other}"
+        ))),
+        None => Err(Error::InvalidInput("ppl_lcdd output is missing end".into())),
+    }
 }
 
 /// GCD of a vector of integers.
@@ -1087,6 +1297,44 @@ mod tests {
 
         let mut cone = Cone::from_hyperplanes(vec![vec![2, 0], vec![1, 0], vec![0, 3], vec![0, 1]]);
         assert_eq!(cone.hyperplanes(), &[vec![1, 0], vec![0, 1]]);
+    }
+
+    #[test]
+    fn cdd_v_representation_writes_cone_rays() {
+        let cdd = cdd_v_representation(&[vec![1, 0], vec![0, 1]], 2);
+
+        assert_eq!(
+            cdd,
+            "V-representation\nbegin\n2 3 integer\n0 1 0\n0 0 1\nend\n"
+        );
+    }
+
+    #[test]
+    fn ppl_lcdd_h_representation_parser_reads_cone_hyperplanes() {
+        let output = "H-representation\nbegin\n2 3 integer\n0 1 0\n0 0 1\nend\n";
+
+        let hyperplanes = parse_ppl_lcdd_h_representation(output, 2).unwrap();
+
+        assert_eq!(hyperplanes, vec![vec![1, 0], vec![0, 1]]);
+    }
+
+    #[test]
+    fn ppl_lcdd_h_representation_parser_expands_lineality_rows() {
+        let output = "H-representation\nlinearity 1 1\nbegin\n2 3 integer\n0 1 -1\n0 0 1\nend\n";
+
+        let hyperplanes = parse_ppl_lcdd_h_representation(output, 2).unwrap();
+
+        assert_eq!(hyperplanes, vec![vec![-1, 1], vec![1, -1], vec![0, 1]]);
+    }
+
+    #[test]
+    fn ppl_lcdd_h_representation_parser_rejects_affine_rows() {
+        let output = "H-representation\nbegin\n1 3 integer\n1 1 0\nend\n";
+
+        let err = parse_ppl_lcdd_h_representation(output, 2)
+            .expect_err("affine rows are not valid cone hyperplanes");
+
+        assert!(err.to_string().contains("affine H-representation"));
     }
 
     #[test]
