@@ -649,3 +649,9 @@ to make the remaining GV layer more first-principles:
    `2017` unique non-known generators over `9611` occurrences, consisting of
    the nine missing targets, `41` uncovered-source-ray matches, and `1967`
    degree-bounded source rays with no toric/source-derived GV value yet.
+   The first-principles context export now includes the full degree-bounded
+   toric GV diagnostic context for this missing-GV degree range. On the current
+   solved-t release export this adds `1053` source-derived toric diagnostic
+   rows and reduces the shared-facet unknown bucket from `228` to `36`
+   occurrences. The all-domain unresolved queue drops to `1631` unique
+   generators over `7360` occurrences.

@@ -43,6 +43,9 @@ struct CorrectedChamberGvContext {
     covered_toric_gv_context_for_missing: Option<Vec<CoveredToricGvContextSample>>,
     #[serde(default)]
     uncovered_source_ray_toric_diagnostic_sample: Option<Vec<ToricGvDiagnosticContextSample>>,
+    #[serde(default)]
+    degree_bounded_toric_gv_diagnostic_context_for_missing:
+        Option<Vec<ToricGvDiagnosticContextSample>>,
     uncovered_source_ray_stats_for_missing: Option<MissingGvTargetStats>,
     gv_q_matrix_for_missing: Option<Vec<Vec<i64>>>,
     grading_for_missing: Option<Vec<i64>>,
@@ -200,6 +203,7 @@ struct ContextReport {
     degree_bounded_mori_ray_context_count: Option<usize>,
     degree_bounded_mori_ray_context_status: String,
     covered_toric_gv_context_count: Option<usize>,
+    degree_bounded_toric_gv_diagnostic_context_count: Option<usize>,
     q_rows: usize,
     q_cols: usize,
     kappa_nonzero_entries: usize,
@@ -4840,10 +4844,19 @@ fn validate_context<'a>(
         context.uncovered_source_ray_stats_for_missing.as_ref(),
         dimension,
     )?;
-    add_uncovered_source_toric_diagnostic_gvs(
+    add_toric_diagnostic_context_gvs(
         &mut source_derived_gv_by_basis,
         context
             .uncovered_source_ray_toric_diagnostic_sample
+            .as_deref(),
+        dimension,
+        grading,
+        degree_bound,
+    )?;
+    add_toric_diagnostic_context_gvs(
+        &mut source_derived_gv_by_basis,
+        context
+            .degree_bounded_toric_gv_diagnostic_context_for_missing
             .as_deref(),
         dimension,
         grading,
@@ -4917,7 +4930,7 @@ fn source_derived_gv_by_basis(
     Ok(out)
 }
 
-fn add_uncovered_source_toric_diagnostic_gvs(
+fn add_toric_diagnostic_context_gvs(
     out: &mut HashMap<Vec<i64>, String>,
     samples: Option<&[ToricGvDiagnosticContextSample]>,
     dimension: usize,
@@ -7706,6 +7719,10 @@ fn build_report(
             .covered_toric_gv_context_for_missing
             .as_ref()
             .map(Vec::len),
+        degree_bounded_toric_gv_diagnostic_context_count: context
+            .degree_bounded_toric_gv_diagnostic_context_for_missing
+            .as_ref()
+            .map(Vec::len),
         q_rows: validated.q_matrix.len(),
         q_cols: validated.q_cols,
         kappa_nonzero_entries: validated.intersection.num_nonzero(),
@@ -8505,6 +8522,7 @@ mod tests {
             degree_bounded_mori_ray_context_for_missing: ray_context,
             covered_toric_gv_context_for_missing: None,
             uncovered_source_ray_toric_diagnostic_sample: None,
+            degree_bounded_toric_gv_diagnostic_context_for_missing: None,
             uncovered_source_ray_stats_for_missing: None,
             gv_q_matrix_for_missing: Some(vec![vec![1, 0], vec![0, 1]]),
             grading_for_missing: Some(vec![1, 1]),
@@ -8602,6 +8620,15 @@ mod tests {
                 ambient_nonzero: vec![(8, 1)],
                 basis_nonzero: vec![(1, 1)],
             }]);
+        context.degree_bounded_toric_gv_diagnostic_context_for_missing =
+            Some(vec![ToricGvDiagnosticContextSample {
+                degree: 2,
+                gv: "1".to_string(),
+                source_bucket: "degree_bounded_two_face".to_string(),
+                source_summary: "gv=1;source_count=1".to_string(),
+                ambient_nonzero: vec![(5, 1), (8, 1)],
+                basis_nonzero: vec![(0, 1), (1, 1)],
+            }]);
         let validated = validate_context(&context).unwrap();
 
         assert_eq!(validated.degree_bounded_ray_context.unwrap().len(), 2);
@@ -8618,6 +8645,13 @@ mod tests {
                 .get(&vec![0, 1])
                 .map(String::as_str),
             Some("-2")
+        );
+        assert_eq!(
+            validated
+                .source_derived_gv_by_basis
+                .get(&vec![1, 1])
+                .map(String::as_str),
+            Some("1")
         );
         assert_eq!(
             path_support_source_class_context(&[0, 1], &validated)

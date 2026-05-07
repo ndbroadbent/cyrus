@@ -730,6 +730,8 @@ struct ChamberGvDiagnostic {
     uncovered_source_ray_stats_degree_bound_for_missing: Option<i128>,
     uncovered_source_ray_stats_for_missing: Option<MissingGvTargetStats>,
     uncovered_source_ray_toric_diagnostic_sample: Option<Vec<ToricGvDiagnosticContextSample>>,
+    degree_bounded_toric_gv_diagnostic_context_for_missing:
+        Option<Vec<ToricGvDiagnosticContextSample>>,
     basis_mori_rays_for_missing_degree_bound: Option<i128>,
     basis_mori_rays_for_missing_degree_bounded: Option<Vec<Vec<i64>>>,
     degree_bounded_mori_ray_context_for_missing: Option<Vec<DegreeBoundedMoriRayContextSample>>,
@@ -799,6 +801,8 @@ struct CorrectedChamberGvContextExport<'a> {
     basis_mori_rays_for_missing_degree_bounded: Option<&'a Vec<Vec<i64>>>,
     degree_bounded_mori_ray_context_for_missing: Option<&'a Vec<DegreeBoundedMoriRayContextSample>>,
     covered_toric_gv_context_for_missing: Option<&'a Vec<CoveredToricGvContextSample>>,
+    degree_bounded_toric_gv_diagnostic_context_for_missing:
+        Option<&'a Vec<ToricGvDiagnosticContextSample>>,
     gv_q_matrix_for_missing: Option<&'a Vec<Vec<i64>>>,
     gv_curve_basis_matrix_for_missing: Option<&'a Vec<Vec<String>>>,
     grading_for_missing: Option<&'a Vec<i64>>,
@@ -7027,6 +7031,7 @@ fn diagnose_chamber_gv_volume_correction(
     let mut uncovered_source_ray_stats_degree_bound_for_missing = None;
     let mut uncovered_source_ray_stats_for_missing = None;
     let mut uncovered_source_ray_toric_diagnostic_sample = None;
+    let mut degree_bounded_toric_gv_diagnostic_context_for_missing = None;
     let mut covered_toric_gv_divisor_representation_baseline = None;
     if !missing_gv_classes.is_empty() {
         let origin_idx = geom
@@ -7099,6 +7104,29 @@ fn diagnose_chamber_gv_volume_correction(
             &grading,
             summary.max_degree,
         )?;
+        let ambient_dimension = ambient_rays
+            .first()
+            .map(Vec::len)
+            .ok_or_else(|| "corrected-chamber Mori-cap ambient ray context is empty".to_string())?;
+        let degree_bounded_ambient_classes = degree_bounded_ambient_ray_context
+            .iter()
+            .enumerate()
+            .map(|(idx, sample)| {
+                dense_i64_from_sparse(
+                    &sample.ambient_nonzero,
+                    ambient_dimension,
+                    &format!("degree-bounded Mori ray context sample {idx} ambient class"),
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        degree_bounded_toric_gv_diagnostic_context_for_missing =
+            Some(toric_gv_diagnostic_context_samples(
+                &degree_bounded_ambient_classes,
+                &toric_gv_diagnostic_by_class,
+                &intersection.basis,
+                &grading,
+                usize::MAX,
+            )?);
         let lower_source_ray_degree_bound = summary.min_degree.saturating_sub(1);
         let mut uncovered_source_ray_classes = uncovered_degree_bounded_source_ray_classes(
             &ambient_rays,
@@ -7693,6 +7721,7 @@ fn diagnose_chamber_gv_volume_correction(
         basis_mori_rays_for_missing_degree_bounded: basis_rays_for_missing_degree_bounded,
         degree_bounded_mori_ray_context_for_missing,
         covered_toric_gv_context_for_missing,
+        degree_bounded_toric_gv_diagnostic_context_for_missing,
         gv_q_matrix_for_missing: gv_basis_data_for_missing
             .as_ref()
             .map(|data| data.q_matrix.clone()),
@@ -8465,6 +8494,9 @@ fn write_corrected_chamber_gv_context_export(
             .degree_bounded_mori_ray_context_for_missing
             .as_ref(),
         covered_toric_gv_context_for_missing: diag.covered_toric_gv_context_for_missing.as_ref(),
+        degree_bounded_toric_gv_diagnostic_context_for_missing: diag
+            .degree_bounded_toric_gv_diagnostic_context_for_missing
+            .as_ref(),
         gv_q_matrix_for_missing: diag.gv_q_matrix_for_missing.as_ref(),
         gv_curve_basis_matrix_for_missing: diag.gv_curve_basis_matrix_for_missing.as_ref(),
         grading_for_missing: diag.grading_for_missing.as_ref(),
@@ -11290,6 +11322,16 @@ mod tests {
                     basis_nonzero: vec![(0, 1), (1, -1)],
                 },
             ]),
+            degree_bounded_toric_gv_diagnostic_context_for_missing: Some(vec![
+                ToricGvDiagnosticContextSample {
+                    degree: 2,
+                    gv: "1".to_string(),
+                    source_bucket: "two_face".to_string(),
+                    source_summary: "degree-bounded diagnostic".to_string(),
+                    ambient_nonzero: vec![(0, 1), (2, -1)],
+                    basis_nonzero: vec![(0, 1)],
+                },
+            ]),
             basis_mori_rays_for_missing_degree_bound: None,
             basis_mori_rays_for_missing_degree_bounded: None,
             degree_bounded_mori_ray_context_for_missing: None,
@@ -11323,6 +11365,12 @@ mod tests {
         assert_eq!(sample[0]["degree"], 4);
         assert_eq!(sample[0]["gv"], "-2");
         assert_eq!(sample[0]["source_bucket"], "origin_circuit");
+        let degree_bounded_sample = value["degree_bounded_toric_gv_diagnostic_context_for_missing"]
+            .as_array()
+            .expect("degree-bounded toric diagnostic context should be exported");
+        assert_eq!(degree_bounded_sample.len(), 1);
+        assert_eq!(degree_bounded_sample[0]["gv"], "1");
+        assert_eq!(degree_bounded_sample[0]["source_bucket"], "two_face");
 
         let _ = std::fs::remove_file(path);
     }

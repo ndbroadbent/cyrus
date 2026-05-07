@@ -2391,6 +2391,15 @@ yet. The degree distribution runs from `5` through `26` and is dominated by the
 large facet-union neighborhoods. This keeps broad facet unions out of the
 production compact-`cygv` handoff until a narrower source-derived chamber
 semigroup is found.
+A fresh first-principles export now serializes the full degree-bounded toric
+GV diagnostic context for the missing-GV degree range, not just selected small
+curves and the lower uncovered-source sample. For the current solved-t run this
+adds `1053` source-derived toric diagnostic rows. Importing those rows into the
+context reader reduces the shared-facet unknown bucket from `228` to `36`
+generator occurrences, and reduces the all-domain unresolved queue from `2017`
+unique / `9611` occurrences to `1631` unique / `7360` occurrences. This is a
+real source-derived reduction, not a fallback: the values come from Cyrus'
+toric two-face/resolved-origin formulas.
 The same active-leaf records now run the existing one-parameter unit-tensor
 phase probe against those lower source rays. This is still diagnostic-only,
 because the local intersection tensor and chamber certificate are not
