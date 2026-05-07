@@ -38,6 +38,7 @@ struct CorrectedChamberGvContext {
     basis_mori_rays_for_missing_degree_bound: Option<i128>,
     basis_mori_rays_for_missing_degree_bounded: Option<Vec<Vec<i64>>>,
     degree_bounded_mori_ray_context_for_missing: Option<Vec<DegreeBoundedMoriRayContextSample>>,
+    covered_toric_gv_context_for_missing: Option<Vec<CoveredToricGvContextSample>>,
     gv_q_matrix_for_missing: Option<Vec<Vec<i64>>>,
     grading_for_missing: Option<Vec<i64>>,
     corrected_kappa_basis_for_missing: Option<Vec<SparseIntersectionEntry>>,
@@ -53,6 +54,14 @@ struct SparseIntersectionEntry {
 #[derive(Debug, Deserialize)]
 struct DegreeBoundedMoriRayContextSample {
     degree: i128,
+    ambient_nonzero: Vec<(usize, i64)>,
+    basis_nonzero: Vec<(usize, i64)>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct CoveredToricGvContextSample {
+    degree: i128,
+    gv: String,
     ambient_nonzero: Vec<(usize, i64)>,
     basis_nonzero: Vec<(usize, i64)>,
 }
@@ -169,6 +178,7 @@ struct ContextReport {
     degree_bounded_ray_count: usize,
     degree_bounded_mori_ray_context_count: Option<usize>,
     degree_bounded_mori_ray_context_status: String,
+    covered_toric_gv_context_count: Option<usize>,
     q_rows: usize,
     q_cols: usize,
     kappa_nonzero_entries: usize,
@@ -406,6 +416,8 @@ struct CygvPathPredecessorCandidate {
     predecessor_degree: i128,
     difference_degree: i128,
     series_distance: String,
+    predecessor_toric_gv: Option<String>,
+    difference_toric_gv: Option<String>,
     predecessor_nonzero: Vec<(usize, i64)>,
     difference_nonzero: Vec<(usize, i64)>,
 }
@@ -2267,6 +2279,37 @@ fn validate_context<'a>(
             }
         }
     }
+    let mut covered_toric_gv_by_basis = HashMap::new();
+    if let Some(covered_context) = context.covered_toric_gv_context_for_missing.as_ref() {
+        for (idx, sample) in covered_context.iter().enumerate() {
+            let basis_class = dense_from_sparse(&sample.basis_nonzero, dimension).map_err(|e| {
+                format!("covered toric GV context sample {idx} has invalid basis support: {e}")
+            })?;
+            let computed_degree = curve_degree(&basis_class, grading).map_err(|e| {
+                format!("covered toric GV context sample {idx} has invalid basis degree: {e}")
+            })?;
+            if computed_degree != sample.degree {
+                return Err(format!(
+                    "covered toric GV context sample {idx} declares degree {} but computes {computed_degree}",
+                    sample.degree
+                ));
+            }
+            if sample.degree > degree_bound {
+                return Err(format!(
+                    "covered toric GV context sample {idx} has degree {} above bound {degree_bound}",
+                    sample.degree
+                ));
+            }
+            if covered_toric_gv_by_basis
+                .insert(basis_class, sample.gv.clone())
+                .is_some()
+            {
+                return Err(format!(
+                    "covered toric GV context sample {idx} duplicates a basis class"
+                ));
+            }
+        }
+    }
     let kappa_entries = context
         .corrected_kappa_basis_for_missing
         .as_ref()
@@ -2306,6 +2349,7 @@ fn validate_context<'a>(
         q_matrix,
         degree_bounded_rays,
         degree_bounded_ray_context,
+        covered_toric_gv_by_basis,
         intersection,
         stats,
     })
@@ -2319,6 +2363,7 @@ struct ValidatedContext<'a> {
     q_matrix: &'a [Vec<i64>],
     degree_bounded_rays: &'a [Vec<i64>],
     degree_bounded_ray_context: Option<&'a [DegreeBoundedMoriRayContextSample]>,
+    covered_toric_gv_by_basis: HashMap<Vec<i64>, String>,
     intersection: Intersection,
     stats: &'a MissingGvTargetStats,
 }
@@ -3565,6 +3610,7 @@ fn cygv_path_history_probe_inner(
         context.grading,
         target,
         &selected_degrees,
+        &context.covered_toric_gv_by_basis,
     )?;
     if !closure.completed {
         return Ok(CygvPathHistoryProbe {
@@ -3652,6 +3698,7 @@ fn cygv_path_predecessor_stats(
     grading: &[i64],
     target: &[i64],
     selected_degrees: &HashSet<i128>,
+    covered_toric_gv_by_basis: &HashMap<Vec<i64>, String>,
 ) -> Result<CygvPathPredecessorStats, String> {
     let mut previous_window_element_count = 0usize;
     let mut predecessor_difference_count = 0usize;
@@ -3682,6 +3729,8 @@ fn cygv_path_predecessor_stats(
                     predecessor_degree: degree,
                     difference_degree,
                     series_distance: format!("{distance:.6}"),
+                    predecessor_toric_gv: covered_toric_gv_by_basis.get(element).cloned(),
+                    difference_toric_gv: covered_toric_gv_by_basis.get(&difference).cloned(),
                     predecessor_nonzero: sparse_from_dense(element),
                     difference_nonzero: sparse_from_dense(&difference),
                 },
@@ -3703,6 +3752,8 @@ fn cygv_path_predecessor_stats(
                     predecessor_degree: degree,
                     difference_degree,
                     series_distance: format!("{distance:.6}"),
+                    predecessor_toric_gv: covered_toric_gv_by_basis.get(element).cloned(),
+                    difference_toric_gv: covered_toric_gv_by_basis.get(&difference).cloned(),
                     predecessor_nonzero: sparse_from_dense(element),
                     difference_nonzero: sparse_from_dense(&difference),
                 },
@@ -4376,6 +4427,10 @@ fn build_report(
             .degree_bounded_ray_context
             .map(<[DegreeBoundedMoriRayContextSample]>::len),
         degree_bounded_mori_ray_context_status: degree_bounded_mori_ray_context_status(validated),
+        covered_toric_gv_context_count: context
+            .covered_toric_gv_context_for_missing
+            .as_ref()
+            .map(Vec::len),
         q_rows: validated.q_matrix.len(),
         q_cols: validated.q_cols,
         kappa_nonzero_entries: validated.intersection.num_nonzero(),
@@ -4737,6 +4792,7 @@ mod tests {
             basis_mori_rays_for_missing_degree_bound: Some(2),
             basis_mori_rays_for_missing_degree_bounded: Some(vec![vec![1, 0], vec![0, 1]]),
             degree_bounded_mori_ray_context_for_missing: ray_context,
+            covered_toric_gv_context_for_missing: None,
             gv_q_matrix_for_missing: Some(vec![vec![1, 0], vec![0, 1]]),
             grading_for_missing: Some(vec![1, 1]),
             corrected_kappa_basis_for_missing: Some(Vec::new()),
@@ -4750,7 +4806,7 @@ mod tests {
 
     #[test]
     fn validate_context_accepts_schema3_degree_bounded_ray_context() {
-        let context = minimal_corrected_context(
+        let mut context = minimal_corrected_context(
             3,
             Some(vec![
                 DegreeBoundedMoriRayContextSample {
@@ -4765,9 +4821,22 @@ mod tests {
                 },
             ]),
         );
+        context.covered_toric_gv_context_for_missing = Some(vec![CoveredToricGvContextSample {
+            degree: 1,
+            gv: "42".to_string(),
+            ambient_nonzero: vec![(5, 1)],
+            basis_nonzero: vec![(0, 1)],
+        }]);
         let validated = validate_context(&context).unwrap();
 
         assert_eq!(validated.degree_bounded_ray_context.unwrap().len(), 2);
+        assert_eq!(
+            validated
+                .covered_toric_gv_by_basis
+                .get(&vec![1, 0])
+                .map(String::as_str),
+            Some("42")
+        );
         assert_eq!(
             degree_bounded_mori_ray_context_status(&validated),
             "source_derived_ambient_and_basis_degree_bounded_mori_ray_context"
@@ -4849,6 +4918,7 @@ mod tests {
             q_matrix: &q_matrix,
             degree_bounded_rays: &degree_bounded_rays,
             degree_bounded_ray_context: Some(&ray_context),
+            covered_toric_gv_by_basis: HashMap::new(),
             intersection: Intersection::new(2),
             stats: &stats,
         };
@@ -5739,6 +5809,7 @@ mod tests {
             q_matrix: &q_matrix,
             degree_bounded_rays: &degree_bounded_rays,
             degree_bounded_ray_context: None,
+            covered_toric_gv_by_basis: HashMap::new(),
             intersection: Intersection::new(2),
             stats: &stats,
         };
@@ -5787,6 +5858,9 @@ mod tests {
         let grading = vec![1, 1];
         let q_matrix = vec![vec![1, 0], vec![0, 1]];
         let degree_bounded_rays = vec![vec![1, 0], vec![0, 1], vec![1, 1]];
+        let mut covered_toric_gv_by_basis = HashMap::new();
+        covered_toric_gv_by_basis.insert(vec![1, 0], "7".to_string());
+        covered_toric_gv_by_basis.insert(vec![0, 1], "11".to_string());
         let context = ValidatedContext {
             dimension: 2,
             degree_bound: 3,
@@ -5795,6 +5869,7 @@ mod tests {
             q_matrix: &q_matrix,
             degree_bounded_rays: &degree_bounded_rays,
             degree_bounded_ray_context: None,
+            covered_toric_gv_by_basis,
             intersection: Intersection::new(2),
             stats: &stats,
         };
@@ -5865,6 +5940,9 @@ mod tests {
         let grading = vec![1, 1];
         let q_matrix = vec![vec![1, 0], vec![0, 1]];
         let degree_bounded_rays = vec![vec![1, 0], vec![0, 1], vec![1, 1]];
+        let mut covered_toric_gv_by_basis = HashMap::new();
+        covered_toric_gv_by_basis.insert(vec![1, 0], "7".to_string());
+        covered_toric_gv_by_basis.insert(vec![0, 1], "11".to_string());
         let context = ValidatedContext {
             dimension: 2,
             degree_bound: 2,
@@ -5873,6 +5951,7 @@ mod tests {
             q_matrix: &q_matrix,
             degree_bounded_rays: &degree_bounded_rays,
             degree_bounded_ray_context: None,
+            covered_toric_gv_by_basis,
             intersection: Intersection::new(2),
             stats: &stats,
         };
@@ -5938,6 +6017,9 @@ mod tests {
         let grading = vec![1, 1];
         let q_matrix = vec![vec![1, 0], vec![0, 1]];
         let degree_bounded_rays = vec![vec![1, 0], vec![0, 1], vec![1, 1]];
+        let mut covered_toric_gv_by_basis = HashMap::new();
+        covered_toric_gv_by_basis.insert(vec![1, 0], "7".to_string());
+        covered_toric_gv_by_basis.insert(vec![0, 1], "11".to_string());
         let context = ValidatedContext {
             dimension: 2,
             degree_bound: 2,
@@ -5946,6 +6028,7 @@ mod tests {
             q_matrix: &q_matrix,
             degree_bounded_rays: &degree_bounded_rays,
             degree_bounded_ray_context: None,
+            covered_toric_gv_by_basis,
             intersection: Intersection::new(2),
             stats: &stats,
         };
@@ -6136,6 +6219,9 @@ mod tests {
         let grading = vec![1, 1];
         let q_matrix = vec![vec![1, 0], vec![0, 1]];
         let degree_bounded_rays = vec![vec![1, 0], vec![0, 1], vec![1, 1]];
+        let mut covered_toric_gv_by_basis = HashMap::new();
+        covered_toric_gv_by_basis.insert(vec![1, 0], "7".to_string());
+        covered_toric_gv_by_basis.insert(vec![0, 1], "11".to_string());
         let context = ValidatedContext {
             dimension: 2,
             degree_bound: 2,
@@ -6144,6 +6230,7 @@ mod tests {
             q_matrix: &q_matrix,
             degree_bounded_rays: &degree_bounded_rays,
             degree_bounded_ray_context: None,
+            covered_toric_gv_by_basis,
             intersection: Intersection::new(2),
             stats: &stats,
         };
@@ -6185,6 +6272,18 @@ mod tests {
         assert_eq!(
             probe.predecessor_candidate_sample[0].difference_nonzero,
             vec![(1, 1)]
+        );
+        assert_eq!(
+            probe.predecessor_candidate_sample[0]
+                .predecessor_toric_gv
+                .as_deref(),
+            Some("7")
+        );
+        assert_eq!(
+            probe.predecessor_candidate_sample[0]
+                .difference_toric_gv
+                .as_deref(),
+            Some("11")
         );
         assert_eq!(
             probe.predecessor_candidate_sample[1].predecessor_nonzero,
@@ -6232,6 +6331,7 @@ mod tests {
             q_matrix: &q_matrix,
             degree_bounded_rays: &degree_bounded_rays,
             degree_bounded_ray_context: None,
+            covered_toric_gv_by_basis: HashMap::new(),
             intersection: Intersection::new(2),
             stats: &stats,
         };
@@ -6294,6 +6394,7 @@ mod tests {
             q_matrix: &q_matrix,
             degree_bounded_rays: &degree_bounded_rays,
             degree_bounded_ray_context: None,
+            covered_toric_gv_by_basis: HashMap::new(),
             intersection: Intersection::new(2),
             stats: &stats,
         };
@@ -6448,6 +6549,7 @@ mod tests {
             q_matrix: &q_matrix,
             degree_bounded_rays: &degree_bounded_rays,
             degree_bounded_ray_context: None,
+            covered_toric_gv_by_basis: HashMap::new(),
             intersection,
             stats: &stats,
         };
@@ -6576,6 +6678,7 @@ mod tests {
             q_matrix: &q_matrix,
             degree_bounded_rays: &degree_bounded_rays,
             degree_bounded_ray_context: None,
+            covered_toric_gv_by_basis: HashMap::new(),
             intersection,
             stats: &stats,
         };

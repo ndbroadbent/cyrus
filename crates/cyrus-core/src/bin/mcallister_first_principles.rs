@@ -730,6 +730,7 @@ struct ChamberGvDiagnostic {
     basis_mori_rays_for_missing_degree_bound: Option<i128>,
     basis_mori_rays_for_missing_degree_bounded: Option<Vec<Vec<i64>>>,
     degree_bounded_mori_ray_context_for_missing: Option<Vec<DegreeBoundedMoriRayContextSample>>,
+    covered_toric_gv_context_for_missing: Option<Vec<CoveredToricGvContextSample>>,
     gv_q_matrix_for_missing: Option<Vec<Vec<i64>>>,
     gv_curve_basis_matrix_for_missing: Option<Vec<Vec<String>>>,
     grading_for_missing: Option<Vec<i64>>,
@@ -750,6 +751,14 @@ struct SparseIntersectionEntry {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 struct DegreeBoundedMoriRayContextSample {
     degree: i128,
+    ambient_nonzero: Vec<(usize, i64)>,
+    basis_nonzero: Vec<(usize, i64)>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+struct CoveredToricGvContextSample {
+    degree: i128,
+    gv: String,
     ambient_nonzero: Vec<(usize, i64)>,
     basis_nonzero: Vec<(usize, i64)>,
 }
@@ -776,6 +785,7 @@ struct CorrectedChamberGvContextExport<'a> {
     basis_mori_rays_for_missing_degree_bound: Option<i128>,
     basis_mori_rays_for_missing_degree_bounded: Option<&'a Vec<Vec<i64>>>,
     degree_bounded_mori_ray_context_for_missing: Option<&'a Vec<DegreeBoundedMoriRayContextSample>>,
+    covered_toric_gv_context_for_missing: Option<&'a Vec<CoveredToricGvContextSample>>,
     gv_q_matrix_for_missing: Option<&'a Vec<Vec<i64>>>,
     gv_curve_basis_matrix_for_missing: Option<&'a Vec<Vec<String>>>,
     grading_for_missing: Option<&'a Vec<i64>>,
@@ -5454,6 +5464,46 @@ fn degree_bounded_mori_ray_context_samples(
     Ok(samples)
 }
 
+fn covered_toric_gv_context_samples(
+    covered_gvs: &[(Vec<i64>, malachite::Integer)],
+    basis: &[usize],
+    grading: &[i64],
+    max_degree: i128,
+) -> Result<Vec<CoveredToricGvContextSample>, String> {
+    let mut samples = Vec::new();
+    for (ambient_class, gv) in covered_gvs {
+        let basis_class =
+            project_ambient_curve_to_basis(ambient_class, basis).map_err(|e| e.to_string())?;
+        if basis_class.len() != grading.len() {
+            return Err(format!(
+                "covered toric GV basis class dimension {} does not match grading dimension {}",
+                basis_class.len(),
+                grading.len()
+            ));
+        }
+        let degree = basis_class
+            .iter()
+            .zip(grading.iter())
+            .map(|(&coefficient, &weight)| i128::from(coefficient) * i128::from(weight))
+            .sum::<i128>();
+        if degree <= max_degree {
+            samples.push(CoveredToricGvContextSample {
+                degree,
+                gv: gv.to_string(),
+                ambient_nonzero: sparse_i64(ambient_class),
+                basis_nonzero: sparse_i64(&basis_class),
+            });
+        }
+    }
+    samples.sort_by(|lhs, rhs| {
+        lhs.degree
+            .cmp(&rhs.degree)
+            .then_with(|| lhs.basis_nonzero.cmp(&rhs.basis_nonzero))
+            .then_with(|| lhs.ambient_nonzero.cmp(&rhs.ambient_nonzero))
+    });
+    Ok(samples)
+}
+
 fn ambient_curve_b_field_parity_diagnostic(
     curve: &[i64],
     basis: &[usize],
@@ -6751,6 +6801,7 @@ fn diagnose_chamber_gv_volume_correction(
     let mut basis_rays_for_missing_degree_bound = None;
     let mut basis_rays_for_missing_degree_bounded = None;
     let mut degree_bounded_mori_ray_context_for_missing = None;
+    let mut covered_toric_gv_context_for_missing = None;
     let mut gv_basis_data_for_missing = None;
     let mut grading_for_missing = None;
     let mut corrected_kappa_basis_for_missing = None;
@@ -6828,6 +6879,12 @@ fn diagnose_chamber_gv_volume_correction(
             &grading,
             summary.max_degree,
         )?;
+        let covered_toric_gv_context = covered_toric_gv_context_samples(
+            &small_curve_gvs,
+            &intersection.basis,
+            &grading,
+            summary.max_degree,
+        )?;
         let ray_stats = graded_ray_stats(&basis_rays, &grading, general_max_deg)?;
         let target_stats = missing_gv_target_stats(
             &missing_gv_classes,
@@ -6845,6 +6902,7 @@ fn diagnose_chamber_gv_volume_correction(
         basis_rays_for_missing_degree_bound = Some(summary.max_degree);
         basis_rays_for_missing_degree_bounded = Some(degree_bounded_basis_rays);
         degree_bounded_mori_ray_context_for_missing = Some(degree_bounded_ambient_ray_context);
+        covered_toric_gv_context_for_missing = Some(covered_toric_gv_context);
         basis_rays_for_missing = Some(basis_rays);
         gv_basis_data_for_missing = Some(gv_basis_data);
         grading_for_missing = Some(grading);
@@ -7360,6 +7418,7 @@ fn diagnose_chamber_gv_volume_correction(
         basis_mori_rays_for_missing_degree_bound: basis_rays_for_missing_degree_bound,
         basis_mori_rays_for_missing_degree_bounded: basis_rays_for_missing_degree_bounded,
         degree_bounded_mori_ray_context_for_missing,
+        covered_toric_gv_context_for_missing,
         gv_q_matrix_for_missing: gv_basis_data_for_missing
             .as_ref()
             .map(|data| data.q_matrix.clone()),
@@ -8131,6 +8190,7 @@ fn write_corrected_chamber_gv_context_export(
         degree_bounded_mori_ray_context_for_missing: diag
             .degree_bounded_mori_ray_context_for_missing
             .as_ref(),
+        covered_toric_gv_context_for_missing: diag.covered_toric_gv_context_for_missing.as_ref(),
         gv_q_matrix_for_missing: diag.gv_q_matrix_for_missing.as_ref(),
         gv_curve_basis_matrix_for_missing: diag.gv_curve_basis_matrix_for_missing.as_ref(),
         grading_for_missing: diag.grading_for_missing.as_ref(),
