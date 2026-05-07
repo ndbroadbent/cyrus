@@ -11119,6 +11119,42 @@ pub fn compute_gv_invariants_with_provided_generators_qn_trace(
     )
 }
 
+/// Compute raw GW/GV coefficient candidates for caller-provided semigroup
+/// generators without enforcing GV integrality.
+///
+/// This is a diagnostic escape hatch for upstream `cygv` failures: when
+/// `FIND_GV=true` rejects a non-integral candidate, `cygv` currently reports
+/// only a generic error. Running the same input with `FIND_GV=false` exposes
+/// the exact coefficient candidates read from the instanton polynomial.
+///
+/// # Errors
+/// Returns an error if input construction, fundamental-period computation, or
+/// instanton-data computation fails.
+#[doc(hidden)]
+pub fn compute_gw_coefficient_trace_with_provided_generators(
+    generators: &[Vec<i64>],
+    grading_vector: &[i64],
+    q_matrix: &[Vec<i64>],
+    intnums: &Intersection,
+    min_points: Option<u32>,
+    max_deg: Option<u32>,
+) -> Result<Vec<CygvGvCoefficientTrace>> {
+    let (semigroup, q, intnums_map) = provided_cygv_semigroup_inputs(
+        generators,
+        grading_vector,
+        q_matrix,
+        intnums,
+        min_points,
+        max_deg,
+    )?;
+    compute_cygv_rat_threefold_gw_coefficient_trace_from_semigroup(
+        semigroup,
+        &q,
+        intnums_map,
+        "provided-generator GW coefficient trace",
+    )
+}
+
 /// Source-audit helper for the private `cygv::Semigroup::with_max_degree`
 /// seed-reduction step.
 ///
@@ -11872,6 +11908,39 @@ fn compute_cygv_rat_threefold_from_semigroup_with_qn_trace(
     }
 }
 
+fn compute_cygv_rat_threefold_gw_coefficient_trace_from_semigroup(
+    semigroup: cygv::Semigroup,
+    q: &DMatrix<i32>,
+    intnums_map: HashMap<(usize, usize, usize), i32>,
+    context: &str,
+) -> Result<Vec<CygvGvCoefficientTrace>> {
+    if cfg!(panic = "abort") {
+        return Err(Error::InvalidInput(format!(
+            "{context}: cygv HKTY execution requires a panic=unwind build because upstream cygv can still panic internally"
+        )));
+    }
+
+    let previous_panic_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        compute_cygv_rat_threefold_gw_coefficient_trace_from_semigroup_unchecked(
+            semigroup,
+            q,
+            intnums_map,
+            context,
+        )
+    }));
+    std::panic::set_hook(previous_panic_hook);
+
+    match result {
+        Ok(result) => result,
+        Err(payload) => Err(Error::InvalidInput(format!(
+            "{context}: cygv HKTY execution panicked: {}",
+            panic_payload_message(payload.as_ref())
+        ))),
+    }
+}
+
 fn compute_cygv_rat_threefold_from_semigroup_unchecked(
     semigroup: cygv::Semigroup,
     q: &DMatrix<i32>,
@@ -11901,6 +11970,86 @@ fn compute_cygv_rat_threefold_from_semigroup_with_qn_trace_unchecked(
         context,
         true,
     )
+}
+
+fn compute_cygv_rat_threefold_gw_coefficient_trace_from_semigroup_unchecked(
+    semigroup: cygv::Semigroup,
+    q: &DMatrix<i32>,
+    intnums_map: HashMap<(usize, usize, usize), i32>,
+    context: &str,
+) -> Result<Vec<CygvGvCoefficientTrace>> {
+    let zero_cutoff = RugRational::new();
+    let poly_props = cygv::PolynomialProperties::new(&semigroup, &zero_cutoff);
+    let (intnum_dict, intnum_idxpairs, n_indices) = cygv::misc::process_int_nums(intnums_map, true)
+        .map_err(|e| {
+            Error::InvalidInput(format!(
+                "{context}: cygv intersection preprocessing failed: {e}"
+            ))
+        })?;
+
+    let n_threads = cygv_thread_count_from_env();
+    let pool_size = cygv_pool_size_from_env();
+    let main_pool = cygv::NumberPool::new(poly_props.zero_cutoff.clone(), pool_size);
+    let thread_pools: Vec<_> = (0..n_threads)
+        .map(|_| cygv::NumberPool::new(poly_props.zero_cutoff.clone(), pool_size))
+        .collect();
+    let mut all_pools = (main_pool, thread_pools);
+    let nefpart: Vec<DVector<i32>> = Vec::new();
+
+    let fp = cygv::fundamental_period::compute_omega(
+        &poly_props,
+        &semigroup,
+        q,
+        &nefpart,
+        &intnum_idxpairs,
+        &mut all_pools,
+    )
+    .map_err(|e| Error::InvalidInput(format!("{context}: cygv fundamental period failed: {e}")))?;
+
+    let inst_data = cygv::instanton::compute_instanton_data(
+        fp,
+        &poly_props,
+        &intnum_idxpairs,
+        n_indices,
+        &intnum_dict,
+        true,
+        &mut all_pools,
+    )
+    .map_err(|e| Error::InvalidInput(format!("{context}: cygv instanton data failed: {e}")))?;
+
+    let (_, _, raw_gv_coefficient_trace) = cygv::series_inversion::invert_series_with_qn_trace::<
+        RugRational,
+        false,
+        true,
+    >(inst_data, &poly_props, &mut all_pools)
+    .map_err(|e| Error::InvalidInput(format!("{context}: cygv series inversion failed: {e}")))?;
+
+    Ok(convert_cygv_gv_coefficient_trace(raw_gv_coefficient_trace))
+}
+
+fn convert_cygv_gv_coefficient_trace(
+    raw_gv_coefficient_trace: Vec<cygv::series_inversion::GvCoefficientTrace<RugRational>>,
+) -> Vec<CygvGvCoefficientTrace> {
+    raw_gv_coefficient_trace
+        .into_iter()
+        .map(|trace| CygvGvCoefficientTrace {
+            element_index: trace.element_index,
+            degree: trace.degree,
+            element: trace.element,
+            insertion_index: trace.insertion_index,
+            pivot_component: trace.pivot_component,
+            instanton_coefficient: trace
+                .instanton_coefficient
+                .map(|coefficient| coefficient.to_string()),
+            gv_candidate: trace
+                .gv_candidate
+                .map(|coefficient| coefficient.to_string()),
+            rounded_gv_candidate: trace
+                .rounded_gv_candidate
+                .map(|coefficient| coefficient.to_string()),
+            status: trace.status.to_string(),
+        })
+        .collect()
 }
 
 fn compute_cygv_rat_threefold_raw_from_semigroup_unchecked(
@@ -12012,26 +12161,7 @@ fn compute_cygv_rat_threefold_raw_from_semigroup_unchecked(
                 .collect(),
         })
         .collect();
-    let gv_coefficient_trace = raw_gv_coefficient_trace
-        .into_iter()
-        .map(|trace| CygvGvCoefficientTrace {
-            element_index: trace.element_index,
-            degree: trace.degree,
-            element: trace.element,
-            insertion_index: trace.insertion_index,
-            pivot_component: trace.pivot_component,
-            instanton_coefficient: trace
-                .instanton_coefficient
-                .map(|coefficient| coefficient.to_string()),
-            gv_candidate: trace
-                .gv_candidate
-                .map(|coefficient| coefficient.to_string()),
-            rounded_gv_candidate: trace
-                .rounded_gv_candidate
-                .map(|coefficient| coefficient.to_string()),
-            status: trace.status.to_string(),
-        })
-        .collect();
+    let gv_coefficient_trace = convert_cygv_gv_coefficient_trace(raw_gv_coefficient_trace);
 
     Ok(GvInvariantsWithQnTrace {
         invariants: out,
@@ -12720,6 +12850,7 @@ mod tests {
         compute_gv_invariants_with_explicit_semigroup_qn_trace,
         compute_gv_invariants_with_provided_generators,
         compute_gv_invariants_with_provided_generators_qn_trace,
+        compute_gw_coefficient_trace_with_provided_generators,
         compute_local_p2_genus_zero_gv_series, compute_local_toric_circuit_gv_series,
         compute_one_dimensional_ray_gv_series, compute_ray_gv_series_with_provided_generators,
         curve_in_rational_row_span, curve_row_span_rank, curve_volume_in_divisor_basis,
@@ -16896,6 +17027,31 @@ mod tests {
         assert_eq!(traced.gv_coefficient_trace.len(), 1);
         assert_eq!(traced.gv_coefficient_trace[0].element, vec![1]);
         assert_eq!(traced.gv_coefficient_trace[0].status, "integer_nonzero_gv");
+    }
+
+    #[test]
+    fn provided_generator_gw_coefficient_trace_exposes_raw_candidate() {
+        let mut intnums = Intersection::new(1);
+        set_intersection_i64(&mut intnums, 0, 0, 0, 5);
+
+        let trace = compute_gw_coefficient_trace_with_provided_generators(
+            &[vec![1]],
+            &[1],
+            &[vec![1, 1, 1, 1, 1]],
+            &intnums,
+            None,
+            Some(1),
+        )
+        .expect("provided-generator quintic should expose raw GW coefficient trace");
+
+        assert_eq!(trace.len(), 1);
+        assert_eq!(trace[0].element, vec![1]);
+        assert_eq!(trace[0].insertion_index, 0);
+        assert_eq!(trace[0].pivot_component, 1);
+        assert_eq!(trace[0].instanton_coefficient.as_deref(), Some("2875"));
+        assert_eq!(trace[0].gv_candidate.as_deref(), Some("2875"));
+        assert_eq!(trace[0].rounded_gv_candidate, None);
+        assert_eq!(trace[0].status, "nonzero_gw");
     }
 
     #[test]

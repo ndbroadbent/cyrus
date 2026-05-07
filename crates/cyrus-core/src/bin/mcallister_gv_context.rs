@@ -24,7 +24,8 @@ use cyrus_core::{
     CygvQnTracePolynomial, Intersection, Point, compute_gv_invariants_with_explicit_semigroup,
     compute_gv_invariants_with_explicit_semigroup_qn_trace,
     compute_gv_invariants_with_provided_generators,
-    compute_gv_invariants_with_provided_generators_qn_trace, curve_row_span_rank,
+    compute_gv_invariants_with_provided_generators_qn_trace,
+    compute_gw_coefficient_trace_with_provided_generators, curve_row_span_rank,
     diagnose_affine_toric_circuit, integer_math::solve_linear_system_rational, utils::gcd_list_int,
 };
 
@@ -624,6 +625,10 @@ struct CygvPathHistoryProbe {
     path_support_gv_coefficient_trace_count: Option<usize>,
     path_support_gv_coefficient_status_counts: BTreeMap<String, usize>,
     path_support_gv_coefficient_trace_sample: Vec<CygvPathSupportGvCoefficientTraceSample>,
+    path_support_gw_coefficient_trace_count: Option<usize>,
+    path_support_gw_noninteger_candidate_count: Option<usize>,
+    path_support_gw_noninteger_candidate_sample: Vec<CygvPathSupportGvCoefficientTraceSample>,
+    path_support_gw_coefficient_trace_error: Option<String>,
     path_support_qn_trace_sample: Vec<CygvPathSupportQnTracePolynomialSample>,
     path_support_target_monomial_qn_source_count: Option<usize>,
     path_support_target_monomial_qn_source_sample: Vec<CygvPathSupportTargetMonomialQnSource>,
@@ -1238,6 +1243,10 @@ struct PathSupportGeneratorProbe {
     gv_coefficient_trace_count: Option<usize>,
     gv_coefficient_status_counts: BTreeMap<String, usize>,
     gv_coefficient_trace_sample: Vec<CygvPathSupportGvCoefficientTraceSample>,
+    gw_coefficient_trace_count: Option<usize>,
+    gw_noninteger_candidate_count: Option<usize>,
+    gw_noninteger_candidate_sample: Vec<CygvPathSupportGvCoefficientTraceSample>,
+    gw_coefficient_trace_error: Option<String>,
     qn_trace_sample: Vec<CygvPathSupportQnTracePolynomialSample>,
     target_monomial_qn_source_count: Option<usize>,
     target_monomial_qn_source_sample: Vec<CygvPathSupportTargetMonomialQnSource>,
@@ -1707,6 +1716,10 @@ fn path_support_generator_probe(
             gv_coefficient_trace_count: None,
             gv_coefficient_status_counts: BTreeMap::new(),
             gv_coefficient_trace_sample: Vec::new(),
+            gw_coefficient_trace_count: None,
+            gw_noninteger_candidate_count: None,
+            gw_noninteger_candidate_sample: Vec::new(),
+            gw_coefficient_trace_error: None,
             qn_trace_sample: Vec::new(),
             target_monomial_qn_source_count: None,
             target_monomial_qn_source_sample: Vec::new(),
@@ -1749,6 +1762,10 @@ fn path_support_generator_probe(
             gv_coefficient_trace_count: None,
             gv_coefficient_status_counts: BTreeMap::new(),
             gv_coefficient_trace_sample: Vec::new(),
+            gw_coefficient_trace_count: None,
+            gw_noninteger_candidate_count: None,
+            gw_noninteger_candidate_sample: Vec::new(),
+            gw_coefficient_trace_error: None,
             qn_trace_sample: Vec::new(),
             target_monomial_qn_source_count: None,
             target_monomial_qn_source_sample: Vec::new(),
@@ -2169,6 +2186,36 @@ fn path_support_generator_nonzero_sample(generators: &[Vec<i64>]) -> Vec<Vec<(us
         .collect()
 }
 
+fn path_support_gw_coefficient_diagnostic(
+    generators: &[Vec<i64>],
+    context: &ValidatedContext<'_>,
+    max_deg: u32,
+) -> (
+    Option<usize>,
+    Option<usize>,
+    Vec<CygvPathSupportGvCoefficientTraceSample>,
+    Option<String>,
+) {
+    match compute_gw_coefficient_trace_with_provided_generators(
+        generators,
+        context.grading,
+        context.q_matrix,
+        &context.intersection,
+        None,
+        Some(max_deg),
+    ) {
+        Ok(trace) => {
+            let noninteger_count = trace
+                .iter()
+                .filter(|entry| gv_coefficient_trace_has_noninteger_candidate(entry))
+                .count();
+            let sample = path_support_gw_noninteger_candidate_sample(&trace);
+            (Some(trace.len()), Some(noninteger_count), sample, None)
+        }
+        Err(error) => (None, None, Vec::new(), Some(error.to_string())),
+    }
+}
+
 fn path_support_generator_probe_inner(
     target: &[i64],
     target_degree: i128,
@@ -2203,6 +2250,10 @@ fn path_support_generator_probe_inner(
             gv_coefficient_trace_count: None,
             gv_coefficient_status_counts: BTreeMap::new(),
             gv_coefficient_trace_sample: Vec::new(),
+            gw_coefficient_trace_count: None,
+            gw_noninteger_candidate_count: None,
+            gw_noninteger_candidate_sample: Vec::new(),
+            gw_coefficient_trace_error: None,
             qn_trace_sample: Vec::new(),
             target_monomial_qn_source_count: None,
             target_monomial_qn_source_sample: Vec::new(),
@@ -2260,6 +2311,12 @@ fn path_support_generator_probe_inner(
     let traced = match gvs_result {
         Ok(Ok(traced)) => traced,
         Ok(Err(error)) => {
+            let (
+                gw_coefficient_trace_count,
+                gw_noninteger_candidate_count,
+                gw_noninteger_candidate_sample,
+                gw_coefficient_trace_error,
+            ) = path_support_gw_coefficient_diagnostic(&generators, context, max_deg);
             return Ok(PathSupportGeneratorProbe {
                 support_size: Some(support.len()),
                 generator_count: Some(generators.len()),
@@ -2286,6 +2343,10 @@ fn path_support_generator_probe_inner(
                 gv_coefficient_trace_count: None,
                 gv_coefficient_status_counts: BTreeMap::new(),
                 gv_coefficient_trace_sample: Vec::new(),
+                gw_coefficient_trace_count,
+                gw_noninteger_candidate_count,
+                gw_noninteger_candidate_sample,
+                gw_coefficient_trace_error,
                 qn_trace_sample: Vec::new(),
                 target_monomial_qn_source_count: None,
                 target_monomial_qn_source_sample: Vec::new(),
@@ -2301,6 +2362,12 @@ fn path_support_generator_probe_inner(
             });
         }
         Err(payload) => {
+            let (
+                gw_coefficient_trace_count,
+                gw_noninteger_candidate_count,
+                gw_noninteger_candidate_sample,
+                gw_coefficient_trace_error,
+            ) = path_support_gw_coefficient_diagnostic(&generators, context, max_deg);
             return Ok(PathSupportGeneratorProbe {
                 support_size: Some(support.len()),
                 generator_count: Some(generators.len()),
@@ -2327,6 +2394,10 @@ fn path_support_generator_probe_inner(
                 gv_coefficient_trace_count: None,
                 gv_coefficient_status_counts: BTreeMap::new(),
                 gv_coefficient_trace_sample: Vec::new(),
+                gw_coefficient_trace_count,
+                gw_noninteger_candidate_count,
+                gw_noninteger_candidate_sample,
+                gw_coefficient_trace_error,
                 qn_trace_sample: Vec::new(),
                 target_monomial_qn_source_count: None,
                 target_monomial_qn_source_sample: Vec::new(),
@@ -2443,6 +2514,10 @@ fn path_support_generator_probe_inner(
         gv_coefficient_trace_count: Some(gv_coefficient_trace_count),
         gv_coefficient_status_counts,
         gv_coefficient_trace_sample,
+        gw_coefficient_trace_count: None,
+        gw_noninteger_candidate_count: None,
+        gw_noninteger_candidate_sample: Vec::new(),
+        gw_coefficient_trace_error: None,
         qn_trace_sample,
         target_monomial_qn_source_count: Some(target_monomial_qn_source_count),
         target_monomial_qn_source_sample,
@@ -3984,6 +4059,26 @@ fn path_support_gv_coefficient_trace_sample(
             status: entry.status.clone(),
         })
         .collect()
+}
+
+fn gv_coefficient_trace_has_noninteger_candidate(entry: &CygvGvCoefficientTrace) -> bool {
+    let Some(candidate) = entry.gv_candidate.as_deref() else {
+        return false;
+    };
+    parse_rational(candidate)
+        .map(|candidate| candidate.denominator_ref() != &1u32)
+        .unwrap_or(false)
+}
+
+fn path_support_gw_noninteger_candidate_sample(
+    trace: &[CygvGvCoefficientTrace],
+) -> Vec<CygvPathSupportGvCoefficientTraceSample> {
+    let noninteger_candidates = trace
+        .iter()
+        .filter(|entry| gv_coefficient_trace_has_noninteger_candidate(entry))
+        .cloned()
+        .collect::<Vec<_>>();
+    path_support_gv_coefficient_trace_sample(&noninteger_candidates)
 }
 
 fn path_support_target_monomial_qn_sources(
@@ -8401,6 +8496,10 @@ fn cygv_path_history_probe(
             path_support_gv_coefficient_trace_count: None,
             path_support_gv_coefficient_status_counts: BTreeMap::new(),
             path_support_gv_coefficient_trace_sample: Vec::new(),
+            path_support_gw_coefficient_trace_count: None,
+            path_support_gw_noninteger_candidate_count: None,
+            path_support_gw_noninteger_candidate_sample: Vec::new(),
+            path_support_gw_coefficient_trace_error: None,
             path_support_qn_trace_sample: Vec::new(),
             path_support_target_monomial_qn_source_count: None,
             path_support_target_monomial_qn_source_sample: Vec::new(),
@@ -8507,6 +8606,10 @@ fn cygv_path_history_probe_inner(
             path_support_gv_coefficient_trace_count: None,
             path_support_gv_coefficient_status_counts: BTreeMap::new(),
             path_support_gv_coefficient_trace_sample: Vec::new(),
+            path_support_gw_coefficient_trace_count: None,
+            path_support_gw_noninteger_candidate_count: None,
+            path_support_gw_noninteger_candidate_sample: Vec::new(),
+            path_support_gw_coefficient_trace_error: None,
             path_support_qn_trace_sample: Vec::new(),
             path_support_target_monomial_qn_source_count: None,
             path_support_target_monomial_qn_source_sample: Vec::new(),
@@ -8589,6 +8692,10 @@ fn cygv_path_history_probe_inner(
             path_support_gv_coefficient_trace_count: None,
             path_support_gv_coefficient_status_counts: BTreeMap::new(),
             path_support_gv_coefficient_trace_sample: Vec::new(),
+            path_support_gw_coefficient_trace_count: None,
+            path_support_gw_noninteger_candidate_count: None,
+            path_support_gw_noninteger_candidate_sample: Vec::new(),
+            path_support_gw_coefficient_trace_error: None,
             path_support_qn_trace_sample: Vec::new(),
             path_support_target_monomial_qn_source_count: None,
             path_support_target_monomial_qn_source_sample: Vec::new(),
@@ -8783,6 +8890,14 @@ fn cygv_path_history_probe_inner(
                 .gv_coefficient_status_counts,
             path_support_gv_coefficient_trace_sample: path_support_generators
                 .gv_coefficient_trace_sample,
+            path_support_gw_coefficient_trace_count: path_support_generators
+                .gw_coefficient_trace_count,
+            path_support_gw_noninteger_candidate_count: path_support_generators
+                .gw_noninteger_candidate_count,
+            path_support_gw_noninteger_candidate_sample: path_support_generators
+                .gw_noninteger_candidate_sample,
+            path_support_gw_coefficient_trace_error: path_support_generators
+                .gw_coefficient_trace_error,
             path_support_qn_trace_sample: path_support_generators.qn_trace_sample,
             path_support_target_monomial_qn_source_count: path_support_generators
                 .target_monomial_qn_source_count,
@@ -8890,6 +9005,12 @@ fn cygv_path_history_probe_inner(
             .gv_coefficient_status_counts,
         path_support_gv_coefficient_trace_sample: path_support_generators
             .gv_coefficient_trace_sample,
+        path_support_gw_coefficient_trace_count: path_support_generators.gw_coefficient_trace_count,
+        path_support_gw_noninteger_candidate_count: path_support_generators
+            .gw_noninteger_candidate_count,
+        path_support_gw_noninteger_candidate_sample: path_support_generators
+            .gw_noninteger_candidate_sample,
+        path_support_gw_coefficient_trace_error: path_support_generators.gw_coefficient_trace_error,
         path_support_qn_trace_sample: path_support_generators.qn_trace_sample,
         path_support_target_monomial_qn_source_count: path_support_generators
             .target_monomial_qn_source_count,
@@ -15038,6 +15159,10 @@ mod tests {
                 gv_coefficient_trace_count: None,
                 gv_coefficient_status_counts: BTreeMap::new(),
                 gv_coefficient_trace_sample: Vec::new(),
+                gw_coefficient_trace_count: None,
+                gw_noninteger_candidate_count: None,
+                gw_noninteger_candidate_sample: Vec::new(),
+                gw_coefficient_trace_error: None,
                 qn_trace_sample,
                 target_monomial_qn_source_count: None,
                 target_monomial_qn_source_sample: Vec::new(),
@@ -15126,6 +15251,10 @@ mod tests {
                 gv_coefficient_trace_count: None,
                 gv_coefficient_status_counts: BTreeMap::new(),
                 gv_coefficient_trace_sample: Vec::new(),
+                gw_coefficient_trace_count: None,
+                gw_noninteger_candidate_count: None,
+                gw_noninteger_candidate_sample: Vec::new(),
+                gw_coefficient_trace_error: None,
                 qn_trace_sample: vec![sample],
                 target_monomial_qn_source_count: None,
                 target_monomial_qn_source_sample: Vec::new(),
@@ -15360,6 +15489,10 @@ mod tests {
             CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT
         );
         assert_eq!(probe.generator_nonzero_sample, vec![vec![(0, 1)]]);
+        assert_eq!(probe.gw_coefficient_trace_count, None);
+        assert_eq!(probe.gw_noninteger_candidate_count, None);
+        assert!(probe.gw_noninteger_candidate_sample.is_empty());
+        assert_eq!(probe.gw_coefficient_trace_error, None);
         assert_eq!(probe.gv.as_deref(), Some("2875"));
         assert_eq!(probe.qn_trace_polynomial_count, Some(1));
         assert_eq!(
