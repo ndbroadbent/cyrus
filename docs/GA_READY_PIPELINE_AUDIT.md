@@ -133,7 +133,11 @@ run pass. Any remaining mismatch must be explicit and localizable.
    has no remaining local missing-input counts and all three occurrences are
    `ready_for_actual_cygv_call`; the remaining blocker is now the higher-degree
    compact qN history that uses those source rows, not the scalar value of this
-   residual source family.
+   residual source family. The path-history report now makes this distinction
+   explicit: scalar toric/source GV coverage is reported separately from
+   compact `q_N` polynomial materialization, and the degree-10 first-layer
+   predecessor pairs still have only scalar coverage or unknown scalar coverage,
+   not exported compact `q_N` polynomials.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for

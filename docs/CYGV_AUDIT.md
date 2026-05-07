@@ -1654,6 +1654,19 @@ degree-ordered subtraction history over those leaves. A pair-expanded reduced
 leaf diamond, still run through actual `cygv` as an explicit semigroup, has 12
 elements for both degree-10 targets and returns `GV=0`; the tiny leaf diamond is
 therefore still not the correct compact history domain.
+The report now separates scalar GV evidence from compact `q_N` polynomial
+evidence. The existing `known_qn_history_*` labels are scalar toric/source GV
+coverage labels; they do not mean that Cyrus has materialized the compact
+mirror-map `q_N` polynomial that cygv subtracts. A fresh target-7 report
+(`--probe-cygv-path-history --element-limit 150000
+--closure-generation-limit 1`) records all eight first-layer predecessor pairs
+as missing compact `q_N` polynomials:
+`compact_qn_missing_toric_scalar_only`,
+`compact_qn_missing_source_scalar_only`, or
+`compact_qn_missing_unknown_scalar_gv` on the two sides. This is why promoting
+more scalar source GV values is insufficient by itself; the remaining compact
+task is still the semigroup/mirror-map history that produces those `q_N`
+polynomials.
 The path-history probe now has a broader opt-in
 `--run-path-support-generators` check that collects the support of the target,
 sampled predecessor/difference pairs, and sampled seed-sum decompositions, then

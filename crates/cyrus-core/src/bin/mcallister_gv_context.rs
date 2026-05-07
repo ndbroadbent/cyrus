@@ -534,6 +534,7 @@ struct CygvPathHistoryProbe {
     improving_predecessor_difference_count: Option<usize>,
     predecessor_toric_coverage_counts: BTreeMap<String, usize>,
     predecessor_known_qn_history_counts: BTreeMap<String, usize>,
+    predecessor_compact_qn_polynomial_counts: BTreeMap<String, usize>,
     closest_series_distance: Option<String>,
     closest_series_predecessor_nonzero: Option<Vec<(usize, i64)>>,
     closest_series_difference_nonzero: Option<Vec<(usize, i64)>>,
@@ -588,6 +589,7 @@ struct CygvPathPredecessorCandidate {
     predecessor_known_qn_history_status: String,
     difference_known_qn_history_status: String,
     known_qn_history_pair_status: String,
+    compact_qn_polynomial_pair_status: String,
     predecessor_is_seed: bool,
     difference_is_seed: bool,
     predecessor_is_reduced_seed: bool,
@@ -929,6 +931,7 @@ struct CygvPathPredecessorStats {
     improving_predecessor_difference_count: usize,
     toric_coverage_counts: BTreeMap<String, usize>,
     known_qn_history_counts: BTreeMap<String, usize>,
+    compact_qn_polynomial_counts: BTreeMap<String, usize>,
     closest_distance: f64,
     closest_predecessor: Option<Vec<i64>>,
     closest_difference: Option<Vec<i64>>,
@@ -6910,6 +6913,7 @@ fn cygv_path_history_probe(
             improving_predecessor_difference_count: None,
             predecessor_toric_coverage_counts: BTreeMap::new(),
             predecessor_known_qn_history_counts: BTreeMap::new(),
+            predecessor_compact_qn_polynomial_counts: BTreeMap::new(),
             closest_series_distance: None,
             closest_series_predecessor_nonzero: None,
             closest_series_difference_nonzero: None,
@@ -6987,6 +6991,7 @@ fn cygv_path_history_probe_inner(
             improving_predecessor_difference_count: None,
             predecessor_toric_coverage_counts: BTreeMap::new(),
             predecessor_known_qn_history_counts: BTreeMap::new(),
+            predecessor_compact_qn_polynomial_counts: BTreeMap::new(),
             closest_series_distance: None,
             closest_series_predecessor_nonzero: None,
             closest_series_difference_nonzero: None,
@@ -7038,6 +7043,7 @@ fn cygv_path_history_probe_inner(
             improving_predecessor_difference_count: None,
             predecessor_toric_coverage_counts: BTreeMap::new(),
             predecessor_known_qn_history_counts: BTreeMap::new(),
+            predecessor_compact_qn_polynomial_counts: BTreeMap::new(),
             closest_series_distance: None,
             closest_series_predecessor_nonzero: None,
             closest_series_difference_nonzero: None,
@@ -7152,6 +7158,8 @@ fn cygv_path_history_probe_inner(
             ),
             predecessor_toric_coverage_counts: predecessor_stats.toric_coverage_counts,
             predecessor_known_qn_history_counts: predecessor_stats.known_qn_history_counts,
+            predecessor_compact_qn_polynomial_counts: predecessor_stats
+                .compact_qn_polynomial_counts,
             closest_series_distance: Some(format!("{:.6}", predecessor_stats.closest_distance)),
             closest_series_predecessor_nonzero: predecessor_stats
                 .closest_predecessor
@@ -7214,6 +7222,7 @@ fn cygv_path_history_probe_inner(
         ),
         predecessor_toric_coverage_counts: predecessor_stats.toric_coverage_counts,
         predecessor_known_qn_history_counts: predecessor_stats.known_qn_history_counts,
+        predecessor_compact_qn_polynomial_counts: predecessor_stats.compact_qn_polynomial_counts,
         closest_series_distance: Some(format!("{:.6}", predecessor_stats.closest_distance)),
         closest_series_predecessor_nonzero: predecessor_stats
             .closest_predecessor
@@ -7289,6 +7298,24 @@ fn known_qn_history_status(
 
 fn known_qn_history_pair_status(predecessor_status: &str, difference_status: &str) -> String {
     format!("predecessor_{predecessor_status}__difference_{difference_status}")
+}
+
+fn compact_qn_polynomial_status(scalar_status: &str) -> &'static str {
+    match scalar_status {
+        "known_nonzero_toric_gv" => "compact_qn_missing_toric_scalar_only",
+        "known_nonzero_source_gv" => "compact_qn_missing_source_scalar_only",
+        "known_zero_toric_gv" | "known_zero_source_gv" => "compact_qn_not_required_zero_scalar_gv",
+        "unknown_not_toric_covered" => "compact_qn_missing_unknown_scalar_gv",
+        _ => "compact_qn_status_unrecognized",
+    }
+}
+
+fn compact_qn_polynomial_pair_status(predecessor_status: &str, difference_status: &str) -> String {
+    format!(
+        "predecessor_{}__difference_{}",
+        compact_qn_polynomial_status(predecessor_status),
+        compact_qn_polynomial_status(difference_status)
+    )
 }
 
 fn is_known_nonzero_qn_history_status(status: &str) -> bool {
@@ -7782,6 +7809,7 @@ fn cygv_path_predecessor_stats(
     let mut candidate_sample = Vec::new();
     let mut toric_coverage_counts = BTreeMap::new();
     let mut known_qn_history_counts = BTreeMap::new();
+    let mut compact_qn_polynomial_counts = BTreeMap::new();
     let mut sorted_elements = elements.iter().collect::<Vec<_>>();
     sorted_elements.sort();
     for element in sorted_elements {
@@ -7813,6 +7841,10 @@ fn cygv_path_predecessor_stats(
             predecessor_known_qn_history_status,
             difference_known_qn_history_status,
         );
+        let compact_qn_polynomial_pair_status = compact_qn_polynomial_pair_status(
+            predecessor_known_qn_history_status,
+            difference_known_qn_history_status,
+        );
         let coverage_key = match (predecessor_is_toric_covered, difference_is_toric_covered) {
             (true, true) => "both_toric_covered",
             (true, false) => "predecessor_only_toric_covered",
@@ -7824,6 +7856,9 @@ fn cygv_path_predecessor_stats(
             .or_insert(0) += 1;
         *known_qn_history_counts
             .entry(known_qn_history_pair_status.clone())
+            .or_insert(0) += 1;
+        *compact_qn_polynomial_counts
+            .entry(compact_qn_polynomial_pair_status.clone())
             .or_insert(0) += 1;
         let difference_degree = curve_degree(&difference, grading)?;
         let distance = cygv_series_distance(&difference);
@@ -7843,6 +7878,7 @@ fn cygv_path_predecessor_stats(
                     difference_known_qn_history_status: difference_known_qn_history_status
                         .to_string(),
                     known_qn_history_pair_status: known_qn_history_pair_status.clone(),
+                    compact_qn_polynomial_pair_status: compact_qn_polynomial_pair_status.clone(),
                     predecessor_is_seed: seed_set.contains(element),
                     difference_is_seed: seed_set.contains(&difference),
                     predecessor_is_reduced_seed: reduced_seed_set.contains(element),
@@ -7893,6 +7929,7 @@ fn cygv_path_predecessor_stats(
                     difference_known_qn_history_status: difference_known_qn_history_status
                         .to_string(),
                     known_qn_history_pair_status: known_qn_history_pair_status.clone(),
+                    compact_qn_polynomial_pair_status: compact_qn_polynomial_pair_status.clone(),
                     predecessor_is_seed: seed_set.contains(element),
                     difference_is_seed: seed_set.contains(&difference),
                     predecessor_is_reduced_seed: reduced_seed_set.contains(element),
@@ -7937,6 +7974,7 @@ fn cygv_path_predecessor_stats(
         improving_predecessor_difference_count,
         toric_coverage_counts,
         known_qn_history_counts,
+        compact_qn_polynomial_counts,
         closest_distance,
         closest_predecessor,
         closest_difference,
@@ -12099,6 +12137,9 @@ mod tests {
             known_qn_history_pair_status:
                 "predecessor_unknown_not_toric_covered__difference_unknown_not_toric_covered"
                     .to_string(),
+            compact_qn_polynomial_pair_status:
+                "predecessor_compact_qn_missing_unknown_scalar_gv__difference_compact_qn_missing_unknown_scalar_gv"
+                    .to_string(),
             predecessor_is_seed: false,
             difference_is_seed: false,
             predecessor_is_reduced_seed: false,
@@ -12174,6 +12215,14 @@ mod tests {
         assert_eq!(
             known_qn_history_pair_status("known_zero_toric_gv", "unknown_not_toric_covered"),
             "predecessor_known_zero_toric_gv__difference_unknown_not_toric_covered"
+        );
+        assert_eq!(
+            compact_qn_polynomial_pair_status("known_nonzero_source_gv", "known_nonzero_toric_gv"),
+            "predecessor_compact_qn_missing_source_scalar_only__difference_compact_qn_missing_toric_scalar_only"
+        );
+        assert_eq!(
+            compact_qn_polynomial_pair_status("known_zero_toric_gv", "unknown_not_toric_covered"),
+            "predecessor_compact_qn_not_required_zero_scalar_gv__difference_compact_qn_missing_unknown_scalar_gv"
         );
     }
 
@@ -13648,6 +13697,13 @@ mod tests {
                 .copied(),
             Some(2)
         );
+        assert_eq!(
+            probe
+                .predecessor_compact_qn_polynomial_counts
+                .get("predecessor_compact_qn_missing_toric_scalar_only__difference_compact_qn_missing_toric_scalar_only")
+                .copied(),
+            Some(2)
+        );
         assert_eq!(probe.closest_series_distance.as_deref(), Some("1.000000"));
         assert_eq!(probe.closest_series_predecessor_nonzero, Some(vec![(1, 1)]));
         assert_eq!(probe.closest_series_difference_nonzero, Some(vec![(0, 1)]));
@@ -13695,6 +13751,10 @@ mod tests {
         assert_eq!(
             probe.predecessor_candidate_sample[0].known_qn_history_pair_status,
             "predecessor_known_nonzero_toric_gv__difference_known_nonzero_toric_gv"
+        );
+        assert_eq!(
+            probe.predecessor_candidate_sample[0].compact_qn_polynomial_pair_status,
+            "predecessor_compact_qn_missing_toric_scalar_only__difference_compact_qn_missing_toric_scalar_only"
         );
         assert!(probe.predecessor_candidate_sample[0].predecessor_is_seed);
         assert!(probe.predecessor_candidate_sample[0].difference_is_seed);
