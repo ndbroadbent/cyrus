@@ -2794,6 +2794,19 @@ separate three-term decomposition despite being a raw pair-reduced seed. Target
 decomposition. These are still scalar/decomposition diagnostics, not compact
 history promotion, but they identify the finite lower-leaf inputs for the next
 `q_N` history check.
+The bounded lower-seed summary now also runs the actual Rust `cygv` explicit
+semigroup qN trace on the tiny decomposition diamond when the diamond is below
+the diagnostic element limit. For the degree-eight target-monomial source, the
+target `7` diamond computes `GV=-2` and materializes the target qN polynomial,
+while the target `8` diamond computes `GV=2` and also materializes a one-term
+target qN polynomial. This shows that the finite lower-leaf diamond can
+reproduce that local source object. The parent-only residual terms do not
+promote the missing target in the same way: target `7`'s missing-target-shaped
+term and generated sibling both compute `GV=0` with no target qN term, and
+target `8`'s missing-target-shaped diamond hits a compact HKTY error. Thus the
+remaining mismatch is not leaf identification or the degree-eight source qN
+alone; it is how the parent compact domain integrates these finite lower
+histories into the degree-ten target's degree-ordered subtraction history.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use

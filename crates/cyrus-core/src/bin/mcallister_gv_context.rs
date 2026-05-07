@@ -35,6 +35,7 @@ const CYGV_PATH_SUPPORT_QN_TRACE_SAMPLE_LIMIT: usize = 16;
 const CYGV_PATH_SUPPORT_QN_TRACE_TERM_SAMPLE_LIMIT: usize = 16;
 const CYGV_PATH_SUPPORT_GV_COEFFICIENT_TRACE_SAMPLE_LIMIT: usize = 32;
 const CYGV_PATH_SUPPORT_TARGET_MONOMIAL_QN_SOURCE_SAMPLE_LIMIT: usize = 16;
+const CYGV_BOUNDED_DECOMPOSITION_DIAMOND_ELEMENT_LIMIT: usize = 64;
 const ORIGIN_CIRCUIT_WITNESS_DOMAIN_UNRESOLVED_SAMPLE_LIMIT: usize = 64;
 const ORIGIN_CIRCUIT_WITNESS_DOMAIN_OCCURRENCE_SAMPLE_LIMIT: usize = 8;
 
@@ -1196,6 +1197,25 @@ struct CygvBoundedSeedDecompositionSummary {
     status: String,
     term_count: Option<usize>,
     terms_nonzero: Option<Vec<Vec<(usize, i64)>>>,
+    diamond_element_count: Option<usize>,
+    diamond_status: Option<String>,
+    diamond_gv: Option<String>,
+    diamond_error: Option<String>,
+    diamond_qn_trace_polynomial_count: Option<usize>,
+    diamond_target_qn_trace_status: Option<String>,
+    diamond_target_qn_trace_term_count: Option<usize>,
+    diamond_qn_trace_sample: Vec<CygvPathSupportQnTracePolynomialSample>,
+}
+
+struct CygvBoundedDecompositionDiamondProbe {
+    element_count: Option<usize>,
+    status: Option<String>,
+    gv: Option<String>,
+    error: Option<String>,
+    qn_trace_polynomial_count: Option<usize>,
+    target_qn_trace_status: Option<String>,
+    target_qn_trace_term_count: Option<usize>,
+    qn_trace_sample: Vec<CygvPathSupportQnTracePolynomialSample>,
 }
 
 struct PathSupportSourceClassContext {
@@ -2038,7 +2058,7 @@ fn residual_parent_only_qn_term_classifications(
                 &context.source_derived_gv_by_basis,
             )?;
             let source_bounded_seed_decomposition =
-                bounded_seed_decomposition_summary(&curve, seed_set, 4)?;
+                bounded_seed_decomposition_summary(&curve, seed_set, 4, Some(context))?;
             Ok(CygvResidualQnDomainTermClassification {
                 exponent_nonzero: term.exponent_nonzero.clone(),
                 coefficient: term.coefficient.clone(),
@@ -4326,23 +4346,169 @@ fn bounded_seed_decomposition_summary(
     target: &[i64],
     seed_set: &HashSet<Vec<i64>>,
     max_terms: usize,
+    context: Option<&ValidatedContext<'_>>,
 ) -> Result<CygvBoundedSeedDecompositionSummary, String> {
     let mut seeds = seed_set.iter().cloned().collect::<Vec<_>>();
     seeds.sort();
     match bounded_seed_decomposition(target, &seeds, max_terms)? {
-        Some(terms) => Ok(CygvBoundedSeedDecompositionSummary {
-            max_terms,
-            status: "found_lower_seed_decomposition".to_string(),
-            term_count: Some(terms.len()),
-            terms_nonzero: Some(terms.iter().map(|term| sparse_from_dense(term)).collect()),
-        }),
+        Some(terms) => {
+            let diamond = context
+                .map(|context| bounded_decomposition_diamond_qn_trace(target, &terms, context))
+                .transpose()?;
+            Ok(CygvBoundedSeedDecompositionSummary {
+                max_terms,
+                status: "found_lower_seed_decomposition".to_string(),
+                term_count: Some(terms.len()),
+                terms_nonzero: Some(terms.iter().map(|term| sparse_from_dense(term)).collect()),
+                diamond_element_count: diamond.as_ref().and_then(|probe| probe.element_count),
+                diamond_status: diamond.as_ref().and_then(|probe| probe.status.clone()),
+                diamond_gv: diamond.as_ref().and_then(|probe| probe.gv.clone()),
+                diamond_error: diamond.as_ref().and_then(|probe| probe.error.clone()),
+                diamond_qn_trace_polynomial_count: diamond
+                    .as_ref()
+                    .and_then(|probe| probe.qn_trace_polynomial_count),
+                diamond_target_qn_trace_status: diamond
+                    .as_ref()
+                    .and_then(|probe| probe.target_qn_trace_status.clone()),
+                diamond_target_qn_trace_term_count: diamond
+                    .as_ref()
+                    .and_then(|probe| probe.target_qn_trace_term_count),
+                diamond_qn_trace_sample: diamond
+                    .map(|probe| probe.qn_trace_sample)
+                    .unwrap_or_default(),
+            })
+        }
         None => Ok(CygvBoundedSeedDecompositionSummary {
             max_terms,
             status: format!("not_found_up_to_{max_terms}"),
             term_count: None,
             terms_nonzero: None,
+            diamond_element_count: None,
+            diamond_status: None,
+            diamond_gv: None,
+            diamond_error: None,
+            diamond_qn_trace_polynomial_count: None,
+            diamond_target_qn_trace_status: None,
+            diamond_target_qn_trace_term_count: None,
+            diamond_qn_trace_sample: Vec::new(),
         }),
     }
+}
+
+fn bounded_decomposition_diamond_qn_trace(
+    target: &[i64],
+    terms: &[Vec<i64>],
+    context: &ValidatedContext<'_>,
+) -> Result<CygvBoundedDecompositionDiamondProbe, String> {
+    let elements = decomposition_diamond_elements(terms, target)?;
+    if elements.len() > CYGV_BOUNDED_DECOMPOSITION_DIAMOND_ELEMENT_LIMIT {
+        return Ok(CygvBoundedDecompositionDiamondProbe {
+            element_count: Some(elements.len()),
+            status: Some(format!(
+                "skipped_element_limit_{CYGV_BOUNDED_DECOMPOSITION_DIAMOND_ELEMENT_LIMIT}"
+            )),
+            gv: None,
+            error: None,
+            qn_trace_polynomial_count: None,
+            target_qn_trace_status: None,
+            target_qn_trace_term_count: None,
+            qn_trace_sample: Vec::new(),
+        });
+    }
+    if context.q_matrix.is_empty() || context.q_cols == 0 {
+        return Ok(CygvBoundedDecompositionDiamondProbe {
+            element_count: Some(elements.len()),
+            status: Some("skipped_no_q_matrix".to_string()),
+            gv: None,
+            error: None,
+            qn_trace_polynomial_count: None,
+            target_qn_trace_status: None,
+            target_qn_trace_term_count: None,
+            qn_trace_sample: Vec::new(),
+        });
+    }
+    if cfg!(panic = "abort") {
+        return Ok(CygvBoundedDecompositionDiamondProbe {
+            element_count: Some(elements.len()),
+            status: Some("hkty_unavailable_panic_abort".to_string()),
+            gv: None,
+            error: Some(
+                "running cygv explicit-semigroup HKTY requires a panic=unwind build for diagnostics"
+                    .to_string(),
+            ),
+            qn_trace_polynomial_count: None,
+            target_qn_trace_status: None,
+            target_qn_trace_term_count: None,
+            qn_trace_sample: Vec::new(),
+        });
+    }
+    let target_i32 = curve_i64_to_i32(target, "bounded-decomposition target")?;
+    let previous_panic_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let traced_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        compute_gv_invariants_with_explicit_semigroup_qn_trace(
+            &elements,
+            context.grading,
+            context.q_matrix,
+            &context.intersection,
+        )
+    }));
+    std::panic::set_hook(previous_panic_hook);
+
+    let traced = match traced_result {
+        Ok(Ok(traced)) => traced,
+        Ok(Err(error)) => {
+            return Ok(CygvBoundedDecompositionDiamondProbe {
+                element_count: Some(elements.len()),
+                status: Some("hkty_error".to_string()),
+                gv: None,
+                error: Some(format!(
+                    "bounded decomposition diamond qN trace failed: {error}"
+                )),
+                qn_trace_polynomial_count: None,
+                target_qn_trace_status: None,
+                target_qn_trace_term_count: None,
+                qn_trace_sample: Vec::new(),
+            });
+        }
+        Err(payload) => {
+            return Ok(CygvBoundedDecompositionDiamondProbe {
+                element_count: Some(elements.len()),
+                status: Some("hkty_panic".to_string()),
+                gv: None,
+                error: Some(format!(
+                    "bounded decomposition diamond qN trace panicked: {}",
+                    panic_payload_message(payload.as_ref())
+                )),
+                qn_trace_polynomial_count: None,
+                target_qn_trace_status: None,
+                target_qn_trace_term_count: None,
+                qn_trace_sample: Vec::new(),
+            });
+        }
+    };
+    let qn_trace_polynomial_count = traced.qn_trace.len();
+    let target_qn_trace_term_count = traced
+        .qn_trace
+        .iter()
+        .find_map(|poly| (poly.element == target_i32).then_some(poly.terms.len()));
+    let gv = traced
+        .invariants
+        .into_iter()
+        .find_map(|(curve, value)| (curve == target_i32).then(|| value.to_string()))
+        .unwrap_or_else(|| "0".to_string());
+    let target_qn_trace_status =
+        path_support_qn_trace_status(&gv, target_qn_trace_term_count)?.to_string();
+    Ok(CygvBoundedDecompositionDiamondProbe {
+        element_count: Some(elements.len()),
+        status: Some("computed_bounded_decomposition_diamond_qn_trace".to_string()),
+        gv: Some(gv),
+        error: None,
+        qn_trace_polynomial_count: Some(qn_trace_polynomial_count),
+        target_qn_trace_status: Some(target_qn_trace_status),
+        target_qn_trace_term_count,
+        qn_trace_sample: path_support_qn_trace_sample(&traced.qn_trace),
+    })
 }
 
 fn annotate_target_monomial_qn_sources_with_seed_decompositions(
@@ -4363,8 +4529,12 @@ fn annotate_target_monomial_qn_sources_with_seed_decompositions(
             &context.covered_toric_gv_by_basis,
             &context.source_derived_gv_by_basis,
         )?;
-        source.source_bounded_seed_decomposition =
-            Some(bounded_seed_decomposition_summary(&curve, seed_set, 4)?);
+        source.source_bounded_seed_decomposition = Some(bounded_seed_decomposition_summary(
+            &curve,
+            seed_set,
+            4,
+            Some(context),
+        )?);
     }
     Ok(())
 }
@@ -15858,6 +16028,17 @@ mod tests {
             .expect("parent-only source should include bounded seed decomposition summary");
         assert_eq!(bounded.status, "found_lower_seed_decomposition");
         assert_eq!(bounded.term_count, Some(2));
+        assert_eq!(
+            bounded.diamond_status.as_deref(),
+            Some("skipped_no_q_matrix")
+        );
+        assert_eq!(bounded.diamond_element_count, Some(3));
+        assert_eq!(bounded.diamond_gv, None);
+        assert_eq!(bounded.diamond_error, None);
+        assert_eq!(bounded.diamond_qn_trace_polynomial_count, None);
+        assert_eq!(bounded.diamond_target_qn_trace_status, None);
+        assert_eq!(bounded.diamond_target_qn_trace_term_count, None);
+        assert!(bounded.diamond_qn_trace_sample.is_empty());
     }
 
     #[test]
@@ -16192,6 +16373,17 @@ mod tests {
             bounded.terms_nonzero.as_deref(),
             Some(&[vec![(1, 1)], vec![(0, 1)]][..])
         );
+        assert_eq!(
+            bounded.diamond_status.as_deref(),
+            Some("skipped_no_q_matrix")
+        );
+        assert_eq!(bounded.diamond_element_count, Some(4));
+        assert_eq!(bounded.diamond_gv, None);
+        assert_eq!(bounded.diamond_error, None);
+        assert_eq!(bounded.diamond_qn_trace_polynomial_count, None);
+        assert_eq!(bounded.diamond_target_qn_trace_status, None);
+        assert_eq!(bounded.diamond_target_qn_trace_term_count, None);
+        assert!(bounded.diamond_qn_trace_sample.is_empty());
     }
 
     #[test]
