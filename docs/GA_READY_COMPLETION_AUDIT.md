@@ -160,6 +160,10 @@ and matrix-basis pipeline are no longer open.
    non-integral cygv output. The generation counters show the first closure
    layer alone would add `130414` elements from `720` seeds, so the first
    visible decomposition is not a valid replacement for the full HKTY history.
+   The path-history probe can now stop after a full generated layer; for the
+   two degree-10 targets the first layer is complete at `131135` elements and
+   `99317` previous-window elements, giving a bounded source-history slice for
+   the next qN-history analysis.
 5. **Potent-ray local diagnostics.** Rank-two N=10 and rank-four potent-ray
    rows are still incomplete, but they are validation diagnostics rather than
    blockers for the compact GA-ready GV engine.

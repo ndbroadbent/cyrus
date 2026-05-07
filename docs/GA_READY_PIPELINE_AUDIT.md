@@ -232,7 +232,10 @@ to make the remaining GV layer more first-principles:
    generation-growth counters show that raising the cap to `100000` still
    truncates in the first closure layer: `720` seeds would generate `130414`
    new elements and `131135` total degree-bounded closure elements before any
-   later layer. A
+   later layer. A new `--closure-generation-limit` option can stop after a full
+   generated layer; with generation limit `1` and element cap `150000`, both
+   degree-10 targets complete that first layer exactly with `131135` elements,
+   `99317` previous-window elements, and eight predecessor differences. A
    structured export now exists via
    `--dump-corrected-chamber-gv-context`; it records the local charge basis,
    target degree, degree-bounded projected Mori rays, exact active-generator

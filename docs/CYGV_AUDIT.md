@@ -1610,6 +1610,13 @@ elements before any later layer. The capped report already has `74148`
 previous-window elements and finds eight monomial-map predecessor differences,
 so the relevant qN history is large but structured, not the tiny active
 decomposition diamond.
+The probe can now stop after a full number of closure generations via
+`--closure-generation-limit`. With `--element-limit 150000
+--closure-generation-limit 1`, both degree-10 targets complete the first layer
+exactly: `closure_element_count=131135`, `previous_window_element_count=99317`,
+`target_in_closure=true`, and `predecessor_difference_count=8`. This gives a
+bounded, reproducible source-history slice for studying cygv's qN reuse without
+entering the second closure layer.
 
 After rebuilding `mcallister_gv_context`, the dry-run report now preserves the
 origin-circuit provenance exported by `mcallister_first_principles`. A fresh

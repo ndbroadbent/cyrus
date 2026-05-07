@@ -2336,6 +2336,7 @@ fn report_target(
         Result<Vec<CygvSemigroupDegreeLadderStep>, String>,
     >,
     element_limit: usize,
+    closure_generation_limit: Option<usize>,
 ) -> TargetReport {
     let exact_kind = sample.real_cone_decomposition_exact_kind.clone();
     let active_generator_count = sample
@@ -2907,6 +2908,7 @@ fn report_target(
                 run_lower_seed_diamonds,
                 element_limit,
                 semigroup_measure_max_seed_count,
+                closure_generation_limit,
             ))
         }
     } else {
@@ -3389,6 +3391,7 @@ fn cygv_path_history_probe(
     run_lower_seed_diamonds: bool,
     element_limit: usize,
     max_seed_count: Option<usize>,
+    closure_generation_limit: Option<usize>,
 ) -> CygvPathHistoryProbe {
     match cygv_path_history_probe_inner(
         sample,
@@ -3397,6 +3400,7 @@ fn cygv_path_history_probe(
         run_lower_seed_diamonds,
         element_limit,
         max_seed_count,
+        closure_generation_limit,
     ) {
         Ok(probe) => probe,
         Err(error) => CygvPathHistoryProbe {
@@ -3439,6 +3443,7 @@ fn cygv_path_history_probe_inner(
     run_lower_seed_diamonds: bool,
     element_limit: usize,
     max_seed_count: Option<usize>,
+    closure_generation_limit: Option<usize>,
 ) -> Result<CygvPathHistoryProbe, String> {
     let previous_level_count = cygv_previous_level_count(context.dimension);
     let mut seeds = Vec::new();
@@ -3524,8 +3529,13 @@ fn cygv_path_history_probe_inner(
         element_limit,
     );
 
-    let closure =
-        bounded_cygv_semigroup_closure(&seeds, context.grading, sample.degree, element_limit)?;
+    let closure = bounded_cygv_semigroup_closure(
+        &seeds,
+        context.grading,
+        sample.degree,
+        element_limit,
+        closure_generation_limit,
+    )?;
     let target_in_closure = closure.elements.contains(target);
     let selected_degree_vec =
         cygv_previous_window_degrees(&closure.degree_counts, sample.degree, previous_level_count);
@@ -3687,9 +3697,13 @@ fn bounded_cygv_semigroup_closure(
     grading_vector: &[i64],
     target_degree: i128,
     element_limit: usize,
+    generation_limit: Option<usize>,
 ) -> Result<BoundedCygvClosure, String> {
     if element_limit == 0 {
         return Err("bounded cygv closure element limit must be positive".to_string());
+    }
+    if generation_limit == Some(0) {
+        return Err("bounded cygv closure generation limit must be positive".to_string());
     }
     let dimension = grading_vector.len();
     if dimension == 0 {
@@ -3783,6 +3797,16 @@ fn bounded_cygv_semigroup_closure(
             elements.insert(element.clone());
         }
         starting_elements = sorted_new_elements.into_iter().collect();
+        if generation_limit.is_some_and(|limit| generation >= limit) {
+            let degree_counts = cygv_closure_degree_counts(&elements, grading_vector)?;
+            return Ok(BoundedCygvClosure {
+                status: format!("stopped_generation_limit_{generation}"),
+                elements,
+                degree_counts,
+                generation_counts,
+                completed: false,
+            });
+        }
     }
 }
 
@@ -4121,6 +4145,7 @@ fn build_report(
     semigroup_measure_max_target_degree: Option<i128>,
     semigroup_measure_max_seed_count: Option<usize>,
     element_limit: usize,
+    closure_generation_limit: Option<usize>,
 ) -> ContextReport {
     let mut semigroup_measurement_cache = HashMap::new();
     let mut semigroup_ladder_cache = HashMap::new();
@@ -4153,6 +4178,7 @@ fn build_report(
             &mut semigroup_measurement_cache,
             &mut semigroup_ladder_cache,
             element_limit,
+            closure_generation_limit,
         ));
     }
     let local_cygv_charge_signature_counts =
@@ -4536,7 +4562,7 @@ fn target_index_selected(index: usize, target_index_filter: Option<usize>) -> bo
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--origin-support-certificate-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
+            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--origin-support-certificate-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--closure-generation-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
         );
         std::process::exit(2);
     };
@@ -4565,6 +4591,7 @@ fn main() {
     let semigroup_measure_max_seed_count =
         parse_arg_value::<usize>("--semigroup-measure-max-seeds");
     let element_limit = parse_arg_value::<usize>("--element-limit").unwrap_or(256);
+    let closure_generation_limit = parse_arg_value::<usize>("--closure-generation-limit");
     let out_path = parse_arg_value::<PathBuf>("--out");
 
     let context = load_json::<CorrectedChamberGvContext>(&context_path).unwrap_or_else(|e| {
@@ -4597,6 +4624,7 @@ fn main() {
         semigroup_measure_max_target_degree,
         semigroup_measure_max_seed_count,
         element_limit,
+        closure_generation_limit,
     );
     let content = serde_json::to_string_pretty(&report).unwrap_or_else(|e| {
         eprintln!("[ERROR] failed to serialize context report: {e}");
@@ -5926,7 +5954,7 @@ mod tests {
     #[test]
     fn bounded_cygv_closure_mirrors_degree_limited_seed_closure() {
         let seeds = vec![vec![1, 0], vec![0, 1]];
-        let closure = bounded_cygv_semigroup_closure(&seeds, &[1, 1], 2, 16).unwrap();
+        let closure = bounded_cygv_semigroup_closure(&seeds, &[1, 1], 2, 16, None).unwrap();
         assert!(closure.completed);
         assert_eq!(closure.elements.len(), 6);
         assert_eq!(closure.degree_counts.get(&0), Some(&1));
@@ -5950,7 +5978,7 @@ mod tests {
         let reduced = cygv_pair_reduced_seed_generators(&seeds).unwrap();
         assert_eq!(reduced, vec![vec![0, 1], vec![1, 0]]);
 
-        let closure = bounded_cygv_semigroup_closure(&seeds, &[1, 1], 2, 16).unwrap();
+        let closure = bounded_cygv_semigroup_closure(&seeds, &[1, 1], 2, 16, None).unwrap();
         assert!(closure.completed);
 
         let dim = 2;
@@ -5980,7 +6008,7 @@ mod tests {
     #[test]
     fn bounded_cygv_closure_truncates_new_elements_deterministically() {
         let seeds = vec![vec![1, 0], vec![0, 1]];
-        let closure = bounded_cygv_semigroup_closure(&seeds, &[1, 1], 2, 4).unwrap();
+        let closure = bounded_cygv_semigroup_closure(&seeds, &[1, 1], 2, 4, None).unwrap();
 
         assert_eq!(closure.status, "exceeded_element_limit_4");
         assert!(!closure.completed);
@@ -5995,6 +6023,20 @@ mod tests {
             6
         );
         assert!(closure.generation_counts[0].truncated_at_limit);
+    }
+
+    #[test]
+    fn bounded_cygv_closure_can_stop_after_full_generation() {
+        let seeds = vec![vec![1, 0], vec![0, 1]];
+        let closure = bounded_cygv_semigroup_closure(&seeds, &[1, 1], 3, 16, Some(1)).unwrap();
+
+        assert_eq!(closure.status, "stopped_generation_limit_1");
+        assert!(!closure.completed);
+        assert_eq!(closure.elements.len(), 6);
+        assert_eq!(closure.degree_counts.get(&2), Some(&3));
+        assert_eq!(closure.degree_counts.get(&3), None);
+        assert_eq!(closure.generation_counts.len(), 1);
+        assert!(!closure.generation_counts[0].truncated_at_limit);
     }
 
     #[test]
@@ -6038,9 +6080,16 @@ mod tests {
         };
 
         let target = vec![1, 1];
-        let probe =
-            cygv_path_history_probe_inner(&stats.sample[0], &context, &target, false, 16, None)
-                .unwrap();
+        let probe = cygv_path_history_probe_inner(
+            &stats.sample[0],
+            &context,
+            &target,
+            false,
+            16,
+            None,
+            None,
+        )
+        .unwrap();
         assert_eq!(probe.status, "completed_bounded_closure");
         assert_eq!(probe.seed_count, Some(3));
         assert_eq!(probe.reduced_seed_count, Some(2));
@@ -6098,9 +6147,16 @@ mod tests {
         };
 
         let target = vec![1, 1];
-        let probe =
-            cygv_path_history_probe_inner(&stats.sample[0], &context, &target, false, 2, None)
-                .unwrap();
+        let probe = cygv_path_history_probe_inner(
+            &stats.sample[0],
+            &context,
+            &target,
+            false,
+            2,
+            None,
+            None,
+        )
+        .unwrap();
 
         assert_eq!(probe.status, "exceeded_element_limit_initial_2");
         assert_eq!(probe.seed_count, Some(2));
@@ -6153,9 +6209,16 @@ mod tests {
         };
 
         let target = vec![1, 1];
-        let probe =
-            cygv_path_history_probe_inner(&stats.sample[0], &context, &target, false, 16, Some(2))
-                .unwrap();
+        let probe = cygv_path_history_probe_inner(
+            &stats.sample[0],
+            &context,
+            &target,
+            false,
+            16,
+            Some(2),
+            None,
+        )
+        .unwrap();
 
         assert_eq!(probe.status, "skipped_seed_limit");
         assert_eq!(probe.seed_count, Some(3));
@@ -6325,6 +6388,7 @@ mod tests {
             &mut semigroup_measurement_cache,
             &mut semigroup_ladder_cache,
             256,
+            None,
         );
 
         assert_eq!(report.origin_circuit_pattern.as_deref(), Some("-2:1,1:2"));
@@ -6452,6 +6516,7 @@ mod tests {
             &mut semigroup_measurement_cache,
             &mut semigroup_ladder_cache,
             256,
+            None,
         );
 
         assert_eq!(
@@ -6484,6 +6549,7 @@ mod tests {
             &mut semigroup_measurement_cache,
             &mut semigroup_ladder_cache,
             256,
+            None,
         );
 
         assert_eq!(path_report.cygv_semigroup_measure_status, None);
