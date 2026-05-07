@@ -1667,6 +1667,16 @@ as missing compact `q_N` polynomials:
 more scalar source GV values is insufficient by itself; the remaining compact
 task is still the semigroup/mirror-map history that produces those `q_N`
 polynomials.
+The upstream `cygv` API currently makes this a real boundary. The public
+`series_inversion::invert_series` call returns only the final GV/GW map. The
+actual `q_N` polynomial construction (`compute_qn`), the closest-predecessor
+search (`compute_li2qn_thread`), and the rolling `previous_qn` cache are
+private implementation details inside `cygv::series_inversion`. Cyrus should
+therefore not claim compact qN-history reproduction from scalar GV evidence.
+The next implementation choice is either to add an instrumented upstream/local
+`cygv` API that exports qN history while preserving the crate algorithm, or to
+find a smaller certified compact/chamber semigroup whose ordinary public
+`cygv` call completes.
 The path-history probe now has a broader opt-in
 `--run-path-support-generators` check that collects the support of the target,
 sampled predecessor/difference pairs, and sampled seed-sum decompositions, then
