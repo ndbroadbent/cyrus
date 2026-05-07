@@ -669,6 +669,12 @@ struct LocalCygvStarUnionGlobalBasisLookup {
     known_qn_history_status: String,
     toric_gv: Option<String>,
     source_derived_gv: Option<String>,
+    opposite_basis_nonzero: Option<Vec<(usize, i64)>>,
+    opposite_degree: Option<i128>,
+    opposite_known_qn_history_status: Option<String>,
+    opposite_toric_gv: Option<String>,
+    opposite_source_derived_gv: Option<String>,
+    opposite_error: Option<String>,
     error: Option<String>,
 }
 
@@ -16555,6 +16561,12 @@ fn local_cygv_star_union_global_basis_lookup(
             known_qn_history_status: "missing_global_basis_projection".to_string(),
             toric_gv: None,
             source_derived_gv: None,
+            opposite_basis_nonzero: None,
+            opposite_degree: None,
+            opposite_known_qn_history_status: None,
+            opposite_toric_gv: None,
+            opposite_source_derived_gv: None,
+            opposite_error: None,
             error: None,
         };
     };
@@ -16568,6 +16580,12 @@ fn local_cygv_star_union_global_basis_lookup(
                 known_qn_history_status: "invalid_global_basis_projection".to_string(),
                 toric_gv: None,
                 source_derived_gv: None,
+                opposite_basis_nonzero: None,
+                opposite_degree: None,
+                opposite_known_qn_history_status: None,
+                opposite_toric_gv: None,
+                opposite_source_derived_gv: None,
+                opposite_error: None,
                 error: Some(error),
             };
         }
@@ -16582,20 +16600,62 @@ fn local_cygv_star_union_global_basis_lookup(
                 known_qn_history_status: "invalid_global_basis_degree".to_string(),
                 toric_gv: None,
                 source_derived_gv: None,
+                opposite_basis_nonzero: None,
+                opposite_degree: None,
+                opposite_known_qn_history_status: None,
+                opposite_toric_gv: None,
+                opposite_source_derived_gv: None,
+                opposite_error: None,
                 error: Some(error),
             };
         }
     };
-    let toric_gv = context.covered_toric_gv_by_basis.get(&basis_dense).cloned();
-    let source_derived_gv = context
-        .source_derived_gv_by_basis
-        .get(&basis_dense)
-        .cloned();
-    let (known_qn_history_status, error) =
-        match known_qn_history_status(toric_gv.as_deref(), source_derived_gv.as_deref()) {
-            Ok(status) => (status.to_string(), None),
-            Err(error) => ("known_qn_history_conflict".to_string(), Some(error)),
-        };
+    let (known_qn_history_status, toric_gv, source_derived_gv, error) =
+        global_basis_known_qn_history(&basis_dense, context);
+    let (
+        opposite_basis_nonzero,
+        opposite_degree,
+        opposite_known_qn_history_status,
+        opposite_toric_gv,
+        opposite_source_derived_gv,
+        opposite_error,
+    ) = if degree.is_some_and(|degree| degree < 0) {
+        match basis_dense
+            .iter()
+            .map(|&value| {
+                value
+                    .checked_neg()
+                    .ok_or_else(|| "basis coordinate overflows under sign reversal".to_string())
+            })
+            .collect::<Result<Vec<_>, _>>()
+        {
+            Ok(opposite_dense) => {
+                let opposite_basis_nonzero = Some(sparse_from_dense(&opposite_dense));
+                match curve_degree(&opposite_dense, context.grading) {
+                    Ok(opposite_degree) => {
+                        let (
+                            opposite_status,
+                            opposite_toric_gv,
+                            opposite_source_derived_gv,
+                            opposite_error,
+                        ) = global_basis_known_qn_history(&opposite_dense, context);
+                        (
+                            opposite_basis_nonzero,
+                            Some(opposite_degree),
+                            Some(opposite_status),
+                            opposite_toric_gv,
+                            opposite_source_derived_gv,
+                            opposite_error,
+                        )
+                    }
+                    Err(error) => (opposite_basis_nonzero, None, None, None, None, Some(error)),
+                }
+            }
+            Err(error) => (None, None, None, None, None, Some(error)),
+        }
+    } else {
+        (None, None, None, None, None, None)
+    };
     LocalCygvStarUnionGlobalBasisLookup {
         role: role.to_string(),
         basis_nonzero: Some(basis_nonzero.clone()),
@@ -16603,8 +16663,28 @@ fn local_cygv_star_union_global_basis_lookup(
         known_qn_history_status,
         toric_gv,
         source_derived_gv,
+        opposite_basis_nonzero,
+        opposite_degree,
+        opposite_known_qn_history_status,
+        opposite_toric_gv,
+        opposite_source_derived_gv,
+        opposite_error,
         error,
     }
+}
+
+fn global_basis_known_qn_history(
+    basis_dense: &[i64],
+    context: &ValidatedContext<'_>,
+) -> (String, Option<String>, Option<String>, Option<String>) {
+    let toric_gv = context.covered_toric_gv_by_basis.get(basis_dense).cloned();
+    let source_derived_gv = context.source_derived_gv_by_basis.get(basis_dense).cloned();
+    let (known_qn_history_status, error) =
+        match known_qn_history_status(toric_gv.as_deref(), source_derived_gv.as_deref()) {
+            Ok(status) => (status.to_string(), None),
+            Err(error) => ("known_qn_history_conflict".to_string(), Some(error)),
+        };
+    (known_qn_history_status, toric_gv, source_derived_gv, error)
 }
 
 fn origin_circuit_star_union_point_samples(
@@ -18508,6 +18588,32 @@ mod tests {
         );
         assert_eq!(source_lookup.degree, Some(2));
         assert_eq!(source_lookup.source_derived_gv.as_deref(), Some("1"));
+        let negative_toric_basis = vec![(0, -1)];
+        let negative_toric_lookup = local_cygv_star_union_global_basis_lookup(
+            "star",
+            Some(&negative_toric_basis),
+            &validated,
+        );
+        assert_eq!(negative_toric_lookup.degree, Some(-1));
+        assert_eq!(
+            negative_toric_lookup.known_qn_history_status,
+            "unknown_not_toric_covered"
+        );
+        assert_eq!(
+            negative_toric_lookup.opposite_basis_nonzero,
+            Some(vec![(0, 1)])
+        );
+        assert_eq!(negative_toric_lookup.opposite_degree, Some(1));
+        assert_eq!(
+            negative_toric_lookup
+                .opposite_known_qn_history_status
+                .as_deref(),
+            Some("known_nonzero_toric_gv")
+        );
+        assert_eq!(
+            negative_toric_lookup.opposite_toric_gv.as_deref(),
+            Some("42")
+        );
         assert_eq!(
             degree_bounded_mori_ray_context_status(&validated),
             "source_derived_ambient_and_basis_degree_bounded_mori_ray_context"

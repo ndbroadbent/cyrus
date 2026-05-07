@@ -3217,6 +3217,16 @@ these are chamber-history rows, not direct effective GV rows. This rules out
 closing the gap by reusing an already-covered scalar GV entry; the remaining
 input is still the source-derived local chamber/intersection/semigroup
 certificate.
+The sign-reversed follow-up report,
+`/tmp/cyrus_gv_context_star_union_opposite_report.json`, checks whether the
+negative projected classes become known after replacing `C` by `-C`. For
+targets `3`/`6`, the opposite star rows have degrees `36` and `24`, and the
+opposite target-plus-star rows have degrees `10` and `12`; all four remain
+`unknown_not_toric_covered`. For targets `7`/`8`, the opposite star row
+`[(53,-1),(190,1),(207,1)]` has degree `4` and is known source-derived GV
+`1`, but the target and target-plus-star rows remain unknown. Thus sign
+reversal supplies adjacent wall evidence in the resolved-conifold-like cases,
+not a promotable corrected-target GV value.
 Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
 serializes a role-tagged height profile over the full union support. For
 targets `3`/`6`, the off-hyperplane zero-shared ray has height `-1` but zero

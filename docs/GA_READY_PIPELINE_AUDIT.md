@@ -1009,6 +1009,13 @@ to make the remaining GV layer more first-principles:
    `62/36/14/14`, and the target-plus-star degrees are `-10/-12/6/6`. The
    negative star-side degrees rule out treating the star relation as an
    effective covered GV contribution.
+   The sign-reversed lookup makes that conclusion sharper. For targets `3` and
+   `6`, the positive-degree opposites of the negative star and target-plus-star
+   rows are still `unknown_not_toric_covered`. For targets `7` and `8`, the
+   opposite star row is known source-derived GV `1` at degree `4`, but the
+   target and target-plus-star rows still have no known toric/source-derived
+   scalar value. So the adjacent source row is evidence for the wall history,
+   not the corrected target GV itself.
    The full union-support height profile is now serialized as well. For
    targets `3`/`6`, the off-hyperplane zero-shared ray carries zero target and
    star coefficient; for targets `7`/`8`, the height `-1` zero-shared ray and
