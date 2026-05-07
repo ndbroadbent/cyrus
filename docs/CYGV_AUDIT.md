@@ -2645,6 +2645,18 @@ domain, but it does not certify the original degree-ten corrected-chamber
 history: the same reports still give target-support `GV=0`,
 `target_instanton_coefficient=0`, and no target qN polynomial for the
 degree-ten classes themselves.
+The parent-vs-subtarget comparison now serializes the actual qN term-count
+difference for those residuals. Target `7`'s residual qN has `3` terms in the
+degree-ten parent path-support domain but only `1` term when the residual is
+the subtarget; the extra parent-domain monomials include the degree-ten target
+class `[(44,2),(203,1),(206,-3),(209,1)]` and
+`[(44,1),(203,-1),(206,-1),(209,1)]`. Target `8` has the same pattern with
+`2` parent-domain terms versus `1` residual-subtarget term, adding the
+degree-ten target class `[(203,-3),(206,1),(209,1)]`. Both comparisons are
+marked `different_qn_term_counts` with complete term samples, so the live
+blocker is now visibly the domain-dependent qN polynomial in the
+degree-ten chamber history, not the scalar `GV=-2` value of the degree-eight
+residual.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use

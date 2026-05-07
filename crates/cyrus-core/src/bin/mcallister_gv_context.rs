@@ -564,6 +564,7 @@ struct CygvPathHistoryProbe {
     closest_known_qn_predecessor: Option<CygvClosestKnownQnPredecessor>,
     closest_known_qn_residual_predecessor: Option<CygvClosestKnownQnPredecessor>,
     closest_known_qn_residual_path_support_probe: Option<PathSupportGeneratorProbe>,
+    closest_known_qn_residual_qn_domain_comparison: Option<CygvResidualQnDomainComparison>,
     predecessor_candidate_sample_limit: usize,
     predecessor_candidate_sample: Vec<CygvPathPredecessorCandidate>,
     lower_seed_decomposition_max_terms: usize,
@@ -1059,6 +1060,24 @@ struct CygvPathSupportQnTraceCurveSummaryBuilder {
     target_indices: BTreeSet<usize>,
     term_count_counts: BTreeMap<usize, usize>,
     first_term_sample: Vec<CygvPathSupportQnTraceTermSample>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CygvResidualQnDomainComparison {
+    residual_nonzero: Vec<(usize, i64)>,
+    parent_path_support_qn_term_count: Option<usize>,
+    residual_subtarget_qn_term_count: Option<usize>,
+    parent_path_support_sample_complete: bool,
+    residual_subtarget_sample_complete: bool,
+    term_signature_comparison_status: String,
+    parent_path_support_term_signatures: Vec<CygvPathSupportQnTraceTermSignature>,
+    residual_subtarget_term_signatures: Vec<CygvPathSupportQnTraceTermSignature>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+struct CygvPathSupportQnTraceTermSignature {
+    exponent_nonzero: Vec<(usize, i64)>,
+    coefficient: String,
 }
 
 struct PathSupportSourceClassContext {
@@ -1684,6 +1703,114 @@ fn residual_path_support_generator_probe(
         context,
         run_path_support_generators,
     )))
+}
+
+fn residual_qn_domain_comparison(
+    residual: Option<&CygvClosestKnownQnPredecessor>,
+    parent_probe: &PathSupportGeneratorProbe,
+    residual_probe: Option<&PathSupportGeneratorProbe>,
+    context: &ValidatedContext<'_>,
+) -> Result<Option<CygvResidualQnDomainComparison>, String> {
+    let Some(residual) = residual else {
+        return Ok(None);
+    };
+    let predecessor = dense_from_sparse(&residual.predecessor_nonzero, context.dimension)?;
+    let difference = dense_from_sparse(&residual.difference_nonzero, context.dimension)?;
+    let residual_target = checked_vector_sum(&predecessor, &difference)?;
+    Ok(Some(residual_qn_domain_comparison_for_curve(
+        sparse_from_dense(&residual_target),
+        parent_probe,
+        residual_probe,
+    )))
+}
+
+fn residual_qn_domain_comparison_for_curve(
+    residual_nonzero: Vec<(usize, i64)>,
+    parent_probe: &PathSupportGeneratorProbe,
+    residual_probe: Option<&PathSupportGeneratorProbe>,
+) -> CygvResidualQnDomainComparison {
+    let parent_qn = qn_trace_sample_for_curve(parent_probe, &residual_nonzero);
+    let residual_qn =
+        residual_probe.and_then(|probe| qn_trace_sample_for_curve(probe, &residual_nonzero));
+    let parent_path_support_qn_term_count = parent_qn.map(|sample| sample.term_count);
+    let residual_subtarget_qn_term_count = residual_qn.map(|sample| sample.term_count);
+    let parent_path_support_sample_complete = qn_trace_sample_is_complete(parent_qn);
+    let residual_subtarget_sample_complete = qn_trace_sample_is_complete(residual_qn);
+    let parent_path_support_term_signatures = qn_trace_term_signatures(parent_qn);
+    let residual_subtarget_term_signatures = qn_trace_term_signatures(residual_qn);
+    let term_signature_comparison_status = qn_domain_comparison_status(
+        parent_qn,
+        residual_qn,
+        parent_path_support_sample_complete,
+        residual_subtarget_sample_complete,
+        &parent_path_support_term_signatures,
+        &residual_subtarget_term_signatures,
+    );
+
+    CygvResidualQnDomainComparison {
+        residual_nonzero,
+        parent_path_support_qn_term_count,
+        residual_subtarget_qn_term_count,
+        parent_path_support_sample_complete,
+        residual_subtarget_sample_complete,
+        term_signature_comparison_status,
+        parent_path_support_term_signatures,
+        residual_subtarget_term_signatures,
+    }
+}
+
+fn qn_trace_sample_for_curve<'a>(
+    probe: &'a PathSupportGeneratorProbe,
+    curve_nonzero: &[(usize, i64)],
+) -> Option<&'a CygvPathSupportQnTracePolynomialSample> {
+    probe
+        .qn_trace_sample
+        .iter()
+        .find(|sample| sample.curve_nonzero.as_slice() == curve_nonzero)
+}
+
+fn qn_trace_sample_is_complete(sample: Option<&CygvPathSupportQnTracePolynomialSample>) -> bool {
+    sample
+        .map(|sample| sample.term_count <= sample.term_sample_limit)
+        .unwrap_or(false)
+}
+
+fn qn_trace_term_signatures(
+    sample: Option<&CygvPathSupportQnTracePolynomialSample>,
+) -> Vec<CygvPathSupportQnTraceTermSignature> {
+    sample
+        .into_iter()
+        .flat_map(|sample| sample.term_sample.iter())
+        .map(|term| CygvPathSupportQnTraceTermSignature {
+            exponent_nonzero: term.exponent_nonzero.clone(),
+            coefficient: term.coefficient.clone(),
+        })
+        .collect()
+}
+
+fn qn_domain_comparison_status(
+    parent_qn: Option<&CygvPathSupportQnTracePolynomialSample>,
+    residual_qn: Option<&CygvPathSupportQnTracePolynomialSample>,
+    parent_sample_complete: bool,
+    residual_sample_complete: bool,
+    parent_terms: &[CygvPathSupportQnTraceTermSignature],
+    residual_terms: &[CygvPathSupportQnTraceTermSignature],
+) -> String {
+    match (parent_qn, residual_qn) {
+        (None, None) => "missing_in_parent_and_residual_subtarget".to_string(),
+        (None, Some(_)) => "missing_in_parent_path_support".to_string(),
+        (Some(_), None) => "missing_in_residual_subtarget".to_string(),
+        (Some(parent), Some(residual)) if parent.term_count != residual.term_count => {
+            "different_qn_term_counts".to_string()
+        }
+        (Some(_), Some(_)) if !parent_sample_complete || !residual_sample_complete => {
+            "same_count_but_sample_truncated".to_string()
+        }
+        (Some(_), Some(_)) if parent_terms == residual_terms => {
+            "same_qn_term_signatures".to_string()
+        }
+        (Some(_), Some(_)) => "same_count_different_qn_term_signatures".to_string(),
+    }
 }
 
 fn path_support_generator_probe_inner(
@@ -7719,6 +7846,7 @@ fn cygv_path_history_probe(
             closest_known_qn_predecessor: None,
             closest_known_qn_residual_predecessor: None,
             closest_known_qn_residual_path_support_probe: None,
+            closest_known_qn_residual_qn_domain_comparison: None,
             predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
             predecessor_candidate_sample: Vec::new(),
             lower_seed_decomposition_max_terms: 4,
@@ -7814,6 +7942,7 @@ fn cygv_path_history_probe_inner(
             closest_known_qn_predecessor: None,
             closest_known_qn_residual_predecessor: None,
             closest_known_qn_residual_path_support_probe: None,
+            closest_known_qn_residual_qn_domain_comparison: None,
             predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
             predecessor_candidate_sample: Vec::new(),
             lower_seed_decomposition_max_terms: 4,
@@ -7883,6 +8012,7 @@ fn cygv_path_history_probe_inner(
             closest_known_qn_predecessor: None,
             closest_known_qn_residual_predecessor: None,
             closest_known_qn_residual_path_support_probe: None,
+            closest_known_qn_residual_qn_domain_comparison: None,
             predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
             predecessor_candidate_sample: Vec::new(),
             lower_seed_decomposition_max_terms: 4,
@@ -7995,6 +8125,12 @@ fn cygv_path_history_probe_inner(
         context,
         run_path_support_generators,
     );
+    let closest_known_qn_residual_qn_domain_comparison = residual_qn_domain_comparison(
+        closest_known_qn_residual_predecessor.as_ref(),
+        &path_support_generators,
+        closest_known_qn_residual_path_support_probe.as_ref(),
+        context,
+    )?;
     if !closure.completed {
         return Ok(CygvPathHistoryProbe {
             status: closure.status,
@@ -8029,6 +8165,7 @@ fn cygv_path_history_probe_inner(
             closest_known_qn_predecessor: predecessor_stats.closest_known_qn_predecessor,
             closest_known_qn_residual_predecessor,
             closest_known_qn_residual_path_support_probe,
+            closest_known_qn_residual_qn_domain_comparison,
             predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
             predecessor_candidate_sample: predecessor_stats.candidate_sample,
             lower_seed_decomposition_max_terms: 4,
@@ -8119,6 +8256,7 @@ fn cygv_path_history_probe_inner(
         closest_known_qn_predecessor: predecessor_stats.closest_known_qn_predecessor,
         closest_known_qn_residual_predecessor,
         closest_known_qn_residual_path_support_probe,
+        closest_known_qn_residual_qn_domain_comparison,
         predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
         predecessor_candidate_sample: predecessor_stats.candidate_sample,
         lower_seed_decomposition_max_terms: 4,
@@ -13943,6 +14081,86 @@ mod tests {
         .expect("residual split should produce a residual subtarget probe");
         assert_eq!(residual_probe.status, None);
         assert_eq!(residual_probe.gv, None);
+    }
+
+    #[test]
+    fn residual_qn_domain_comparison_flags_domain_dependent_terms() {
+        fn qn_sample(
+            curve_nonzero: Vec<(usize, i64)>,
+            term_exponents: Vec<Vec<(usize, i64)>>,
+        ) -> CygvPathSupportQnTracePolynomialSample {
+            CygvPathSupportQnTracePolynomialSample {
+                element_index: 0,
+                degree: 8,
+                curve_nonzero,
+                term_count: term_exponents.len(),
+                term_sample_limit: 16,
+                term_sample: term_exponents
+                    .into_iter()
+                    .enumerate()
+                    .map(
+                        |(monomial_index, exponent_nonzero)| CygvPathSupportQnTraceTermSample {
+                            monomial_index,
+                            exponent_nonzero,
+                            coefficient: "1".to_string(),
+                        },
+                    )
+                    .collect(),
+            }
+        }
+
+        fn probe(
+            qn_trace_sample: Vec<CygvPathSupportQnTracePolynomialSample>,
+        ) -> PathSupportGeneratorProbe {
+            PathSupportGeneratorProbe {
+                support_size: None,
+                generator_count: None,
+                status: None,
+                gv: None,
+                qn_trace_polynomial_count: None,
+                target_qn_trace_status: None,
+                target_qn_trace_term_count: None,
+                target_gv_coefficient_status: None,
+                target_instanton_coefficient: None,
+                target_gv_candidate: None,
+                target_rounded_gv_candidate: None,
+                target_pivot_coordinate: None,
+                target_pivot_component: None,
+                gv_coefficient_trace_count: None,
+                gv_coefficient_status_counts: BTreeMap::new(),
+                gv_coefficient_trace_sample: Vec::new(),
+                qn_trace_sample,
+                target_monomial_qn_source_count: None,
+                target_monomial_qn_source_sample: Vec::new(),
+                error: None,
+                lookup_status_counts: BTreeMap::new(),
+                qn_trace_status_counts: BTreeMap::new(),
+                source_class_status_counts: BTreeMap::new(),
+                lookup_sample: Vec::new(),
+            }
+        }
+
+        let residual = vec![(0, 1), (1, -1)];
+        let parent = probe(vec![qn_sample(
+            residual.clone(),
+            vec![residual.clone(), vec![(0, 2)]],
+        )]);
+        let subtarget = probe(vec![qn_sample(residual.clone(), vec![residual.clone()])]);
+
+        let comparison =
+            residual_qn_domain_comparison_for_curve(residual.clone(), &parent, Some(&subtarget));
+
+        assert_eq!(comparison.residual_nonzero, residual);
+        assert_eq!(comparison.parent_path_support_qn_term_count, Some(2));
+        assert_eq!(comparison.residual_subtarget_qn_term_count, Some(1));
+        assert!(comparison.parent_path_support_sample_complete);
+        assert!(comparison.residual_subtarget_sample_complete);
+        assert_eq!(
+            comparison.term_signature_comparison_status,
+            "different_qn_term_counts"
+        );
+        assert_eq!(comparison.parent_path_support_term_signatures.len(), 2);
+        assert_eq!(comparison.residual_subtarget_term_signatures.len(), 1);
     }
 
     #[test]

@@ -155,8 +155,13 @@ run pass. Any remaining mismatch must be explicit and localizable.
    materializing 6 qN polynomials. The original degree-10 target-support
    domains in those same reports remain `GV=0` with no target qN polynomial, so
    this is a diagnostic for the lower composite history, not a corrected-target
-   replacement. Applying the trace to McAllister still requires the certified
-   corrected-chamber semigroup/history domain.
+   replacement. The parent-vs-subtarget qN comparison now records the residual
+   polynomial domain dependence directly: target 7's residual has 3 qN terms in
+   the degree-10 parent path-support domain but 1 as a residual subtarget, and
+   target 8 has 2 parent-domain terms but 1 residual-subtarget term. Both
+   samples are complete and marked `different_qn_term_counts`. Applying the
+   trace to McAllister still requires the certified corrected-chamber
+   semigroup/history domain.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for

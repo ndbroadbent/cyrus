@@ -356,7 +356,14 @@ and matrix-basis pipeline are no longer open.
    degree-ten target-support probes in the same reports still return `GV=0`
    with no target qN polynomial, so the new result shows that the residual can
    be observed as a lower subtarget but does not certify the McAllister
-   corrected-chamber target history.
+   corrected-chamber target history. The parent-vs-subtarget comparison now
+   makes the domain dependence explicit: target `7`'s residual qN has three
+   terms in the degree-ten parent path-support domain but one as a residual
+   subtarget; target `8` has two parent-domain terms but one residual-subtarget
+   term. Both complete samples are marked `different_qn_term_counts`, so the
+   remaining work is constructing the certified chamber history whose qN
+   polynomial includes the right ambient terms, not finding a scalar residual
+   GV value.
    The source-ray summary now shows that shared ray has local charge signature
    `[-1,-1,-1,1,2]` and a matching CMS check. The residual-source predecessor
    queue now shows all three occurrences have shared origin-circuit witness
