@@ -8765,6 +8765,7 @@ fn solve_supporting_face_normal_lp_model<M: SolverModel<Error = ResolutionError>
     let solution = match model.solve() {
         Ok(solution) => solution,
         Err(ResolutionError::Infeasible) => return Ok(None),
+        Err(ResolutionError::Other("NoSolutionFound")) => return Ok(None),
         Err(err) => {
             return Err(Error::InvalidInput(format!(
                 "supporting Mori face normal LP failed: {err}"

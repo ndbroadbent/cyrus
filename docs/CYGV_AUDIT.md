@@ -256,12 +256,16 @@ local affine charge basis because the sampled support has `points = affine_rank
 + 2`, but no rank-two local coordinate model is available. Therefore the
 rank-two CKYZ/potent-ray machinery cannot simply be reused for these missing
 nilpotent origin circuits. A bounded origin-support LP-certificate pass on the
-schema-3 context found no exact certificate for eight relation supports and hit
-solver errors for one relation support plus three small shared-facet supports;
-larger facet-union supports were intentionally skipped by the 256-generator
-cap. The next source-derived object therefore remains the higher-rank local
-semigroup or flop/chamber context for these origin-circuit supports, not a
-promoted LP-witness fallback.
+schema-3 context found no promoted exact certificate. The LP diagnostic now
+treats HiGHS `NoSolutionFound` as a no-certificate outcome rather than a hard
+runtime error, because every candidate normal still has to be verified exactly
+before promotion. Raising the origin-support guard to `4096` for the two
+degree-10 misses checks the larger facet-union domains too: target `7` has
+relation/shared/union ranks `1/13/194`, target `8` has ranks `1/9/177`, and
+all six domains report `origin_support_lp_no_certificate_*`. The next
+source-derived object therefore remains the higher-rank local semigroup or
+flop/chamber context for these origin-circuit supports, not a promoted
+LP-witness fallback.
 
 The missing-target diagnostic now also records the B-field parity and real-axis
 polylog branch status for these unresolved classes. For the current solved-t
@@ -299,7 +303,10 @@ counts rather than sent into an unbounded integer-kernel computation. On the
 dimension `214`. Under the 256-row guard, the checked shared-facet domains have
 ranks `9`, `13`, and `26` in dimension `214` (`rank 9` twice, `rank 13` once,
 and `rank 26` once). No checked origin-support domain is a codimension-one
-supporting face.
+supporting face. With the raised `4096` guard on target `7/8`, even the
+degree-10 facet-union domains are checked by LP-assisted exact-verification
+search and still return no certificate, with ranks `194` and `177` in the
+214-dimensional basis.
 
 ## McAllister Paper Boundary
 

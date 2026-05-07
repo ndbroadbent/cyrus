@@ -146,8 +146,13 @@ and matrix-basis pipeline are no longer open.
    be handed to `cygv`, not an unproven local CKYZ substitute. Cyrus now has an
    LP-assisted supporting-face search whose successful outputs are exact
    integer certificates, but the current schema-3 McAllister origin-support
-   pass still finds no promoted certificate for the remaining relation supports
-   and leaves several larger shared/union supports capped or solver-blocked.
+   pass still finds no promoted certificate for the remaining relation
+   supports. The LP diagnostic now treats HiGHS `NoSolutionFound` as
+   no-certificate rather than a hard error, and raising the origin-support guard
+   to `4096` for the two degree-10 targets checks their larger source domains
+   without promotion: target `7` has relation/shared/union ranks `1/13/194`,
+   target `8` has ranks `1/9/177`, and all checked domains return
+   `origin_support_lp_no_certificate_*`.
    The context tool now also has an opt-in exact extremal-ray probe. For the
    current schema-3 context it verifies that all nine remaining targets are
    non-extremal in the finite degree-bounded cone by exact decomposition

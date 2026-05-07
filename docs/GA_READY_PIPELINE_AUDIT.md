@@ -205,9 +205,11 @@ to make the remaining GV layer more first-principles:
    LP-assisted supporting-face certificate search for higher-codimension
    supports, but it only promotes normals that pass exact integer verification.
    On the schema-3 corrected-chamber context, the bounded origin-support pass
-   found no promoted relation-support certificate for eight targets, reported
-   solver errors for one relation support and three small shared-facet supports,
-   and skipped larger facet-union supports under the 256-generator cap.
+   found no promoted relation-support certificate. The LP no-solution status is
+   now reported as no-certificate rather than a hard diagnostic error, and a
+   raised `4096`-generator guard checks the degree-10 facet-union domains
+   directly: target `7` has relation/shared/union ranks `1/13/194`, target `8`
+   has ranks `1/9/177`, and none is promoted to a supporting face.
    `mcallister_gv_context` now also has an opt-in exact extremal-ray probe for
    target Mori generators. It first verifies any exported exact positive
    decomposition by other degree-bounded generators, and only falls back to the
