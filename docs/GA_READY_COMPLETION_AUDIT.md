@@ -304,7 +304,10 @@ and matrix-basis pipeline are no longer open.
    still records the same two source predecessors across three occurrences. It
    also records source-ray import counts: `52` full-facet CMS formula imports,
    `79` rows with no integral matching CMS formula, and `115` rows with no
-   origin-circuit witness. The
+   origin-circuit witness. Those 52 imports now split by local charge signature
+   as `-1,-1,-1,1,1,1:28`, `-1,-1,-1,1,2:20`, `-1,-1,1,1:3`, and
+   `-1,-1,-1,-1,1,3:1`; the residual predecessors stay in the
+   `-1,-1,-1,1,2` family. The
    CMS divisor cubic suggests tensor value `3`,
    but the raw-cubic primitive probe gives `GV=-6`; the unit-tensor probe gives
    the expected `GV=-2` and remains unpromoted until the chamber/tensor source is

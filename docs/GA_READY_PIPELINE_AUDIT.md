@@ -122,7 +122,11 @@ run pass. Any remaining mismatch must be explicit and localizable.
    that source context. The source-derived GV-history importer now requires the
    same full witness/facet context before accepting a CMS-derived scalar value,
    and the guarded report preserves the same two predecessors and three
-   occurrences.
+   occurrences. The same report now splits the accepted source-derived imports
+   by local charge signature: 52 full-facet CMS formula imports break into
+   `-1,-1,-1,1,1,1` 28 times, `-1,-1,-1,1,2` 20 times,
+   `-1,-1,1,1` 3 times, and `-1,-1,-1,-1,1,3` once. The current residual
+   predecessors remain in the `-1,-1,-1,1,2` family.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for

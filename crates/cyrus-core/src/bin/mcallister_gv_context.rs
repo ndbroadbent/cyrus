@@ -230,6 +230,8 @@ struct ContextReport {
     origin_circuit_witness_relation_status_counts: BTreeMap<String, usize>,
     uncovered_source_ray_origin_circuit_witness_relation_status_counts: BTreeMap<String, usize>,
     uncovered_source_ray_source_derived_gv_import_status_counts: BTreeMap<String, usize>,
+    uncovered_source_ray_source_derived_gv_import_local_charge_signature_counts:
+        BTreeMap<String, usize>,
     shared_facet_unresolved_source_ray_target_count: Option<usize>,
     shared_facet_unresolved_source_ray_origin_circuit_pattern_counts: BTreeMap<String, usize>,
     shared_facet_unresolved_source_ray_origin_circuit_witness_relation_status_counts:
@@ -5516,6 +5518,30 @@ fn source_derived_gv_import_status_counts(
     counts
 }
 
+fn source_derived_gv_import_local_charge_signature_counts(
+    stats: Option<&MissingGvTargetStats>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    let Some(stats) = stats else {
+        return counts;
+    };
+    for sample in &stats.sample {
+        let Ok((Some(_), status)) = source_derived_gv_value_and_status_for_sample(sample) else {
+            continue;
+        };
+        if status != "source_derived_gv_imported_full_facet_cms_formula" {
+            continue;
+        }
+        let signature = sample
+            .origin_circuit_affine_support
+            .as_ref()
+            .map(|support| local_charge_signature_key(&support.local_charge_basis))
+            .unwrap_or_else(|| "missing_local_charge_signature".to_string());
+        *counts.entry(signature).or_insert(0) += 1;
+    }
+    counts
+}
+
 struct ValidatedContext<'a> {
     dimension: usize,
     degree_bound: i128,
@@ -8350,6 +8376,10 @@ fn build_report(
         .unwrap_or_default();
     let uncovered_source_ray_source_derived_gv_import_status_counts =
         source_derived_gv_import_status_counts(validated.uncovered_source_ray_stats);
+    let uncovered_source_ray_source_derived_gv_import_local_charge_signature_counts =
+        source_derived_gv_import_local_charge_signature_counts(
+            validated.uncovered_source_ray_stats,
+        );
     let shared_facet_unresolved_source_ray_target_count = validated
         .shared_facet_unresolved_source_ray_stats
         .map(|stats| stats.target_count);
@@ -8846,6 +8876,7 @@ fn build_report(
             missing_origin_circuit_witness_relation_status_counts,
         uncovered_source_ray_origin_circuit_witness_relation_status_counts,
         uncovered_source_ray_source_derived_gv_import_status_counts,
+        uncovered_source_ray_source_derived_gv_import_local_charge_signature_counts,
         shared_facet_unresolved_source_ray_target_count,
         shared_facet_unresolved_source_ray_origin_circuit_pattern_counts,
         shared_facet_unresolved_source_ray_origin_circuit_witness_relation_status_counts,
@@ -11961,6 +11992,10 @@ mod tests {
                 "source_derived_gv_imported_full_facet_cms_formula".to_string(),
                 1
             )])
+        );
+        assert_eq!(
+            source_derived_gv_import_local_charge_signature_counts(Some(&stats)),
+            BTreeMap::from([("missing_local_charge_signature".to_string(), 1)])
         );
         let map = source_derived_gv_by_basis(Some(&stats), 2).unwrap();
         assert_eq!(map.get(&vec![2, 0]).map(String::as_str), Some("-2"));

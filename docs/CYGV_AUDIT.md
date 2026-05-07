@@ -2463,6 +2463,17 @@ solutions have divisor cubics `27` and `81`; the nonintegral solution has
 cubic `77/27`. Their candidate statuses are explicitly
 `diagnostic_from_*_not_promoted`, so these records preserve chamber evidence
 without becoming GV fallbacks.
+The guarded source-derived GV importer now reports which local charge families
+actually enter known `q_N` history. On
+`/tmp/cyrus_gv_context_all_source_residual_import_signature_report.json`, the
+accepted imports are
+`{"-1,-1,-1,-1,1,3":1,"-1,-1,-1,1,1,1":28,
+"-1,-1,-1,1,2":20,"-1,-1,1,1":3}`. The open residual queue is still two
+unique source predecessors across three occurrences, all source-known and all
+missing only `local_intersection_tensor` and `local_chamber_certificate`; the
+residual predecessors lie in the `-1,-1,-1,1,2` import family. This makes the
+remaining task a chamber/tensor certification problem inside an already
+observed source-derived family, not a search for an unseen scalar GV family.
 An opt-in target-level integer tensor scan now runs the same one-parameter
 local skeletons through the actual compact `cygv` call while varying the single
 intersection tensor entry over a bounded integer range. On the fresh
