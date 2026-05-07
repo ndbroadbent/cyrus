@@ -414,6 +414,7 @@ struct TargetReport {
     origin_circuit_affine_support: Option<OriginCircuitAffineSupportSample>,
     local_cygv_hypersurface_shape: Option<LocalCygvHypersurfaceShape>,
     local_cygv_input_skeleton: Option<LocalCygvInputSkeleton>,
+    local_cygv_unit_phase_probe: Option<LocalCygvTargetUnitPhaseProbeSummary>,
     local_cygv_integer_tensor_scan: Option<LocalCygvIntegerTensorScanSummary>,
     cms_general_divisor_shape_candidates: Option<Vec<CmsGeneralDivisorShapeCandidate>>,
     cms_general_divisor_intersection_checks: Option<Vec<CmsGeneralDivisorIntersectionCheck>>,
@@ -9357,6 +9358,7 @@ fn report_target(
                 origin_circuit_affine_support,
                 local_cygv_hypersurface_shape: None,
                 local_cygv_input_skeleton,
+                local_cygv_unit_phase_probe: None,
                 local_cygv_integer_tensor_scan: None,
                 cms_general_divisor_shape_candidates: sample
                     .cms_general_divisor_shape_candidates
@@ -9438,6 +9440,7 @@ fn report_target(
                 origin_circuit_affine_support,
                 local_cygv_hypersurface_shape,
                 local_cygv_input_skeleton,
+                local_cygv_unit_phase_probe: None,
                 local_cygv_integer_tensor_scan: None,
                 cms_general_divisor_shape_candidates: sample
                     .cms_general_divisor_shape_candidates
@@ -9519,6 +9522,7 @@ fn report_target(
                 origin_circuit_affine_support,
                 local_cygv_hypersurface_shape,
                 local_cygv_input_skeleton,
+                local_cygv_unit_phase_probe: None,
                 local_cygv_integer_tensor_scan: None,
                 cms_general_divisor_shape_candidates: sample
                     .cms_general_divisor_shape_candidates
@@ -9604,6 +9608,7 @@ fn report_target(
                 origin_circuit_affine_support,
                 local_cygv_hypersurface_shape,
                 local_cygv_input_skeleton,
+                local_cygv_unit_phase_probe: None,
                 local_cygv_integer_tensor_scan: None,
                 cms_general_divisor_shape_candidates: sample
                     .cms_general_divisor_shape_candidates
@@ -9704,6 +9709,7 @@ fn report_target(
         origin_circuit_affine_support,
         local_cygv_hypersurface_shape,
         local_cygv_input_skeleton,
+        local_cygv_unit_phase_probe: None,
         local_cygv_integer_tensor_scan: None,
         cms_general_divisor_shape_candidates: sample.cms_general_divisor_shape_candidates.clone(),
         cms_general_divisor_intersection_checks: sample
@@ -13294,6 +13300,14 @@ fn build_report(
         );
     let local_cygv_target_unit_phase_probe_sample =
         local_cygv_target_unit_phase_probe_summaries(&targets);
+    let unit_probes_by_target = local_cygv_target_unit_phase_probe_sample
+        .iter()
+        .cloned()
+        .map(|probe| (probe.target_index, probe))
+        .collect::<HashMap<_, _>>();
+    for target in &mut targets {
+        target.local_cygv_unit_phase_probe = unit_probes_by_target.get(&target.index).cloned();
+    }
     let local_cygv_target_unit_phase_probe_status_counts =
         local_cygv_target_unit_phase_probe_status_counts(
             &local_cygv_target_unit_phase_probe_sample,
