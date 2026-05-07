@@ -319,7 +319,10 @@ so the remaining implementation work has moved to those lower
 source-ray/chamber leaves. The report now carries
 `active_decomposition_unresolved_source_leaf_sample`, which gives the exact
 curve and ambient support for each unresolved dependency; the current sample
-contains two missing-target links plus seven lower source-ray leaves.
+contains two missing-target links plus seven lower source-ray leaves. All
+unresolved entries except the degree-4 leaf have derived ambient origin-pattern
+labels, so the remaining source-ray work is still mainly local origin-circuit
+GV/chamber certification.
 
 ## Next Concrete Action
 

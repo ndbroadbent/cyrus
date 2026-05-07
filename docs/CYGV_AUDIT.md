@@ -2316,3 +2316,13 @@ links back to other missing targets, one is an uncovered source ray of degree
 rays not yet toric-covered or source-derived (degrees 10, 10, 10, 10, 12, and
 14). This is now the concrete lower leaf set for the next GV implementation
 step.
+The unresolved-leaf sample also derives an ambient origin-relation pattern
+whenever the source ray contains the origin coordinate. The current unresolved
+origin-pattern buckets are:
+`origin=-1;neg={-2: 1};pos={1: 3}` twice,
+`origin=-2;neg={-2: 1, -1: 1};pos={1: 1, 2: 2}` three times, and once each
+for `origin=-1;neg={-2: 1, -1: 1};pos={1: 2, 2: 1}`,
+`origin=-1;neg={-3: 1};pos={1: 2, 2: 1}`, and
+`origin=-2;neg={-3: 1};pos={1: 1, 2: 2}`. The only unresolved lower leaf
+without an origin pattern is the degree-4 class with ambient support
+`[(6,1),(200,1),(210,-2)]`.

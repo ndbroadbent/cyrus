@@ -639,6 +639,7 @@ struct ActiveDecompositionSourceLeafSummary {
     degree: Option<i128>,
     curve_nonzero: Vec<(usize, i64)>,
     source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
+    source_ray_ambient_origin_relation_pattern: Option<String>,
     matching_missing_target_index: Option<usize>,
     matching_missing_target_degree: Option<i128>,
     matching_missing_target_exact_kind: Option<String>,
@@ -2101,6 +2102,41 @@ fn sparse_matches_dense(sparse: &[(usize, i64)], dense: &[i64]) -> bool {
         .all(|(idx, &value)| value == 0 || seen.contains(&idx))
 }
 
+fn ambient_origin_relation_pattern(ambient_nonzero: &[(usize, i64)]) -> Option<String> {
+    let origin_coefficient = ambient_nonzero
+        .iter()
+        .find_map(|&(idx, value)| (idx == 0).then_some(value))?;
+    let mut negative_counts = BTreeMap::new();
+    let mut positive_counts = BTreeMap::new();
+    for &(idx, coefficient) in ambient_nonzero {
+        if idx == 0 || coefficient == 0 {
+            continue;
+        }
+        if coefficient < 0 {
+            *negative_counts.entry(coefficient).or_insert(0usize) += 1;
+        } else {
+            *positive_counts.entry(coefficient).or_insert(0usize) += 1;
+        }
+    }
+    Some(format!(
+        "origin={origin_coefficient};neg={};pos={}",
+        coefficient_count_map_label(&negative_counts),
+        coefficient_count_map_label(&positive_counts)
+    ))
+}
+
+fn coefficient_count_map_label(counts: &BTreeMap<i64, usize>) -> String {
+    if counts.is_empty() {
+        return "{}".to_string();
+    }
+    let body = counts
+        .iter()
+        .map(|(coefficient, count)| format!("{coefficient}: {count}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("{{{body}}}")
+}
+
 fn active_decomposition_generator_source_status_counts(
     samples: &[MissingGvTargetSample],
     context: &ValidatedContext<'_>,
@@ -2204,14 +2240,19 @@ fn active_decomposition_unresolved_source_leaf_summaries(
                 }
                 std::collections::btree_map::Entry::Vacant(entry) => {
                     let source_context = path_support_source_class_context(&curve, context).ok();
+                    let source_ray_ambient_nonzero = source_context
+                        .as_ref()
+                        .and_then(|context| context.source_ray_ambient_nonzero.clone());
+                    let source_ray_ambient_origin_relation_pattern = source_ray_ambient_nonzero
+                        .as_deref()
+                        .and_then(ambient_origin_relation_pattern);
                     entry.insert(ActiveDecompositionSourceLeafSummary {
                         source_status,
                         occurrence_count: 1,
                         degree: curve_degree(&curve, context.grading).ok(),
                         curve_nonzero: sparse_from_dense(&curve),
-                        source_ray_ambient_nonzero: source_context
-                            .as_ref()
-                            .and_then(|context| context.source_ray_ambient_nonzero.clone()),
+                        source_ray_ambient_nonzero,
+                        source_ray_ambient_origin_relation_pattern,
                         matching_missing_target_index: source_context
                             .as_ref()
                             .and_then(|context| context.matching_missing_target_index),
@@ -9334,6 +9375,11 @@ mod tests {
         assert!(!sparse_matches_dense(&[(0, 2), (4, 1)], &[2, 0, 0, -1]));
         assert!(!sparse_matches_dense(&[(0, 2), (0, 2)], &[2, 0, 0, -1]));
         assert!(!sparse_matches_dense(&[(0, 0)], &[0]));
+        assert_eq!(
+            ambient_origin_relation_pattern(&[(0, -1), (5, -2), (6, 1), (7, 1)]).as_deref(),
+            Some("origin=-1;neg={-2: 1};pos={1: 2}")
+        );
+        assert_eq!(ambient_origin_relation_pattern(&[(5, -2), (6, 1)]), None);
     }
 
     #[test]
@@ -9421,7 +9467,7 @@ mod tests {
         };
         let ray_context = vec![DegreeBoundedMoriRayContextSample {
             degree: 1,
-            ambient_nonzero: Vec::new(),
+            ambient_nonzero: vec![(0, -1), (7, 1)],
             basis_nonzero: vec![(2, 1)],
         }];
         let grading = vec![1, 1, 1];
@@ -9501,6 +9547,13 @@ mod tests {
         assert!(summaries.iter().any(|summary| {
             summary.source_status == "active_generator_matches_uncovered_source_ray"
                 && summary.matching_uncovered_source_ray_index == Some(1)
+        }));
+        assert!(summaries.iter().any(|summary| {
+            summary.source_status == "active_generator_source_ray_not_toric_covered"
+                && summary
+                    .source_ray_ambient_origin_relation_pattern
+                    .as_deref()
+                    == Some("origin=-1;neg={};pos={1: 1}")
         }));
     }
 

@@ -585,3 +585,6 @@ to make the remaining GV layer more first-principles:
    current context this sample contains two links back to other missing
    targets, one uncovered degree-4 source ray without a CMS formula candidate,
    and six not-yet-covered source rays of degrees 10, 10, 10, 10, 12, and 14.
+   The sample also records ambient origin-relation patterns, showing that all
+   unresolved dependencies except the degree-4 leaf still have origin-circuit
+   charge shapes that need local chamber/GV treatment.
