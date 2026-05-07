@@ -561,4 +561,12 @@ to make the remaining GV layer more first-principles:
    directly: all nine remaining targets have CMS-style formula candidates, but
    the 14 exact divisor-intersection checks all fail with
    `cms_general_divisor_no_rational_divisor_solution`, so no source-derived
-   shrinking divisor certificate is currently available.
+   shrinking divisor certificate is currently available. The default schema-3
+   context report now verifies the target-ray side without enabling the
+   expensive separator search: five targets are
+   `not_extremal_by_exact_integer_semigroup_decomposition`, four are
+   `not_extremal_by_exact_rational_cone_decomposition`, and all nine active
+   supports remain `active_support_not_certified_as_codimension_one_face`.
+   This rules out treating the missing target rays themselves as certified
+   chamber walls; the remaining chamber work has to recover a source-derived
+   face/continuation history.

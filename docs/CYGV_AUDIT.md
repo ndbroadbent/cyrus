@@ -2276,3 +2276,15 @@ divisor-intersection checks aggregate as
 `cms_general_divisor_no_rational_divisor_solution=14`. Thus Cyrus currently
 has the algebraic flop/Weyl primitives, but not a source-derived shrinking
 divisor certificate for these origin-circuit misses.
+The default context report now also records the cheap exact non-extremality
+certificate before any expensive separator search. Regenerating
+`/tmp/cyrus_gv_context_schema3_default_nonextremal_report.json` reports
+`target_extremal_ray_certificate_status_counts =
+{"not_extremal_by_exact_integer_semigroup_decomposition":5,
+"not_extremal_by_exact_rational_cone_decomposition":4}` and
+`active_support_face_certificate_status_counts =
+{"active_support_not_certified_as_codimension_one_face":9}`. Therefore the
+remaining nine targets are not themselves extremal wall rays in the
+degree-bounded finite cone; the next chamber step must identify a certified
+source face/continuation history rather than applying the flop/Weyl transform
+directly to each missing target ray.

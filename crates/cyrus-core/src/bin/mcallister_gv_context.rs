@@ -2983,11 +2983,11 @@ fn target_extremal_ray_certificate_probe(
     generator_limit: usize,
     max_target_degree: Option<i128>,
 ) -> Option<TargetExtremalRayCertificateProbe> {
-    if !run {
-        return None;
-    }
     if let Some(probe) = target_exact_non_extremal_decomposition_probe(sample, target, context) {
         return Some(probe);
+    }
+    if !run {
+        return None;
     }
     if !sample.is_mori_generator {
         return Some(TargetExtremalRayCertificateProbe {
@@ -8703,6 +8703,20 @@ mod tests {
             Some(vec!["1".to_string(), "1".to_string()])
         );
         assert_eq!(probe.separator_normal_nonzero, None);
+
+        let cheap_probe = target_extremal_ray_certificate_probe(
+            &stats.sample[0],
+            &[1, 1],
+            &context,
+            false,
+            0,
+            None,
+        )
+        .expect("exact non-extremal decomposition should not require separator search");
+        assert_eq!(
+            cheap_probe.status,
+            "not_extremal_by_exact_integer_semigroup_decomposition"
+        );
     }
 
     #[test]

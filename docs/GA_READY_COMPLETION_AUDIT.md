@@ -302,7 +302,13 @@ targets have formula-shaped divisor candidates, but the 14 exact
 divisor-intersection checks all report
 `cms_general_divisor_no_rational_divisor_solution`. The algebraic flop
 transforms are present, but Cyrus still lacks a source-derived shrinking
-divisor and certified `n_C^0` for these classes.
+divisor and certified `n_C^0` for these classes. A regenerated default
+schema-3 report now records the cheap target-ray certificate as well:
+`not_extremal_by_exact_integer_semigroup_decomposition=5`,
+`not_extremal_by_exact_rational_cone_decomposition=4`, and
+`active_support_not_certified_as_codimension_one_face=9`. The unresolved GV
+classes therefore cannot be handled by directly treating the target rays as
+certified chamber walls.
 
 ## Next Concrete Action
 
