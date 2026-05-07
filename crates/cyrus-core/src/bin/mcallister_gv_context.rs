@@ -465,6 +465,10 @@ struct CygvSeedSumDecomposition {
     seed_degree: i128,
     reduced_seed_toric_gv: Option<String>,
     seed_toric_gv: Option<String>,
+    reduced_seed_source_derived_gv: Option<String>,
+    seed_source_derived_gv: Option<String>,
+    reduced_seed_known_qn_history_status: String,
+    seed_known_qn_history_status: String,
     seed_is_reduced_seed: bool,
     seed_pair_reduction_sum: Option<CygvSeedPairDecomposition>,
     reduced_seed_nonzero: Vec<(usize, i64)>,
@@ -477,6 +481,10 @@ struct CygvSeedPairDecomposition {
     rhs_degree: i128,
     lhs_toric_gv: Option<String>,
     rhs_toric_gv: Option<String>,
+    lhs_source_derived_gv: Option<String>,
+    rhs_source_derived_gv: Option<String>,
+    lhs_known_qn_history_status: String,
+    rhs_known_qn_history_status: String,
     lhs_is_reduced_seed: bool,
     rhs_is_reduced_seed: bool,
     lhs_nonzero: Vec<(usize, i64)>,
@@ -4928,6 +4936,7 @@ fn cygv_path_predecessor_stats(
                         seed_set,
                         reduced_seed_set,
                         covered_toric_gv_by_basis,
+                        source_derived_gv_by_basis,
                     )?,
                     difference_first_generation_seed_sum: first_generation_seed_sum_decomposition(
                         &difference,
@@ -4935,6 +4944,7 @@ fn cygv_path_predecessor_stats(
                         seed_set,
                         reduced_seed_set,
                         covered_toric_gv_by_basis,
+                        source_derived_gv_by_basis,
                     )?,
                     predecessor_nonzero: sparse_from_dense(element),
                     difference_nonzero: sparse_from_dense(&difference),
@@ -4976,6 +4986,7 @@ fn cygv_path_predecessor_stats(
                         seed_set,
                         reduced_seed_set,
                         covered_toric_gv_by_basis,
+                        source_derived_gv_by_basis,
                     )?,
                     difference_first_generation_seed_sum: first_generation_seed_sum_decomposition(
                         &difference,
@@ -4983,6 +4994,7 @@ fn cygv_path_predecessor_stats(
                         seed_set,
                         reduced_seed_set,
                         covered_toric_gv_by_basis,
+                        source_derived_gv_by_basis,
                     )?,
                     predecessor_nonzero: sparse_from_dense(element),
                     difference_nonzero: sparse_from_dense(&difference),
@@ -5024,6 +5036,7 @@ fn first_generation_seed_sum_decomposition(
     seed_set: &HashSet<Vec<i64>>,
     reduced_seed_set: &HashSet<Vec<i64>>,
     covered_toric_gv_by_basis: &HashMap<Vec<i64>, String>,
+    source_derived_gv_by_basis: &HashMap<Vec<i64>, String>,
 ) -> Result<Option<CygvSeedSumDecomposition>, String> {
     let mut reduced_seeds = reduced_seed_set.iter().collect::<Vec<_>>();
     reduced_seeds.sort();
@@ -5032,11 +5045,27 @@ fn first_generation_seed_sum_decomposition(
         if !seed_set.contains(&seed) {
             continue;
         }
+        let reduced_seed_toric_gv = covered_toric_gv_by_basis.get(reduced_seed);
+        let seed_toric_gv = covered_toric_gv_by_basis.get(&seed);
+        let reduced_seed_source_derived_gv = source_derived_gv_by_basis.get(reduced_seed);
+        let seed_source_derived_gv = source_derived_gv_by_basis.get(&seed);
         return Ok(Some(CygvSeedSumDecomposition {
             reduced_seed_degree: curve_degree(reduced_seed, grading)?,
             seed_degree: curve_degree(&seed, grading)?,
-            reduced_seed_toric_gv: covered_toric_gv_by_basis.get(reduced_seed).cloned(),
-            seed_toric_gv: covered_toric_gv_by_basis.get(&seed).cloned(),
+            reduced_seed_toric_gv: reduced_seed_toric_gv.cloned(),
+            seed_toric_gv: seed_toric_gv.cloned(),
+            reduced_seed_source_derived_gv: reduced_seed_source_derived_gv.cloned(),
+            seed_source_derived_gv: seed_source_derived_gv.cloned(),
+            reduced_seed_known_qn_history_status: known_qn_history_status(
+                reduced_seed_toric_gv.map(String::as_str),
+                reduced_seed_source_derived_gv.map(String::as_str),
+            )?
+            .to_string(),
+            seed_known_qn_history_status: known_qn_history_status(
+                seed_toric_gv.map(String::as_str),
+                seed_source_derived_gv.map(String::as_str),
+            )?
+            .to_string(),
             seed_is_reduced_seed: reduced_seed_set.contains(&seed),
             seed_pair_reduction_sum: seed_pair_reduction_sum_decomposition(
                 &seed,
@@ -5044,6 +5073,7 @@ fn first_generation_seed_sum_decomposition(
                 seed_set,
                 reduced_seed_set,
                 covered_toric_gv_by_basis,
+                source_derived_gv_by_basis,
             )?,
             reduced_seed_nonzero: sparse_from_dense(reduced_seed),
             seed_nonzero: sparse_from_dense(&seed),
@@ -5058,6 +5088,7 @@ fn seed_pair_reduction_sum_decomposition(
     seed_set: &HashSet<Vec<i64>>,
     reduced_seed_set: &HashSet<Vec<i64>>,
     covered_toric_gv_by_basis: &HashMap<Vec<i64>, String>,
+    source_derived_gv_by_basis: &HashMap<Vec<i64>, String>,
 ) -> Result<Option<CygvSeedPairDecomposition>, String> {
     if reduced_seed_set.contains(seed) {
         return Ok(None);
@@ -5069,11 +5100,27 @@ fn seed_pair_reduction_sum_decomposition(
         if !seed_set.contains(&rhs) {
             continue;
         }
+        let lhs_toric_gv = covered_toric_gv_by_basis.get(lhs);
+        let rhs_toric_gv = covered_toric_gv_by_basis.get(&rhs);
+        let lhs_source_derived_gv = source_derived_gv_by_basis.get(lhs);
+        let rhs_source_derived_gv = source_derived_gv_by_basis.get(&rhs);
         return Ok(Some(CygvSeedPairDecomposition {
             lhs_degree: curve_degree(lhs, grading)?,
             rhs_degree: curve_degree(&rhs, grading)?,
-            lhs_toric_gv: covered_toric_gv_by_basis.get(lhs).cloned(),
-            rhs_toric_gv: covered_toric_gv_by_basis.get(&rhs).cloned(),
+            lhs_toric_gv: lhs_toric_gv.cloned(),
+            rhs_toric_gv: rhs_toric_gv.cloned(),
+            lhs_source_derived_gv: lhs_source_derived_gv.cloned(),
+            rhs_source_derived_gv: rhs_source_derived_gv.cloned(),
+            lhs_known_qn_history_status: known_qn_history_status(
+                lhs_toric_gv.map(String::as_str),
+                lhs_source_derived_gv.map(String::as_str),
+            )?
+            .to_string(),
+            rhs_known_qn_history_status: known_qn_history_status(
+                rhs_toric_gv.map(String::as_str),
+                rhs_source_derived_gv.map(String::as_str),
+            )?
+            .to_string(),
             lhs_is_reduced_seed: reduced_seed_set.contains(lhs),
             rhs_is_reduced_seed: reduced_seed_set.contains(&rhs),
             lhs_nonzero: sparse_from_dense(lhs),
@@ -7662,12 +7709,20 @@ mod tests {
                 seed_degree: 2,
                 reduced_seed_toric_gv: None,
                 seed_toric_gv: None,
+                reduced_seed_source_derived_gv: None,
+                seed_source_derived_gv: None,
+                reduced_seed_known_qn_history_status: "unknown_not_toric_covered".to_string(),
+                seed_known_qn_history_status: "unknown_not_toric_covered".to_string(),
                 seed_is_reduced_seed: false,
                 seed_pair_reduction_sum: Some(CygvSeedPairDecomposition {
                     lhs_degree: 1,
                     rhs_degree: 1,
                     lhs_toric_gv: None,
                     rhs_toric_gv: None,
+                    lhs_source_derived_gv: None,
+                    rhs_source_derived_gv: None,
+                    lhs_known_qn_history_status: "unknown_not_toric_covered".to_string(),
+                    rhs_known_qn_history_status: "unknown_not_toric_covered".to_string(),
                     lhs_is_reduced_seed: true,
                     rhs_is_reduced_seed: true,
                     lhs_nonzero: vec![(4, 3), (5, 0)],
@@ -7775,6 +7830,41 @@ mod tests {
         };
         let map = source_derived_gv_by_basis(Some(&stats), 2).unwrap();
         assert_eq!(map.get(&vec![2, 0]).map(String::as_str), Some("-2"));
+    }
+
+    #[test]
+    fn seed_sum_decomposition_reports_source_derived_history_status() {
+        let seed_set = [vec![1, 0], vec![0, 1]].into_iter().collect::<HashSet<_>>();
+        let reduced_seed_set = seed_set.clone();
+        let mut covered_toric_gv_by_basis = HashMap::new();
+        covered_toric_gv_by_basis.insert(vec![1, 0], "7".to_string());
+        let mut source_derived_gv_by_basis = HashMap::new();
+        source_derived_gv_by_basis.insert(vec![0, 1], "5".to_string());
+
+        let decomposition = first_generation_seed_sum_decomposition(
+            &[1, 1],
+            &[1, 1],
+            &seed_set,
+            &reduced_seed_set,
+            &covered_toric_gv_by_basis,
+            &source_derived_gv_by_basis,
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(
+            decomposition.reduced_seed_source_derived_gv.as_deref(),
+            Some("5")
+        );
+        assert_eq!(decomposition.seed_toric_gv.as_deref(), Some("7"));
+        assert_eq!(
+            decomposition.reduced_seed_known_qn_history_status,
+            "known_nonzero_source_gv"
+        );
+        assert_eq!(
+            decomposition.seed_known_qn_history_status,
+            "known_nonzero_toric_gv"
+        );
     }
 
     #[test]

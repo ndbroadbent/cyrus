@@ -498,7 +498,12 @@ to make the remaining GV layer more first-principles:
    lookup matches the four source-known and four toric-known nonzero lower
    values, but the target still evaluates to `GV=0`, so the remaining compact
    history is in the degree-four/degree-eight composite classes and the
-   uncertified semigroup/chamber continuation.
+   uncertified semigroup/chamber continuation. The seed-sum diagnostic now
+   records source-derived statuses too: sampled degree-eight unknowns split as
+   toric degree-two plus source-known degree-six, and sampled degree-four
+   unknowns split as toric degree-two plus toric degree-two. Those decompositions
+   identify the finite-history inputs but do not license a multiplicative GV
+   shortcut.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.
    The exact classical-data transform is now available as

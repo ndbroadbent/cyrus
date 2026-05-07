@@ -227,6 +227,11 @@ and matrix-basis pipeline are no longer open.
    target. The small path-support `cygv` lookup matches the four source-known
    nonzero lower values and four toric-known nonzero lower values, but the
    target still returns `GV=0`, so this is not a final GV correction.
+   The seed-sum diagnostics now carry the same source-derived status and show
+   that the sampled degree-eight unknowns are sums of a toric degree-two seed
+   and a source-known degree-six seed, while the sampled degree-four unknowns
+   are sums of toric degree-two seeds. These are compact-history inputs, not a
+   multiplicative shortcut to composite GV values.
    These lower classes are now classified against the exported source-ray
    context: for both degree-10 targets the sampled lookups split as four known
    toric source rays, four non-toric source rays, and eight composite classes

@@ -2138,6 +2138,17 @@ queue is no longer opaque, but the unsolved compact history has moved to the
 remaining degree-four and degree-eight composite classes plus the missing
 certified semigroup/chamber continuation.
 
+The seed-sum decomposition report now carries the same source-derived qN
+classification. On the target `7`/`8` reruns, every sampled degree-eight
+unknown decomposes as a known nonzero toric degree-two seed plus a known
+nonzero source-derived degree-six seed; every sampled degree-four unknown
+decomposes as two known nonzero toric degree-two seeds. This is still not a GV
+formula for the composite classes, because `cygv`'s `previous_qn` cache is
+degree-ordered and coefficient-dependent, not multiplicative over semigroup
+sums. It does, however, pin the remaining missing object more tightly: Cyrus
+needs the certified compact semigroup/chamber history that assigns qN values to
+these composites after the lower toric/source leaves have entered the history.
+
 The stable-Weyl/flop-continuation route is now surfaced as a report-level
 readiness count rather than only per-target arrays. On the schema-3 context all
 nine remaining targets have CMS-style formula candidates, but the 14 exact
