@@ -129,6 +129,10 @@ run pass. Any remaining mismatch must be explicit and localizable.
    weighted `O(-2)+O(-2)->P(1,1,2)` family and targets `7`/`8` as
    resolved-conifold charge rows with spectator zero columns. This narrows the
    next work to certifying the local phase maps for those reduced families.
+   A toy unit-tensor compact `cygv` probe on those reduced rows is explicitly
+   non-promotable: it gives `0` for targets `3`/`6` and rejects targets `7`/`8`
+   as below compact CY dimension three. This keeps the blocker on deriving
+   certified local/noncompact phase data.
    A fresh read of
    `string_theory/mcallister_2107/latest_cytools/compute_kklt_iterative.py`
    confirms the sign convention used by Cyrus,

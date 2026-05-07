@@ -556,6 +556,9 @@ struct LocalCygvSourceResolutionHintSummary {
     shared_two_simplex_star_reduction_status: String,
     shared_two_simplex_star_reduced_zero_charge_points: Vec<usize>,
     shared_two_simplex_star_reduced_charge_row: Option<Vec<i64>>,
+    shared_two_simplex_star_reduced_unit_tensor_candidate_gv: Option<String>,
+    shared_two_simplex_star_reduced_unit_tensor_probe_status: String,
+    shared_two_simplex_star_reduced_unit_tensor_probe_error: Option<String>,
     zero_relation_shared_two_simplex_points: Vec<usize>,
     zero_relation_shared_two_simplex_point_samples: Vec<OriginCircuitRelationPointSample>,
     resolved_shared_support_status: String,
@@ -14573,6 +14576,8 @@ fn local_cygv_source_resolution_hint_summaries(
             );
             let star_reduction_hint =
                 local_cygv_shared_two_simplex_star_reduction_hint(&star_support_hint);
+            let star_reduced_unit_tensor_probe =
+                local_cygv_star_reduced_unit_tensor_probe(&star_reduction_hint);
             let star_extra_affine_heights =
                 origin_circuit_shared_two_simplex_star_extra_affine_heights(
                     target.origin_circuit_first_witness.as_ref(),
@@ -14609,6 +14614,12 @@ fn local_cygv_source_resolution_hint_summaries(
                 shared_two_simplex_star_reduced_zero_charge_points: star_reduction_hint
                     .zero_charge_points,
                 shared_two_simplex_star_reduced_charge_row: star_reduction_hint.reduced_charge_row,
+                shared_two_simplex_star_reduced_unit_tensor_candidate_gv:
+                    star_reduced_unit_tensor_probe.candidate_gv,
+                shared_two_simplex_star_reduced_unit_tensor_probe_status:
+                    star_reduced_unit_tensor_probe.status,
+                shared_two_simplex_star_reduced_unit_tensor_probe_error:
+                    star_reduced_unit_tensor_probe.error,
                 zero_relation_shared_two_simplex_points:
                     origin_circuit_zero_relation_shared_two_simplex_points(
                         target.origin_circuit_first_witness.as_ref(),
@@ -15138,6 +15149,12 @@ struct LocalCygvStarReductionHint {
     reduced_charge_row: Option<Vec<i64>>,
 }
 
+struct LocalCygvStarReducedUnitTensorProbe {
+    candidate_gv: Option<String>,
+    status: String,
+    error: Option<String>,
+}
+
 fn local_cygv_shared_two_simplex_star_support_hint(
     witness: Option<&OriginCircuitWitnessSample>,
 ) -> LocalCygvStarSupportHint {
@@ -15309,6 +15326,51 @@ fn classify_zero_charge_reduced_one_parameter_family(charges: &[i64]) -> String 
             .collect::<Vec<_>>()
             .join(",")
     )
+}
+
+fn local_cygv_star_reduced_unit_tensor_probe(
+    reduction: &LocalCygvStarReductionHint,
+) -> LocalCygvStarReducedUnitTensorProbe {
+    let Some(reduced_charge_row) = reduction.reduced_charge_row.as_ref() else {
+        return LocalCygvStarReducedUnitTensorProbe {
+            candidate_gv: None,
+            status: "star_reduced_unit_tensor_probe_not_run_no_reduced_charge_row".to_string(),
+            error: None,
+        };
+    };
+    if reduced_charge_row.is_empty() {
+        return LocalCygvStarReducedUnitTensorProbe {
+            candidate_gv: None,
+            status: "star_reduced_unit_tensor_probe_not_run_empty_reduced_charge_row".to_string(),
+            error: None,
+        };
+    }
+    if reduced_charge_row.iter().sum::<i64>() != 0 {
+        return LocalCygvStarReducedUnitTensorProbe {
+            candidate_gv: None,
+            status: "star_reduced_unit_tensor_probe_not_run_non_calabi_yau_charge".to_string(),
+            error: None,
+        };
+    }
+    let q_matrix = vec![reduced_charge_row.clone()];
+    match one_parameter_primitive_cygv_value(
+        &q_matrix,
+        &[1],
+        &[vec![0], vec![1]],
+        MalachiteRational::from(1),
+    ) {
+        Ok(value) => LocalCygvStarReducedUnitTensorProbe {
+            candidate_gv: Some(value),
+            status: "star_reduced_unit_tensor_probe_computed_with_unit_tensor_uncertified"
+                .to_string(),
+            error: None,
+        },
+        Err(error) => LocalCygvStarReducedUnitTensorProbe {
+            candidate_gv: None,
+            status: "star_reduced_unit_tensor_probe_hkty_error".to_string(),
+            error: Some(error),
+        },
+    }
 }
 
 fn origin_circuit_resolved_shared_support_point_samples(

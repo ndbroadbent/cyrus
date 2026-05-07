@@ -3166,6 +3166,13 @@ spectator columns from those actual star rows. Targets `3` and `6` reduce to
 columns. These remain classification results only. The missing certificate is
 still the local chamber/intersection map that makes any resulting compact or
 local `cygv` computation a first-principles input.
+A deliberately uncertified unit-tensor probe on the reduced rows reinforces
+that boundary: the weighted reduced rows compute `GV=0` in the toy
+one-parameter compact handoff, while the resolved-conifold reduced rows are
+rejected by compact `cygv` with "the dimension of the CY must be at least
+three". Thus targets `7`/`8` need the local/noncompact resolved-conifold
+certificate, and targets `3`/`6` still need a real weighted-phase tensor rather
+than the unit-tensor toy value.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

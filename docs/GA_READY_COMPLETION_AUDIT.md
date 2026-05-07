@@ -726,6 +726,10 @@ become the sign-flipped weighted `O(-2)+O(-2)->P(1,1,2)` family, while targets
 `7`/`8` become resolved-conifold rows with spectator zero columns. This is
 still not a promoted GV value; it identifies which local phase certificates
 must be derived next.
+The uncertified reduced-row unit-tensor probe does not close the gap: targets
+`3`/`6` compute toy `GV=0`, while targets `7`/`8` are rejected by compact
+`cygv` as too low-dimensional. The next step is therefore certificate work, not
+using the reduced rows as compact GV inputs.
 Origin-circuit witness-domain compact `cygv` probes are now opt-in and guarded
 by `--origin-witness-cygv-generator-limit`. The traced target `8` report shows
 the single-generator relation domain computes `GV=2` with one materialized
