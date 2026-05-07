@@ -28,7 +28,9 @@ use cyrus_core::{
     compute_gv_invariants_with_provided_generators_qn_trace,
     compute_gw_coefficient_trace_with_explicit_semigroup,
     compute_gw_coefficient_trace_with_provided_generators, curve_row_span_rank,
-    diagnose_affine_toric_circuit, integer_math::solve_linear_system_rational, utils::gcd_list_int,
+    diagnose_affine_toric_circuit,
+    integer_math::{integer_kernel, solve_linear_system_rational},
+    utils::gcd_list_int,
 };
 
 const CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT: usize = 32;
@@ -239,6 +241,7 @@ struct ContextReport {
     local_cygv_charge_signature_counts: BTreeMap<String, usize>,
     local_cygv_one_parameter_family_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_hint_status_counts: BTreeMap<String, usize>,
+    local_cygv_source_resolution_resolved_support_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_hint_sample: Vec<LocalCygvSourceResolutionHintSummary>,
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
     local_cygv_actual_call_readiness_counts: BTreeMap<String, usize>,
@@ -532,6 +535,11 @@ struct LocalCygvSourceResolutionHintSummary {
     status: String,
     zero_relation_shared_two_simplex_points: Vec<usize>,
     zero_relation_shared_two_simplex_point_samples: Vec<OriginCircuitRelationPointSample>,
+    resolved_shared_support_status: String,
+    resolved_shared_support_affine_rank: Option<usize>,
+    resolved_shared_support_point_indices: Vec<usize>,
+    resolved_shared_support_charge_basis: Option<Vec<Vec<i64>>>,
+    resolved_shared_support_charge_row_sums: Option<Vec<i64>>,
     relation_support_point_indices: Vec<usize>,
     local_phase_q_matrix: Option<Vec<Vec<i64>>>,
     local_one_parameter_family_status: Option<String>,
@@ -13550,6 +13558,8 @@ fn build_report(
         );
     let local_cygv_source_resolution_hint_status_counts =
         local_cygv_source_resolution_hint_status_counts(&targets);
+    let local_cygv_source_resolution_resolved_support_status_counts =
+        local_cygv_source_resolution_resolved_support_status_counts(&targets);
     let local_cygv_source_resolution_hint_sample =
         local_cygv_source_resolution_hint_summaries(&targets);
     let missing_local_cygv_missing_source_input_counts = local_cygv_missing_source_input_counts(
@@ -14284,6 +14294,7 @@ fn build_report(
         local_cygv_one_parameter_family_status_counts:
             missing_local_cygv_one_parameter_family_status_counts,
         local_cygv_source_resolution_hint_status_counts,
+        local_cygv_source_resolution_resolved_support_status_counts,
         local_cygv_source_resolution_hint_sample,
         local_cygv_target_candidate_status_counts,
         local_cygv_actual_call_readiness_counts: missing_local_cygv_actual_call_readiness_counts,
@@ -14501,6 +14512,10 @@ fn local_cygv_source_resolution_hint_summaries(
                 skeleton,
                 target.origin_circuit_first_witness.as_ref(),
             );
+            let resolved_hint = local_cygv_resolved_shared_support_hint(
+                skeleton,
+                target.origin_circuit_first_witness.as_ref(),
+            );
             Some(LocalCygvSourceResolutionHintSummary {
                 target_index: target.index,
                 degree: target.degree,
@@ -14513,6 +14528,11 @@ fn local_cygv_source_resolution_hint_summaries(
                     origin_circuit_zero_relation_shared_two_simplex_point_samples(
                         target.origin_circuit_first_witness.as_ref(),
                     ),
+                resolved_shared_support_status: resolved_hint.status,
+                resolved_shared_support_affine_rank: resolved_hint.affine_rank,
+                resolved_shared_support_point_indices: resolved_hint.point_indices,
+                resolved_shared_support_charge_basis: resolved_hint.charge_basis,
+                resolved_shared_support_charge_row_sums: resolved_hint.charge_row_sums,
                 relation_support_point_indices: target
                     .origin_circuit_first_witness
                     .as_ref()
@@ -14525,6 +14545,23 @@ fn local_cygv_source_resolution_hint_summaries(
             })
         })
         .collect()
+}
+
+fn local_cygv_source_resolution_resolved_support_status_counts<'a>(
+    targets: impl IntoIterator<Item = &'a TargetReport>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        let Some(skeleton) = target.local_cygv_input_skeleton.as_ref() else {
+            continue;
+        };
+        let hint = local_cygv_resolved_shared_support_hint(
+            skeleton,
+            target.origin_circuit_first_witness.as_ref(),
+        );
+        *counts.entry(hint.status).or_insert(0usize) += 1;
+    }
+    counts
 }
 
 fn local_cygv_source_resolution_hint_status_counts<'a>(
@@ -14543,6 +14580,125 @@ fn local_cygv_source_resolution_hint_status_counts<'a>(
             .or_insert(0usize) += 1;
     }
     counts
+}
+
+struct LocalCygvResolvedSharedSupportHint {
+    status: String,
+    affine_rank: Option<usize>,
+    point_indices: Vec<usize>,
+    charge_basis: Option<Vec<Vec<i64>>>,
+    charge_row_sums: Option<Vec<i64>>,
+}
+
+fn local_cygv_resolved_shared_support_hint(
+    skeleton: &LocalCygvInputSkeleton,
+    witness: Option<&OriginCircuitWitnessSample>,
+) -> LocalCygvResolvedSharedSupportHint {
+    let empty = |status: &str| LocalCygvResolvedSharedSupportHint {
+        status: status.to_string(),
+        affine_rank: None,
+        point_indices: Vec::new(),
+        charge_basis: None,
+        charge_row_sums: None,
+    };
+    let Some(q_matrix) = skeleton.local_cygv_phase_q_matrix_candidate.as_ref() else {
+        return empty("resolved_shared_support_blocked_missing_phase_q_matrix");
+    };
+    if q_matrix.len() != 1 {
+        return empty("resolved_shared_support_not_one_parameter_local_q_matrix");
+    }
+    if one_parameter_weighted_p2_split_bundle_signature(&q_matrix[0]).is_none() {
+        return empty("resolved_shared_support_not_weighted_p2_split_bundle");
+    }
+    let Some(witness) = witness else {
+        return empty("weighted_p2_resolved_shared_support_missing_origin_circuit_witness");
+    };
+    let zero_shared = origin_circuit_zero_relation_shared_two_simplex_points(Some(witness));
+    if zero_shared.len() != 1 {
+        return empty("weighted_p2_resolved_shared_support_requires_single_zero_shared_ray");
+    }
+    let support = origin_circuit_resolved_shared_support_point_samples(witness);
+    if !zero_shared.iter().all(|point_index| {
+        support
+            .iter()
+            .any(|point| point.point_index == *point_index && point.coefficient == 0)
+    }) {
+        return LocalCygvResolvedSharedSupportHint {
+            status: "weighted_p2_resolved_shared_support_missing_zero_shared_ray_coordinates"
+                .to_string(),
+            affine_rank: None,
+            point_indices: support.iter().map(|point| point.point_index).collect(),
+            charge_basis: None,
+            charge_row_sums: None,
+        };
+    }
+    let point_indices = support
+        .iter()
+        .map(|point| point.point_index)
+        .collect::<Vec<_>>();
+    let affine_rank = match affine_rank_for_point_samples(&support) {
+        Ok(rank) => rank,
+        Err(error) => {
+            return LocalCygvResolvedSharedSupportHint {
+                status: format!(
+                    "weighted_p2_resolved_shared_support_affine_rank_error:{}",
+                    status_error_fragment(&error)
+                ),
+                affine_rank: None,
+                point_indices,
+                charge_basis: None,
+                charge_row_sums: None,
+            };
+        }
+    };
+    let charge_basis = match affine_charge_basis_for_point_samples(&support) {
+        Ok(charge_basis) => charge_basis,
+        Err(error) => {
+            return LocalCygvResolvedSharedSupportHint {
+                status: format!(
+                    "weighted_p2_resolved_shared_support_charge_basis_error:{}",
+                    status_error_fragment(&error)
+                ),
+                affine_rank: Some(affine_rank),
+                point_indices,
+                charge_basis: None,
+                charge_row_sums: None,
+            };
+        }
+    };
+    let charge_row_sums = charge_basis
+        .iter()
+        .map(|row| row.iter().sum::<i64>())
+        .collect::<Vec<_>>();
+    let cy_dim = point_indices
+        .len()
+        .checked_sub(charge_basis.len())
+        .and_then(|value| value.checked_sub(1));
+    let status = if affine_rank != 3 {
+        format!(
+            "weighted_p2_zero_shared_ray_raises_affine_rank_{affine_rank}_requires_projection_or_chamber_map"
+        )
+    } else if cy_dim == Some(3) && charge_row_sums.iter().all(|&sum| sum == 0) {
+        "source_witness_resolved_weighted_p2_support_has_compact_cy_threefold_charge_basis"
+            .to_string()
+    } else {
+        format!(
+            "weighted_p2_resolved_support_not_compact_cy_threefold:cy_dim={};row_sums={}",
+            cy_dim.map_or_else(|| "invalid".to_string(), |value| value.to_string()),
+            charge_row_sums
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        )
+    };
+    LocalCygvResolvedSharedSupportHint {
+        status,
+        affine_rank: Some(affine_rank),
+        point_indices,
+        charge_basis: Some(charge_basis),
+        charge_row_sums: Some(charge_row_sums),
+    }
 }
 
 fn local_cygv_source_resolution_hint_status(
@@ -14617,6 +14773,97 @@ fn origin_circuit_zero_relation_shared_two_simplex_point_samples(
         .filter(|point| zero_shared.contains(&point.point_index))
         .cloned()
         .collect()
+}
+
+fn origin_circuit_resolved_shared_support_point_samples(
+    witness: &OriginCircuitWitnessSample,
+) -> Vec<OriginCircuitRelationPointSample> {
+    let mut by_point = witness
+        .relation_points
+        .iter()
+        .cloned()
+        .map(|point| (point.point_index, point))
+        .collect::<BTreeMap<_, _>>();
+    for point in origin_circuit_zero_relation_shared_two_simplex_point_samples(Some(witness)) {
+        by_point.entry(point.point_index).or_insert(point);
+    }
+    by_point.into_values().collect()
+}
+
+fn affine_rank_for_point_samples(
+    points: &[OriginCircuitRelationPointSample],
+) -> Result<usize, String> {
+    let Some(base) = points.first() else {
+        return Ok(0);
+    };
+    let dim = base.coordinates.len();
+    if points
+        .iter()
+        .any(|point| point.coordinates.len() != dim || point.coordinates.is_empty())
+    {
+        return Err("resolved shared support has missing or inconsistent coordinates".to_string());
+    }
+    let rows = points
+        .iter()
+        .skip(1)
+        .map(|point| {
+            point
+                .coordinates
+                .iter()
+                .zip(base.coordinates.iter())
+                .map(|(&coord, &base_coord)| coord - base_coord)
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    curve_row_span_rank(&rows).map_err(|error| error.to_string())
+}
+
+fn affine_charge_basis_for_point_samples(
+    points: &[OriginCircuitRelationPointSample],
+) -> Result<Vec<Vec<i64>>, String> {
+    let Some(first_point) = points.first() else {
+        return Ok(Vec::new());
+    };
+    let dim = first_point.coordinates.len();
+    if points
+        .iter()
+        .any(|point| point.coordinates.len() != dim || point.coordinates.is_empty())
+    {
+        return Err("resolved shared support has missing or inconsistent coordinates".to_string());
+    }
+    let mut matrix = vec![vec![Integer::from(0); points.len()]; dim + 1];
+    for (col, point) in points.iter().enumerate() {
+        matrix[0][col] = Integer::from(1);
+        for (row, &coordinate) in point.coordinates.iter().enumerate() {
+            matrix[row + 1][col] = Integer::from(coordinate);
+        }
+    }
+    integer_kernel(&matrix)
+        .into_iter()
+        .map(|row| {
+            let mut converted = row
+                .iter()
+                .map(|value| {
+                    i64::try_from(value).map_err(|_| {
+                        "resolved shared support charge-basis entry does not fit in i64".to_string()
+                    })
+                })
+                .collect::<Result<Vec<_>, String>>()?;
+            normalize_integer_relation_orientation(&mut converted);
+            Ok(converted)
+        })
+        .collect()
+}
+
+fn normalize_integer_relation_orientation(row: &mut [i64]) {
+    let Some(first_nonzero) = row.iter().find(|&&value| value != 0).copied() else {
+        return;
+    };
+    if first_nonzero < 0 {
+        for value in row {
+            *value = -*value;
+        }
+    }
 }
 
 fn origin_circuit_relation_support_point_indices(
@@ -17683,7 +17930,7 @@ mod tests {
                 OriginCircuitRelationPointSample {
                     point_index: 55,
                     coefficient: 0,
-                    coordinates: vec![1, 2, 1, 2],
+                    coordinates: vec![3, 4, 1, 5],
                     face_dimension: None,
                 },
                 OriginCircuitRelationPointSample {
@@ -17741,12 +17988,24 @@ mod tests {
                 .into_iter()
                 .map(|point| (point.point_index, point.coefficient, point.coordinates))
                 .collect::<Vec<_>>(),
-            vec![(55, 0, vec![1, 2, 1, 2])]
+            vec![(55, 0, vec![3, 4, 1, 5])]
         );
         assert_eq!(
             local_cygv_source_resolution_hint_status(&skeleton, Some(&witness)),
             "source_witness_weighted_p2_split_bundle_has_single_zero_relation_shared_resolution_ray"
         );
+        let resolved_hint = local_cygv_resolved_shared_support_hint(&skeleton, Some(&witness));
+        assert_eq!(
+            resolved_hint.status,
+            "weighted_p2_zero_shared_ray_raises_affine_rank_4_requires_projection_or_chamber_map"
+        );
+        assert_eq!(resolved_hint.affine_rank, Some(4));
+        assert_eq!(resolved_hint.point_indices, vec![0, 2, 55, 208, 211, 214]);
+        assert_eq!(
+            resolved_hint.charge_basis,
+            Some(vec![vec![1, -2, 0, 3, -1, -1]])
+        );
+        assert_eq!(resolved_hint.charge_row_sums, Some(vec![0]));
     }
 
     #[test]

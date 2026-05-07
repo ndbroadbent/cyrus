@@ -103,7 +103,10 @@ run pass. Any remaining mismatch must be explicit and localizable.
    weighted rows (`202`, `199`, `55`, `55`). That points the next chamber task
    at the resolved local phase containing the extra shared ray, rather than at
    another scalar tensor scan. Fresh context dumps now serialize those shared
-   two-simplex point records with coordinates.
+   two-simplex point records with coordinates. A direct resolved-support check
+   shows that appending the shared ray raises the affine rank to `4` for the
+   weighted rows, so the missing input is a projection/chamber map rather than
+   a naive six-column compact `cygv` handoff.
    A fresh read of
    `string_theory/mcallister_2107/latest_cytools/compute_kklt_iterative.py`
    confirms the sign convention used by Cyrus,

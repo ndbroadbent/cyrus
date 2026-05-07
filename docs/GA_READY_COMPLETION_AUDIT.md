@@ -697,7 +697,12 @@ This is not yet a chamber certificate, but it identifies the source-derived
 extra ray that the resolved local phase/intersection construction must use.
 Fresh `mcallister_first_principles` context dumps now serialize
 `shared_two_simplex_points`, so that extra ray can be recovered with
-coordinates instead of only by point ID.
+coordinates instead of only by point ID. The context consumer now classifies
+the resolved-support attempt separately; old dumps are blocked at
+`weighted_p2_resolved_shared_support_missing_zero_shared_ray_coordinates`, and
+the declared point coordinates show the naive support with the extra ray has
+affine rank `4`, not a compact threefold phase. The chamber task is therefore
+a projection/chamber-map problem, not an append-the-ray cygv handoff.
 Origin-circuit witness-domain compact `cygv` probes are now opt-in and guarded
 by `--origin-witness-cygv-generator-limit`. The traced target `8` report shows
 the single-generator relation domain computes `GV=2` with one materialized

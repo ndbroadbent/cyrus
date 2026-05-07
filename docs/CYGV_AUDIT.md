@@ -3119,6 +3119,17 @@ origin-circuit witnesses so fresh context dumps will carry the zero-coefficient
 shared ray coordinates. `mcallister_gv_context` accepts older dumps via a
 default empty field; on the old schema-3 dump the point IDs above are present
 but `zero_relation_shared_two_simplex_point_samples` is necessarily empty.
+The context consumer also computes a resolved-support diagnostic when those
+coordinates are available. On old dumps the aggregate is
+`weighted_p2_resolved_shared_support_missing_zero_shared_ray_coordinates=4`.
+A direct check using the declared `points.dat` coordinates for those four
+zero-shared rays shows that simply appending the extra ray raises the affine
+rank to `4` in all four cases, with one zero-sum charge relation:
+target `3`: `[1,0,-2,-1,-1,3]`, target `6`: `[1,-1,-1,0,-2,3]`,
+target `7`: `[1,-2,0,-1,3,-1]`, target `8`: `[1,-2,0,3,-1,-1]`
+in sorted point-index order. This rules out the naive "append the shared ray
+and call compact threefold cygv" path; the next construction needs a projection
+or chamber map, not just a six-column charge handoff.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:
