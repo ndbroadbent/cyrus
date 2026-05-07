@@ -387,6 +387,7 @@ struct CygvPathHistoryProbe {
     predecessor_difference_count: Option<usize>,
     improving_predecessor_difference_count: Option<usize>,
     predecessor_toric_coverage_counts: BTreeMap<String, usize>,
+    predecessor_known_qn_history_counts: BTreeMap<String, usize>,
     closest_series_distance: Option<String>,
     closest_series_predecessor_nonzero: Option<Vec<(usize, i64)>>,
     closest_series_difference_nonzero: Option<Vec<(usize, i64)>>,
@@ -431,6 +432,9 @@ struct CygvPathPredecessorCandidate {
     series_distance: String,
     predecessor_toric_gv: Option<String>,
     difference_toric_gv: Option<String>,
+    predecessor_known_qn_history_status: String,
+    difference_known_qn_history_status: String,
+    known_qn_history_pair_status: String,
     predecessor_is_seed: bool,
     difference_is_seed: bool,
     predecessor_is_reduced_seed: bool,
@@ -470,6 +474,7 @@ struct CygvPathPredecessorStats {
     predecessor_difference_count: usize,
     improving_predecessor_difference_count: usize,
     toric_coverage_counts: BTreeMap<String, usize>,
+    known_qn_history_counts: BTreeMap<String, usize>,
     closest_distance: f64,
     closest_predecessor: Option<Vec<i64>>,
     closest_difference: Option<Vec<i64>>,
@@ -3822,6 +3827,7 @@ fn cygv_path_history_probe(
             predecessor_difference_count: None,
             improving_predecessor_difference_count: None,
             predecessor_toric_coverage_counts: BTreeMap::new(),
+            predecessor_known_qn_history_counts: BTreeMap::new(),
             closest_series_distance: None,
             closest_series_predecessor_nonzero: None,
             closest_series_difference_nonzero: None,
@@ -3893,6 +3899,7 @@ fn cygv_path_history_probe_inner(
             predecessor_difference_count: None,
             improving_predecessor_difference_count: None,
             predecessor_toric_coverage_counts: BTreeMap::new(),
+            predecessor_known_qn_history_counts: BTreeMap::new(),
             closest_series_distance: None,
             closest_series_predecessor_nonzero: None,
             closest_series_difference_nonzero: None,
@@ -3938,6 +3945,7 @@ fn cygv_path_history_probe_inner(
             predecessor_difference_count: None,
             improving_predecessor_difference_count: None,
             predecessor_toric_coverage_counts: BTreeMap::new(),
+            predecessor_known_qn_history_counts: BTreeMap::new(),
             closest_series_distance: None,
             closest_series_predecessor_nonzero: None,
             closest_series_difference_nonzero: None,
@@ -4035,6 +4043,7 @@ fn cygv_path_history_probe_inner(
                 predecessor_stats.improving_predecessor_difference_count,
             ),
             predecessor_toric_coverage_counts: predecessor_stats.toric_coverage_counts,
+            predecessor_known_qn_history_counts: predecessor_stats.known_qn_history_counts,
             closest_series_distance: Some(format!("{:.6}", predecessor_stats.closest_distance)),
             closest_series_predecessor_nonzero: predecessor_stats
                 .closest_predecessor
@@ -4090,6 +4099,7 @@ fn cygv_path_history_probe_inner(
             predecessor_stats.improving_predecessor_difference_count,
         ),
         predecessor_toric_coverage_counts: predecessor_stats.toric_coverage_counts,
+        predecessor_known_qn_history_counts: predecessor_stats.known_qn_history_counts,
         closest_series_distance: Some(format!("{:.6}", predecessor_stats.closest_distance)),
         closest_series_predecessor_nonzero: predecessor_stats
             .closest_predecessor
@@ -4127,6 +4137,22 @@ fn cygv_path_history_probe_inner(
     })
 }
 
+fn known_qn_history_status(toric_gv: Option<&str>) -> Result<&'static str, String> {
+    let Some(gv) = toric_gv else {
+        return Ok("unknown_not_toric_covered");
+    };
+    let parsed = parse_rational(gv)?;
+    if parsed == MalachiteRational::from(0) {
+        Ok("known_zero_toric_gv")
+    } else {
+        Ok("known_nonzero_toric_gv")
+    }
+}
+
+fn known_qn_history_pair_status(predecessor_status: &str, difference_status: &str) -> String {
+    format!("predecessor_{predecessor_status}__difference_{difference_status}")
+}
+
 fn cygv_path_predecessor_stats(
     elements: &HashSet<Vec<i64>>,
     grading: &[i64],
@@ -4144,6 +4170,7 @@ fn cygv_path_predecessor_stats(
     let mut closest_difference = None;
     let mut candidate_sample = Vec::new();
     let mut toric_coverage_counts = BTreeMap::new();
+    let mut known_qn_history_counts = BTreeMap::new();
     let mut sorted_elements = elements.iter().collect::<Vec<_>>();
     sorted_elements.sort();
     for element in sorted_elements {
@@ -4159,6 +4186,16 @@ fn cygv_path_predecessor_stats(
         predecessor_difference_count += 1;
         let predecessor_is_toric_covered = covered_toric_gv_by_basis.contains_key(element);
         let difference_is_toric_covered = covered_toric_gv_by_basis.contains_key(&difference);
+        let predecessor_toric_gv = covered_toric_gv_by_basis.get(element);
+        let difference_toric_gv = covered_toric_gv_by_basis.get(&difference);
+        let predecessor_known_qn_history_status =
+            known_qn_history_status(predecessor_toric_gv.map(String::as_str))?;
+        let difference_known_qn_history_status =
+            known_qn_history_status(difference_toric_gv.map(String::as_str))?;
+        let known_qn_history_pair_status = known_qn_history_pair_status(
+            predecessor_known_qn_history_status,
+            difference_known_qn_history_status,
+        );
         let coverage_key = match (predecessor_is_toric_covered, difference_is_toric_covered) {
             (true, true) => "both_toric_covered",
             (true, false) => "predecessor_only_toric_covered",
@@ -4167,6 +4204,9 @@ fn cygv_path_predecessor_stats(
         };
         *toric_coverage_counts
             .entry(coverage_key.to_string())
+            .or_insert(0) += 1;
+        *known_qn_history_counts
+            .entry(known_qn_history_pair_status.clone())
             .or_insert(0) += 1;
         let difference_degree = curve_degree(&difference, grading)?;
         let distance = cygv_series_distance(&difference);
@@ -4177,8 +4217,13 @@ fn cygv_path_predecessor_stats(
                     predecessor_degree: degree,
                     difference_degree,
                     series_distance: format!("{distance:.6}"),
-                    predecessor_toric_gv: covered_toric_gv_by_basis.get(element).cloned(),
-                    difference_toric_gv: covered_toric_gv_by_basis.get(&difference).cloned(),
+                    predecessor_toric_gv: predecessor_toric_gv.cloned(),
+                    difference_toric_gv: difference_toric_gv.cloned(),
+                    predecessor_known_qn_history_status: predecessor_known_qn_history_status
+                        .to_string(),
+                    difference_known_qn_history_status: difference_known_qn_history_status
+                        .to_string(),
+                    known_qn_history_pair_status: known_qn_history_pair_status.clone(),
                     predecessor_is_seed: seed_set.contains(element),
                     difference_is_seed: seed_set.contains(&difference),
                     predecessor_is_reduced_seed: reduced_seed_set.contains(element),
@@ -4218,8 +4263,13 @@ fn cygv_path_predecessor_stats(
                     predecessor_degree: degree,
                     difference_degree,
                     series_distance: format!("{distance:.6}"),
-                    predecessor_toric_gv: covered_toric_gv_by_basis.get(element).cloned(),
-                    difference_toric_gv: covered_toric_gv_by_basis.get(&difference).cloned(),
+                    predecessor_toric_gv: predecessor_toric_gv.cloned(),
+                    difference_toric_gv: difference_toric_gv.cloned(),
+                    predecessor_known_qn_history_status: predecessor_known_qn_history_status
+                        .to_string(),
+                    difference_known_qn_history_status: difference_known_qn_history_status
+                        .to_string(),
+                    known_qn_history_pair_status: known_qn_history_pair_status.clone(),
                     predecessor_is_seed: seed_set.contains(element),
                     difference_is_seed: seed_set.contains(&difference),
                     predecessor_is_reduced_seed: reduced_seed_set.contains(element),
@@ -4261,6 +4311,7 @@ fn cygv_path_predecessor_stats(
         predecessor_difference_count,
         improving_predecessor_difference_count,
         toric_coverage_counts,
+        known_qn_history_counts,
         closest_distance,
         closest_predecessor,
         closest_difference,
@@ -6773,6 +6824,11 @@ mod tests {
             series_distance: "0.000000".to_string(),
             predecessor_toric_gv: None,
             difference_toric_gv: None,
+            predecessor_known_qn_history_status: "unknown_not_toric_covered".to_string(),
+            difference_known_qn_history_status: "unknown_not_toric_covered".to_string(),
+            known_qn_history_pair_status:
+                "predecessor_unknown_not_toric_covered__difference_unknown_not_toric_covered"
+                    .to_string(),
             predecessor_is_seed: false,
             difference_is_seed: false,
             predecessor_is_reduced_seed: false,
@@ -6804,6 +6860,26 @@ mod tests {
         let support = path_candidate_support(&[0, 5, 0, 0, 0, 0, 0, 1], &[candidate]);
 
         assert_eq!(support, HashSet::from([1, 2, 3, 4, 6, 7]));
+    }
+
+    #[test]
+    fn known_qn_history_status_distinguishes_zero_nonzero_and_unknown() {
+        assert_eq!(
+            known_qn_history_status(Some("0")).unwrap(),
+            "known_zero_toric_gv"
+        );
+        assert_eq!(
+            known_qn_history_status(Some("-3")).unwrap(),
+            "known_nonzero_toric_gv"
+        );
+        assert_eq!(
+            known_qn_history_status(None).unwrap(),
+            "unknown_not_toric_covered"
+        );
+        assert_eq!(
+            known_qn_history_pair_status("known_zero_toric_gv", "unknown_not_toric_covered"),
+            "predecessor_known_zero_toric_gv__difference_unknown_not_toric_covered"
+        );
     }
 
     #[test]
@@ -6880,6 +6956,13 @@ mod tests {
                 .copied(),
             Some(2)
         );
+        assert_eq!(
+            probe
+                .predecessor_known_qn_history_counts
+                .get("predecessor_known_nonzero_toric_gv__difference_known_nonzero_toric_gv")
+                .copied(),
+            Some(2)
+        );
         assert_eq!(probe.closest_series_distance.as_deref(), Some("1.000000"));
         assert_eq!(probe.closest_series_predecessor_nonzero, Some(vec![(1, 1)]));
         assert_eq!(probe.closest_series_difference_nonzero, Some(vec![(0, 1)]));
@@ -6907,6 +6990,18 @@ mod tests {
                 .difference_toric_gv
                 .as_deref(),
             Some("11")
+        );
+        assert_eq!(
+            probe.predecessor_candidate_sample[0].predecessor_known_qn_history_status,
+            "known_nonzero_toric_gv"
+        );
+        assert_eq!(
+            probe.predecessor_candidate_sample[0].difference_known_qn_history_status,
+            "known_nonzero_toric_gv"
+        );
+        assert_eq!(
+            probe.predecessor_candidate_sample[0].known_qn_history_pair_status,
+            "predecessor_known_nonzero_toric_gv__difference_known_nonzero_toric_gv"
         );
         assert!(probe.predecessor_candidate_sample[0].predecessor_is_seed);
         assert!(probe.predecessor_candidate_sample[0].difference_is_seed);

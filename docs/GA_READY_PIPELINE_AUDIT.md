@@ -460,7 +460,15 @@ to make the remaining GV layer more first-principles:
    history for these higher-rank origin circuits, or to certify a
    flop/Weyl-continuation chain that supplies the data from another chamber,
    not to promote LP active-generator diamonds or reuse the rank-two
-   local-surface machinery.
+   local-surface machinery. The path-history report now makes this distinction
+   explicit by classifying sampled predecessor/difference pairs by whether
+   they have source-derived nonzero toric GV values that could enter
+   `cygv`'s live `previous_qn` cache. For both degree-10 targets, the eight
+   first-layer predecessor differences contain no pair where both sides are
+   known nonzero lower-degree history: the split is `2/2/4` across
+   known-nonzero/unknown, unknown/known-nonzero, and unknown/unknown. Raw
+   predecessor decomposability is therefore not enough to explain the missing
+   corrected-chamber GV value.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.
    The exact classical-data transform is now available as

@@ -193,7 +193,14 @@ and matrix-basis pipeline are no longer open.
    target `8` uses support size `6` with `7` generators, and both return
    `GV=0`. This keeps the missing object at the certified compact/chamber
    semigroup and degree-ordered subtraction history level, not a small support
-   subset.
+   subset. The path-history probe now also separates raw predecessor existence
+   from `cygv`-style live qN history: for both degree-10 targets, the eight
+   sampled predecessor differences split as two known-nonzero toric plus
+   unknown pairs, two unknown plus known-nonzero toric pairs, and four
+   unknown/unknown pairs. No sampled pair has both sides certified as known
+   nonzero lower-degree history, so the next compact-GV task is still the
+   unknown lower-degree non-toric history or a certified chamber-continuation
+   source for it.
 5. **Potent-ray local diagnostics.** Rank-two N=10 and rank-four potent-ray
    rows are still incomplete, but they are validation diagnostics rather than
    blockers for the compact GA-ready GV engine.

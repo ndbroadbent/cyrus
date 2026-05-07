@@ -2052,3 +2052,23 @@ or potent-ray GV values must recreate the finite semigroup and lower-degree
 residual history used for the target class. A target curve class plus a
 plausible local charge matrix is insufficient unless it induces the same
 monomial domain and lower-degree subtraction path.
+
+The path-history probe now separates raw semigroup predecessor pairs from
+classes that would actually enter `cygv`'s `previous_qn` cache. Source-read
+`series_inversion::invert_series` only caches qN polynomials for classes whose
+extracted lower-degree GV/GW value is nonzero. The diagnostic therefore labels
+each sampled predecessor/difference as `known_nonzero_toric_gv`,
+`known_zero_toric_gv`, or `unknown_not_toric_covered`, and aggregates pair
+statuses separately from the older toric-covered counts. Rerunning the
+degree-10 targets on the schema-3 context with one complete closure generation
+shows the same result for targets `7` and `8`: eight predecessor differences,
+with qN-history counts
+`predecessor_known_nonzero_toric_gv__difference_unknown_not_toric_covered=2`,
+`predecessor_unknown_not_toric_covered__difference_known_nonzero_toric_gv=2`,
+and
+`predecessor_unknown_not_toric_covered__difference_unknown_not_toric_covered=4`.
+No sampled pair has both sides certified as known nonzero lower-degree history,
+and the actual-`cygv` path-support generator probe still returns `GV=0` for
+both targets. The missing datum is therefore lower-degree non-toric compact
+history or a certified chamber/continuation source for it, not mere existence
+of a semigroup predecessor pair.
