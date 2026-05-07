@@ -2577,6 +2577,15 @@ path-support `q_N` polynomial is present. The remaining missing object is
 therefore not the scalar source row or its local unit `q_N`; it is the
 certified corrected-chamber history that makes the degree-ten target itself
 nonzero.
+The report now also records lower `q_N` polynomials whose term support contains
+the target monomial. For both degree-ten targets the path-support domain has
+three such lower sources: the toric degree-two predecessor, the shared
+source-derived degree-six row, and the unknown degree-eight residual. In the
+fresh target-`7` report their target-term coefficients are `-2`, `-1`, and
+`1`; target `8` has the same coefficient pattern. This is exactly the
+`cygv` series-inversion mechanism we need to certify in the real chamber: the
+target can be affected by lower `q_N` history even when no target `q_N`
+polynomial is materialized.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use

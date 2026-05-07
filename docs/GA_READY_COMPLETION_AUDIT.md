@@ -309,7 +309,11 @@ and matrix-basis pipeline are no longer open.
    inside `cygv` series inversion with non-integer GV output. The path-support
    domains do materialize lower compact `q_N` polynomials, including the shared
    ready source-derived degree-six predecessor, but both target domains still
-   return target `GV=0` with no target `q_N` polynomial.
+   return target `GV=0` with no target `q_N` polynomial. The path-support
+   report now explicitly lists lower `q_N` polynomials that contain the target
+   monomial: for both target `7` and target `8`, these are the toric degree-two
+   predecessor, the shared source-derived degree-six row, and the unknown
+   degree-eight residual, with target-term coefficients `-2`, `-1`, and `1`.
    The path-history report now also mirrors `cygv`'s nearest live-`q_N`
    predecessor selection. The closest certified qN predecessor for target `7`
    is the toric degree-two class `[(44,1),(54,1),(206,-2)]` with an unknown

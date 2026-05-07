@@ -31,6 +31,7 @@ use cyrus_core::{
 const CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT: usize = 32;
 const CYGV_PATH_SUPPORT_QN_TRACE_SAMPLE_LIMIT: usize = 16;
 const CYGV_PATH_SUPPORT_QN_TRACE_TERM_SAMPLE_LIMIT: usize = 16;
+const CYGV_PATH_SUPPORT_TARGET_MONOMIAL_QN_SOURCE_SAMPLE_LIMIT: usize = 16;
 const ORIGIN_CIRCUIT_WITNESS_DOMAIN_UNRESOLVED_SAMPLE_LIMIT: usize = 64;
 const ORIGIN_CIRCUIT_WITNESS_DOMAIN_OCCURRENCE_SAMPLE_LIMIT: usize = 8;
 
@@ -580,6 +581,8 @@ struct CygvPathHistoryProbe {
     path_support_target_qn_trace_status: Option<String>,
     path_support_target_qn_trace_term_count: Option<usize>,
     path_support_qn_trace_sample: Vec<CygvPathSupportQnTracePolynomialSample>,
+    path_support_target_monomial_qn_source_count: Option<usize>,
+    path_support_target_monomial_qn_source_sample: Vec<CygvPathSupportTargetMonomialQnSource>,
     path_support_error: Option<String>,
     path_support_lookup_status_counts: BTreeMap<String, usize>,
     path_support_qn_trace_status_counts: BTreeMap<String, usize>,
@@ -711,6 +714,18 @@ struct CygvPathSupportQnTraceTermSample {
     monomial_index: usize,
     exponent_nonzero: Vec<(usize, i64)>,
     coefficient: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CygvPathSupportTargetMonomialQnSource {
+    element_index: usize,
+    degree: u32,
+    curve_nonzero: Vec<(usize, i64)>,
+    curve_gv: Option<String>,
+    term_count: usize,
+    target_term_count: usize,
+    target_term_monomial_indices: Vec<usize>,
+    target_term_coefficients: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1038,6 +1053,8 @@ struct PathSupportGeneratorProbe {
     target_qn_trace_status: Option<String>,
     target_qn_trace_term_count: Option<usize>,
     qn_trace_sample: Vec<CygvPathSupportQnTracePolynomialSample>,
+    target_monomial_qn_source_count: Option<usize>,
+    target_monomial_qn_source_sample: Vec<CygvPathSupportTargetMonomialQnSource>,
     error: Option<String>,
     lookup_status_counts: BTreeMap<String, usize>,
     qn_trace_status_counts: BTreeMap<String, usize>,
@@ -1479,6 +1496,8 @@ fn path_support_generator_probe(
             target_qn_trace_status: None,
             target_qn_trace_term_count: None,
             qn_trace_sample: Vec::new(),
+            target_monomial_qn_source_count: None,
+            target_monomial_qn_source_sample: Vec::new(),
             error: None,
             lookup_status_counts: BTreeMap::new(),
             qn_trace_status_counts: BTreeMap::new(),
@@ -1497,6 +1516,8 @@ fn path_support_generator_probe(
             target_qn_trace_status: None,
             target_qn_trace_term_count: None,
             qn_trace_sample: Vec::new(),
+            target_monomial_qn_source_count: None,
+            target_monomial_qn_source_sample: Vec::new(),
             error: Some(error),
             lookup_status_counts: BTreeMap::new(),
             qn_trace_status_counts: BTreeMap::new(),
@@ -1523,6 +1544,8 @@ fn path_support_generator_probe_inner(
             target_qn_trace_status: None,
             target_qn_trace_term_count: None,
             qn_trace_sample: Vec::new(),
+            target_monomial_qn_source_count: None,
+            target_monomial_qn_source_sample: Vec::new(),
             error: None,
             lookup_status_counts: BTreeMap::new(),
             qn_trace_status_counts: BTreeMap::new(),
@@ -1578,6 +1601,8 @@ fn path_support_generator_probe_inner(
                 target_qn_trace_status: None,
                 target_qn_trace_term_count: None,
                 qn_trace_sample: Vec::new(),
+                target_monomial_qn_source_count: None,
+                target_monomial_qn_source_sample: Vec::new(),
                 error: Some(format!("path_support_generators HKTY failed: {error}")),
                 lookup_status_counts: BTreeMap::new(),
                 qn_trace_status_counts: BTreeMap::new(),
@@ -1595,6 +1620,8 @@ fn path_support_generator_probe_inner(
                 target_qn_trace_status: None,
                 target_qn_trace_term_count: None,
                 qn_trace_sample: Vec::new(),
+                target_monomial_qn_source_count: None,
+                target_monomial_qn_source_sample: Vec::new(),
                 error: Some(format!(
                     "path_support_generators HKTY panicked: {}",
                     panic_payload_message(payload.as_ref())
@@ -1618,6 +1645,13 @@ fn path_support_generator_probe_inner(
         .into_iter()
         .map(|(curve, value)| (curve, value.to_string()))
         .collect::<HashMap<_, _>>();
+    let target_monomial_qn_sources =
+        path_support_target_monomial_qn_sources(&traced.qn_trace, &gvs_by_curve, &target_i32);
+    let target_monomial_qn_source_count = target_monomial_qn_sources.len();
+    let target_monomial_qn_source_sample = target_monomial_qn_sources
+        .into_iter()
+        .take(CYGV_PATH_SUPPORT_TARGET_MONOMIAL_QN_SOURCE_SAMPLE_LIMIT)
+        .collect();
     let gv = gvs_by_curve
         .get(&target_i32)
         .cloned()
@@ -1641,6 +1675,8 @@ fn path_support_generator_probe_inner(
         target_qn_trace_status: Some(target_qn_trace_status),
         target_qn_trace_term_count,
         qn_trace_sample,
+        target_monomial_qn_source_count: Some(target_monomial_qn_source_count),
+        target_monomial_qn_source_sample,
         error: None,
         lookup_status_counts,
         qn_trace_status_counts,
@@ -3143,6 +3179,42 @@ fn path_support_qn_trace_sample(
                     coefficient: term.coefficient.clone(),
                 })
                 .collect(),
+        })
+        .collect()
+}
+
+fn path_support_target_monomial_qn_sources(
+    qn_trace: &[CygvQnTracePolynomial],
+    gvs_by_curve: &HashMap<Vec<i32>, String>,
+    target: &[i32],
+) -> Vec<CygvPathSupportTargetMonomialQnSource> {
+    qn_trace
+        .iter()
+        .filter_map(|poly| {
+            let target_terms = poly
+                .terms
+                .iter()
+                .filter(|term| term.exponent.as_slice() == target)
+                .collect::<Vec<_>>();
+            if target_terms.is_empty() {
+                return None;
+            }
+            Some(CygvPathSupportTargetMonomialQnSource {
+                element_index: poly.element_index,
+                degree: poly.degree,
+                curve_nonzero: sparse_from_i32_dense(&poly.element),
+                curve_gv: gvs_by_curve.get(&poly.element).cloned(),
+                term_count: poly.terms.len(),
+                target_term_count: target_terms.len(),
+                target_term_monomial_indices: target_terms
+                    .iter()
+                    .map(|term| term.monomial_index)
+                    .collect(),
+                target_term_coefficients: target_terms
+                    .iter()
+                    .map(|term| term.coefficient.clone())
+                    .collect(),
+            })
         })
         .collect()
 }
@@ -7395,6 +7467,8 @@ fn cygv_path_history_probe(
             path_support_target_qn_trace_status: None,
             path_support_target_qn_trace_term_count: None,
             path_support_qn_trace_sample: Vec::new(),
+            path_support_target_monomial_qn_source_count: None,
+            path_support_target_monomial_qn_source_sample: Vec::new(),
             path_support_error: None,
             path_support_lookup_status_counts: BTreeMap::new(),
             path_support_qn_trace_status_counts: BTreeMap::new(),
@@ -7476,6 +7550,8 @@ fn cygv_path_history_probe_inner(
             path_support_target_qn_trace_status: None,
             path_support_target_qn_trace_term_count: None,
             path_support_qn_trace_sample: Vec::new(),
+            path_support_target_monomial_qn_source_count: None,
+            path_support_target_monomial_qn_source_sample: Vec::new(),
             path_support_error: None,
             path_support_lookup_status_counts: BTreeMap::new(),
             path_support_qn_trace_status_counts: BTreeMap::new(),
@@ -7533,6 +7609,8 @@ fn cygv_path_history_probe_inner(
             path_support_target_qn_trace_status: None,
             path_support_target_qn_trace_term_count: None,
             path_support_qn_trace_sample: Vec::new(),
+            path_support_target_monomial_qn_source_count: None,
+            path_support_target_monomial_qn_source_sample: Vec::new(),
             path_support_error: None,
             path_support_lookup_status_counts: BTreeMap::new(),
             path_support_qn_trace_status_counts: BTreeMap::new(),
@@ -7664,6 +7742,10 @@ fn cygv_path_history_probe_inner(
             path_support_target_qn_trace_term_count: path_support_generators
                 .target_qn_trace_term_count,
             path_support_qn_trace_sample: path_support_generators.qn_trace_sample,
+            path_support_target_monomial_qn_source_count: path_support_generators
+                .target_monomial_qn_source_count,
+            path_support_target_monomial_qn_source_sample: path_support_generators
+                .target_monomial_qn_source_sample,
             path_support_error: path_support_generators.error,
             path_support_lookup_status_counts: path_support_generators.lookup_status_counts,
             path_support_qn_trace_status_counts: path_support_generators.qn_trace_status_counts,
@@ -7732,6 +7814,10 @@ fn cygv_path_history_probe_inner(
         path_support_target_qn_trace_status: path_support_generators.target_qn_trace_status,
         path_support_target_qn_trace_term_count: path_support_generators.target_qn_trace_term_count,
         path_support_qn_trace_sample: path_support_generators.qn_trace_sample,
+        path_support_target_monomial_qn_source_count: path_support_generators
+            .target_monomial_qn_source_count,
+        path_support_target_monomial_qn_source_sample: path_support_generators
+            .target_monomial_qn_source_sample,
         path_support_error: path_support_generators.error,
         path_support_lookup_status_counts: path_support_generators.lookup_status_counts,
         path_support_qn_trace_status_counts: path_support_generators.qn_trace_status_counts,
@@ -10752,6 +10838,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cyrus_core::CygvQnTraceTerm;
 
     #[test]
     fn dense_from_sparse_rejects_duplicate_or_out_of_bounds_entries() {
@@ -13417,6 +13504,68 @@ mod tests {
             vec![(0, 1)]
         );
         assert_eq!(probe.qn_trace_sample[0].term_sample[0].coefficient, "1");
+        assert_eq!(probe.target_monomial_qn_source_count, Some(1));
+        assert_eq!(probe.target_monomial_qn_source_sample.len(), 1);
+        assert_eq!(
+            probe.target_monomial_qn_source_sample[0].curve_nonzero,
+            vec![(0, 1)]
+        );
+        assert_eq!(
+            probe.target_monomial_qn_source_sample[0].target_term_coefficients,
+            vec!["1"]
+        );
+    }
+
+    #[test]
+    fn path_support_target_monomial_qn_sources_find_lower_qn_terms() {
+        let trace = vec![
+            CygvQnTracePolynomial {
+                element_index: 7,
+                degree: 8,
+                element: vec![1, -1, 0],
+                terms: vec![
+                    CygvQnTraceTerm {
+                        monomial_index: 7,
+                        exponent: vec![1, -1, 0],
+                        coefficient: "1".to_string(),
+                    },
+                    CygvQnTraceTerm {
+                        monomial_index: 11,
+                        exponent: vec![2, -3, 1],
+                        coefficient: "-2".to_string(),
+                    },
+                    CygvQnTraceTerm {
+                        monomial_index: 13,
+                        exponent: vec![2, -3, 1],
+                        coefficient: "1".to_string(),
+                    },
+                ],
+            },
+            CygvQnTracePolynomial {
+                element_index: 9,
+                degree: 10,
+                element: vec![0, 1, -1],
+                terms: vec![CygvQnTraceTerm {
+                    monomial_index: 9,
+                    exponent: vec![0, 1, -1],
+                    coefficient: "1".to_string(),
+                }],
+            },
+        ];
+        let mut gvs_by_curve = HashMap::new();
+        gvs_by_curve.insert(vec![1, -1, 0], "-2".to_string());
+
+        let sources = path_support_target_monomial_qn_sources(&trace, &gvs_by_curve, &[2, -3, 1]);
+
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].element_index, 7);
+        assert_eq!(sources[0].degree, 8);
+        assert_eq!(sources[0].curve_nonzero, vec![(0, 1), (1, -1)]);
+        assert_eq!(sources[0].curve_gv.as_deref(), Some("-2"));
+        assert_eq!(sources[0].term_count, 3);
+        assert_eq!(sources[0].target_term_count, 2);
+        assert_eq!(sources[0].target_term_monomial_indices, vec![11, 13]);
+        assert_eq!(sources[0].target_term_coefficients, vec!["-2", "1"]);
     }
 
     #[test]

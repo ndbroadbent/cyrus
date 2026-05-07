@@ -399,7 +399,13 @@ to make the remaining GV layer more first-principles:
    path-support domains are internally integral and materialize compact lower
    `q_N` polynomials (`11` for target `7`, `6` for target `8`), but both still
    return target `GV=0` with no target `q_N` polynomial. This keeps the blocker
-   at certified corrected-chamber history, not qN observability.
+   at certified corrected-chamber history, not qN observability. The path
+   support report now also identifies lower `q_N` polynomials containing the
+   target monomial directly. For both degree-10 targets there are three such
+   lower sources: the toric degree-two predecessor, the shared source-derived
+   degree-six row, and the unknown degree-eight residual, with target-term
+   coefficients `-2`, `-1`, and `1`. This exposes the series-inversion
+   cancellation/history that must be reproduced in a certified chamber.
    A direct cygv semigroup-size diagnostic now confirms why: the degree-10
    missing targets already have `720` seed rows at or below the target degree,
    and an unguarded cygv semigroup closure measurement did not finish within
