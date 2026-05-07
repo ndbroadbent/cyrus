@@ -193,6 +193,11 @@ and matrix-basis pipeline are no longer open.
    fitted local tensor. A bounded unit-tensor comparison sharpens this: the
    `[-1,-2,1,1,1]` lower ray gives the expected `-2` with unit tensor `1`, but
    the `[-1,1,-1,1,-1,1]` lower ray still gives `0` against expected `1`.
+   An explicit origin-omitted phase diagnostic then drops the origin/canonical
+   divisor column before the unit-tensor `cygv` call: this matches the
+   resolved-conifold-like row (`1` against expected `1`) and rejects the
+   `[-1,-2,1,1,1]` row with the compact-HKTY dimension guard. This is evidence
+   for the local `q` phase convention, not a chamber certificate.
    The first seed-sum
    sample for the degree-8 side splits it as another toric-covered degree-2
    reduced seed plus an uncovered degree-6 seed that does not survive pair

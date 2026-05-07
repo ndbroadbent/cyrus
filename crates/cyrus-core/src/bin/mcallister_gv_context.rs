@@ -571,9 +571,12 @@ struct LocalCygvPrimitiveProbe {
     candidate_gv: Option<String>,
     unit_tensor_candidate_gv: Option<String>,
     unit_tensor_probe_status: String,
+    origin_omitted_unit_tensor_candidate_gv: Option<String>,
+    origin_omitted_unit_tensor_probe_status: String,
     expected_toric_gv1_formula_value: Option<String>,
     error: Option<String>,
     unit_tensor_error: Option<String>,
+    origin_omitted_unit_tensor_error: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1656,11 +1659,15 @@ fn local_cygv_primitive_probe_from_cms_divisor(
             candidate_gv: None,
             unit_tensor_candidate_gv: None,
             unit_tensor_probe_status: "unit_tensor_probe_not_run_raw_cubic_nonintegral".to_string(),
+            origin_omitted_unit_tensor_candidate_gv: None,
+            origin_omitted_unit_tensor_probe_status:
+                "origin_omitted_unit_tensor_probe_not_run_raw_cubic_nonintegral".to_string(),
             expected_toric_gv1_formula_value,
             error: Some(format!(
                 "raw cubic candidate {divisor_cubic_self_intersection} is not integral"
             )),
             unit_tensor_error: None,
+            origin_omitted_unit_tensor_error: None,
         });
     }
 
@@ -1677,9 +1684,13 @@ fn local_cygv_primitive_probe_from_cms_divisor(
                 candidate_gv: None,
                 unit_tensor_candidate_gv: None,
                 unit_tensor_probe_status: "unit_tensor_probe_not_run_raw_cubic_failed".to_string(),
+                origin_omitted_unit_tensor_candidate_gv: None,
+                origin_omitted_unit_tensor_probe_status:
+                    "origin_omitted_unit_tensor_probe_not_run_raw_cubic_failed".to_string(),
                 expected_toric_gv1_formula_value,
                 error: Some(error),
                 unit_tensor_error: None,
+                origin_omitted_unit_tensor_error: None,
             });
         }
     };
@@ -1714,6 +1725,40 @@ fn local_cygv_primitive_probe_from_cms_divisor(
             Some(error),
         ),
     };
+    let origin_omitted_q_matrix = local_origin_omitted_wrapper_q_matrix(skeleton)?;
+    let (
+        origin_omitted_unit_tensor_candidate_gv,
+        origin_omitted_unit_tensor_probe_status,
+        origin_omitted_unit_tensor_error,
+    ) = match origin_omitted_q_matrix {
+        Some(origin_omitted_q_matrix) => match one_parameter_primitive_cygv_value(
+            &origin_omitted_q_matrix,
+            &grading_vector,
+            &semigroup_elements,
+            MalachiteRational::from(1),
+        ) {
+            Ok(origin_omitted_gv) => {
+                let status = match expected_toric_gv1_formula_value.as_deref() {
+                    Some(expected) if expected == origin_omitted_gv => {
+                        "origin_omitted_unit_tensor_probe_matches_expected_formula_but_phase_uncertified"
+                    }
+                    Some(_) => "origin_omitted_unit_tensor_probe_mismatch",
+                    None => "origin_omitted_unit_tensor_probe_computed_without_expected_formula",
+                };
+                (Some(origin_omitted_gv), status.to_string(), None)
+            }
+            Err(error) => (
+                None,
+                "origin_omitted_unit_tensor_probe_hkty_error".to_string(),
+                Some(error),
+            ),
+        },
+        None => (
+            None,
+            "origin_omitted_unit_tensor_probe_not_run_no_origin_column".to_string(),
+            None,
+        ),
+    };
     Ok(LocalCygvPrimitiveProbe {
         status: status.to_string(),
         q_matrix,
@@ -1722,10 +1767,48 @@ fn local_cygv_primitive_probe_from_cms_divisor(
         candidate_gv: Some(gvs),
         unit_tensor_candidate_gv,
         unit_tensor_probe_status,
+        origin_omitted_unit_tensor_candidate_gv,
+        origin_omitted_unit_tensor_probe_status,
         expected_toric_gv1_formula_value,
         error: None,
         unit_tensor_error,
+        origin_omitted_unit_tensor_error,
     })
+}
+
+fn local_origin_omitted_wrapper_q_matrix(
+    skeleton: &LocalCygvInputSkeleton,
+) -> Result<Option<Vec<Vec<i64>>>, String> {
+    let Some(origin_position) = skeleton
+        .support_point_indices
+        .iter()
+        .position(|&point_index| point_index == 0)
+    else {
+        return Ok(None);
+    };
+    let Some(q_matrix) = skeleton.local_cygv_wrapper_q_matrix_candidate.as_ref() else {
+        return Ok(None);
+    };
+    if q_matrix
+        .iter()
+        .any(|row| row.len() != skeleton.support_point_indices.len())
+    {
+        return Err("local origin-omitted q matrix support width mismatch".to_string());
+    }
+    let mut omitted = Vec::with_capacity(q_matrix.len());
+    for row in q_matrix {
+        let mut new_row = Vec::with_capacity(row.len().saturating_sub(1));
+        for (idx, &entry) in row.iter().enumerate() {
+            if idx != origin_position {
+                new_row.push(entry);
+            }
+        }
+        if new_row.is_empty() {
+            return Ok(None);
+        }
+        omitted.push(new_row);
+    }
+    Ok(Some(omitted))
 }
 
 fn one_parameter_primitive_cygv_value(
@@ -8809,9 +8892,13 @@ mod tests {
                         unit_tensor_probe_status:
                             "unit_tensor_probe_matches_expected_formula_but_chamber_uncertified"
                                 .to_string(),
+                        origin_omitted_unit_tensor_candidate_gv: None,
+                        origin_omitted_unit_tensor_probe_status:
+                            "origin_omitted_unit_tensor_probe_not_run_no_origin_column".to_string(),
                         expected_toric_gv1_formula_value: Some("-2".to_string()),
                         error: None,
                         unit_tensor_error: None,
+                        origin_omitted_unit_tensor_error: None,
                     }),
                 },
                 CmsGeneralDivisorSolutionSummary {
@@ -9066,9 +9153,129 @@ mod tests {
         );
         assert_eq!(probe.q_matrix, vec![vec![-1, -2, 1, 1, 1]]);
         assert_eq!(probe.candidate_gv.as_deref(), Some("-6"));
+        assert_eq!(probe.unit_tensor_candidate_gv.as_deref(), Some("-2"));
+        assert_eq!(
+            probe.unit_tensor_probe_status,
+            "unit_tensor_probe_matches_expected_formula_but_chamber_uncertified"
+        );
+        assert_eq!(
+            probe.origin_omitted_unit_tensor_probe_status,
+            "origin_omitted_unit_tensor_probe_hkty_error"
+        );
+        assert!(
+            probe
+                .origin_omitted_unit_tensor_error
+                .as_deref()
+                .is_some_and(|error| error.contains("dimension of the CY must be at least three"))
+        );
         assert_eq!(
             probe.expected_toric_gv1_formula_value.as_deref(),
             Some("-2")
+        );
+    }
+
+    #[test]
+    fn cms_solution_summary_origin_omitted_probe_checks_origin_phase() {
+        let mut sample = minimal_missing_sample(vec![(0, 1)]);
+        sample.origin_circuit_first_witness = Some(OriginCircuitWitnessSample {
+            first_facet_exclusive_point: 3,
+            second_facet_exclusive_point: 4,
+            shared_two_simplex: vec![1, 2],
+            first_facet: Vec::new(),
+            second_facet: Vec::new(),
+            first_facet_size: 2,
+            second_facet_size: 2,
+            sparse_relation: vec![(0, -1), (1, 1), (2, -1), (3, 1), (4, -1), (5, 1)],
+            relation_points: vec![
+                OriginCircuitRelationPointSample {
+                    point_index: 0,
+                    coefficient: -1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 1,
+                    coefficient: 1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 2,
+                    coefficient: -1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 3,
+                    coefficient: 1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 4,
+                    coefficient: -1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 5,
+                    coefficient: 1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+            ],
+        });
+        sample.origin_circuit_affine_support = Some(OriginCircuitAffineSupportSample {
+            affine_rank: 4,
+            coefficient_counts: BTreeMap::new(),
+            local_charge_basis: vec![vec![1, -1, 1, -1, 1, -1]],
+            local_coordinates: Vec::new(),
+            local_coordinates_2d: None,
+        });
+        sample.cms_general_divisor_shape_candidates = Some(vec![CmsGeneralDivisorShapeCandidate {
+            shrinking_divisor_index: 1,
+            shrinking_divisor_coefficient: 1,
+            shrinking_divisor_coordinates: Vec::new(),
+            inferred_other_normal_degree: -1,
+            toric_gv1_formula_value: Some(1),
+            all_non_origin_relation_points_are_two_face: false,
+        }]);
+        sample.cms_general_divisor_intersection_checks =
+            Some(vec![CmsGeneralDivisorIntersectionCheck {
+                shrinking_divisor_index: 1,
+                has_rational_divisor_solution: true,
+                solution_basis_support_len: Some(1),
+                solution_basis_nonzero: Some(vec![(0, "1".to_string())]),
+                solution_ambient_basis_nonzero: Some(vec![(1, "1".to_string())]),
+                solution_is_integral: Some(true),
+                computed_other_normal_degree: Some("-1".to_string()),
+                matches_inferred_other_normal_degree: Some(true),
+            }]);
+        let mut intersection = Intersection::new(1);
+        intersection.set(
+            0,
+            0,
+            0,
+            Rational::<Finite>::new(MalachiteRational::from(26)),
+        );
+
+        let summaries =
+            cms_general_divisor_solution_summaries(Some(&sample), &intersection).unwrap();
+        let probe = summaries[0]
+            .local_cygv_primitive_probe
+            .as_ref()
+            .expect("one-parameter CMS summary should run primitive cygv probe");
+
+        assert_eq!(probe.q_matrix, vec![vec![-1, 1, -1, 1, -1, 1]]);
+        assert_eq!(probe.candidate_gv.as_deref(), Some("0"));
+        assert_eq!(probe.unit_tensor_candidate_gv.as_deref(), Some("0"));
+        assert_eq!(
+            probe.origin_omitted_unit_tensor_candidate_gv.as_deref(),
+            Some("1")
+        );
+        assert_eq!(
+            probe.origin_omitted_unit_tensor_probe_status,
+            "origin_omitted_unit_tensor_probe_matches_expected_formula_but_phase_uncertified"
         );
     }
 
