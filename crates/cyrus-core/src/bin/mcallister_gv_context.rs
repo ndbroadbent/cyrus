@@ -16,6 +16,7 @@ use std::path::PathBuf;
 use cyrus_core::gv::{
     SupportingMoriFaceLpSearchOptions, certify_supporting_mori_face_by_exact_kernel,
     certify_supporting_mori_face_by_lp_search, cygv_pair_reduced_seed_generators,
+    find_extremal_mori_ray_separator,
 };
 use cyrus_core::types::rational::Rational;
 use cyrus_core::types::tags::Finite;
@@ -180,6 +181,7 @@ struct ContextReport {
     origin_circuit_facet_context_status_counts: BTreeMap<String, usize>,
     active_support_status_counts: BTreeMap<String, usize>,
     active_support_face_certificate_status_counts: BTreeMap<String, usize>,
+    target_extremal_ray_certificate_status_counts: BTreeMap<String, usize>,
     origin_relation_support_face_certificate_status_counts: BTreeMap<String, usize>,
     origin_shared_facet_face_certificate_status_counts: BTreeMap<String, usize>,
     origin_facet_union_face_certificate_status_counts: BTreeMap<String, usize>,
@@ -209,6 +211,7 @@ struct TargetReport {
     real_cone_decomposable_by_other_generators: bool,
     ambient_nonzero: Vec<(usize, i64)>,
     basis_nonzero: Vec<(usize, i64)>,
+    target_extremal_ray_certificate: Option<TargetExtremalRayCertificateProbe>,
     target_cygv_negative_intersections: Option<usize>,
     target_cygv_omega_bucket: Option<String>,
     target_cygv_series_coordinate: Option<usize>,
@@ -252,6 +255,15 @@ struct TargetReport {
     cygv_semigroup_error: Option<String>,
     cygv_semigroup_degree_ladder: Option<Vec<CygvSemigroupDegreeLadderStep>>,
     cygv_path_history_probe: Option<CygvPathHistoryProbe>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct TargetExtremalRayCertificateProbe {
+    status: String,
+    same_ray_generator_count: Option<usize>,
+    zero_other_generator_count: Option<usize>,
+    positive_other_generator_count: Option<usize>,
+    separator_normal_nonzero: Option<Vec<(usize, i64)>>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1270,6 +1282,72 @@ fn status_error_fragment(error: &str) -> String {
     out.trim_matches('_').to_string()
 }
 
+fn target_extremal_ray_certificate_probe(
+    sample: &MissingGvTargetSample,
+    target: &[i64],
+    context: &ValidatedContext<'_>,
+    run: bool,
+    generator_limit: usize,
+    max_target_degree: Option<i128>,
+) -> Option<TargetExtremalRayCertificateProbe> {
+    if !run {
+        return None;
+    }
+    if !sample.is_mori_generator {
+        return Some(TargetExtremalRayCertificateProbe {
+            status: "skipped_non_mori_generator".to_string(),
+            same_ray_generator_count: None,
+            zero_other_generator_count: None,
+            positive_other_generator_count: None,
+            separator_normal_nonzero: None,
+        });
+    }
+    if max_target_degree.is_some_and(|max_degree| sample.degree > max_degree) {
+        return Some(TargetExtremalRayCertificateProbe {
+            status: "skipped_target_degree_limit".to_string(),
+            same_ray_generator_count: None,
+            zero_other_generator_count: None,
+            positive_other_generator_count: None,
+            separator_normal_nonzero: None,
+        });
+    }
+    if context.degree_bounded_rays.len() > generator_limit {
+        return Some(TargetExtremalRayCertificateProbe {
+            status: format!(
+                "skipped_generator_limit_{generator_limit}_actual_{}",
+                context.degree_bounded_rays.len()
+            ),
+            same_ray_generator_count: None,
+            zero_other_generator_count: None,
+            positive_other_generator_count: None,
+            separator_normal_nonzero: None,
+        });
+    }
+    match find_extremal_mori_ray_separator(target, context.degree_bounded_rays) {
+        Ok(Some(certificate)) => Some(TargetExtremalRayCertificateProbe {
+            status: "certified_exact_extremal_ray".to_string(),
+            same_ray_generator_count: Some(certificate.same_ray_generator_count),
+            zero_other_generator_count: Some(certificate.zero_other_generator_count),
+            positive_other_generator_count: Some(certificate.positive_other_generator_count),
+            separator_normal_nonzero: Some(sparse_from_dense(&certificate.separator_normal)),
+        }),
+        Ok(None) => Some(TargetExtremalRayCertificateProbe {
+            status: "not_certified_as_extremal_ray".to_string(),
+            same_ray_generator_count: None,
+            zero_other_generator_count: None,
+            positive_other_generator_count: None,
+            separator_normal_nonzero: None,
+        }),
+        Err(error) => Some(TargetExtremalRayCertificateProbe {
+            status: format!("error_{}", status_error_fragment(&error.to_string())),
+            same_ray_generator_count: None,
+            zero_other_generator_count: None,
+            positive_other_generator_count: None,
+            separator_normal_nonzero: None,
+        }),
+    }
+}
+
 fn degree_bounded_ray_context_support_generators(
     ray_context: &[DegreeBoundedMoriRayContextSample],
     max_degree: i128,
@@ -2096,6 +2174,9 @@ fn report_target(
     support_overlap_pair_reduce_for_run: bool,
     certify_origin_support_domains: bool,
     origin_support_certificate_limit: usize,
+    certify_target_extremal_rays: bool,
+    target_extremal_generator_limit: usize,
+    target_extremal_max_degree: Option<i128>,
     measure_cygv_semigroups: bool,
     probe_cygv_path_history: bool,
     run_lower_seed_diamonds: bool,
@@ -2159,6 +2240,7 @@ fn report_target(
                     .real_cone_decomposable_by_other_generators,
                 ambient_nonzero: sample.ambient_nonzero.clone(),
                 basis_nonzero: sample.basis_nonzero.clone(),
+                target_extremal_ray_certificate: None,
                 target_cygv_negative_intersections: None,
                 target_cygv_omega_bucket: None,
                 target_cygv_series_coordinate: None,
@@ -2230,6 +2312,7 @@ fn report_target(
                     .real_cone_decomposable_by_other_generators,
                 ambient_nonzero: sample.ambient_nonzero.clone(),
                 basis_nonzero: sample.basis_nonzero.clone(),
+                target_extremal_ray_certificate: None,
                 target_cygv_negative_intersections: None,
                 target_cygv_omega_bucket: None,
                 target_cygv_series_coordinate: None,
@@ -2301,6 +2384,7 @@ fn report_target(
                     .real_cone_decomposable_by_other_generators,
                 ambient_nonzero: sample.ambient_nonzero.clone(),
                 basis_nonzero: sample.basis_nonzero.clone(),
+                target_extremal_ray_certificate: None,
                 target_cygv_negative_intersections: None,
                 target_cygv_omega_bucket: None,
                 target_cygv_series_coordinate: None,
@@ -2376,6 +2460,7 @@ fn report_target(
                     .real_cone_decomposable_by_other_generators,
                 ambient_nonzero: sample.ambient_nonzero.clone(),
                 basis_nonzero: sample.basis_nonzero.clone(),
+                target_extremal_ray_certificate: None,
                 target_cygv_negative_intersections: Some(negative_intersections),
                 target_cygv_omega_bucket: Some(cygv_omega_bucket(negative_intersections)),
                 target_cygv_series_coordinate: None,
@@ -2436,6 +2521,14 @@ fn report_target(
             facet_union: None,
         }
     };
+    let target_extremal_ray_certificate = target_extremal_ray_certificate_probe(
+        sample,
+        &target,
+        context,
+        certify_target_extremal_rays,
+        target_extremal_generator_limit,
+        target_extremal_max_degree,
+    );
     let base = TargetReport {
         index,
         degree: sample.degree,
@@ -2456,6 +2549,7 @@ fn report_target(
             .real_cone_decomposable_by_other_generators,
         ambient_nonzero: sample.ambient_nonzero.clone(),
         basis_nonzero: sample.basis_nonzero.clone(),
+        target_extremal_ray_certificate,
         target_cygv_negative_intersections: Some(negative_intersections),
         target_cygv_omega_bucket: Some(cygv_omega_bucket(negative_intersections)),
         target_cygv_series_coordinate,
@@ -3840,6 +3934,9 @@ fn build_report(
     support_overlap_pair_reduce_for_run: bool,
     certify_origin_support_domains: bool,
     origin_support_certificate_limit: usize,
+    certify_target_extremal_rays: bool,
+    target_extremal_generator_limit: usize,
+    target_extremal_max_degree: Option<i128>,
     measure_cygv_semigroups: bool,
     probe_cygv_path_history: bool,
     run_lower_seed_diamonds: bool,
@@ -3867,6 +3964,9 @@ fn build_report(
             support_overlap_pair_reduce_for_run,
             certify_origin_support_domains,
             origin_support_certificate_limit,
+            certify_target_extremal_rays,
+            target_extremal_generator_limit,
+            target_extremal_max_degree,
             measure_cygv_semigroups,
             probe_cygv_path_history,
             run_lower_seed_diamonds,
@@ -3910,6 +4010,15 @@ fn build_report(
             &validated,
             target_index_filter,
         );
+    let target_extremal_ray_certificate_status_counts = optional_status_counts(
+        targets.iter().map(|target| {
+            target
+                .target_extremal_ray_certificate
+                .as_ref()
+                .map(|probe| probe.status.as_str())
+        }),
+        "not_run",
+    );
     let origin_relation_support_face_certificate_status_counts = optional_status_counts(
         targets.iter().map(|target| {
             target
@@ -3986,6 +4095,7 @@ fn build_report(
         origin_circuit_facet_context_status_counts,
         active_support_status_counts,
         active_support_face_certificate_status_counts,
+        target_extremal_ray_certificate_status_counts,
         origin_relation_support_face_certificate_status_counts,
         origin_shared_facet_face_certificate_status_counts,
         origin_facet_union_face_certificate_status_counts,
@@ -4220,7 +4330,7 @@ fn target_index_selected(index: usize, target_index_filter: Option<usize>) -> bo
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--origin-support-certificate-limit N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
+            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--origin-support-certificate-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--element-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
         );
         std::process::exit(2);
     };
@@ -4235,6 +4345,10 @@ fn main() {
     let certify_origin_support_domains = parse_flag("--certify-origin-support-domains");
     let origin_support_certificate_limit =
         parse_arg_value::<usize>("--origin-support-certificate-limit").unwrap_or(256);
+    let certify_target_extremal_rays = parse_flag("--certify-target-extremal-rays");
+    let target_extremal_generator_limit =
+        parse_arg_value::<usize>("--target-extremal-generator-limit").unwrap_or(256);
+    let target_extremal_max_degree = parse_arg_value::<i128>("--target-extremal-max-degree");
     let measure_cygv_semigroups = parse_flag("--measure-cygv-semigroups");
     let probe_cygv_path_history = parse_flag("--probe-cygv-path-history");
     let run_lower_seed_diamonds = parse_flag("--run-lower-seed-diamonds");
@@ -4266,6 +4380,9 @@ fn main() {
         support_overlap_pair_reduce_for_run,
         certify_origin_support_domains,
         origin_support_certificate_limit,
+        certify_target_extremal_rays,
+        target_extremal_generator_limit,
+        target_extremal_max_degree,
         measure_cygv_semigroups,
         probe_cygv_path_history,
         run_lower_seed_diamonds,
@@ -5418,6 +5535,73 @@ mod tests {
     }
 
     #[test]
+    fn target_extremal_ray_probe_uses_exact_separator() {
+        let stats = MissingGvTargetStats {
+            target_count: 1,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: vec![MissingGvTargetSample {
+                degree: 1,
+                generators_le_degree: 1,
+                is_mori_generator: true,
+                origin_circuit_pattern: None,
+                origin_circuit_witness_count: None,
+                origin_circuit_first_witness: None,
+                origin_circuit_affine_support: None,
+                cms_general_divisor_shape_candidates: None,
+                cms_general_divisor_intersection_checks: None,
+                branch_diagnostic: None,
+                real_cone_decomposable_by_other_generators: false,
+                real_cone_decomposition_active_generators: None,
+                real_cone_decomposition_active_generator_basis_nonzero: None,
+                real_cone_decomposition_exact_coefficients: None,
+                real_cone_decomposition_exact_kind: None,
+                ambient_nonzero: vec![(0, 1)],
+                basis_nonzero: vec![(0, 1)],
+            }],
+        };
+        let grading = vec![1, 1];
+        let q_matrix = vec![vec![1, 0], vec![0, 1]];
+        let degree_bounded_rays = vec![vec![1, 0], vec![0, 1], vec![1, 1]];
+        let context = ValidatedContext {
+            dimension: 2,
+            degree_bound: 2,
+            q_cols: 2,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: None,
+            intersection: Intersection::new(2),
+            stats: &stats,
+        };
+
+        let probe = target_extremal_ray_certificate_probe(
+            &stats.sample[0],
+            &[1, 0],
+            &context,
+            true,
+            3,
+            None,
+        )
+        .expect("enabled probe should report a status");
+        assert_eq!(probe.status, "certified_exact_extremal_ray");
+        assert_eq!(probe.same_ray_generator_count, Some(1));
+        assert_eq!(probe.zero_other_generator_count, Some(1));
+        assert_eq!(probe.positive_other_generator_count, Some(1));
+        assert_eq!(probe.separator_normal_nonzero, Some(vec![(0, -1), (1, 1)]));
+
+        let limited = target_extremal_ray_certificate_probe(
+            &stats.sample[0],
+            &[1, 0],
+            &context,
+            true,
+            2,
+            None,
+        )
+        .expect("enabled probe should report a limit status");
+        assert_eq!(limited.status, "skipped_generator_limit_2_actual_3");
+    }
+
+    #[test]
     fn q_intersection_bucket_counts_cygv_negative_intersections() {
         let q_matrix = vec![vec![1, -2, 0], vec![-1, 1, 3]];
         assert_eq!(q_intersections(&[2, 1], &q_matrix).unwrap(), vec![1, -3, 3]);
@@ -5840,6 +6024,9 @@ mod tests {
             false,
             256,
             false,
+            256,
+            None,
+            false,
             false,
             false,
             false,
@@ -5964,6 +6151,9 @@ mod tests {
             false,
             256,
             false,
+            256,
+            None,
+            false,
             false,
             false,
             false,
@@ -5992,6 +6182,9 @@ mod tests {
             false,
             false,
             256,
+            false,
+            256,
+            None,
             false,
             true,
             false,

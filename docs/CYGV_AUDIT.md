@@ -230,6 +230,11 @@ With exact-kernel and aggregate-normal LP certificate attempts enabled, the
 current local face diagnostic computes values for several toric-missing curves,
 but certifies none of them as supporting Mori faces. Those values remain
 unpromoted because the semigroup context is not proven to be a valid face.
+`mcallister_gv_context` also exposes an opt-in exact extremal-ray separator
+probe for each target. This is another certificate-only diagnostic: a
+successful separator proves extremality in the supplied finite generator cone,
+but it still does not produce a GV invariant and still does not certify that the
+finite degree-bounded rays are the complete corrected-chamber Mori context.
 
 A separate source-derived correction is now promoted: the origin-circuit
 resolved-conifold detector accepts the sparse standard charge pattern

@@ -207,7 +207,11 @@ to make the remaining GV layer more first-principles:
    On the schema-3 corrected-chamber context, the bounded origin-support pass
    found no promoted relation-support certificate for eight targets, reported
    solver errors for one relation support and three small shared-facet supports,
-   and skipped larger facet-union supports under the 256-generator cap. The
+   and skipped larger facet-union supports under the 256-generator cap.
+   `mcallister_gv_context` now also has an opt-in exact extremal-ray separator
+   probe for target Mori generators. That is useful cone triage, but it only
+   certifies extremality in the supplied finite degree-bounded generator set; it
+   does not identify the HKTY semigroup or promote a corrected GV value. The
    immediate audit checkpoint is still to reconstruct the smallest exact
    semigroup/chamber context for these higher-rank origin circuits. The prior
    checkpoint of distinguishing exact

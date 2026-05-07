@@ -148,6 +148,9 @@ and matrix-basis pipeline are no longer open.
    integer certificates, but the current schema-3 McAllister origin-support
    pass still finds no promoted certificate for the remaining relation supports
    and leaves several larger shared/union supports capped or solver-blocked.
+   The context tool now also has an opt-in exact extremal-ray separator probe;
+   this certifies only ray extremality in a supplied finite cone and is not a
+   substitute for the missing compact/chamber semigroup.
 5. **Potent-ray local diagnostics.** Rank-two N=10 and rank-four potent-ray
    rows are still incomplete, but they are validation diagnostics rather than
    blockers for the compact GA-ready GV engine.
