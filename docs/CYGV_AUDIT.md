@@ -2350,6 +2350,16 @@ unit-tensor promotion. The top-level aggregate is
 "unit_tensor_probe_mismatch_expected_formula_set":4}` and the origin-omitted
 aggregate is `{"not_available":3,"origin_omitted_unit_tensor_probe_hkty_error":2,
 "origin_omitted_unit_tensor_probe_mismatch_expected_formula_set":3}`.
+The active-leaf CMS summaries now retain rational divisor solutions even when
+they are not promotable. The current aggregate is
+`active_decomposition_source_leaf_cms_solution_status_counts =
+{"cms_general_divisor_integral_solution_mismatches_inferred_degree":2,
+"cms_general_divisor_nonintegral_divisor_solution":1,
+"no_cms_solution_summary":5}`. The two integral-but-mismatched degree-10
+solutions have divisor cubics `27` and `81`; the nonintegral solution has
+cubic `77/27`. Their candidate statuses are explicitly
+`diagnostic_from_*_not_promoted`, so these records preserve chamber evidence
+without becoming GV fallbacks.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

@@ -92,6 +92,9 @@ run pass. Any remaining mismatch must be explicit and localizable.
    still need a certified alternate phase/chamber model. The unit-tensor phase
    probe matches only the degree-14 lower leaf and mismatches the degree-12 and
    three degree-10 leaves, so the report does not promote any new GV values.
+   Non-promotable CMS rational solutions are now retained as diagnostics:
+   two integral degree-10 solutions mismatch the inferred normal degree and one
+   solution is nonintegral.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for

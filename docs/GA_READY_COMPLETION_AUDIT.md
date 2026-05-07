@@ -332,7 +332,10 @@ certified phase or chamber model. The unit-tensor phase probe matches only the
 degree-14 lower leaf (`GV=-2`); the degree-12 leaf gives `-3` versus expected
 `3`, and the three degree-10 leaves give `0` origin-included or `-1`
 origin-omitted against expected `{-2,1}`. These are diagnostics, not promoted
-GV values.
+GV values. The same active-leaf report now retains non-promotable CMS rational
+solutions: two integral solutions mismatch the inferred normal degree, one is
+nonintegral, and five leaves have no CMS solution summary. Their candidate
+statuses are marked `diagnostic_from_*_not_promoted`.
 
 ## Next Concrete Action
 

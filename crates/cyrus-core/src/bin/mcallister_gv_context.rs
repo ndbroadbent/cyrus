@@ -197,6 +197,8 @@ struct ContextReport {
     active_decomposition_source_leaf_unit_phase_probe_status_counts: BTreeMap<String, usize>,
     active_decomposition_source_leaf_origin_omitted_unit_phase_probe_status_counts:
         BTreeMap<String, usize>,
+    active_decomposition_source_leaf_cms_solution_status_counts: BTreeMap<String, usize>,
+    active_decomposition_source_leaf_cms_candidate_status_counts: BTreeMap<String, usize>,
     local_cygv_charge_signature_counts: BTreeMap<String, usize>,
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
     local_cygv_actual_call_readiness_counts: BTreeMap<String, usize>,
@@ -557,6 +559,7 @@ struct CygvPathSupportLookup {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 struct CmsGeneralDivisorSolutionSummary {
     shrinking_divisor_index: usize,
+    cms_check_status: String,
     solution_basis_nonzero: Vec<(usize, String)>,
     solution_ambient_basis_nonzero: Vec<(usize, String)>,
     computed_other_normal_degree: String,
@@ -1598,11 +1601,7 @@ fn cms_general_divisor_solution_summaries(
     };
     let mut summaries = Vec::new();
     for check in checks {
-        if cms_general_divisor_intersection_check_status(check)
-            != "cms_general_divisor_integral_solution_matches_inferred_degree"
-        {
-            continue;
-        }
+        let cms_check_status = cms_general_divisor_intersection_check_status(check).to_string();
         let Some(solution_basis_nonzero) = check.solution_basis_nonzero.clone() else {
             continue;
         };
@@ -1625,9 +1624,11 @@ fn cms_general_divisor_solution_summaries(
             sample,
             &solution_basis_cubic_self_intersection,
             expected_toric_gv1_formula_value,
+            &cms_check_status,
         )?;
         summaries.push(CmsGeneralDivisorSolutionSummary {
             shrinking_divisor_index: check.shrinking_divisor_index,
+            cms_check_status,
             solution_basis_cubic_self_intersection,
             local_intersection_tensor_candidate_status,
             local_intersection_tensor_candidate,
@@ -1646,6 +1647,7 @@ fn local_cygv_intersection_tensor_candidate_from_cms_divisor(
     sample: &MissingGvTargetSample,
     divisor_cubic_self_intersection: &str,
     expected_toric_gv1_formula_value: Option<i64>,
+    cms_check_status: &str,
 ) -> Result<
     (
         Option<Vec<LocalCygvIntersectionTensorEntry>>,
@@ -1692,12 +1694,18 @@ fn local_cygv_intersection_tensor_candidate_from_cms_divisor(
         divisor_cubic_self_intersection,
         expected_toric_gv1_formula_value,
     )?);
+    let candidate_status =
+        if cms_check_status == "cms_general_divisor_integral_solution_matches_inferred_degree" {
+            "candidate_from_cms_divisor_cubic_needs_phase_and_chamber_certificate".to_string()
+        } else {
+            format!("diagnostic_from_{cms_check_status}_not_promoted")
+        };
     Ok((
         Some(vec![LocalCygvIntersectionTensorEntry {
             indices: [0, 0, 0],
             value: divisor_cubic_self_intersection.to_string(),
         }]),
-        "candidate_from_cms_divisor_cubic_needs_phase_and_chamber_certificate".to_string(),
+        candidate_status,
         local_cygv_primitive_probe,
     ))
 }
@@ -2403,6 +2411,44 @@ fn active_decomposition_source_leaf_origin_omitted_unit_phase_probe_status_count
         }),
         "not_available",
     )
+}
+
+fn active_decomposition_source_leaf_cms_solution_status_counts(
+    summaries: &[ActiveDecompositionSourceLeafSummary],
+) -> BTreeMap<String, usize> {
+    active_decomposition_source_leaf_cms_summary_counts(summaries, |summary| {
+        summary.cms_check_status.as_str()
+    })
+}
+
+fn active_decomposition_source_leaf_cms_candidate_status_counts(
+    summaries: &[ActiveDecompositionSourceLeafSummary],
+) -> BTreeMap<String, usize> {
+    active_decomposition_source_leaf_cms_summary_counts(summaries, |summary| {
+        summary.local_intersection_tensor_candidate_status.as_str()
+    })
+}
+
+fn active_decomposition_source_leaf_cms_summary_counts(
+    summaries: &[ActiveDecompositionSourceLeafSummary],
+    key: impl Fn(&CmsGeneralDivisorSolutionSummary) -> &str,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        if summary
+            .matching_uncovered_source_ray_cms_solution_summaries
+            .is_empty()
+        {
+            *counts
+                .entry("no_cms_solution_summary".to_string())
+                .or_insert(0) += 1;
+            continue;
+        }
+        for cms_summary in &summary.matching_uncovered_source_ray_cms_solution_summaries {
+            *counts.entry(key(cms_summary).to_string()).or_insert(0) += 1;
+        }
+    }
+    counts
 }
 
 fn path_support_lookup_status(
@@ -7061,6 +7107,14 @@ fn build_report(
         active_decomposition_source_leaf_origin_omitted_unit_phase_probe_status_counts(
             &active_decomposition_unresolved_source_leaf_sample,
         );
+    let active_decomposition_source_leaf_cms_solution_status_counts =
+        active_decomposition_source_leaf_cms_solution_status_counts(
+            &active_decomposition_unresolved_source_leaf_sample,
+        );
+    let active_decomposition_source_leaf_cms_candidate_status_counts =
+        active_decomposition_source_leaf_cms_candidate_status_counts(
+            &active_decomposition_unresolved_source_leaf_sample,
+        );
     ContextReport {
         schema_version: context.schema_version,
         dimension: validated.dimension,
@@ -7091,6 +7145,8 @@ fn build_report(
         active_decomposition_unresolved_source_leaf_sample,
         active_decomposition_source_leaf_unit_phase_probe_status_counts,
         active_decomposition_source_leaf_origin_omitted_unit_phase_probe_status_counts,
+        active_decomposition_source_leaf_cms_solution_status_counts,
+        active_decomposition_source_leaf_cms_candidate_status_counts,
         local_cygv_charge_signature_counts,
         local_cygv_target_candidate_status_counts,
         local_cygv_actual_call_readiness_counts,
@@ -9730,6 +9786,8 @@ mod tests {
             active_decomposition_source_leaf_unit_phase_probe_status_counts(&summaries);
         assert_eq!(phase_counts.values().sum::<usize>(), 4);
         assert_eq!(phase_counts.get("not_available").copied(), Some(3));
+        let cms_counts = active_decomposition_source_leaf_cms_solution_status_counts(&summaries);
+        assert_eq!(cms_counts.get("no_cms_solution_summary").copied(), Some(4));
     }
 
     #[test]
@@ -9758,6 +9816,8 @@ mod tests {
             matching_uncovered_source_ray_cms_check_status_counts: BTreeMap::new(),
             matching_uncovered_source_ray_cms_solution_summaries: vec![
                 CmsGeneralDivisorSolutionSummary {
+                    cms_check_status:
+                        "cms_general_divisor_integral_solution_matches_inferred_degree".to_string(),
                     shrinking_divisor_index: 5,
                     solution_basis_nonzero: vec![(0, "1".to_string())],
                     solution_ambient_basis_nonzero: vec![(5, "1".to_string())],
@@ -9815,6 +9875,8 @@ mod tests {
         assert_eq!(
             summary.uncovered_source_ray_cms_solution_summaries,
             vec![CmsGeneralDivisorSolutionSummary {
+                cms_check_status: "cms_general_divisor_integral_solution_matches_inferred_degree"
+                    .to_string(),
                 shrinking_divisor_index: 5,
                 solution_basis_nonzero: vec![(0, "1".to_string())],
                 solution_ambient_basis_nonzero: vec![(5, "1".to_string())],
@@ -9864,6 +9926,8 @@ mod tests {
             uncovered_source_ray_cms_check_status_counts: BTreeMap::new(),
             uncovered_source_ray_cms_solution_summaries: vec![
                 CmsGeneralDivisorSolutionSummary {
+                    cms_check_status:
+                        "cms_general_divisor_integral_solution_matches_inferred_degree".to_string(),
                     shrinking_divisor_index: 1,
                     solution_basis_nonzero: vec![(0, "1".to_string())],
                     solution_ambient_basis_nonzero: vec![(1, "1".to_string())],
@@ -9892,6 +9956,8 @@ mod tests {
                     }),
                 },
                 CmsGeneralDivisorSolutionSummary {
+                    cms_check_status:
+                        "cms_general_divisor_integral_solution_matches_inferred_degree".to_string(),
                     shrinking_divisor_index: 2,
                     solution_basis_nonzero: vec![(0, "1".to_string())],
                     solution_ambient_basis_nonzero: vec![(2, "1".to_string())],
@@ -10053,6 +10119,86 @@ mod tests {
                 indices: [0, 0, 0],
                 value: "3".to_string(),
             }])
+        );
+    }
+
+    #[test]
+    fn cms_solution_summary_keeps_non_promotable_rational_solution() {
+        let mut sample = minimal_missing_sample(vec![(0, 1)]);
+        sample.origin_circuit_first_witness = Some(OriginCircuitWitnessSample {
+            first_facet_exclusive_point: 2,
+            second_facet_exclusive_point: 4,
+            shared_two_simplex: vec![1, 3],
+            first_facet: Vec::new(),
+            second_facet: Vec::new(),
+            first_facet_size: 2,
+            second_facet_size: 2,
+            sparse_relation: vec![(0, -1), (1, 2), (2, 1), (3, -3), (4, 1)],
+            relation_points: vec![
+                OriginCircuitRelationPointSample {
+                    point_index: 0,
+                    coefficient: -1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 1,
+                    coefficient: 2,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 2,
+                    coefficient: 1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 3,
+                    coefficient: -3,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 4,
+                    coefficient: 1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+            ],
+        });
+        sample.origin_circuit_affine_support = Some(OriginCircuitAffineSupportSample {
+            affine_rank: 3,
+            coefficient_counts: BTreeMap::new(),
+            local_charge_basis: vec![vec![1, -2, -1, 3, -1]],
+            local_coordinates: Vec::new(),
+            local_coordinates_2d: None,
+        });
+        sample.cms_general_divisor_intersection_checks =
+            Some(vec![CmsGeneralDivisorIntersectionCheck {
+                shrinking_divisor_index: 4,
+                has_rational_divisor_solution: true,
+                solution_basis_support_len: Some(1),
+                solution_basis_nonzero: Some(vec![(0, "1".to_string())]),
+                solution_ambient_basis_nonzero: Some(vec![(4, "1".to_string())]),
+                solution_is_integral: Some(true),
+                computed_other_normal_degree: Some("-2".to_string()),
+                matches_inferred_other_normal_degree: Some(false),
+            }]);
+        let mut intersection = Intersection::new(1);
+        intersection.set(0, 0, 0, Rational::<Finite>::new(MalachiteRational::from(3)));
+
+        let summaries =
+            cms_general_divisor_solution_summaries(Some(&sample), &intersection).unwrap();
+
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(
+            summaries[0].cms_check_status,
+            "cms_general_divisor_integral_solution_mismatches_inferred_degree"
+        );
+        assert_eq!(
+            summaries[0].local_intersection_tensor_candidate_status,
+            "diagnostic_from_cms_general_divisor_integral_solution_mismatches_inferred_degree_not_promoted"
         );
     }
 
