@@ -27,6 +27,8 @@ use cyrus_core::{
 };
 
 const CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT: usize = 32;
+const ORIGIN_CIRCUIT_WITNESS_DOMAIN_UNRESOLVED_SAMPLE_LIMIT: usize = 64;
+const ORIGIN_CIRCUIT_WITNESS_DOMAIN_OCCURRENCE_SAMPLE_LIMIT: usize = 8;
 
 #[derive(Debug, Deserialize)]
 struct CorrectedChamberGvContext {
@@ -226,6 +228,12 @@ struct ContextReport {
     origin_circuit_witness_shared_facet_face_certificate_status_counts: BTreeMap<String, usize>,
     origin_circuit_witness_facet_union_face_certificate_status_counts: BTreeMap<String, usize>,
     origin_circuit_witness_domain_sample: Vec<OriginCircuitWitnessDomainSummary>,
+    origin_circuit_witness_domain_unresolved_generator_unique_count: usize,
+    origin_circuit_witness_domain_unresolved_generator_occurrence_count: usize,
+    origin_circuit_witness_domain_unresolved_generator_status_counts: BTreeMap<String, usize>,
+    origin_circuit_witness_domain_unresolved_generator_degree_counts: BTreeMap<i128, usize>,
+    origin_circuit_witness_domain_unresolved_generator_sample:
+        Vec<OriginCircuitWitnessDomainUnresolvedGeneratorSummary>,
     active_support_status_counts: BTreeMap<String, usize>,
     active_support_face_certificate_status_counts: BTreeMap<String, usize>,
     target_extremal_ray_certificate_status_counts: BTreeMap<String, usize>,
@@ -3197,6 +3205,24 @@ struct OriginCircuitWitnessDomainSummary {
     facet_union_face_certificate_status: String,
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct OriginCircuitWitnessDomainUnresolvedGeneratorSummary {
+    degree: i128,
+    source_status: String,
+    ambient_nonzero: Vec<(usize, i64)>,
+    basis_nonzero: Vec<(usize, i64)>,
+    occurrence_count: usize,
+    occurrences: Vec<OriginCircuitWitnessDomainGeneratorOccurrence>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct OriginCircuitWitnessDomainGeneratorOccurrence {
+    target_index: usize,
+    witness_index: usize,
+    domain_kind: String,
+    target_degree: i128,
+}
+
 struct OriginCircuitAmbientSupportSets {
     relation_support: HashSet<usize>,
     shared_facet: HashSet<usize>,
@@ -3493,6 +3519,129 @@ fn origin_circuit_witness_domain_status_counts(
     let mut counts = BTreeMap::new();
     for summary in summaries {
         *counts.entry(status(summary).to_string()).or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn origin_circuit_witness_domain_unresolved_generator_summaries(
+    samples: &[MissingGvTargetSample],
+    context: &ValidatedContext<'_>,
+    target_index_filter: Option<usize>,
+) -> Vec<OriginCircuitWitnessDomainUnresolvedGeneratorSummary> {
+    let Some(ray_context) = context.degree_bounded_ray_context else {
+        return Vec::new();
+    };
+    let mut summaries: BTreeMap<Vec<i64>, OriginCircuitWitnessDomainUnresolvedGeneratorSummary> =
+        BTreeMap::new();
+    for (target_index, sample) in samples.iter().enumerate() {
+        if target_index_filter.is_some_and(|filter| filter != target_index) {
+            continue;
+        }
+        for (witness_index, witness) in origin_circuit_witnesses(sample).into_iter().enumerate() {
+            let supports = origin_circuit_witness_ambient_support_sets(witness);
+            let domains = [
+                ("relation_support", &supports.relation_support),
+                ("shared_facet", &supports.shared_facet),
+                ("facet_union", &supports.facet_union),
+            ];
+            for (domain_kind, support) in domains {
+                let mut seen_in_domain = HashSet::new();
+                for ray in ray_context {
+                    if ray.degree <= 0 || ray.degree > sample.degree {
+                        continue;
+                    }
+                    if !ray
+                        .ambient_nonzero
+                        .iter()
+                        .all(|(idx, _)| support.contains(idx))
+                    {
+                        continue;
+                    }
+                    let Ok(basis_ray) = dense_from_sparse(&ray.basis_nonzero, context.dimension)
+                    else {
+                        continue;
+                    };
+                    if !seen_in_domain.insert(basis_ray.clone()) {
+                        continue;
+                    }
+                    let source_status =
+                        match active_decomposition_generator_source_status(&basis_ray, context) {
+                            Ok(status) => status,
+                            Err(error) => format!(
+                                "generator_source_status_error_{}",
+                                status_error_fragment(&error)
+                            ),
+                        };
+                    if source_status == "active_generator_known_toric_covered"
+                        || source_status == "active_generator_known_source_derived_gv"
+                    {
+                        continue;
+                    }
+                    let occurrence = OriginCircuitWitnessDomainGeneratorOccurrence {
+                        target_index,
+                        witness_index,
+                        domain_kind: domain_kind.to_string(),
+                        target_degree: sample.degree,
+                    };
+                    match summaries.entry(basis_ray) {
+                        std::collections::btree_map::Entry::Occupied(mut entry) => {
+                            let summary = entry.get_mut();
+                            summary.occurrence_count += 1;
+                            if summary.occurrences.len()
+                                < ORIGIN_CIRCUIT_WITNESS_DOMAIN_OCCURRENCE_SAMPLE_LIMIT
+                            {
+                                summary.occurrences.push(occurrence);
+                            }
+                        }
+                        std::collections::btree_map::Entry::Vacant(entry) => {
+                            entry.insert(OriginCircuitWitnessDomainUnresolvedGeneratorSummary {
+                                degree: ray.degree,
+                                source_status,
+                                ambient_nonzero: ray.ambient_nonzero.clone(),
+                                basis_nonzero: ray.basis_nonzero.clone(),
+                                occurrence_count: 1,
+                                occurrences: vec![occurrence],
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let mut summaries = summaries.into_values().collect::<Vec<_>>();
+    summaries.sort_by(|left, right| {
+        (
+            left.degree,
+            left.source_status.as_str(),
+            left.basis_nonzero.as_slice(),
+        )
+            .cmp(&(
+                right.degree,
+                right.source_status.as_str(),
+                right.basis_nonzero.as_slice(),
+            ))
+    });
+    summaries
+}
+
+fn origin_circuit_witness_domain_unresolved_generator_status_counts(
+    summaries: &[OriginCircuitWitnessDomainUnresolvedGeneratorSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts
+            .entry(summary.source_status.clone())
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn origin_circuit_witness_domain_unresolved_generator_degree_counts(
+    summaries: &[OriginCircuitWitnessDomainUnresolvedGeneratorSummary],
+) -> BTreeMap<i128, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts.entry(summary.degree).or_insert(0usize) += 1;
     }
     counts
 }
@@ -7338,6 +7487,32 @@ fn build_report(
             &origin_circuit_witness_domain_sample,
             |summary| &summary.facet_union_face_certificate_status,
         );
+    let origin_circuit_witness_domain_unresolved_generators =
+        origin_circuit_witness_domain_unresolved_generator_summaries(
+            &validated.stats.sample,
+            validated,
+            target_index_filter,
+        );
+    let origin_circuit_witness_domain_unresolved_generator_unique_count =
+        origin_circuit_witness_domain_unresolved_generators.len();
+    let origin_circuit_witness_domain_unresolved_generator_occurrence_count =
+        origin_circuit_witness_domain_unresolved_generators
+            .iter()
+            .map(|summary| summary.occurrence_count)
+            .sum();
+    let origin_circuit_witness_domain_unresolved_generator_status_counts =
+        origin_circuit_witness_domain_unresolved_generator_status_counts(
+            &origin_circuit_witness_domain_unresolved_generators,
+        );
+    let origin_circuit_witness_domain_unresolved_generator_degree_counts =
+        origin_circuit_witness_domain_unresolved_generator_degree_counts(
+            &origin_circuit_witness_domain_unresolved_generators,
+        );
+    let origin_circuit_witness_domain_unresolved_generator_sample =
+        origin_circuit_witness_domain_unresolved_generators
+            .into_iter()
+            .take(ORIGIN_CIRCUIT_WITNESS_DOMAIN_UNRESOLVED_SAMPLE_LIMIT)
+            .collect::<Vec<_>>();
     let active_support_status_counts = optional_status_counts(
         targets
             .iter()
@@ -7562,6 +7737,11 @@ fn build_report(
         origin_circuit_witness_shared_facet_face_certificate_status_counts,
         origin_circuit_witness_facet_union_face_certificate_status_counts,
         origin_circuit_witness_domain_sample,
+        origin_circuit_witness_domain_unresolved_generator_unique_count,
+        origin_circuit_witness_domain_unresolved_generator_occurrence_count,
+        origin_circuit_witness_domain_unresolved_generator_status_counts,
+        origin_circuit_witness_domain_unresolved_generator_degree_counts,
+        origin_circuit_witness_domain_unresolved_generator_sample,
         active_support_status_counts,
         active_support_face_certificate_status_counts,
         target_extremal_ray_certificate_status_counts,

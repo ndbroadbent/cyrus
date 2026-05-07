@@ -348,7 +348,9 @@ remain explicitly skipped. These witness domains also still contain unresolved
 source data: the shared-facet domains aggregate to `228` source rays without a
 derived GV value, `20` other missing-target hits, and `10` uncovered-source-ray
 hits, despite also containing many toric-covered and source-derived-GV
-generators. The
+generators. Across all per-witness relation/shared/facet-union domains, the
+new unresolved queue contains `2017` unique non-known generators over `9611`
+domain occurrences, dominated by broad facet-union source rays. The
 enriched active-leaf report
 now also carries the matching source rays' local q rows and CMS check counts:
 two origin-circuit lower leaves are primitive `neg2` q-row candidates, while

@@ -644,4 +644,8 @@ to make the remaining GV layer more first-principles:
    `20` occurrences of other missing targets, and `10` uncovered-source-ray
    hits. Facet unions contain a much larger unresolved source-ray bucket, so a
    reusable semigroup handoff still needs lower source-ray closure rather than
-   a small all-known witness domain.
+   a small all-known witness domain. The report now exposes that queue
+   directly: across relation, shared-facet, and facet-union domains there are
+   `2017` unique non-known generators over `9611` occurrences, consisting of
+   the nine missing targets, `41` uncovered-source-ray matches, and `1967`
+   degree-bounded source rays with no toric/source-derived GV value yet.

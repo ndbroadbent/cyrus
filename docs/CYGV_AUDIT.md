@@ -2382,6 +2382,15 @@ value yet. Across facet unions, the unresolved source-ray bucket is much larger
 (`9000` aggregate occurrences). This keeps the next semigroup task tied to
 unresolved lower source-ray closure, not to a finite domain whose generator GV
 values are already known.
+The report also materializes a bounded sample of this unresolved witness-domain
+queue. Across relation, shared-facet, and facet-union domains together, there
+are `2017` unique non-known generators over `9611` domain occurrences:
+`9` are the original missing targets, `41` match uncovered source-ray samples,
+and `1967` are degree-bounded source rays with no toric/source-derived GV value
+yet. The degree distribution runs from `5` through `26` and is dominated by the
+large facet-union neighborhoods. This keeps broad facet unions out of the
+production compact-`cygv` handoff until a narrower source-derived chamber
+semigroup is found.
 The same active-leaf records now run the existing one-parameter unit-tensor
 phase probe against those lower source rays. This is still diagnostic-only,
 because the local intersection tensor and chamber certificate are not
