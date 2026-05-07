@@ -387,6 +387,9 @@ and matrix-basis pipeline are no longer open.
    `found_lower_seed_decomposition` terms whose tiny decomposition diamonds
    both compute `GV=0` with no target qN polynomial, while target `8` has one
    `found_lower_seed_decomposition` term whose tiny diamond hits an HKTY error.
+   The target `8` bounded-diamond error is now counted at report top level and
+   the detailed sample pins it to `[(203,-3),(206,1),(209,1)]` with GV
+   candidate `4/3`.
    This keeps the next work focused on the parent compact-history domain, not
    on rediscovering lower scalar leaves.
    The target-monomial source comparison is now sharper: bounded lower-leaf

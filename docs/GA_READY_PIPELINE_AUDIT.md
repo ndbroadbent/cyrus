@@ -516,7 +516,9 @@ to make the remaining GV layer more first-principles:
    diamonds compute `GV=0` with no target qN polynomial, while target `8`'s one
    parent-only term has a lower-seed decomposition whose bounded diamond hits
    an HKTY error. This rules out a simple "lower-leaf scalar missing" diagnosis
-   for those parent terms.
+   for those parent terms. The error bucket is now aggregated as well; the
+   detailed target `8` sample is the explicit-semigroup non-integer candidate
+   `4/3` for `[(203,-3),(206,1),(209,1)]`.
    A direct cygv semigroup-size diagnostic now confirms why: the degree-10
    missing targets already have `720` seed rows at or below the target degree,
    and an unguarded cygv semigroup closure measurement did not finish within

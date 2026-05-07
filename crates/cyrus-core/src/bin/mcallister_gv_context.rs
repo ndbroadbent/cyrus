@@ -334,6 +334,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_gv_counts:
         BTreeMap<String, usize>,
+    cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_error_counts:
+        BTreeMap<String, usize>,
     cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_qn_trace_status_counts:
         BTreeMap<String, usize>,
     cygv_closest_known_qn_residual_source_predecessor_unique_count: usize,
@@ -12985,6 +12987,10 @@ fn build_report(
         cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_gv_counts(
             &targets,
         );
+    let cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_error_counts =
+        cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_error_counts(
+            &targets,
+        );
     let cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_qn_trace_status_counts =
         cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_qn_trace_status_counts(
             &targets,
@@ -13297,6 +13303,7 @@ fn build_report(
         cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_decomposition_status_counts,
         cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_status_counts,
         cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_gv_counts,
+        cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_error_counts,
         cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_qn_trace_status_counts,
         cygv_closest_known_qn_residual_source_predecessor_unique_count,
         cygv_closest_known_qn_residual_source_predecessor_occurrence_count,
@@ -13688,6 +13695,33 @@ fn cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_gv_
                 .and_then(|summary| summary.diamond_gv.as_deref())
                 .unwrap_or("missing_bounded_seed_diamond_gv");
             *counts.entry(gv.to_string()).or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_error_counts(
+    targets: &[TargetReport],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        let Some(comparison) = target.cygv_path_history_probe.as_ref().and_then(|probe| {
+            probe
+                .closest_known_qn_residual_qn_domain_comparison
+                .as_ref()
+        }) else {
+            continue;
+        };
+        for classification in &comparison.parent_only_term_classification_sample {
+            let error = classification
+                .source_bounded_seed_decomposition
+                .as_ref()
+                .and_then(|summary| summary.diamond_error.as_deref())
+                .map_or_else(
+                    || "none".to_string(),
+                    |error| format!("error_{}", status_error_fragment(error)),
+                );
+            *counts.entry(error).or_insert(0usize) += 1;
         }
     }
     counts

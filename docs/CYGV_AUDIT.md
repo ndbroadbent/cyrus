@@ -2813,7 +2813,10 @@ each target run: target `7` has two parent-only terms with lower-seed
 decompositions whose tiny diamonds both compute `GV=0` and require no target
 qN polynomial, while target `8` has one parent-only term with a lower-seed
 decomposition whose tiny diamond fails in HKTY. These aggregates make the
-parent-domain obstruction visible without reading the long term samples.
+parent-domain obstruction visible without reading the long term samples. The
+same report now aggregates the bounded-diamond error key; target `8`'s detailed
+sample identifies the failed class as `[(203,-3),(206,1),(209,1)]` with
+non-integer GV candidate `4/3`.
 The report now compares each target-monomial source's parent-domain qN
 signature with the bounded-diamond qN signature for the same source curve. On
 fresh target `7` and target `8` runs, the main path-support domain reports
