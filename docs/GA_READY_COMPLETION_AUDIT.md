@@ -354,7 +354,10 @@ domain occurrences, dominated by broad facet-union source rays. After exporting
 the full degree-bounded toric GV diagnostic context (`1053` rows) from the
 first-principles runner, the shared-facet unknown bucket drops from `228` to
 `36` occurrences and the all-domain unresolved queue drops to `1631` unique
-generators over `7360` occurrences. The
+generators over `7360` occurrences. The shared-facet-only unresolved queue is
+now explicit as well: `33` unique non-known generators over `66` occurrences,
+made up of the nine missing targets, `4` uncovered-source-ray hits, and `20`
+source degree-bounded rays still missing toric/source-derived GV values. The
 enriched active-leaf report
 now also carries the matching source rays' local q rows and CMS check counts:
 two origin-circuit lower leaves are primitive `neg2` q-row candidates, while

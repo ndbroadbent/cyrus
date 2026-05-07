@@ -238,6 +238,12 @@ struct ContextReport {
     origin_circuit_witness_domain_unresolved_generator_degree_counts: BTreeMap<i128, usize>,
     origin_circuit_witness_domain_unresolved_generator_sample:
         Vec<OriginCircuitWitnessDomainUnresolvedGeneratorSummary>,
+    origin_circuit_witness_shared_facet_unresolved_generator_unique_count: usize,
+    origin_circuit_witness_shared_facet_unresolved_generator_occurrence_count: usize,
+    origin_circuit_witness_shared_facet_unresolved_generator_status_counts: BTreeMap<String, usize>,
+    origin_circuit_witness_shared_facet_unresolved_generator_degree_counts: BTreeMap<i128, usize>,
+    origin_circuit_witness_shared_facet_unresolved_generator_sample:
+        Vec<OriginCircuitWitnessDomainUnresolvedGeneratorSummary>,
     active_support_status_counts: BTreeMap<String, usize>,
     active_support_face_certificate_status_counts: BTreeMap<String, usize>,
     target_extremal_ray_certificate_status_counts: BTreeMap<String, usize>,
@@ -3531,6 +3537,7 @@ fn origin_circuit_witness_domain_unresolved_generator_summaries(
     samples: &[MissingGvTargetSample],
     context: &ValidatedContext<'_>,
     target_index_filter: Option<usize>,
+    domain_kind_filter: Option<&str>,
 ) -> Vec<OriginCircuitWitnessDomainUnresolvedGeneratorSummary> {
     let Some(ray_context) = context.degree_bounded_ray_context else {
         return Vec::new();
@@ -3549,6 +3556,9 @@ fn origin_circuit_witness_domain_unresolved_generator_summaries(
                 ("facet_union", &supports.facet_union),
             ];
             for (domain_kind, support) in domains {
+                if domain_kind_filter.is_some_and(|filter| filter != domain_kind) {
+                    continue;
+                }
                 let mut seen_in_domain = HashSet::new();
                 for ray in ray_context {
                     if ray.degree <= 0 || ray.degree > sample.degree {
@@ -3628,7 +3638,7 @@ fn origin_circuit_witness_domain_unresolved_generator_summaries(
     summaries
 }
 
-fn origin_circuit_witness_domain_unresolved_generator_status_counts(
+fn origin_circuit_witness_domain_unresolved_generator_status_counts_for(
     summaries: &[OriginCircuitWitnessDomainUnresolvedGeneratorSummary],
 ) -> BTreeMap<String, usize> {
     let mut counts = BTreeMap::new();
@@ -3640,7 +3650,7 @@ fn origin_circuit_witness_domain_unresolved_generator_status_counts(
     counts
 }
 
-fn origin_circuit_witness_domain_unresolved_generator_degree_counts(
+fn origin_circuit_witness_domain_unresolved_generator_degree_counts_for(
     summaries: &[OriginCircuitWitnessDomainUnresolvedGeneratorSummary],
 ) -> BTreeMap<i128, usize> {
     let mut counts = BTreeMap::new();
@@ -7505,6 +7515,7 @@ fn build_report(
             &validated.stats.sample,
             validated,
             target_index_filter,
+            None,
         );
     let origin_circuit_witness_domain_unresolved_generator_unique_count =
         origin_circuit_witness_domain_unresolved_generators.len();
@@ -7514,15 +7525,42 @@ fn build_report(
             .map(|summary| summary.occurrence_count)
             .sum();
     let origin_circuit_witness_domain_unresolved_generator_status_counts =
-        origin_circuit_witness_domain_unresolved_generator_status_counts(
+        origin_circuit_witness_domain_unresolved_generator_status_counts_for(
             &origin_circuit_witness_domain_unresolved_generators,
         );
     let origin_circuit_witness_domain_unresolved_generator_degree_counts =
-        origin_circuit_witness_domain_unresolved_generator_degree_counts(
+        origin_circuit_witness_domain_unresolved_generator_degree_counts_for(
             &origin_circuit_witness_domain_unresolved_generators,
         );
     let origin_circuit_witness_domain_unresolved_generator_sample =
         origin_circuit_witness_domain_unresolved_generators
+            .into_iter()
+            .take(ORIGIN_CIRCUIT_WITNESS_DOMAIN_UNRESOLVED_SAMPLE_LIMIT)
+            .collect::<Vec<_>>();
+    let origin_circuit_witness_shared_facet_unresolved_generators =
+        origin_circuit_witness_domain_unresolved_generator_summaries(
+            &validated.stats.sample,
+            validated,
+            target_index_filter,
+            Some("shared_facet"),
+        );
+    let origin_circuit_witness_shared_facet_unresolved_generator_unique_count =
+        origin_circuit_witness_shared_facet_unresolved_generators.len();
+    let origin_circuit_witness_shared_facet_unresolved_generator_occurrence_count =
+        origin_circuit_witness_shared_facet_unresolved_generators
+            .iter()
+            .map(|summary| summary.occurrence_count)
+            .sum();
+    let origin_circuit_witness_shared_facet_unresolved_generator_status_counts =
+        origin_circuit_witness_domain_unresolved_generator_status_counts_for(
+            &origin_circuit_witness_shared_facet_unresolved_generators,
+        );
+    let origin_circuit_witness_shared_facet_unresolved_generator_degree_counts =
+        origin_circuit_witness_domain_unresolved_generator_degree_counts_for(
+            &origin_circuit_witness_shared_facet_unresolved_generators,
+        );
+    let origin_circuit_witness_shared_facet_unresolved_generator_sample =
+        origin_circuit_witness_shared_facet_unresolved_generators
             .into_iter()
             .take(ORIGIN_CIRCUIT_WITNESS_DOMAIN_UNRESOLVED_SAMPLE_LIMIT)
             .collect::<Vec<_>>();
@@ -7759,6 +7797,11 @@ fn build_report(
         origin_circuit_witness_domain_unresolved_generator_status_counts,
         origin_circuit_witness_domain_unresolved_generator_degree_counts,
         origin_circuit_witness_domain_unresolved_generator_sample,
+        origin_circuit_witness_shared_facet_unresolved_generator_unique_count,
+        origin_circuit_witness_shared_facet_unresolved_generator_occurrence_count,
+        origin_circuit_witness_shared_facet_unresolved_generator_status_counts,
+        origin_circuit_witness_shared_facet_unresolved_generator_degree_counts,
+        origin_circuit_witness_shared_facet_unresolved_generator_sample,
         active_support_status_counts,
         active_support_face_certificate_status_counts,
         target_extremal_ray_certificate_status_counts,

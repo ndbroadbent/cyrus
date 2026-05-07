@@ -2400,6 +2400,13 @@ generator occurrences, and reduces the all-domain unresolved queue from `2017`
 unique / `9611` occurrences to `1631` unique / `7360` occurrences. This is a
 real source-derived reduction, not a fallback: the values come from Cyrus'
 toric two-face/resolved-origin formulas.
+The report now also exposes the shared-facet unresolved queue separately from
+the broad facet-union queue. After the degree-bounded toric export, the
+shared-facet queue contains `33` unique non-known generators over `66`
+occurrences: `9` are the original missing targets, `4` match uncovered source
+rays, and `20` remain source degree-bounded rays without a toric/source-derived
+GV value. Their degrees are concentrated in `8..26`, giving a concrete next
+source-ray closure queue.
 The same active-leaf records now run the existing one-parameter unit-tensor
 phase probe against those lower source rays. This is still diagnostic-only,
 because the local intersection tensor and chamber certificate are not

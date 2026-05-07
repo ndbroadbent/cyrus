@@ -654,4 +654,8 @@ to make the remaining GV layer more first-principles:
    solved-t release export this adds `1053` source-derived toric diagnostic
    rows and reduces the shared-facet unknown bucket from `228` to `36`
    occurrences. The all-domain unresolved queue drops to `1631` unique
+   generators over `7360` occurrences. The report now splits out the narrow
+   shared-facet queue: `33` unique non-known generators over `66` occurrences,
+   consisting of the nine missing targets, `4` uncovered-source-ray hits, and
+   `20` source degree-bounded rays still lacking toric/source-derived GV values.
    generators over `7360` occurrences.
