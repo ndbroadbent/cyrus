@@ -305,6 +305,12 @@ struct ContextReport {
     local_cygv_target_unit_effective_tensor_requirement_status_counts: BTreeMap<String, usize>,
     local_cygv_target_origin_omitted_effective_tensor_requirement_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_target_unit_formula_sum_probe_status_counts: BTreeMap<String, usize>,
+    local_cygv_target_origin_omitted_unit_formula_sum_probe_status_counts: BTreeMap<String, usize>,
+    local_cygv_target_unit_formula_sum_effective_tensor_requirement_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_target_origin_omitted_unit_formula_sum_effective_tensor_requirement_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_target_unit_phase_probe_sample: Vec<LocalCygvTargetUnitPhaseProbeSummary>,
     local_cygv_target_integer_tensor_scan_status_counts: BTreeMap<String, usize>,
     local_cygv_target_integer_tensor_scan_sample: Vec<LocalCygvIntegerTensorScanSummary>,
@@ -697,6 +703,13 @@ struct LocalCygvUnitPhaseProbe {
     origin_omitted_unit_tensor_effective_tensor_requirements:
         Vec<LocalCygvEffectiveTensorRequirement>,
     expected_toric_gv1_formula_values: Vec<String>,
+    expected_toric_gv1_formula_value_sum: Option<String>,
+    unit_tensor_formula_sum_probe_status: String,
+    unit_tensor_formula_sum_effective_tensor_requirement:
+        Option<LocalCygvEffectiveTensorRequirement>,
+    origin_omitted_unit_tensor_formula_sum_probe_status: String,
+    origin_omitted_unit_tensor_formula_sum_effective_tensor_requirement:
+        Option<LocalCygvEffectiveTensorRequirement>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1679,6 +1692,7 @@ fn uncovered_source_ray_local_cygv_context(
         local_cygv_unit_phase_probe_from_skeleton(
             skeleton,
             sample_expected_toric_gv1_formula_values(sample),
+            sample_expected_toric_gv1_formula_value_sum(sample),
         )
     });
     Ok((
@@ -2040,6 +2054,7 @@ fn local_origin_omitted_wrapper_q_matrix_from_parts(
 fn local_cygv_unit_phase_probe_from_skeleton(
     skeleton: &LocalCygvInputSkeleton,
     expected_toric_gv1_formula_values: Vec<String>,
+    expected_toric_gv1_formula_value_sum: Option<String>,
 ) -> LocalCygvUnitPhaseProbe {
     let q_matrix = skeleton.local_cygv_phase_q_matrix_candidate.clone();
     let grading_vector = skeleton.local_grading_vector_candidate.clone();
@@ -2143,6 +2158,33 @@ fn local_cygv_unit_phase_probe_from_skeleton(
             origin_omitted_unit_tensor_candidate_gv.as_deref(),
             &expected_toric_gv1_formula_values,
         );
+    let unit_tensor_formula_sum_probe_status = formula_sum_probe_status(
+        "unit_tensor",
+        unit_tensor_candidate_gv.as_deref(),
+        expected_toric_gv1_formula_value_sum.as_deref(),
+    );
+    let origin_omitted_unit_tensor_formula_sum_probe_status = formula_sum_probe_status(
+        "origin_omitted_unit_tensor",
+        origin_omitted_unit_tensor_candidate_gv.as_deref(),
+        expected_toric_gv1_formula_value_sum.as_deref(),
+    );
+    let unit_tensor_formula_sum_effective_tensor_requirement = expected_toric_gv1_formula_value_sum
+        .as_deref()
+        .map(|expected| {
+            effective_tensor_requirement_for_unit_probe(
+                unit_tensor_candidate_gv.as_deref(),
+                expected,
+            )
+        });
+    let origin_omitted_unit_tensor_formula_sum_effective_tensor_requirement =
+        expected_toric_gv1_formula_value_sum
+            .as_deref()
+            .map(|expected| {
+                effective_tensor_requirement_for_unit_probe(
+                    origin_omitted_unit_tensor_candidate_gv.as_deref(),
+                    expected,
+                )
+            });
 
     LocalCygvUnitPhaseProbe {
         q_matrix,
@@ -2156,6 +2198,11 @@ fn local_cygv_unit_phase_probe_from_skeleton(
         origin_omitted_unit_tensor_error,
         origin_omitted_unit_tensor_effective_tensor_requirements,
         expected_toric_gv1_formula_values,
+        expected_toric_gv1_formula_value_sum,
+        unit_tensor_formula_sum_probe_status,
+        unit_tensor_formula_sum_effective_tensor_requirement,
+        origin_omitted_unit_tensor_formula_sum_probe_status,
+        origin_omitted_unit_tensor_formula_sum_effective_tensor_requirement,
     }
 }
 
@@ -2232,6 +2279,24 @@ fn origin_omitted_unit_phase_probe_status(value: &str, expected_values: &[String
             .to_string()
     } else {
         "origin_omitted_unit_tensor_probe_mismatch_expected_formula_set".to_string()
+    }
+}
+
+fn formula_sum_probe_status(
+    label: &str,
+    unit_tensor_gv: Option<&str>,
+    expected_sum: Option<&str>,
+) -> String {
+    let Some(expected_sum) = expected_sum else {
+        return format!("{label}_formula_sum_not_available");
+    };
+    let Some(unit_tensor_gv) = unit_tensor_gv else {
+        return format!("{label}_formula_sum_probe_not_run_missing_unit_probe");
+    };
+    if unit_tensor_gv == expected_sum {
+        format!("{label}_matches_formula_sum_but_uncertified")
+    } else {
+        format!("{label}_mismatch_formula_sum")
     }
 }
 
@@ -8141,6 +8206,22 @@ fn build_report(
         local_cygv_target_origin_omitted_effective_tensor_requirement_status_counts(
             &local_cygv_target_unit_phase_probe_sample,
         );
+    let local_cygv_target_unit_formula_sum_probe_status_counts =
+        local_cygv_target_unit_formula_sum_probe_status_counts(
+            &local_cygv_target_unit_phase_probe_sample,
+        );
+    let local_cygv_target_origin_omitted_unit_formula_sum_probe_status_counts =
+        local_cygv_target_origin_omitted_unit_formula_sum_probe_status_counts(
+            &local_cygv_target_unit_phase_probe_sample,
+        );
+    let local_cygv_target_unit_formula_sum_effective_tensor_requirement_status_counts =
+        local_cygv_target_unit_formula_sum_effective_tensor_requirement_status_counts(
+            &local_cygv_target_unit_phase_probe_sample,
+        );
+    let local_cygv_target_origin_omitted_unit_formula_sum_effective_tensor_requirement_status_counts =
+        local_cygv_target_origin_omitted_unit_formula_sum_effective_tensor_requirement_status_counts(
+            &local_cygv_target_unit_phase_probe_sample,
+        );
     let local_cygv_target_integer_tensor_scan_sample = local_cygv_integer_tensor_scan_summaries(
         &targets,
         scan_local_integer_tensors,
@@ -8303,6 +8384,10 @@ fn build_report(
         local_cygv_target_origin_omitted_unit_phase_probe_status_counts,
         local_cygv_target_unit_effective_tensor_requirement_status_counts,
         local_cygv_target_origin_omitted_effective_tensor_requirement_status_counts,
+        local_cygv_target_unit_formula_sum_probe_status_counts,
+        local_cygv_target_origin_omitted_unit_formula_sum_probe_status_counts,
+        local_cygv_target_unit_formula_sum_effective_tensor_requirement_status_counts,
+        local_cygv_target_origin_omitted_unit_formula_sum_effective_tensor_requirement_status_counts,
         local_cygv_target_unit_phase_probe_sample,
         local_cygv_target_integer_tensor_scan_status_counts,
         local_cygv_target_integer_tensor_scan_sample,
@@ -8736,7 +8821,9 @@ fn local_cygv_target_unit_phase_probe_summaries(
             continue;
         };
         let expected_values = target_expected_toric_gv1_formula_values(target);
-        let probe = local_cygv_unit_phase_probe_from_skeleton(skeleton, expected_values);
+        let expected_sum = target_expected_toric_gv1_formula_value_sum(target);
+        let probe =
+            local_cygv_unit_phase_probe_from_skeleton(skeleton, expected_values, expected_sum);
         summaries.push(LocalCygvTargetUnitPhaseProbeSummary {
             target_index: target.index,
             degree: target.degree,
@@ -8750,8 +8837,16 @@ fn target_expected_toric_gv1_formula_values(target: &TargetReport) -> Vec<String
     expected_toric_gv1_formula_values(target.cms_general_divisor_shape_candidates.as_deref())
 }
 
+fn target_expected_toric_gv1_formula_value_sum(target: &TargetReport) -> Option<String> {
+    expected_toric_gv1_formula_value_sum(target.cms_general_divisor_shape_candidates.as_deref())
+}
+
 fn sample_expected_toric_gv1_formula_values(sample: &MissingGvTargetSample) -> Vec<String> {
     expected_toric_gv1_formula_values(sample.cms_general_divisor_shape_candidates.as_deref())
+}
+
+fn sample_expected_toric_gv1_formula_value_sum(sample: &MissingGvTargetSample) -> Option<String> {
+    expected_toric_gv1_formula_value_sum(sample.cms_general_divisor_shape_candidates.as_deref())
 }
 
 fn expected_toric_gv1_formula_values(
@@ -8761,11 +8856,26 @@ fn expected_toric_gv1_formula_values(
         .unwrap_or_default()
         .iter()
         .filter_map(|candidate| candidate.toric_gv1_formula_value)
-        .map(|value| value.to_string())
         .collect::<Vec<_>>();
-    values.sort();
+    values.sort_unstable();
     values.dedup();
-    values
+    values.into_iter().map(|value| value.to_string()).collect()
+}
+
+fn expected_toric_gv1_formula_value_sum(
+    candidates: Option<&[CmsGeneralDivisorShapeCandidate]>,
+) -> Option<String> {
+    let mut found = false;
+    let mut sum = 0i64;
+    for value in candidates
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|candidate| candidate.toric_gv1_formula_value)
+    {
+        found = true;
+        sum = sum.checked_add(value)?;
+    }
+    found.then(|| sum.to_string())
 }
 
 fn local_cygv_target_unit_phase_probe_status_counts(
@@ -8812,6 +8922,65 @@ fn local_cygv_target_origin_omitted_effective_tensor_requirement_status_counts(
         for requirement in &probe
             .probe
             .origin_omitted_unit_tensor_effective_tensor_requirements
+        {
+            *counts.entry(requirement.status.clone()).or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn local_cygv_target_unit_formula_sum_probe_status_counts(
+    probes: &[LocalCygvTargetUnitPhaseProbeSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes {
+        *counts
+            .entry(probe.probe.unit_tensor_formula_sum_probe_status.clone())
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_target_origin_omitted_unit_formula_sum_probe_status_counts(
+    probes: &[LocalCygvTargetUnitPhaseProbeSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes {
+        *counts
+            .entry(
+                probe
+                    .probe
+                    .origin_omitted_unit_tensor_formula_sum_probe_status
+                    .clone(),
+            )
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_target_unit_formula_sum_effective_tensor_requirement_status_counts(
+    probes: &[LocalCygvTargetUnitPhaseProbeSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes {
+        if let Some(requirement) = &probe
+            .probe
+            .unit_tensor_formula_sum_effective_tensor_requirement
+        {
+            *counts.entry(requirement.status.clone()).or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn local_cygv_target_origin_omitted_unit_formula_sum_effective_tensor_requirement_status_counts(
+    probes: &[LocalCygvTargetUnitPhaseProbeSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes {
+        if let Some(requirement) = &probe
+            .probe
+            .origin_omitted_unit_tensor_formula_sum_effective_tensor_requirement
         {
             *counts.entry(requirement.status.clone()).or_insert(0usize) += 1;
         }
@@ -10402,7 +10571,11 @@ mod tests {
             Some(vec![vec![-1, 1, -1, 1, -1, 1]]),
         );
 
-        let probe = local_cygv_unit_phase_probe_from_skeleton(&resolved_like, vec!["1".into()]);
+        let probe = local_cygv_unit_phase_probe_from_skeleton(
+            &resolved_like,
+            vec!["1".into()],
+            Some("1".into()),
+        );
 
         assert_eq!(probe.unit_tensor_candidate_gv.as_deref(), Some("1"));
         assert_eq!(
@@ -10435,6 +10608,17 @@ mod tests {
             probe.origin_omitted_unit_tensor_effective_tensor_requirements[0].status,
             "effective_tensor_integral_candidate_but_uncertified"
         );
+        assert_eq!(
+            probe.unit_tensor_formula_sum_probe_status,
+            "unit_tensor_matches_formula_sum_but_uncertified"
+        );
+        assert_eq!(
+            probe
+                .unit_tensor_formula_sum_effective_tensor_requirement
+                .as_ref()
+                .and_then(|requirement| requirement.required_tensor_value.as_deref()),
+            Some("1")
+        );
     }
 
     #[test]
@@ -10445,6 +10629,45 @@ mod tests {
         assert_eq!(
             requirement.status,
             "effective_tensor_nonintegral_candidate_rejected_by_cygv_threefold_intnums"
+        );
+    }
+
+    #[test]
+    fn expected_formula_sum_preserves_candidate_multiplicity() {
+        let candidates = vec![
+            CmsGeneralDivisorShapeCandidate {
+                shrinking_divisor_index: 1,
+                shrinking_divisor_coefficient: -1,
+                shrinking_divisor_coordinates: vec![0, 1],
+                inferred_other_normal_degree: -1,
+                toric_gv1_formula_value: Some(1),
+                all_non_origin_relation_points_are_two_face: true,
+            },
+            CmsGeneralDivisorShapeCandidate {
+                shrinking_divisor_index: 2,
+                shrinking_divisor_coefficient: -2,
+                shrinking_divisor_coordinates: vec![1, 0],
+                inferred_other_normal_degree: 0,
+                toric_gv1_formula_value: Some(-2),
+                all_non_origin_relation_points_are_two_face: true,
+            },
+            CmsGeneralDivisorShapeCandidate {
+                shrinking_divisor_index: 3,
+                shrinking_divisor_coefficient: -1,
+                shrinking_divisor_coordinates: vec![1, 1],
+                inferred_other_normal_degree: -1,
+                toric_gv1_formula_value: Some(1),
+                all_non_origin_relation_points_are_two_face: true,
+            },
+        ];
+
+        assert_eq!(
+            expected_toric_gv1_formula_values(Some(&candidates)),
+            vec!["-2".to_string(), "1".to_string()]
+        );
+        assert_eq!(
+            expected_toric_gv1_formula_value_sum(Some(&candidates)).as_deref(),
+            Some("0")
         );
     }
 
