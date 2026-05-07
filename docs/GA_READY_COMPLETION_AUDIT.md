@@ -232,6 +232,11 @@ and matrix-basis pipeline are no longer open.
    and a source-known degree-six seed, while the sampled degree-four unknowns
    are sums of toric degree-two seeds. These are compact-history inputs, not a
    multiplicative shortcut to composite GV values.
+   A direct all-degree-bounded `cygv` call is also not currently practical:
+   feeding the `720` generators of degree at most `10` to target `7` timed out
+   after `1200s` in release mode after earlier debug runs for targets `7` and
+   `8` timed out at `600s`. This leaves certified semigroup/chamber reduction
+   as the next required implementation, not brute-force enlargement.
    These lower classes are now classified against the exported source-ray
    context: for both degree-10 targets the sampled lookups split as four known
    toric source rays, four non-toric source rays, and eight composite classes

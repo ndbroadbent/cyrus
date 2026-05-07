@@ -2149,6 +2149,17 @@ sums. It does, however, pin the remaining missing object more tightly: Cyrus
 needs the certified compact semigroup/chamber history that assigns qN values to
 these composites after the lower toric/source leaves have entered the history.
 
+A direct brute-force check with all degree-bounded generators is currently not
+a viable escape hatch. Running
+`mcallister_gv_context --target-index 7 --run-support-overlap-generators 0
+--support-overlap-max-target-degree 10` feeds `720` generators to the actual
+Rust `cygv` crate with `max_deg=10`; in debug mode, simultaneous target `7` and
+`8` runs both timed out after `600s`, and a single release target-`7` run
+timed out after `1200s` while still consuming CPU and about `5GB` RSS. No
+report file was produced. This reinforces that the next productive step is a
+source-derived finite semigroup/chamber certificate for the relevant composite
+history, not just increasing the supplied generator set.
+
 The stable-Weyl/flop-continuation route is now surfaced as a report-level
 readiness count rather than only per-target arrays. On the schema-3 context all
 nine remaining targets have CMS-style formula candidates, but the 14 exact

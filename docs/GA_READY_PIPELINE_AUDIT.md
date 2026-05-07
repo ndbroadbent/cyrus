@@ -503,7 +503,10 @@ to make the remaining GV layer more first-principles:
    toric degree-two plus source-known degree-six, and sampled degree-four
    unknowns split as toric degree-two plus toric degree-two. Those decompositions
    identify the finite-history inputs but do not license a multiplicative GV
-   shortcut.
+   shortcut. The naive larger-domain alternative is currently too expensive:
+   the actual Rust `cygv` call with all `720` degree-bounded generators through
+   target degree `10` timed out after `1200s` in release mode for target `7`
+   after `600s` debug timeouts for targets `7` and `8`.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.
    The exact classical-data transform is now available as
