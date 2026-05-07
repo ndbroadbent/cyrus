@@ -1459,7 +1459,9 @@ fn path_support_source_class_context(
     ) = uncovered_source_ray_local_cygv_context(matching_uncovered_source_ray.as_ref())?;
     let Some(ray_context) = context.degree_bounded_ray_context else {
         return Ok(PathSupportSourceClassContext {
-            status: if matching_missing_target.is_some() {
+            status: if context.source_derived_gv_by_basis.contains_key(curve) {
+                "source_ray_known_source_derived_gv".to_string()
+            } else if matching_missing_target.is_some() {
                 "source_ray_context_missing_but_matches_missing_target".to_string()
             } else {
                 "source_ray_context_missing".to_string()
@@ -1502,6 +1504,8 @@ fn path_support_source_class_context(
         .find(|sample| sparse_matches_dense(&sample.basis_nonzero, curve));
     let status = if context.covered_toric_gv_by_basis.contains_key(curve) {
         "source_ray_known_toric_covered"
+    } else if context.source_derived_gv_by_basis.contains_key(curve) {
+        "source_ray_known_source_derived_gv"
     } else if matching_missing_target.is_some() {
         "source_ray_matches_missing_target"
     } else if source_ray.is_some() {
@@ -7861,6 +7865,12 @@ mod tests {
                 .get(&vec![0, 1])
                 .map(String::as_str),
             Some("-2")
+        );
+        assert_eq!(
+            path_support_source_class_context(&[0, 1], &validated)
+                .unwrap()
+                .status,
+            "source_ray_known_source_derived_gv"
         );
         assert_eq!(
             degree_bounded_mori_ray_context_status(&validated),
