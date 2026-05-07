@@ -251,13 +251,14 @@ and matrix-basis pipeline are no longer open.
    compact `q_N` polynomial materialization: known toric/source scalar values
    do not mean the compact mirror-map `q_N` polynomial has been exported from
    cygv's history. Cyrus now has a vendored `cygv` 0.1.2 trace API for explicit
-   semigroups, checked on the quintic `2875` case, so the observability blocker
-   is reduced to finding the right corrected-chamber compact semigroup/history
-   domain. The same small path-support `cygv` domain now reports
-   per-predecessor lookups: it matches the four known degree-two toric values
-   and assigns six nonzero plus six zero/absent values among the unknown
-   non-toric lower classes, but the target remains `GV=0`. These lower-class
-   values are therefore diagnostic artifacts of the small domain, not
+   and provided-generator domains, checked on the quintic `2875` case, so the
+   observability blocker is reduced to finding the right corrected-chamber
+   compact semigroup/history domain. The same small path-support `cygv` domain
+   now reports per-predecessor lookups and qN-trace status: for target `7`, it
+   materializes qN for ten sampled nonzero lower lookups and records six
+   zero/absent lower lookups with no qN, but the target remains `GV=0` with no
+   target qN polynomial. These lower-class values are therefore diagnostic
+   artifacts of the small domain, not
    promotable compact GV history.
    The report now also aggregates the uncovered source-ray subset as a unique
    queue. For each of targets `7` and `8`, the queue has two unique degree-six

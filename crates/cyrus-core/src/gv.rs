@@ -11057,6 +11057,41 @@ pub fn compute_gv_invariants_with_provided_generators(
     )
 }
 
+/// Compute GV invariants and compact `q_N` polynomial history from
+/// caller-provided semigroup generators.
+///
+/// This mirrors [`compute_gv_invariants_with_provided_generators`] at the
+/// `cygv` boundary, but returns the `q_N` polynomials materialized by cygv's
+/// series inversion. It intentionally bypasses the normal GV cache because the
+/// trace is diagnostic state, not just the final invariant table.
+///
+/// # Errors
+/// Returns an error if the input shapes or numeric ranges are invalid, if cygv
+/// cannot construct the semigroup, or if HKTY finds non-integral output.
+pub fn compute_gv_invariants_with_provided_generators_qn_trace(
+    generators: &[Vec<i64>],
+    grading_vector: &[i64],
+    q_matrix: &[Vec<i64>],
+    intnums: &Intersection,
+    min_points: Option<u32>,
+    max_deg: Option<u32>,
+) -> Result<GvInvariantsWithQnTrace> {
+    let (semigroup, q, intnums_map) = provided_cygv_semigroup_inputs(
+        generators,
+        grading_vector,
+        q_matrix,
+        intnums,
+        min_points,
+        max_deg,
+    )?;
+    compute_cygv_rat_threefold_from_semigroup_with_qn_trace(
+        semigroup,
+        &q,
+        intnums_map,
+        "provided-generator GV qN trace",
+    )
+}
+
 /// Source-audit helper for the private `cygv::Semigroup::with_max_degree`
 /// seed-reduction step.
 ///
@@ -11175,6 +11210,100 @@ pub fn compute_gv_invariants_with_explicit_semigroup_qn_trace(
         intnums_map,
         "explicit GV semigroup qN trace",
     )
+}
+
+fn provided_cygv_semigroup_inputs(
+    generators: &[Vec<i64>],
+    grading_vector: &[i64],
+    q_matrix: &[Vec<i64>],
+    intnums: &Intersection,
+    min_points: Option<u32>,
+    max_deg: Option<u32>,
+) -> Result<(
+    cygv::Semigroup,
+    DMatrix<i32>,
+    HashMap<(usize, usize, usize), i32>,
+)> {
+    if min_points.is_some() == max_deg.is_some() {
+        return Err(Error::InvalidInput(
+            "Exactly one of min_points or max_deg must be specified".into(),
+        ));
+    }
+    if generators.is_empty() {
+        return Err(Error::InvalidInput(
+            "GV computation requires at least one generator".into(),
+        ));
+    }
+    let dim = generators[0].len();
+    if dim == 0 {
+        return Err(Error::InvalidInput(
+            "GV generator dimension must be positive".into(),
+        ));
+    }
+    if grading_vector.len() != dim {
+        return Err(Error::InvalidInput(
+            "grading vector length must match GV generator dimension".into(),
+        ));
+    }
+
+    let grading_vec_i32: Vec<i32> = grading_vector
+        .iter()
+        .map(|&v| i32::try_from(v))
+        .collect::<std::result::Result<_, _>>()
+        .map_err(|_| Error::InvalidInput("grading vector does not fit in i32".into()))?;
+    let grading = RowDVector::from_row_slice(&grading_vec_i32);
+    let q = cygv_q_matrix(q_matrix, dim)?;
+    let intnums_map = cygv_intnums_map(intnums)?;
+
+    let mut unique = HashSet::new();
+    let mut filtered_vecs = Vec::new();
+    for row in generators {
+        if row.len() != dim {
+            return Err(Error::InvalidInput(
+                "GV generator rows have inconsistent dimensions".into(),
+            ));
+        }
+        if unique.insert(row.clone()) {
+            filtered_vecs.push(row.clone());
+        }
+    }
+    if let Some(d) = max_deg {
+        let d_i128 = i128::from(d);
+        filtered_vecs.retain(|row| {
+            row.iter()
+                .zip(grading_vector.iter())
+                .map(|(&x, &g)| i128::from(x) * i128::from(g))
+                .sum::<i128>()
+                <= d_i128
+        });
+        if filtered_vecs.is_empty() {
+            return Err(Error::InvalidInput(
+                "No generators remain after max_deg filtering".into(),
+            ));
+        }
+    }
+
+    let n_gen = filtered_vecs.len();
+    let mut gen_data = Vec::with_capacity(dim * n_gen);
+    for col in 0..n_gen {
+        for row in 0..dim {
+            let val = i32::try_from(filtered_vecs[col][row]).map_err(|_| {
+                Error::InvalidInput("Mori cone generator does not fit in i32".into())
+            })?;
+            gen_data.push(val);
+        }
+    }
+    let generators = DMatrix::from_column_slice(dim, n_gen, &gen_data);
+    let semigroup = if let Some(d) = max_deg {
+        cygv::Semigroup::with_max_degree(generators, grading, d)
+    } else if let Some(n) = min_points {
+        cygv::Semigroup::with_min_elements(generators, grading, n as usize)
+    } else {
+        cygv::Semigroup::from_data(generators, grading)
+    }
+    .map_err(|e| Error::InvalidInput(format!("cygv semigroup construction failed: {e}")))?;
+
+    Ok((semigroup, q, intnums_map))
 }
 
 fn explicit_cygv_semigroup_inputs(
@@ -12532,11 +12661,12 @@ mod tests {
         compute_grading_vector, compute_gv_invariants_inner,
         compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_explicit_semigroup_qn_trace,
-        compute_gv_invariants_with_provided_generators, compute_local_p2_genus_zero_gv_series,
-        compute_local_toric_circuit_gv_series, compute_one_dimensional_ray_gv_series,
-        compute_ray_gv_series_with_provided_generators, curve_in_rational_row_span,
-        curve_row_span_rank, curve_volume_in_divisor_basis, cygv_pair_reduced_seed_generators,
-        detect_apparent_nilpotent_ray_from_gv_multiples,
+        compute_gv_invariants_with_provided_generators,
+        compute_gv_invariants_with_provided_generators_qn_trace,
+        compute_local_p2_genus_zero_gv_series, compute_local_toric_circuit_gv_series,
+        compute_one_dimensional_ray_gv_series, compute_ray_gv_series_with_provided_generators,
+        curve_in_rational_row_span, curve_row_span_rank, curve_volume_in_divisor_basis,
+        cygv_pair_reduced_seed_generators, detect_apparent_nilpotent_ray_from_gv_multiples,
         detect_apparent_nilpotent_rays_from_gv_table, diagnose_affine_toric_circuit,
         dump_mori_rays_cdd, exact_i64_dot_checked, extract_ckyz_local_gv_invariants_from_potential,
         extract_ckyz_local_gv_invariants_from_potential_for_degrees,
@@ -16640,6 +16770,42 @@ mod tests {
                 coefficient: "1".to_string(),
             }]
         );
+    }
+
+    #[test]
+    fn provided_generator_quintic_qn_trace_matches_normal_wrapper() {
+        let mut intnums = Intersection::new(1);
+        set_intersection_i64(&mut intnums, 0, 0, 0, 5);
+
+        let normal = compute_gv_invariants_with_provided_generators(
+            &[vec![1]],
+            &[1],
+            &[vec![1, 1, 1, 1, 1]],
+            &intnums,
+            None,
+            Some(1),
+        )
+        .expect("provided-generator quintic should compute degree-one GV");
+        let traced = compute_gv_invariants_with_provided_generators_qn_trace(
+            &[vec![1]],
+            &[1],
+            &[vec![1, 1, 1, 1, 1]],
+            &intnums,
+            None,
+            Some(1),
+        )
+        .expect("provided-generator quintic should compute degree-one qN trace");
+
+        assert_eq!(traced.invariants, normal);
+        assert!(
+            traced
+                .invariants
+                .iter()
+                .any(|(charge, value)| charge == &[1] && value == &Integer::from(2875))
+        );
+        assert_eq!(traced.qn_trace.len(), 1);
+        assert_eq!(traced.qn_trace[0].element, vec![1]);
+        assert_eq!(traced.qn_trace[0].terms.len(), 1);
     }
 
     #[test]

@@ -22,7 +22,8 @@ use cyrus_core::types::rational::Rational;
 use cyrus_core::types::tags::Finite;
 use cyrus_core::{
     Intersection, Point, compute_gv_invariants_with_explicit_semigroup,
-    compute_gv_invariants_with_provided_generators, curve_row_span_rank,
+    compute_gv_invariants_with_provided_generators,
+    compute_gv_invariants_with_provided_generators_qn_trace, curve_row_span_rank,
     diagnose_affine_toric_circuit, integer_math::solve_linear_system_rational, utils::gcd_list_int,
 };
 
@@ -562,8 +563,12 @@ struct CygvPathHistoryProbe {
     path_support_generator_count: Option<usize>,
     path_support_status: Option<String>,
     path_support_gv: Option<String>,
+    path_support_qn_trace_polynomial_count: Option<usize>,
+    path_support_target_qn_trace_status: Option<String>,
+    path_support_target_qn_trace_term_count: Option<usize>,
     path_support_error: Option<String>,
     path_support_lookup_status_counts: BTreeMap<String, usize>,
+    path_support_qn_trace_status_counts: BTreeMap<String, usize>,
     path_support_source_class_status_counts: BTreeMap<String, usize>,
     path_support_lookup_sample: Vec<CygvPathSupportLookup>,
 }
@@ -657,6 +662,8 @@ struct CygvPathSupportLookup {
     source_derived_gv: Option<String>,
     path_support_gv: Option<String>,
     path_support_lookup_status: String,
+    path_support_qn_trace_status: String,
+    path_support_qn_trace_term_count: Option<usize>,
     source_class_status: String,
     source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
     matching_missing_target_index: Option<usize>,
@@ -960,8 +967,12 @@ struct PathSupportGeneratorProbe {
     generator_count: Option<usize>,
     status: Option<String>,
     gv: Option<String>,
+    qn_trace_polynomial_count: Option<usize>,
+    target_qn_trace_status: Option<String>,
+    target_qn_trace_term_count: Option<usize>,
     error: Option<String>,
     lookup_status_counts: BTreeMap<String, usize>,
+    qn_trace_status_counts: BTreeMap<String, usize>,
     source_class_status_counts: BTreeMap<String, usize>,
     lookup_sample: Vec<CygvPathSupportLookup>,
 }
@@ -1396,8 +1407,12 @@ fn path_support_generator_probe(
             generator_count: None,
             status: None,
             gv: None,
+            qn_trace_polynomial_count: None,
+            target_qn_trace_status: None,
+            target_qn_trace_term_count: None,
             error: None,
             lookup_status_counts: BTreeMap::new(),
+            qn_trace_status_counts: BTreeMap::new(),
             source_class_status_counts: BTreeMap::new(),
             lookup_sample: Vec::new(),
         };
@@ -1409,8 +1424,12 @@ fn path_support_generator_probe(
             generator_count: None,
             status: Some("error".to_string()),
             gv: None,
+            qn_trace_polynomial_count: None,
+            target_qn_trace_status: None,
+            target_qn_trace_term_count: None,
             error: Some(error),
             lookup_status_counts: BTreeMap::new(),
+            qn_trace_status_counts: BTreeMap::new(),
             source_class_status_counts: BTreeMap::new(),
             lookup_sample: Vec::new(),
         },
@@ -1430,8 +1449,12 @@ fn path_support_generator_probe_inner(
             generator_count: Some(0),
             status: Some("skipped_empty_path_support".to_string()),
             gv: None,
+            qn_trace_polynomial_count: None,
+            target_qn_trace_status: None,
+            target_qn_trace_term_count: None,
             error: None,
             lookup_status_counts: BTreeMap::new(),
+            qn_trace_status_counts: BTreeMap::new(),
             source_class_status_counts: BTreeMap::new(),
             lookup_sample: Vec::new(),
         });
@@ -1462,7 +1485,7 @@ fn path_support_generator_probe_inner(
     let previous_panic_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
     let gvs_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        compute_gv_invariants_with_provided_generators(
+        compute_gv_invariants_with_provided_generators_qn_trace(
             &generators,
             context.grading,
             context.q_matrix,
@@ -1472,16 +1495,20 @@ fn path_support_generator_probe_inner(
         )
     }));
     std::panic::set_hook(previous_panic_hook);
-    let gvs = match gvs_result {
-        Ok(Ok(gvs)) => gvs,
+    let traced = match gvs_result {
+        Ok(Ok(traced)) => traced,
         Ok(Err(error)) => {
             return Ok(PathSupportGeneratorProbe {
                 support_size: Some(support.len()),
                 generator_count: Some(generators.len()),
                 status: Some("hkty_error".to_string()),
                 gv: None,
+                qn_trace_polynomial_count: None,
+                target_qn_trace_status: None,
+                target_qn_trace_term_count: None,
                 error: Some(format!("path_support_generators HKTY failed: {error}")),
                 lookup_status_counts: BTreeMap::new(),
+                qn_trace_status_counts: BTreeMap::new(),
                 source_class_status_counts: BTreeMap::new(),
                 lookup_sample: Vec::new(),
             });
@@ -1492,17 +1519,28 @@ fn path_support_generator_probe_inner(
                 generator_count: Some(generators.len()),
                 status: Some("hkty_panic".to_string()),
                 gv: None,
+                qn_trace_polynomial_count: None,
+                target_qn_trace_status: None,
+                target_qn_trace_term_count: None,
                 error: Some(format!(
                     "path_support_generators HKTY panicked: {}",
                     panic_payload_message(payload.as_ref())
                 )),
                 lookup_status_counts: BTreeMap::new(),
+                qn_trace_status_counts: BTreeMap::new(),
                 source_class_status_counts: BTreeMap::new(),
                 lookup_sample: Vec::new(),
             });
         }
     };
-    let gvs_by_curve = gvs
+    let qn_trace_polynomial_count = traced.qn_trace.len();
+    let qn_trace_term_counts_by_curve = traced
+        .qn_trace
+        .iter()
+        .map(|poly| (poly.element.clone(), poly.terms.len()))
+        .collect::<HashMap<_, _>>();
+    let gvs_by_curve = traced
+        .invariants
         .into_iter()
         .map(|(curve, value)| (curve, value.to_string()))
         .collect::<HashMap<_, _>>();
@@ -1510,15 +1548,27 @@ fn path_support_generator_probe_inner(
         .get(&target_i32)
         .cloned()
         .unwrap_or_else(|| "0".to_string());
-    let (lookup_status_counts, source_class_status_counts, lookup_sample) =
-        path_support_gv_lookup_sample(candidates, &gvs_by_curve, context)?;
+    let target_qn_trace_term_count = qn_trace_term_counts_by_curve.get(&target_i32).copied();
+    let target_qn_trace_status =
+        path_support_qn_trace_status(&gv, target_qn_trace_term_count)?.to_string();
+    let (lookup_status_counts, qn_trace_status_counts, source_class_status_counts, lookup_sample) =
+        path_support_gv_lookup_sample(
+            candidates,
+            &gvs_by_curve,
+            &qn_trace_term_counts_by_curve,
+            context,
+        )?;
     Ok(PathSupportGeneratorProbe {
         support_size: Some(support.len()),
         generator_count: Some(generators.len()),
         status: Some("computed_path_support_generators".to_string()),
         gv: Some(gv),
+        qn_trace_polynomial_count: Some(qn_trace_polynomial_count),
+        target_qn_trace_status: Some(target_qn_trace_status),
+        target_qn_trace_term_count,
         error: None,
         lookup_status_counts,
+        qn_trace_status_counts,
         source_class_status_counts,
         lookup_sample,
     })
@@ -1527,9 +1577,11 @@ fn path_support_generator_probe_inner(
 fn path_support_gv_lookup_sample(
     candidates: &[CygvPathPredecessorCandidate],
     gvs_by_curve: &HashMap<Vec<i32>, String>,
+    qn_trace_term_counts_by_curve: &HashMap<Vec<i32>, usize>,
     context: &ValidatedContext<'_>,
 ) -> Result<
     (
+        BTreeMap<String, usize>,
         BTreeMap<String, usize>,
         BTreeMap<String, usize>,
         Vec<CygvPathSupportLookup>,
@@ -1537,6 +1589,7 @@ fn path_support_gv_lookup_sample(
     String,
 > {
     let mut lookup_status_counts = BTreeMap::new();
+    let mut qn_trace_status_counts = BTreeMap::new();
     let mut source_class_status_counts = BTreeMap::new();
     let mut sample = Vec::new();
     for (candidate_index, candidate) in candidates.iter().enumerate() {
@@ -1549,8 +1602,10 @@ fn path_support_gv_lookup_sample(
             candidate.predecessor_source_derived_gv.as_ref(),
             &candidate.predecessor_nonzero,
             gvs_by_curve,
+            qn_trace_term_counts_by_curve,
             context,
             &mut lookup_status_counts,
+            &mut qn_trace_status_counts,
             &mut source_class_status_counts,
             &mut sample,
         )?;
@@ -1563,13 +1618,20 @@ fn path_support_gv_lookup_sample(
             candidate.difference_source_derived_gv.as_ref(),
             &candidate.difference_nonzero,
             gvs_by_curve,
+            qn_trace_term_counts_by_curve,
             context,
             &mut lookup_status_counts,
+            &mut qn_trace_status_counts,
             &mut source_class_status_counts,
             &mut sample,
         )?;
     }
-    Ok((lookup_status_counts, source_class_status_counts, sample))
+    Ok((
+        lookup_status_counts,
+        qn_trace_status_counts,
+        source_class_status_counts,
+        sample,
+    ))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1582,8 +1644,10 @@ fn push_path_support_lookup(
     source_derived_gv: Option<&String>,
     curve_nonzero: &[(usize, i64)],
     gvs_by_curve: &HashMap<Vec<i32>, String>,
+    qn_trace_term_counts_by_curve: &HashMap<Vec<i32>, usize>,
     context: &ValidatedContext<'_>,
     lookup_status_counts: &mut BTreeMap<String, usize>,
+    qn_trace_status_counts: &mut BTreeMap<String, usize>,
     source_class_status_counts: &mut BTreeMap<String, usize>,
     sample: &mut Vec<CygvPathSupportLookup>,
 ) -> Result<(), String> {
@@ -1593,10 +1657,16 @@ fn push_path_support_lookup(
         .get(&curve_i32)
         .cloned()
         .unwrap_or_else(|| "0".to_string());
+    let path_support_qn_trace_term_count = qn_trace_term_counts_by_curve.get(&curve_i32).copied();
+    let path_support_qn_trace_status =
+        path_support_qn_trace_status(&path_support_gv, path_support_qn_trace_term_count)?;
     let path_support_lookup_status =
         path_support_lookup_status(known_qn_history_status, &path_support_gv)?;
     *lookup_status_counts
         .entry(path_support_lookup_status.clone())
+        .or_insert(0) += 1;
+    *qn_trace_status_counts
+        .entry(path_support_qn_trace_status.to_string())
         .or_insert(0) += 1;
     let source_context = path_support_source_class_context(&curve, context)?;
     *source_class_status_counts
@@ -1611,6 +1681,8 @@ fn push_path_support_lookup(
         source_derived_gv: source_derived_gv.cloned(),
         path_support_gv: Some(path_support_gv),
         path_support_lookup_status,
+        path_support_qn_trace_status: path_support_qn_trace_status.to_string(),
+        path_support_qn_trace_term_count,
         source_class_status: source_context.status,
         source_ray_ambient_nonzero: source_context.source_ray_ambient_nonzero,
         matching_missing_target_index: source_context.matching_missing_target_index,
@@ -2847,6 +2919,22 @@ fn path_support_lookup_status(
         (_, false) => "path_support_zero_or_absent_unrecognized_history_status",
     };
     Ok(status.to_string())
+}
+
+fn path_support_qn_trace_status(
+    path_support_gv: &str,
+    qn_trace_term_count: Option<usize>,
+) -> Result<&'static str, String> {
+    let path_support_nonzero = parse_rational(path_support_gv)? != MalachiteRational::from(0);
+    let status = match (path_support_nonzero, qn_trace_term_count) {
+        (true, Some(0)) => "path_support_qn_materialized_empty_for_nonzero_gv",
+        (true, Some(_)) => "path_support_qn_materialized_for_nonzero_gv",
+        (true, None) => "path_support_qn_missing_for_nonzero_gv",
+        (false, Some(0)) => "path_support_qn_materialized_empty_for_zero_or_absent_gv",
+        (false, Some(_)) => "path_support_qn_materialized_for_zero_or_absent_gv",
+        (false, None) => "path_support_qn_not_required_zero_or_absent_gv",
+    };
+    Ok(status)
 }
 
 fn path_support_uncovered_source_ray_summaries(
@@ -6943,8 +7031,12 @@ fn cygv_path_history_probe(
             path_support_generator_count: None,
             path_support_status: None,
             path_support_gv: None,
+            path_support_qn_trace_polynomial_count: None,
+            path_support_target_qn_trace_status: None,
+            path_support_target_qn_trace_term_count: None,
             path_support_error: None,
             path_support_lookup_status_counts: BTreeMap::new(),
+            path_support_qn_trace_status_counts: BTreeMap::new(),
             path_support_source_class_status_counts: BTreeMap::new(),
             path_support_lookup_sample: Vec::new(),
         },
@@ -7019,8 +7111,12 @@ fn cygv_path_history_probe_inner(
             path_support_generator_count: None,
             path_support_status: None,
             path_support_gv: None,
+            path_support_qn_trace_polynomial_count: None,
+            path_support_target_qn_trace_status: None,
+            path_support_target_qn_trace_term_count: None,
             path_support_error: None,
             path_support_lookup_status_counts: BTreeMap::new(),
+            path_support_qn_trace_status_counts: BTreeMap::new(),
             path_support_source_class_status_counts: BTreeMap::new(),
             path_support_lookup_sample: Vec::new(),
         });
@@ -7071,8 +7167,12 @@ fn cygv_path_history_probe_inner(
             path_support_generator_count: None,
             path_support_status: None,
             path_support_gv: None,
+            path_support_qn_trace_polynomial_count: None,
+            path_support_target_qn_trace_status: None,
+            path_support_target_qn_trace_term_count: None,
             path_support_error: None,
             path_support_lookup_status_counts: BTreeMap::new(),
+            path_support_qn_trace_status_counts: BTreeMap::new(),
             path_support_source_class_status_counts: BTreeMap::new(),
             path_support_lookup_sample: Vec::new(),
         });
@@ -7195,8 +7295,14 @@ fn cygv_path_history_probe_inner(
             path_support_generator_count: path_support_generators.generator_count,
             path_support_status: path_support_generators.status,
             path_support_gv: path_support_generators.gv,
+            path_support_qn_trace_polynomial_count: path_support_generators
+                .qn_trace_polynomial_count,
+            path_support_target_qn_trace_status: path_support_generators.target_qn_trace_status,
+            path_support_target_qn_trace_term_count: path_support_generators
+                .target_qn_trace_term_count,
             path_support_error: path_support_generators.error,
             path_support_lookup_status_counts: path_support_generators.lookup_status_counts,
+            path_support_qn_trace_status_counts: path_support_generators.qn_trace_status_counts,
             path_support_source_class_status_counts: path_support_generators
                 .source_class_status_counts,
             path_support_lookup_sample: path_support_generators.lookup_sample,
@@ -7258,8 +7364,12 @@ fn cygv_path_history_probe_inner(
         path_support_generator_count: path_support_generators.generator_count,
         path_support_status: path_support_generators.status,
         path_support_gv: path_support_generators.gv,
+        path_support_qn_trace_polynomial_count: path_support_generators.qn_trace_polynomial_count,
+        path_support_target_qn_trace_status: path_support_generators.target_qn_trace_status,
+        path_support_target_qn_trace_term_count: path_support_generators.target_qn_trace_term_count,
         path_support_error: path_support_generators.error,
         path_support_lookup_status_counts: path_support_generators.lookup_status_counts,
+        path_support_qn_trace_status_counts: path_support_generators.qn_trace_status_counts,
         path_support_source_class_status_counts: path_support_generators.source_class_status_counts,
         path_support_lookup_sample: path_support_generators.lookup_sample,
     })
@@ -12739,6 +12849,50 @@ mod tests {
     }
 
     #[test]
+    fn path_support_generator_probe_exports_target_qn_trace_status() {
+        let stats = MissingGvTargetStats {
+            target_count: 1,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: vec![minimal_missing_sample(vec![(0, 1)])],
+        };
+        let grading = vec![1];
+        let q_matrix = vec![vec![1, 1, 1, 1, 1]];
+        let degree_bounded_rays = vec![vec![1]];
+        let mut intersection = Intersection::new(1);
+        intersection.set(0, 0, 0, Rational::<Finite>::new(MalachiteRational::from(5)));
+        let context = ValidatedContext {
+            dimension: 1,
+            degree_bound: 1,
+            q_cols: 5,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: None,
+            covered_toric_gv_by_basis: HashMap::new(),
+            source_derived_gv_by_basis: HashMap::new(),
+            intersection,
+            stats: &stats,
+            uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
+        };
+
+        let probe = path_support_generator_probe_inner(&[1], 1, &[], &context)
+            .expect("quintic-sized path-support probe should compute");
+
+        assert_eq!(
+            probe.status.as_deref(),
+            Some("computed_path_support_generators")
+        );
+        assert_eq!(probe.gv.as_deref(), Some("2875"));
+        assert_eq!(probe.qn_trace_polynomial_count, Some(1));
+        assert_eq!(
+            probe.target_qn_trace_status.as_deref(),
+            Some("path_support_qn_materialized_for_nonzero_gv")
+        );
+        assert_eq!(probe.target_qn_trace_term_count, Some(1));
+    }
+
+    #[test]
     fn sparse_matches_dense_rejects_missing_extra_or_duplicate_entries() {
         assert!(sparse_matches_dense(&[(0, 2), (3, -1)], &[2, 0, 0, -1]));
         assert!(!sparse_matches_dense(&[(0, 2)], &[2, 0, 0, -1]));
@@ -13000,6 +13154,8 @@ mod tests {
             path_support_gv: Some("1".to_string()),
             path_support_lookup_status: "path_support_nonzero_unknown_not_toric_covered"
                 .to_string(),
+            path_support_qn_trace_status: "path_support_qn_materialized_for_nonzero_gv".to_string(),
+            path_support_qn_trace_term_count: Some(3),
             source_class_status: "source_ray_not_toric_covered".to_string(),
             source_ray_ambient_nonzero: Some(vec![(0, -1), (5, 1)]),
             matching_missing_target_index: None,

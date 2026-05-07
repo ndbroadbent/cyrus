@@ -138,8 +138,11 @@ run pass. Any remaining mismatch must be explicit and localizable.
    compact `q_N` polynomial materialization, and the degree-10 first-layer
    predecessor pairs still have only scalar coverage or unknown scalar coverage,
    not exported compact `q_N` polynomials. Cyrus now vendors `cygv` 0.1.2 with
-   a narrow qN-trace API and has a quintic regression proving the trace path
-   preserves the degree-one GV `2875`; applying that trace to McAllister still
+   a narrow qN-trace API and has quintic regressions proving the trace path
+   preserves the degree-one GV `2875` for explicit and provided-generator
+   domains. The target-7 path-support probe now records 11 small-domain qN
+   polynomials and ten sampled nonzero lower-class qN lookups, while the target
+   still has `GV=0` and no qN polynomial. Applying the trace to McAllister still
    requires the certified corrected-chamber semigroup/history domain.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV

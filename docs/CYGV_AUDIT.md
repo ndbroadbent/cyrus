@@ -1678,20 +1678,23 @@ polynomials.
 This was previously an API boundary: public upstream `cygv` returned only final
 GV/GW maps, while `compute_qn`, `compute_li2qn_thread`, and the rolling
 `previous_qn` cache were private inside `cygv::series_inversion`. The local
-patch removes that specific observability blocker for explicit semigroups. It
-does not by itself solve the McAllister corrected-chamber residual, because the
-remaining degree-10 target histories still require a certified compact/chamber
-semigroup large enough to reproduce cygv's mirror-map subtraction history.
+patch removes that specific observability blocker for explicit semigroups and
+provided-generator diagnostic domains. It does not by itself solve the
+McAllister corrected-chamber residual, because the remaining degree-10 target
+histories still require a certified compact/chamber semigroup large enough to
+reproduce cygv's mirror-map subtraction history.
 The path-history probe now has a broader opt-in
 `--run-path-support-generators` check that collects the support of the target,
 sampled predecessor/difference pairs, and sampled seed-sum decompositions, then
 passes every degree-bounded generator contained in that support to the actual
 Rust `cygv` crate. On the saved corrected-chamber context with covered toric
-rows, target `7` has path support size `7`, supplies `11` generators, and
-returns `GV=0`; target `8` has path support size `6`, supplies `7` generators,
-and also returns `GV=0`. This rules out the sampled path-support generator
-domain as the missing compact HKTY history. Like the lower-seed diamonds, it is
-a negative diagnostic unless a source certificate promotes the supplied
+rows, target `7` has path support size `7`, supplies `11` generators, returns
+`GV=0`, and now records `11` cygv-materialized qN polynomials in that small
+domain. The target itself has no qN polynomial because the small-domain target
+GV is zero. Target `8` has path support size `6`, supplies `7` generators, and
+also returns `GV=0`. This rules out the sampled path-support generator domain
+as the missing compact HKTY history. Like the lower-seed diamonds, it is a
+negative diagnostic unless a source certificate promotes the supplied
 semigroup.
 
 After rebuilding `mcallister_gv_context`, the dry-run report now preserves the
@@ -2108,14 +2111,15 @@ history or a certified chamber/continuation source for it, not mere existence
 of a semigroup predecessor pair.
 
 The same path-support provided-generator run now looks up every sampled
-predecessor and difference inside that small `cygv` domain. For both degree-10
-targets it matches the four known nonzero toric degree-two lookups, and among
-the twelve unknown non-toric lookups it reports six nonzero and six zero/absent
-values. The target lookup remains `GV=0`. This is an important negative check:
-the small support domain can manufacture some live-looking lower-degree qN
-history, but it still does not reproduce the target correction, so those
-lookup values remain diagnostic-only and cannot replace the certified compact
-semigroup/chamber history.
+predecessor and difference inside that small `cygv` domain, and the report
+records whether cygv actually materialized a qN polynomial for each lookup. For
+target `7`, the small domain materializes qN for ten sampled nonzero lower
+classes and has six zero/absent lower lookups with no qN polynomial; the target
+lookup remains `GV=0` with no target qN polynomial. This is an important
+negative check: the small support domain can manufacture some live-looking
+lower-degree qN history, but it still does not reproduce the target correction,
+so those lookup values remain diagnostic-only and cannot replace the certified
+compact semigroup/chamber history.
 
 Those sampled lower classes are now also classified against the source-ray
 inventory exported in schema `3`. For both degree-10 targets the 16
