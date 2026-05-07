@@ -380,6 +380,18 @@ and matrix-basis pipeline are no longer open.
    the missing target GV. The qN-shape trace further shows the generated
    target-`7` side term is only an `identity_single_term_qn_polynomial`, so it
    is not concealing a lower-history expansion inside its own qN polynomial.
+   The target-monomial source comparison is now sharper: bounded lower-leaf
+   diamonds reproduce the local source scalar GV and one-term qN polynomial,
+   but the parent domain has extra qN monomials. Those parent-only terms are
+   now classified in-context. For targets `7` and `8`, they include the final
+   missing target ray itself as a raw/reduced seed, plus non-source composite
+   degree-eight/degree-ten terms. A diagnostic semigroup built only from the
+   observed parent qN term support is still not a certificate: target `7`
+   source rows fail with non-integer HKTY output, while target `8` source rows
+   compute the scalar source GV values but still materialize only one qN term
+   and mismatch the parent qN term counts. Thus the parent qN term set itself
+   is not the missing compact/chamber semigroup; the broader certified
+   parent-domain history is still required.
    The target-coefficient balance reconstructs the small-domain
    pre-subtraction readouts: target `7` has lower-source sum `3`,
    post-subtraction coefficient `0`, pivot component `2`, and
