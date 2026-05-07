@@ -1142,6 +1142,7 @@ fn stage5_gv_computation_roadmap() {
             "mcallister_first_principles runs from declared inputs only with validation checkpoints absent, and can skip McAllister final assertions for generic candidate evaluation",
             "generic no-assertion runs default K/M flux vectors to Cyrus' selected production dual basis instead of the McAllister [3,4,5,8] source basis; --dual-basis now accepts index or matrix validation-source flux coordinate bases, and --production-dual-basis carries index or matrix internal dual bases through flat-direction/GV handoff",
             "corrected-chamber general GV diagnostics report degree-bounded ray counts; for the 4-214-647 corrected chamber, max_deg=26 keeps 2963 of 561596 Mori generators",
+            "mcallister_gv_context reports pre-LP supporting-face profiles for origin-circuit witness domains; for the 4-214-647 corrected chamber, the default witness-domain certificate diagnostic now finishes with 14 relation domains skipped as single-generator codimension-213 cases, seven small shared-facet domains returning no LP certificate, seven larger shared-facet domains skipped by the 256-generator limit, and all facet-union domains skipped by generator limits",
         ],
         remaining_gaps: vec![
             "Generated branch candidates without the height_projected initializer still did not find the 4-214-647 paper branch in a deterministic 48-candidate diagnostic: the lowest sampled phase-1 volume was about 20611 rather than 17901, and even coverage-aware selection still had at least 412 small curves missing toric GV coverage",
@@ -1163,6 +1164,7 @@ fn stage5_gv_computation_roadmap() {
             "Do not promote degree-bounded generator filtering as an exact GV shortcut: a high-degree cone ray can still affect low-degree lattice points through fractional cone combinations, so exact bounded GV needs full inequalities or a proven reduced formulation",
             "The corrected-chamber provided-generator diagnostic with max_deg=26 and 2963 degree-bounded rows exceeded a 600-second timeout without producing a cygv result, so naive mcap_generators truncation is not a useful replacement for an exact reduced formulation",
             "The corrected-chamber LP-face supporting-certificate diagnostic with default 16-anchor search exceeded a 300-second timeout before producing a certificate summary; the smaller 2-anchor sample still certified 0/9 faces",
+            "The corrected-chamber origin-circuit witness-domain certificate profile does not justify promoting shared-facet local GV values: relation supports are single-generator high-codimension domains, seven small shared-facet domains have no bounded LP certificate, and the remaining shared/union domains are too large under the current generator limits",
             "Reduce the 561658-ray Mori cap input before dualization, or add a CYTools/PPL-faithful constraint minimization path",
             "Run and validate lattice-point generation under a Python environment with OR-Tools after DDM returns the dual cone",
         ],
