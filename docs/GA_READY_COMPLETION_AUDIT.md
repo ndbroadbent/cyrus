@@ -206,6 +206,13 @@ and matrix-basis pipeline are no longer open.
    non-toric lower classes, but the target remains `GV=0`. These lower-class
    values are therefore diagnostic artifacts of the small domain, not
    promotable compact GV history.
+   These lower classes are now classified against the exported source-ray
+   context: for both degree-10 targets the sampled lookups split as four known
+   toric source rays, four non-toric source rays, and eight composite classes
+   that are not source degree-bounded rays. None is one of the nine direct
+   missing target rows, so reproducing the target qN history requires broader
+   finite-semigroup history, not just assigning values to the nine target
+   curves.
 5. **Potent-ray local diagnostics.** Rank-two N=10 and rank-four potent-ray
    rows are still incomplete, but they are validation diagnostics rather than
    blockers for the compact GA-ready GV engine.

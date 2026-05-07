@@ -474,7 +474,12 @@ to make the remaining GV layer more first-principles:
    six nonzero plus six zero/absent values across the unknown non-toric lower
    classes, while the target still evaluates to `GV=0`. This confirms that
    small-domain lower-history values are diagnostic only until the source
-   compact semigroup/chamber history is certified.
+   compact semigroup/chamber history is certified. The same lookup rows are now
+   classified against the schema-`3` source-ray inventory: each degree-10
+   target has four known toric source-ray lookups, four non-toric source-ray
+   lookups, and eight composite/non-source-ray lookups, with no lower lookup
+   matching one of the nine direct target rows. The compact history problem is
+   therefore broader than the final target classes themselves.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.
    The exact classical-data transform is now available as

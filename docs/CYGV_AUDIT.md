@@ -2083,6 +2083,16 @@ history, but it still does not reproduce the target correction, so those
 lookup values remain diagnostic-only and cannot replace the certified compact
 semigroup/chamber history.
 
+Those sampled lower classes are now also classified against the source-ray
+inventory exported in schema `3`. For both degree-10 targets the 16
+predecessor/difference lookups split as
+`source_ray_known_toric_covered=4`, `source_ray_not_toric_covered=4`, and
+`not_source_degree_bounded_ray=8`, with no lookup matching one of the nine
+direct missing target rows. This shows that the missing lower-degree qN history
+is not just the nine corrected-chamber target rays: it also involves lower
+degree-six source rays that were not toric-covered and composite closure
+classes that are not source rays at all.
+
 The stable-Weyl/flop-continuation route is now surfaced as a report-level
 readiness count rather than only per-target arrays. On the schema-3 context all
 nine remaining targets have CMS-style formula candidates, but the 14 exact

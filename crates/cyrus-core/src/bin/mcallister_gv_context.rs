@@ -417,6 +417,7 @@ struct CygvPathHistoryProbe {
     path_support_gv: Option<String>,
     path_support_error: Option<String>,
     path_support_lookup_status_counts: BTreeMap<String, usize>,
+    path_support_source_class_status_counts: BTreeMap<String, usize>,
     path_support_lookup_sample: Vec<CygvPathSupportLookup>,
 }
 
@@ -482,7 +483,22 @@ struct CygvPathSupportLookup {
     toric_gv: Option<String>,
     path_support_gv: Option<String>,
     path_support_lookup_status: String,
+    source_class_status: String,
+    source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
+    matching_missing_target_index: Option<usize>,
+    matching_missing_target_degree: Option<i128>,
+    matching_missing_target_origin_circuit_pattern: Option<String>,
+    matching_missing_target_exact_kind: Option<String>,
     curve_nonzero: Vec<(usize, i64)>,
+}
+
+struct PathSupportSourceClassContext {
+    status: String,
+    source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
+    matching_missing_target_index: Option<usize>,
+    matching_missing_target_degree: Option<i128>,
+    matching_missing_target_origin_circuit_pattern: Option<String>,
+    matching_missing_target_exact_kind: Option<String>,
 }
 
 struct CygvPathPredecessorStats {
@@ -520,6 +536,7 @@ struct PathSupportGeneratorProbe {
     gv: Option<String>,
     error: Option<String>,
     lookup_status_counts: BTreeMap<String, usize>,
+    source_class_status_counts: BTreeMap<String, usize>,
     lookup_sample: Vec<CygvPathSupportLookup>,
 }
 
@@ -955,6 +972,7 @@ fn path_support_generator_probe(
             gv: None,
             error: None,
             lookup_status_counts: BTreeMap::new(),
+            source_class_status_counts: BTreeMap::new(),
             lookup_sample: Vec::new(),
         };
     }
@@ -967,6 +985,7 @@ fn path_support_generator_probe(
             gv: None,
             error: Some(error),
             lookup_status_counts: BTreeMap::new(),
+            source_class_status_counts: BTreeMap::new(),
             lookup_sample: Vec::new(),
         },
     }
@@ -987,6 +1006,7 @@ fn path_support_generator_probe_inner(
             gv: None,
             error: None,
             lookup_status_counts: BTreeMap::new(),
+            source_class_status_counts: BTreeMap::new(),
             lookup_sample: Vec::new(),
         });
     }
@@ -1036,6 +1056,7 @@ fn path_support_generator_probe_inner(
                 gv: None,
                 error: Some(format!("path_support_generators HKTY failed: {error}")),
                 lookup_status_counts: BTreeMap::new(),
+                source_class_status_counts: BTreeMap::new(),
                 lookup_sample: Vec::new(),
             });
         }
@@ -1050,6 +1071,7 @@ fn path_support_generator_probe_inner(
                     panic_payload_message(payload.as_ref())
                 )),
                 lookup_status_counts: BTreeMap::new(),
+                source_class_status_counts: BTreeMap::new(),
                 lookup_sample: Vec::new(),
             });
         }
@@ -1062,8 +1084,8 @@ fn path_support_generator_probe_inner(
         .get(&target_i32)
         .cloned()
         .unwrap_or_else(|| "0".to_string());
-    let (lookup_status_counts, lookup_sample) =
-        path_support_gv_lookup_sample(candidates, &gvs_by_curve, context.dimension)?;
+    let (lookup_status_counts, source_class_status_counts, lookup_sample) =
+        path_support_gv_lookup_sample(candidates, &gvs_by_curve, context)?;
     Ok(PathSupportGeneratorProbe {
         support_size: Some(support.len()),
         generator_count: Some(generators.len()),
@@ -1071,6 +1093,7 @@ fn path_support_generator_probe_inner(
         gv: Some(gv),
         error: None,
         lookup_status_counts,
+        source_class_status_counts,
         lookup_sample,
     })
 }
@@ -1078,9 +1101,17 @@ fn path_support_generator_probe_inner(
 fn path_support_gv_lookup_sample(
     candidates: &[CygvPathPredecessorCandidate],
     gvs_by_curve: &HashMap<Vec<i32>, String>,
-    dimension: usize,
-) -> Result<(BTreeMap<String, usize>, Vec<CygvPathSupportLookup>), String> {
-    let mut status_counts = BTreeMap::new();
+    context: &ValidatedContext<'_>,
+) -> Result<
+    (
+        BTreeMap<String, usize>,
+        BTreeMap<String, usize>,
+        Vec<CygvPathSupportLookup>,
+    ),
+    String,
+> {
+    let mut lookup_status_counts = BTreeMap::new();
+    let mut source_class_status_counts = BTreeMap::new();
     let mut sample = Vec::new();
     for (candidate_index, candidate) in candidates.iter().enumerate() {
         push_path_support_lookup(
@@ -1091,8 +1122,9 @@ fn path_support_gv_lookup_sample(
             candidate.predecessor_toric_gv.as_ref(),
             &candidate.predecessor_nonzero,
             gvs_by_curve,
-            dimension,
-            &mut status_counts,
+            context,
+            &mut lookup_status_counts,
+            &mut source_class_status_counts,
             &mut sample,
         )?;
         push_path_support_lookup(
@@ -1103,12 +1135,13 @@ fn path_support_gv_lookup_sample(
             candidate.difference_toric_gv.as_ref(),
             &candidate.difference_nonzero,
             gvs_by_curve,
-            dimension,
-            &mut status_counts,
+            context,
+            &mut lookup_status_counts,
+            &mut source_class_status_counts,
             &mut sample,
         )?;
     }
-    Ok((status_counts, sample))
+    Ok((lookup_status_counts, source_class_status_counts, sample))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1120,11 +1153,12 @@ fn push_path_support_lookup(
     toric_gv: Option<&String>,
     curve_nonzero: &[(usize, i64)],
     gvs_by_curve: &HashMap<Vec<i32>, String>,
-    dimension: usize,
-    status_counts: &mut BTreeMap<String, usize>,
+    context: &ValidatedContext<'_>,
+    lookup_status_counts: &mut BTreeMap<String, usize>,
+    source_class_status_counts: &mut BTreeMap<String, usize>,
     sample: &mut Vec<CygvPathSupportLookup>,
 ) -> Result<(), String> {
-    let curve = dense_from_sparse(curve_nonzero, dimension)?;
+    let curve = dense_from_sparse(curve_nonzero, context.dimension)?;
     let curve_i32 = curve_i64_to_i32(&curve, "path-support lookup curve")?;
     let path_support_gv = gvs_by_curve
         .get(&curve_i32)
@@ -1132,8 +1166,12 @@ fn push_path_support_lookup(
         .unwrap_or_else(|| "0".to_string());
     let path_support_lookup_status =
         path_support_lookup_status(known_qn_history_status, &path_support_gv)?;
-    *status_counts
+    *lookup_status_counts
         .entry(path_support_lookup_status.clone())
+        .or_insert(0) += 1;
+    let source_context = path_support_source_class_context(&curve, context)?;
+    *source_class_status_counts
+        .entry(source_context.status.clone())
         .or_insert(0) += 1;
     sample.push(CygvPathSupportLookup {
         candidate_index,
@@ -1143,9 +1181,96 @@ fn push_path_support_lookup(
         toric_gv: toric_gv.cloned(),
         path_support_gv: Some(path_support_gv),
         path_support_lookup_status,
+        source_class_status: source_context.status,
+        source_ray_ambient_nonzero: source_context.source_ray_ambient_nonzero,
+        matching_missing_target_index: source_context.matching_missing_target_index,
+        matching_missing_target_degree: source_context.matching_missing_target_degree,
+        matching_missing_target_origin_circuit_pattern: source_context
+            .matching_missing_target_origin_circuit_pattern,
+        matching_missing_target_exact_kind: source_context.matching_missing_target_exact_kind,
         curve_nonzero: curve_nonzero.to_vec(),
     });
     Ok(())
+}
+
+fn path_support_source_class_context(
+    curve: &[i64],
+    context: &ValidatedContext<'_>,
+) -> Result<PathSupportSourceClassContext, String> {
+    let matching_missing_target = matching_missing_target_for_curve(curve, context)?;
+    let Some(ray_context) = context.degree_bounded_ray_context else {
+        return Ok(PathSupportSourceClassContext {
+            status: if matching_missing_target.is_some() {
+                "source_ray_context_missing_but_matches_missing_target".to_string()
+            } else {
+                "source_ray_context_missing".to_string()
+            },
+            source_ray_ambient_nonzero: None,
+            matching_missing_target_index: matching_missing_target.as_ref().map(|entry| entry.0),
+            matching_missing_target_degree: matching_missing_target
+                .as_ref()
+                .map(|entry| entry.1.degree),
+            matching_missing_target_origin_circuit_pattern: matching_missing_target
+                .as_ref()
+                .and_then(|entry| entry.1.origin_circuit_pattern.clone()),
+            matching_missing_target_exact_kind: matching_missing_target
+                .as_ref()
+                .and_then(|entry| entry.1.real_cone_decomposition_exact_kind.clone()),
+        });
+    };
+
+    let source_ray = ray_context
+        .iter()
+        .find(|sample| sparse_matches_dense(&sample.basis_nonzero, curve));
+    let status = if context.covered_toric_gv_by_basis.contains_key(curve) {
+        "source_ray_known_toric_covered"
+    } else if matching_missing_target.is_some() {
+        "source_ray_matches_missing_target"
+    } else if source_ray.is_some() {
+        "source_ray_not_toric_covered"
+    } else {
+        "not_source_degree_bounded_ray"
+    };
+    Ok(PathSupportSourceClassContext {
+        status: status.to_string(),
+        source_ray_ambient_nonzero: source_ray.map(|sample| sample.ambient_nonzero.clone()),
+        matching_missing_target_index: matching_missing_target.as_ref().map(|entry| entry.0),
+        matching_missing_target_degree: matching_missing_target
+            .as_ref()
+            .map(|entry| entry.1.degree),
+        matching_missing_target_origin_circuit_pattern: matching_missing_target
+            .as_ref()
+            .and_then(|entry| entry.1.origin_circuit_pattern.clone()),
+        matching_missing_target_exact_kind: matching_missing_target
+            .as_ref()
+            .and_then(|entry| entry.1.real_cone_decomposition_exact_kind.clone()),
+    })
+}
+
+fn matching_missing_target_for_curve<'a>(
+    curve: &[i64],
+    context: &'a ValidatedContext<'_>,
+) -> Result<Option<(usize, &'a MissingGvTargetSample)>, String> {
+    for (index, sample) in context.stats.sample.iter().enumerate() {
+        let sample_curve = dense_from_sparse(&sample.basis_nonzero, context.dimension)?;
+        if sample_curve == curve {
+            return Ok(Some((index, sample)));
+        }
+    }
+    Ok(None)
+}
+
+fn sparse_matches_dense(sparse: &[(usize, i64)], dense: &[i64]) -> bool {
+    let mut seen = HashSet::new();
+    for &(idx, value) in sparse {
+        if idx >= dense.len() || value == 0 || dense[idx] != value || !seen.insert(idx) {
+            return false;
+        }
+    }
+    dense
+        .iter()
+        .enumerate()
+        .all(|(idx, &value)| value == 0 || seen.contains(&idx))
 }
 
 fn path_support_lookup_status(
@@ -4032,6 +4157,7 @@ fn cygv_path_history_probe(
             path_support_gv: None,
             path_support_error: None,
             path_support_lookup_status_counts: BTreeMap::new(),
+            path_support_source_class_status_counts: BTreeMap::new(),
             path_support_lookup_sample: Vec::new(),
         },
     }
@@ -4104,6 +4230,7 @@ fn cygv_path_history_probe_inner(
             path_support_gv: None,
             path_support_error: None,
             path_support_lookup_status_counts: BTreeMap::new(),
+            path_support_source_class_status_counts: BTreeMap::new(),
             path_support_lookup_sample: Vec::new(),
         });
     }
@@ -4152,6 +4279,7 @@ fn cygv_path_history_probe_inner(
             path_support_gv: None,
             path_support_error: None,
             path_support_lookup_status_counts: BTreeMap::new(),
+            path_support_source_class_status_counts: BTreeMap::new(),
             path_support_lookup_sample: Vec::new(),
         });
     }
@@ -4260,6 +4388,8 @@ fn cygv_path_history_probe_inner(
             path_support_gv: path_support_generators.gv,
             path_support_error: path_support_generators.error,
             path_support_lookup_status_counts: path_support_generators.lookup_status_counts,
+            path_support_source_class_status_counts: path_support_generators
+                .source_class_status_counts,
             path_support_lookup_sample: path_support_generators.lookup_sample,
         });
     }
@@ -4318,6 +4448,7 @@ fn cygv_path_history_probe_inner(
         path_support_gv: path_support_generators.gv,
         path_support_error: path_support_generators.error,
         path_support_lookup_status_counts: path_support_generators.lookup_status_counts,
+        path_support_source_class_status_counts: path_support_generators.source_class_status_counts,
         path_support_lookup_sample: path_support_generators.lookup_sample,
     })
 }
@@ -7153,6 +7284,15 @@ mod tests {
             path_support_lookup_status("unknown_not_toric_covered", "0").unwrap(),
             "path_support_zero_or_absent_unknown_not_toric_covered"
         );
+    }
+
+    #[test]
+    fn sparse_matches_dense_rejects_missing_extra_or_duplicate_entries() {
+        assert!(sparse_matches_dense(&[(0, 2), (3, -1)], &[2, 0, 0, -1]));
+        assert!(!sparse_matches_dense(&[(0, 2)], &[2, 0, 0, -1]));
+        assert!(!sparse_matches_dense(&[(0, 2), (4, 1)], &[2, 0, 0, -1]));
+        assert!(!sparse_matches_dense(&[(0, 2), (0, 2)], &[2, 0, 0, -1]));
+        assert!(!sparse_matches_dense(&[(0, 0)], &[0]));
     }
 
     #[test]
