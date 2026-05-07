@@ -5470,6 +5470,30 @@ fn sparse_i64(values: &[i64]) -> Vec<(usize, i64)> {
         .collect()
 }
 
+fn dense_i64_from_sparse(
+    sparse: &[(usize, i64)],
+    dim: usize,
+    label: &str,
+) -> Result<Vec<i64>, String> {
+    let mut dense = vec![0; dim];
+    let mut seen = HashSet::new();
+    for &(idx, value) in sparse {
+        if idx >= dim {
+            return Err(format!(
+                "{label} sparse coordinate {idx} is out of bounds for dimension {dim}"
+            ));
+        }
+        if value == 0 {
+            return Err(format!("{label} sparse coordinate {idx} has zero value"));
+        }
+        if !seen.insert(idx) {
+            return Err(format!("{label} sparse coordinate {idx} is duplicated"));
+        }
+        dense[idx] = value;
+    }
+    Ok(dense)
+}
+
 fn degree_bounded_mori_ray_context_samples(
     ambient_rays: &[Vec<i64>],
     basis: &[usize],
@@ -5522,6 +5546,67 @@ fn uncovered_degree_bounded_source_ray_classes(
         }
     }
     Ok(out)
+}
+
+fn active_noncovered_dependency_source_ray_classes(
+    target_stats: &MissingGvTargetStats,
+    degree_bounded_ray_context: &[DegreeBoundedMoriRayContextSample],
+    covered_toric_context: &[CoveredToricGvContextSample],
+    ambient_dim: usize,
+) -> Result<Vec<Vec<i64>>, String> {
+    let covered_basis_supports = covered_toric_context
+        .iter()
+        .map(|sample| sample.basis_nonzero.clone())
+        .collect::<HashSet<_>>();
+    let missing_target_basis_supports = target_stats
+        .sample
+        .iter()
+        .map(|sample| sample.basis_nonzero.clone())
+        .collect::<HashSet<_>>();
+    let mut out = HashSet::new();
+    for (target_idx, target) in target_stats.sample.iter().enumerate() {
+        let Some(active_generators) = target
+            .real_cone_decomposition_active_generator_basis_nonzero
+            .as_ref()
+        else {
+            continue;
+        };
+        for active_generator in active_generators {
+            if covered_basis_supports.contains(active_generator)
+                || missing_target_basis_supports.contains(active_generator)
+            {
+                continue;
+            }
+            let Some(ray_context) = degree_bounded_ray_context
+                .iter()
+                .find(|sample| sample.basis_nonzero == *active_generator)
+            else {
+                return Err(format!(
+                    "missing target {target_idx} active dependency {:?} is not in the degree-bounded source-ray context",
+                    active_generator
+                ));
+            };
+            out.insert(dense_i64_from_sparse(
+                &ray_context.ambient_nonzero,
+                ambient_dim,
+                "active dependency source ray",
+            )?);
+        }
+    }
+    let mut out = out.into_iter().collect::<Vec<_>>();
+    out.sort();
+    Ok(out)
+}
+
+fn merge_unique_ambient_classes(mut lhs: Vec<Vec<i64>>, rhs: Vec<Vec<i64>>) -> Vec<Vec<i64>> {
+    let mut seen = lhs.iter().cloned().collect::<HashSet<_>>();
+    for class in rhs {
+        if seen.insert(class.clone()) {
+            lhs.push(class);
+        }
+    }
+    lhs.sort();
+    lhs
 }
 
 fn covered_toric_gv_context_samples(
@@ -6942,7 +7027,7 @@ fn diagnose_chamber_gv_volume_correction(
             summary.max_degree,
         )?;
         let lower_source_ray_degree_bound = summary.min_degree.saturating_sub(1);
-        let uncovered_source_ray_classes = uncovered_degree_bounded_source_ray_classes(
+        let mut uncovered_source_ray_classes = uncovered_degree_bounded_source_ray_classes(
             &ambient_rays,
             &small_curve_gvs,
             &intersection.basis,
@@ -6970,6 +7055,18 @@ fn diagnose_chamber_gv_volume_correction(
             true,
             missing_target_sample_limit,
         )?;
+        let active_dependency_source_ray_classes = active_noncovered_dependency_source_ray_classes(
+            &target_stats,
+            &degree_bounded_ambient_ray_context,
+            &covered_toric_gv_context,
+            ambient_rays.first().map(Vec::len).ok_or_else(|| {
+                "corrected-chamber Mori-cap ambient ray context is empty".to_string()
+            })?,
+        )?;
+        uncovered_source_ray_classes = merge_unique_ambient_classes(
+            uncovered_source_ray_classes,
+            active_dependency_source_ray_classes,
+        );
         let uncovered_source_ray_cms_intersection_checks_by_class =
             cms_general_divisor_intersection_checks_by_class(
                 &uncovered_source_ray_classes,
@@ -11475,6 +11572,119 @@ mod tests {
             false
         );
         assert_eq!(stats.sample[0].real_cone_decomposition_exact_kind, None);
+    }
+
+    #[test]
+    fn active_dependency_source_rays_extend_uncovered_source_context() {
+        let target_stats = MissingGvTargetStats {
+            target_count: 2,
+            targets_that_are_mori_generators: 0,
+            targets_that_are_origin_circuits: 0,
+            targets_real_cone_decomposable_by_other_generators: 1,
+            targets_that_are_lp_extremal_mori_generators: 0,
+            real_cone_decomposition_active_generator_min: Some(4),
+            real_cone_decomposition_active_generator_max: Some(4),
+            origin_circuit_resolved_conifold_count: 0,
+            min_generators_le_target_degree: 0,
+            max_generators_le_target_degree: 0,
+            origin_coefficient_counts: BTreeMap::new(),
+            origin_circuit_pattern_counts: BTreeMap::new(),
+            origin_circuit_affine_rank_counts: BTreeMap::new(),
+            branch_status_counts: BTreeMap::new(),
+            branch_bucket_counts: BTreeMap::new(),
+            real_cone_decomposition_exact_kind_counts: BTreeMap::new(),
+            sample: vec![
+                MissingGvTargetSample {
+                    degree: 5,
+                    generators_le_degree: 4,
+                    is_mori_generator: false,
+                    origin_circuit_pattern: None,
+                    origin_circuit_witness_count: None,
+                    origin_circuit_first_witness: None,
+                    origin_circuit_affine_support: None,
+                    cms_general_divisor_shape_candidates: None,
+                    cms_general_divisor_intersection_checks: None,
+                    branch_diagnostic: None,
+                    real_cone_decomposable_by_other_generators: true,
+                    real_cone_decomposition_active_generators: Some(4),
+                    real_cone_decomposition_active_generator_basis_nonzero: Some(vec![
+                        vec![(0, 1)],
+                        vec![(1, 1)],
+                        vec![(2, 1)],
+                        vec![(3, 1)],
+                    ]),
+                    real_cone_decomposition_exact_coefficients: Some(vec![
+                        "1".to_string(),
+                        "1".to_string(),
+                        "1".to_string(),
+                        "1".to_string(),
+                    ]),
+                    real_cone_decomposition_exact_kind: Some("integer_semigroup"),
+                    ambient_nonzero: vec![(4, 1)],
+                    basis_nonzero: vec![(4, 1)],
+                },
+                MissingGvTargetSample {
+                    degree: 1,
+                    generators_le_degree: 1,
+                    is_mori_generator: true,
+                    origin_circuit_pattern: None,
+                    origin_circuit_witness_count: None,
+                    origin_circuit_first_witness: None,
+                    origin_circuit_affine_support: None,
+                    cms_general_divisor_shape_candidates: None,
+                    cms_general_divisor_intersection_checks: None,
+                    branch_diagnostic: None,
+                    real_cone_decomposable_by_other_generators: false,
+                    real_cone_decomposition_active_generators: None,
+                    real_cone_decomposition_active_generator_basis_nonzero: None,
+                    real_cone_decomposition_exact_coefficients: None,
+                    real_cone_decomposition_exact_kind: None,
+                    ambient_nonzero: vec![(1, 1)],
+                    basis_nonzero: vec![(1, 1)],
+                },
+            ],
+        };
+        let degree_bounded_context = vec![
+            DegreeBoundedMoriRayContextSample {
+                degree: 1,
+                ambient_nonzero: vec![(0, 1)],
+                basis_nonzero: vec![(0, 1)],
+            },
+            DegreeBoundedMoriRayContextSample {
+                degree: 1,
+                ambient_nonzero: vec![(1, 1)],
+                basis_nonzero: vec![(1, 1)],
+            },
+            DegreeBoundedMoriRayContextSample {
+                degree: 1,
+                ambient_nonzero: vec![(0, -1), (2, 1)],
+                basis_nonzero: vec![(2, 1)],
+            },
+            DegreeBoundedMoriRayContextSample {
+                degree: 1,
+                ambient_nonzero: vec![(0, -1), (3, 1)],
+                basis_nonzero: vec![(3, 1)],
+            },
+        ];
+        let covered_context = vec![CoveredToricGvContextSample {
+            degree: 1,
+            gv: "7".to_string(),
+            ambient_nonzero: vec![(0, 1)],
+            basis_nonzero: vec![(0, 1)],
+        }];
+
+        let active_classes = active_noncovered_dependency_source_ray_classes(
+            &target_stats,
+            &degree_bounded_context,
+            &covered_context,
+            4,
+        )
+        .unwrap();
+        assert_eq!(active_classes, vec![vec![-1, 0, 0, 1], vec![-1, 0, 1, 0]]);
+        assert_eq!(
+            merge_unique_ambient_classes(vec![vec![-1, 0, 1, 0]], active_classes),
+            vec![vec![-1, 0, 0, 1], vec![-1, 0, 1, 0]]
+        );
     }
 
     #[test]

@@ -2298,30 +2298,34 @@ integrality check, so the decomposition diamond is not the missing chamber
 context either.
 The same report now aggregates the active decomposition generators themselves:
 `active_decomposition_generator_source_status_counts =
-{"active_generator_known_source_derived_gv":1,
+{"active_generator_known_source_derived_gv":2,
 "active_generator_known_toric_covered":12,
 "active_generator_matches_missing_target":2,
-"active_generator_matches_uncovered_source_ray":1,
-"active_generator_source_ray_not_toric_covered":6}`. The unresolved target
-classes therefore depend on a smaller lower-source-ray graph, with most leaves
-already toric-covered or source-derived but seven lower generators still
-requiring source-derived GV/chamber treatment.
-The report now materializes those unresolved dependencies in
+"active_generator_matches_uncovered_source_ray":6}` on
+`/tmp/cyrus_gv_context_schema3_active_dependencies_report.json`. This report
+uses the first-principles context export that unions active non-covered
+dependency rays into the uncovered source-ray diagnostic set before computing
+local source-readiness metadata. The unresolved target classes therefore no
+longer contain anonymous degree-bounded leaves: every non-toric active source
+dependency either links to another missing target or matches a concrete
+uncovered source-ray diagnostic row.
+The report materializes those unresolved dependencies in
 `active_decomposition_unresolved_source_leaf_sample`, including the exact
-divisor-basis curve, ambient support, parent-target occurrences, and any
-matching missing-target or uncovered-source metadata. On the current
-McAllister context the sample has nine unresolved dependency entries: two are
-links back to other missing targets, one is an uncovered source ray of degree
-4 with no origin-circuit formula candidate, and six are degree-bounded source
-rays not yet toric-covered or source-derived (degrees 10, 10, 10, 10, 12, and
-14). This is now the concrete lower leaf set for the next GV implementation
+divisor-basis curve, ambient support, parent-target occurrences, and matching
+missing-target or uncovered-source metadata. On the current McAllister context
+the sample has eight unresolved dependency entries: two links back to other
+missing targets and six matching uncovered source rays with degrees 4, 10, 10,
+10, 12, and 14. Five of those source rays are explicitly blocked on
+`local_q_matrix_phase`, `local_intersection_tensor`, and
+`local_chamber_certificate`; the degree-4 ray has no origin-pattern diagnostic
+yet. This is now the concrete lower leaf set for the next GV implementation
 step.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
-origin-pattern buckets are:
-`origin=-1;neg={-2: 1};pos={1: 3}` twice,
+origin-pattern buckets among the matching missing/source-ray leaves are:
 `origin=-2;neg={-2: 1, -1: 1};pos={1: 1, 2: 2}` three times, and once each
-for `origin=-1;neg={-2: 1, -1: 1};pos={1: 2, 2: 1}`,
+for `origin=-1;neg={-2: 1};pos={1: 3}`,
+`origin=-1;neg={-2: 1, -1: 1};pos={1: 2, 2: 1}`,
 `origin=-1;neg={-3: 1};pos={1: 2, 2: 1}`, and
 `origin=-2;neg={-3: 1};pos={1: 1, 2: 2}`. The only unresolved lower leaf
 without an origin pattern is the degree-4 class with ambient support

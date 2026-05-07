@@ -76,7 +76,16 @@ run pass. Any remaining mismatch must be explicit and localizable.
    tensor candidate. A primitive actual-`cygv` probe now checks those raw
    candidates and records the mismatch against the CMS formula values, so this
    remains candidate evidence until the full local `cygv` intersection tensor
-   and chamber certificate are derived.
+   and chamber certificate are derived. The active-dependency context export
+   now also resolves the previously anonymous non-toric active leaves into
+   concrete source-ray diagnostics: the current report has 12 toric-covered
+   active leaves, two source-derived leaves, two links to other missing
+   targets, and six matching uncovered source rays. Five of those source rays
+   are explicitly blocked on `local_q_matrix_phase`,
+   `local_intersection_tensor`, and `local_chamber_certificate`; the degree-4
+   source ray still lacks an origin-pattern/source-derived readiness label.
+   That makes the next corrected-GV step local phase/intersection/chamber
+   construction, not more leaf discovery.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for
