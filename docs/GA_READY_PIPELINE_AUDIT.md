@@ -618,4 +618,8 @@ to make the remaining GV layer more first-principles:
    alternate local chamber data needed by the next certificate step. The
    context diagnostics now consume all serialized witnesses when forming
    support-domain and facet-context summaries, so multi-witness rows expose
-   mixed facet context rather than inheriting the first witness's status.
+   mixed facet context rather than inheriting the first witness's status. A
+   fresh all-witness release export now confirms that the five multi-witness
+   missing targets all share their local relation across witnesses; the
+   remaining blocker is certifying the facet/chamber phase and local
+   intersection tensor for that relation.

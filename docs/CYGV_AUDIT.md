@@ -2349,6 +2349,18 @@ first. The context reader now uses that full witness list when building
 origin-circuit support-domain and facet-context diagnostics: relation/support
 sets are unions over all serialized witnesses, and mixed facet-context status
 is reported explicitly instead of hiding behind the first witness.
+A fresh release export with the full witness list completed in `122.72s`
+and wrote `/tmp/cyrus_corrected_chamber_gv_context_all_witnesses_release.json`.
+The corresponding lightweight report records
+`origin_circuit_witness_relation_status_counts =
+{"all_origin_circuit_witnesses_share_relation":5,"single_origin_circuit_witness":4}`
+for the nine missing targets, and
+`uncovered_source_ray_origin_circuit_witness_relation_status_counts =
+{"all_origin_circuit_witnesses_share_relation":97,"no_origin_circuit_witness":115,
+"single_origin_circuit_witness":34}` for the uncovered source-ray sample. Thus
+the multi-witness rows seen so far do not produce competing local charge
+relations; the remaining ambiguity is facet/chamber/phase data for the same
+relation, not which relation to feed to cygv.
 The same active-leaf records now run the existing one-parameter unit-tensor
 phase probe against those lower source rays. This is still diagnostic-only,
 because the local intersection tensor and chamber certificate are not

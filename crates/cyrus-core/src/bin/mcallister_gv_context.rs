@@ -219,6 +219,8 @@ struct ContextReport {
     local_cygv_missing_source_input_counts: BTreeMap<String, usize>,
     cms_general_divisor_candidate_status_counts: BTreeMap<String, usize>,
     cms_general_divisor_intersection_check_status_counts: BTreeMap<String, usize>,
+    origin_circuit_witness_relation_status_counts: BTreeMap<String, usize>,
+    uncovered_source_ray_origin_circuit_witness_relation_status_counts: BTreeMap<String, usize>,
     origin_circuit_facet_context_status_counts: BTreeMap<String, usize>,
     active_support_status_counts: BTreeMap<String, usize>,
     active_support_face_certificate_status_counts: BTreeMap<String, usize>,
@@ -7033,6 +7035,12 @@ fn build_report(
         cms_general_divisor_candidate_status_counts(&targets);
     let cms_general_divisor_intersection_check_status_counts =
         cms_general_divisor_intersection_check_status_counts(&targets);
+    let missing_origin_circuit_witness_relation_status_counts =
+        origin_circuit_witness_relation_status_counts(&validated.stats.sample, target_index_filter);
+    let uncovered_source_ray_origin_circuit_witness_relation_status_counts = validated
+        .uncovered_source_ray_stats
+        .map(|stats| origin_circuit_witness_relation_status_counts(&stats.sample, None))
+        .unwrap_or_default();
     let origin_circuit_facet_context_status_counts =
         origin_circuit_facet_context_status_counts(&validated.stats.sample, target_index_filter);
     let active_support_status_counts = optional_status_counts(
@@ -7240,6 +7248,9 @@ fn build_report(
         local_cygv_missing_source_input_counts,
         cms_general_divisor_candidate_status_counts,
         cms_general_divisor_intersection_check_status_counts,
+        origin_circuit_witness_relation_status_counts:
+            missing_origin_circuit_witness_relation_status_counts,
+        uncovered_source_ray_origin_circuit_witness_relation_status_counts,
         origin_circuit_facet_context_status_counts,
         active_support_status_counts,
         active_support_face_certificate_status_counts,
@@ -7424,6 +7435,70 @@ fn origin_circuit_facet_context_status_counts(
         *counts.entry(status).or_insert(0usize) += 1;
     }
     counts
+}
+
+fn origin_circuit_witness_relation_status_counts(
+    samples: &[MissingGvTargetSample],
+    target_index_filter: Option<usize>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for (idx, sample) in samples.iter().enumerate() {
+        if target_index_filter.is_some_and(|filter| filter != idx) {
+            continue;
+        }
+        *counts
+            .entry(origin_circuit_witness_relation_status(sample))
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn origin_circuit_witness_relation_status(sample: &MissingGvTargetSample) -> String {
+    let Some(witnesses) = sample
+        .origin_circuit_witnesses
+        .as_ref()
+        .filter(|witnesses| !witnesses.is_empty())
+    else {
+        return if sample.origin_circuit_first_witness.is_some() {
+            if sample.origin_circuit_witness_count.unwrap_or(1) > 1 {
+                "multiple_origin_circuit_witnesses_not_serialized".to_string()
+            } else {
+                "single_origin_circuit_witness".to_string()
+            }
+        } else {
+            "no_origin_circuit_witness".to_string()
+        };
+    };
+
+    if witnesses.len() == 1 {
+        return "single_origin_circuit_witness".to_string();
+    }
+
+    let mut relation_signatures = BTreeSet::new();
+    for witness in witnesses {
+        relation_signatures.insert(origin_circuit_witness_relation_signature(witness));
+    }
+    if relation_signatures.len() == 1 {
+        "all_origin_circuit_witnesses_share_relation".to_string()
+    } else {
+        "mixed_origin_circuit_witness_relations".to_string()
+    }
+}
+
+fn origin_circuit_witness_relation_signature(
+    witness: &OriginCircuitWitnessSample,
+) -> Vec<(usize, i64)> {
+    let mut signature = if witness.relation_points.is_empty() {
+        witness.sparse_relation.clone()
+    } else {
+        witness
+            .relation_points
+            .iter()
+            .map(|point| (point.point_index, point.coefficient))
+            .collect()
+    };
+    signature.sort_unstable();
+    signature
 }
 
 fn origin_circuit_facet_context_status(sample: &MissingGvTargetSample) -> String {
@@ -10952,6 +11027,87 @@ mod tests {
         assert_eq!(supports.relation_support, HashSet::from([0, 4, 7]));
         assert_eq!(supports.shared_facet, HashSet::from([0, 1, 2, 4, 5, 6, 7]));
         assert_eq!(supports.facet_union, HashSet::from([0, 1, 2, 6, 7]));
+    }
+
+    #[test]
+    fn origin_circuit_witness_relation_status_tracks_multi_witness_relation_changes() {
+        let first = OriginCircuitWitnessSample {
+            first_facet_exclusive_point: 4,
+            second_facet_exclusive_point: 5,
+            shared_two_simplex: vec![1, 2],
+            first_facet: vec![1, 2, 4],
+            second_facet: vec![1, 2, 5],
+            first_facet_size: 3,
+            second_facet_size: 3,
+            sparse_relation: vec![(0, -1), (4, 1), (5, 1)],
+            relation_points: vec![
+                OriginCircuitRelationPointSample {
+                    point_index: 0,
+                    coefficient: -1,
+                    coordinates: vec![0, 0],
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 4,
+                    coefficient: 1,
+                    coordinates: vec![1, 0],
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 5,
+                    coefficient: 1,
+                    coordinates: vec![0, 1],
+                    face_dimension: None,
+                },
+            ],
+        };
+        let mut same_relation = first.clone();
+        same_relation.shared_two_simplex = vec![2, 3];
+        same_relation.first_facet = vec![2, 3, 4];
+        same_relation.second_facet = vec![2, 3, 5];
+
+        let mut shared = minimal_missing_sample(Vec::new());
+        shared.origin_circuit_witness_count = Some(2);
+        shared.origin_circuit_first_witness = Some(first.clone());
+        shared.origin_circuit_witnesses = Some(vec![first.clone(), same_relation]);
+        assert_eq!(
+            origin_circuit_witness_relation_status(&shared),
+            "all_origin_circuit_witnesses_share_relation"
+        );
+
+        let mut changed_relation = first.clone();
+        changed_relation.relation_points[2].point_index = 6;
+        changed_relation.sparse_relation = vec![(0, -1), (4, 1), (6, 1)];
+        let mut mixed = minimal_missing_sample(Vec::new());
+        mixed.origin_circuit_witness_count = Some(2);
+        mixed.origin_circuit_first_witness = Some(first.clone());
+        mixed.origin_circuit_witnesses = Some(vec![first.clone(), changed_relation]);
+        assert_eq!(
+            origin_circuit_witness_relation_status(&mixed),
+            "mixed_origin_circuit_witness_relations"
+        );
+
+        let mut legacy = minimal_missing_sample(Vec::new());
+        legacy.origin_circuit_witness_count = Some(2);
+        legacy.origin_circuit_first_witness = Some(first);
+        assert_eq!(
+            origin_circuit_witness_relation_status(&legacy),
+            "multiple_origin_circuit_witnesses_not_serialized"
+        );
+
+        let counts = origin_circuit_witness_relation_status_counts(&[shared, mixed, legacy], None);
+        assert_eq!(
+            counts.get("all_origin_circuit_witnesses_share_relation"),
+            Some(&1)
+        );
+        assert_eq!(
+            counts.get("mixed_origin_circuit_witness_relations"),
+            Some(&1)
+        );
+        assert_eq!(
+            counts.get("multiple_origin_circuit_witnesses_not_serialized"),
+            Some(&1)
+        );
     }
 
     #[test]

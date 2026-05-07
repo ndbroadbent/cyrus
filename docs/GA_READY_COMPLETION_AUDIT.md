@@ -336,7 +336,10 @@ can compare alternate facet-pair witnesses for multi-witness rows such as the
 degree-14 `[-1,-2,1,1,1]` dependency. The report reader now builds
 origin-circuit support-domain and facet-context summaries from all serialized
 witnesses, including explicit mixed-status summaries for rows whose witnesses
-do not agree. The
+do not agree. A fresh all-witness release export shows all five multi-witness
+missing targets share the same local relation across their witnesses, so the
+open problem is facet/chamber phase and local intersection tensor
+certification, not choosing among competing relation vectors. The
 enriched active-leaf report
 now also carries the matching source rays' local q rows and CMS check counts:
 two origin-circuit lower leaves are primitive `neg2` q-row candidates, while
