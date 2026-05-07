@@ -146,9 +146,9 @@ run pass. Any remaining mismatch must be explicit and localizable.
    sampled nonzero lower-class qN lookups. Both targets still have `GV=0` and no
    target qN polynomial in these small domains. A reduced two-target aggregate
    collapses 17 qN-polynomial occurrences to 11 unique lower curves, with 6
-   curves shared by both target-support domains. Applying the trace to
-   McAllister still requires the certified corrected-chamber semigroup/history
-   domain.
+   curves shared by both target-support domains and 4 unique curves showing
+   domain-dependent qN term counts. Applying the trace to McAllister still
+   requires the certified corrected-chamber semigroup/history domain.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for

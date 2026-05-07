@@ -325,6 +325,7 @@ struct ContextReport {
     path_support_qn_trace_curve_occurrence_count: usize,
     path_support_qn_trace_curve_degree_counts: BTreeMap<u32, usize>,
     path_support_qn_trace_curve_target_count_counts: BTreeMap<usize, usize>,
+    path_support_qn_trace_curve_term_count_consistency_counts: BTreeMap<String, usize>,
     path_support_qn_trace_curve_sample: Vec<CygvPathSupportQnTraceCurveSummary>,
     local_cygv_q_matrix_orientation_status_counts: BTreeMap<String, usize>,
     local_cygv_q_matrix_layout_status_counts: BTreeMap<String, usize>,
@@ -3294,6 +3295,21 @@ fn path_support_qn_trace_curve_target_count_counts(
     let mut counts = BTreeMap::new();
     for summary in summaries {
         *counts.entry(summary.target_count).or_insert(0) += 1;
+    }
+    counts
+}
+
+fn path_support_qn_trace_curve_term_count_consistency_counts(
+    summaries: &[CygvPathSupportQnTraceCurveSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        let status = if summary.term_count_counts.len() <= 1 {
+            "single_qn_term_count"
+        } else {
+            "domain_dependent_qn_term_count"
+        };
+        *counts.entry(status.to_string()).or_insert(0) += 1;
     }
     counts
 }
@@ -9284,6 +9300,10 @@ fn build_report(
         path_support_qn_trace_curve_degree_counts(&path_support_qn_trace_curve_sample);
     let path_support_qn_trace_curve_target_count_counts =
         path_support_qn_trace_curve_target_count_counts(&path_support_qn_trace_curve_sample);
+    let path_support_qn_trace_curve_term_count_consistency_counts =
+        path_support_qn_trace_curve_term_count_consistency_counts(
+            &path_support_qn_trace_curve_sample,
+        );
     let local_cygv_q_matrix_orientation_status_counts =
         local_cygv_q_matrix_orientation_status_counts(
             targets
@@ -9524,6 +9544,7 @@ fn build_report(
         path_support_qn_trace_curve_occurrence_count,
         path_support_qn_trace_curve_degree_counts,
         path_support_qn_trace_curve_target_count_counts,
+        path_support_qn_trace_curve_term_count_consistency_counts,
         path_support_qn_trace_curve_sample,
         local_cygv_q_matrix_orientation_status_counts,
         local_cygv_q_matrix_layout_status_counts,

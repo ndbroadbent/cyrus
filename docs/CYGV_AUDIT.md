@@ -1701,7 +1701,10 @@ A reduced two-target report over these degree-10 targets aggregates the
 small-domain qN curves directly: 17 qN-polynomial occurrences collapse to 11
 unique curves, with 6 curves appearing in both target-support domains. The
 shared curves have degrees 2, 4, 6, 6, 8, and 8, while the target qN
-polynomials remain absent because both small-domain target GVs are zero.
+polynomials remain absent because both small-domain target GVs are zero. Four
+of the 11 unique lower curves have different qN term counts between the two
+small domains, so even the shared lower qN polynomials are domain-dependent
+artifacts rather than certified compact history.
 
 After rebuilding `mcallister_gv_context`, the dry-run report now preserves the
 origin-circuit provenance exported by `mcallister_first_principles`. A fresh

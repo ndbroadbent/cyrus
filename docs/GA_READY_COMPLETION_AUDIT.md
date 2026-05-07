@@ -263,7 +263,8 @@ and matrix-basis pipeline are no longer open.
    therefore diagnostic artifacts of the small domain, not promotable compact
    GV history. A reduced two-target aggregate shows 17 qN-polynomial
    occurrences, 11 unique lower curves, and 6 curves shared by both degree-10
-   target-support domains.
+   target-support domains; 4 unique lower curves have domain-dependent qN term
+   counts.
    The report now also aggregates the uncovered source-ray subset as a unique
    queue. For each of targets `7` and `8`, the queue has two unique degree-six
    source rays, four sampled occurrences, and diagnostic small-domain GV counts
