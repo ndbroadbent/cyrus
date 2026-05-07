@@ -664,6 +664,13 @@ at tensor value `1`, while the compact bounded diamond's target raw GW
 candidate is `4/3`. This keeps the q-matrix orientation in the plausible
 bucket and moves the unresolved discrepancy to certified chamber/intersection
 tensor history.
+The latest target `8` schema-4 report also adds
+`local_cygv_one_parameter_family_status_counts`, which classifies that same
+local model as
+`uncertified_one_parameter_charge_family:-3,-1,1,1,2`. Certified
+`source_derived_local_p2_bundle_family_with_tensor_chamber_certificate` rows
+are counted separately, so the local unit-tensor match is explicitly not a
+promotable replacement for the missing compact GV target correction.
 Origin-circuit witness-domain compact `cygv` probes are now opt-in and guarded
 by `--origin-witness-cygv-generator-limit`. The traced target `8` report shows
 the single-generator relation domain computes `GV=2` with one materialized

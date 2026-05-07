@@ -3072,6 +3072,18 @@ is
 tensor value `1` and remain explicitly uncertified because the local
 q-phase/chamber certificate is still absent. The five mismatches rule out a
 single scalar tensor normalization as the full corrected-chamber GV solution.
+The context report now also distinguishes certified one-parameter source
+families from shape-only one-parameter charge matches. Regenerating
+`/tmp/cyrus_gv_context_target8_family_status_report.json` from the schema-4
+context gives
+`local_cygv_one_parameter_family_status_counts =
+{"uncertified_one_parameter_charge_family:-3,-1,1,1,2":1}` for target `8`,
+even though its unit-tensor scalar probe matches the CMS formula sum. In the
+same report, shared-facet source rows count certified
+`source_derived_local_p2_bundle_family_with_tensor_chamber_certificate`
+separately from uncertified charge families. This prevents the
+`[-3,-1,1,1,2]` unit-tensor match from being promoted as if it were the
+source-derived `O(-1)+O(-2)->P^2` family.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

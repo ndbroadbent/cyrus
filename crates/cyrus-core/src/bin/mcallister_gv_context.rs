@@ -234,6 +234,7 @@ struct ContextReport {
     active_decomposition_source_leaf_cms_solution_status_counts: BTreeMap<String, usize>,
     active_decomposition_source_leaf_cms_candidate_status_counts: BTreeMap<String, usize>,
     local_cygv_charge_signature_counts: BTreeMap<String, usize>,
+    local_cygv_one_parameter_family_status_counts: BTreeMap<String, usize>,
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
     local_cygv_actual_call_readiness_counts: BTreeMap<String, usize>,
     local_cygv_missing_source_input_counts: BTreeMap<String, usize>,
@@ -249,6 +250,8 @@ struct ContextReport {
     shared_facet_unresolved_source_ray_origin_circuit_witness_relation_status_counts:
         BTreeMap<String, usize>,
     shared_facet_unresolved_source_ray_local_cygv_charge_signature_counts: BTreeMap<String, usize>,
+    shared_facet_unresolved_source_ray_local_cygv_one_parameter_family_status_counts:
+        BTreeMap<String, usize>,
     shared_facet_unresolved_source_ray_local_cygv_actual_call_readiness_counts:
         BTreeMap<String, usize>,
     shared_facet_unresolved_source_ray_local_cygv_missing_source_input_counts:
@@ -13159,6 +13162,12 @@ fn build_report(
             .iter()
             .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
     );
+    let missing_local_cygv_one_parameter_family_status_counts =
+        local_cygv_one_parameter_family_status_counts(
+            targets
+                .iter()
+                .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
+        );
     let missing_local_cygv_missing_source_input_counts = local_cygv_missing_source_input_counts(
         targets
             .iter()
@@ -13232,6 +13241,12 @@ fn build_report(
     }
     let shared_facet_unresolved_source_ray_local_cygv_actual_call_readiness_counts =
         local_cygv_actual_call_readiness_counts(
+            shared_facet_unresolved_source_ray_sample
+                .iter()
+                .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
+        );
+    let shared_facet_unresolved_source_ray_local_cygv_one_parameter_family_status_counts =
+        local_cygv_one_parameter_family_status_counts(
             shared_facet_unresolved_source_ray_sample
                 .iter()
                 .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
@@ -13866,6 +13881,8 @@ fn build_report(
         active_decomposition_source_leaf_cms_solution_status_counts,
         active_decomposition_source_leaf_cms_candidate_status_counts,
         local_cygv_charge_signature_counts: missing_local_cygv_charge_signature_counts,
+        local_cygv_one_parameter_family_status_counts:
+            missing_local_cygv_one_parameter_family_status_counts,
         local_cygv_target_candidate_status_counts,
         local_cygv_actual_call_readiness_counts: missing_local_cygv_actual_call_readiness_counts,
         local_cygv_missing_source_input_counts: missing_local_cygv_missing_source_input_counts,
@@ -13882,6 +13899,7 @@ fn build_report(
         shared_facet_unresolved_source_ray_origin_circuit_pattern_counts,
         shared_facet_unresolved_source_ray_origin_circuit_witness_relation_status_counts,
         shared_facet_unresolved_source_ray_local_cygv_charge_signature_counts,
+        shared_facet_unresolved_source_ray_local_cygv_one_parameter_family_status_counts,
         shared_facet_unresolved_source_ray_local_cygv_actual_call_readiness_counts,
         shared_facet_unresolved_source_ray_local_cygv_missing_source_input_counts,
         shared_facet_unresolved_source_ray_cms_general_divisor_candidate_status_counts,
@@ -14053,6 +14071,71 @@ fn local_cygv_actual_call_readiness_counts<'a>(
             .or_insert(0usize) += 1;
     }
     counts
+}
+
+fn local_cygv_one_parameter_family_status_counts<'a>(
+    skeletons: impl IntoIterator<Item = &'a LocalCygvInputSkeleton>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for skeleton in skeletons {
+        *counts
+            .entry(local_cygv_one_parameter_family_status(skeleton))
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_one_parameter_family_status(skeleton: &LocalCygvInputSkeleton) -> String {
+    let Some(q_matrix) = skeleton.local_cygv_phase_q_matrix_candidate.as_ref() else {
+        return "one_parameter_family_blocked_missing_phase_q_matrix".to_string();
+    };
+    if q_matrix.len() != 1 {
+        return "not_one_parameter_local_q_matrix".to_string();
+    }
+    let charges = &q_matrix[0];
+    if charges.is_empty() {
+        return "one_parameter_family_blocked_empty_charge_row".to_string();
+    }
+    if charges.iter().sum::<i64>() != 0 {
+        return "one_parameter_charge_not_calabi_yau".to_string();
+    }
+    if skeleton.local_cygv_q_matrix_phase_status
+        != "source_derived_unique_compact_threefold_phase_including_origin"
+    {
+        return format!(
+            "one_parameter_family_blocked_phase_status:{}",
+            skeleton.local_cygv_q_matrix_phase_status
+        );
+    }
+    let Some(semigroup_generators) = skeleton.local_semigroup_generators_candidate.as_ref() else {
+        return "one_parameter_family_blocked_missing_semigroup_generators".to_string();
+    };
+    if semigroup_generators.as_slice() != [vec![1]] {
+        return "one_parameter_family_blocked_not_primitive_semigroup".to_string();
+    }
+    let Some(grading_vector) = skeleton.local_grading_vector_candidate.as_ref() else {
+        return "one_parameter_family_blocked_missing_grading_vector".to_string();
+    };
+    if grading_vector != &[1] {
+        return "one_parameter_family_blocked_not_primitive_grading".to_string();
+    }
+    let mut sorted_charges = charges.clone();
+    sorted_charges.sort_unstable();
+    let charge_signature = sorted_charges
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+
+    if sorted_charges == [-2, -1, 1, 1, 1] {
+        if local_cygv_has_source_derived_unit_tensor_chamber(skeleton) {
+            "source_derived_local_p2_bundle_family_with_tensor_chamber_certificate".to_string()
+        } else {
+            "local_p2_bundle_charge_family_missing_tensor_chamber_certificate".to_string()
+        }
+    } else {
+        format!("uncertified_one_parameter_charge_family:{charge_signature}")
+    }
 }
 
 fn local_cygv_missing_source_input_counts<'a>(
@@ -16803,6 +16886,66 @@ mod tests {
         );
         assert_eq!(
             counts.get("origin_omitted_q_matrix_not_available").copied(),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn local_cygv_one_parameter_family_status_separates_certified_p2_from_uncertified_shapes() {
+        let mut certified_p2 = skeleton_with_origin_phase_probe(
+            vec![0, 1, 2, 3, 4],
+            Some(vec![vec![-1, -2, 1, 1, 1]]),
+        );
+        certified_p2.local_intersection_tensor_candidate =
+            Some(vec![LocalCygvIntersectionTensorEntry {
+                indices: [0, 0, 0],
+                value: "1".to_string(),
+            }]);
+        certified_p2.local_chamber_certificate_status =
+            "source_derived_local_p2_bundle_positive_base_chamber".to_string();
+        let uncertified_weighted = skeleton_with_origin_phase_probe(
+            vec![0, 1, 2, 3, 4],
+            Some(vec![vec![-1, 2, -3, 1, 1]]),
+        );
+        let p2_without_certificate = skeleton_with_origin_phase_probe(
+            vec![0, 1, 2, 3, 4],
+            Some(vec![vec![-1, -2, 1, 1, 1]]),
+        );
+
+        assert_eq!(
+            local_cygv_one_parameter_family_status(&certified_p2),
+            "source_derived_local_p2_bundle_family_with_tensor_chamber_certificate"
+        );
+        assert_eq!(
+            local_cygv_one_parameter_family_status(&uncertified_weighted),
+            "uncertified_one_parameter_charge_family:-3,-1,1,1,2"
+        );
+        assert_eq!(
+            local_cygv_one_parameter_family_status(&p2_without_certificate),
+            "local_p2_bundle_charge_family_missing_tensor_chamber_certificate"
+        );
+
+        let counts = local_cygv_one_parameter_family_status_counts([
+            &certified_p2,
+            &uncertified_weighted,
+            &p2_without_certificate,
+        ]);
+        assert_eq!(
+            counts
+                .get("source_derived_local_p2_bundle_family_with_tensor_chamber_certificate")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(
+            counts
+                .get("uncertified_one_parameter_charge_family:-3,-1,1,1,2")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(
+            counts
+                .get("local_p2_bundle_charge_family_missing_tensor_chamber_certificate")
+                .copied(),
             Some(1)
         );
     }
