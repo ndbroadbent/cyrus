@@ -994,4 +994,7 @@ to make the remaining GV layer more first-principles:
    the union relation lattice (`[1/2,1/2,-3/2]` and `[1/2,-2,3/2]`), while
    targets `7`/`8` are integral (`[3,0,-1]` and `[1,0,-1]`). This keeps the
    next chamber-map step focused on a real lattice/projection obstruction
-   rather than a missing serialization detail.
+   rather than a missing serialization detail. A raw point-index projection
+   through the global `q` matrix has also been ruled out for all four weighted
+   rows, so the reusable fix needs the explicit CYTools ambient-column map for
+   the compact `cygv` handoff.

@@ -3191,6 +3191,14 @@ coordinates (`target=[3,0,-1]` / `[1,0,-1]`, star `[0,1,0]`), while targets
 rational coordinates `[1/2,1/2,-3/2]` and `[1/2,-2,3/2]`. The corresponding
 star rows remain integral (`[0,0,1]` and `[0,2,-1]`). This is the first
 explicit chamber-history object; it still does not determine a GV value.
+The follow-up `/tmp/cyrus_gv_context_star_union_global_basis_report.json` adds
+a guardrail against a tempting shortcut: direct raw point-index projection of
+the union target/star rows through the global `q` matrix reports
+`star_union_raw_point_index_global_basis_projection_missing_coordinates:target,star,target_minus_star,target_plus_star`
+for all four weighted rows. Thus the serialized local point IDs are not, by
+themselves, a valid CYTools curve-basis column map for this chamber diagnostic.
+The next projection step needs the actual ambient-column mapping used to build
+the compact `cygv` handoff.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

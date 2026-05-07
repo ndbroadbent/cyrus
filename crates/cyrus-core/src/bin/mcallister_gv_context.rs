@@ -574,6 +574,11 @@ struct LocalCygvSourceResolutionHintSummary {
     shared_two_simplex_star_union_star_coordinates: Option<Vec<i64>>,
     shared_two_simplex_star_union_star_rational_coordinates: Option<Vec<String>>,
     shared_two_simplex_star_union_star_rational_denominators: Option<Vec<String>>,
+    shared_two_simplex_star_union_global_basis_status: String,
+    shared_two_simplex_star_union_target_basis_coordinates: Option<Vec<i64>>,
+    shared_two_simplex_star_union_star_basis_coordinates: Option<Vec<i64>>,
+    shared_two_simplex_star_union_target_minus_star_basis_coordinates: Option<Vec<i64>>,
+    shared_two_simplex_star_union_target_plus_star_basis_coordinates: Option<Vec<i64>>,
     shared_two_simplex_star_union_target_minus_star: Vec<(usize, i64)>,
     shared_two_simplex_star_union_target_plus_star: Vec<(usize, i64)>,
     zero_relation_shared_two_simplex_points: Vec<usize>,
@@ -9562,6 +9567,76 @@ fn integral_coordinates_from_optional_rational(
         .transpose()
 }
 
+fn solve_rectangular_linear_system_rational(
+    matrix: &[Vec<MalachiteRational>],
+    rhs: &[MalachiteRational],
+) -> Result<Option<Vec<MalachiteRational>>, String> {
+    if matrix.len() != rhs.len() {
+        return Err("rectangular linear system row count does not match rhs length".to_string());
+    }
+    let Some(variable_count) = matrix.first().map(Vec::len) else {
+        return Ok(Some(Vec::new()));
+    };
+    if matrix.iter().any(|row| row.len() != variable_count) {
+        return Err("rectangular linear system rows have inconsistent widths".to_string());
+    }
+    let mut augmented = matrix
+        .iter()
+        .zip(rhs.iter())
+        .map(|(row, value)| {
+            let mut out = row.clone();
+            out.push(value.clone());
+            out
+        })
+        .collect::<Vec<_>>();
+    let equation_count = augmented.len();
+    let mut pivot_row = 0usize;
+    let mut pivot_columns = Vec::new();
+    for col in 0..variable_count {
+        let Some(source_row) = (pivot_row..equation_count)
+            .find(|&row| augmented[row][col] != MalachiteRational::from(0))
+        else {
+            continue;
+        };
+        augmented.swap(pivot_row, source_row);
+        let pivot_value = augmented[pivot_row][col].clone();
+        for entry in &mut augmented[pivot_row][col..=variable_count] {
+            *entry /= &pivot_value;
+        }
+        for row in 0..equation_count {
+            if row == pivot_row {
+                continue;
+            }
+            let factor = augmented[row][col].clone();
+            if factor == 0 {
+                continue;
+            }
+            for entry_col in col..=variable_count {
+                let subtraction = &factor * &augmented[pivot_row][entry_col];
+                augmented[row][entry_col] -= subtraction;
+            }
+        }
+        pivot_columns.push(col);
+        pivot_row += 1;
+        if pivot_row == equation_count {
+            break;
+        }
+    }
+    for row in &augmented {
+        let has_coefficient = row[..variable_count]
+            .iter()
+            .any(|entry| entry != &MalachiteRational::from(0));
+        if !has_coefficient && row[variable_count] != 0 {
+            return Ok(None);
+        }
+    }
+    let mut solution = vec![MalachiteRational::from(0); variable_count];
+    for (row, &col) in pivot_columns.iter().enumerate() {
+        solution[col] = augmented[row][variable_count].clone();
+    }
+    Ok(Some(solution))
+}
+
 fn rational_vec_to_strings(coordinates: &[MalachiteRational]) -> Vec<String> {
     coordinates.iter().map(ToString::to_string).collect()
 }
@@ -13673,7 +13748,7 @@ fn build_report(
     let local_cygv_source_resolution_star_union_status_counts =
         local_cygv_source_resolution_star_union_status_counts(&targets);
     let local_cygv_source_resolution_hint_sample =
-        local_cygv_source_resolution_hint_summaries(&targets);
+        local_cygv_source_resolution_hint_summaries(&targets, Some(validated.q_matrix));
     let missing_local_cygv_missing_source_input_counts = local_cygv_missing_source_input_counts(
         targets
             .iter()
@@ -14619,6 +14694,7 @@ fn local_cygv_one_parameter_family_status_counts<'a>(
 
 fn local_cygv_source_resolution_hint_summaries(
     targets: &[TargetReport],
+    global_q_matrix: Option<&[Vec<i64>]>,
 ) -> Vec<LocalCygvSourceResolutionHintSummary> {
     targets
         .iter()
@@ -14654,6 +14730,7 @@ fn local_cygv_source_resolution_hint_summaries(
             let star_union_relation_hint = local_cygv_star_union_relation_hint(
                 target.origin_circuit_first_witness.as_ref(),
                 &star_support_hint,
+                global_q_matrix,
             );
             let star_extra_affine_heights =
                 origin_circuit_shared_two_simplex_star_extra_affine_heights(
@@ -14720,6 +14797,16 @@ fn local_cygv_source_resolution_hint_summaries(
                     .star_rational_coordinates,
                 shared_two_simplex_star_union_star_rational_denominators: star_union_relation_hint
                     .star_rational_denominators,
+                shared_two_simplex_star_union_global_basis_status: star_union_relation_hint
+                    .global_basis_status,
+                shared_two_simplex_star_union_target_basis_coordinates: star_union_relation_hint
+                    .target_basis_coordinates,
+                shared_two_simplex_star_union_star_basis_coordinates: star_union_relation_hint
+                    .star_basis_coordinates,
+                shared_two_simplex_star_union_target_minus_star_basis_coordinates:
+                    star_union_relation_hint.target_minus_star_basis_coordinates,
+                shared_two_simplex_star_union_target_plus_star_basis_coordinates:
+                    star_union_relation_hint.target_plus_star_basis_coordinates,
                 shared_two_simplex_star_union_target_minus_star: star_union_relation_hint
                     .target_minus_star,
                 shared_two_simplex_star_union_target_plus_star: star_union_relation_hint
@@ -14853,6 +14940,7 @@ fn local_cygv_source_resolution_star_union_status_counts<'a>(
         let union = local_cygv_star_union_relation_hint(
             target.origin_circuit_first_witness.as_ref(),
             &star_support_hint,
+            None,
         );
         *counts.entry(union.status).or_insert(0usize) += 1;
     }
@@ -15307,6 +15395,11 @@ struct LocalCygvStarUnionRelationHint {
     star_coordinates: Option<Vec<i64>>,
     star_rational_coordinates: Option<Vec<String>>,
     star_rational_denominators: Option<Vec<String>>,
+    global_basis_status: String,
+    target_basis_coordinates: Option<Vec<i64>>,
+    star_basis_coordinates: Option<Vec<i64>>,
+    target_minus_star_basis_coordinates: Option<Vec<i64>>,
+    target_plus_star_basis_coordinates: Option<Vec<i64>>,
     target_minus_star: Vec<(usize, i64)>,
     target_plus_star: Vec<(usize, i64)>,
 }
@@ -15615,6 +15708,7 @@ fn local_cygv_star_target_relation_hint(
 fn local_cygv_star_union_relation_hint(
     witness: Option<&OriginCircuitWitnessSample>,
     star_support: &LocalCygvStarSupportHint,
+    global_q_matrix: Option<&[Vec<i64>]>,
 ) -> LocalCygvStarUnionRelationHint {
     let empty = |status: &str| LocalCygvStarUnionRelationHint {
         status: status.to_string(),
@@ -15627,6 +15721,11 @@ fn local_cygv_star_union_relation_hint(
         star_coordinates: None,
         star_rational_coordinates: None,
         star_rational_denominators: None,
+        global_basis_status: "star_union_global_basis_projection_not_run".to_string(),
+        target_basis_coordinates: None,
+        star_basis_coordinates: None,
+        target_minus_star_basis_coordinates: None,
+        target_plus_star_basis_coordinates: None,
         target_minus_star: Vec::new(),
         target_plus_star: Vec::new(),
     };
@@ -15667,6 +15766,11 @@ fn local_cygv_star_union_relation_hint(
                 star_coordinates: None,
                 star_rational_coordinates: None,
                 star_rational_denominators: None,
+                global_basis_status: "star_union_global_basis_projection_not_run".to_string(),
+                target_basis_coordinates: None,
+                star_basis_coordinates: None,
+                target_minus_star_basis_coordinates: None,
+                target_plus_star_basis_coordinates: None,
                 target_minus_star: Vec::new(),
                 target_plus_star: Vec::new(),
             };
@@ -15689,6 +15793,11 @@ fn local_cygv_star_union_relation_hint(
                 star_coordinates: None,
                 star_rational_coordinates: None,
                 star_rational_denominators: None,
+                global_basis_status: "star_union_global_basis_projection_not_run".to_string(),
+                target_basis_coordinates: None,
+                star_basis_coordinates: None,
+                target_minus_star_basis_coordinates: None,
+                target_plus_star_basis_coordinates: None,
                 target_minus_star: Vec::new(),
                 target_plus_star: Vec::new(),
             };
@@ -15712,6 +15821,16 @@ fn local_cygv_star_union_relation_hint(
     let star = point_indices
         .iter()
         .map(|point_index| star_by_point.get(point_index).copied().unwrap_or(0))
+        .collect::<Vec<_>>();
+    let target_minus_star_coefficients = target
+        .iter()
+        .zip(star.iter())
+        .map(|(&left, &right)| left - right)
+        .collect::<Vec<_>>();
+    let target_plus_star_coefficients = target
+        .iter()
+        .zip(star.iter())
+        .map(|(&left, &right)| left + right)
         .collect::<Vec<_>>();
     let target_minus_star = point_index_sparse_difference(&point_indices, &target, &star);
     let target_plus_star = point_index_sparse_sum(&point_indices, &target, &star);
@@ -15746,6 +15865,11 @@ fn local_cygv_star_union_relation_hint(
                     star_rational_denominators: optional_rational_denominators_to_strings(
                         &star_rational_coordinates,
                     ),
+                    global_basis_status: "star_union_global_basis_projection_not_run".to_string(),
+                    target_basis_coordinates: None,
+                    star_basis_coordinates: None,
+                    target_minus_star_basis_coordinates: None,
+                    target_plus_star_basis_coordinates: None,
                     target_minus_star,
                     target_plus_star,
                 };
@@ -15778,6 +15902,11 @@ fn local_cygv_star_union_relation_hint(
                     star_coordinates: None,
                     star_rational_coordinates: None,
                     star_rational_denominators: None,
+                    global_basis_status: "star_union_global_basis_projection_not_run".to_string(),
+                    target_basis_coordinates: None,
+                    star_basis_coordinates: None,
+                    target_minus_star_basis_coordinates: None,
+                    target_plus_star_basis_coordinates: None,
                     target_minus_star,
                     target_plus_star,
                 };
@@ -15792,6 +15921,14 @@ fn local_cygv_star_union_relation_hint(
                 )
                 .ok()
                 .flatten();
+                let global_basis_projection = local_cygv_star_union_global_basis_projection(
+                    global_q_matrix,
+                    &point_indices,
+                    &target,
+                    &star,
+                    &target_minus_star_coefficients,
+                    &target_plus_star_coefficients,
+                );
                 return LocalCygvStarUnionRelationHint {
                     status: format!(
                         "star_union_target_coordinate_error:{}",
@@ -15814,6 +15951,11 @@ fn local_cygv_star_union_relation_hint(
                     star_rational_denominators: optional_rational_denominators_to_strings(
                         &star_rational_coordinates,
                     ),
+                    global_basis_status: global_basis_projection.status,
+                    target_basis_coordinates: global_basis_projection.target,
+                    star_basis_coordinates: global_basis_projection.star,
+                    target_minus_star_basis_coordinates: global_basis_projection.target_minus_star,
+                    target_plus_star_basis_coordinates: global_basis_projection.target_plus_star,
                     target_minus_star,
                     target_plus_star,
                 };
@@ -15845,6 +15987,11 @@ fn local_cygv_star_union_relation_hint(
                     star_rational_denominators: optional_rational_denominators_to_strings(
                         &star_rational_coordinates,
                     ),
+                    global_basis_status: "star_union_global_basis_projection_not_run".to_string(),
+                    target_basis_coordinates: None,
+                    star_basis_coordinates: None,
+                    target_minus_star_basis_coordinates: None,
+                    target_plus_star_basis_coordinates: None,
                     target_minus_star,
                     target_plus_star,
                 };
@@ -15856,6 +16003,14 @@ fn local_cygv_star_union_relation_hint(
         (None, Some(_)) => "star_union_target_not_in_union_charge_basis",
         (None, None) => "star_union_target_and_star_not_in_union_charge_basis",
     };
+    let global_basis_projection = local_cygv_star_union_global_basis_projection(
+        global_q_matrix,
+        &point_indices,
+        &target,
+        &star,
+        &target_minus_star_coefficients,
+        &target_plus_star_coefficients,
+    );
     LocalCygvStarUnionRelationHint {
         status: status.to_string(),
         point_indices,
@@ -15871,9 +16026,180 @@ fn local_cygv_star_union_relation_hint(
         star_rational_denominators: optional_rational_denominators_to_strings(
             &star_rational_coordinates,
         ),
+        global_basis_status: global_basis_projection.status,
+        target_basis_coordinates: global_basis_projection.target,
+        star_basis_coordinates: global_basis_projection.star,
+        target_minus_star_basis_coordinates: global_basis_projection.target_minus_star,
+        target_plus_star_basis_coordinates: global_basis_projection.target_plus_star,
         target_minus_star,
         target_plus_star,
     }
+}
+
+struct LocalCygvStarUnionGlobalBasisProjection {
+    status: String,
+    target: Option<Vec<i64>>,
+    star: Option<Vec<i64>>,
+    target_minus_star: Option<Vec<i64>>,
+    target_plus_star: Option<Vec<i64>>,
+}
+
+fn local_cygv_star_union_global_basis_projection(
+    global_q_matrix: Option<&[Vec<i64>]>,
+    point_indices: &[usize],
+    target: &[i64],
+    star: &[i64],
+    target_minus_star: &[i64],
+    target_plus_star: &[i64],
+) -> LocalCygvStarUnionGlobalBasisProjection {
+    let empty = |status: &str| LocalCygvStarUnionGlobalBasisProjection {
+        status: status.to_string(),
+        target: None,
+        star: None,
+        target_minus_star: None,
+        target_plus_star: None,
+    };
+    let Some(global_q_matrix) = global_q_matrix else {
+        return empty("star_union_raw_point_index_global_basis_projection_missing_global_q_matrix");
+    };
+    let target =
+        match project_star_union_relation_to_global_basis(point_indices, target, global_q_matrix) {
+            Ok(coordinates) => coordinates,
+            Err(error) => {
+                return empty(&format!(
+                    "star_union_raw_point_index_global_basis_projection_target_error:{}",
+                    status_error_fragment(&error)
+                ));
+            }
+        };
+    let star =
+        match project_star_union_relation_to_global_basis(point_indices, star, global_q_matrix) {
+            Ok(coordinates) => coordinates,
+            Err(error) => {
+                return LocalCygvStarUnionGlobalBasisProjection {
+                    status: format!(
+                        "star_union_raw_point_index_global_basis_projection_star_error:{}",
+                        status_error_fragment(&error)
+                    ),
+                    target,
+                    star: None,
+                    target_minus_star: None,
+                    target_plus_star: None,
+                };
+            }
+        };
+    let target_minus_star = match project_star_union_relation_to_global_basis(
+        point_indices,
+        target_minus_star,
+        global_q_matrix,
+    ) {
+        Ok(coordinates) => coordinates,
+        Err(error) => {
+            return LocalCygvStarUnionGlobalBasisProjection {
+                status: format!(
+                    "star_union_raw_point_index_global_basis_projection_target_minus_star_error:{}",
+                    status_error_fragment(&error)
+                ),
+                target,
+                star,
+                target_minus_star: None,
+                target_plus_star: None,
+            };
+        }
+    };
+    let target_plus_star = match project_star_union_relation_to_global_basis(
+        point_indices,
+        target_plus_star,
+        global_q_matrix,
+    ) {
+        Ok(coordinates) => coordinates,
+        Err(error) => {
+            return LocalCygvStarUnionGlobalBasisProjection {
+                status: format!(
+                    "star_union_raw_point_index_global_basis_projection_target_plus_star_error:{}",
+                    status_error_fragment(&error)
+                ),
+                target,
+                star,
+                target_minus_star,
+                target_plus_star: None,
+            };
+        }
+    };
+    let mut missing = Vec::new();
+    if target.is_none() {
+        missing.push("target");
+    }
+    if star.is_none() {
+        missing.push("star");
+    }
+    if target_minus_star.is_none() {
+        missing.push("target_minus_star");
+    }
+    if target_plus_star.is_none() {
+        missing.push("target_plus_star");
+    }
+    let status = if missing.is_empty() {
+        "star_union_raw_point_index_global_basis_projection_integral_for_target_star_and_sums"
+            .to_string()
+    } else {
+        format!(
+            "star_union_raw_point_index_global_basis_projection_missing_coordinates:{}",
+            missing.join(",")
+        )
+    };
+    LocalCygvStarUnionGlobalBasisProjection {
+        status,
+        target,
+        star,
+        target_minus_star,
+        target_plus_star,
+    }
+}
+
+fn project_star_union_relation_to_global_basis(
+    point_indices: &[usize],
+    coefficients: &[i64],
+    global_q_matrix: &[Vec<i64>],
+) -> Result<Option<Vec<i64>>, String> {
+    if point_indices.len() != coefficients.len() {
+        return Err("star union point/coefficient length mismatch".to_string());
+    }
+    let width = global_q_matrix
+        .first()
+        .map(Vec::len)
+        .ok_or_else(|| "global q-matrix is empty".to_string())?;
+    if global_q_matrix.iter().any(|row| row.len() != width) {
+        return Err("global q-matrix rows have inconsistent widths".to_string());
+    }
+    let mut ambient_relation = vec![0i64; width];
+    for (&point_index, &coefficient) in point_indices.iter().zip(coefficients.iter()) {
+        let Some(slot) = ambient_relation.get_mut(point_index) else {
+            return Err(format!(
+                "star union point index {point_index} exceeds global q-matrix width {width}"
+            ));
+        };
+        *slot += coefficient;
+    }
+    let matrix = (0..width)
+        .map(|col| {
+            global_q_matrix
+                .iter()
+                .map(|row| MalachiteRational::from(Integer::from(row[col])))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let rhs = ambient_relation
+        .iter()
+        .map(|&entry| MalachiteRational::from(Integer::from(entry)))
+        .collect::<Vec<_>>();
+    let Some(coordinates) = solve_rectangular_linear_system_rational(&matrix, &rhs)? else {
+        return Ok(None);
+    };
+    if !local_charge_coordinates_match_target(&coordinates, &ambient_relation, global_q_matrix) {
+        return Ok(None);
+    }
+    Ok(Some(integral_coordinates_from_rational(&coordinates)?))
 }
 
 fn origin_circuit_star_union_point_samples(
@@ -17578,6 +17904,19 @@ mod tests {
         assert_eq!(
             relation_coordinates_in_local_charge_basis(&target, &rows).unwrap_err(),
             "target relation has non-integral local charge coordinates"
+        );
+    }
+
+    #[test]
+    fn star_union_global_projection_uses_cytools_curve_basis_rows() {
+        let q_matrix = vec![vec![1, 0, 1], vec![0, 1, 1]];
+        let point_indices = vec![0, 1, 2];
+        let coefficients = vec![2, 3, 5];
+
+        assert_eq!(
+            project_star_union_relation_to_global_basis(&point_indices, &coefficients, &q_matrix)
+                .unwrap(),
+            Some(vec![2, 3])
         );
     }
 
@@ -19350,7 +19689,7 @@ mod tests {
         );
         assert_eq!(star_target_relation_hint.coordinates, None);
         let star_union_hint =
-            local_cygv_star_union_relation_hint(Some(&witness), &star_support_hint);
+            local_cygv_star_union_relation_hint(Some(&witness), &star_support_hint, None);
         assert_eq!(
             star_union_hint.status,
             "star_union_target_and_star_integral_in_union_charge_basis"
@@ -19377,6 +19716,10 @@ mod tests {
         assert_eq!(
             star_union_hint.star_rational_denominators,
             Some(vec!["1".to_string(), "1".to_string(), "1".to_string()])
+        );
+        assert_eq!(
+            star_union_hint.global_basis_status,
+            "star_union_raw_point_index_global_basis_projection_missing_global_q_matrix"
         );
         assert_eq!(
             star_union_hint.target_minus_star,
