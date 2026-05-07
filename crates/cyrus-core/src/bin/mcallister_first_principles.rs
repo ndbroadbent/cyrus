@@ -729,6 +729,8 @@ struct ChamberGvDiagnostic {
     missing_target_stats: Option<MissingGvTargetStats>,
     uncovered_source_ray_stats_degree_bound_for_missing: Option<i128>,
     uncovered_source_ray_stats_for_missing: Option<MissingGvTargetStats>,
+    #[allow(dead_code)]
+    uncovered_source_ray_toric_diagnostic_sample: Option<Vec<ToricGvDiagnosticContextSample>>,
     basis_mori_rays_for_missing_degree_bound: Option<i128>,
     basis_mori_rays_for_missing_degree_bounded: Option<Vec<Vec<i64>>>,
     degree_bounded_mori_ray_context_for_missing: Option<Vec<DegreeBoundedMoriRayContextSample>>,
@@ -761,6 +763,16 @@ struct DegreeBoundedMoriRayContextSample {
 struct CoveredToricGvContextSample {
     degree: i128,
     gv: String,
+    ambient_nonzero: Vec<(usize, i64)>,
+    basis_nonzero: Vec<(usize, i64)>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+struct ToricGvDiagnosticContextSample {
+    degree: i128,
+    gv: String,
+    source_bucket: String,
+    source_summary: String,
     ambient_nonzero: Vec<(usize, i64)>,
     basis_nonzero: Vec<(usize, i64)>,
 }
@@ -5649,6 +5661,53 @@ fn covered_toric_gv_context_samples(
     Ok(samples)
 }
 
+fn toric_gv_diagnostic_context_samples(
+    ambient_classes: &[Vec<i64>],
+    diagnostics_by_class: &HashMap<Vec<i64>, cyrus_core::ToricCurveGvDiagnostic>,
+    basis: &[usize],
+    grading: &[i64],
+    sample_limit: usize,
+) -> Result<Vec<ToricGvDiagnosticContextSample>, String> {
+    let mut samples = Vec::new();
+    for ambient_class in ambient_classes {
+        if samples.len() >= sample_limit {
+            break;
+        }
+        let Some(diagnostic) = diagnostics_by_class.get(ambient_class) else {
+            continue;
+        };
+        let basis_class =
+            project_ambient_curve_to_basis(ambient_class, basis).map_err(|e| e.to_string())?;
+        if basis_class.len() != grading.len() {
+            return Err(format!(
+                "toric GV diagnostic basis class dimension {} does not match grading dimension {}",
+                basis_class.len(),
+                grading.len()
+            ));
+        }
+        let degree = basis_class
+            .iter()
+            .zip(grading.iter())
+            .map(|(&coefficient, &weight)| i128::from(coefficient) * i128::from(weight))
+            .sum::<i128>();
+        samples.push(ToricGvDiagnosticContextSample {
+            degree,
+            gv: diagnostic.gv.to_string(),
+            source_bucket: toric_curve_gv_source_bucket_label(diagnostic),
+            source_summary: toric_curve_gv_diagnostic_summary(diagnostic),
+            ambient_nonzero: sparse_i64(ambient_class),
+            basis_nonzero: sparse_i64(&basis_class),
+        });
+    }
+    samples.sort_by(|lhs, rhs| {
+        lhs.degree
+            .cmp(&rhs.degree)
+            .then_with(|| lhs.basis_nonzero.cmp(&rhs.basis_nonzero))
+            .then_with(|| lhs.ambient_nonzero.cmp(&rhs.ambient_nonzero))
+    });
+    Ok(samples)
+}
+
 fn ambient_curve_b_field_parity_diagnostic(
     curve: &[i64],
     basis: &[usize],
@@ -6920,13 +6979,15 @@ fn diagnose_chamber_gv_volume_correction(
         small_curve_pruning,
         "corrected-chamber",
     )?;
-    let toric_gvs =
-        compute_toric_two_face_curve_gv_invariants(tri, &geom.triangulation_points, &geom.polytope)
-            .map_err(|e| format!("failed to compute corrected-chamber toric GV values: {e}"))?;
-
-    let mut gv_by_class: HashMap<Vec<i64>, malachite::Integer> = toric_gvs
-        .into_iter()
-        .map(|item| (item.class, item.gv))
+    let toric_gv_diagnostic_by_class: HashMap<Vec<i64>, cyrus_core::ToricCurveGvDiagnostic> =
+        compute_toric_curve_gv_diagnostics(tri, &geom.triangulation_points, &geom.polytope)
+            .map_err(|e| format!("failed to compute corrected-chamber toric GV values: {e}"))?
+            .into_iter()
+            .map(|item| (item.class.clone(), item))
+            .collect();
+    let mut gv_by_class: HashMap<Vec<i64>, malachite::Integer> = toric_gv_diagnostic_by_class
+        .iter()
+        .map(|(class, diagnostic)| (class.clone(), diagnostic.gv.clone()))
         .collect();
     let mut small_curve_gvs = Vec::with_capacity(small_curves.len());
     let mut missing_gv_classes = Vec::new();
@@ -6954,6 +7015,7 @@ fn diagnose_chamber_gv_volume_correction(
     let mut missing_target_stats = None;
     let mut uncovered_source_ray_stats_degree_bound_for_missing = None;
     let mut uncovered_source_ray_stats_for_missing = None;
+    let mut uncovered_source_ray_toric_diagnostic_sample = None;
     let mut covered_toric_gv_divisor_representation_baseline = None;
     if !missing_gv_classes.is_empty() {
         let origin_idx = geom
@@ -7067,6 +7129,13 @@ fn diagnose_chamber_gv_volume_correction(
             uncovered_source_ray_classes,
             active_dependency_source_ray_classes,
         );
+        uncovered_source_ray_toric_diagnostic_sample = Some(toric_gv_diagnostic_context_samples(
+            &uncovered_source_ray_classes,
+            &toric_gv_diagnostic_by_class,
+            &intersection.basis,
+            &grading,
+            missing_target_sample_limit,
+        )?);
         let uncovered_source_ray_cms_intersection_checks_by_class =
             cms_general_divisor_intersection_checks_by_class(
                 &uncovered_source_ray_classes,
@@ -7608,6 +7677,7 @@ fn diagnose_chamber_gv_volume_correction(
         missing_target_stats,
         uncovered_source_ray_stats_degree_bound_for_missing,
         uncovered_source_ray_stats_for_missing,
+        uncovered_source_ray_toric_diagnostic_sample,
         basis_mori_rays_for_missing_degree_bound: basis_rays_for_missing_degree_bound,
         basis_mori_rays_for_missing_degree_bounded: basis_rays_for_missing_degree_bounded,
         degree_bounded_mori_ray_context_for_missing,
