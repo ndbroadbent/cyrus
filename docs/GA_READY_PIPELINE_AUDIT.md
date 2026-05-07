@@ -989,4 +989,9 @@ to make the remaining GV layer more first-principles:
    generators across `720..2963` unique degree-bounded candidates per target.
    So the issue is not that the small witness domains forgot forced row-span
    members; it is still the absent supporting-face/chamber-semigroup
-   certificate.
+   certificate. The star-union diagnostic now also serializes exact rational
+   coordinates for the four weighted rows: targets `3`/`6` are half-integral in
+   the union relation lattice (`[1/2,1/2,-3/2]` and `[1/2,-2,3/2]`), while
+   targets `7`/`8` are integral (`[3,0,-1]` and `[1,0,-1]`). This keeps the
+   next chamber-map step focused on a real lattice/projection obstruction
+   rather than a missing serialization detail.

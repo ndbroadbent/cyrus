@@ -569,7 +569,11 @@ struct LocalCygvSourceResolutionHintSummary {
     shared_two_simplex_star_union_affine_rank: Option<usize>,
     shared_two_simplex_star_union_charge_basis: Option<Vec<Vec<i64>>>,
     shared_two_simplex_star_union_target_coordinates: Option<Vec<i64>>,
+    shared_two_simplex_star_union_target_rational_coordinates: Option<Vec<String>>,
+    shared_two_simplex_star_union_target_rational_denominators: Option<Vec<String>>,
     shared_two_simplex_star_union_star_coordinates: Option<Vec<i64>>,
+    shared_two_simplex_star_union_star_rational_coordinates: Option<Vec<String>>,
+    shared_two_simplex_star_union_star_rational_denominators: Option<Vec<String>>,
     shared_two_simplex_star_union_target_minus_star: Vec<(usize, i64)>,
     shared_two_simplex_star_union_target_plus_star: Vec<(usize, i64)>,
     zero_relation_shared_two_simplex_points: Vec<usize>,
@@ -9486,6 +9490,17 @@ fn relation_coordinates_in_local_charge_basis(
     target: &[i64],
     rows: &[Vec<i64>],
 ) -> Result<Option<Vec<i64>>, String> {
+    let Some(coordinates) = relation_rational_coordinates_in_local_charge_basis(target, rows)?
+    else {
+        return Ok(None);
+    };
+    Ok(Some(integral_coordinates_from_rational(&coordinates)?))
+}
+
+fn relation_rational_coordinates_in_local_charge_basis(
+    target: &[i64],
+    rows: &[Vec<i64>],
+) -> Result<Option<Vec<MalachiteRational>>, String> {
     if rows.is_empty() {
         return Ok(target.iter().all(|&value| value == 0).then(Vec::new));
     }
@@ -9515,25 +9530,63 @@ fn relation_coordinates_in_local_charge_basis(
         if !local_charge_coordinates_match_target(&coordinates, target, rows) {
             continue;
         }
-        let coordinates = coordinates
-            .into_iter()
-            .map(|coordinate| {
-                if coordinate.denominator_ref() != &1u32 {
-                    return Err(
-                        "target relation has non-integral local charge coordinates".to_string()
-                    );
-                }
-                let integer = Integer::try_from(coordinate).map_err(|_| {
-                    "target relation local charge coordinate is not integral".to_string()
-                })?;
-                i64::try_from(&integer).map_err(|_| {
-                    "target relation local charge coordinate does not fit in i64".to_string()
-                })
-            })
-            .collect::<Result<Vec<_>, String>>()?;
         return Ok(Some(coordinates));
     }
     Ok(None)
+}
+
+fn integral_coordinates_from_rational(
+    coordinates: &[MalachiteRational],
+) -> Result<Vec<i64>, String> {
+    coordinates
+        .iter()
+        .map(|coordinate| {
+            if coordinate.denominator_ref() != &1u32 {
+                return Err("target relation has non-integral local charge coordinates".to_string());
+            }
+            let integer = Integer::try_from(coordinate.clone()).map_err(|_| {
+                "target relation local charge coordinate is not integral".to_string()
+            })?;
+            i64::try_from(&integer).map_err(|_| {
+                "target relation local charge coordinate does not fit in i64".to_string()
+            })
+        })
+        .collect()
+}
+
+fn integral_coordinates_from_optional_rational(
+    coordinates: Option<&[MalachiteRational]>,
+) -> Result<Option<Vec<i64>>, String> {
+    coordinates
+        .map(|coordinates| integral_coordinates_from_rational(coordinates))
+        .transpose()
+}
+
+fn rational_vec_to_strings(coordinates: &[MalachiteRational]) -> Vec<String> {
+    coordinates.iter().map(ToString::to_string).collect()
+}
+
+fn rational_denominators_to_strings(coordinates: &[MalachiteRational]) -> Vec<String> {
+    coordinates
+        .iter()
+        .map(|coordinate| coordinate.denominator_ref().to_string())
+        .collect()
+}
+
+fn optional_rational_vec_to_strings(
+    coordinates: &Option<Vec<MalachiteRational>>,
+) -> Option<Vec<String>> {
+    coordinates
+        .as_ref()
+        .map(|coordinates| rational_vec_to_strings(coordinates))
+}
+
+fn optional_rational_denominators_to_strings(
+    coordinates: &Option<Vec<MalachiteRational>>,
+) -> Option<Vec<String>> {
+    coordinates
+        .as_ref()
+        .map(|coordinates| rational_denominators_to_strings(coordinates))
 }
 
 fn local_charge_coordinates_match_target(
@@ -14657,8 +14710,16 @@ fn local_cygv_source_resolution_hint_summaries(
                 shared_two_simplex_star_union_charge_basis: star_union_relation_hint.charge_basis,
                 shared_two_simplex_star_union_target_coordinates: star_union_relation_hint
                     .target_coordinates,
+                shared_two_simplex_star_union_target_rational_coordinates: star_union_relation_hint
+                    .target_rational_coordinates,
+                shared_two_simplex_star_union_target_rational_denominators:
+                    star_union_relation_hint.target_rational_denominators,
                 shared_two_simplex_star_union_star_coordinates: star_union_relation_hint
                     .star_coordinates,
+                shared_two_simplex_star_union_star_rational_coordinates: star_union_relation_hint
+                    .star_rational_coordinates,
+                shared_two_simplex_star_union_star_rational_denominators: star_union_relation_hint
+                    .star_rational_denominators,
                 shared_two_simplex_star_union_target_minus_star: star_union_relation_hint
                     .target_minus_star,
                 shared_two_simplex_star_union_target_plus_star: star_union_relation_hint
@@ -15241,7 +15302,11 @@ struct LocalCygvStarUnionRelationHint {
     affine_rank: Option<usize>,
     charge_basis: Option<Vec<Vec<i64>>>,
     target_coordinates: Option<Vec<i64>>,
+    target_rational_coordinates: Option<Vec<String>>,
+    target_rational_denominators: Option<Vec<String>>,
     star_coordinates: Option<Vec<i64>>,
+    star_rational_coordinates: Option<Vec<String>>,
+    star_rational_denominators: Option<Vec<String>>,
     target_minus_star: Vec<(usize, i64)>,
     target_plus_star: Vec<(usize, i64)>,
 }
@@ -15557,7 +15622,11 @@ fn local_cygv_star_union_relation_hint(
         affine_rank: None,
         charge_basis: None,
         target_coordinates: None,
+        target_rational_coordinates: None,
+        target_rational_denominators: None,
         star_coordinates: None,
+        star_rational_coordinates: None,
+        star_rational_denominators: None,
         target_minus_star: Vec::new(),
         target_plus_star: Vec::new(),
     };
@@ -15593,7 +15662,11 @@ fn local_cygv_star_union_relation_hint(
                 affine_rank: None,
                 charge_basis: None,
                 target_coordinates: None,
+                target_rational_coordinates: None,
+                target_rational_denominators: None,
                 star_coordinates: None,
+                star_rational_coordinates: None,
+                star_rational_denominators: None,
                 target_minus_star: Vec::new(),
                 target_plus_star: Vec::new(),
             };
@@ -15611,7 +15684,11 @@ fn local_cygv_star_union_relation_hint(
                 affine_rank: Some(affine_rank),
                 charge_basis: None,
                 target_coordinates: None,
+                target_rational_coordinates: None,
+                target_rational_denominators: None,
                 star_coordinates: None,
+                star_rational_coordinates: None,
+                star_rational_denominators: None,
                 target_minus_star: Vec::new(),
                 target_plus_star: Vec::new(),
             };
@@ -15638,14 +15715,19 @@ fn local_cygv_star_union_relation_hint(
         .collect::<Vec<_>>();
     let target_minus_star = point_index_sparse_difference(&point_indices, &target, &star);
     let target_plus_star = point_index_sparse_sum(&point_indices, &target, &star);
-    let target_coordinates =
-        match relation_coordinates_in_local_charge_basis(&target, &charge_basis) {
+    let target_rational_coordinates =
+        match relation_rational_coordinates_in_local_charge_basis(&target, &charge_basis) {
             Ok(coordinates) => coordinates,
             Err(error) => {
-                let star_coordinates =
-                    relation_coordinates_in_local_charge_basis(&star, &charge_basis)
+                let star_rational_coordinates =
+                    relation_rational_coordinates_in_local_charge_basis(&star, &charge_basis)
                         .ok()
                         .flatten();
+                let star_coordinates = integral_coordinates_from_optional_rational(
+                    star_rational_coordinates.as_deref(),
+                )
+                .ok()
+                .flatten();
                 return LocalCygvStarUnionRelationHint {
                     status: format!(
                         "star_union_target_coordinate_error:{}",
@@ -15655,30 +15737,119 @@ fn local_cygv_star_union_relation_hint(
                     affine_rank: Some(affine_rank),
                     charge_basis: Some(charge_basis),
                     target_coordinates: None,
+                    target_rational_coordinates: None,
+                    target_rational_denominators: None,
                     star_coordinates,
+                    star_rational_coordinates: optional_rational_vec_to_strings(
+                        &star_rational_coordinates,
+                    ),
+                    star_rational_denominators: optional_rational_denominators_to_strings(
+                        &star_rational_coordinates,
+                    ),
                     target_minus_star,
                     target_plus_star,
                 };
             }
         };
-    let star_coordinates = match relation_coordinates_in_local_charge_basis(&star, &charge_basis) {
-        Ok(coordinates) => coordinates,
-        Err(error) => {
-            return LocalCygvStarUnionRelationHint {
-                status: format!(
-                    "star_union_star_coordinate_error:{}",
-                    status_error_fragment(&error)
-                ),
-                point_indices,
-                affine_rank: Some(affine_rank),
-                charge_basis: Some(charge_basis),
-                target_coordinates,
-                star_coordinates: None,
-                target_minus_star,
-                target_plus_star,
-            };
-        }
-    };
+    let star_rational_coordinates =
+        match relation_rational_coordinates_in_local_charge_basis(&star, &charge_basis) {
+            Ok(coordinates) => coordinates,
+            Err(error) => {
+                let target_coordinates = integral_coordinates_from_optional_rational(
+                    target_rational_coordinates.as_deref(),
+                )
+                .ok()
+                .flatten();
+                return LocalCygvStarUnionRelationHint {
+                    status: format!(
+                        "star_union_star_coordinate_error:{}",
+                        status_error_fragment(&error)
+                    ),
+                    point_indices,
+                    affine_rank: Some(affine_rank),
+                    charge_basis: Some(charge_basis),
+                    target_coordinates,
+                    target_rational_coordinates: optional_rational_vec_to_strings(
+                        &target_rational_coordinates,
+                    ),
+                    target_rational_denominators: optional_rational_denominators_to_strings(
+                        &target_rational_coordinates,
+                    ),
+                    star_coordinates: None,
+                    star_rational_coordinates: None,
+                    star_rational_denominators: None,
+                    target_minus_star,
+                    target_plus_star,
+                };
+            }
+        };
+    let target_coordinates =
+        match integral_coordinates_from_optional_rational(target_rational_coordinates.as_deref()) {
+            Ok(coordinates) => coordinates,
+            Err(error) => {
+                let star_coordinates = integral_coordinates_from_optional_rational(
+                    star_rational_coordinates.as_deref(),
+                )
+                .ok()
+                .flatten();
+                return LocalCygvStarUnionRelationHint {
+                    status: format!(
+                        "star_union_target_coordinate_error:{}",
+                        status_error_fragment(&error)
+                    ),
+                    point_indices,
+                    affine_rank: Some(affine_rank),
+                    charge_basis: Some(charge_basis),
+                    target_coordinates: None,
+                    target_rational_coordinates: optional_rational_vec_to_strings(
+                        &target_rational_coordinates,
+                    ),
+                    target_rational_denominators: optional_rational_denominators_to_strings(
+                        &target_rational_coordinates,
+                    ),
+                    star_coordinates,
+                    star_rational_coordinates: optional_rational_vec_to_strings(
+                        &star_rational_coordinates,
+                    ),
+                    star_rational_denominators: optional_rational_denominators_to_strings(
+                        &star_rational_coordinates,
+                    ),
+                    target_minus_star,
+                    target_plus_star,
+                };
+            }
+        };
+    let star_coordinates =
+        match integral_coordinates_from_optional_rational(star_rational_coordinates.as_deref()) {
+            Ok(coordinates) => coordinates,
+            Err(error) => {
+                return LocalCygvStarUnionRelationHint {
+                    status: format!(
+                        "star_union_star_coordinate_error:{}",
+                        status_error_fragment(&error)
+                    ),
+                    point_indices,
+                    affine_rank: Some(affine_rank),
+                    charge_basis: Some(charge_basis),
+                    target_coordinates,
+                    target_rational_coordinates: optional_rational_vec_to_strings(
+                        &target_rational_coordinates,
+                    ),
+                    target_rational_denominators: optional_rational_denominators_to_strings(
+                        &target_rational_coordinates,
+                    ),
+                    star_coordinates: None,
+                    star_rational_coordinates: optional_rational_vec_to_strings(
+                        &star_rational_coordinates,
+                    ),
+                    star_rational_denominators: optional_rational_denominators_to_strings(
+                        &star_rational_coordinates,
+                    ),
+                    target_minus_star,
+                    target_plus_star,
+                };
+            }
+        };
     let status = match (&target_coordinates, &star_coordinates) {
         (Some(_), Some(_)) => "star_union_target_and_star_integral_in_union_charge_basis",
         (Some(_), None) => "star_union_star_not_in_union_charge_basis",
@@ -15691,7 +15862,15 @@ fn local_cygv_star_union_relation_hint(
         affine_rank: Some(affine_rank),
         charge_basis: Some(charge_basis),
         target_coordinates,
+        target_rational_coordinates: optional_rational_vec_to_strings(&target_rational_coordinates),
+        target_rational_denominators: optional_rational_denominators_to_strings(
+            &target_rational_coordinates,
+        ),
         star_coordinates,
+        star_rational_coordinates: optional_rational_vec_to_strings(&star_rational_coordinates),
+        star_rational_denominators: optional_rational_denominators_to_strings(
+            &star_rational_coordinates,
+        ),
         target_minus_star,
         target_plus_star,
     }
@@ -17375,6 +17554,30 @@ mod tests {
                 .unwrap()
                 .contains_integer_row(&[0, 1])
                 .unwrap()
+        );
+    }
+
+    #[test]
+    fn local_charge_rational_coordinates_expose_nonintegral_obstruction() {
+        let rows = vec![vec![2, 0], vec![0, 2]];
+        let target = vec![1, 1];
+
+        let rational_coordinates =
+            relation_rational_coordinates_in_local_charge_basis(&target, &rows)
+                .unwrap()
+                .expect("target is in the rational row span");
+
+        assert_eq!(
+            rational_vec_to_strings(&rational_coordinates),
+            vec!["1/2".to_string(), "1/2".to_string()]
+        );
+        assert_eq!(
+            rational_denominators_to_strings(&rational_coordinates),
+            vec!["2".to_string(), "2".to_string()]
+        );
+        assert_eq!(
+            relation_coordinates_in_local_charge_basis(&target, &rows).unwrap_err(),
+            "target relation has non-integral local charge coordinates"
         );
     }
 
@@ -19157,8 +19360,24 @@ mod tests {
             vec![0, 2, 55, 195, 208, 211, 212, 214]
         );
         assert_eq!(star_union_hint.affine_rank, Some(4));
-        assert!(star_union_hint.target_coordinates.is_some());
-        assert!(star_union_hint.star_coordinates.is_some());
+        assert_eq!(star_union_hint.target_coordinates, Some(vec![1, 0, -1]));
+        assert_eq!(star_union_hint.star_coordinates, Some(vec![0, 1, 0]));
+        assert_eq!(
+            star_union_hint.target_rational_coordinates,
+            Some(vec!["1".to_string(), "0".to_string(), "-1".to_string()])
+        );
+        assert_eq!(
+            star_union_hint.target_rational_denominators,
+            Some(vec!["1".to_string(), "1".to_string(), "1".to_string()])
+        );
+        assert_eq!(
+            star_union_hint.star_rational_coordinates,
+            Some(vec!["0".to_string(), "1".to_string(), "0".to_string()])
+        );
+        assert_eq!(
+            star_union_hint.star_rational_denominators,
+            Some(vec!["1".to_string(), "1".to_string(), "1".to_string()])
+        );
         assert_eq!(
             star_union_hint.target_minus_star,
             vec![

@@ -737,7 +737,11 @@ target rows whose GV values are missing.
 The union-support comparison narrows the next chamber-history task further:
 targets `7`/`8` are integral in the union relation lattice with the star row,
 whereas targets `3`/`6` have non-integral target coordinates in that lattice.
-That split is now serialized instead of inferred from point IDs.
+That split is now serialized instead of inferred from point IDs. The exact
+coordinates in `/tmp/cyrus_gv_context_star_union_rational_report.json` are
+`target 3 = [1/2,1/2,-3/2]`, `target 6 = [1/2,-2,3/2]`,
+`target 7 = [3,0,-1]`, and `target 8 = [1,0,-1]`; the corresponding actual
+star rows are integral (`[0,0,1]`, `[0,2,-1]`, `[0,1,0]`, `[0,1,0]`).
 Origin-circuit witness-domain compact `cygv` probes are now opt-in and guarded
 by `--origin-witness-cygv-generator-limit`. The traced target `8` report shows
 the single-generator relation domain computes `GV=2` with one materialized
