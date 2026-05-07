@@ -3114,6 +3114,11 @@ respectively. This is chamber evidence from the actual origin-circuit facet
 witnesses: the five-point weighted relation is not yet the full resolved local
 model, and the next implementation step should serialize/use that extra shared
 ray with coordinates when constructing the resolved local phase.
+`mcallister_first_principles` now serializes `shared_two_simplex_points` on
+origin-circuit witnesses so fresh context dumps will carry the zero-coefficient
+shared ray coordinates. `mcallister_gv_context` accepts older dumps via a
+default empty field; on the old schema-3 dump the point IDs above are present
+but `zero_relation_shared_two_simplex_point_samples` is necessarily empty.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

@@ -102,7 +102,8 @@ run pass. Any remaining mismatch must be explicit and localizable.
    source-witness zero-relation shared ray for each of the four compact
    weighted rows (`202`, `199`, `55`, `55`). That points the next chamber task
    at the resolved local phase containing the extra shared ray, rather than at
-   another scalar tensor scan.
+   another scalar tensor scan. Fresh context dumps now serialize those shared
+   two-simplex point records with coordinates.
    A fresh read of
    `string_theory/mcallister_2107/latest_cytools/compute_kklt_iterative.py`
    confirms the sign convention used by Cyrus,

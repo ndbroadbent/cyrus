@@ -190,6 +190,8 @@ struct OriginCircuitWitnessSample {
     second_facet_exclusive_point: usize,
     shared_two_simplex: Vec<usize>,
     #[serde(default)]
+    shared_two_simplex_points: Vec<OriginCircuitRelationPointSample>,
+    #[serde(default)]
     first_facet: Vec<usize>,
     #[serde(default)]
     second_facet: Vec<usize>,
@@ -529,6 +531,7 @@ struct LocalCygvSourceResolutionHintSummary {
     degree: i128,
     status: String,
     zero_relation_shared_two_simplex_points: Vec<usize>,
+    zero_relation_shared_two_simplex_point_samples: Vec<OriginCircuitRelationPointSample>,
     relation_support_point_indices: Vec<usize>,
     local_phase_q_matrix: Option<Vec<Vec<i64>>>,
     local_one_parameter_family_status: Option<String>,
@@ -14506,6 +14509,10 @@ fn local_cygv_source_resolution_hint_summaries(
                     origin_circuit_zero_relation_shared_two_simplex_points(
                         target.origin_circuit_first_witness.as_ref(),
                     ),
+                zero_relation_shared_two_simplex_point_samples:
+                    origin_circuit_zero_relation_shared_two_simplex_point_samples(
+                        target.origin_circuit_first_witness.as_ref(),
+                    ),
                 relation_support_point_indices: target
                     .origin_circuit_first_witness
                     .as_ref()
@@ -14593,6 +14600,23 @@ fn origin_circuit_zero_relation_shared_two_simplex_points(
     zero_shared.sort_unstable();
     zero_shared.dedup();
     zero_shared
+}
+
+fn origin_circuit_zero_relation_shared_two_simplex_point_samples(
+    witness: Option<&OriginCircuitWitnessSample>,
+) -> Vec<OriginCircuitRelationPointSample> {
+    let Some(witness) = witness else {
+        return Vec::new();
+    };
+    let zero_shared = origin_circuit_zero_relation_shared_two_simplex_points(Some(witness))
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    witness
+        .shared_two_simplex_points
+        .iter()
+        .filter(|point| zero_shared.contains(&point.point_index))
+        .cloned()
+        .collect()
 }
 
 fn origin_circuit_relation_support_point_indices(
@@ -16349,6 +16373,7 @@ mod tests {
                 first_facet_exclusive_point: 4,
                 second_facet_exclusive_point: 5,
                 shared_two_simplex: vec![1, 2, 3],
+                shared_two_simplex_points: Vec::new(),
                 first_facet: vec![1, 2, 3, 4, 6],
                 second_facet: vec![1, 2, 3, 5, 7],
                 first_facet_size: 5,
@@ -16703,6 +16728,7 @@ mod tests {
                 first_facet_exclusive_point: 208,
                 second_facet_exclusive_point: 214,
                 shared_two_simplex: vec![46, 55, 211],
+                shared_two_simplex_points: Vec::new(),
                 first_facet: Vec::new(),
                 second_facet: Vec::new(),
                 first_facet_size: 23,
@@ -17647,6 +17673,26 @@ mod tests {
             first_facet_exclusive_point: 214,
             second_facet_exclusive_point: 211,
             shared_two_simplex: vec![2, 55, 208],
+            shared_two_simplex_points: vec![
+                OriginCircuitRelationPointSample {
+                    point_index: 2,
+                    coefficient: 2,
+                    coordinates: vec![1, 0, 0, 0],
+                    face_dimension: Some(0),
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 55,
+                    coefficient: 0,
+                    coordinates: vec![1, 2, 1, 2],
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 208,
+                    coefficient: -3,
+                    coordinates: vec![2, 2, 1, 2],
+                    face_dimension: Some(2),
+                },
+            ],
             first_facet: Vec::new(),
             second_facet: Vec::new(),
             first_facet_size: 0,
@@ -17689,6 +17735,13 @@ mod tests {
         assert_eq!(
             origin_circuit_zero_relation_shared_two_simplex_points(Some(&witness)),
             vec![55]
+        );
+        assert_eq!(
+            origin_circuit_zero_relation_shared_two_simplex_point_samples(Some(&witness))
+                .into_iter()
+                .map(|point| (point.point_index, point.coefficient, point.coordinates))
+                .collect::<Vec<_>>(),
+            vec![(55, 0, vec![1, 2, 1, 2])]
         );
         assert_eq!(
             local_cygv_source_resolution_hint_status(&skeleton, Some(&witness)),
@@ -18601,6 +18654,7 @@ mod tests {
             first_facet_exclusive_point: 6,
             second_facet_exclusive_point: 7,
             shared_two_simplex: vec![1, 5],
+            shared_two_simplex_points: Vec::new(),
             first_facet: vec![1, 5, 6],
             second_facet: vec![1, 5, 7],
             first_facet_size: 3,
@@ -18753,6 +18807,7 @@ mod tests {
             first_facet_exclusive_point: 203,
             second_facet_exclusive_point: 206,
             shared_two_simplex: vec![54, 209],
+            shared_two_simplex_points: Vec::new(),
             first_facet: vec![54, 203, 209],
             second_facet: vec![54, 206, 209],
             first_facet_size: 3,
@@ -20349,6 +20404,7 @@ mod tests {
                 first_facet_exclusive_point: 0,
                 second_facet_exclusive_point: 1,
                 shared_two_simplex: Vec::new(),
+                shared_two_simplex_points: Vec::new(),
                 first_facet: Vec::new(),
                 second_facet: Vec::new(),
                 first_facet_size: 1,
@@ -20775,6 +20831,7 @@ mod tests {
             first_facet_exclusive_point: 2,
             second_facet_exclusive_point: 4,
             shared_two_simplex: vec![1, 3],
+            shared_two_simplex_points: Vec::new(),
             first_facet: Vec::new(),
             second_facet: Vec::new(),
             first_facet_size: 2,
@@ -20859,6 +20916,7 @@ mod tests {
             first_facet_exclusive_point: 2,
             second_facet_exclusive_point: 4,
             shared_two_simplex: vec![1, 3],
+            shared_two_simplex_points: Vec::new(),
             first_facet: Vec::new(),
             second_facet: Vec::new(),
             first_facet_size: 2,
@@ -20939,6 +20997,7 @@ mod tests {
             first_facet_exclusive_point: 3,
             second_facet_exclusive_point: 4,
             shared_two_simplex: vec![1, 2],
+            shared_two_simplex_points: Vec::new(),
             first_facet: Vec::new(),
             second_facet: Vec::new(),
             first_facet_size: 2,
@@ -21047,6 +21106,7 @@ mod tests {
             first_facet_exclusive_point: 3,
             second_facet_exclusive_point: 4,
             shared_two_simplex: vec![1, 2],
+            shared_two_simplex_points: Vec::new(),
             first_facet: Vec::new(),
             second_facet: Vec::new(),
             first_facet_size: 2,
@@ -21490,6 +21550,7 @@ mod tests {
             first_facet_exclusive_point: 4,
             second_facet_exclusive_point: 5,
             shared_two_simplex: vec![1, 2],
+            shared_two_simplex_points: Vec::new(),
             first_facet: Vec::new(),
             second_facet: Vec::new(),
             first_facet_size: 3,
@@ -21514,6 +21575,7 @@ mod tests {
             first_facet_exclusive_point: 6,
             second_facet_exclusive_point: 7,
             shared_two_simplex: vec![1, 2],
+            shared_two_simplex_points: Vec::new(),
             first_facet: vec![1, 2, 6],
             second_facet: vec![1, 2, 7],
             first_facet_size: 3,
@@ -21555,6 +21617,7 @@ mod tests {
             first_facet_exclusive_point: 4,
             second_facet_exclusive_point: 5,
             shared_two_simplex: vec![1, 2],
+            shared_two_simplex_points: Vec::new(),
             first_facet: vec![1, 2, 4, 6],
             second_facet: vec![1, 2, 5, 7],
             first_facet_size: 4,
@@ -21595,6 +21658,7 @@ mod tests {
             first_facet_exclusive_point: 4,
             second_facet_exclusive_point: 5,
             shared_two_simplex: vec![1, 2],
+            shared_two_simplex_points: Vec::new(),
             first_facet: vec![1, 2, 4],
             second_facet: vec![1, 2, 5],
             first_facet_size: 3,
@@ -21676,6 +21740,7 @@ mod tests {
             first_facet_exclusive_point: 7,
             second_facet_exclusive_point: 11,
             shared_two_simplex: vec![2, 3, 5],
+            shared_two_simplex_points: Vec::new(),
             first_facet: vec![2, 3, 5, 7],
             second_facet: vec![2, 3, 5, 11],
             first_facet_size: 4,

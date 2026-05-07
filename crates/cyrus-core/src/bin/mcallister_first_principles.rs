@@ -1061,6 +1061,7 @@ struct OriginCircuitWitnessSample {
     first_facet_exclusive_point: usize,
     second_facet_exclusive_point: usize,
     shared_two_simplex: Vec<usize>,
+    shared_two_simplex_points: Vec<OriginCircuitRelationPointSample>,
     first_facet: Vec<usize>,
     second_facet: Vec<usize>,
     first_facet_size: usize,
@@ -2690,13 +2691,13 @@ fn missing_gv_target_stats(
             origin_circuit_diagnostic.map(|diagnostic| diagnostic.witnesses.len());
         let origin_circuit_first_witness = origin_circuit_diagnostic
             .and_then(|diagnostic| diagnostic.witnesses.first())
-            .map(origin_circuit_witness_sample);
+            .map(|witness| origin_circuit_witness_sample(witness, triangulation_points));
         let origin_circuit_witnesses = origin_circuit_diagnostic
             .map(|diagnostic| {
                 diagnostic
                     .witnesses
                     .iter()
-                    .map(origin_circuit_witness_sample)
+                    .map(|witness| origin_circuit_witness_sample(witness, triangulation_points))
                     .collect::<Vec<_>>()
             })
             .filter(|witnesses| !witnesses.is_empty());
@@ -3082,11 +3083,16 @@ fn origin_circuit_pattern(diagnostic: &cyrus_core::OriginCircuitCurveDiagnostic)
 
 fn origin_circuit_witness_sample(
     witness: &cyrus_core::OriginCircuitCurveWitness,
+    triangulation_points: &[Point],
 ) -> OriginCircuitWitnessSample {
     OriginCircuitWitnessSample {
         first_facet_exclusive_point: witness.first_facet_exclusive_point,
         second_facet_exclusive_point: witness.second_facet_exclusive_point,
         shared_two_simplex: witness.shared_two_simplex.clone(),
+        shared_two_simplex_points: origin_circuit_shared_two_simplex_point_samples(
+            witness,
+            triangulation_points,
+        ),
         first_facet: witness.first_facet.clone(),
         second_facet: witness.second_facet.clone(),
         first_facet_size: witness.first_facet.len(),
@@ -3103,6 +3109,38 @@ fn origin_circuit_witness_sample(
             })
             .collect(),
     }
+}
+
+fn origin_circuit_shared_two_simplex_point_samples(
+    witness: &cyrus_core::OriginCircuitCurveWitness,
+    triangulation_points: &[Point],
+) -> Vec<OriginCircuitRelationPointSample> {
+    let relation_by_point = witness
+        .relation_points
+        .iter()
+        .map(|point| (point.point_index, point))
+        .collect::<HashMap<_, _>>();
+    witness
+        .shared_two_simplex
+        .iter()
+        .filter_map(|&point_index| {
+            if let Some(relation_point) = relation_by_point.get(&point_index) {
+                return Some(OriginCircuitRelationPointSample {
+                    point_index,
+                    coefficient: relation_point.coefficient,
+                    coordinates: relation_point.coordinates.clone(),
+                    face_dimension: relation_point.face_dimension,
+                });
+            }
+            let coordinates = triangulation_points.get(point_index)?.coords().to_vec();
+            Some(OriginCircuitRelationPointSample {
+                point_index,
+                coefficient: 0,
+                coordinates,
+                face_dimension: None,
+            })
+        })
+        .collect()
 }
 
 fn origin_circuit_affine_support_sample(
@@ -12345,6 +12383,7 @@ mod tests {
             first_facet_exclusive_point: 1,
             second_facet_exclusive_point: 3,
             shared_two_simplex: vec![2],
+            shared_two_simplex_points: Vec::new(),
             first_facet: vec![1, 2],
             second_facet: vec![2, 3],
             first_facet_size: 2,
@@ -12610,6 +12649,17 @@ mod tests {
                 .as_ref()
                 .map(Vec::len),
             Some(2)
+        );
+        let first_witness = stats.sample[0]
+            .origin_circuit_first_witness
+            .as_ref()
+            .expect("origin circuit should serialize the first witness");
+        assert_eq!(first_witness.shared_two_simplex_points.len(), 1);
+        assert_eq!(first_witness.shared_two_simplex_points[0].point_index, 1);
+        assert_eq!(first_witness.shared_two_simplex_points[0].coefficient, 0);
+        assert_eq!(
+            first_witness.shared_two_simplex_points[0].coordinates,
+            vec![1, 1]
         );
     }
 

@@ -695,6 +695,9 @@ in the shared two-simplex of the origin-circuit witness
 `source_witness_weighted_p2_split_bundle_has_single_zero_relation_shared_resolution_ray=4`.
 This is not yet a chamber certificate, but it identifies the source-derived
 extra ray that the resolved local phase/intersection construction must use.
+Fresh `mcallister_first_principles` context dumps now serialize
+`shared_two_simplex_points`, so that extra ray can be recovered with
+coordinates instead of only by point ID.
 Origin-circuit witness-domain compact `cygv` probes are now opt-in and guarded
 by `--origin-witness-cygv-generator-limit`. The traced target `8` report shows
 the single-generator relation domain computes `GV=2` with one materialized
