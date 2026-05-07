@@ -2586,6 +2586,16 @@ path-support `q_N` polynomial is present. The remaining missing object is
 therefore not the scalar source row or its local unit `q_N`; it is the
 certified corrected-chamber history that makes the degree-ten target itself
 nonzero.
+The same path-history report now promotes the residual difference side into a
+top-level queue instead of leaving it buried in each predecessor occurrence. On
+fresh target-`7` and target-`8` schema-4 runs, the
+`cygv_closest_known_qn_residual_difference_*` fields each report one unique
+degree-two known-nonzero toric residual difference. Target `7` leaves
+`[(44,1),(54,1),(206,-2)]`; target `8` leaves `[(54,1),(203,-2)]`. Both are
+paired with the same source-derived degree-six predecessor above. This makes
+the unresolved degree-eight residual split explicit in the report: the scalar
+degree-two and degree-six leaves are known, but the certified compact qN
+history for their composite remains missing.
 The report now also records lower `q_N` polynomials whose term support contains
 the target monomial. Cyrus now traces the corresponding `Li2(q_N)` polynomial
 inside `cygv`, after the finite monomial-map truncation, so these coefficients

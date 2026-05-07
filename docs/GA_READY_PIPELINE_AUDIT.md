@@ -407,7 +407,14 @@ to make the remaining GV layer more first-principles:
    target monomial directly. For both degree-10 targets there are three such
    lower sources: the toric degree-two predecessor, the shared source-derived
    degree-six row, and the unknown degree-eight residual, with target-term
-   coefficients `-2`, `-1`, and `1`. The trace now comes from `cygv`'s exact
+   coefficients `-2`, `-1`, and `1`. The
+   `cygv_closest_known_qn_residual_difference_*` fields now aggregate the
+   residual difference side explicitly: target `7` leaves known toric
+   `[(44,1),(54,1),(206,-2)]`, while target `8` leaves known toric
+   `[(54,1),(203,-2)]`, both paired with the shared source-derived degree-six
+   predecessor. Thus the unresolved degree-eight residual is visible as a
+   composite qN-history gap rather than an unknown scalar GV leaf. The qN/Li2
+   trace now comes from `cygv`'s exact
    `Li2(q_N)` polynomial after finite monomial-map truncation: the exact Li2
    target coefficients are `-5/2`, `-1`, and `1`; target `7`'s pivot
    subtraction coefficients are `5`, `0`, and `-2`, while target `8`'s are

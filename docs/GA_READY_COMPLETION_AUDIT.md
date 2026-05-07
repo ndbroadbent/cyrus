@@ -132,7 +132,13 @@ and matrix-basis pipeline are no longer open.
    corrected-chamber context export is now accepted by `mcallister_gv_context`;
    bounded target-7 and target-8 path-history reports aggregate the closest
    known `q_N` residual as the same source-derived degree-6 predecessor plus
-   toric degree-2 differences. The unfiltered bounded report now promotes
+   toric degree-2 differences. The residual difference side is now a
+   first-class report queue as well: target 7 leaves known toric
+   `[(44,1),(54,1),(206,-2)]`, target 8 leaves known toric
+   `[(54,1),(203,-2)]`, and both point back to the same source-derived degree-6
+   predecessor. This makes the remaining degree-8 composite qN-history gap
+   explicit instead of hiding it inside occurrence samples. The unfiltered
+   bounded report now promotes
    closest-known residual source predecessors into a first-class queue: two
    unique source-derived predecessors appear across three occurrences, target
    7/8 share the degree-6 ray, target 6 has the analogous degree-4 ray, and all

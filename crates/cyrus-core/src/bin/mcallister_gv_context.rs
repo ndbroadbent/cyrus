@@ -301,6 +301,13 @@ struct ContextReport {
     cygv_pair_expanded_lower_seed_diamond_gv_counts: BTreeMap<String, usize>,
     cygv_closest_known_qn_residual_status_counts: BTreeMap<String, usize>,
     cygv_closest_known_qn_residual_degree_split_counts: BTreeMap<String, usize>,
+    cygv_closest_known_qn_residual_difference_unique_count: usize,
+    cygv_closest_known_qn_residual_difference_occurrence_count: usize,
+    cygv_closest_known_qn_residual_difference_degree_counts: BTreeMap<i128, usize>,
+    cygv_closest_known_qn_residual_difference_known_qn_history_status_counts:
+        BTreeMap<String, usize>,
+    cygv_closest_known_qn_residual_difference_sample:
+        Vec<CygvClosestKnownQnResidualDifferenceSummary>,
     cygv_closest_known_qn_residual_source_predecessor_unique_count: usize,
     cygv_closest_known_qn_residual_source_predecessor_occurrence_count: usize,
     cygv_closest_known_qn_residual_source_predecessor_degree_counts: BTreeMap<i128, usize>,
@@ -941,6 +948,28 @@ struct CygvClosestKnownQnResidualSourcePredecessorOccurrence {
 }
 
 #[derive(Clone, Debug, Serialize)]
+struct CygvClosestKnownQnResidualDifferenceSummary {
+    degree: i128,
+    occurrence_count: usize,
+    known_qn_history_status_counts: BTreeMap<String, usize>,
+    source_derived_gv_counts: BTreeMap<String, usize>,
+    toric_gv_counts: BTreeMap<String, usize>,
+    curve_nonzero: Vec<(usize, i64)>,
+    occurrences: Vec<CygvClosestKnownQnResidualDifferenceOccurrence>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CygvClosestKnownQnResidualDifferenceOccurrence {
+    target_index: usize,
+    series_distance: String,
+    residual_predecessor_degree: i128,
+    residual_predecessor_known_qn_history_status: String,
+    residual_predecessor_toric_gv: Option<String>,
+    residual_predecessor_source_derived_gv: Option<String>,
+    residual_predecessor_nonzero: Vec<(usize, i64)>,
+}
+
+#[derive(Clone, Debug, Serialize)]
 struct ActiveDecompositionSourceLeafSummary {
     source_status: String,
     occurrence_count: usize,
@@ -1011,6 +1040,15 @@ struct CygvClosestKnownQnResidualSourcePredecessorSummaryBuilder {
     matching_uncovered_source_ray_local_unit_phase_probe: Option<LocalCygvUnitPhaseProbe>,
     curve_nonzero: Vec<(usize, i64)>,
     occurrences: Vec<CygvClosestKnownQnResidualSourcePredecessorOccurrence>,
+}
+
+struct CygvClosestKnownQnResidualDifferenceSummaryBuilder {
+    degree: i128,
+    known_qn_history_status_counts: BTreeMap<String, usize>,
+    source_derived_gv_counts: BTreeMap<String, usize>,
+    toric_gv_counts: BTreeMap<String, usize>,
+    curve_nonzero: Vec<(usize, i64)>,
+    occurrences: Vec<CygvClosestKnownQnResidualDifferenceOccurrence>,
 }
 
 struct CygvPathSupportQnTraceCurveSummaryBuilder {
@@ -8168,6 +8206,118 @@ fn cygv_closest_known_qn_residual_degree_split_counts(
     counts
 }
 
+fn cygv_closest_known_qn_residual_difference_summaries(
+    targets: &[TargetReport],
+) -> Vec<CygvClosestKnownQnResidualDifferenceSummary> {
+    let mut summaries: BTreeMap<
+        Vec<(usize, i64)>,
+        CygvClosestKnownQnResidualDifferenceSummaryBuilder,
+    > = BTreeMap::new();
+    for target in targets {
+        let Some(residual) = target
+            .cygv_path_history_probe
+            .as_ref()
+            .and_then(|probe| probe.closest_known_qn_residual_predecessor.as_ref())
+        else {
+            continue;
+        };
+        add_cygv_closest_known_qn_residual_difference(&mut summaries, target.index, residual);
+    }
+    let mut out = summaries
+        .into_values()
+        .map(|builder| CygvClosestKnownQnResidualDifferenceSummary {
+            degree: builder.degree,
+            occurrence_count: builder.occurrences.len(),
+            known_qn_history_status_counts: builder.known_qn_history_status_counts,
+            source_derived_gv_counts: builder.source_derived_gv_counts,
+            toric_gv_counts: builder.toric_gv_counts,
+            curve_nonzero: builder.curve_nonzero,
+            occurrences: builder.occurrences,
+        })
+        .collect::<Vec<_>>();
+    out.sort_by(|lhs, rhs| {
+        lhs.degree
+            .cmp(&rhs.degree)
+            .then_with(|| lhs.curve_nonzero.cmp(&rhs.curve_nonzero))
+    });
+    out
+}
+
+fn add_cygv_closest_known_qn_residual_difference(
+    summaries: &mut BTreeMap<Vec<(usize, i64)>, CygvClosestKnownQnResidualDifferenceSummaryBuilder>,
+    target_index: usize,
+    residual: &CygvClosestKnownQnPredecessor,
+) {
+    let entry = summaries
+        .entry(residual.difference_nonzero.clone())
+        .or_insert_with(|| CygvClosestKnownQnResidualDifferenceSummaryBuilder {
+            degree: residual.difference_degree,
+            known_qn_history_status_counts: BTreeMap::new(),
+            source_derived_gv_counts: BTreeMap::new(),
+            toric_gv_counts: BTreeMap::new(),
+            curve_nonzero: residual.difference_nonzero.clone(),
+            occurrences: Vec::new(),
+        });
+    debug_assert_eq!(entry.degree, residual.difference_degree);
+    *entry
+        .known_qn_history_status_counts
+        .entry(residual.difference_known_qn_history_status.clone())
+        .or_insert(0) += 1;
+    *entry
+        .source_derived_gv_counts
+        .entry(
+            residual
+                .difference_source_derived_gv
+                .clone()
+                .unwrap_or_else(|| "missing_source_derived_gv".to_string()),
+        )
+        .or_insert(0) += 1;
+    *entry
+        .toric_gv_counts
+        .entry(
+            residual
+                .difference_toric_gv
+                .clone()
+                .unwrap_or_else(|| "not_toric_covered".to_string()),
+        )
+        .or_insert(0) += 1;
+    entry
+        .occurrences
+        .push(CygvClosestKnownQnResidualDifferenceOccurrence {
+            target_index,
+            series_distance: residual.series_distance.clone(),
+            residual_predecessor_degree: residual.predecessor_degree,
+            residual_predecessor_known_qn_history_status: residual
+                .predecessor_known_qn_history_status
+                .clone(),
+            residual_predecessor_toric_gv: residual.predecessor_toric_gv.clone(),
+            residual_predecessor_source_derived_gv: residual.predecessor_source_derived_gv.clone(),
+            residual_predecessor_nonzero: residual.predecessor_nonzero.clone(),
+        });
+}
+
+fn cygv_closest_known_qn_residual_difference_degree_counts(
+    summaries: &[CygvClosestKnownQnResidualDifferenceSummary],
+) -> BTreeMap<i128, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts.entry(summary.degree).or_insert(0) += 1;
+    }
+    counts
+}
+
+fn cygv_closest_known_qn_residual_difference_known_qn_history_status_counts(
+    summaries: &[CygvClosestKnownQnResidualDifferenceSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        for (status, count) in &summary.known_qn_history_status_counts {
+            *counts.entry(status.clone()).or_insert(0) += count;
+        }
+    }
+    counts
+}
+
 fn cygv_closest_known_qn_residual_source_predecessor_summaries(
     targets: &[TargetReport],
     context: &ValidatedContext<'_>,
@@ -9849,6 +9999,23 @@ fn build_report(
         cygv_closest_known_qn_residual_status_counts(&targets);
     let cygv_closest_known_qn_residual_degree_split_counts =
         cygv_closest_known_qn_residual_degree_split_counts(&targets);
+    let cygv_closest_known_qn_residual_difference_sample =
+        cygv_closest_known_qn_residual_difference_summaries(&targets);
+    let cygv_closest_known_qn_residual_difference_unique_count =
+        cygv_closest_known_qn_residual_difference_sample.len();
+    let cygv_closest_known_qn_residual_difference_occurrence_count =
+        cygv_closest_known_qn_residual_difference_sample
+            .iter()
+            .map(|summary| summary.occurrence_count)
+            .sum();
+    let cygv_closest_known_qn_residual_difference_degree_counts =
+        cygv_closest_known_qn_residual_difference_degree_counts(
+            &cygv_closest_known_qn_residual_difference_sample,
+        );
+    let cygv_closest_known_qn_residual_difference_known_qn_history_status_counts =
+        cygv_closest_known_qn_residual_difference_known_qn_history_status_counts(
+            &cygv_closest_known_qn_residual_difference_sample,
+        );
     let cygv_closest_known_qn_residual_source_predecessor_sample =
         cygv_closest_known_qn_residual_source_predecessor_summaries(&targets, validated);
     let cygv_closest_known_qn_residual_source_predecessor_unique_count =
@@ -10139,6 +10306,11 @@ fn build_report(
         cygv_pair_expanded_lower_seed_diamond_gv_counts,
         cygv_closest_known_qn_residual_status_counts,
         cygv_closest_known_qn_residual_degree_split_counts,
+        cygv_closest_known_qn_residual_difference_unique_count,
+        cygv_closest_known_qn_residual_difference_occurrence_count,
+        cygv_closest_known_qn_residual_difference_degree_counts,
+        cygv_closest_known_qn_residual_difference_known_qn_history_status_counts,
+        cygv_closest_known_qn_residual_difference_sample,
         cygv_closest_known_qn_residual_source_predecessor_unique_count,
         cygv_closest_known_qn_residual_source_predecessor_occurrence_count,
         cygv_closest_known_qn_residual_source_predecessor_degree_counts,
@@ -13650,6 +13822,35 @@ mod tests {
         assert_eq!(
             summary.occurrences[1].residual_difference_known_qn_history_status,
             "known_nonzero_toric_gv"
+        );
+
+        let mut difference_summaries = BTreeMap::new();
+        add_cygv_closest_known_qn_residual_difference(&mut difference_summaries, 7, &residual);
+        add_cygv_closest_known_qn_residual_difference(&mut difference_summaries, 8, &residual);
+        let difference_summary = difference_summaries.get(&vec![(0, 1)]).unwrap();
+        assert_eq!(difference_summary.degree, 1);
+        assert_eq!(difference_summary.occurrences.len(), 2);
+        assert_eq!(
+            difference_summary.known_qn_history_status_counts,
+            BTreeMap::from([("known_nonzero_toric_gv".to_string(), 2)])
+        );
+        assert_eq!(
+            difference_summary.toric_gv_counts,
+            BTreeMap::from([("-2".to_string(), 2)])
+        );
+        assert_eq!(
+            difference_summary
+                .occurrences
+                .iter()
+                .map(|occurrence| occurrence.target_index)
+                .collect::<Vec<_>>(),
+            vec![7, 8]
+        );
+        assert_eq!(
+            difference_summary.occurrences[0]
+                .residual_predecessor_source_derived_gv
+                .as_deref(),
+            Some("-2")
         );
     }
 
