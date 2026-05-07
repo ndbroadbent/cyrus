@@ -247,6 +247,9 @@ to make the remaining GV layer more first-principles:
    also report seed membership: the degree-2 side is a toric-covered
    pair-reduced seed, while the degree-8 side is not a supplied seed, so the
    next source-history task is composite lower-degree semigroup reconstruction.
+   The seed-sum sample for that degree-8 side splits it again as a
+   toric-covered degree-2 reduced seed plus an uncovered degree-6 seed that does
+   not survive pair reduction.
    A
    structured export now exists via
    `--dump-corrected-chamber-gv-context`; it records the local charge basis,

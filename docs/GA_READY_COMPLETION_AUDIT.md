@@ -173,7 +173,10 @@ and matrix-basis pipeline are no longer open.
    history, not just the nine target classes. The nearest `8+2` samples now
    show that the degree-2 side is a toric-covered pair-reduced seed, while the
    degree-8 side is not a supplied seed, so that lower-degree history is
-   composite rather than a single uncovered Mori generator.
+   composite rather than a single uncovered Mori generator. The first seed-sum
+   sample for the degree-8 side splits it as another toric-covered degree-2
+   reduced seed plus an uncovered degree-6 seed that does not survive pair
+   reduction.
 5. **Potent-ray local diagnostics.** Rank-two N=10 and rank-four potent-ray
    rows are still incomplete, but they are validation diagnostics rather than
    blockers for the compact GA-ready GV engine.

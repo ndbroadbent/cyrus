@@ -423,8 +423,21 @@ struct CygvPathPredecessorCandidate {
     difference_is_seed: bool,
     predecessor_is_reduced_seed: bool,
     difference_is_reduced_seed: bool,
+    predecessor_first_generation_seed_sum: Option<CygvSeedSumDecomposition>,
+    difference_first_generation_seed_sum: Option<CygvSeedSumDecomposition>,
     predecessor_nonzero: Vec<(usize, i64)>,
     difference_nonzero: Vec<(usize, i64)>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CygvSeedSumDecomposition {
+    reduced_seed_degree: i128,
+    seed_degree: i128,
+    reduced_seed_toric_gv: Option<String>,
+    seed_toric_gv: Option<String>,
+    seed_is_reduced_seed: bool,
+    reduced_seed_nonzero: Vec<(usize, i64)>,
+    seed_nonzero: Vec<(usize, i64)>,
 }
 
 struct CygvPathPredecessorStats {
@@ -3764,6 +3777,20 @@ fn cygv_path_predecessor_stats(
                     difference_is_seed: seed_set.contains(&difference),
                     predecessor_is_reduced_seed: reduced_seed_set.contains(element),
                     difference_is_reduced_seed: reduced_seed_set.contains(&difference),
+                    predecessor_first_generation_seed_sum: first_generation_seed_sum_decomposition(
+                        element,
+                        grading,
+                        seed_set,
+                        reduced_seed_set,
+                        covered_toric_gv_by_basis,
+                    )?,
+                    difference_first_generation_seed_sum: first_generation_seed_sum_decomposition(
+                        &difference,
+                        grading,
+                        seed_set,
+                        reduced_seed_set,
+                        covered_toric_gv_by_basis,
+                    )?,
                     predecessor_nonzero: sparse_from_dense(element),
                     difference_nonzero: sparse_from_dense(&difference),
                 },
@@ -3791,6 +3818,20 @@ fn cygv_path_predecessor_stats(
                     difference_is_seed: seed_set.contains(&difference),
                     predecessor_is_reduced_seed: reduced_seed_set.contains(element),
                     difference_is_reduced_seed: reduced_seed_set.contains(&difference),
+                    predecessor_first_generation_seed_sum: first_generation_seed_sum_decomposition(
+                        element,
+                        grading,
+                        seed_set,
+                        reduced_seed_set,
+                        covered_toric_gv_by_basis,
+                    )?,
+                    difference_first_generation_seed_sum: first_generation_seed_sum_decomposition(
+                        &difference,
+                        grading,
+                        seed_set,
+                        reduced_seed_set,
+                        covered_toric_gv_by_basis,
+                    )?,
                     predecessor_nonzero: sparse_from_dense(element),
                     difference_nonzero: sparse_from_dense(&difference),
                 },
@@ -3822,6 +3863,33 @@ fn cygv_path_predecessor_stats(
             .map(|(_, candidate)| candidate)
             .collect(),
     })
+}
+
+fn first_generation_seed_sum_decomposition(
+    target: &[i64],
+    grading: &[i64],
+    seed_set: &HashSet<Vec<i64>>,
+    reduced_seed_set: &HashSet<Vec<i64>>,
+    covered_toric_gv_by_basis: &HashMap<Vec<i64>, String>,
+) -> Result<Option<CygvSeedSumDecomposition>, String> {
+    let mut reduced_seeds = reduced_seed_set.iter().collect::<Vec<_>>();
+    reduced_seeds.sort();
+    for reduced_seed in reduced_seeds {
+        let seed = checked_vector_difference(target, reduced_seed)?;
+        if !seed_set.contains(&seed) {
+            continue;
+        }
+        return Ok(Some(CygvSeedSumDecomposition {
+            reduced_seed_degree: curve_degree(reduced_seed, grading)?,
+            seed_degree: curve_degree(&seed, grading)?,
+            reduced_seed_toric_gv: covered_toric_gv_by_basis.get(reduced_seed).cloned(),
+            seed_toric_gv: covered_toric_gv_by_basis.get(&seed).cloned(),
+            seed_is_reduced_seed: reduced_seed_set.contains(&seed),
+            reduced_seed_nonzero: sparse_from_dense(reduced_seed),
+            seed_nonzero: sparse_from_dense(&seed),
+        }));
+    }
+    Ok(None)
 }
 
 fn cygv_previous_window_degrees(
@@ -6334,6 +6402,16 @@ mod tests {
         assert!(probe.predecessor_candidate_sample[0].difference_is_seed);
         assert!(probe.predecessor_candidate_sample[0].predecessor_is_reduced_seed);
         assert!(probe.predecessor_candidate_sample[0].difference_is_reduced_seed);
+        assert!(
+            probe.predecessor_candidate_sample[0]
+                .predecessor_first_generation_seed_sum
+                .is_none()
+        );
+        assert!(
+            probe.predecessor_candidate_sample[0]
+                .difference_first_generation_seed_sum
+                .is_none()
+        );
         assert_eq!(
             probe.predecessor_candidate_sample[1].predecessor_nonzero,
             vec![(1, 1)]

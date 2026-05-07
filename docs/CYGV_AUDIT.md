@@ -1636,7 +1636,9 @@ each side is a supplied seed or a cygv pair-reduced seed. In those nearest
 `8+2` splits, the degree-2 side is a toric-covered reduced seed, while the
 degree-8 side is not a supplied seed at all. The immediate missing input is
 therefore composite lower-degree semigroup history, not simply another
-uncovered Mori generator.
+uncovered Mori generator. The first-generation seed-sum sample for the degree-8
+side splits it further as a toric-covered degree-2 reduced seed plus an
+uncovered degree-6 seed that does not survive pair reduction.
 
 After rebuilding `mcallister_gv_context`, the dry-run report now preserves the
 origin-circuit provenance exported by `mcallister_first_principles`. A fresh
