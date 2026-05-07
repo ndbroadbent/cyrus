@@ -250,7 +250,10 @@ and matrix-basis pipeline are no longer open.
    source for it. The report now also distinguishes scalar GV evidence from
    compact `q_N` polynomial materialization: known toric/source scalar values
    do not mean the compact mirror-map `q_N` polynomial has been exported from
-   cygv's history. The same small path-support `cygv` domain now reports
+   cygv's history. Cyrus now has a vendored `cygv` 0.1.2 trace API for explicit
+   semigroups, checked on the quintic `2875` case, so the observability blocker
+   is reduced to finding the right corrected-chamber compact semigroup/history
+   domain. The same small path-support `cygv` domain now reports
    per-predecessor lookups: it matches the four known degree-two toric values
    and assigns six nonzero plus six zero/absent values among the unknown
    non-toric lower classes, but the target remains `GV=0`. These lower-class

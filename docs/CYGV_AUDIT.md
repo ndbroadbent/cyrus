@@ -24,6 +24,14 @@ module call chain against `cygv::compute_gv_rat_threefold` on the quintic
 degree-one `2875` case, so the error-handling wrapper stays pinned to upstream
 `cygv` behavior.
 
+Cyrus now vendors `cygv` 0.1.2 under `vendor/cygv-0.1.2` via a Cargo patch.
+The patch keeps the HKTY algorithm in the `cygv` crate and adds a narrow
+`series_inversion::invert_series_with_qn_trace` API that exports compact
+`q_N` polynomials materialized by cygv's own series inversion. The Cyrus
+wrapper `compute_gv_invariants_with_explicit_semigroup_qn_trace` is checked on
+the quintic degree-one case: it still returns GV `2875` and exports the actual
+degree-one `q_N` polynomial.
+
 ## CYTools Contract
 
 The authoritative CYTools wrapper is
@@ -1667,16 +1675,13 @@ as missing compact `q_N` polynomials:
 more scalar source GV values is insufficient by itself; the remaining compact
 task is still the semigroup/mirror-map history that produces those `q_N`
 polynomials.
-The upstream `cygv` API currently makes this a real boundary. The public
-`series_inversion::invert_series` call returns only the final GV/GW map. The
-actual `q_N` polynomial construction (`compute_qn`), the closest-predecessor
-search (`compute_li2qn_thread`), and the rolling `previous_qn` cache are
-private implementation details inside `cygv::series_inversion`. Cyrus should
-therefore not claim compact qN-history reproduction from scalar GV evidence.
-The next implementation choice is either to add an instrumented upstream/local
-`cygv` API that exports qN history while preserving the crate algorithm, or to
-find a smaller certified compact/chamber semigroup whose ordinary public
-`cygv` call completes.
+This was previously an API boundary: public upstream `cygv` returned only final
+GV/GW maps, while `compute_qn`, `compute_li2qn_thread`, and the rolling
+`previous_qn` cache were private inside `cygv::series_inversion`. The local
+patch removes that specific observability blocker for explicit semigroups. It
+does not by itself solve the McAllister corrected-chamber residual, because the
+remaining degree-10 target histories still require a certified compact/chamber
+semigroup large enough to reproduce cygv's mirror-map subtraction history.
 The path-history probe now has a broader opt-in
 `--run-path-support-generators` check that collects the support of the target,
 sampled predecessor/difference pairs, and sampled seed-sum decompositions, then

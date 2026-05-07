@@ -51,6 +51,39 @@ const CKYZ_ABSENT_ADDITION_INDEX: usize = usize::MAX;
 const CKYZ_DENSE_DEGREE_INDEX_MAX_ENTRIES: usize = 5_000_000;
 const CKYZ_ABSENT_DEGREE_INDEX: usize = usize::MAX;
 
+/// One term in a compact `q_N` polynomial materialized by cygv.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CygvQnTraceTerm {
+    /// Index of the monomial in cygv's finite semigroup.
+    pub monomial_index: usize,
+    /// Semigroup exponent vector for this monomial.
+    pub exponent: Vec<i32>,
+    /// Exact coefficient, serialized with rug's rational display format.
+    pub coefficient: String,
+}
+
+/// Compact `q_N` polynomial history exported from cygv series inversion.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CygvQnTracePolynomial {
+    /// Index of the curve element whose `q_N` polynomial was computed.
+    pub element_index: usize,
+    /// Grading degree of the curve element.
+    pub degree: u32,
+    /// Semigroup exponent vector of the curve element.
+    pub element: Vec<i32>,
+    /// Nonzero terms of the `q_N` polynomial.
+    pub terms: Vec<CygvQnTraceTerm>,
+}
+
+/// GV output together with the compact `q_N` polynomials cygv materialized.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GvInvariantsWithQnTrace {
+    /// Integral GV invariants returned by cygv.
+    pub invariants: Vec<(Vec<i32>, Integer)>,
+    /// Compact `q_N` polynomials materialized while computing those invariants.
+    pub qn_trace: Vec<CygvQnTracePolynomial>,
+}
+
 /// Compute the Mori cone cap generators (rays) using the CYTools algorithm.
 ///
 /// Returns a matrix where each row is a generator (ray) expressed in the
@@ -11112,6 +11145,48 @@ pub fn compute_gv_invariants_with_explicit_semigroup(
     q_matrix: &[Vec<i64>],
     intnums: &Intersection,
 ) -> Result<Vec<(Vec<i32>, Integer)>> {
+    let (semigroup, q, intnums_map) =
+        explicit_cygv_semigroup_inputs(elements, grading_vector, q_matrix, intnums)?;
+    compute_cygv_rat_threefold_from_semigroup(semigroup, &q, intnums_map, "explicit GV semigroup")
+}
+
+/// Compute GV invariants and compact `q_N` polynomial history using an
+/// explicitly truncated semigroup.
+///
+/// This is a diagnostic entry point for understanding cygv's degree-ordered
+/// subtraction history. It still runs the upstream cygv HKTY implementation;
+/// Cyrus only exports the qN polynomials that cygv materializes internally.
+///
+/// # Errors
+/// Returns an error under the same conditions as
+/// [`compute_gv_invariants_with_explicit_semigroup`].
+#[allow(clippy::too_many_lines)]
+pub fn compute_gv_invariants_with_explicit_semigroup_qn_trace(
+    elements: &[Vec<i64>],
+    grading_vector: &[i64],
+    q_matrix: &[Vec<i64>],
+    intnums: &Intersection,
+) -> Result<GvInvariantsWithQnTrace> {
+    let (semigroup, q, intnums_map) =
+        explicit_cygv_semigroup_inputs(elements, grading_vector, q_matrix, intnums)?;
+    compute_cygv_rat_threefold_from_semigroup_with_qn_trace(
+        semigroup,
+        &q,
+        intnums_map,
+        "explicit GV semigroup qN trace",
+    )
+}
+
+fn explicit_cygv_semigroup_inputs(
+    elements: &[Vec<i64>],
+    grading_vector: &[i64],
+    q_matrix: &[Vec<i64>],
+    intnums: &Intersection,
+) -> Result<(
+    cygv::Semigroup,
+    DMatrix<i32>,
+    HashMap<(usize, usize, usize), i32>,
+)> {
     if elements.is_empty() {
         return Err(Error::InvalidInput(
             "explicit GV semigroup elements are empty".into(),
@@ -11166,7 +11241,7 @@ pub fn compute_gv_invariants_with_explicit_semigroup(
     let elements = DMatrix::from_column_slice(dim, n_elements, &element_data);
     let semigroup = cygv::Semigroup::from_data(elements, grading)
         .map_err(|e| Error::InvalidInput(format!("explicit GV semigroup is inconsistent: {e}")))?;
-    compute_cygv_rat_threefold_from_semigroup(semigroup, &q, intnums_map, "explicit GV semigroup")
+    Ok((semigroup, q, intnums_map))
 }
 
 fn compute_gv_invariants_inner(
@@ -11608,12 +11683,77 @@ fn compute_cygv_rat_threefold_from_semigroup(
     }
 }
 
+fn compute_cygv_rat_threefold_from_semigroup_with_qn_trace(
+    semigroup: cygv::Semigroup,
+    q: &DMatrix<i32>,
+    intnums_map: HashMap<(usize, usize, usize), i32>,
+    context: &str,
+) -> Result<GvInvariantsWithQnTrace> {
+    if cfg!(panic = "abort") {
+        return Err(Error::InvalidInput(format!(
+            "{context}: cygv HKTY execution requires a panic=unwind build because upstream cygv can still panic internally"
+        )));
+    }
+
+    let previous_panic_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        compute_cygv_rat_threefold_from_semigroup_with_qn_trace_unchecked(
+            semigroup,
+            q,
+            intnums_map,
+            context,
+        )
+    }));
+    std::panic::set_hook(previous_panic_hook);
+
+    match result {
+        Ok(result) => result,
+        Err(payload) => Err(Error::InvalidInput(format!(
+            "{context}: cygv HKTY execution panicked: {}",
+            panic_payload_message(payload.as_ref())
+        ))),
+    }
+}
+
 fn compute_cygv_rat_threefold_from_semigroup_unchecked(
     semigroup: cygv::Semigroup,
     q: &DMatrix<i32>,
     intnums_map: HashMap<(usize, usize, usize), i32>,
     context: &str,
 ) -> Result<Vec<(Vec<i32>, Integer)>> {
+    compute_cygv_rat_threefold_raw_from_semigroup_unchecked(
+        semigroup,
+        q,
+        intnums_map,
+        context,
+        false,
+    )
+    .map(|output| output.invariants)
+}
+
+fn compute_cygv_rat_threefold_from_semigroup_with_qn_trace_unchecked(
+    semigroup: cygv::Semigroup,
+    q: &DMatrix<i32>,
+    intnums_map: HashMap<(usize, usize, usize), i32>,
+    context: &str,
+) -> Result<GvInvariantsWithQnTrace> {
+    compute_cygv_rat_threefold_raw_from_semigroup_unchecked(
+        semigroup,
+        q,
+        intnums_map,
+        context,
+        true,
+    )
+}
+
+fn compute_cygv_rat_threefold_raw_from_semigroup_unchecked(
+    semigroup: cygv::Semigroup,
+    q: &DMatrix<i32>,
+    intnums_map: HashMap<(usize, usize, usize), i32>,
+    context: &str,
+    collect_qn_trace: bool,
+) -> Result<GvInvariantsWithQnTrace> {
     let zero_cutoff = RugRational::new();
     let poly_props = cygv::PolynomialProperties::new(&semigroup, &zero_cutoff);
     let (intnum_dict, intnum_idxpairs, n_indices) = cygv::misc::process_int_nums(intnums_map, true)
@@ -11653,11 +11793,20 @@ fn compute_cygv_rat_threefold_from_semigroup_unchecked(
     )
     .map_err(|e| Error::InvalidInput(format!("{context}: cygv instanton data failed: {e}")))?;
 
-    let gv = cygv::series_inversion::invert_series::<RugRational, true, true>(
-        inst_data,
-        &poly_props,
-        &mut all_pools,
-    )
+    let (gv, raw_qn_trace) = if collect_qn_trace {
+        cygv::series_inversion::invert_series_with_qn_trace::<RugRational, true, true>(
+            inst_data,
+            &poly_props,
+            &mut all_pools,
+        )
+    } else {
+        cygv::series_inversion::invert_series::<RugRational, true, true>(
+            inst_data,
+            &poly_props,
+            &mut all_pools,
+        )
+        .map(|gv| (gv, Vec::new()))
+    }
     .map_err(|e| Error::InvalidInput(format!("{context}: cygv series inversion failed: {e}")))?;
 
     let mut gv_sorted: Vec<_> = gv.into_iter().collect();
@@ -11681,7 +11830,28 @@ fn compute_cygv_rat_threefold_from_semigroup_unchecked(
             gv_int,
         ));
     }
-    Ok(out)
+    let qn_trace = raw_qn_trace
+        .into_iter()
+        .map(|poly| CygvQnTracePolynomial {
+            element_index: poly.element_index,
+            degree: poly.degree,
+            element: poly.element,
+            terms: poly
+                .terms
+                .into_iter()
+                .map(|term| CygvQnTraceTerm {
+                    monomial_index: term.monomial_index,
+                    exponent: term.exponent,
+                    coefficient: term.coefficient.to_string(),
+                })
+                .collect(),
+        })
+        .collect();
+
+    Ok(GvInvariantsWithQnTrace {
+        invariants: out,
+        qn_trace,
+    })
 }
 
 fn cygv_thread_count_from_env() -> usize {
@@ -12322,8 +12492,8 @@ mod tests {
     use super::{
         BoundedCurveDecompositionIndex, CkyzExpCoefficientCache, CkyzIndexedSeries,
         CkyzLocalIntersectionTerm, CkyzLocalSurfaceIdentification, CkyzLocalSurfaceKind,
-        CkyzMonomialDomain, CurveDecompositionTerm, CurvePruningStrategy, GvCachePolicy,
-        GvLatticeAugmentation, LocalToricCircuitKind, LocalToricCoordinate2D,
+        CkyzMonomialDomain, CurveDecompositionTerm, CurvePruningStrategy, CygvQnTraceTerm,
+        GvCachePolicy, GvLatticeAugmentation, LocalToricCircuitKind, LocalToricCoordinate2D,
         NilpotentRayCandidate, NilpotentRayDegreeSlice, NilpotentRaySliceDistance,
         OriginCircuitCurveWitness, OriginCircuitRelationPoint, SupportingMoriFaceLpSearchOptions,
         ToricCurveCandidate, certify_supporting_mori_face_by_exact_kernel,
@@ -12361,6 +12531,7 @@ mod tests {
         compute_ckyz_log_period_corrections, compute_ckyz_log_period_corrections_domain,
         compute_grading_vector, compute_gv_invariants_inner,
         compute_gv_invariants_with_explicit_semigroup,
+        compute_gv_invariants_with_explicit_semigroup_qn_trace,
         compute_gv_invariants_with_provided_generators, compute_local_p2_genus_zero_gv_series,
         compute_local_toric_circuit_gv_series, compute_one_dimensional_ray_gv_series,
         compute_ray_gv_series_with_provided_generators, curve_in_rational_row_span,
@@ -16434,6 +16605,40 @@ mod tests {
             gvs.iter()
                 .any(|(charge, value)| charge == &[1] && value == &Integer::from(2875)),
             "degree-one quintic GV 2875 missing from {gvs:?}"
+        );
+    }
+
+    #[test]
+    fn explicit_quintic_qn_trace_exports_cygv_materialized_polynomial() {
+        let mut intnums = Intersection::new(1);
+        set_intersection_i64(&mut intnums, 0, 0, 0, 5);
+
+        let traced = compute_gv_invariants_with_explicit_semigroup_qn_trace(
+            &[vec![0], vec![1]],
+            &[1],
+            &[vec![1, 1, 1, 1, 1]],
+            &intnums,
+        )
+        .expect("explicit quintic semigroup should compute degree-one qN trace");
+
+        assert!(
+            traced
+                .invariants
+                .iter()
+                .any(|(charge, value)| charge == &[1] && value == &Integer::from(2875)),
+            "degree-one quintic GV 2875 missing from {:?}",
+            traced.invariants
+        );
+        assert_eq!(traced.qn_trace.len(), 1);
+        assert_eq!(traced.qn_trace[0].degree, 1);
+        assert_eq!(traced.qn_trace[0].element, vec![1]);
+        assert_eq!(
+            traced.qn_trace[0].terms,
+            vec![CygvQnTraceTerm {
+                monomial_index: 1,
+                exponent: vec![1],
+                coefficient: "1".to_string(),
+            }]
         );
     }
 

@@ -100,6 +100,9 @@ criterion = "0.5"
 thiserror = "2"
 anyhow = "1"
 
+[patch.crates-io]
+cygv = { path = "vendor/cygv-0.1.2" }
+
 [profile.release]
 lto = "fat"
 codegen-units = 1
