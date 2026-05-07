@@ -2728,6 +2728,23 @@ fails with a non-integer GV invariant, while its residual subtarget alone
 materializes a one-term qN polynomial. Thus the sibling-offset qN comparison is
 currently actionable for targets `7` and `8`, and the higher-degree targets
 still need tighter bounded domains before the same comparison can be promoted.
+The context report now has a per-target output mode, so long batches no longer
+lose completed target diagnostics on timeout. A fresh target-0 report with the
+raw GW coefficient trace enabled pins the generic `cygv` non-integer error to
+specific coefficient reads: the small path-support semigroup has support
+indices `[53,54,197,203,206]`, supplied generator degrees `{2:1,18:1}`, and
+raw GW mode reports `9` non-integral candidates among `10` coefficient reads.
+The target curve itself has instanton coefficient `1/2`, pivot component `-1`,
+and raw candidate `-1/2`, so this tiny support is not a valid corrected-chamber
+compact GV history. The same target also shows why the pair-expanded lower-seed
+diamond is only diagnostic: after pair expansion it computes `GV=0`, but that
+does not reproduce the corrected target row. Regenerating targets `7` and `8`
+with target-level raw GW readouts further narrows the mismatch: both successful
+small path-support calls read the target coefficient as `0` in raw GW mode
+(`zero_or_absent_gw`) even though the reconstructed pre-subtraction candidates
+are `3/2` and `2`. Therefore the formula mismatch is not a hidden raw
+instanton read; it is specifically lower-history `Li2(q_N)` attribution in the
+sampled compact qN history.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use
