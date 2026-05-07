@@ -235,7 +235,10 @@ to make the remaining GV layer more first-principles:
    later layer. A new `--closure-generation-limit` option can stop after a full
    generated layer; with generation limit `1` and element cap `150000`, both
    degree-10 targets complete that first layer exactly with `131135` elements,
-   `99317` previous-window elements, and eight predecessor differences. A
+   `99317` previous-window elements, and eight predecessor differences. The
+   path-history report now samples those qN predecessor pairs directly; the
+   nearest candidates for both degree-10 targets are degree splits `8+2`
+   (distances `4` and `3`). A
    structured export now exists via
    `--dump-corrected-chamber-gv-context`; it records the local charge basis,
    target degree, degree-bounded projected Mori rays, exact active-generator

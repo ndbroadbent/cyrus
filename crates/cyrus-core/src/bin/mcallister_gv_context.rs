@@ -26,6 +26,8 @@ use cyrus_core::{
     diagnose_affine_toric_circuit, integer_math::solve_linear_system_rational, utils::gcd_list_int,
 };
 
+const CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT: usize = 32;
+
 #[derive(Debug, Deserialize)]
 struct CorrectedChamberGvContext {
     schema_version: u32,
@@ -377,6 +379,8 @@ struct CygvPathHistoryProbe {
     closest_series_distance: Option<String>,
     closest_series_predecessor_nonzero: Option<Vec<(usize, i64)>>,
     closest_series_difference_nonzero: Option<Vec<(usize, i64)>>,
+    predecessor_candidate_sample_limit: usize,
+    predecessor_candidate_sample: Vec<CygvPathPredecessorCandidate>,
     lower_seed_decomposition_max_terms: usize,
     lower_seed_decomposition_status: String,
     lower_seed_decomposition_term_count: Option<usize>,
@@ -397,6 +401,15 @@ struct CygvClosureGenerationCount {
     truncated_at_limit: bool,
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct CygvPathPredecessorCandidate {
+    predecessor_degree: i128,
+    difference_degree: i128,
+    series_distance: String,
+    predecessor_nonzero: Vec<(usize, i64)>,
+    difference_nonzero: Vec<(usize, i64)>,
+}
+
 struct CygvPathPredecessorStats {
     previous_window_element_count: usize,
     predecessor_difference_count: usize,
@@ -404,6 +417,7 @@ struct CygvPathPredecessorStats {
     closest_distance: f64,
     closest_predecessor: Option<Vec<i64>>,
     closest_difference: Option<Vec<i64>>,
+    candidate_sample: Vec<CygvPathPredecessorCandidate>,
 }
 
 struct LowerSeedDecompositionProbe {
@@ -3421,6 +3435,8 @@ fn cygv_path_history_probe(
             closest_series_distance: None,
             closest_series_predecessor_nonzero: None,
             closest_series_difference_nonzero: None,
+            predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
+            predecessor_candidate_sample: Vec::new(),
             lower_seed_decomposition_max_terms: 4,
             lower_seed_decomposition_status: "not_run".to_string(),
             lower_seed_decomposition_term_count: None,
@@ -3476,6 +3492,8 @@ fn cygv_path_history_probe_inner(
             closest_series_distance: None,
             closest_series_predecessor_nonzero: None,
             closest_series_difference_nonzero: None,
+            predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
+            predecessor_candidate_sample: Vec::new(),
             lower_seed_decomposition_max_terms: 4,
             lower_seed_decomposition_status: "skipped_empty_seed_set".to_string(),
             lower_seed_decomposition_term_count: None,
@@ -3506,6 +3524,8 @@ fn cygv_path_history_probe_inner(
             closest_series_distance: None,
             closest_series_predecessor_nonzero: None,
             closest_series_difference_nonzero: None,
+            predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
+            predecessor_candidate_sample: Vec::new(),
             lower_seed_decomposition_max_terms: 4,
             lower_seed_decomposition_status: "skipped_seed_limit".to_string(),
             lower_seed_decomposition_term_count: None,
@@ -3573,6 +3593,8 @@ fn cygv_path_history_probe_inner(
                 .closest_difference
                 .as_deref()
                 .map(sparse_from_dense),
+            predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
+            predecessor_candidate_sample: predecessor_stats.candidate_sample,
             lower_seed_decomposition_max_terms: 4,
             lower_seed_decomposition_status: lower_seed_decomposition.status,
             lower_seed_decomposition_term_count: lower_seed_decomposition.term_count,
@@ -3611,6 +3633,8 @@ fn cygv_path_history_probe_inner(
             .closest_difference
             .as_deref()
             .map(sparse_from_dense),
+        predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
+        predecessor_candidate_sample: predecessor_stats.candidate_sample,
         lower_seed_decomposition_max_terms: 4,
         lower_seed_decomposition_status: lower_seed_decomposition.status,
         lower_seed_decomposition_term_count: lower_seed_decomposition.term_count,
@@ -3635,6 +3659,7 @@ fn cygv_path_predecessor_stats(
     let mut closest_distance = cygv_series_distance(target);
     let mut closest_predecessor = None;
     let mut closest_difference = None;
+    let mut candidate_sample = Vec::new();
     let mut sorted_elements = elements.iter().collect::<Vec<_>>();
     sorted_elements.sort();
     for element in sorted_elements {
@@ -3648,7 +3673,47 @@ fn cygv_path_predecessor_stats(
             continue;
         }
         predecessor_difference_count += 1;
+        let difference_degree = curve_degree(&difference, grading)?;
         let distance = cygv_series_distance(&difference);
+        if candidate_sample.len() < CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT {
+            candidate_sample.push((
+                distance,
+                CygvPathPredecessorCandidate {
+                    predecessor_degree: degree,
+                    difference_degree,
+                    series_distance: format!("{distance:.6}"),
+                    predecessor_nonzero: sparse_from_dense(element),
+                    difference_nonzero: sparse_from_dense(&difference),
+                },
+            ));
+            candidate_sample.sort_by(|(lhs_distance, lhs), (rhs_distance, rhs)| {
+                lhs_distance
+                    .total_cmp(rhs_distance)
+                    .then_with(|| lhs.predecessor_nonzero.cmp(&rhs.predecessor_nonzero))
+                    .then_with(|| lhs.difference_nonzero.cmp(&rhs.difference_nonzero))
+            });
+        } else if candidate_sample
+            .last()
+            .is_some_and(|(worst_distance, _)| distance < *worst_distance)
+        {
+            candidate_sample.pop();
+            candidate_sample.push((
+                distance,
+                CygvPathPredecessorCandidate {
+                    predecessor_degree: degree,
+                    difference_degree,
+                    series_distance: format!("{distance:.6}"),
+                    predecessor_nonzero: sparse_from_dense(element),
+                    difference_nonzero: sparse_from_dense(&difference),
+                },
+            ));
+            candidate_sample.sort_by(|(lhs_distance, lhs), (rhs_distance, rhs)| {
+                lhs_distance
+                    .total_cmp(rhs_distance)
+                    .then_with(|| lhs.predecessor_nonzero.cmp(&rhs.predecessor_nonzero))
+                    .then_with(|| lhs.difference_nonzero.cmp(&rhs.difference_nonzero))
+            });
+        }
         if distance < closest_distance {
             closest_distance = distance;
             improving_predecessor_difference_count += 1;
@@ -3663,6 +3728,10 @@ fn cygv_path_predecessor_stats(
         closest_distance,
         closest_predecessor,
         closest_difference,
+        candidate_sample: candidate_sample
+            .into_iter()
+            .map(|(_, candidate)| candidate)
+            .collect(),
     })
 }
 
@@ -6104,6 +6173,27 @@ mod tests {
         assert_eq!(probe.closest_series_distance.as_deref(), Some("1.000000"));
         assert_eq!(probe.closest_series_predecessor_nonzero, Some(vec![(1, 1)]));
         assert_eq!(probe.closest_series_difference_nonzero, Some(vec![(0, 1)]));
+        assert_eq!(
+            probe.predecessor_candidate_sample_limit,
+            CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT
+        );
+        assert_eq!(probe.predecessor_candidate_sample.len(), 2);
+        assert_eq!(
+            probe.predecessor_candidate_sample[0].predecessor_nonzero,
+            vec![(0, 1)]
+        );
+        assert_eq!(
+            probe.predecessor_candidate_sample[0].difference_nonzero,
+            vec![(1, 1)]
+        );
+        assert_eq!(
+            probe.predecessor_candidate_sample[1].predecessor_nonzero,
+            vec![(1, 1)]
+        );
+        assert_eq!(
+            probe.predecessor_candidate_sample[1].difference_nonzero,
+            vec![(0, 1)]
+        );
     }
 
     #[test]

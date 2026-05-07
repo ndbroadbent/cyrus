@@ -163,7 +163,9 @@ and matrix-basis pipeline are no longer open.
    The path-history probe can now stop after a full generated layer; for the
    two degree-10 targets the first layer is complete at `131135` elements and
    `99317` previous-window elements, giving a bounded source-history slice for
-   the next qN-history analysis.
+   the next qN-history analysis. It also samples the actual predecessor pairs;
+   both degree-10 targets have eight first-layer predecessor differences, with
+   nearest degree split `8+2`.
 5. **Potent-ray local diagnostics.** Rank-two N=10 and rank-four potent-ray
    rows are still incomplete, but they are validation diagnostics rather than
    blockers for the compact GA-ready GV engine.

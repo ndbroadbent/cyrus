@@ -1617,6 +1617,13 @@ exactly: `closure_element_count=131135`, `previous_window_element_count=99317`,
 `target_in_closure=true`, and `predecessor_difference_count=8`. This gives a
 bounded, reproducible source-history slice for studying cygv's qN reuse without
 entering the second closure layer.
+The path-history report now also samples the actual qN predecessor candidates
+as sparse `(previous curve, difference)` pairs sorted by cygv's distance
+heuristic. For both degree-10 targets the complete first-layer slice contains
+all eight predecessor differences under the sample cap. Target `7` has nearest
+degree split `8+2` at distance `4`, while target `8` has nearest degree split
+`8+2` at distance `3`. These pairs are not new GV values; they are the source
+history entries that cygv would use when constructing `q_N` for the target.
 
 After rebuilding `mcallister_gv_context`, the dry-run report now preserves the
 origin-circuit provenance exported by `mcallister_first_principles`. A fresh
