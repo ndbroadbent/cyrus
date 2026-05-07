@@ -328,7 +328,11 @@ not finding which lower leaves are involved. The enriched active-leaf report
 now also carries the matching source rays' local q rows and CMS check counts:
 two origin-circuit lower leaves are primitive `neg2` q-row candidates, while
 three have three negative primitive intersections and still need a different
-certified phase or chamber model.
+certified phase or chamber model. The unit-tensor phase probe matches only the
+degree-14 lower leaf (`GV=-2`); the degree-12 leaf gives `-3` versus expected
+`3`, and the three degree-10 leaves give `0` origin-included or `-1`
+origin-omitted against expected `{-2,1}`. These are diagnostics, not promoted
+GV values.
 
 ## Next Concrete Action
 

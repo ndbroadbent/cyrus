@@ -2334,6 +2334,17 @@ intersections, so cygv's compact coefficient layer would ignore the primitive
 term without a different certified phase/chamber model. This narrows the next
 step to local phase/intersection/chamber certification for a known set of
 source rows, not discovery of additional active leaves.
+The same active-leaf records now run the existing one-parameter unit-tensor
+phase probe against those lower source rays. This is still diagnostic-only,
+because the local intersection tensor and chamber certificate are not
+certified. The degree-14 row `[-1,-2,1,1,1]` gives unit-tensor GV `-2`, matching
+its formula candidate set. The degree-12 row `[-2,-3,2,2,1]` gives `-3` while
+the formula candidate is `3`, so even a `neg2` bucket is not enough to fix the
+phase/tensor normalization. The three degree-10 rows give origin-included
+unit-tensor GV `0` and origin-omitted unit-tensor GV `-1`, while their formula
+candidate set is `{-2,1}`. Thus four of the five origin-circuit lower leaves
+still require a certified local phase/intersection/chamber model rather than a
+unit-tensor promotion.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

@@ -89,7 +89,9 @@ run pass. Any remaining mismatch must be explicit and localizable.
    includes the matched source-ray q rows and CMS status counts; two lower
    origin-circuit leaves are primitive `neg2` candidates, while three have
    three negative primitive intersections under the oriented local q row and
-   still need a certified alternate phase/chamber model.
+   still need a certified alternate phase/chamber model. The unit-tensor phase
+   probe matches only the degree-14 lower leaf and mismatches the degree-12 and
+   three degree-10 leaves, so the report does not promote any new GV values.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for

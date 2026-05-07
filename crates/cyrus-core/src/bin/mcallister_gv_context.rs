@@ -653,6 +653,7 @@ struct ActiveDecompositionSourceLeafSummary {
     matching_uncovered_source_ray_local_cygv_readiness: Option<String>,
     matching_uncovered_source_ray_local_missing_inputs: Vec<String>,
     matching_uncovered_source_ray_local_cygv_input_skeleton: Option<LocalCygvInputSkeleton>,
+    matching_uncovered_source_ray_local_unit_phase_probe: Option<LocalCygvUnitPhaseProbe>,
     occurrences: Vec<ActiveDecompositionSourceLeafOccurrence>,
 }
 
@@ -698,6 +699,7 @@ struct PathSupportSourceClassContext {
     matching_uncovered_source_ray_local_cygv_readiness: Option<String>,
     matching_uncovered_source_ray_local_missing_inputs: Vec<String>,
     matching_uncovered_source_ray_local_cygv_input_skeleton: Option<LocalCygvInputSkeleton>,
+    matching_uncovered_source_ray_local_unit_phase_probe: Option<LocalCygvUnitPhaseProbe>,
 }
 
 struct CygvPathPredecessorStats {
@@ -1435,6 +1437,7 @@ fn path_support_source_class_context(
         matching_uncovered_source_ray_local_cygv_readiness,
         matching_uncovered_source_ray_local_missing_inputs,
         matching_uncovered_source_ray_local_cygv_input_skeleton,
+        matching_uncovered_source_ray_local_unit_phase_probe,
     ) = uncovered_source_ray_local_cygv_context(matching_uncovered_source_ray.as_ref())?;
     let Some(ray_context) = context.degree_bounded_ray_context else {
         return Ok(PathSupportSourceClassContext {
@@ -1472,6 +1475,7 @@ fn path_support_source_class_context(
             matching_uncovered_source_ray_local_cygv_readiness,
             matching_uncovered_source_ray_local_missing_inputs,
             matching_uncovered_source_ray_local_cygv_input_skeleton,
+            matching_uncovered_source_ray_local_unit_phase_probe,
         });
     };
 
@@ -1518,6 +1522,7 @@ fn path_support_source_class_context(
         matching_uncovered_source_ray_local_cygv_readiness,
         matching_uncovered_source_ray_local_missing_inputs,
         matching_uncovered_source_ray_local_cygv_input_skeleton,
+        matching_uncovered_source_ray_local_unit_phase_probe,
     })
 }
 
@@ -1529,11 +1534,12 @@ fn uncovered_source_ray_local_cygv_context(
         Option<String>,
         Vec<String>,
         Option<LocalCygvInputSkeleton>,
+        Option<LocalCygvUnitPhaseProbe>,
     ),
     String,
 > {
     let Some((_, sample)) = matching_uncovered_source_ray else {
-        return Ok((None, None, Vec::new(), None));
+        return Ok((None, None, Vec::new(), None, None));
     };
     let signature = sample
         .origin_circuit_affine_support
@@ -1546,7 +1552,19 @@ fn uncovered_source_ray_local_cygv_context(
         .as_ref()
         .map(|skeleton| skeleton.remaining_uncertified_inputs.clone())
         .unwrap_or_default();
-    Ok((signature, readiness, missing_inputs, skeleton))
+    let unit_phase_probe = skeleton.as_ref().map(|skeleton| {
+        local_cygv_unit_phase_probe_from_skeleton(
+            skeleton,
+            sample_expected_toric_gv1_formula_values(sample),
+        )
+    });
+    Ok((
+        signature,
+        readiness,
+        missing_inputs,
+        skeleton,
+        unit_phase_probe,
+    ))
 }
 
 fn missing_sample_cms_check_status_counts(
@@ -2338,6 +2356,13 @@ fn active_decomposition_unresolved_source_leaf_summaries(
                             .and_then(|context| {
                                 context
                                     .matching_uncovered_source_ray_local_cygv_input_skeleton
+                                    .clone()
+                            }),
+                        matching_uncovered_source_ray_local_unit_phase_probe: source_context
+                            .as_ref()
+                            .and_then(|context| {
+                                context
+                                    .matching_uncovered_source_ray_local_unit_phase_probe
                                     .clone()
                             }),
                         occurrences: vec![occurrence],
@@ -7375,9 +7400,17 @@ fn local_cygv_target_unit_phase_probe_summaries(
 }
 
 fn target_expected_toric_gv1_formula_values(target: &TargetReport) -> Vec<String> {
-    let mut values = target
-        .cms_general_divisor_shape_candidates
-        .as_deref()
+    expected_toric_gv1_formula_values(target.cms_general_divisor_shape_candidates.as_deref())
+}
+
+fn sample_expected_toric_gv1_formula_values(sample: &MissingGvTargetSample) -> Vec<String> {
+    expected_toric_gv1_formula_values(sample.cms_general_divisor_shape_candidates.as_deref())
+}
+
+fn expected_toric_gv1_formula_values(
+    candidates: Option<&[CmsGeneralDivisorShapeCandidate]>,
+) -> Vec<String> {
+    let mut values = candidates
         .unwrap_or_default()
         .iter()
         .filter_map(|candidate| candidate.toric_gv1_formula_value)
@@ -9641,6 +9674,9 @@ mod tests {
                     .as_ref()
                     .and_then(|skeleton| skeleton.local_cygv_wrapper_q_matrix_candidate.as_ref())
                     == Some(&vec![vec![2, -1]])
+                && summary
+                    .matching_uncovered_source_ray_local_unit_phase_probe
+                    .is_some()
         }));
         assert!(summaries.iter().any(|summary| {
             summary.source_status == "active_generator_source_ray_not_toric_covered"
