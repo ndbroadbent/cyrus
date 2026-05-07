@@ -251,6 +251,10 @@ struct ContextReport {
     shared_facet_unresolved_source_ray_unit_phase_probe_status_counts: BTreeMap<String, usize>,
     shared_facet_unresolved_source_ray_origin_omitted_unit_phase_probe_status_counts:
         BTreeMap<String, usize>,
+    shared_facet_unresolved_source_ray_unit_effective_tensor_requirement_status_counts:
+        BTreeMap<String, usize>,
+    shared_facet_unresolved_source_ray_origin_omitted_effective_tensor_requirement_status_counts:
+        BTreeMap<String, usize>,
     shared_facet_unresolved_source_ray_unit_phase_probe_sample:
         Vec<LocalCygvTargetUnitPhaseProbeSummary>,
     shared_facet_unresolved_source_ray_sample: Vec<TargetReport>,
@@ -294,6 +298,9 @@ struct ContextReport {
     local_cygv_origin_omitted_compact_shape_status_counts: BTreeMap<String, usize>,
     local_cygv_target_unit_phase_probe_status_counts: BTreeMap<String, usize>,
     local_cygv_target_origin_omitted_unit_phase_probe_status_counts: BTreeMap<String, usize>,
+    local_cygv_target_unit_effective_tensor_requirement_status_counts: BTreeMap<String, usize>,
+    local_cygv_target_origin_omitted_effective_tensor_requirement_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_target_unit_phase_probe_sample: Vec<LocalCygvTargetUnitPhaseProbeSummary>,
     local_cygv_target_integer_tensor_scan_status_counts: BTreeMap<String, usize>,
     local_cygv_target_integer_tensor_scan_sample: Vec<LocalCygvIntegerTensorScanSummary>,
@@ -676,11 +683,22 @@ struct LocalCygvUnitPhaseProbe {
     unit_tensor_candidate_gv: Option<String>,
     unit_tensor_probe_status: String,
     unit_tensor_error: Option<String>,
+    unit_tensor_effective_tensor_requirements: Vec<LocalCygvEffectiveTensorRequirement>,
     origin_omitted_q_matrix: Option<Vec<Vec<i64>>>,
     origin_omitted_unit_tensor_candidate_gv: Option<String>,
     origin_omitted_unit_tensor_probe_status: String,
     origin_omitted_unit_tensor_error: Option<String>,
+    origin_omitted_unit_tensor_effective_tensor_requirements:
+        Vec<LocalCygvEffectiveTensorRequirement>,
     expected_toric_gv1_formula_values: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvEffectiveTensorRequirement {
+    expected_gv: String,
+    unit_tensor_gv: Option<String>,
+    required_tensor_value: Option<String>,
+    status: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -2102,16 +2120,81 @@ fn local_cygv_unit_phase_probe_from_skeleton(
         ),
     };
 
+    let unit_tensor_effective_tensor_requirements = effective_tensor_requirements_for_unit_probe(
+        unit_tensor_candidate_gv.as_deref(),
+        &expected_toric_gv1_formula_values,
+    );
+    let origin_omitted_unit_tensor_effective_tensor_requirements =
+        effective_tensor_requirements_for_unit_probe(
+            origin_omitted_unit_tensor_candidate_gv.as_deref(),
+            &expected_toric_gv1_formula_values,
+        );
+
     LocalCygvUnitPhaseProbe {
         q_matrix,
         unit_tensor_candidate_gv,
         unit_tensor_probe_status,
         unit_tensor_error,
+        unit_tensor_effective_tensor_requirements,
         origin_omitted_q_matrix,
         origin_omitted_unit_tensor_candidate_gv,
         origin_omitted_unit_tensor_probe_status,
         origin_omitted_unit_tensor_error,
+        origin_omitted_unit_tensor_effective_tensor_requirements,
         expected_toric_gv1_formula_values,
+    }
+}
+
+fn effective_tensor_requirements_for_unit_probe(
+    unit_tensor_gv: Option<&str>,
+    expected_values: &[String],
+) -> Vec<LocalCygvEffectiveTensorRequirement> {
+    expected_values
+        .iter()
+        .map(|expected| effective_tensor_requirement_for_unit_probe(unit_tensor_gv, expected))
+        .collect()
+}
+
+fn effective_tensor_requirement_for_unit_probe(
+    unit_tensor_gv: Option<&str>,
+    expected: &str,
+) -> LocalCygvEffectiveTensorRequirement {
+    let blocked = |status: &str| LocalCygvEffectiveTensorRequirement {
+        expected_gv: expected.to_string(),
+        unit_tensor_gv: unit_tensor_gv.map(ToString::to_string),
+        required_tensor_value: None,
+        status: status.to_string(),
+    };
+    let Some(unit_tensor_gv) = unit_tensor_gv else {
+        return blocked("effective_tensor_not_computed_missing_unit_probe");
+    };
+    let Ok(unit) = parse_rational(unit_tensor_gv) else {
+        return blocked("effective_tensor_invalid_unit_gv");
+    };
+    let Ok(expected) = parse_rational(expected) else {
+        return blocked("effective_tensor_invalid_expected_gv");
+    };
+    let zero = MalachiteRational::from(0);
+    if unit == zero {
+        let status = if expected == zero {
+            "effective_tensor_underdetermined_unit_gv_zero_expected_zero"
+        } else {
+            "effective_tensor_no_scalar_match_unit_gv_zero"
+        };
+        return blocked(status);
+    }
+    let expected_gv = expected.to_string();
+    let required = expected / unit;
+    let status = if required.denominator_ref() == &1u32 {
+        "effective_tensor_integral_candidate_but_uncertified"
+    } else {
+        "effective_tensor_nonintegral_candidate_rejected_by_cygv_threefold_intnums"
+    };
+    LocalCygvEffectiveTensorRequirement {
+        expected_gv,
+        unit_tensor_gv: Some(unit_tensor_gv.to_string()),
+        required_tensor_value: Some(required.to_string()),
+        status: status.to_string(),
     }
 }
 
@@ -7674,6 +7757,14 @@ fn build_report(
         local_cygv_target_origin_omitted_unit_phase_probe_status_counts(
             &shared_facet_unresolved_source_ray_unit_phase_probe_sample,
         );
+    let shared_facet_unresolved_source_ray_unit_effective_tensor_requirement_status_counts =
+        local_cygv_target_unit_effective_tensor_requirement_status_counts(
+            &shared_facet_unresolved_source_ray_unit_phase_probe_sample,
+        );
+    let shared_facet_unresolved_source_ray_origin_omitted_effective_tensor_requirement_status_counts =
+        local_cygv_target_origin_omitted_effective_tensor_requirement_status_counts(
+            &shared_facet_unresolved_source_ray_unit_phase_probe_sample,
+        );
     let origin_circuit_facet_context_status_counts =
         origin_circuit_facet_context_status_counts(&validated.stats.sample, target_index_filter);
     let origin_circuit_witness_domain_sample = origin_circuit_witness_domain_summaries(
@@ -7877,6 +7968,14 @@ fn build_report(
         local_cygv_target_origin_omitted_unit_phase_probe_status_counts(
             &local_cygv_target_unit_phase_probe_sample,
         );
+    let local_cygv_target_unit_effective_tensor_requirement_status_counts =
+        local_cygv_target_unit_effective_tensor_requirement_status_counts(
+            &local_cygv_target_unit_phase_probe_sample,
+        );
+    let local_cygv_target_origin_omitted_effective_tensor_requirement_status_counts =
+        local_cygv_target_origin_omitted_effective_tensor_requirement_status_counts(
+            &local_cygv_target_unit_phase_probe_sample,
+        );
     let local_cygv_target_integer_tensor_scan_sample = local_cygv_integer_tensor_scan_summaries(
         &targets,
         scan_local_integer_tensors,
@@ -7992,6 +8091,8 @@ fn build_report(
         shared_facet_unresolved_source_ray_cms_solution_summary_error_counts,
         shared_facet_unresolved_source_ray_unit_phase_probe_status_counts,
         shared_facet_unresolved_source_ray_origin_omitted_unit_phase_probe_status_counts,
+        shared_facet_unresolved_source_ray_unit_effective_tensor_requirement_status_counts,
+        shared_facet_unresolved_source_ray_origin_omitted_effective_tensor_requirement_status_counts,
         shared_facet_unresolved_source_ray_unit_phase_probe_sample,
         shared_facet_unresolved_source_ray_sample,
         origin_circuit_facet_context_status_counts,
@@ -8031,6 +8132,8 @@ fn build_report(
         local_cygv_origin_omitted_compact_shape_status_counts,
         local_cygv_target_unit_phase_probe_status_counts,
         local_cygv_target_origin_omitted_unit_phase_probe_status_counts,
+        local_cygv_target_unit_effective_tensor_requirement_status_counts,
+        local_cygv_target_origin_omitted_effective_tensor_requirement_status_counts,
         local_cygv_target_unit_phase_probe_sample,
         local_cygv_target_integer_tensor_scan_status_counts,
         local_cygv_target_integer_tensor_scan_sample,
@@ -8504,6 +8607,33 @@ fn local_cygv_target_origin_omitted_unit_phase_probe_status_counts(
         *counts
             .entry(probe.probe.origin_omitted_unit_tensor_probe_status.clone())
             .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_target_unit_effective_tensor_requirement_status_counts(
+    probes: &[LocalCygvTargetUnitPhaseProbeSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes {
+        for requirement in &probe.probe.unit_tensor_effective_tensor_requirements {
+            *counts.entry(requirement.status.clone()).or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn local_cygv_target_origin_omitted_effective_tensor_requirement_status_counts(
+    probes: &[LocalCygvTargetUnitPhaseProbeSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes {
+        for requirement in &probe
+            .probe
+            .origin_omitted_unit_tensor_effective_tensor_requirements
+        {
+            *counts.entry(requirement.status.clone()).or_insert(0usize) += 1;
+        }
     }
     counts
 }
@@ -10002,6 +10132,31 @@ mod tests {
         assert_eq!(
             probe.origin_omitted_unit_tensor_probe_status,
             "origin_omitted_unit_tensor_probe_matches_expected_formula_set_but_phase_uncertified"
+        );
+        assert_eq!(
+            probe.unit_tensor_effective_tensor_requirements[0].status,
+            "effective_tensor_no_scalar_match_unit_gv_zero"
+        );
+        assert_eq!(
+            probe.origin_omitted_unit_tensor_effective_tensor_requirements[0]
+                .required_tensor_value
+                .as_deref(),
+            Some("1")
+        );
+        assert_eq!(
+            probe.origin_omitted_unit_tensor_effective_tensor_requirements[0].status,
+            "effective_tensor_integral_candidate_but_uncertified"
+        );
+    }
+
+    #[test]
+    fn effective_tensor_requirement_flags_nonintegral_local_reductions() {
+        let requirement = effective_tensor_requirement_for_unit_probe(Some("6"), "3");
+
+        assert_eq!(requirement.required_tensor_value.as_deref(), Some("1/2"));
+        assert_eq!(
+            requirement.status,
+            "effective_tensor_nonintegral_candidate_rejected_by_cygv_threefold_intnums"
         );
     }
 
