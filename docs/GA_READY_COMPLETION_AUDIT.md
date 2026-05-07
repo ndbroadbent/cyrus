@@ -762,6 +762,11 @@ the relation hyperplane, while targets `7`/`8` have a height `-1` star-side
 pair: the zero-shared ray with coefficient `+1` and star extra `212` with
 coefficient `-1`. The remaining certificate work is therefore a real
 chamber-map/intersection problem, not just a missing projection or lookup.
+The off-height projection lookup confirms the pair is not independently
+promotable: targets `3`/`6` have zero off-height components, and the target
+`7`/`8` off-height star component `[(55,1),(212,-1)]` has no integral global
+curve-basis projection. The wall-crossing object must therefore be certified
+locally before it can affect compact GV history.
 Origin-circuit witness-domain compact `cygv` probes are now opt-in and guarded
 by `--origin-witness-cygv-generator-limit`. The traced target `8` report shows
 the single-generator relation domain computes `GV=2` with one materialized

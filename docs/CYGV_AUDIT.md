@@ -3228,6 +3228,16 @@ coefficients remain on height `0`. This makes the chamber-map obstruction more
 explicit: the missing certificate must explain the height `-1` star-side pair
 and its projection into the target chamber, not merely find another global
 curve coordinate.
+The off-height projection lookup in
+`/tmp/cyrus_gv_context_star_union_off_height_report.json` sharpens that split.
+Targets `3`/`6` have `zero_off_height_component` for all target/star/sum
+roles. Targets `7`/`8` have a nonzero star-side off-height component
+`[(55,1),(212,-1)]`, with the opposite sign in `target_minus_star`, but this
+component reports
+`off_height_global_basis_projection_no_integral_basis_coordinates`. Thus the
+height-`-1` chamber pair is not itself a global curve-basis class with a GV
+history entry. It has to be handled as part of the local wall/chamber
+transport.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

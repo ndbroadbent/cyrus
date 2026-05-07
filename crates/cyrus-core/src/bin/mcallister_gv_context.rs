@@ -569,6 +569,7 @@ struct LocalCygvSourceResolutionHintSummary {
     shared_two_simplex_star_union_affine_rank: Option<usize>,
     shared_two_simplex_star_union_charge_basis: Option<Vec<Vec<i64>>>,
     shared_two_simplex_star_union_affine_height_profile: Vec<StarUnionAffineHeight>,
+    shared_two_simplex_star_union_off_height_lookup: Vec<LocalCygvStarUnionOffHeightLookup>,
     shared_two_simplex_star_union_target_coordinates: Option<Vec<i64>>,
     shared_two_simplex_star_union_target_rational_coordinates: Option<Vec<String>>,
     shared_two_simplex_star_union_target_rational_denominators: Option<Vec<String>>,
@@ -616,6 +617,19 @@ struct StarUnionAffineHeight {
     target_minus_star_coefficient: i64,
     target_plus_star_coefficient: i64,
     height: i64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvStarUnionOffHeightLookup {
+    role: String,
+    point_nonzero: Vec<(usize, i64)>,
+    global_basis_status: String,
+    basis_nonzero: Option<Vec<(usize, i64)>>,
+    degree: Option<i128>,
+    known_qn_history_status: String,
+    toric_gv: Option<String>,
+    source_derived_gv: Option<String>,
+    error: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -14765,6 +14779,10 @@ fn local_cygv_source_resolution_hint_summaries(
                 &star_support_hint,
                 affine_projection_hint.hyperplane.as_deref(),
             );
+            let star_union_off_height_lookup = local_cygv_star_union_off_height_lookup_sample(
+                &star_union_affine_height_profile,
+                context,
+            );
             let star_extra_affine_heights =
                 origin_circuit_shared_two_simplex_star_extra_affine_heights(
                     target.origin_circuit_first_witness.as_ref(),
@@ -14820,6 +14838,7 @@ fn local_cygv_source_resolution_hint_summaries(
                 shared_two_simplex_star_union_charge_basis: star_union_relation_hint.charge_basis,
                 shared_two_simplex_star_union_affine_height_profile:
                     star_union_affine_height_profile,
+                shared_two_simplex_star_union_off_height_lookup: star_union_off_height_lookup,
                 shared_two_simplex_star_union_target_coordinates: star_union_relation_hint
                     .target_coordinates,
                 shared_two_simplex_star_union_target_rational_coordinates: star_union_relation_hint
@@ -15842,6 +15861,164 @@ fn star_union_point_role(
         "star_support".to_string()
     } else {
         "star_union_support".to_string()
+    }
+}
+
+fn local_cygv_star_union_off_height_lookup_sample(
+    height_profile: &[StarUnionAffineHeight],
+    context: &ValidatedContext<'_>,
+) -> Vec<LocalCygvStarUnionOffHeightLookup> {
+    ["target", "star", "target_minus_star", "target_plus_star"]
+        .into_iter()
+        .map(|role| local_cygv_star_union_off_height_lookup(role, height_profile, context))
+        .collect()
+}
+
+fn local_cygv_star_union_off_height_lookup(
+    role: &str,
+    height_profile: &[StarUnionAffineHeight],
+    context: &ValidatedContext<'_>,
+) -> LocalCygvStarUnionOffHeightLookup {
+    let empty = |global_basis_status: &str,
+                 known_qn_history_status: &str,
+                 error: Option<String>|
+     -> LocalCygvStarUnionOffHeightLookup {
+        LocalCygvStarUnionOffHeightLookup {
+            role: role.to_string(),
+            point_nonzero: Vec::new(),
+            global_basis_status: global_basis_status.to_string(),
+            basis_nonzero: None,
+            degree: None,
+            known_qn_history_status: known_qn_history_status.to_string(),
+            toric_gv: None,
+            source_derived_gv: None,
+            error,
+        }
+    };
+    if height_profile.is_empty() {
+        return empty(
+            "off_height_global_basis_projection_missing_height_profile",
+            "missing_off_height_profile",
+            None,
+        );
+    }
+    let point_indices = height_profile
+        .iter()
+        .map(|entry| entry.point_index)
+        .collect::<Vec<_>>();
+    let coefficients = height_profile
+        .iter()
+        .map(|entry| {
+            if entry.height == 0 {
+                0
+            } else {
+                star_union_height_profile_role_coefficient(role, entry)
+            }
+        })
+        .collect::<Vec<_>>();
+    let point_nonzero = point_indices
+        .iter()
+        .copied()
+        .zip(coefficients.iter().copied())
+        .filter(|(_, coefficient)| *coefficient != 0)
+        .collect::<Vec<_>>();
+    if point_nonzero.is_empty() {
+        return LocalCygvStarUnionOffHeightLookup {
+            role: role.to_string(),
+            point_nonzero,
+            global_basis_status: "off_height_global_basis_projection_zero_component".to_string(),
+            basis_nonzero: None,
+            degree: Some(0),
+            known_qn_history_status: "zero_off_height_component".to_string(),
+            toric_gv: None,
+            source_derived_gv: None,
+            error: None,
+        };
+    }
+    let basis_dense = match project_star_union_relation_to_global_basis(
+        &point_indices,
+        &coefficients,
+        context.q_matrix,
+    ) {
+        Ok(Some(basis_dense)) => basis_dense,
+        Ok(None) => {
+            return LocalCygvStarUnionOffHeightLookup {
+                role: role.to_string(),
+                point_nonzero,
+                global_basis_status:
+                    "off_height_global_basis_projection_no_integral_basis_coordinates".to_string(),
+                basis_nonzero: None,
+                degree: None,
+                known_qn_history_status: "off_height_not_in_global_basis".to_string(),
+                toric_gv: None,
+                source_derived_gv: None,
+                error: None,
+            };
+        }
+        Err(error) => {
+            return LocalCygvStarUnionOffHeightLookup {
+                role: role.to_string(),
+                point_nonzero,
+                global_basis_status: format!(
+                    "off_height_global_basis_projection_error:{}",
+                    status_error_fragment(&error)
+                ),
+                basis_nonzero: None,
+                degree: None,
+                known_qn_history_status: "invalid_off_height_global_basis_projection".to_string(),
+                toric_gv: None,
+                source_derived_gv: None,
+                error: Some(error),
+            };
+        }
+    };
+    let basis_nonzero = sparse_from_dense(&basis_dense);
+    let degree = match curve_degree(&basis_dense, context.grading) {
+        Ok(degree) => Some(degree),
+        Err(error) => {
+            return LocalCygvStarUnionOffHeightLookup {
+                role: role.to_string(),
+                point_nonzero,
+                global_basis_status: "off_height_global_basis_projection_integral".to_string(),
+                basis_nonzero: Some(basis_nonzero),
+                degree: None,
+                known_qn_history_status: "invalid_off_height_global_basis_degree".to_string(),
+                toric_gv: None,
+                source_derived_gv: None,
+                error: Some(error),
+            };
+        }
+    };
+    let toric_gv = context.covered_toric_gv_by_basis.get(&basis_dense).cloned();
+    let source_derived_gv = context
+        .source_derived_gv_by_basis
+        .get(&basis_dense)
+        .cloned();
+    let (known_qn_history_status, error) =
+        match known_qn_history_status(toric_gv.as_deref(), source_derived_gv.as_deref()) {
+            Ok(status) => (status.to_string(), None),
+            Err(error) => ("known_qn_history_conflict".to_string(), Some(error)),
+        };
+    LocalCygvStarUnionOffHeightLookup {
+        role: role.to_string(),
+        point_nonzero,
+        global_basis_status: "off_height_global_basis_projection_integral".to_string(),
+        basis_nonzero: Some(basis_nonzero),
+        degree,
+        known_qn_history_status,
+        toric_gv,
+        source_derived_gv,
+        error,
+    }
+}
+
+fn star_union_height_profile_role_coefficient(role: &str, entry: &StarUnionAffineHeight) -> i64 {
+    match role {
+        "target" => entry.target_coefficient,
+        "star" => entry.star_coefficient,
+        "target_minus_star" => entry.target_minus_star_coefficient,
+        "target_plus_star" => entry.target_plus_star_coefficient,
+        _ => 0,
     }
 }
 
@@ -19995,25 +20172,27 @@ mod tests {
                 (214, 1)
             ]
         );
+        let star_union_height_profile = local_cygv_star_union_affine_height_profile(
+            Some(&witness),
+            &star_support_hint,
+            projection_hint.hyperplane.as_deref(),
+        );
         assert_eq!(
-            local_cygv_star_union_affine_height_profile(
-                Some(&witness),
-                &star_support_hint,
-                projection_hint.hyperplane.as_deref()
-            )
-            .into_iter()
-            .map(|entry| {
-                (
-                    entry.point_index,
-                    entry.role,
-                    entry.target_coefficient,
-                    entry.star_coefficient,
-                    entry.target_minus_star_coefficient,
-                    entry.target_plus_star_coefficient,
-                    entry.height,
-                )
-            })
-            .collect::<Vec<_>>(),
+            star_union_height_profile
+                .clone()
+                .into_iter()
+                .map(|entry| {
+                    (
+                        entry.point_index,
+                        entry.role,
+                        entry.target_coefficient,
+                        entry.star_coefficient,
+                        entry.target_minus_star_coefficient,
+                        entry.target_plus_star_coefficient,
+                        entry.height,
+                    )
+                })
+                .collect::<Vec<_>>(),
             vec![
                 (0, "origin".to_string(), -1, 1, -2, 0, 0),
                 (2, "relation_shared_two_simplex".to_string(), 2, 0, 2, 2, 0),
@@ -20040,6 +20219,47 @@ mod tests {
                 (212, "star_extra".to_string(), 0, -1, 1, -1, -1),
                 (214, "origin_circuit_exclusive".to_string(), 1, 0, 1, 1, 0),
             ]
+        );
+        let mut context = minimal_corrected_context(
+            3,
+            Some(vec![
+                DegreeBoundedMoriRayContextSample {
+                    degree: 1,
+                    ambient_nonzero: vec![(55, 1)],
+                    basis_nonzero: vec![(0, 1)],
+                },
+                DegreeBoundedMoriRayContextSample {
+                    degree: 1,
+                    ambient_nonzero: vec![(212, 1)],
+                    basis_nonzero: vec![(1, 1)],
+                },
+            ]),
+        );
+        let mut q_matrix = vec![vec![0; 214], vec![0; 214]];
+        q_matrix[0][54] = 1;
+        q_matrix[1][211] = 1;
+        context.gv_q_matrix_for_missing = Some(q_matrix);
+        let validated = validate_context(&context).unwrap();
+        let off_height_lookup =
+            local_cygv_star_union_off_height_lookup_sample(&star_union_height_profile, &validated);
+        assert_eq!(off_height_lookup.len(), 4);
+        assert_eq!(
+            off_height_lookup[0].known_qn_history_status,
+            "zero_off_height_component"
+        );
+        assert_eq!(off_height_lookup[1].point_nonzero, vec![(55, 1), (212, -1)]);
+        assert_eq!(
+            off_height_lookup[1].global_basis_status,
+            "off_height_global_basis_projection_integral"
+        );
+        assert_eq!(
+            off_height_lookup[1].basis_nonzero,
+            Some(vec![(0, 1), (1, -1)])
+        );
+        assert_eq!(off_height_lookup[1].degree, Some(0));
+        assert_eq!(
+            off_height_lookup[1].known_qn_history_status,
+            "unknown_not_toric_covered"
         );
         let resolved_hint = local_cygv_resolved_shared_support_hint(&skeleton, Some(&witness));
         assert_eq!(

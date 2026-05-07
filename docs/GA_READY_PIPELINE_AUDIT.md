@@ -1015,3 +1015,8 @@ to make the remaining GV layer more first-principles:
    height `-1` star extra `212` carry opposite star coefficients. This keeps
    the next source-derived task focused on the actual chamber map and
    intersection transport across that wall.
+   A direct off-height global projection lookup now rules out another shortcut:
+   the target `7`/`8` star-side off-height pair `[(55,1),(212,-1)]` is not an
+   integral global curve-basis class, and targets `3`/`6` have no nonzero
+   off-height component. The off-height data is local wall data, not a hidden
+   scalar GV row.
