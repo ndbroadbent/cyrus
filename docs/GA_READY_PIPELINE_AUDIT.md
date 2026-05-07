@@ -78,14 +78,17 @@ run pass. Any remaining mismatch must be explicit and localizable.
    remains candidate evidence until the full local `cygv` intersection tensor
    and chamber certificate are derived. The active-dependency context export
    now also resolves the previously anonymous non-toric active leaves into
-   concrete source-ray diagnostics: the current report has 12 toric-covered
-   active leaves, two source-derived leaves, two links to other missing
-   targets, and six matching uncovered source rays. Five of those source rays
-   are explicitly blocked on `local_q_matrix_phase`,
-   `local_intersection_tensor`, and `local_chamber_certificate`; the degree-4
-   source ray still lacks an origin-pattern/source-derived readiness label.
-   That makes the next corrected-GV step local phase/intersection/chamber
-   construction, not more leaf discovery. The enriched active-leaf report now
+   concrete source-ray diagnostics. The context export now includes uncovered
+   source-ray toric diagnostics, and the context consumer imports them as
+   source-derived known GV values after exact degree and duplicate-conflict
+   checks. The latest report has 12 toric-covered active leaves, three
+   source-derived leaves, two links to other missing targets, and five matching
+   uncovered source rays. The formerly unresolved degree-4 leaf with ambient
+   support `[(6,1),(200,1),(210,-2)]` is a two-face toric diagnostic with
+   `GV=-2`, so it no longer belongs in the local-phase queue. That makes the
+   next corrected-GV step local phase/intersection/chamber construction for
+   the remaining higher-rank uncovered leaves, not more leaf discovery. The
+   enriched active-leaf report now
    includes the matched source-ray q rows and CMS status counts; two lower
    origin-circuit leaves are primitive `neg2` candidates, while three have
    three negative primitive intersections under the oriented local q row and
@@ -600,9 +603,10 @@ to make the remaining GV layer more first-principles:
    those lower source-ray leaves and their chamber history. The report now
    includes `active_decomposition_unresolved_source_leaf_sample`, which lists
    the exact unresolved dependency leaves and their parent occurrences. In the
-   current context this sample contains two links back to other missing
-   targets, one uncovered degree-4 source ray without a CMS formula candidate,
-   and six not-yet-covered source rays of degrees 10, 10, 10, 10, 12, and 14.
-   The sample also records ambient origin-relation patterns, showing that all
-   unresolved dependencies except the degree-4 leaf still have origin-circuit
-   charge shapes that need local chamber/GV treatment.
+   current context this sample contains two links back to other missing targets
+   and five not-yet-covered source rays of degrees 10, 10, 10, 12, and 14. The
+   previous degree-4 source ray is now classified from an exported two-face
+   toric diagnostic with `GV=-2`. The sample also records ambient
+   origin-relation patterns, showing that the remaining uncovered source-ray
+   dependencies all have origin-circuit charge shapes that need local
+   chamber/GV treatment.

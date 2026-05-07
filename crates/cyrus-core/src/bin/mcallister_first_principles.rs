@@ -729,7 +729,6 @@ struct ChamberGvDiagnostic {
     missing_target_stats: Option<MissingGvTargetStats>,
     uncovered_source_ray_stats_degree_bound_for_missing: Option<i128>,
     uncovered_source_ray_stats_for_missing: Option<MissingGvTargetStats>,
-    #[allow(dead_code)]
     uncovered_source_ray_toric_diagnostic_sample: Option<Vec<ToricGvDiagnosticContextSample>>,
     basis_mori_rays_for_missing_degree_bound: Option<i128>,
     basis_mori_rays_for_missing_degree_bounded: Option<Vec<Vec<i64>>>,
@@ -809,6 +808,7 @@ struct CorrectedChamberGvContextExport<'a> {
     missing_target_stats: Option<&'a MissingGvTargetStats>,
     uncovered_source_ray_stats_degree_bound_for_missing: Option<i128>,
     uncovered_source_ray_stats_for_missing: Option<&'a MissingGvTargetStats>,
+    uncovered_source_ray_toric_diagnostic_sample: Option<&'a Vec<ToricGvDiagnosticContextSample>>,
 }
 
 struct ChamberToricGvSelection {
@@ -8466,6 +8466,9 @@ fn write_corrected_chamber_gv_context_export(
         uncovered_source_ray_stats_for_missing: diag
             .uncovered_source_ray_stats_for_missing
             .as_ref(),
+        uncovered_source_ray_toric_diagnostic_sample: diag
+            .uncovered_source_ray_toric_diagnostic_sample
+            .as_ref(),
     };
     if let Some(parent) = path.parent()
         && !parent.as_os_str().is_empty()
@@ -11217,6 +11220,98 @@ mod tests {
         assert_eq!(rows[1]["type"], "positive_branch");
         assert_eq!(rows[1]["small_curve_pruning"], "finite-semigroup");
         assert_eq!(rows[1]["small_curve_filtered_count"], 4);
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn corrected_chamber_context_export_includes_uncovered_source_toric_diagnostics() {
+        let cache_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/cyrus-test-cache");
+        std::fs::create_dir_all(&cache_dir).expect("create cache dir");
+        let path = cache_dir.join(format!(
+            "corrected-chamber-context-{}-{}.json",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time after epoch")
+                .as_nanos()
+        ));
+        let diag = ChamberGvDiagnostic {
+            ambient_rays: 3,
+            subcutoff_count: 2,
+            filtered_count: 1,
+            toric_gv_covered_count: 0,
+            toric_gv_missing_count: 1,
+            basis_mori_ray_count: None,
+            degree_bounded_basis_mori_ray_count: None,
+            basis_mori_ray_degree_min: None,
+            basis_mori_ray_degree_max: None,
+            general_gv_covered_count: None,
+            ray_gv_covered_count: None,
+            ray_gv_volume_correction: None,
+            ray_gv_sample: Vec::new(),
+            lp_face_gv_covered_count: None,
+            lp_face_gv_failed_count: None,
+            lp_face_gv_certified_count: None,
+            lp_face_gv_uncertified_count: None,
+            lp_face_gv_volume_correction: None,
+            lp_face_gv_sample: Vec::new(),
+            combined_diagnostic_gv_covered_count: None,
+            combined_diagnostic_gv_missing_count: None,
+            combined_diagnostic_gv_zero_count: None,
+            combined_diagnostic_gv_nonzero_count: None,
+            combined_diagnostic_gv_volume_correction: None,
+            combined_diagnostic_gv_target_correction: None,
+            remaining_gv_missing_count: 1,
+            first_missing_class: Some(vec![0, 1, -1]),
+            missing_required_degree_min: Some(4),
+            missing_required_degree_max: Some(4),
+            missing_target_stats: None,
+            uncovered_source_ray_stats_degree_bound_for_missing: Some(4),
+            uncovered_source_ray_stats_for_missing: None,
+            uncovered_source_ray_toric_diagnostic_sample: Some(vec![
+                ToricGvDiagnosticContextSample {
+                    degree: 4,
+                    gv: "-2".to_string(),
+                    source_bucket: "origin_circuit".to_string(),
+                    source_summary: "diagnostic".to_string(),
+                    ambient_nonzero: vec![(1, 1), (2, -1)],
+                    basis_nonzero: vec![(0, 1), (1, -1)],
+                },
+            ]),
+            basis_mori_rays_for_missing_degree_bound: None,
+            basis_mori_rays_for_missing_degree_bounded: None,
+            degree_bounded_mori_ray_context_for_missing: None,
+            covered_toric_gv_context_for_missing: None,
+            gv_q_matrix_for_missing: None,
+            gv_curve_basis_matrix_for_missing: None,
+            grading_for_missing: None,
+            corrected_kappa_basis_for_missing: None,
+            covered_toric_gv_divisor_representation_baseline: None,
+            covered_gv_target_correction: None,
+            covered_gv_volume_correction: None,
+            gv_volume_correction: None,
+        };
+
+        write_corrected_chamber_gv_context_export(
+            &path,
+            &diag,
+            F64::<Pos>::new(1.0).expect("positive cutoff"),
+            CurvePruningStrategy::PairDecomposable,
+            8,
+        )
+        .expect("write corrected chamber context");
+
+        let content = std::fs::read_to_string(&path).expect("read corrected chamber context");
+        let value =
+            serde_json::from_str::<serde_json::Value>(&content).expect("valid context JSON");
+        let sample = value["uncovered_source_ray_toric_diagnostic_sample"]
+            .as_array()
+            .expect("source toric diagnostic sample should be exported");
+        assert_eq!(sample.len(), 1);
+        assert_eq!(sample[0]["degree"], 4);
+        assert_eq!(sample[0]["gv"], "-2");
+        assert_eq!(sample[0]["source_bucket"], "origin_circuit");
 
         let _ = std::fs::remove_file(path);
     }

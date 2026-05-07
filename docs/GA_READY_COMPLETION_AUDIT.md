@@ -313,18 +313,21 @@ aggregated as `target_status_counts`: three integer-semigroup diamonds compute
 target GV `0`, two fail compact HKTY with a non-integral invariant, and the
 four rational-cone targets are skipped. That diagnostic does not resolve the
 remaining GV rows. The active decomposition generators now classify as 12
-toric-covered leaves, two source-derived GV leaves, two other missing targets,
-and six concrete uncovered source-ray leaves after the first-principles export
-unions active non-covered dependencies into the source-ray diagnostic set. The
-report now carries `active_decomposition_unresolved_source_leaf_sample`, which
-gives the exact curve and ambient support for each unresolved dependency; the
-current sample contains two missing-target links plus six matching uncovered
-source-ray leaves. Five of those source-ray leaves are blocked on
-`local_q_matrix_phase`, `local_intersection_tensor`, and
-`local_chamber_certificate`; the remaining degree-4 leaf lacks an
-origin-pattern/source-derived readiness classification. The remaining
-source-ray work is therefore local phase/intersection/chamber certification,
-not finding which lower leaves are involved. The enriched active-leaf report
+toric-covered leaves, three source-derived GV leaves, two other missing
+targets, and five concrete uncovered source-ray leaves after the
+first-principles export unions active non-covered dependencies into the
+source-ray diagnostic set and exports uncovered source-ray toric diagnostics.
+The context consumer imports those toric diagnostics as source-derived known GV
+values after exact degree and duplicate-conflict checks. The report now carries
+`active_decomposition_unresolved_source_leaf_sample`, which gives the exact
+curve and ambient support for each unresolved dependency; the current sample
+contains two missing-target links plus five matching uncovered source-ray
+leaves. The previous degree-4 leaf with ambient support
+`[(6,1),(200,1),(210,-2)]` is now classified from a two-face toric diagnostic
+with `GV=-2`. The remaining source-ray work is therefore
+local phase/intersection/chamber certification for the higher-rank
+origin-circuit leaves, not finding which lower leaves are involved. The
+enriched active-leaf report
 now also carries the matching source rays' local q rows and CMS check counts:
 two origin-circuit lower leaves are primitive `neg2` q-row candidates, while
 three have three negative primitive intersections and still need a different

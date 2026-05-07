@@ -2312,14 +2312,15 @@ uncovered source-ray diagnostic row.
 The report materializes those unresolved dependencies in
 `active_decomposition_unresolved_source_leaf_sample`, including the exact
 divisor-basis curve, ambient support, parent-target occurrences, and matching
-missing-target or uncovered-source metadata. On the current McAllister context
-the sample has eight unresolved dependency entries: two links back to other
-missing targets and six matching uncovered source rays with degrees 4, 10, 10,
-10, 12, and 14. Five of those source rays are explicitly blocked on
-`local_q_matrix_phase`, `local_intersection_tensor`, and
-`local_chamber_certificate`; the degree-4 ray has no origin-pattern diagnostic
-yet. This is now the concrete lower leaf set for the next GV implementation
-step.
+missing-target or uncovered-source metadata. The context export now also
+serializes uncovered source-ray toric diagnostics, and the context consumer
+imports them as source-derived known GV values after exact degree and
+duplicate-conflict checks. On the current McAllister context the unresolved
+sample has seven entries: two links back to other missing targets and five
+matching uncovered source rays with degrees 10, 10, 10, 12, and 14. The
+previous degree-4 ray with ambient support `[(6,1),(200,1),(210,-2)]` is
+classified by a two-face toric diagnostic with `GV=-2`. This is now the
+concrete lower leaf set for the next GV implementation step.
 The active-leaf report now serializes the matching uncovered source ray's
 local charge signature, CMS check status counts, CMS solution summaries, and
 full `LocalCygvInputSkeleton` when an origin-circuit support exists. On the
@@ -2367,6 +2368,7 @@ origin-pattern buckets among the matching missing/source-ray leaves are:
 for `origin=-1;neg={-2: 1};pos={1: 3}`,
 `origin=-1;neg={-2: 1, -1: 1};pos={1: 2, 2: 1}`,
 `origin=-1;neg={-3: 1};pos={1: 2, 2: 1}`, and
-`origin=-2;neg={-3: 1};pos={1: 1, 2: 2}`. The only unresolved lower leaf
-without an origin pattern is the degree-4 class with ambient support
-`[(6,1),(200,1),(210,-2)]`.
+`origin=-2;neg={-3: 1};pos={1: 1, 2: 2}`. The previous unresolved lower leaf
+without an origin pattern was the degree-4 class with ambient support
+`[(6,1),(200,1),(210,-2)]`; it is now source-derived from an exported two-face
+toric diagnostic with `GV=-2`.
