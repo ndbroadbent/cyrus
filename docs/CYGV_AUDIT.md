@@ -2553,6 +2553,14 @@ computation directly and requires agreement with the CMS formula when a CMS
 formula is present. The next step is therefore not tensor guessing or CMS
 scalar replacement; it is checking how these computed source rows affect the
 broader qN history.
+The same local unit-phase probe now uses Cyrus' explicit-semigroup qN trace
+wrapper for the unit-tensor source call and serializes the materialized qN
+polynomial count, target qN status, target term count, and bounded qN samples.
+The residual-source predecessor regression verifies that the certified
+`O(-1)+O(-2)->P^2` source row materializes one target qN polynomial while
+returning the expected local `GV=-2`. This is still source-local history; it is
+evidence to compare against the compact corrected-chamber qN queue, not a
+replacement for it.
 An opt-in target-level integer tensor scan now runs the same one-parameter
 local skeletons through the actual compact `cygv` call while varying the single
 intersection tensor entry over a bounded integer range. On the fresh

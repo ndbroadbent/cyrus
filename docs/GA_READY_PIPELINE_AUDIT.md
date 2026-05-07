@@ -623,6 +623,11 @@ to make the remaining GV layer more first-principles:
    matching CMS formulas, `21` actual local cygv imports without CMS formula
    checks, `32` remaining full-facet CMS formula imports, `58` rows with no
    integral matching CMS formula, and `115` rows with no origin-circuit witness.
+   The same local unit-phase probe now records qN trace metadata for the
+   certified unit-tensor source call; the residual-source regression verifies
+   one materialized target qN polynomial for the source-local `GV=-2` row.
+   This is trace evidence for the source-local model, not a promoted compact
+   corrected-chamber qN polynomial.
    The CMS divisor cubic suggested tensor value `3`, but the raw-cubic primitive
    probe gave `GV=-6`; the source-derived unit tensor gives the expected `GV=-2`
    and is now the promoted source value for this lower ray. The follow-up

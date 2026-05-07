@@ -22,6 +22,7 @@ use cyrus_core::types::rational::Rational;
 use cyrus_core::types::tags::Finite;
 use cyrus_core::{
     CygvQnTracePolynomial, Intersection, Point, compute_gv_invariants_with_explicit_semigroup,
+    compute_gv_invariants_with_explicit_semigroup_qn_trace,
     compute_gv_invariants_with_provided_generators,
     compute_gv_invariants_with_provided_generators_qn_trace, curve_row_span_rank,
     diagnose_affine_toric_circuit, integer_math::solve_linear_system_rational, utils::gcd_list_int,
@@ -784,6 +785,10 @@ struct LocalCygvUnitPhaseProbe {
     unit_tensor_candidate_gv: Option<String>,
     unit_tensor_probe_status: String,
     unit_tensor_error: Option<String>,
+    unit_tensor_qn_trace_polynomial_count: Option<usize>,
+    unit_tensor_target_qn_trace_status: Option<String>,
+    unit_tensor_target_qn_trace_term_count: Option<usize>,
+    unit_tensor_qn_trace_sample: Vec<CygvPathSupportQnTracePolynomialSample>,
     unit_tensor_effective_tensor_requirements: Vec<LocalCygvEffectiveTensorRequirement>,
     origin_omitted_q_matrix: Option<Vec<Vec<i64>>>,
     origin_omitted_unit_tensor_candidate_gv: Option<String>,
@@ -2298,43 +2303,68 @@ fn local_cygv_unit_phase_probe_from_skeleton(
         .filter(|generators| generators.as_slice() == [vec![1]])
         .map(|_| vec![vec![0], vec![1]]);
 
-    let (unit_tensor_candidate_gv, unit_tensor_probe_status, unit_tensor_error) =
-        match (&q_matrix, &grading_vector, &semigroup_elements) {
-            (Some(q_matrix), Some(grading_vector), Some(semigroup_elements))
-                if q_matrix.len() == 1 =>
-            {
-                match one_parameter_primitive_cygv_value(
-                    q_matrix,
-                    grading_vector,
-                    semigroup_elements,
-                    MalachiteRational::from(1),
-                ) {
-                    Ok(value) => {
-                        let status = unit_phase_probe_status(
-                            &value,
-                            &expected_toric_gv1_formula_values,
-                            local_cygv_has_source_derived_unit_tensor_chamber(skeleton),
-                        );
-                        (Some(value), status, None)
-                    }
-                    Err(error) => (
+    let (
+        unit_tensor_candidate_gv,
+        unit_tensor_probe_status,
+        unit_tensor_error,
+        unit_tensor_qn_trace_polynomial_count,
+        unit_tensor_target_qn_trace_status,
+        unit_tensor_target_qn_trace_term_count,
+        unit_tensor_qn_trace_sample,
+    ) = match (&q_matrix, &grading_vector, &semigroup_elements) {
+        (Some(q_matrix), Some(grading_vector), Some(semigroup_elements)) if q_matrix.len() == 1 => {
+            match one_parameter_primitive_cygv_qn_trace(
+                q_matrix,
+                grading_vector,
+                semigroup_elements,
+                MalachiteRational::from(1),
+            ) {
+                Ok(trace) => {
+                    let status = unit_phase_probe_status(
+                        &trace.gv,
+                        &expected_toric_gv1_formula_values,
+                        local_cygv_has_source_derived_unit_tensor_chamber(skeleton),
+                    );
+                    (
+                        Some(trace.gv),
+                        status,
                         None,
-                        "unit_tensor_probe_hkty_error".to_string(),
-                        Some(error),
-                    ),
+                        Some(trace.qn_trace_polynomial_count),
+                        Some(trace.target_qn_trace_status),
+                        trace.target_qn_trace_term_count,
+                        trace.qn_trace_sample,
+                    )
                 }
+                Err(error) => (
+                    None,
+                    "unit_tensor_probe_hkty_error".to_string(),
+                    Some(error),
+                    None,
+                    None,
+                    None,
+                    Vec::new(),
+                ),
             }
-            (Some(_), Some(_), Some(_)) => (
-                None,
-                "unit_tensor_probe_not_run_not_one_parameter_q_matrix".to_string(),
-                None,
-            ),
-            _ => (
-                None,
-                "unit_tensor_probe_not_run_missing_source_inputs".to_string(),
-                None,
-            ),
-        };
+        }
+        (Some(_), Some(_), Some(_)) => (
+            None,
+            "unit_tensor_probe_not_run_not_one_parameter_q_matrix".to_string(),
+            None,
+            None,
+            None,
+            None,
+            Vec::new(),
+        ),
+        _ => (
+            None,
+            "unit_tensor_probe_not_run_missing_source_inputs".to_string(),
+            None,
+            None,
+            None,
+            None,
+            Vec::new(),
+        ),
+    };
 
     let origin_omitted_q_matrix = local_origin_omitted_wrapper_q_matrix(skeleton)
         .ok()
@@ -2428,6 +2458,10 @@ fn local_cygv_unit_phase_probe_from_skeleton(
         unit_tensor_candidate_gv,
         unit_tensor_probe_status,
         unit_tensor_error,
+        unit_tensor_qn_trace_polynomial_count,
+        unit_tensor_target_qn_trace_status,
+        unit_tensor_target_qn_trace_term_count,
+        unit_tensor_qn_trace_sample,
         unit_tensor_effective_tensor_requirements,
         origin_omitted_q_matrix,
         origin_omitted_unit_tensor_candidate_gv,
@@ -2585,6 +2619,54 @@ fn one_parameter_primitive_cygv_value(
         .iter()
         .find(|(curve, _)| curve.as_slice() == [1])
         .map_or_else(|| "0".to_string(), |(_, value)| value.to_string()))
+}
+
+struct OneParameterPrimitiveCygvTrace {
+    gv: String,
+    qn_trace_polynomial_count: usize,
+    target_qn_trace_status: String,
+    target_qn_trace_term_count: Option<usize>,
+    qn_trace_sample: Vec<CygvPathSupportQnTracePolynomialSample>,
+}
+
+fn one_parameter_primitive_cygv_qn_trace(
+    q_matrix: &[Vec<i64>],
+    grading_vector: &[i64],
+    semigroup_elements: &[Vec<i64>],
+    tensor_value: MalachiteRational,
+) -> Result<OneParameterPrimitiveCygvTrace, String> {
+    if tensor_value.denominator_ref() != &1u32 {
+        return Err(format!(
+            "one-parameter primitive cygv tensor value {tensor_value} is not integral"
+        ));
+    }
+    let mut intnums = Intersection::new(1);
+    intnums.set(0, 0, 0, Rational::<Finite>::new(tensor_value));
+    let traced = compute_gv_invariants_with_explicit_semigroup_qn_trace(
+        semigroup_elements,
+        grading_vector,
+        q_matrix,
+        &intnums,
+    )
+    .map_err(|error| error.to_string())?;
+    let gv = traced
+        .invariants
+        .iter()
+        .find(|(curve, _)| curve.as_slice() == [1])
+        .map_or_else(|| "0".to_string(), |(_, value)| value.to_string());
+    let target_qn_trace_term_count = traced
+        .qn_trace
+        .iter()
+        .find_map(|poly| (poly.element.as_slice() == [1]).then_some(poly.terms.len()));
+    let target_qn_trace_status =
+        local_unit_qn_trace_status(&gv, target_qn_trace_term_count)?.to_string();
+    Ok(OneParameterPrimitiveCygvTrace {
+        gv,
+        qn_trace_polynomial_count: traced.qn_trace.len(),
+        target_qn_trace_status,
+        target_qn_trace_term_count,
+        qn_trace_sample: path_support_qn_trace_sample(&traced.qn_trace),
+    })
 }
 
 fn divisor_cubic_self_intersection(
@@ -3019,6 +3101,22 @@ fn support_overlap_qn_trace_status(
         (false, Some(0)) => "support_overlap_qn_materialized_empty_for_zero_or_absent_gv",
         (false, Some(_)) => "support_overlap_qn_materialized_for_zero_or_absent_gv",
         (false, None) => "support_overlap_qn_not_required_zero_or_absent_gv",
+    };
+    Ok(status)
+}
+
+fn local_unit_qn_trace_status(
+    local_unit_gv: &str,
+    qn_trace_term_count: Option<usize>,
+) -> Result<&'static str, String> {
+    let local_unit_nonzero = parse_rational(local_unit_gv)? != MalachiteRational::from(0);
+    let status = match (local_unit_nonzero, qn_trace_term_count) {
+        (true, Some(0)) => "local_unit_qn_materialized_empty_for_nonzero_gv",
+        (true, Some(_)) => "local_unit_qn_materialized_for_nonzero_gv",
+        (true, None) => "local_unit_qn_missing_for_nonzero_gv",
+        (false, Some(0)) => "local_unit_qn_materialized_empty_for_zero_or_absent_gv",
+        (false, Some(_)) => "local_unit_qn_materialized_for_zero_or_absent_gv",
+        (false, None) => "local_unit_qn_not_required_zero_or_absent_gv",
     };
     Ok(status)
 }
@@ -12057,6 +12155,16 @@ mod tests {
             probe.unit_tensor_probe_status,
             "unit_tensor_probe_matches_expected_formula_set_but_uncertified"
         );
+        assert_eq!(probe.unit_tensor_qn_trace_polynomial_count, Some(1));
+        assert_eq!(
+            probe.unit_tensor_target_qn_trace_status.as_deref(),
+            Some("local_unit_qn_materialized_for_nonzero_gv")
+        );
+        assert_eq!(probe.unit_tensor_target_qn_trace_term_count, Some(1));
+        assert_eq!(
+            probe.unit_tensor_qn_trace_sample[0].curve_nonzero,
+            vec![(0, 1)]
+        );
         assert_eq!(
             probe.origin_omitted_q_matrix,
             Some(vec![vec![1, -1, 1, -1, 1]])
@@ -13202,6 +13310,16 @@ mod tests {
         assert_eq!(
             unit_probe.unit_tensor_probe_status,
             "unit_tensor_probe_matches_expected_formula_set_with_source_derived_tensor_chamber"
+        );
+        assert_eq!(unit_probe.unit_tensor_qn_trace_polynomial_count, Some(1));
+        assert_eq!(
+            unit_probe.unit_tensor_target_qn_trace_status.as_deref(),
+            Some("local_unit_qn_materialized_for_nonzero_gv")
+        );
+        assert_eq!(unit_probe.unit_tensor_target_qn_trace_term_count, Some(1));
+        assert_eq!(
+            unit_probe.unit_tensor_qn_trace_sample[0].curve_nonzero,
+            vec![(0, 1)]
         );
         assert_eq!(
             summary

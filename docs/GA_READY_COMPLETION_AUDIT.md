@@ -336,7 +336,11 @@ and matrix-basis pipeline are no longer open.
    are `ready_for_actual_cygv_call`. The CMS divisor cubic suggests tensor
    value `3`, but the raw-cubic primitive probe gives `GV=-6`; the certified
    local bundle tensor gives the expected `GV=-2` and is the promoted source
-   value. The context export now also keeps the nonzero rational divisor-basis
+   value. The local unit-phase probe now also exports actual `cygv` qN trace
+   metadata for that source-derived unit tensor, with the residual-source
+   regression verifying one materialized target qN polynomial for the
+   `GV=-2` source row. The context export now also keeps the nonzero rational
+   divisor-basis
    and ambient-basis coefficients from successful CMS-general-divisor solves,
    so the next step is consuming these computed source values inside the
    broader finite qN history rather than relying on the CMS scalar formula
