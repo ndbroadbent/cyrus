@@ -8429,6 +8429,7 @@ fn compare_corrected_target_volume_checkpoint(
 fn compare_gv_target_correction_to_corrected_target_checkpoint(
     label: &str,
     data_dir: Option<&str>,
+    kklt_basis: &[usize],
     base_target_tau: &[F64<Pos>],
     candidate_gv_correction: &[F64<Finite>],
 ) {
@@ -8477,6 +8478,23 @@ fn compare_gv_target_correction_to_corrected_target_checkpoint(
         summary.max_abs_reference,
         summary.max_abs_candidate
     );
+    let mut deltas = implied_gv_correction
+        .iter()
+        .zip(candidate_gv_correction.iter())
+        .enumerate()
+        .map(|(idx, (implied, candidate))| {
+            let delta = candidate.get() - implied.get();
+            (idx, delta.abs(), delta, implied.get(), candidate.get())
+        })
+        .collect::<Vec<_>>();
+    deltas.sort_unstable_by(|lhs, rhs| rhs.1.total_cmp(&lhs.1));
+    for (idx, _abs_delta, delta, implied, candidate) in deltas.into_iter().take(8) {
+        let point_idx = kklt_basis.get(idx).copied();
+        eprintln!(
+            "[COMPARE] corrected target-volume implied GV correction top_delta ({label}) kklt_idx={} point_idx={:?} delta={} checkpoint_implied={} candidate={}",
+            idx, point_idx, delta, implied, candidate
+        );
+    }
 }
 
 fn compare_corrected_chamber_target_volume_checkpoint(
@@ -10876,6 +10894,7 @@ fn stage_volume(
                     compare_gv_target_correction_to_corrected_target_checkpoint(
                         "corrected_chamber_formula_sum_diagnostic",
                         data_dir,
+                        kklt_basis,
                         base_target_tau,
                         formula_sum_target_correction,
                     );
