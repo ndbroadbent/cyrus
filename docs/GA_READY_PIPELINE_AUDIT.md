@@ -391,7 +391,15 @@ to make the remaining GV layer more first-principles:
    the call finishes. A quintic-sized regression proves the flag reaches actual
    `cygv` qN history and recovers the degree-one `2875` target polynomial; the
    broad McAllister degree-10 support-overlap domains remain too large to use as
-   the missing chamber history.
+   the missing chamber history. Fresh schema-4 target-specific traces also
+   rule out the smaller overlap windows for the two degree-10 misses: target
+   `7` thresholds `1..4` use `64`, `41`, `24`, and `10` generators, target `8`
+   uses `48`, `40`, `18`, and `10`, and all eight traced calls fail in
+   `cygv` series inversion with non-integer GV output. By contrast, the
+   path-support domains are internally integral and materialize compact lower
+   `q_N` polynomials (`11` for target `7`, `6` for target `8`), but both still
+   return target `GV=0` with no target `q_N` polynomial. This keeps the blocker
+   at certified corrected-chamber history, not qN observability.
    A direct cygv semigroup-size diagnostic now confirms why: the degree-10
    missing targets already have `720` seed rows at or below the target degree,
    and an unguarded cygv semigroup closure measurement did not finish within

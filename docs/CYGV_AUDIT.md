@@ -2561,6 +2561,28 @@ The residual-source predecessor regression verifies that the certified
 returning the expected local `GV=-2`. This is still source-local history; it is
 evidence to compare against the compact corrected-chamber qN queue, not a
 replacement for it.
+Fresh schema-4 target-specific path-history reports make that comparison more
+concrete. On
+`/tmp/cyrus_gv_context_schema4_target7_path_history_report.json`, target `7`
+uses an 11-generator path-support domain, materializes 11 compact `q_N`
+polynomials, and still returns target `GV=0` with no target `q_N` polynomial.
+On `/tmp/cyrus_gv_context_schema4_target8_path_history_report.json`, target
+`8` uses a 7-generator path-support domain, materializes 6 compact `q_N`
+polynomials, and likewise returns target `GV=0` with no target `q_N`
+polynomial. In both reports the closest residual source predecessor is the
+shared degree-six source row
+`[(54,-2),(203,1),(206,1),(209,1)]`; it is now
+`ready_for_actual_cygv_call` with no missing local inputs, and its compact
+path-support `q_N` polynomial is present. The remaining missing object is
+therefore not the scalar source row or its local unit `q_N`; it is the
+certified corrected-chamber history that makes the degree-ten target itself
+nonzero.
+The same fresh schema-4 run rules out the nearby support-overlap windows as a
+replacement chamber. For target `7`, traced overlap thresholds `1..4` use
+`64`, `41`, `24`, and `10` supplied generators; for target `8`, they use
+`48`, `40`, `18`, and `10`. Every one of those eight traced HKTY calls fails in
+`cygv` series inversion with a non-integer GV invariant, so these overlap
+domains are not certifiable target histories.
 Regenerating
 `/tmp/cyrus_gv_context_schema3_local_source_qn_trace_report.json` also shows
 that all nine target-level one-parameter unit probes materialize one local qN

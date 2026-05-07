@@ -302,7 +302,14 @@ and matrix-basis pipeline are no longer open.
    bounded qN term sample. A tiny quintic regression verifies that this traces
    the actual `cygv` history and recovers the degree-one `2875` qN polynomial.
    This improves observability but does not change the broad-domain timeout
-   conclusion above.
+   conclusion above. Fresh schema-4 target-specific overlap traces now also
+   show that the smaller degree-10 support-overlap windows are not certified
+   histories: thresholds `1..4` for target `7` (`64`, `41`, `24`, `10`
+   generators) and target `8` (`48`, `40`, `18`, `10` generators) all fail
+   inside `cygv` series inversion with non-integer GV output. The path-support
+   domains do materialize lower compact `q_N` polynomials, including the shared
+   ready source-derived degree-six predecessor, but both target domains still
+   return target `GV=0` with no target `q_N` polynomial.
    The path-history report now also mirrors `cygv`'s nearest live-`q_N`
    predecessor selection. The closest certified qN predecessor for target `7`
    is the toric degree-two class `[(44,1),(54,1),(206,-2)]` with an unknown
