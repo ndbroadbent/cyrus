@@ -615,4 +615,7 @@ to make the remaining GV layer more first-principles:
    origin-circuit facet-pair witness in `origin_circuit_witnesses`, in addition
    to the compatibility `origin_circuit_first_witness` field, so multi-witness
    source rows such as the degree-14 `[-1,-2,1,1,1]` dependency keep the
-   alternate local chamber data needed by the next certificate step.
+   alternate local chamber data needed by the next certificate step. The
+   context diagnostics now consume all serialized witnesses when forming
+   support-domain and facet-context summaries, so multi-witness rows expose
+   mixed facet context rather than inheriting the first witness's status.

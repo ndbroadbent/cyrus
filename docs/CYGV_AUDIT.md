@@ -2345,7 +2345,10 @@ keeping the legacy `origin_circuit_first_witness` field for compatibility. This
 matters for rows such as the degree-14 `[-1,-2,1,1,1]` source dependency,
 which has two facet-pair witnesses; the local chamber step should inspect both
 source-derived witnesses rather than committing to whichever one was serialized
-first.
+first. The context reader now uses that full witness list when building
+origin-circuit support-domain and facet-context diagnostics: relation/support
+sets are unions over all serialized witnesses, and mixed facet-context status
+is reported explicitly instead of hiding behind the first witness.
 The same active-leaf records now run the existing one-parameter unit-tensor
 phase probe against those lower source rays. This is still diagnostic-only,
 because the local intersection tensor and chamber certificate are not

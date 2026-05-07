@@ -10,7 +10,7 @@
 use malachite::{Integer, Rational as MalachiteRational};
 use nalgebra::{DMatrix, RowDVector};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 
 use cyrus_core::gv::{
@@ -3193,27 +3193,30 @@ fn origin_circuit_ambient_generator_counts(
 fn origin_circuit_ambient_support_sets(
     sample: &MissingGvTargetSample,
 ) -> Option<OriginCircuitAmbientSupportSets> {
-    let witness = sample.origin_circuit_first_witness.as_ref()?;
+    let witnesses = origin_circuit_witnesses(sample);
+    if witnesses.is_empty() {
+        return None;
+    }
 
-    let relation_support = witness
-        .relation_points
-        .iter()
-        .map(|point| point.point_index)
-        .collect::<HashSet<_>>();
-    let first_facet = witness.first_facet.iter().copied().collect::<HashSet<_>>();
-    let second_facet = witness.second_facet.iter().copied().collect::<HashSet<_>>();
-    let mut shared_facet = first_facet
-        .intersection(&second_facet)
-        .copied()
-        .collect::<HashSet<_>>();
-    shared_facet.insert(0);
-    shared_facet.insert(witness.first_facet_exclusive_point);
-    shared_facet.insert(witness.second_facet_exclusive_point);
-    let mut facet_union = first_facet
-        .union(&second_facet)
-        .copied()
-        .collect::<HashSet<_>>();
-    facet_union.insert(0);
+    let mut relation_support = HashSet::new();
+    let mut shared_facet = HashSet::new();
+    let mut facet_union = HashSet::new();
+    for witness in witnesses {
+        relation_support.extend(
+            witness
+                .relation_points
+                .iter()
+                .map(|point| point.point_index),
+        );
+        let first_facet = witness.first_facet.iter().copied().collect::<HashSet<_>>();
+        let second_facet = witness.second_facet.iter().copied().collect::<HashSet<_>>();
+        shared_facet.extend(first_facet.intersection(&second_facet).copied());
+        shared_facet.insert(0);
+        shared_facet.insert(witness.first_facet_exclusive_point);
+        shared_facet.insert(witness.second_facet_exclusive_point);
+        facet_union.extend(first_facet.union(&second_facet).copied());
+        facet_union.insert(0);
+    }
 
     Some(OriginCircuitAmbientSupportSets {
         relation_support,
@@ -4246,12 +4249,12 @@ fn origin_circuit_affine_support_with_coordinates(
     if !support.local_coordinates.is_empty() {
         return Ok(Some(support));
     }
-    let Some(witness) = sample.origin_circuit_first_witness.as_ref() else {
+    let Some(witness) = origin_circuit_witnesses(sample)
+        .into_iter()
+        .find(|witness| !witness.relation_points.is_empty())
+    else {
         return Ok(Some(support));
     };
-    if witness.relation_points.is_empty() {
-        return Ok(Some(support));
-    }
 
     let points = witness
         .relation_points
@@ -7424,16 +7427,49 @@ fn origin_circuit_facet_context_status_counts(
 }
 
 fn origin_circuit_facet_context_status(sample: &MissingGvTargetSample) -> String {
-    let Some(witness) = sample.origin_circuit_first_witness.as_ref() else {
+    let witnesses = origin_circuit_witnesses(sample);
+    if witnesses.is_empty() {
         return "no_origin_circuit_witness".to_string();
-    };
+    }
+
+    let mut statuses = BTreeSet::new();
+    for witness in witnesses {
+        statuses.insert(origin_circuit_witness_facet_context_status(witness));
+    }
+    if statuses.len() == 1 {
+        return statuses
+            .into_iter()
+            .next()
+            .expect("single status exists")
+            .to_string();
+    }
+    format!(
+        "mixed_origin_circuit_facet_context:{}",
+        statuses.into_iter().collect::<Vec<_>>().join("|")
+    )
+}
+
+fn origin_circuit_witnesses(sample: &MissingGvTargetSample) -> Vec<&OriginCircuitWitnessSample> {
+    if let Some(witnesses) = sample
+        .origin_circuit_witnesses
+        .as_ref()
+        .filter(|witnesses| !witnesses.is_empty())
+    {
+        return witnesses.iter().collect();
+    }
+    sample.origin_circuit_first_witness.iter().collect()
+}
+
+fn origin_circuit_witness_facet_context_status(
+    witness: &OriginCircuitWitnessSample,
+) -> &'static str {
     if witness.first_facet.is_empty() || witness.second_facet.is_empty() {
-        return "origin_circuit_missing_full_facet_context".to_string();
+        return "origin_circuit_missing_full_facet_context";
     }
     if witness.first_facet.len() != witness.first_facet_size
         || witness.second_facet.len() != witness.second_facet_size
     {
-        return "origin_circuit_facet_context_size_mismatch".to_string();
+        return "origin_circuit_facet_context_size_mismatch";
     }
 
     let first_facet = witness.first_facet.iter().copied().collect::<HashSet<_>>();
@@ -7448,9 +7484,9 @@ fn origin_circuit_facet_context_status(sample: &MissingGvTargetSample) -> String
         && !first_facet.contains(&witness.second_facet_exclusive_point);
 
     if shared_two_simplex_is_common && exclusive_points_are_exclusive {
-        "source_derived_full_facet_context".to_string()
+        "source_derived_full_facet_context"
     } else {
-        "origin_circuit_facet_context_inconsistent".to_string()
+        "origin_circuit_facet_context_inconsistent"
     }
 }
 
@@ -10851,6 +10887,71 @@ mod tests {
         let support = target_active_support(&sample, 5).unwrap();
         assert_eq!(support, HashSet::from([0, 1, 2, 4]));
         assert!(target_active_support(&sample, 4).is_err());
+    }
+
+    #[test]
+    fn origin_circuit_support_diagnostics_use_all_serialized_witnesses() {
+        let missing_witness = OriginCircuitWitnessSample {
+            first_facet_exclusive_point: 4,
+            second_facet_exclusive_point: 5,
+            shared_two_simplex: vec![1, 2],
+            first_facet: Vec::new(),
+            second_facet: Vec::new(),
+            first_facet_size: 3,
+            second_facet_size: 3,
+            sparse_relation: vec![(0, -1), (4, 1), (5, 1)],
+            relation_points: vec![
+                OriginCircuitRelationPointSample {
+                    point_index: 0,
+                    coefficient: -1,
+                    coordinates: vec![0, 0],
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 4,
+                    coefficient: 1,
+                    coordinates: vec![1, 0],
+                    face_dimension: None,
+                },
+            ],
+        };
+        let full_witness = OriginCircuitWitnessSample {
+            first_facet_exclusive_point: 6,
+            second_facet_exclusive_point: 7,
+            shared_two_simplex: vec![1, 2],
+            first_facet: vec![1, 2, 6],
+            second_facet: vec![1, 2, 7],
+            first_facet_size: 3,
+            second_facet_size: 3,
+            sparse_relation: vec![(0, -1), (6, 1), (7, 1)],
+            relation_points: vec![
+                OriginCircuitRelationPointSample {
+                    point_index: 0,
+                    coefficient: -1,
+                    coordinates: vec![0, 0],
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 7,
+                    coefficient: 1,
+                    coordinates: vec![0, 1],
+                    face_dimension: None,
+                },
+            ],
+        };
+        let mut sample = minimal_missing_sample(Vec::new());
+        sample.origin_circuit_first_witness = Some(missing_witness.clone());
+        sample.origin_circuit_witnesses = Some(vec![missing_witness, full_witness]);
+
+        assert_eq!(
+            origin_circuit_facet_context_status(&sample),
+            "mixed_origin_circuit_facet_context:origin_circuit_missing_full_facet_context|source_derived_full_facet_context"
+        );
+        let supports = origin_circuit_ambient_support_sets(&sample)
+            .expect("witness list should define ambient supports");
+        assert_eq!(supports.relation_support, HashSet::from([0, 4, 7]));
+        assert_eq!(supports.shared_facet, HashSet::from([0, 1, 2, 4, 5, 6, 7]));
+        assert_eq!(supports.facet_union, HashSet::from([0, 1, 2, 6, 7]));
     }
 
     #[test]
