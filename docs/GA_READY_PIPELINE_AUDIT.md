@@ -511,6 +511,12 @@ to make the remaining GV layer more first-principles:
    target `7` has `79` readouts (`11` nonzero, `25` zero/absent, `43`
    missing), while target `8` has `33` (`6`, `16`, `11`). This pins the
    composite lower-degree decisions made in the small domains.
+   The refreshed parent-only aggregates now show target `7`'s two extra
+   parent-domain terms both have lower-seed decompositions whose bounded
+   diamonds compute `GV=0` with no target qN polynomial, while target `8`'s one
+   parent-only term has a lower-seed decomposition whose bounded diamond hits
+   an HKTY error. This rules out a simple "lower-leaf scalar missing" diagnosis
+   for those parent terms.
    A direct cygv semigroup-size diagnostic now confirms why: the degree-10
    missing targets already have `720` seed rows at or below the target degree,
    and an unguarded cygv semigroup closure measurement did not finish within

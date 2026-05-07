@@ -2808,6 +2808,12 @@ target `8`'s missing-target-shaped diamond hits a compact HKTY error. Thus the
 remaining mismatch is not leaf identification or the degree-eight source qN
 alone; it is how the parent compact domain integrates these finite lower
 histories into the degree-ten target's degree-ordered subtraction history.
+The report now aggregates the same parent-only bounded-diamond statuses across
+each target run: target `7` has two parent-only terms with lower-seed
+decompositions whose tiny diamonds both compute `GV=0` and require no target
+qN polynomial, while target `8` has one parent-only term with a lower-seed
+decomposition whose tiny diamond fails in HKTY. These aggregates make the
+parent-domain obstruction visible without reading the long term samples.
 The report now compares each target-monomial source's parent-domain qN
 signature with the bounded-diamond qN signature for the same source curve. On
 fresh target `7` and target `8` runs, the main path-support domain reports

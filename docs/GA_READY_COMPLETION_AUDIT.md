@@ -382,6 +382,13 @@ and matrix-basis pipeline are no longer open.
    the missing target GV. The qN-shape trace further shows the generated
    target-`7` side term is only an `identity_single_term_qn_polynomial`, so it
    is not concealing a lower-history expansion inside its own qN polynomial.
+   The context report now aggregates the bounded lower-seed decomposition
+   status for these parent-only terms: target `7` has two
+   `found_lower_seed_decomposition` terms whose tiny decomposition diamonds
+   both compute `GV=0` with no target qN polynomial, while target `8` has one
+   `found_lower_seed_decomposition` term whose tiny diamond hits an HKTY error.
+   This keeps the next work focused on the parent compact-history domain, not
+   on rediscovering lower scalar leaves.
    The target-monomial source comparison is now sharper: bounded lower-leaf
    diamonds reproduce the local source scalar GV and one-term qN polynomial,
    but the parent domain has extra qN monomials. Those parent-only terms are
