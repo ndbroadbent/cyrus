@@ -869,6 +869,7 @@ struct CygvSourceQnTermSemigroupProbe {
     generator_face_certificate_positive_count: Option<usize>,
     generator_face_certificate_lp_search_status: Option<String>,
     generator_face_certificate_lp_exact_kernel_status: Option<String>,
+    generator_face_certificate_lp_full_status: Option<String>,
     generator_face_certificate_lp_aggregate_status: Option<String>,
     generator_face_certificate_lp_anchor_attempt_count: Option<usize>,
     generator_face_certificate_lp_anchor_lp_solution_count: Option<usize>,
@@ -892,6 +893,7 @@ struct CygvSourceQnTermGeneratorFaceCertificate {
     positive_count: Option<usize>,
     lp_search_status: Option<String>,
     lp_exact_kernel_status: Option<String>,
+    lp_full_status: Option<String>,
     lp_aggregate_status: Option<String>,
     lp_anchor_attempt_count: Option<usize>,
     lp_anchor_lp_solution_count: Option<usize>,
@@ -5084,6 +5086,7 @@ fn source_qn_term_generator_face_certificate(
             positive_count: None,
             lp_search_status: None,
             lp_exact_kernel_status: None,
+            lp_full_status: None,
             lp_aggregate_status: None,
             lp_anchor_attempt_count: None,
             lp_anchor_lp_solution_count: None,
@@ -5103,6 +5106,7 @@ fn source_qn_term_generator_face_certificate(
             positive_count: None,
             lp_search_status: None,
             lp_exact_kernel_status: None,
+            lp_full_status: None,
             lp_aggregate_status: None,
             lp_anchor_attempt_count: None,
             lp_anchor_lp_solution_count: None,
@@ -5125,6 +5129,7 @@ fn source_qn_term_generator_face_certificate(
                 positive_count: Some(certificate.positive_generator_count),
                 lp_search_status: None,
                 lp_exact_kernel_status: None,
+                lp_full_status: None,
                 lp_aggregate_status: None,
                 lp_anchor_attempt_count: None,
                 lp_anchor_lp_solution_count: None,
@@ -5140,6 +5145,7 @@ fn source_qn_term_generator_face_certificate(
                 positive_count: None,
                 lp_search_status: None,
                 lp_exact_kernel_status: None,
+                lp_full_status: None,
                 lp_aggregate_status: None,
                 lp_anchor_attempt_count: None,
                 lp_anchor_lp_solution_count: None,
@@ -5155,6 +5161,7 @@ fn source_qn_term_generator_face_certificate(
                 positive_count: None,
                 lp_search_status: None,
                 lp_exact_kernel_status: None,
+                lp_full_status: None,
                 lp_aggregate_status: None,
                 lp_anchor_attempt_count: None,
                 lp_anchor_lp_solution_count: None,
@@ -5188,6 +5195,7 @@ fn source_qn_term_generator_face_certificate(
                 positive_count: certificate.map(|certificate| certificate.positive_generator_count),
                 lp_search_status: Some(diagnostic.status),
                 lp_exact_kernel_status: Some(diagnostic.exact_kernel_status),
+                lp_full_status: Some(diagnostic.full_status),
                 lp_aggregate_status: Some(diagnostic.aggregate_status),
                 lp_anchor_attempt_count: Some(diagnostic.anchor_attempt_count),
                 lp_anchor_lp_solution_count: Some(diagnostic.anchor_lp_solution_count),
@@ -5204,6 +5212,7 @@ fn source_qn_term_generator_face_certificate(
             positive_count: None,
             lp_search_status: None,
             lp_exact_kernel_status: None,
+            lp_full_status: None,
             lp_aggregate_status: None,
             lp_anchor_attempt_count: None,
             lp_anchor_lp_solution_count: None,
@@ -5284,6 +5293,7 @@ fn source_qn_term_provided_generator_probe_from_generators(
             generator_face_certificate_lp_search_status: face_certificate.lp_search_status,
             generator_face_certificate_lp_exact_kernel_status: face_certificate
                 .lp_exact_kernel_status,
+            generator_face_certificate_lp_full_status: face_certificate.lp_full_status,
             generator_face_certificate_lp_aggregate_status: face_certificate.lp_aggregate_status,
             generator_face_certificate_lp_anchor_attempt_count: face_certificate
                 .lp_anchor_attempt_count,
@@ -5324,6 +5334,7 @@ fn source_qn_term_provided_generator_probe_from_generators(
             generator_face_certificate_lp_search_status: face_certificate.lp_search_status,
             generator_face_certificate_lp_exact_kernel_status: face_certificate
                 .lp_exact_kernel_status,
+            generator_face_certificate_lp_full_status: face_certificate.lp_full_status,
             generator_face_certificate_lp_aggregate_status: face_certificate.lp_aggregate_status,
             generator_face_certificate_lp_anchor_attempt_count: face_certificate
                 .lp_anchor_attempt_count,
@@ -5367,6 +5378,7 @@ fn source_qn_term_provided_generator_probe_from_generators(
             generator_face_certificate_lp_search_status: face_certificate.lp_search_status,
             generator_face_certificate_lp_exact_kernel_status: face_certificate
                 .lp_exact_kernel_status,
+            generator_face_certificate_lp_full_status: face_certificate.lp_full_status,
             generator_face_certificate_lp_aggregate_status: face_certificate.lp_aggregate_status,
             generator_face_certificate_lp_anchor_attempt_count: face_certificate
                 .lp_anchor_attempt_count,
@@ -5432,6 +5444,7 @@ fn source_qn_term_provided_generator_probe_from_generators(
                 generator_face_certificate_lp_search_status: face_certificate.lp_search_status,
                 generator_face_certificate_lp_exact_kernel_status: face_certificate
                     .lp_exact_kernel_status,
+                generator_face_certificate_lp_full_status: face_certificate.lp_full_status,
                 generator_face_certificate_lp_aggregate_status: face_certificate
                     .lp_aggregate_status,
                 generator_face_certificate_lp_anchor_attempt_count: face_certificate
@@ -5484,6 +5497,7 @@ fn source_qn_term_provided_generator_probe_from_generators(
                 generator_face_certificate_lp_search_status: face_certificate.lp_search_status,
                 generator_face_certificate_lp_exact_kernel_status: face_certificate
                     .lp_exact_kernel_status,
+                generator_face_certificate_lp_full_status: face_certificate.lp_full_status,
                 generator_face_certificate_lp_aggregate_status: face_certificate
                     .lp_aggregate_status,
                 generator_face_certificate_lp_anchor_attempt_count: face_certificate
@@ -5553,6 +5567,7 @@ fn source_qn_term_provided_generator_probe_from_generators(
         generator_face_certificate_positive_count: face_certificate.positive_count,
         generator_face_certificate_lp_search_status: face_certificate.lp_search_status,
         generator_face_certificate_lp_exact_kernel_status: face_certificate.lp_exact_kernel_status,
+        generator_face_certificate_lp_full_status: face_certificate.lp_full_status,
         generator_face_certificate_lp_aggregate_status: face_certificate.lp_aggregate_status,
         generator_face_certificate_lp_anchor_attempt_count: face_certificate
             .lp_anchor_attempt_count,
@@ -5605,6 +5620,7 @@ fn source_qn_term_semigroup_probe_from_elements(
             generator_face_certificate_positive_count: None,
             generator_face_certificate_lp_search_status: None,
             generator_face_certificate_lp_exact_kernel_status: None,
+            generator_face_certificate_lp_full_status: None,
             generator_face_certificate_lp_aggregate_status: None,
             generator_face_certificate_lp_anchor_attempt_count: None,
             generator_face_certificate_lp_anchor_lp_solution_count: None,
@@ -5641,6 +5657,7 @@ fn source_qn_term_semigroup_probe_from_elements(
             generator_face_certificate_positive_count: None,
             generator_face_certificate_lp_search_status: None,
             generator_face_certificate_lp_exact_kernel_status: None,
+            generator_face_certificate_lp_full_status: None,
             generator_face_certificate_lp_aggregate_status: None,
             generator_face_certificate_lp_anchor_attempt_count: None,
             generator_face_certificate_lp_anchor_lp_solution_count: None,
@@ -5680,6 +5697,7 @@ fn source_qn_term_semigroup_probe_from_elements(
             generator_face_certificate_positive_count: None,
             generator_face_certificate_lp_search_status: None,
             generator_face_certificate_lp_exact_kernel_status: None,
+            generator_face_certificate_lp_full_status: None,
             generator_face_certificate_lp_aggregate_status: None,
             generator_face_certificate_lp_anchor_attempt_count: None,
             generator_face_certificate_lp_anchor_lp_solution_count: None,
@@ -5732,6 +5750,7 @@ fn source_qn_term_semigroup_probe_from_elements(
                 generator_face_certificate_positive_count: None,
                 generator_face_certificate_lp_search_status: None,
                 generator_face_certificate_lp_exact_kernel_status: None,
+                generator_face_certificate_lp_full_status: None,
                 generator_face_certificate_lp_aggregate_status: None,
                 generator_face_certificate_lp_anchor_attempt_count: None,
                 generator_face_certificate_lp_anchor_lp_solution_count: None,
@@ -5771,6 +5790,7 @@ fn source_qn_term_semigroup_probe_from_elements(
                 generator_face_certificate_positive_count: None,
                 generator_face_certificate_lp_search_status: None,
                 generator_face_certificate_lp_exact_kernel_status: None,
+                generator_face_certificate_lp_full_status: None,
                 generator_face_certificate_lp_aggregate_status: None,
                 generator_face_certificate_lp_anchor_attempt_count: None,
                 generator_face_certificate_lp_anchor_lp_solution_count: None,
@@ -5834,6 +5854,7 @@ fn source_qn_term_semigroup_probe_from_elements(
         generator_face_certificate_positive_count: None,
         generator_face_certificate_lp_search_status: None,
         generator_face_certificate_lp_exact_kernel_status: None,
+        generator_face_certificate_lp_full_status: None,
         generator_face_certificate_lp_aggregate_status: None,
         generator_face_certificate_lp_anchor_attempt_count: None,
         generator_face_certificate_lp_anchor_lp_solution_count: None,

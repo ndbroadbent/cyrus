@@ -2918,6 +2918,14 @@ has `{lp_no_solution:11, lp_cutting_round_limit:5}` for both rows. So the
 current failure is not integer rounding/scaling of a real LP normal. This
 remains an inconclusive bounded search, not a theorem that no chamber face
 exists.
+The direct full-constraint LP pass resolves the sampled-domain question more
+cleanly. Regenerating
+`/tmp/cyrus_gv_context_target7_full_lp_diagnostic_report.json` and
+`/tmp/cyrus_gv_context_target8_full_lp_diagnostic_report.json` reports
+`full_status=lp_no_solution` for all four offset-generator domains before the
+lazy cutting-plane fallback. Thus these particular offset-generator sets do
+not span supporting faces of the exported degree-bounded Mori cone. They can
+explain qN term shapes, but they are not promotable chamber semigroups.
 The offset-generator report now also serializes the generator degree buckets,
 sparse generator samples, and a raw `FIND_GV=false` GW coefficient trace for
 the same provided-generator domain. Regenerating target `7` and `8` reports

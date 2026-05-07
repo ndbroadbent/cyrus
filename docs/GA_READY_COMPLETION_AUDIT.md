@@ -439,9 +439,13 @@ and matrix-basis pipeline are no longer open.
    hits the aggregate cutting limit. Anchor attempts still produce no real
    normal: target `7` splits `13/3` and `11/5` between `lp_no_solution` and
    `lp_cutting_round_limit`; target `8` splits `11/5` for both rows. This
-   still does not prove no supporting chamber face exists; it says the sampled
-   offset-generator domains are not certifiable with the current bounded
-   face-search settings.
+   still does not prove no supporting chamber face exists in a different
+   generator domain. A new direct full-constraint LP pass does prove the
+   sampled offset-generator domains themselves are not supporting faces of the
+   exported degree-bounded Mori cone: target `7` and `8` both report
+   `full_status=lp_no_solution` for their offset-generator rows. These qN
+   shape matches are therefore explanatory artifacts, not promotable chamber
+   semigroups.
    The offset-generator report now also records the exact sparse generators,
    generator degree buckets, and a raw `FIND_GV=false` GW coefficient trace for
    the provided-generator domain. Fresh target `7`/`8` runs show that the

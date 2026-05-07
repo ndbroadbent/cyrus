@@ -851,6 +851,8 @@ pub struct SupportingMoriFaceLpSearchDiagnostic {
     pub status: String,
     /// Outcome of the exact-kernel certificate attempt.
     pub exact_kernel_status: String,
+    /// Outcome of the full LP feasibility attempt with all Mori inequalities.
+    pub full_status: String,
     /// Outcome of the aggregate LP attempt.
     pub aggregate_status: String,
     /// Number of anchor rays tested after the aggregate LP attempt.
@@ -8545,6 +8547,7 @@ pub fn diagnose_supporting_mori_face_by_lp_search(
         dim,
         status: String::new(),
         exact_kernel_status: String::new(),
+        full_status: "not_attempted".to_string(),
         aggregate_status: "not_attempted".to_string(),
         anchor_attempt_count: 0,
         anchor_lp_solution_count: 0,
@@ -8567,6 +8570,26 @@ pub fn diagnose_supporting_mori_face_by_lp_search(
         }
         None => {
             diagnostic.exact_kernel_status = "no_certificate".to_string();
+        }
+    }
+
+    match solve_supporting_face_normal_full_lp(face_generators, mori_generators, options)? {
+        SupportingFaceLpNormalSearchOutcome::Found(lp_normal) => {
+            if let Some(certificate) = integer_supporting_face_certificate_from_lp(
+                &lp_normal,
+                face_generators,
+                mori_generators,
+                options,
+            )? {
+                diagnostic.status = "certified_full_lp".to_string();
+                diagnostic.full_status = "certified".to_string();
+                diagnostic.certificate = Some(certificate);
+                return Ok(diagnostic);
+            }
+            diagnostic.full_status = "lp_solution_rounding_no_certificate".to_string();
+        }
+        other => {
+            diagnostic.full_status = other.status().to_string();
         }
     }
 
@@ -8724,6 +8747,42 @@ impl SupportingFaceLpNormalSearchOutcome {
             Self::RepeatedViolation => "lp_repeated_violation",
             Self::CuttingRoundLimit => "lp_cutting_round_limit",
         }
+    }
+}
+
+fn solve_supporting_face_normal_full_lp(
+    face_generators: &[Vec<i64>],
+    mori_generators: &[Vec<i64>],
+    options: &SupportingMoriFaceLpSearchOptions,
+) -> Result<SupportingFaceLpNormalSearchOutcome> {
+    let aggregate = aggregate_mori_ray_coefficients(mori_generators)?;
+    let normal_vars = supporting_face_normal_vars(aggregate.len(), options)?;
+    let vars = normal_vars.variables;
+    let mut objective = Expression::from(0.0);
+    objective.add_mul(0.0, normal_vars.normal[0]);
+    let mut model = vars.minimise(objective).using(default_solver);
+
+    model = add_supporting_face_zero_constraints(model, &normal_vars.normal, face_generators);
+
+    let mut aggregate_expr = Expression::from(0.0);
+    for (var, &coefficient) in normal_vars.normal.iter().zip(&aggregate) {
+        if coefficient != 0 {
+            aggregate_expr.add_mul(coefficient as f64, *var);
+        }
+    }
+    model = model.with(aggregate_expr.geq(1.0));
+
+    let all_ray_indices = (0..mori_generators.len()).collect::<Vec<_>>();
+    model = add_supporting_face_enforced_ray_constraints(
+        model,
+        &normal_vars.normal,
+        mori_generators,
+        &all_ray_indices,
+    )?;
+
+    match solve_supporting_face_normal_lp_model(model, &normal_vars.normal)? {
+        Some(normal) => Ok(SupportingFaceLpNormalSearchOutcome::Found(normal)),
+        None => Ok(SupportingFaceLpNormalSearchOutcome::LpNoSolution),
     }
 }
 
@@ -15418,9 +15477,14 @@ mod tests {
         assert_eq!(diagnostic.exact_kernel_status, "no_certificate");
         assert!(diagnostic.certificate.is_some());
         assert!(
-            diagnostic.status == "certified_aggregate_lp"
+            diagnostic.status == "certified_full_lp"
+                || diagnostic.status == "certified_aggregate_lp"
                 || diagnostic.status == "certified_anchor_lp"
         );
+        if diagnostic.status == "certified_full_lp" {
+            assert_eq!(diagnostic.full_status, "certified");
+            assert_eq!(diagnostic.anchor_attempt_count, 0);
+        }
         if diagnostic.status == "certified_aggregate_lp" {
             assert_eq!(diagnostic.aggregate_status, "certified");
             assert_eq!(diagnostic.anchor_attempt_count, 0);
@@ -15452,6 +15516,7 @@ mod tests {
         assert_eq!(diagnostic.dim, 2);
         assert_eq!(diagnostic.status, "lp_no_certificate");
         assert_eq!(diagnostic.exact_kernel_status, "no_certificate");
+        assert_eq!(diagnostic.full_status, "lp_no_solution");
         assert_eq!(diagnostic.aggregate_status, "lp_no_solution");
         assert_eq!(diagnostic.anchor_attempt_count, 0);
         assert!(diagnostic.certificate.is_none());
