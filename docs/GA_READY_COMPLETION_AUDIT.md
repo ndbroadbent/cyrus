@@ -219,6 +219,14 @@ and matrix-basis pipeline are no longer open.
    target `7`/`8` queue now records source-derived origin/CMS status: the
    `GV=1` lower rays are resolved-conifold origin circuits, and the shared
    `GV=-2` ray has integral CMS divisor checks matching the inferred degree.
+   The path-history classifier now consumes those source-derived lower-ray
+   values under a conservative uniqueness rule. Rerunning targets `7` and `8`
+   changes the sampled predecessor qN-history counts to two
+   source-known/unknown pairs, two toric-known/unknown pairs, two
+   unknown/source-known pairs, and two unknown/toric-known pairs for each
+   target. The small path-support `cygv` lookup matches the four source-known
+   nonzero lower values and four toric-known nonzero lower values, but the
+   target still returns `GV=0`, so this is not a final GV correction.
    These lower classes are now classified against the exported source-ray
    context: for both degree-10 targets the sampled lookups split as four known
    toric source rays, four non-toric source rays, and eight composite classes

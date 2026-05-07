@@ -490,7 +490,15 @@ to make the remaining GV layer more first-principles:
    rays, and annotates the target `7`/`8` queue with source-derived origin/CMS
    status. The `GV=1` lower rays are resolved-conifold origin circuits; the
    shared `GV=-2` ray has integral CMS divisor checks matching the inferred
-   degree.
+   degree. Those lower source-ray values are now fed back into the qN-history
+   classifier only when the CMS checks give a unique source-derived formula
+   value. For both degree-10 targets, the sampled predecessor pairs now split
+   evenly across source-known/unknown, toric-known/unknown,
+   unknown/source-known, and unknown/toric-known histories. The path-support
+   lookup matches the four source-known and four toric-known nonzero lower
+   values, but the target still evaluates to `GV=0`, so the remaining compact
+   history is in the degree-four/degree-eight composite classes and the
+   uncertified semigroup/chamber continuation.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.
    The exact classical-data transform is now available as

@@ -444,6 +444,8 @@ struct CygvPathPredecessorCandidate {
     series_distance: String,
     predecessor_toric_gv: Option<String>,
     difference_toric_gv: Option<String>,
+    predecessor_source_derived_gv: Option<String>,
+    difference_source_derived_gv: Option<String>,
     predecessor_known_qn_history_status: String,
     difference_known_qn_history_status: String,
     known_qn_history_pair_status: String,
@@ -488,6 +490,7 @@ struct CygvPathSupportLookup {
     degree: i128,
     known_qn_history_status: String,
     toric_gv: Option<String>,
+    source_derived_gv: Option<String>,
     path_support_gv: Option<String>,
     path_support_lookup_status: String,
     source_class_status: String,
@@ -1172,6 +1175,7 @@ fn path_support_gv_lookup_sample(
             candidate.predecessor_degree,
             &candidate.predecessor_known_qn_history_status,
             candidate.predecessor_toric_gv.as_ref(),
+            candidate.predecessor_source_derived_gv.as_ref(),
             &candidate.predecessor_nonzero,
             gvs_by_curve,
             context,
@@ -1185,6 +1189,7 @@ fn path_support_gv_lookup_sample(
             candidate.difference_degree,
             &candidate.difference_known_qn_history_status,
             candidate.difference_toric_gv.as_ref(),
+            candidate.difference_source_derived_gv.as_ref(),
             &candidate.difference_nonzero,
             gvs_by_curve,
             context,
@@ -1203,6 +1208,7 @@ fn push_path_support_lookup(
     degree: i128,
     known_qn_history_status: &str,
     toric_gv: Option<&String>,
+    source_derived_gv: Option<&String>,
     curve_nonzero: &[(usize, i64)],
     gvs_by_curve: &HashMap<Vec<i32>, String>,
     context: &ValidatedContext<'_>,
@@ -1231,6 +1237,7 @@ fn push_path_support_lookup(
         degree,
         known_qn_history_status: known_qn_history_status.to_string(),
         toric_gv: toric_gv.cloned(),
+        source_derived_gv: source_derived_gv.cloned(),
         path_support_gv: Some(path_support_gv),
         path_support_lookup_status,
         source_class_status: source_context.status,
@@ -1407,6 +1414,10 @@ fn path_support_lookup_status(
         ("known_nonzero_toric_gv", false) => "path_support_misses_known_nonzero_toric_gv",
         ("known_zero_toric_gv", true) => "path_support_contradicts_known_zero_toric_gv",
         ("known_zero_toric_gv", false) => "path_support_matches_known_zero_toric_gv",
+        ("known_nonzero_source_gv", true) => "path_support_matches_known_nonzero_source_gv",
+        ("known_nonzero_source_gv", false) => "path_support_misses_known_nonzero_source_gv",
+        ("known_zero_source_gv", true) => "path_support_contradicts_known_zero_source_gv",
+        ("known_zero_source_gv", false) => "path_support_matches_known_zero_source_gv",
         ("unknown_not_toric_covered", true) => "path_support_nonzero_unknown_not_toric_covered",
         ("unknown_not_toric_covered", false) => {
             "path_support_zero_or_absent_unknown_not_toric_covered"
@@ -3226,6 +3237,10 @@ fn validate_context<'a>(
         .as_ref()
         .ok_or_else(|| "context is missing corrected kappa entries".to_string())?;
     let intersection = reconstruct_intersection(dimension, kappa_entries)?;
+    let source_derived_gv_by_basis = source_derived_gv_by_basis(
+        context.uncovered_source_ray_stats_for_missing.as_ref(),
+        dimension,
+    )?;
     let stats = context
         .missing_target_stats
         .as_ref()
@@ -3261,10 +3276,75 @@ fn validate_context<'a>(
         degree_bounded_rays,
         degree_bounded_ray_context,
         covered_toric_gv_by_basis,
+        source_derived_gv_by_basis,
         intersection,
         stats,
         uncovered_source_ray_stats: context.uncovered_source_ray_stats_for_missing.as_ref(),
     })
+}
+
+fn source_derived_gv_by_basis(
+    stats: Option<&MissingGvTargetStats>,
+    dimension: usize,
+) -> Result<HashMap<Vec<i64>, String>, String> {
+    let mut out = HashMap::new();
+    let Some(stats) = stats else {
+        return Ok(out);
+    };
+    for (index, sample) in stats.sample.iter().enumerate() {
+        let basis_class = dense_from_sparse(&sample.basis_nonzero, dimension).map_err(|e| {
+            format!("uncovered source-ray stats sample {index} has invalid basis support: {e}")
+        })?;
+        let Some(gv) = source_derived_gv_for_sample(sample)? else {
+            continue;
+        };
+        if let Some(previous) = out.insert(basis_class, gv.clone())
+            && previous != gv
+        {
+            return Err(format!(
+                "uncovered source-ray stats sample {index} gives conflicting source-derived GV values {previous} and {gv}"
+            ));
+        }
+    }
+    Ok(out)
+}
+
+fn source_derived_gv_for_sample(sample: &MissingGvTargetSample) -> Result<Option<String>, String> {
+    let Some(candidates) = sample.cms_general_divisor_shape_candidates.as_deref() else {
+        return Ok(None);
+    };
+    let Some(checks) = sample.cms_general_divisor_intersection_checks.as_deref() else {
+        return Ok(None);
+    };
+    let mut values = Vec::new();
+    for check in checks {
+        if cms_general_divisor_intersection_check_status(check)
+            != "cms_general_divisor_integral_solution_matches_inferred_degree"
+        {
+            continue;
+        }
+        let Some(candidate) = candidates
+            .iter()
+            .find(|candidate| candidate.shrinking_divisor_index == check.shrinking_divisor_index)
+        else {
+            return Err(format!(
+                "CMS divisor check for shrinking divisor {} has no matching shape candidate",
+                check.shrinking_divisor_index
+            ));
+        };
+        if let Some(value) = candidate.toric_gv1_formula_value {
+            values.push(value);
+        }
+    }
+    values.sort_unstable();
+    values.dedup();
+    match values.as_slice() {
+        [] => Ok(None),
+        [value] => Ok(Some(value.to_string())),
+        _ => Err(format!(
+            "source-derived CMS checks produce conflicting GV formula values {values:?}"
+        )),
+    }
 }
 
 struct ValidatedContext<'a> {
@@ -3276,6 +3356,7 @@ struct ValidatedContext<'a> {
     degree_bounded_rays: &'a [Vec<i64>],
     degree_bounded_ray_context: Option<&'a [DegreeBoundedMoriRayContextSample]>,
     covered_toric_gv_by_basis: HashMap<Vec<i64>, String>,
+    source_derived_gv_by_basis: HashMap<Vec<i64>, String>,
     intersection: Intersection,
     stats: &'a MissingGvTargetStats,
     uncovered_source_ray_stats: Option<&'a MissingGvTargetStats>,
@@ -4591,6 +4672,7 @@ fn cygv_path_history_probe_inner(
         target,
         &selected_degrees,
         &context.covered_toric_gv_by_basis,
+        &context.source_derived_gv_by_basis,
         &seen,
         &reduced_seeds,
     )?;
@@ -4721,15 +4803,34 @@ fn cygv_path_history_probe_inner(
     })
 }
 
-fn known_qn_history_status(toric_gv: Option<&str>) -> Result<&'static str, String> {
-    let Some(gv) = toric_gv else {
-        return Ok("unknown_not_toric_covered");
-    };
-    let parsed = parse_rational(gv)?;
-    if parsed == MalachiteRational::from(0) {
-        Ok("known_zero_toric_gv")
+fn known_qn_history_status(
+    toric_gv: Option<&str>,
+    source_derived_gv: Option<&str>,
+) -> Result<&'static str, String> {
+    let toric_parsed = toric_gv.map(parse_rational).transpose()?;
+    let source_parsed = source_derived_gv.map(parse_rational).transpose()?;
+    if let (Some(toric), Some(source)) = (&toric_parsed, &source_parsed)
+        && toric != source
+    {
+        return Err(format!(
+            "toric GV value {toric} conflicts with source-derived GV value {source}"
+        ));
+    }
+    let zero = MalachiteRational::from(0);
+    if let Some(toric) = toric_parsed {
+        if toric == zero {
+            Ok("known_zero_toric_gv")
+        } else {
+            Ok("known_nonzero_toric_gv")
+        }
+    } else if let Some(source) = source_parsed {
+        if source == zero {
+            Ok("known_zero_source_gv")
+        } else {
+            Ok("known_nonzero_source_gv")
+        }
     } else {
-        Ok("known_nonzero_toric_gv")
+        Ok("unknown_not_toric_covered")
     }
 }
 
@@ -4743,6 +4844,7 @@ fn cygv_path_predecessor_stats(
     target: &[i64],
     selected_degrees: &HashSet<i128>,
     covered_toric_gv_by_basis: &HashMap<Vec<i64>, String>,
+    source_derived_gv_by_basis: &HashMap<Vec<i64>, String>,
     seed_set: &HashSet<Vec<i64>>,
     reduced_seed_set: &HashSet<Vec<i64>>,
 ) -> Result<CygvPathPredecessorStats, String> {
@@ -4772,10 +4874,16 @@ fn cygv_path_predecessor_stats(
         let difference_is_toric_covered = covered_toric_gv_by_basis.contains_key(&difference);
         let predecessor_toric_gv = covered_toric_gv_by_basis.get(element);
         let difference_toric_gv = covered_toric_gv_by_basis.get(&difference);
-        let predecessor_known_qn_history_status =
-            known_qn_history_status(predecessor_toric_gv.map(String::as_str))?;
-        let difference_known_qn_history_status =
-            known_qn_history_status(difference_toric_gv.map(String::as_str))?;
+        let predecessor_source_derived_gv = source_derived_gv_by_basis.get(element);
+        let difference_source_derived_gv = source_derived_gv_by_basis.get(&difference);
+        let predecessor_known_qn_history_status = known_qn_history_status(
+            predecessor_toric_gv.map(String::as_str),
+            predecessor_source_derived_gv.map(String::as_str),
+        )?;
+        let difference_known_qn_history_status = known_qn_history_status(
+            difference_toric_gv.map(String::as_str),
+            difference_source_derived_gv.map(String::as_str),
+        )?;
         let known_qn_history_pair_status = known_qn_history_pair_status(
             predecessor_known_qn_history_status,
             difference_known_qn_history_status,
@@ -4803,6 +4911,8 @@ fn cygv_path_predecessor_stats(
                     series_distance: format!("{distance:.6}"),
                     predecessor_toric_gv: predecessor_toric_gv.cloned(),
                     difference_toric_gv: difference_toric_gv.cloned(),
+                    predecessor_source_derived_gv: predecessor_source_derived_gv.cloned(),
+                    difference_source_derived_gv: difference_source_derived_gv.cloned(),
                     predecessor_known_qn_history_status: predecessor_known_qn_history_status
                         .to_string(),
                     difference_known_qn_history_status: difference_known_qn_history_status
@@ -4849,6 +4959,8 @@ fn cygv_path_predecessor_stats(
                     series_distance: format!("{distance:.6}"),
                     predecessor_toric_gv: predecessor_toric_gv.cloned(),
                     difference_toric_gv: difference_toric_gv.cloned(),
+                    predecessor_source_derived_gv: predecessor_source_derived_gv.cloned(),
+                    difference_source_derived_gv: difference_source_derived_gv.cloned(),
                     predecessor_known_qn_history_status: predecessor_known_qn_history_status
                         .to_string(),
                     difference_known_qn_history_status: difference_known_qn_history_status
@@ -6087,6 +6199,28 @@ mod tests {
         }
     }
 
+    fn minimal_missing_sample(basis_nonzero: Vec<(usize, i64)>) -> MissingGvTargetSample {
+        MissingGvTargetSample {
+            degree: 1,
+            generators_le_degree: 0,
+            is_mori_generator: true,
+            origin_circuit_pattern: None,
+            origin_circuit_witness_count: None,
+            origin_circuit_first_witness: None,
+            origin_circuit_affine_support: None,
+            cms_general_divisor_shape_candidates: None,
+            cms_general_divisor_intersection_checks: None,
+            branch_diagnostic: None,
+            real_cone_decomposable_by_other_generators: false,
+            real_cone_decomposition_active_generators: None,
+            real_cone_decomposition_active_generator_basis_nonzero: None,
+            real_cone_decomposition_exact_coefficients: None,
+            real_cone_decomposition_exact_kind: None,
+            ambient_nonzero: basis_nonzero.clone(),
+            basis_nonzero,
+        }
+    }
+
     #[test]
     fn validate_context_accepts_schema3_degree_bounded_ray_context() {
         let mut context = minimal_corrected_context(
@@ -6222,6 +6356,7 @@ mod tests {
             degree_bounded_rays: &degree_bounded_rays,
             degree_bounded_ray_context: Some(&ray_context),
             covered_toric_gv_by_basis: HashMap::new(),
+            source_derived_gv_by_basis: HashMap::new(),
             intersection: Intersection::new(2),
             stats: &stats,
             uncovered_source_ray_stats: None,
@@ -7114,6 +7249,7 @@ mod tests {
             degree_bounded_rays: &degree_bounded_rays,
             degree_bounded_ray_context: None,
             covered_toric_gv_by_basis: HashMap::new(),
+            source_derived_gv_by_basis: HashMap::new(),
             intersection: Intersection::new(2),
             stats: &stats,
             uncovered_source_ray_stats: None,
@@ -7175,6 +7311,7 @@ mod tests {
             degree_bounded_rays: &degree_bounded_rays,
             degree_bounded_ray_context: None,
             covered_toric_gv_by_basis,
+            source_derived_gv_by_basis: HashMap::new(),
             intersection: Intersection::new(2),
             stats: &stats,
             uncovered_source_ray_stats: None,
@@ -7258,6 +7395,7 @@ mod tests {
             degree_bounded_rays: &degree_bounded_rays,
             degree_bounded_ray_context: None,
             covered_toric_gv_by_basis,
+            source_derived_gv_by_basis: HashMap::new(),
             intersection: Intersection::new(2),
             stats: &stats,
             uncovered_source_ray_stats: None,
@@ -7336,6 +7474,7 @@ mod tests {
             degree_bounded_rays: &degree_bounded_rays,
             degree_bounded_ray_context: None,
             covered_toric_gv_by_basis,
+            source_derived_gv_by_basis: HashMap::new(),
             intersection: Intersection::new(2),
             stats: &stats,
             uncovered_source_ray_stats: None,
@@ -7507,6 +7646,8 @@ mod tests {
             series_distance: "0.000000".to_string(),
             predecessor_toric_gv: None,
             difference_toric_gv: None,
+            predecessor_source_derived_gv: None,
+            difference_source_derived_gv: None,
             predecessor_known_qn_history_status: "unknown_not_toric_covered".to_string(),
             difference_known_qn_history_status: "unknown_not_toric_covered".to_string(),
             known_qn_history_pair_status:
@@ -7548,21 +7689,92 @@ mod tests {
     #[test]
     fn known_qn_history_status_distinguishes_zero_nonzero_and_unknown() {
         assert_eq!(
-            known_qn_history_status(Some("0")).unwrap(),
+            known_qn_history_status(Some("0"), None).unwrap(),
             "known_zero_toric_gv"
         );
         assert_eq!(
-            known_qn_history_status(Some("-3")).unwrap(),
+            known_qn_history_status(Some("-3"), None).unwrap(),
             "known_nonzero_toric_gv"
         );
         assert_eq!(
-            known_qn_history_status(None).unwrap(),
+            known_qn_history_status(None, Some("5")).unwrap(),
+            "known_nonzero_source_gv"
+        );
+        assert_eq!(
+            known_qn_history_status(None, Some("0")).unwrap(),
+            "known_zero_source_gv"
+        );
+        assert_eq!(
+            known_qn_history_status(Some("7"), Some("7")).unwrap(),
+            "known_nonzero_toric_gv"
+        );
+        assert!(
+            known_qn_history_status(Some("7"), Some("5"))
+                .unwrap_err()
+                .contains("conflicts")
+        );
+        assert_eq!(
+            known_qn_history_status(None, None).unwrap(),
             "unknown_not_toric_covered"
         );
         assert_eq!(
             known_qn_history_pair_status("known_zero_toric_gv", "unknown_not_toric_covered"),
             "predecessor_known_zero_toric_gv__difference_unknown_not_toric_covered"
         );
+    }
+
+    #[test]
+    fn source_derived_gv_requires_integral_matching_cms_certificate() {
+        let mut sample = minimal_missing_sample(vec![(0, 2)]);
+        sample.cms_general_divisor_shape_candidates = Some(vec![
+            CmsGeneralDivisorShapeCandidate {
+                shrinking_divisor_index: 5,
+                shrinking_divisor_coefficient: -2,
+                shrinking_divisor_coordinates: vec![1, 0, 0, 0],
+                inferred_other_normal_degree: 0,
+                toric_gv1_formula_value: Some(-2),
+                all_non_origin_relation_points_are_two_face: true,
+            },
+            CmsGeneralDivisorShapeCandidate {
+                shrinking_divisor_index: 6,
+                shrinking_divisor_coefficient: -1,
+                shrinking_divisor_coordinates: vec![0, 1, 0, 0],
+                inferred_other_normal_degree: -1,
+                toric_gv1_formula_value: Some(1),
+                all_non_origin_relation_points_are_two_face: true,
+            },
+        ]);
+        sample.cms_general_divisor_intersection_checks = Some(vec![
+            CmsGeneralDivisorIntersectionCheck {
+                shrinking_divisor_index: 5,
+                has_rational_divisor_solution: true,
+                solution_basis_support_len: Some(1),
+                solution_is_integral: Some(true),
+                computed_other_normal_degree: Some("0".to_string()),
+                matches_inferred_other_normal_degree: Some(true),
+            },
+            CmsGeneralDivisorIntersectionCheck {
+                shrinking_divisor_index: 6,
+                has_rational_divisor_solution: false,
+                solution_basis_support_len: None,
+                solution_is_integral: None,
+                computed_other_normal_degree: None,
+                matches_inferred_other_normal_degree: None,
+            },
+        ]);
+
+        assert_eq!(
+            source_derived_gv_for_sample(&sample).unwrap().as_deref(),
+            Some("-2")
+        );
+
+        let stats = MissingGvTargetStats {
+            target_count: 1,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: vec![sample],
+        };
+        let map = source_derived_gv_by_basis(Some(&stats), 2).unwrap();
+        assert_eq!(map.get(&vec![2, 0]).map(String::as_str), Some("-2"));
     }
 
     #[test]
@@ -7578,6 +7790,18 @@ mod tests {
         assert_eq!(
             path_support_lookup_status("unknown_not_toric_covered", "3").unwrap(),
             "path_support_nonzero_unknown_not_toric_covered"
+        );
+        assert_eq!(
+            path_support_lookup_status("known_nonzero_source_gv", "3").unwrap(),
+            "path_support_matches_known_nonzero_source_gv"
+        );
+        assert_eq!(
+            path_support_lookup_status("known_zero_source_gv", "0").unwrap(),
+            "path_support_matches_known_zero_source_gv"
+        );
+        assert_eq!(
+            path_support_lookup_status("known_zero_source_gv", "3").unwrap(),
+            "path_support_contradicts_known_zero_source_gv"
         );
         assert_eq!(
             path_support_lookup_status("unknown_not_toric_covered", "0").unwrap(),
@@ -7603,6 +7827,7 @@ mod tests {
             degree: 6,
             known_qn_history_status: "unknown_not_toric_covered".to_string(),
             toric_gv: None,
+            source_derived_gv: None,
             path_support_gv: Some("1".to_string()),
             path_support_lookup_status: "path_support_nonzero_unknown_not_toric_covered"
                 .to_string(),
@@ -7719,6 +7944,7 @@ mod tests {
             degree_bounded_rays: &degree_bounded_rays,
             degree_bounded_ray_context: None,
             covered_toric_gv_by_basis,
+            source_derived_gv_by_basis: HashMap::new(),
             intersection: Intersection::new(2),
             stats: &stats,
             uncovered_source_ray_stats: None,
@@ -7862,6 +8088,7 @@ mod tests {
             degree_bounded_rays: &degree_bounded_rays,
             degree_bounded_ray_context: None,
             covered_toric_gv_by_basis: HashMap::new(),
+            source_derived_gv_by_basis: HashMap::new(),
             intersection: Intersection::new(2),
             stats: &stats,
             uncovered_source_ray_stats: None,
@@ -7927,6 +8154,7 @@ mod tests {
             degree_bounded_rays: &degree_bounded_rays,
             degree_bounded_ray_context: None,
             covered_toric_gv_by_basis: HashMap::new(),
+            source_derived_gv_by_basis: HashMap::new(),
             intersection: Intersection::new(2),
             stats: &stats,
             uncovered_source_ray_stats: None,
@@ -8084,6 +8312,7 @@ mod tests {
             degree_bounded_rays: &degree_bounded_rays,
             degree_bounded_ray_context: None,
             covered_toric_gv_by_basis: HashMap::new(),
+            source_derived_gv_by_basis: HashMap::new(),
             intersection,
             stats: &stats,
             uncovered_source_ray_stats: None,
@@ -8215,6 +8444,7 @@ mod tests {
             degree_bounded_rays: &degree_bounded_rays,
             degree_bounded_ray_context: None,
             covered_toric_gv_by_basis: HashMap::new(),
+            source_derived_gv_by_basis: HashMap::new(),
             intersection,
             stats: &stats,
             uncovered_source_ray_stats: None,

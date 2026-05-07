@@ -2121,6 +2121,23 @@ does not by itself certify the degree-10 compact target values, but it shows
 that part of the missing lower qN history is source-derivable rather than an
 opaque `cygv` artifact.
 
+The path-history classifier now consumes those source-derived lower-ray values
+conservatively: a class is marked source-known only when an integral CMS
+divisor check matches the inferred degree and all matching formula candidates
+give a unique GV value. Rerunning targets `7` and `8` against the fresh
+schema-`3` context changes the sampled predecessor qN-history split to
+`predecessor_known_nonzero_source_gv__difference_unknown_not_toric_covered=2`,
+`predecessor_known_nonzero_toric_gv__difference_unknown_not_toric_covered=2`,
+`predecessor_unknown_not_toric_covered__difference_known_nonzero_source_gv=2`,
+and
+`predecessor_unknown_not_toric_covered__difference_known_nonzero_toric_gv=2`
+for each target. The path-support lookup rows now match four source-known
+nonzero lower values and four toric-known nonzero lower values, but the target
+path-support `cygv` lookup still returns `GV=0`. Thus the degree-six source
+queue is no longer opaque, but the unsolved compact history has moved to the
+remaining degree-four and degree-eight composite classes plus the missing
+certified semigroup/chamber continuation.
+
 The stable-Weyl/flop-continuation route is now surfaced as a report-level
 readiness count rather than only per-target arrays. On the schema-3 context all
 nine remaining targets have CMS-style formula candidates, but the 14 exact
