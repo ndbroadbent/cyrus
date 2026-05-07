@@ -649,6 +649,13 @@ candidate is classified as
 status is `nonzero_gw` with candidate `4/3`. This is evidence against a hidden
 lower-leaf explanation for the target-`8` failure, but it remains a diagnostic
 because the semigroup/chamber certificate is still absent.
+The same diagnostic on target `7` preserves the earlier conclusion: both
+parent-only bounded diamonds compute `GV=0`, and their target-row raw GW
+statuses are `missing_instanton_coefficient` and `zero_or_absent_gw`. One
+diamond has a fractional lower degree-4 raw candidate, but it is
+`not_source_degree_bounded_ray`, not the target row. Target `7` therefore still
+needs the correct compact `q_N` history; the bounded diamonds do not provide a
+promotable nonzero target coefficient.
 
 ## Next Concrete Action
 

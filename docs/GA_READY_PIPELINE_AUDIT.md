@@ -884,4 +884,9 @@ to make the remaining GV layer more first-principles:
    `source_ray_matches_missing_target` and `unknown_not_toric_covered`. This
    keeps the target-`8` diamond in the diagnostic bucket rather than promoting
    it, while narrowing the remaining chamber-history problem.
+   The analogous target-`7` run keeps both parent-only bounded diamonds at
+   `GV=0`; their target raw GW statuses are `missing_instanton_coefficient` and
+   `zero_or_absent_gw`, with only one unrelated fractional lower degree-4
+   candidate. This contrast separates target `8`'s fractional target-row
+   failure from target `7`'s zero-history failure.
    generators over `7360` occurrences.

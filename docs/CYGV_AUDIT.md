@@ -2983,6 +2983,17 @@ also `diamond_gw_coefficient_trace_count=7`,
 instanton coefficient `-4`. This removes the opacity of the bounded-diamond
 HKTY error: the failing fractional coefficient is the missing target row
 itself, not a hidden lower leaf.
+The comparable target-`7` report
+(`/tmp/cyrus_gv_context_target7_explicit_diamond_gw_report.json`) keeps both
+parent-only bounded diamonds in the zero-history bucket:
+`diamond_status_counts =
+{"computed_bounded_decomposition_diamond_qn_trace":2}` and
+`diamond_gv_counts={"0":2}`. Their target-row raw GW statuses are
+`missing_instanton_coefficient` and `zero_or_absent_gw`; only one diamond has
+a fractional lower raw candidate, a degree-4 non-source-degree-bounded row
+`[(44,2),(54,2),(206,-4)]` with candidate `-1/4`. Thus target `7`'s bounded
+diamonds do not hide a fractional target coefficient analogous to target `8`;
+they are still the wrong compact history because the target readout is zero.
 Thus the current blocker is not hidden by a missing scalar source readout: the
 candidate domains contain fractional lower coefficient history and still lack
 a supporting-face/chamber certificate.
