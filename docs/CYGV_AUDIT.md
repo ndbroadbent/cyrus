@@ -3129,7 +3129,15 @@ target `3`: `[1,0,-2,-1,-1,3]`, target `6`: `[1,-1,-1,0,-2,3]`,
 target `7`: `[1,-2,0,-1,3,-1]`, target `8`: `[1,-2,0,3,-1,-1]`
 in sorted point-index order. This rules out the naive "append the shared ray
 and call compact threefold cygv" path; the next construction needs a projection
-or chamber map, not just a six-column charge handoff.
+or chamber map, not just a six-column charge handoff. Regenerating the report
+from the fresh shared-point context as
+`/tmp/cyrus_gv_context_shared_points_projection_report.json` adds
+`local_cygv_source_resolution_projection_status_counts =
+{"weighted_p2_zero_shared_ray_has_primitive_unit_height_off_relation_hyperplane_requires_projection_or_chamber_map":4,
+"zero_shared_projection_not_weighted_p2_split_bundle":5}`. The relation
+hyperplanes are `[0,1,0,-1,0]` for targets `3`, `7`, and `8`, and
+`[0,0,1,0,0]` for target `6`; the zero-shared ray has signed height `-1` in
+all four weighted cases.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

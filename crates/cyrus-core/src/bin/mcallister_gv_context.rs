@@ -242,6 +242,7 @@ struct ContextReport {
     local_cygv_one_parameter_family_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_hint_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_resolved_support_status_counts: BTreeMap<String, usize>,
+    local_cygv_source_resolution_projection_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_hint_sample: Vec<LocalCygvSourceResolutionHintSummary>,
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
     local_cygv_actual_call_readiness_counts: BTreeMap<String, usize>,
@@ -533,6 +534,9 @@ struct LocalCygvSourceResolutionHintSummary {
     target_index: usize,
     degree: i128,
     status: String,
+    zero_shared_affine_projection_status: String,
+    relation_support_affine_hyperplane: Option<Vec<i64>>,
+    zero_relation_shared_two_simplex_affine_heights: Vec<ZeroSharedAffineHeight>,
     zero_relation_shared_two_simplex_points: Vec<usize>,
     zero_relation_shared_two_simplex_point_samples: Vec<OriginCircuitRelationPointSample>,
     resolved_shared_support_status: String,
@@ -543,6 +547,12 @@ struct LocalCygvSourceResolutionHintSummary {
     relation_support_point_indices: Vec<usize>,
     local_phase_q_matrix: Option<Vec<Vec<i64>>>,
     local_one_parameter_family_status: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ZeroSharedAffineHeight {
+    point_index: usize,
+    height: i64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -13560,6 +13570,8 @@ fn build_report(
         local_cygv_source_resolution_hint_status_counts(&targets);
     let local_cygv_source_resolution_resolved_support_status_counts =
         local_cygv_source_resolution_resolved_support_status_counts(&targets);
+    let local_cygv_source_resolution_projection_status_counts =
+        local_cygv_source_resolution_projection_status_counts(&targets);
     let local_cygv_source_resolution_hint_sample =
         local_cygv_source_resolution_hint_summaries(&targets);
     let missing_local_cygv_missing_source_input_counts = local_cygv_missing_source_input_counts(
@@ -14295,6 +14307,7 @@ fn build_report(
             missing_local_cygv_one_parameter_family_status_counts,
         local_cygv_source_resolution_hint_status_counts,
         local_cygv_source_resolution_resolved_support_status_counts,
+        local_cygv_source_resolution_projection_status_counts,
         local_cygv_source_resolution_hint_sample,
         local_cygv_target_candidate_status_counts,
         local_cygv_actual_call_readiness_counts: missing_local_cygv_actual_call_readiness_counts,
@@ -14516,10 +14529,17 @@ fn local_cygv_source_resolution_hint_summaries(
                 skeleton,
                 target.origin_circuit_first_witness.as_ref(),
             );
+            let affine_projection_hint = local_cygv_zero_shared_affine_projection_hint(
+                skeleton,
+                target.origin_circuit_first_witness.as_ref(),
+            );
             Some(LocalCygvSourceResolutionHintSummary {
                 target_index: target.index,
                 degree: target.degree,
                 status,
+                zero_shared_affine_projection_status: affine_projection_hint.status,
+                relation_support_affine_hyperplane: affine_projection_hint.hyperplane,
+                zero_relation_shared_two_simplex_affine_heights: affine_projection_hint.heights,
                 zero_relation_shared_two_simplex_points:
                     origin_circuit_zero_relation_shared_two_simplex_points(
                         target.origin_circuit_first_witness.as_ref(),
@@ -14564,6 +14584,23 @@ fn local_cygv_source_resolution_resolved_support_status_counts<'a>(
     counts
 }
 
+fn local_cygv_source_resolution_projection_status_counts<'a>(
+    targets: impl IntoIterator<Item = &'a TargetReport>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        let Some(skeleton) = target.local_cygv_input_skeleton.as_ref() else {
+            continue;
+        };
+        let hint = local_cygv_zero_shared_affine_projection_hint(
+            skeleton,
+            target.origin_circuit_first_witness.as_ref(),
+        );
+        *counts.entry(hint.status).or_insert(0usize) += 1;
+    }
+    counts
+}
+
 fn local_cygv_source_resolution_hint_status_counts<'a>(
     targets: impl IntoIterator<Item = &'a TargetReport>,
 ) -> BTreeMap<String, usize> {
@@ -14580,6 +14617,82 @@ fn local_cygv_source_resolution_hint_status_counts<'a>(
             .or_insert(0usize) += 1;
     }
     counts
+}
+
+struct LocalCygvZeroSharedAffineProjectionHint {
+    status: String,
+    hyperplane: Option<Vec<i64>>,
+    heights: Vec<ZeroSharedAffineHeight>,
+}
+
+fn local_cygv_zero_shared_affine_projection_hint(
+    skeleton: &LocalCygvInputSkeleton,
+    witness: Option<&OriginCircuitWitnessSample>,
+) -> LocalCygvZeroSharedAffineProjectionHint {
+    let empty = |status: &str| LocalCygvZeroSharedAffineProjectionHint {
+        status: status.to_string(),
+        hyperplane: None,
+        heights: Vec::new(),
+    };
+    let Some(q_matrix) = skeleton.local_cygv_phase_q_matrix_candidate.as_ref() else {
+        return empty("zero_shared_projection_blocked_missing_phase_q_matrix");
+    };
+    if q_matrix.len() != 1 {
+        return empty("zero_shared_projection_not_one_parameter_local_q_matrix");
+    }
+    if one_parameter_weighted_p2_split_bundle_signature(&q_matrix[0]).is_none() {
+        return empty("zero_shared_projection_not_weighted_p2_split_bundle");
+    }
+    let Some(witness) = witness else {
+        return empty("weighted_p2_zero_shared_projection_missing_origin_circuit_witness");
+    };
+    let zero_shared = origin_circuit_zero_relation_shared_two_simplex_points(Some(witness));
+    if zero_shared.len() != 1 {
+        return empty("weighted_p2_zero_shared_projection_requires_single_zero_shared_ray");
+    }
+    let hyperplane = match primitive_relation_support_affine_hyperplane(witness) {
+        Ok(hyperplane) => hyperplane,
+        Err(error) => {
+            return LocalCygvZeroSharedAffineProjectionHint {
+                status: format!(
+                    "weighted_p2_zero_shared_projection_hyperplane_error:{}",
+                    status_error_fragment(&error)
+                ),
+                hyperplane: None,
+                heights: Vec::new(),
+            };
+        }
+    };
+    let zero_shared_set = zero_shared.into_iter().collect::<BTreeSet<_>>();
+    let heights = witness
+        .shared_two_simplex_points
+        .iter()
+        .filter(|point| zero_shared_set.contains(&point.point_index))
+        .map(|point| ZeroSharedAffineHeight {
+            point_index: point.point_index,
+            height: affine_hyperplane_height(&hyperplane, &point.coordinates),
+        })
+        .collect::<Vec<_>>();
+    if heights.len() != zero_shared_set.len() {
+        return LocalCygvZeroSharedAffineProjectionHint {
+            status: "weighted_p2_zero_shared_projection_missing_zero_shared_ray_coordinates"
+                .to_string(),
+            hyperplane: Some(hyperplane),
+            heights,
+        };
+    }
+    let status = if heights.iter().all(|height| height.height.abs() == 1) {
+        "weighted_p2_zero_shared_ray_has_primitive_unit_height_off_relation_hyperplane_requires_projection_or_chamber_map"
+    } else if heights.iter().all(|height| height.height == 0) {
+        "weighted_p2_zero_shared_ray_lies_on_relation_hyperplane"
+    } else {
+        "weighted_p2_zero_shared_ray_has_nonunit_height_off_relation_hyperplane"
+    };
+    LocalCygvZeroSharedAffineProjectionHint {
+        status: status.to_string(),
+        hyperplane: Some(hyperplane),
+        heights,
+    }
 }
 
 struct LocalCygvResolvedSharedSupportHint {
@@ -14853,6 +14966,75 @@ fn affine_charge_basis_for_point_samples(
             Ok(converted)
         })
         .collect()
+}
+
+fn primitive_relation_support_affine_hyperplane(
+    witness: &OriginCircuitWitnessSample,
+) -> Result<Vec<i64>, String> {
+    let Some(first_point) = witness.relation_points.first() else {
+        return Err("origin-circuit relation support is empty".to_string());
+    };
+    let dim = first_point.coordinates.len();
+    if dim == 0
+        || witness
+            .relation_points
+            .iter()
+            .any(|point| point.coordinates.len() != dim)
+    {
+        return Err(
+            "origin-circuit relation support has missing or inconsistent coordinates".to_string(),
+        );
+    }
+    let matrix = witness
+        .relation_points
+        .iter()
+        .map(|point| {
+            let mut row = point
+                .coordinates
+                .iter()
+                .map(|&coordinate| Integer::from(coordinate))
+                .collect::<Vec<_>>();
+            row.push(Integer::from(1));
+            row
+        })
+        .collect::<Vec<_>>();
+    let kernel = integer_kernel(&matrix);
+    if kernel.len() != 1 {
+        return Err(format!(
+            "origin-circuit relation support has affine hyperplane kernel dimension {}",
+            kernel.len()
+        ));
+    }
+    let mut hyperplane = kernel[0]
+        .iter()
+        .map(|value| {
+            i64::try_from(value).map_err(|_| {
+                "origin-circuit affine hyperplane entry does not fit in i64".to_string()
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    normalize_integer_relation_orientation(&mut hyperplane);
+    if witness
+        .relation_points
+        .iter()
+        .any(|point| affine_hyperplane_height(&hyperplane, &point.coordinates) != 0)
+    {
+        return Err(
+            "origin-circuit affine hyperplane does not vanish on relation support".to_string(),
+        );
+    }
+    Ok(hyperplane)
+}
+
+fn affine_hyperplane_height(hyperplane: &[i64], coordinates: &[i64]) -> i64 {
+    let dim = coordinates.len();
+    debug_assert_eq!(hyperplane.len(), dim + 1);
+    hyperplane[..dim]
+        .iter()
+        .zip(coordinates.iter())
+        .map(|(&normal, &coordinate)| normal * coordinate)
+        .sum::<i64>()
+        + hyperplane[dim]
 }
 
 fn normalize_integer_relation_orientation(row: &mut [i64]) {
@@ -17993,6 +18175,21 @@ mod tests {
         assert_eq!(
             local_cygv_source_resolution_hint_status(&skeleton, Some(&witness)),
             "source_witness_weighted_p2_split_bundle_has_single_zero_relation_shared_resolution_ray"
+        );
+        let projection_hint =
+            local_cygv_zero_shared_affine_projection_hint(&skeleton, Some(&witness));
+        assert_eq!(
+            projection_hint.status,
+            "weighted_p2_zero_shared_ray_has_primitive_unit_height_off_relation_hyperplane_requires_projection_or_chamber_map"
+        );
+        assert_eq!(projection_hint.hyperplane, Some(vec![0, 1, 0, -1, 0]));
+        assert_eq!(
+            projection_hint
+                .heights
+                .iter()
+                .map(|height| (height.point_index, height.height))
+                .collect::<Vec<_>>(),
+            vec![(55, -1)]
         );
         let resolved_hint = local_cygv_resolved_shared_support_hint(&skeleton, Some(&witness));
         assert_eq!(

@@ -106,7 +106,13 @@ run pass. Any remaining mismatch must be explicit and localizable.
    two-simplex point records with coordinates. A direct resolved-support check
    shows that appending the shared ray raises the affine rank to `4` for the
    weighted rows, so the missing input is a projection/chamber map rather than
-   a naive six-column compact `cygv` handoff.
+   a naive six-column compact `cygv` handoff. The fresh projection diagnostic
+   now also records the primitive affine hyperplane of the five-point relation:
+   targets `3`, `7`, and `8` use `[0,1,0,-1,0]`, target `6` uses
+   `[0,0,1,0,0]`, and each zero-shared ray has signed height `-1`. Thus the
+   extra ray is unit-height resolution data off the local CY hyperplane; the
+   unresolved step is choosing/certifying the source chamber projection, not
+   discovering another missing point.
    A fresh read of
    `string_theory/mcallister_2107/latest_cytools/compute_kklt_iterative.py`
    confirms the sign convention used by Cyrus,

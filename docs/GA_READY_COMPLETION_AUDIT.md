@@ -702,7 +702,12 @@ the resolved-support attempt separately; old dumps are blocked at
 `weighted_p2_resolved_shared_support_missing_zero_shared_ray_coordinates`, and
 the declared point coordinates show the naive support with the extra ray has
 affine rank `4`, not a compact threefold phase. The chamber task is therefore
-a projection/chamber-map problem, not an append-the-ray cygv handoff.
+a projection/chamber-map problem, not an append-the-ray cygv handoff. On the
+fresh shared-point context, the projection diagnostic classifies all four
+weighted rows as
+`weighted_p2_zero_shared_ray_has_primitive_unit_height_off_relation_hyperplane_requires_projection_or_chamber_map`;
+the zero-shared ray has signed height `-1` above the relation hyperplane in
+each case.
 Origin-circuit witness-domain compact `cygv` probes are now opt-in and guarded
 by `--origin-witness-cygv-generator-limit`. The traced target `8` report shows
 the single-generator relation domain computes `GV=2` with one materialized
