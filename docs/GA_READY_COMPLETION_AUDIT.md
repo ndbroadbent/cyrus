@@ -190,7 +190,10 @@ and matrix-basis pipeline are no longer open.
    `cygv` probe against those raw cubic candidates; the target-`7` lower-ray
    summaries explicitly mismatch (`-6` versus expected `-2`, and `0` versus
    expected `1`), so the cubic evidence is guarded against promotion as a
-   fitted local tensor. The first seed-sum
+   fitted local tensor. A bounded unit-tensor comparison sharpens this: the
+   `[-1,-2,1,1,1]` lower ray gives the expected `-2` with unit tensor `1`, but
+   the `[-1,1,-1,1,-1,1]` lower ray still gives `0` against expected `1`.
+   The first seed-sum
    sample for the degree-8 side splits it as another toric-covered degree-2
    reduced seed plus an uncovered degree-6 seed that does not survive pair
    reduction; that degree-6 seed pair-reduces into degree-4 and degree-2

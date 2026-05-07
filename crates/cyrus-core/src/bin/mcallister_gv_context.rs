@@ -569,8 +569,11 @@ struct LocalCygvPrimitiveProbe {
     grading_vector: Vec<i64>,
     semigroup_elements: Vec<Vec<i64>>,
     candidate_gv: Option<String>,
+    unit_tensor_candidate_gv: Option<String>,
+    unit_tensor_probe_status: String,
     expected_toric_gv1_formula_value: Option<String>,
     error: Option<String>,
+    unit_tensor_error: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1651,23 +1654,20 @@ fn local_cygv_primitive_probe_from_cms_divisor(
             grading_vector,
             semigroup_elements,
             candidate_gv: None,
+            unit_tensor_candidate_gv: None,
+            unit_tensor_probe_status: "unit_tensor_probe_not_run_raw_cubic_nonintegral".to_string(),
             expected_toric_gv1_formula_value,
             error: Some(format!(
                 "raw cubic candidate {divisor_cubic_self_intersection} is not integral"
             )),
+            unit_tensor_error: None,
         });
     }
 
-    let mut intnums = Intersection::new(1);
-    intnums.set(0, 0, 0, Rational::<Finite>::new(cubic));
-    let result = compute_gv_invariants_with_explicit_semigroup(
-        &semigroup_elements,
-        &grading_vector,
-        &q_matrix,
-        &intnums,
-    );
+    let result =
+        one_parameter_primitive_cygv_value(&q_matrix, &grading_vector, &semigroup_elements, cubic);
     let gvs = match result {
-        Ok(gvs) => gvs,
+        Ok(gv) => gv,
         Err(error) => {
             return Ok(LocalCygvPrimitiveProbe {
                 status: "primitive_cygv_probe_hkty_error".to_string(),
@@ -1675,31 +1675,83 @@ fn local_cygv_primitive_probe_from_cms_divisor(
                 grading_vector,
                 semigroup_elements,
                 candidate_gv: None,
+                unit_tensor_candidate_gv: None,
+                unit_tensor_probe_status: "unit_tensor_probe_not_run_raw_cubic_failed".to_string(),
                 expected_toric_gv1_formula_value,
-                error: Some(error.to_string()),
+                error: Some(error),
+                unit_tensor_error: None,
             });
         }
     };
-    let candidate_gv = gvs
-        .iter()
-        .find(|(curve, _)| curve.as_slice() == [1])
-        .map_or_else(|| "0".to_string(), |(_, value)| value.to_string());
     let status = match expected_toric_gv1_formula_value.as_deref() {
-        Some(expected) if expected == candidate_gv => {
+        Some(expected) if expected == gvs => {
             "primitive_cygv_probe_matches_expected_formula_but_chamber_uncertified"
         }
         Some(_) => "primitive_cygv_probe_mismatch_raw_cubic_is_not_certified_tensor",
         None => "primitive_cygv_probe_computed_without_expected_formula",
+    };
+    let unit_result = one_parameter_primitive_cygv_value(
+        &q_matrix,
+        &grading_vector,
+        &semigroup_elements,
+        MalachiteRational::from(1),
+    );
+    let (unit_tensor_candidate_gv, unit_tensor_probe_status, unit_tensor_error) = match unit_result
+    {
+        Ok(unit_gv) => {
+            let unit_status = match expected_toric_gv1_formula_value.as_deref() {
+                Some(expected) if expected == unit_gv => {
+                    "unit_tensor_probe_matches_expected_formula_but_chamber_uncertified"
+                }
+                Some(_) => "unit_tensor_probe_mismatch",
+                None => "unit_tensor_probe_computed_without_expected_formula",
+            };
+            (Some(unit_gv), unit_status.to_string(), None)
+        }
+        Err(error) => (
+            None,
+            "unit_tensor_probe_hkty_error".to_string(),
+            Some(error),
+        ),
     };
     Ok(LocalCygvPrimitiveProbe {
         status: status.to_string(),
         q_matrix,
         grading_vector,
         semigroup_elements,
-        candidate_gv: Some(candidate_gv),
+        candidate_gv: Some(gvs),
+        unit_tensor_candidate_gv,
+        unit_tensor_probe_status,
         expected_toric_gv1_formula_value,
         error: None,
+        unit_tensor_error,
     })
+}
+
+fn one_parameter_primitive_cygv_value(
+    q_matrix: &[Vec<i64>],
+    grading_vector: &[i64],
+    semigroup_elements: &[Vec<i64>],
+    tensor_value: MalachiteRational,
+) -> Result<String, String> {
+    if tensor_value.denominator_ref() != &1u32 {
+        return Err(format!(
+            "one-parameter primitive cygv tensor value {tensor_value} is not integral"
+        ));
+    }
+    let mut intnums = Intersection::new(1);
+    intnums.set(0, 0, 0, Rational::<Finite>::new(tensor_value));
+    let gvs = compute_gv_invariants_with_explicit_semigroup(
+        semigroup_elements,
+        grading_vector,
+        q_matrix,
+        &intnums,
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(gvs
+        .iter()
+        .find(|(curve, _)| curve.as_slice() == [1])
+        .map_or_else(|| "0".to_string(), |(_, value)| value.to_string()))
 }
 
 fn divisor_cubic_self_intersection(
@@ -8753,8 +8805,13 @@ mod tests {
                         grading_vector: vec![1],
                         semigroup_elements: vec![vec![0], vec![1]],
                         candidate_gv: Some("-6".to_string()),
+                        unit_tensor_candidate_gv: Some("-2".to_string()),
+                        unit_tensor_probe_status:
+                            "unit_tensor_probe_matches_expected_formula_but_chamber_uncertified"
+                                .to_string(),
                         expected_toric_gv1_formula_value: Some("-2".to_string()),
                         error: None,
+                        unit_tensor_error: None,
                     }),
                 },
                 CmsGeneralDivisorSolutionSummary {

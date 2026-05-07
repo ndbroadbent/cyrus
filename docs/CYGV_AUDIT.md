@@ -2228,6 +2228,16 @@ which confirms that the divisor cubic is not the certified local intersection
 tensor normalization by itself. The target-`7` report aggregates this at top
 level as
 `path_support_uncovered_source_ray_local_cygv_primitive_probe_status_counts = {"primitive_cygv_probe_mismatch_raw_cubic_is_not_certified_tensor":2}`.
+The same fresh target-`7` report
+(`/tmp/cyrus_gv_context_schema3_target7_unit_tensor_probe_report.json`) also
+runs a bounded unit-tensor comparison for these one-parameter local probes. For
+q-row `[-1,-2,1,1,1]`, replacing the raw cubic `3` by unit tensor `1` changes
+the primitive result from `-6` to `-2`, matching the CMS formula checkpoint but
+still without a phase/chamber certificate. For q-row
+`[-1,1,-1,1,-1,1]`, the unit tensor still gives `0` while the checkpoint is
+`1`. Thus one lower source ray may be a normalization/certificate problem, but
+the resolved-conifold-like ray still needs different source-derived local
+phase/chamber/intersection data rather than a scalar tensor rescaling.
 These are source-derived local-intersection candidates, not a certified local
 `cygv` intersection tensor yet, so the skeleton still lists the missing
 `local_q_matrix_phase`, `local_intersection_tensor`, and
