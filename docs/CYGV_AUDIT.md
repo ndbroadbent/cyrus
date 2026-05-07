@@ -3006,19 +3006,27 @@ expected scalar formula while the compact bounded diamond reads the target as
 tensor history, not a missing one-parameter q-matrix orientation.
 The origin-circuit witness domains now have an opt-in compact `cygv` probe in
 addition to the LP/exact face certificate. With
-`--run-origin-witness-cygv --origin-witness-cygv-generator-limit 64`, target
-`8`'s two identical witnesses compute the single-generator relation domain
-with target `GV=2`, compute the 14-generator shared-facet domain with target
-`GV=0`, and skip the 458-generator facet union under the guard. The same run
-still reports `origin_support_lp_no_certificate_rank_9_dim_214` for the
-shared facet and `origin_support_lp_no_certificate_rank_177_dim_214` for the
-facet union, so these compact HKTY readouts remain diagnostic. Target `7`
-contrasts again: its single-generator relation domain fails compact HKTY
-integrality at the target row with candidate `3/2`, its 21-generator
-shared-facet domain computes target `GV=0`, and its 506-generator facet union
-is skipped under the same guard. Thus the witness-domain compact probes do not
-promote either degree-10 target; they show that the small relation/shared-facet
-domains have the wrong compact history before any larger facet-union question.
+`--run-origin-witness-cygv --origin-witness-cygv-generator-limit 64`, the fresh
+trace reports
+`/tmp/cyrus_gv_context_target8_origin_witness_cygv_trace_report.json` and
+`/tmp/cyrus_gv_context_target7_origin_witness_cygv_trace_report.json` include
+both qN-trace and raw GW coefficient fields. Target `8`'s two identical
+witnesses compute the single-generator relation domain with `GV=2`, one
+materialized target qN term, raw instanton coefficient `-6`, and target GW
+candidate `2`. Its 14-generator shared-facet domain computes `GV=0` after
+materializing `24` qN polynomials, has no target qN polynomial, and its raw GW
+target row is `0`; the `26` fractional raw candidates are all
+`not_source_degree_bounded_ray`. Target `7` contrasts again: its
+single-generator relation domain fails compact HKTY integrality at the target
+row, and the raw trace localizes that failure to the missing target itself
+with instanton coefficient `3` and candidate `3/2`; its 21-generator
+shared-facet domain computes `GV=0` after `51` qN polynomials, has no target
+qN polynomial, and its `43` fractional raw candidates are all
+`not_source_degree_bounded_ray`. The 458/506-generator facet unions are still
+skipped under the diagnostic guard. Thus the witness-domain compact probes do
+not promote either degree-10 target; they show that the small
+relation/shared-facet domains have the wrong compact history before any larger
+facet-union question.
 Thus the current blocker is not hidden by a missing scalar source readout: the
 candidate domains contain fractional lower coefficient history and still lack
 a supporting-face/chamber certificate.

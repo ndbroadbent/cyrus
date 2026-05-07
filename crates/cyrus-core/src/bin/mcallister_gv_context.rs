@@ -7094,6 +7094,73 @@ struct OriginCircuitWitnessDomainCygvProbe {
     status: String,
     gv: Option<String>,
     error: Option<String>,
+    qn_trace_polynomial_count: Option<usize>,
+    target_qn_trace_status: Option<String>,
+    target_qn_trace_term_count: Option<usize>,
+    qn_trace_sample: Vec<CygvPathSupportQnTracePolynomialSample>,
+    gw_coefficient_trace_count: Option<usize>,
+    gw_noninteger_candidate_count: Option<usize>,
+    gw_noninteger_known_qn_history_status_counts: BTreeMap<String, usize>,
+    gw_noninteger_source_class_status_counts: BTreeMap<String, usize>,
+    gw_noninteger_candidate_sample: Vec<CygvPathSupportGvCoefficientTraceSample>,
+    gw_coefficient_trace_error: Option<String>,
+    target_gw_coefficient_status: Option<String>,
+    target_gw_instanton_coefficient: Option<String>,
+    target_gw_candidate: Option<String>,
+}
+
+fn origin_circuit_witness_domain_cygv_probe_empty(
+    generator_count: Option<usize>,
+    status: String,
+    gv: Option<String>,
+    error: Option<String>,
+) -> OriginCircuitWitnessDomainCygvProbe {
+    OriginCircuitWitnessDomainCygvProbe {
+        generator_count,
+        status,
+        gv,
+        error,
+        qn_trace_polynomial_count: None,
+        target_qn_trace_status: None,
+        target_qn_trace_term_count: None,
+        qn_trace_sample: Vec::new(),
+        gw_coefficient_trace_count: None,
+        gw_noninteger_candidate_count: None,
+        gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
+        gw_noninteger_source_class_status_counts: BTreeMap::new(),
+        gw_noninteger_candidate_sample: Vec::new(),
+        gw_coefficient_trace_error: None,
+        target_gw_coefficient_status: None,
+        target_gw_instanton_coefficient: None,
+        target_gw_candidate: None,
+    }
+}
+
+fn origin_circuit_witness_domain_cygv_probe_from_run(
+    probe: ProvidedGeneratorTargetGvProbe,
+    gw_diagnostic: PathSupportGwCoefficientDiagnostic,
+) -> OriginCircuitWitnessDomainCygvProbe {
+    OriginCircuitWitnessDomainCygvProbe {
+        generator_count: Some(probe.generator_count),
+        status: probe.status,
+        gv: probe.gv,
+        error: probe.error,
+        qn_trace_polynomial_count: probe.qn_trace_polynomial_count,
+        target_qn_trace_status: probe.target_qn_trace_status,
+        target_qn_trace_term_count: probe.target_qn_trace_term_count,
+        qn_trace_sample: probe.qn_trace_sample,
+        gw_coefficient_trace_count: gw_diagnostic.trace_count,
+        gw_noninteger_candidate_count: gw_diagnostic.noninteger_candidate_count,
+        gw_noninteger_known_qn_history_status_counts: gw_diagnostic
+            .noninteger_known_qn_history_status_counts,
+        gw_noninteger_source_class_status_counts: gw_diagnostic
+            .noninteger_source_class_status_counts,
+        gw_noninteger_candidate_sample: gw_diagnostic.noninteger_candidate_sample,
+        gw_coefficient_trace_error: gw_diagnostic.error,
+        target_gw_coefficient_status: gw_diagnostic.target_status,
+        target_gw_instanton_coefficient: gw_diagnostic.target_instanton_coefficient,
+        target_gw_candidate: gw_diagnostic.target_gw_candidate,
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -7459,44 +7526,79 @@ fn origin_circuit_witness_domain_cygv_probe(
     let target = match target {
         Ok(target) => target,
         Err(error) => {
-            return Some(OriginCircuitWitnessDomainCygvProbe {
-                generator_count: Some(generators.len()),
-                status: "origin_witness_cygv_error_invalid_target".to_string(),
-                gv: None,
-                error: Some(error.clone()),
-            });
+            return Some(origin_circuit_witness_domain_cygv_probe_empty(
+                Some(generators.len()),
+                "origin_witness_cygv_error_invalid_target".to_string(),
+                None,
+                Some(error.clone()),
+            ));
         }
     };
     if generators.is_empty() {
-        return Some(OriginCircuitWitnessDomainCygvProbe {
-            generator_count: Some(0),
-            status: "origin_witness_cygv_skipped_empty_domain".to_string(),
-            gv: None,
-            error: None,
-        });
+        return Some(origin_circuit_witness_domain_cygv_probe_empty(
+            Some(0),
+            "origin_witness_cygv_skipped_empty_domain".to_string(),
+            None,
+            None,
+        ));
     }
     if generators.len() > generator_limit {
-        return Some(OriginCircuitWitnessDomainCygvProbe {
-            generator_count: Some(generators.len()),
-            status: format!("origin_witness_cygv_skipped_generator_limit_{generator_limit}"),
-            gv: None,
-            error: None,
-        });
+        return Some(origin_circuit_witness_domain_cygv_probe_empty(
+            Some(generators.len()),
+            format!("origin_witness_cygv_skipped_generator_limit_{generator_limit}"),
+            None,
+            None,
+        ));
     }
 
-    match run_provided_generator_target_gv(generators, target, degree, context, label, false) {
-        Ok(probe) => Some(OriginCircuitWitnessDomainCygvProbe {
-            generator_count: Some(probe.generator_count),
-            status: probe.status,
-            gv: probe.gv,
-            error: probe.error,
-        }),
-        Err(error) => Some(OriginCircuitWitnessDomainCygvProbe {
-            generator_count: Some(generators.len()),
-            status: "origin_witness_cygv_error".to_string(),
-            gv: None,
-            error: Some(error),
-        }),
+    let max_deg = match u32::try_from(degree) {
+        Ok(max_deg) => max_deg,
+        Err(_) => {
+            return Some(origin_circuit_witness_domain_cygv_probe_empty(
+                Some(generators.len()),
+                "origin_witness_cygv_error_invalid_degree".to_string(),
+                None,
+                Some(format!(
+                    "origin witness target degree {degree} does not fit in u32"
+                )),
+            ));
+        }
+    };
+    let target_i32 = match curve_i64_to_i32(target, "origin witness target") {
+        Ok(target_i32) => target_i32,
+        Err(error) => {
+            return Some(origin_circuit_witness_domain_cygv_probe_empty(
+                Some(generators.len()),
+                "origin_witness_cygv_error_invalid_target".to_string(),
+                None,
+                Some(error),
+            ));
+        }
+    };
+    let gw_diagnostic =
+        path_support_gw_coefficient_diagnostic(generators, context, max_deg, &target_i32);
+
+    match run_provided_generator_target_gv(generators, target, degree, context, label, true) {
+        Ok(probe) => Some(origin_circuit_witness_domain_cygv_probe_from_run(
+            probe,
+            gw_diagnostic,
+        )),
+        Err(error) => {
+            let probe = ProvidedGeneratorTargetGvProbe {
+                generator_count: generators.len(),
+                status: "origin_witness_cygv_error".to_string(),
+                gv: None,
+                error: Some(error),
+                qn_trace_polynomial_count: None,
+                target_qn_trace_status: None,
+                target_qn_trace_term_count: None,
+                qn_trace_sample: Vec::new(),
+            };
+            Some(origin_circuit_witness_domain_cygv_probe_from_run(
+                probe,
+                gw_diagnostic,
+            ))
+        }
     }
 }
 
@@ -17277,6 +17379,55 @@ mod tests {
                 1,
             )])
         );
+    }
+
+    #[test]
+    fn origin_witness_cygv_probe_preserves_qn_and_gw_diagnostics() {
+        let probe = ProvidedGeneratorTargetGvProbe {
+            generator_count: 3,
+            status: "computed_origin_witness_relation_qn_trace".to_string(),
+            gv: Some("2".to_string()),
+            error: None,
+            qn_trace_polynomial_count: Some(1),
+            target_qn_trace_status: Some("support_overlap_qn_materialized_for_nonzero_gv".into()),
+            target_qn_trace_term_count: Some(1),
+            qn_trace_sample: Vec::new(),
+        };
+        let gw_diagnostic = PathSupportGwCoefficientDiagnostic {
+            trace_count: Some(5),
+            noninteger_candidate_count: Some(1),
+            noninteger_known_qn_history_status_counts: BTreeMap::from([(
+                "unknown_not_toric_covered".to_string(),
+                1,
+            )]),
+            noninteger_source_class_status_counts: BTreeMap::from([(
+                "source_ray_matches_missing_target".to_string(),
+                1,
+            )]),
+            noninteger_candidate_sample: Vec::new(),
+            error: None,
+            target_status: Some("nonzero_gw".to_string()),
+            target_instanton_coefficient: Some("-6".to_string()),
+            target_gw_candidate: Some("2".to_string()),
+        };
+
+        let out = origin_circuit_witness_domain_cygv_probe_from_run(probe, gw_diagnostic);
+
+        assert_eq!(out.generator_count, Some(3));
+        assert_eq!(out.gv.as_deref(), Some("2"));
+        assert_eq!(out.qn_trace_polynomial_count, Some(1));
+        assert_eq!(
+            out.target_qn_trace_status.as_deref(),
+            Some("support_overlap_qn_materialized_for_nonzero_gv")
+        );
+        assert_eq!(out.gw_coefficient_trace_count, Some(5));
+        assert_eq!(out.gw_noninteger_candidate_count, Some(1));
+        assert_eq!(
+            out.gw_noninteger_source_class_status_counts
+                .get("source_ray_matches_missing_target"),
+            Some(&1)
+        );
+        assert_eq!(out.target_gw_candidate.as_deref(), Some("2"));
     }
 
     #[test]

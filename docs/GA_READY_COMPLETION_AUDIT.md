@@ -665,15 +665,18 @@ candidate is `4/3`. This keeps the q-matrix orientation in the plausible
 bucket and moves the unresolved discrepancy to certified chamber/intersection
 tensor history.
 Origin-circuit witness-domain compact `cygv` probes are now opt-in and guarded
-by `--origin-witness-cygv-generator-limit`. For target `8`, the
-single-generator relation domain computes `GV=2`, the 14-generator
-shared-facet domain computes `GV=0`, and the 458-generator facet union is
-skipped with the default diagnostic guard. For target `7`, the relation domain
-fails compact HKTY integrality with target candidate `3/2`, the 21-generator
-shared-facet domain computes `GV=0`, and the 506-generator facet union is
-skipped. These are not promoted because the LP/exact witness-domain face
-certificates still fail, but they rule out the small relation/shared-facet
-domains as the corrected McAllister compact histories.
+by `--origin-witness-cygv-generator-limit`. The traced target `8` report shows
+the single-generator relation domain computes `GV=2` with one materialized
+target qN term and raw target GW candidate `2`, while the 14-generator
+shared-facet domain computes `GV=0` with `24` qN polynomials, no target qN
+polynomial, and raw target GW candidate `0`. The traced target `7` report
+shows the relation domain fails compact HKTY integrality on the missing target
+itself with raw candidate `3/2`, while the 21-generator shared-facet domain
+computes `GV=0` with `51` qN polynomials, no target qN polynomial, and raw
+target GW candidate `0`. The 458/506-generator facet unions are skipped with
+the default diagnostic guard. These are not promoted because the LP/exact
+witness-domain face certificates still fail, but they rule out the small
+relation/shared-facet domains as the corrected McAllister compact histories.
 
 ## Next Concrete Action
 

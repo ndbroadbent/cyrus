@@ -899,10 +899,13 @@ to make the remaining GV layer more first-principles:
    value promotable in the compact pipeline.
    Origin-circuit witness-domain reports now optionally run compact `cygv` on
    relation, shared-facet, and guarded facet-union generator domains. For
-   target `8`, relation-only gives `GV=2` while the shared facet gives `GV=0`;
-   for target `7`, relation-only fails integrality at candidate `3/2` while
-   the shared facet gives `GV=0`. Both large facet unions exceed the default
-   `64`-generator compact probe guard. These readouts are diagnostic because
-   the witness-domain supporting-face certificates remain absent, but they
-   show the small witness domains are not the missing corrected chamber.
-   generators over `7360` occurrences.
+   target `8`, relation-only gives `GV=2`, materializes one target qN term,
+   and has raw target GW candidate `2`, while the shared facet gives `GV=0`
+   after `24` qN polynomials with no target qN and raw target GW candidate
+   `0`. For target `7`, relation-only fails integrality on the missing target
+   row with raw candidate `3/2`, while the shared facet gives `GV=0` after
+   `51` qN polynomials with no target qN and raw target GW candidate `0`.
+   Both large facet unions exceed the default `64`-generator compact probe
+   guard. These readouts are diagnostic because the witness-domain
+   supporting-face certificates remain absent, but they show the small witness
+   domains are not the missing corrected chamber.
