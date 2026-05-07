@@ -287,6 +287,8 @@ struct ContextReport {
     cygv_path_history_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_decomposition_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_diamond_status_counts: BTreeMap<String, usize>,
+    cygv_closest_known_qn_residual_status_counts: BTreeMap<String, usize>,
+    cygv_closest_known_qn_residual_degree_split_counts: BTreeMap<String, usize>,
     path_support_uncovered_source_ray_unique_count: usize,
     path_support_uncovered_source_ray_occurrence_count: usize,
     path_support_uncovered_source_ray_degree_counts: BTreeMap<i128, usize>,
@@ -5098,7 +5100,7 @@ fn origin_circuit_affine_support_with_coordinates(
 fn validate_context<'a>(
     context: &'a CorrectedChamberGvContext,
 ) -> Result<ValidatedContext<'a>, String> {
-    if !matches!(context.schema_version, 1 | 2 | 3) {
+    if !matches!(context.schema_version, 1 | 2 | 3 | 4) {
         return Err(format!(
             "unsupported corrected-chamber GV context schema {}",
             context.schema_version
@@ -5147,7 +5149,7 @@ fn validate_context<'a>(
         .degree_bounded_mori_ray_context_for_missing
         .as_deref();
     if context.schema_version >= 3 && degree_bounded_ray_context.is_none() {
-        return Err("schema-3 context is missing degree-bounded Mori ray context".to_string());
+        return Err("schema>=3 context is missing degree-bounded Mori ray context".to_string());
     }
     if let Some(ray_context) = degree_bounded_ray_context {
         for (idx, sample) in ray_context.iter().enumerate() {
@@ -6936,6 +6938,60 @@ fn is_known_nonzero_qn_history_status(status: &str) -> bool {
     matches!(status, "known_nonzero_toric_gv" | "known_nonzero_source_gv")
 }
 
+fn cygv_closest_known_qn_residual_status(probe: &CygvPathHistoryProbe) -> String {
+    let Some(closest) = probe.closest_known_qn_predecessor.as_ref() else {
+        return "no_closest_known_qn_predecessor".to_string();
+    };
+    let Some(residual) = probe.closest_known_qn_residual_predecessor.as_ref() else {
+        if closest.difference_known_qn_history_status == "unknown_not_toric_covered" {
+            return "unknown_residual_has_no_known_qn_predecessor".to_string();
+        }
+        return format!(
+            "closest_difference_{}",
+            closest.difference_known_qn_history_status
+        );
+    };
+    format!(
+        "residual_{}",
+        known_qn_history_pair_status(
+            &residual.predecessor_known_qn_history_status,
+            &residual.difference_known_qn_history_status,
+        )
+    )
+}
+
+fn cygv_closest_known_qn_residual_status_counts(
+    targets: &[TargetReport],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        let status = target.cygv_path_history_probe.as_ref().map_or_else(
+            || "not_run".to_string(),
+            cygv_closest_known_qn_residual_status,
+        );
+        *counts.entry(status).or_insert(0) += 1;
+    }
+    counts
+}
+
+fn cygv_closest_known_qn_residual_degree_split_counts(
+    targets: &[TargetReport],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for residual in targets
+        .iter()
+        .filter_map(|target| target.cygv_path_history_probe.as_ref())
+        .filter_map(|probe| probe.closest_known_qn_residual_predecessor.as_ref())
+    {
+        let key = format!(
+            "{}+{}",
+            residual.predecessor_degree, residual.difference_degree
+        );
+        *counts.entry(key).or_insert(0) += 1;
+    }
+    counts
+}
+
 fn cygv_closest_known_qn_residual_predecessor(
     elements: &HashSet<Vec<i64>>,
     degree_counts: &BTreeMap<i128, usize>,
@@ -8142,6 +8198,10 @@ fn build_report(
         }),
         "not_run",
     );
+    let cygv_closest_known_qn_residual_status_counts =
+        cygv_closest_known_qn_residual_status_counts(&targets);
+    let cygv_closest_known_qn_residual_degree_split_counts =
+        cygv_closest_known_qn_residual_degree_split_counts(&targets);
     let path_support_uncovered_source_ray_sample =
         path_support_uncovered_source_ray_summaries(&targets);
     let path_support_uncovered_source_ray_unique_count =
@@ -8378,6 +8438,8 @@ fn build_report(
         cygv_path_history_status_counts,
         cygv_lower_seed_decomposition_status_counts,
         cygv_lower_seed_diamond_status_counts,
+        cygv_closest_known_qn_residual_status_counts,
+        cygv_closest_known_qn_residual_degree_split_counts,
         path_support_uncovered_source_ray_unique_count,
         path_support_uncovered_source_ray_occurrence_count,
         path_support_uncovered_source_ray_degree_counts,
@@ -9469,6 +9531,22 @@ mod tests {
     }
 
     #[test]
+    fn validate_context_accepts_schema4_degree_bounded_ray_context() {
+        let context = minimal_corrected_context(
+            4,
+            Some(vec![DegreeBoundedMoriRayContextSample {
+                degree: 1,
+                ambient_nonzero: vec![(5, 1)],
+                basis_nonzero: vec![(0, 1)],
+            }]),
+        );
+
+        let validated = validate_context(&context).unwrap();
+
+        assert_eq!(validated.degree_bounded_ray_context.unwrap().len(), 1);
+    }
+
+    #[test]
     fn pair_expansion_replaces_nonreduced_seed_terms() {
         let seed_set = [vec![1, 0], vec![0, 1], vec![1, 1]]
             .into_iter()
@@ -9496,7 +9574,7 @@ mod tests {
             Err(err) => err,
         };
         assert!(
-            err.contains("schema-3 context is missing degree-bounded Mori ray context"),
+            err.contains("schema>=3 context is missing degree-bounded Mori ray context"),
             "{err}"
         );
     }

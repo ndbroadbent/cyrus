@@ -106,6 +106,13 @@ run pass. Any remaining mismatch must be explicit and localizable.
    maps `c_i` onto `basis.dat` and computes GV in the CYTools divisor basis,
    rather than constructing the `kklt_basis.dat` corrected-target vector that
    currently blocks Cyrus.
+   `mcallister_gv_context` now accepts the schema-4 context export written by
+   `mcallister_first_principles` and aggregates the closest known `q_N`
+   residual statuses and degree splits. A bounded target-7 run on the current
+   4-214-647 export records the live residual split as a source-derived
+   degree-6 predecessor plus a toric degree-2 difference, sharpening the next
+   source-history task to the certified semigroup/chamber history around that
+   composite lower term.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for

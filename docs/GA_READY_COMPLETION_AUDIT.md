@@ -128,7 +128,12 @@ and matrix-basis pipeline are no longer open.
    Python `compute_kklt_iterative.py` confirms Cyrus' target-sign convention,
    but that script maps `c_i` onto `basis.dat` and does not implement the mixed
    `basis.dat`/`kklt_basis.dat` corrected-target vector, so it is not evidence
-   that Python had reproduced this layer without replay.
+   that Python had reproduced this layer without replay. The schema-4
+   corrected-chamber context export is now accepted by `mcallister_gv_context`;
+   its bounded target-7 path-history report aggregates the closest known `q_N`
+   residual as a source-derived degree-6 predecessor plus a toric degree-2
+   difference, leaving the certified semigroup/chamber history for that lower
+   composite term as the next source-level object.
 2. **Exact corrected KKLT volume.** The no-replay path computes a corrected
    volume but still has a documented instanton/chamber residual.
 3. **Generic matrix-basis pipeline.** Matrix divisor-basis primitives now cover
