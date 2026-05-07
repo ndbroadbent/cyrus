@@ -297,31 +297,30 @@ and matrix-basis pipeline are no longer open.
    The source-ray summary now shows that shared ray has local charge signature
    `[-1,-1,-1,1,2]` and a matching CMS check. The residual-source predecessor
    queue now shows all three occurrences have shared origin-circuit witness
-   relations and `source_derived_full_facet_context`, so the actual remaining
-   inputs are `local_intersection_tensor` and `local_chamber_certificate`. The
-   source-derived scalar GV map now enforces this full facet context before a
-   CMS-derived value enters qN-history status, and the guarded 4-214-647 report
-   still records the same two source predecessors across three occurrences. It
-   also records source-ray import counts: `52` full-facet CMS formula imports,
-   `79` rows with no integral matching CMS formula, and `115` rows with no
-   origin-circuit witness. Those 52 imports now split by local charge signature
-   as `-1,-1,-1,1,1,1:28`, `-1,-1,-1,1,2:20`, `-1,-1,1,1:3`, and
-   `-1,-1,-1,-1,1,3:1`; the residual predecessors stay in the
-   `-1,-1,-1,1,2` family. The residual predecessor sample now carries its
+   relations and `source_derived_full_facet_context`. The source-derived scalar
+   GV map enforces this full facet context before a source value enters
+   qN-history status, and the actual-local-cygv 4-214-647 report now records
+   `20` actual local cygv imports matching CMS formulas, `21` actual local cygv
+   imports without CMS formula checks, `32` remaining full-facet CMS formula
+   imports, `58` rows with no integral matching CMS formula, and `115` rows
+   with no origin-circuit witness. Accepted imports split by local charge
+   signature as `-1,-1,-1,1,1,1:28`, `-1,-1,-1,1,2:41`,
+   `-1,-1,1,1:3`, and `-1,-1,-1,-1,1,3:1`; the residual predecessors stay in
+   the `-1,-1,-1,1,2` family. The residual predecessor sample carries its
    local `cygv` skeleton: both residual source rows use including-origin
    `q=[-1,-2,1,1,1]`, semigroup `[[1]]`, grading `[1]`, and a unit-tensor
    probe that gives `GV=-2` against expected `-2`. Cyrus now certifies this as
    the source-derived local bundle phase `O(-1)+O(-2)->P^2`, with unit
    hyperplane tensor `κ_000=1` and a positive-base chamber certificate; the
-   residual queue now has no local missing-input counts and all three
-   occurrences are `ready_for_actual_cygv_call`. The
-   CMS divisor cubic suggests tensor value `3`,
-   but the raw-cubic primitive probe gives `GV=-6`; the certified local bundle
-   tensor gives the expected `GV=-2`. The context export now also keeps the
-   nonzero rational divisor-basis and ambient-basis coefficients from
-   successful CMS-general-divisor solves, so the next step is to promote or
-   consume the ready actual local-`cygv` source calculation rather than relying
-   on the CMS scalar formula status.
+   residual queue has no local missing-input counts and all three occurrences
+   are `ready_for_actual_cygv_call`. The CMS divisor cubic suggests tensor
+   value `3`, but the raw-cubic primitive probe gives `GV=-6`; the certified
+   local bundle tensor gives the expected `GV=-2` and is the promoted source
+   value. The context export now also keeps the nonzero rational divisor-basis
+   and ambient-basis coefficients from successful CMS-general-divisor solves,
+   so the next step is consuming these computed source values inside the
+   broader finite qN history rather than relying on the CMS scalar formula
+   status.
    These lower classes are now classified against the exported source-ray
    context: for both degree-10 targets the sampled lookups split as four known
    toric source rays, four non-toric source rays, and eight composite classes

@@ -2465,28 +2465,28 @@ cubic `77/27`. Their candidate statuses are explicitly
 without becoming GV fallbacks.
 The guarded source-derived GV importer now reports which local charge families
 actually enter known `q_N` history. On
-`/tmp/cyrus_gv_context_all_source_residual_import_signature_report.json`, the
+`/tmp/cyrus_gv_context_all_source_residual_actual_local_cygv_report.json`, the
 accepted imports are
 `{"-1,-1,-1,-1,1,3":1,"-1,-1,-1,1,1,1":28,
-"-1,-1,-1,1,2":20,"-1,-1,1,1":3}`. The open residual queue is still two
-unique source predecessors across three occurrences, all source-known and all
-missing only `local_intersection_tensor` and `local_chamber_certificate`; the
-residual predecessors lie in the `-1,-1,-1,1,2` import family. This makes the
-remaining task a chamber/tensor certification problem inside an already
-observed source-derived family, not a search for an unseen scalar GV family.
+"-1,-1,-1,1,2":41,"-1,-1,1,1":3}`. The import-status split is `20` actual
+local-cygv imports matching CMS formulas, `21` actual local-cygv imports
+without CMS formula checks, `32` remaining full-facet CMS formula imports, `58`
+rows with no integral matching CMS formula, and `115` rows with no
+origin-circuit witness. The residual predecessors lie in the
+`-1,-1,-1,1,2` import family, and their scalar source value is no longer the
+open blocker; the remaining task is using that source value inside the broader
+finite qN history.
 The residual predecessor sample now preserves the source-derived local `cygv`
 skeleton instead of only the scalar CMS summaries. On
 `/tmp/cyrus_gv_context_all_source_residual_skeleton_report.json`, both
 residual source predecessors have compact including-origin phase
 `q=[-1,-2,1,1,1]`, one-parameter semigroup `[[1]]`, grading `[1]`,
-unit-tensor primitive value `GV=-2`, and expected formula value `-2`. They
-therefore share the exact same remaining uncertified inputs:
-`local_intersection_tensor` and `local_chamber_certificate`. A direct read of
-`cygv` 0.1.2 shows that `misc::process_int_nums` only normalizes the supplied
-intersection-number dictionary and `instanton::compute_inst_thread` consumes
-that tensor directly, so there is no hidden `cygv` routine that derives this
-local tensor from `q`; Cyrus must still source the tensor/chamber from toric
-phase data or a justified local model.
+unit-tensor primitive value `GV=-2`, and expected formula value `-2`. A direct
+read of `cygv` 0.1.2 shows that `misc::process_int_nums` only normalizes the
+supplied intersection-number dictionary and `instanton::compute_inst_thread`
+consumes that tensor directly, so there is no hidden `cygv` routine that
+derives this local tensor from `q`; Cyrus must source the tensor/chamber from
+toric phase data or a justified local model.
 That justified local model is now implemented for this residual family. The
 including-origin phase `q=[-1,-2,1,1,1]`, oriented primitive semigroup
 `[[1]]`, and grading `[1]` identify the local bundle `O(-1)+O(-2)->P^2`.
@@ -2497,9 +2497,11 @@ the residual predecessor queue to no local missing-input counts and
 `{"ready_for_actual_cygv_call":3}`. The unit probe status for both residual
 source rows is now
 `unit_tensor_probe_matches_expected_formula_set_with_source_derived_tensor_chamber`.
-The next step is therefore not tensor guessing; it is replacing or validating
-the CMS scalar import with the ready actual local-`cygv` source computation and
-checking the effect on qN history.
+The source-derived GV importer now consumes this ready local-`cygv` source
+computation directly and requires agreement with the CMS formula when a CMS
+formula is present. The next step is therefore not tensor guessing or CMS
+scalar replacement; it is checking how these computed source rows affect the
+broader qN history.
 An opt-in target-level integer tensor scan now runs the same one-parameter
 local skeletons through the actual compact `cygv` call while varying the single
 intersection tensor entry over a bounded integer range. On the fresh

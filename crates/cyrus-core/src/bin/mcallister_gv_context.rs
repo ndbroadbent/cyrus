@@ -5550,25 +5550,75 @@ fn source_derived_gv_for_sample(sample: &MissingGvTargetSample) -> Result<Option
     source_derived_gv_value_and_status_for_sample(sample).map(|(value, _status)| value)
 }
 
-fn source_derived_gv_value_and_status_for_sample(
+fn actual_local_cygv_source_gv_for_sample(
+    sample: &MissingGvTargetSample,
+) -> Result<Option<String>, String> {
+    let Some(support) = sample.origin_circuit_affine_support.as_ref() else {
+        return Ok(None);
+    };
+    let Some(skeleton) = local_cygv_input_skeleton(sample, Some(support))? else {
+        return Ok(None);
+    };
+    let readiness = local_cygv_actual_call_readiness(&skeleton);
+    if readiness != "ready_for_actual_cygv_call" {
+        return Ok(None);
+    }
+    let q_matrix = skeleton
+        .local_cygv_phase_q_matrix_candidate
+        .as_ref()
+        .ok_or_else(|| "ready local cygv source skeleton is missing q matrix".to_string())?;
+    if q_matrix.len() != 1 {
+        return Err(format!(
+            "ready local cygv source skeleton has {} q-matrix rows, expected one",
+            q_matrix.len()
+        ));
+    }
+    let grading_vector = skeleton
+        .local_grading_vector_candidate
+        .as_ref()
+        .ok_or_else(|| "ready local cygv source skeleton is missing grading vector".to_string())?;
+    if grading_vector.as_slice() != [1] {
+        return Err(format!(
+            "ready local cygv source skeleton has unsupported grading vector {grading_vector:?}"
+        ));
+    }
+    let semigroup_generators = skeleton
+        .local_semigroup_generators_candidate
+        .as_ref()
+        .ok_or_else(|| {
+            "ready local cygv source skeleton is missing semigroup generators".to_string()
+        })?;
+    if semigroup_generators.as_slice() != [vec![1]] {
+        return Err(format!(
+            "ready local cygv source skeleton has unsupported semigroup generators {semigroup_generators:?}"
+        ));
+    }
+    let tensor_entries = skeleton
+        .local_intersection_tensor_candidate
+        .as_ref()
+        .ok_or_else(|| {
+            "ready local cygv source skeleton is missing intersection tensor".to_string()
+        })?;
+    let [tensor_entry] = tensor_entries.as_slice() else {
+        return Err(format!(
+            "ready local cygv source skeleton has {} tensor entries, expected one",
+            tensor_entries.len()
+        ));
+    };
+    if tensor_entry.indices != [0, 0, 0] {
+        return Err(format!(
+            "ready local cygv source skeleton has unsupported tensor index {:?}",
+            tensor_entry.indices
+        ));
+    }
+    let tensor_value = parse_rational(&tensor_entry.value)?;
+    one_parameter_primitive_cygv_value(q_matrix, grading_vector, &[vec![0], vec![1]], tensor_value)
+        .map(Some)
+}
+
+fn source_derived_cms_formula_value_and_status_for_sample(
     sample: &MissingGvTargetSample,
 ) -> Result<(Option<String>, String), String> {
-    let witness_relation_status = origin_circuit_witness_relation_status(sample);
-    if witness_relation_status != "single_origin_circuit_witness"
-        && witness_relation_status != "all_origin_circuit_witnesses_share_relation"
-    {
-        return Ok((
-            None,
-            format!("source_derived_gv_not_imported_{witness_relation_status}"),
-        ));
-    }
-    let facet_context_status = origin_circuit_facet_context_status(sample);
-    if facet_context_status != "source_derived_full_facet_context" {
-        return Ok((
-            None,
-            format!("source_derived_gv_not_imported_{facet_context_status}"),
-        ));
-    }
     let Some(candidates) = sample.cms_general_divisor_shape_candidates.as_deref() else {
         return Ok((
             None,
@@ -5618,6 +5668,47 @@ fn source_derived_gv_value_and_status_for_sample(
     }
 }
 
+fn source_derived_gv_value_and_status_for_sample(
+    sample: &MissingGvTargetSample,
+) -> Result<(Option<String>, String), String> {
+    let witness_relation_status = origin_circuit_witness_relation_status(sample);
+    if witness_relation_status != "single_origin_circuit_witness"
+        && witness_relation_status != "all_origin_circuit_witnesses_share_relation"
+    {
+        return Ok((
+            None,
+            format!("source_derived_gv_not_imported_{witness_relation_status}"),
+        ));
+    }
+    let facet_context_status = origin_circuit_facet_context_status(sample);
+    if facet_context_status != "source_derived_full_facet_context" {
+        return Ok((
+            None,
+            format!("source_derived_gv_not_imported_{facet_context_status}"),
+        ));
+    }
+    let actual_local_cygv = actual_local_cygv_source_gv_for_sample(sample)?;
+    let cms_formula = source_derived_cms_formula_value_and_status_for_sample(sample)?;
+    if let Some(actual_value) = actual_local_cygv {
+        if let Some(cms_value) = cms_formula.0.as_deref() {
+            if actual_value != cms_value {
+                return Err(format!(
+                    "source-derived actual local cygv value {actual_value} conflicts with CMS formula value {cms_value}"
+                ));
+            }
+            return Ok((
+                Some(actual_value),
+                "source_derived_gv_imported_actual_local_cygv_matches_cms_formula".to_string(),
+            ));
+        }
+        return Ok((
+            Some(actual_value),
+            "source_derived_gv_imported_actual_local_cygv_without_cms_formula".to_string(),
+        ));
+    }
+    Ok(cms_formula)
+}
+
 fn source_derived_gv_import_status_counts(
     stats: Option<&MissingGvTargetStats>,
 ) -> BTreeMap<String, usize> {
@@ -5645,7 +5736,7 @@ fn source_derived_gv_import_local_charge_signature_counts(
         let Ok((Some(_), status)) = source_derived_gv_value_and_status_for_sample(sample) else {
             continue;
         };
-        if status != "source_derived_gv_imported_full_facet_cms_formula" {
+        if !status.starts_with("source_derived_gv_imported_") {
             continue;
         }
         let signature = sample
@@ -12353,11 +12444,44 @@ mod tests {
                 computed_other_normal_degree: Some("0".to_string()),
                 matches_inferred_other_normal_degree: Some(true),
             }]);
+        assert_eq!(
+            source_derived_gv_value_and_status_for_sample(&source_sample).unwrap(),
+            (
+                Some("-2".to_string()),
+                "source_derived_gv_imported_actual_local_cygv_matches_cms_formula".to_string()
+            )
+        );
+        source_sample
+            .cms_general_divisor_shape_candidates
+            .as_mut()
+            .unwrap()[0]
+            .toric_gv1_formula_value = Some(1);
+        assert!(
+            source_derived_gv_value_and_status_for_sample(&source_sample)
+                .unwrap_err()
+                .contains("actual local cygv value -2 conflicts with CMS formula value 1")
+        );
+        source_sample
+            .cms_general_divisor_shape_candidates
+            .as_mut()
+            .unwrap()[0]
+            .toric_gv1_formula_value = Some(-2);
         let source_stats = MissingGvTargetStats {
             target_count: 1,
             real_cone_decomposition_exact_kind_counts: HashMap::new(),
             sample: vec![source_sample],
         };
+        assert_eq!(
+            source_derived_gv_import_status_counts(Some(&source_stats)),
+            BTreeMap::from([(
+                "source_derived_gv_imported_actual_local_cygv_matches_cms_formula".to_string(),
+                1
+            )])
+        );
+        assert_eq!(
+            source_derived_gv_import_local_charge_signature_counts(Some(&source_stats)),
+            BTreeMap::from([("-2,-1,1,1,1".to_string(), 1)])
+        );
         let stats = MissingGvTargetStats {
             target_count: 0,
             real_cone_decomposition_exact_kind_counts: HashMap::new(),

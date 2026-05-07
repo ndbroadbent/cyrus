@@ -117,24 +117,23 @@ run pass. Any remaining mismatch must be explicit and localizable.
    queue: two unique source-derived predecessors occur three times, target 7/8
    share the degree-6 ray, target 6 has the analogous degree-4 ray, and every
    occurrence has shared origin-circuit witness relations plus
-   `source_derived_full_facet_context`. The remaining blocker is therefore
-   `local_intersection_tensor` and `local_chamber_certificate` extraction from
-   that source context. The source-derived GV-history importer now requires the
-   same full witness/facet context before accepting a CMS-derived scalar value,
-   and the guarded report preserves the same two predecessors and three
-   occurrences. The same report now splits the accepted source-derived imports
-   by local charge signature: 52 full-facet CMS formula imports break into
-   `-1,-1,-1,1,1,1` 28 times, `-1,-1,-1,1,2` 20 times,
-   `-1,-1,1,1` 3 times, and `-1,-1,-1,-1,1,3` once. The current residual
-   predecessors remain in the `-1,-1,-1,1,2` family. The residual predecessor
-   sample now also serializes the source-derived local `cygv` skeleton: both
-   source predecessors have compact including-origin phase
-   `q=[-1,-2,1,1,1]`, semigroup `[[1]]`, grading `[1]`, unit-tensor probe
-   `GV=-2`, and expected formula value `-2`. Cyrus now recognizes this as the
-   source-derived local bundle phase `O(-1)+O(-2)->P^2`, assigns the unit
-   hyperplane tensor `κ_000=1`, and records a positive-base chamber
-   certificate; the residual predecessor queue has no remaining local
-   missing-input counts and all three occurrences are `ready_for_actual_cygv_call`.
+   `source_derived_full_facet_context`. The source-derived GV-history importer
+   now requires that full witness/facet context before accepting a source value.
+   The latest actual-local-cygv report promotes ready source skeletons through
+   the `cygv` computation path: 20 imports match CMS formulas, 21 imports have
+   no CMS formula check, 32 remain full-facet CMS formula imports, 58 rows have
+   no integral matching CMS formula, and 115 rows have no origin-circuit witness.
+   Accepted source-derived imports now split by local charge signature as
+   `-1,-1,-1,1,1,1` 28 times, `-1,-1,-1,1,2` 41 times,
+   `-1,-1,1,1` 3 times, and `-1,-1,-1,-1,1,3` once. The residual predecessors
+   remain in the `-1,-1,-1,1,2` family and are now computed from the
+   source-derived local bundle phase `O(-1)+O(-2)->P^2`: compact
+   including-origin `q=[-1,-2,1,1,1]`, semigroup `[[1]]`, grading `[1]`, unit
+   tensor `κ_000=1`, and positive-base chamber. The residual predecessor queue
+   has no remaining local missing-input counts and all three occurrences are
+   `ready_for_actual_cygv_call`; the remaining blocker is now the higher-degree
+   compact qN history that uses those source rows, not the scalar value of this
+   residual source family.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for
@@ -590,21 +589,21 @@ to make the remaining GV layer more first-principles:
    a certified semigroup/chamber. The new source-ray readiness fields sharpen
    this to a concrete input list: the shared degree-six ray has local charge
    signature `[-1,-1,-1,1,2]`, matching CMS checks, shared origin-circuit
-   witness relations, and `source_derived_full_facet_context`, but still lacks
-   `local_intersection_tensor` and `local_chamber_certificate`. The residual
-   predecessor queue also shows target `6` has an analogous degree-four source
-   predecessor with the same local signature, facet context, and blockers. The
-   source-derived GV importer now refuses CMS shape/check rows without full
-   origin-circuit facet context, so these lower rays enter qN history only
-   because the source context is present. The guarded import-status report has
-   `52` full-facet CMS formula imports, `79` rows with no integral matching CMS
-   formula, and `115` rows with no origin-circuit witness. The
-   CMS divisor cubic
-   suggests tensor value `3`, but the raw-cubic primitive probe gives `GV=-6`;
-   the unit-tensor probe gives the expected `GV=-2` and is not promotable without
-   the chamber/tensor source certificate. Its one-parameter unit semigroup
-   generator, grading vector, and q-matrix phase are now source-derived. The
-   follow-up primitive probes show that unit tensor normalization explains the
+   witness relations, and `source_derived_full_facet_context`. Cyrus now
+   recognizes the corresponding source-derived local
+   `O(-1)+O(-2)->P^2` phase, supplies tensor `κ_000=1` and a positive-base
+   chamber, and imports the value through actual local `cygv`, requiring
+   agreement with the CMS formula where one exists. The residual predecessor
+   queue also shows target `6` has an analogous degree-four source predecessor
+   with the same local signature and ready local-cygv source inputs. The
+   actual-local-cygv import-status report has `20` actual local cygv imports
+   matching CMS formulas, `21` actual local cygv imports without CMS formula
+   checks, `32` remaining full-facet CMS formula imports, `58` rows with no
+   integral matching CMS formula, and `115` rows with no origin-circuit witness.
+   The CMS divisor cubic suggested tensor value `3`, but the raw-cubic primitive
+   probe gave `GV=-6`; the source-derived unit tensor gives the expected `GV=-2`
+   and is now the promoted source value for this lower ray. The follow-up
+   primitive probes show that unit tensor normalization explains the
    `[-1,-2,1,1,1]` lower ray, and that omitting the origin/canonical divisor
    column explains the
    resolved-conifold-like `[-1,1,-1,1,-1,1]` lower ray. These are still
