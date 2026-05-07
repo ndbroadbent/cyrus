@@ -857,6 +857,18 @@ struct CygvSourceQnTermSemigroupProbe {
     source_qn_trace_term_sample_complete: Option<bool>,
     source_qn_trace_term_signature_sample: Vec<CygvPathSupportQnTraceTermSignature>,
     parent_qn_comparison_status: Option<String>,
+    generator_face_certificate_status: Option<String>,
+    generator_face_certificate_normal_nonzero: Option<Vec<(usize, i64)>>,
+    generator_face_certificate_zero_count: Option<usize>,
+    generator_face_certificate_positive_count: Option<usize>,
+}
+
+#[derive(Clone, Debug)]
+struct CygvSourceQnTermGeneratorFaceCertificate {
+    status: String,
+    normal_nonzero: Option<Vec<(usize, i64)>>,
+    zero_count: Option<usize>,
+    positive_count: Option<usize>,
 }
 
 struct CygvPathSupportFormulaBalance {
@@ -4947,6 +4959,103 @@ fn source_qn_term_offset_generators(
     Ok((generators, max_degree))
 }
 
+fn source_qn_term_generator_face_certificate(
+    generators: &[Vec<i64>],
+    context: &ValidatedContext<'_>,
+) -> Result<CygvSourceQnTermGeneratorFaceCertificate, String> {
+    if generators.is_empty() {
+        return Ok(CygvSourceQnTermGeneratorFaceCertificate {
+            status: "offset_generators_no_generators".to_string(),
+            normal_nonzero: None,
+            zero_count: None,
+            positive_count: None,
+        });
+    }
+    let rank = curve_row_span_rank(generators)
+        .map_err(|error| format!("offset-generator face rank failed: {error}"))?;
+    if rank >= context.dimension {
+        return Ok(CygvSourceQnTermGeneratorFaceCertificate {
+            status: format!(
+                "offset_generators_full_dimensional_rank_{rank}_dim_{}",
+                context.dimension
+            ),
+            normal_nonzero: None,
+            zero_count: None,
+            positive_count: None,
+        });
+    }
+
+    if rank == context.dimension.saturating_sub(1) {
+        return match certify_supporting_mori_face_by_exact_kernel(
+            generators,
+            context.degree_bounded_rays,
+        ) {
+            Ok(Some(certificate)) => Ok(CygvSourceQnTermGeneratorFaceCertificate {
+                status: format!(
+                    "offset_generators_certified_exact_kernel_rank_{rank}_dim_{}",
+                    context.dimension
+                ),
+                normal_nonzero: Some(sparse_from_dense(&certificate.normal)),
+                zero_count: Some(certificate.zero_generator_count),
+                positive_count: Some(certificate.positive_generator_count),
+            }),
+            Ok(None) => Ok(CygvSourceQnTermGeneratorFaceCertificate {
+                status: format!(
+                    "offset_generators_codimension_one_but_not_supporting_rank_{rank}_dim_{}",
+                    context.dimension
+                ),
+                normal_nonzero: None,
+                zero_count: None,
+                positive_count: None,
+            }),
+            Err(error) => Ok(CygvSourceQnTermGeneratorFaceCertificate {
+                status: format!(
+                    "offset_generators_face_certificate_error_{}",
+                    status_error_fragment(&error.to_string())
+                ),
+                normal_nonzero: None,
+                zero_count: None,
+                positive_count: None,
+            }),
+        };
+    }
+
+    let options = SupportingMoriFaceLpSearchOptions::default();
+    match certify_supporting_mori_face_by_lp_search(
+        generators,
+        context.degree_bounded_rays,
+        &options,
+    ) {
+        Ok(Some(certificate)) => Ok(CygvSourceQnTermGeneratorFaceCertificate {
+            status: format!(
+                "offset_generators_certified_lp_containing_face_rank_{rank}_dim_{}",
+                context.dimension
+            ),
+            normal_nonzero: Some(sparse_from_dense(&certificate.normal)),
+            zero_count: Some(certificate.zero_generator_count),
+            positive_count: Some(certificate.positive_generator_count),
+        }),
+        Ok(None) => Ok(CygvSourceQnTermGeneratorFaceCertificate {
+            status: format!(
+                "offset_generators_lp_no_certificate_rank_{rank}_dim_{}",
+                context.dimension
+            ),
+            normal_nonzero: None,
+            zero_count: None,
+            positive_count: None,
+        }),
+        Err(error) => Ok(CygvSourceQnTermGeneratorFaceCertificate {
+            status: format!(
+                "offset_generators_face_certificate_error_{}",
+                status_error_fragment(&error.to_string())
+            ),
+            normal_nonzero: None,
+            zero_count: None,
+            positive_count: None,
+        }),
+    }
+}
+
 fn source_qn_term_seed_expanded_support_elements(
     source: &CygvPathSupportTargetMonomialQnSource,
     dimension: usize,
@@ -4986,6 +5095,7 @@ fn source_qn_term_provided_generator_probe_from_generators(
     error_label: &str,
 ) -> Result<Option<CygvSourceQnTermSemigroupProbe>, String> {
     let source_curve = dense_from_sparse(&source.curve_nonzero, context.dimension)?;
+    let face_certificate = source_qn_term_generator_face_certificate(&generators, context)?;
     if generators.len() > CYGV_BOUNDED_DECOMPOSITION_DIAMOND_ELEMENT_LIMIT {
         return Ok(Some(CygvSourceQnTermSemigroupProbe {
             element_count: None,
@@ -5000,6 +5110,10 @@ fn source_qn_term_provided_generator_probe_from_generators(
             source_qn_trace_term_sample_complete: None,
             source_qn_trace_term_signature_sample: Vec::new(),
             parent_qn_comparison_status: None,
+            generator_face_certificate_status: Some(face_certificate.status),
+            generator_face_certificate_normal_nonzero: face_certificate.normal_nonzero,
+            generator_face_certificate_zero_count: face_certificate.zero_count,
+            generator_face_certificate_positive_count: face_certificate.positive_count,
         }));
     }
     if context.q_matrix.is_empty() || context.q_cols == 0 {
@@ -5014,6 +5128,10 @@ fn source_qn_term_provided_generator_probe_from_generators(
             source_qn_trace_term_sample_complete: None,
             source_qn_trace_term_signature_sample: Vec::new(),
             parent_qn_comparison_status: None,
+            generator_face_certificate_status: Some(face_certificate.status),
+            generator_face_certificate_normal_nonzero: face_certificate.normal_nonzero,
+            generator_face_certificate_zero_count: face_certificate.zero_count,
+            generator_face_certificate_positive_count: face_certificate.positive_count,
         }));
     }
     if cfg!(panic = "abort") {
@@ -5031,6 +5149,10 @@ fn source_qn_term_provided_generator_probe_from_generators(
             source_qn_trace_term_sample_complete: None,
             source_qn_trace_term_signature_sample: Vec::new(),
             parent_qn_comparison_status: None,
+            generator_face_certificate_status: Some(face_certificate.status),
+            generator_face_certificate_normal_nonzero: face_certificate.normal_nonzero,
+            generator_face_certificate_zero_count: face_certificate.zero_count,
+            generator_face_certificate_positive_count: face_certificate.positive_count,
         }));
     }
     let max_degree = u32::try_from(max_degree)
@@ -5064,6 +5186,10 @@ fn source_qn_term_provided_generator_probe_from_generators(
                 source_qn_trace_term_sample_complete: None,
                 source_qn_trace_term_signature_sample: Vec::new(),
                 parent_qn_comparison_status: None,
+                generator_face_certificate_status: Some(face_certificate.status),
+                generator_face_certificate_normal_nonzero: face_certificate.normal_nonzero,
+                generator_face_certificate_zero_count: face_certificate.zero_count,
+                generator_face_certificate_positive_count: face_certificate.positive_count,
             }));
         }
         Err(payload) => {
@@ -5081,6 +5207,10 @@ fn source_qn_term_provided_generator_probe_from_generators(
                 source_qn_trace_term_sample_complete: None,
                 source_qn_trace_term_signature_sample: Vec::new(),
                 parent_qn_comparison_status: None,
+                generator_face_certificate_status: Some(face_certificate.status),
+                generator_face_certificate_normal_nonzero: face_certificate.normal_nonzero,
+                generator_face_certificate_zero_count: face_certificate.zero_count,
+                generator_face_certificate_positive_count: face_certificate.positive_count,
             }));
         }
     };
@@ -5120,6 +5250,10 @@ fn source_qn_term_provided_generator_probe_from_generators(
         source_qn_trace_term_sample_complete,
         source_qn_trace_term_signature_sample: generated_terms,
         parent_qn_comparison_status,
+        generator_face_certificate_status: Some(face_certificate.status),
+        generator_face_certificate_normal_nonzero: face_certificate.normal_nonzero,
+        generator_face_certificate_zero_count: face_certificate.zero_count,
+        generator_face_certificate_positive_count: face_certificate.positive_count,
     }))
 }
 
@@ -5145,6 +5279,10 @@ fn source_qn_term_semigroup_probe_from_elements(
             source_qn_trace_term_sample_complete: None,
             source_qn_trace_term_signature_sample: Vec::new(),
             parent_qn_comparison_status: None,
+            generator_face_certificate_status: None,
+            generator_face_certificate_normal_nonzero: None,
+            generator_face_certificate_zero_count: None,
+            generator_face_certificate_positive_count: None,
         }));
     }
     if context.q_matrix.is_empty() || context.q_cols == 0 {
@@ -5159,6 +5297,10 @@ fn source_qn_term_semigroup_probe_from_elements(
             source_qn_trace_term_sample_complete: None,
             source_qn_trace_term_signature_sample: Vec::new(),
             parent_qn_comparison_status: None,
+            generator_face_certificate_status: None,
+            generator_face_certificate_normal_nonzero: None,
+            generator_face_certificate_zero_count: None,
+            generator_face_certificate_positive_count: None,
         }));
     }
     if cfg!(panic = "abort") {
@@ -5176,6 +5318,10 @@ fn source_qn_term_semigroup_probe_from_elements(
             source_qn_trace_term_sample_complete: None,
             source_qn_trace_term_signature_sample: Vec::new(),
             parent_qn_comparison_status: None,
+            generator_face_certificate_status: None,
+            generator_face_certificate_normal_nonzero: None,
+            generator_face_certificate_zero_count: None,
+            generator_face_certificate_positive_count: None,
         }));
     }
 
@@ -5206,6 +5352,10 @@ fn source_qn_term_semigroup_probe_from_elements(
                 source_qn_trace_term_sample_complete: None,
                 source_qn_trace_term_signature_sample: Vec::new(),
                 parent_qn_comparison_status: None,
+                generator_face_certificate_status: None,
+                generator_face_certificate_normal_nonzero: None,
+                generator_face_certificate_zero_count: None,
+                generator_face_certificate_positive_count: None,
             }));
         }
         Err(payload) => {
@@ -5223,6 +5373,10 @@ fn source_qn_term_semigroup_probe_from_elements(
                 source_qn_trace_term_sample_complete: None,
                 source_qn_trace_term_signature_sample: Vec::new(),
                 parent_qn_comparison_status: None,
+                generator_face_certificate_status: None,
+                generator_face_certificate_normal_nonzero: None,
+                generator_face_certificate_zero_count: None,
+                generator_face_certificate_positive_count: None,
             }));
         }
     };
@@ -5264,6 +5418,10 @@ fn source_qn_term_semigroup_probe_from_elements(
         source_qn_trace_term_sample_complete,
         source_qn_trace_term_signature_sample: generated_terms,
         parent_qn_comparison_status,
+        generator_face_certificate_status: None,
+        generator_face_certificate_normal_nonzero: None,
+        generator_face_certificate_zero_count: None,
+        generator_face_certificate_positive_count: None,
     }))
 }
 
@@ -17443,6 +17601,12 @@ mod tests {
                 .expect("mismatched source with known offset should request offset generators");
         assert_eq!(offset_generator_probe.generator_count, Some(1));
         assert_eq!(offset_generator_probe.status, "skipped_no_q_matrix");
+        assert_eq!(
+            offset_generator_probe
+                .generator_face_certificate_status
+                .as_deref(),
+            Some("offset_generators_full_dimensional_rank_1_dim_1")
+        );
         assert_eq!(
             target_monomial_qn_source_diamond_parent_qn_comparison_status_counts(&[
                 sources[0].clone(),

@@ -420,6 +420,11 @@ and matrix-basis pipeline are no longer open.
    `cygv` invariant. These matching rows are explanatory candidates, not
    production inputs, until a chamber/face certificate supplies the generator
    set from geometry.
+   The same offset-generator candidates now run through the supporting-face
+   verifier and all remain uncertified: target `7` reports LP no-certificate
+   statuses at ranks `4` and `3` in dimension `214`, and target `8` reports LP
+   no-certificate at rank `3` for both the matching degree-six row and the
+   failing degree-eight row.
    The target-coefficient balance reconstructs the small-domain
    pre-subtraction readouts: target `7` has lower-source sum `3`,
    post-subtraction coefficient `0`, pivot component `2`, and

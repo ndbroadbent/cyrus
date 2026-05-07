@@ -2890,6 +2890,15 @@ its degree-eight composite uses three generators and fails in `cygv` series
 inversion with a non-integer GV invariant. The matching target-`7` domains are
 therefore candidate explanatory histories, but they are not yet
 source-certified chamber semigroups.
+The offset-generator probe now runs the same candidate generator sets through
+the exact/LP-assisted supporting-face verifier. None of the current candidates
+is promoted: target `7`'s matching degree-six and degree-eight histories return
+`offset_generators_lp_no_certificate_rank_4_dim_214` and
+`offset_generators_lp_no_certificate_rank_3_dim_214`, respectively; target
+`8`'s matching shared degree-six history and failing degree-eight history both
+return `offset_generators_lp_no_certificate_rank_3_dim_214`. The qN matches
+therefore identify a plausible local history pattern, not a certified
+corrected-chamber face.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use
