@@ -308,6 +308,9 @@ struct ContextReport {
         BTreeMap<String, usize>,
     cygv_closest_known_qn_residual_difference_sample:
         Vec<CygvClosestKnownQnResidualDifferenceSummary>,
+    cygv_closest_known_qn_residual_qn_domain_status_counts: BTreeMap<String, usize>,
+    cygv_closest_known_qn_residual_qn_domain_parent_only_source_status_counts:
+        BTreeMap<String, usize>,
     cygv_closest_known_qn_residual_source_predecessor_unique_count: usize,
     cygv_closest_known_qn_residual_source_predecessor_occurrence_count: usize,
     cygv_closest_known_qn_residual_source_predecessor_degree_counts: BTreeMap<i128, usize>,
@@ -10306,6 +10309,22 @@ fn build_report(
         cygv_closest_known_qn_residual_difference_known_qn_history_status_counts(
             &cygv_closest_known_qn_residual_difference_sample,
         );
+    let cygv_closest_known_qn_residual_qn_domain_status_counts = optional_status_counts(
+        targets.iter().map(|target| {
+            target
+                .cygv_path_history_probe
+                .as_ref()
+                .and_then(|probe| {
+                    probe
+                        .closest_known_qn_residual_qn_domain_comparison
+                        .as_ref()
+                })
+                .map(|comparison| comparison.term_signature_comparison_status.as_str())
+        }),
+        "not_run",
+    );
+    let cygv_closest_known_qn_residual_qn_domain_parent_only_source_status_counts =
+        cygv_closest_known_qn_residual_qn_domain_parent_only_source_status_counts(&targets);
     let cygv_closest_known_qn_residual_source_predecessor_sample =
         cygv_closest_known_qn_residual_source_predecessor_summaries(&targets, validated);
     let cygv_closest_known_qn_residual_source_predecessor_unique_count =
@@ -10601,6 +10620,8 @@ fn build_report(
         cygv_closest_known_qn_residual_difference_degree_counts,
         cygv_closest_known_qn_residual_difference_known_qn_history_status_counts,
         cygv_closest_known_qn_residual_difference_sample,
+        cygv_closest_known_qn_residual_qn_domain_status_counts,
+        cygv_closest_known_qn_residual_qn_domain_parent_only_source_status_counts,
         cygv_closest_known_qn_residual_source_predecessor_unique_count,
         cygv_closest_known_qn_residual_source_predecessor_occurrence_count,
         cygv_closest_known_qn_residual_source_predecessor_degree_counts,
@@ -10783,6 +10804,25 @@ fn optional_status_counts<'a>(
         *counts
             .entry(status.unwrap_or(missing_status).to_string())
             .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn cygv_closest_known_qn_residual_qn_domain_parent_only_source_status_counts(
+    targets: &[TargetReport],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        let Some(comparison) = target.cygv_path_history_probe.as_ref().and_then(|probe| {
+            probe
+                .closest_known_qn_residual_qn_domain_comparison
+                .as_ref()
+        }) else {
+            continue;
+        };
+        for (status, count) in &comparison.parent_only_term_source_status_counts {
+            *counts.entry(status.clone()).or_insert(0usize) += count;
+        }
     }
     counts
 }
