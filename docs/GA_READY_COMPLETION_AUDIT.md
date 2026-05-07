@@ -437,6 +437,10 @@ and matrix-basis pipeline are no longer open.
    first failing coefficient as
    `element_nonzero=[(203,-3),(206,1),(209,1)]`, pivot component `-3`,
    instanton coefficient `-4`, GV candidate `4/3`, rounded candidate `1`.
+   The classified raw GW sample marks that curve as
+   `unknown_not_toric_covered` and `source_ray_matches_missing_target`, i.e.
+   the first integrality failure is the target-`8` missing ray inside the
+   lower coefficient history of this candidate source domain.
    These traces explain why the candidate domains cannot be promoted without a
    source-derived supporting-face/chamber certificate.
    The target-coefficient balance reconstructs the small-domain

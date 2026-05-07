@@ -2920,6 +2920,11 @@ non-integral lower candidates. The vendored `cygv` error now reports the first
 integrality failure directly:
 `element_nonzero=[(203,-3),(206,1),(209,1)]`, pivot component `-3`,
 instanton coefficient `-4`, GV candidate `4/3`, rounded candidate `1`.
+The classified raw GW sample marks this same curve as
+`known_qn_history_status=unknown_not_toric_covered` and
+`source_class_status=source_ray_matches_missing_target`, so the first
+integrality failure is the target-`8` missing ray appearing as lower
+coefficient history inside the candidate degree-eight source domain.
 Thus the current blocker is not hidden by a missing scalar source readout: the
 candidate domains contain fractional lower coefficient history and still lack
 a supporting-face/chamber certificate.

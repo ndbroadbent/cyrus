@@ -784,6 +784,8 @@ struct CygvPathSupportGvCoefficientTraceSample {
     element_index: usize,
     degree: u32,
     curve_nonzero: Vec<(usize, i64)>,
+    known_qn_history_status: Option<String>,
+    source_class_status: Option<String>,
     insertion_index: usize,
     pivot_component: i32,
     instanton_coefficient: Option<String>,
@@ -2385,7 +2387,7 @@ fn path_support_gw_coefficient_diagnostic(
                 .iter()
                 .filter(|entry| gv_coefficient_trace_has_noninteger_candidate(entry))
                 .count();
-            let sample = path_support_gw_noninteger_candidate_sample(&trace);
+            let sample = path_support_gw_noninteger_candidate_sample(&trace, context);
             let target_trace = trace
                 .iter()
                 .find(|entry| entry.element.as_slice() == target);
@@ -2619,7 +2621,7 @@ fn path_support_generator_probe_inner(
     let gv_coefficient_status_counts =
         path_support_gv_coefficient_status_counts(&traced.gv_coefficient_trace);
     let gv_coefficient_trace_sample =
-        path_support_gv_coefficient_trace_sample(&traced.gv_coefficient_trace);
+        path_support_gv_coefficient_trace_sample(&traced.gv_coefficient_trace, Some(context));
     let qn_trace_term_counts_by_curve = traced
         .qn_trace
         .iter()
@@ -4247,22 +4249,69 @@ fn path_support_gv_coefficient_status_counts(
     counts
 }
 
+fn gv_coefficient_trace_classification(
+    entry: &CygvGvCoefficientTrace,
+    context: Option<&ValidatedContext<'_>>,
+) -> (Option<String>, Option<String>) {
+    let Some(context) = context else {
+        return (None, None);
+    };
+    let curve = entry
+        .element
+        .iter()
+        .map(|&value| i64::from(value))
+        .collect::<Vec<_>>();
+    let known_status = known_qn_history_status(
+        context
+            .covered_toric_gv_by_basis
+            .get(&curve)
+            .map(String::as_str),
+        context
+            .source_derived_gv_by_basis
+            .get(&curve)
+            .map(String::as_str),
+    )
+    .map(str::to_string)
+    .unwrap_or_else(|error| {
+        format!(
+            "known_qn_history_classification_error_{}",
+            status_error_fragment(&error)
+        )
+    });
+    let source_status = path_support_source_class_context(&curve, context)
+        .map(|source_context| source_context.status)
+        .unwrap_or_else(|error| {
+            format!(
+                "source_classification_error_{}",
+                status_error_fragment(&error)
+            )
+        });
+    (Some(known_status), Some(source_status))
+}
+
 fn path_support_gv_coefficient_trace_sample(
     trace: &[CygvGvCoefficientTrace],
+    context: Option<&ValidatedContext<'_>>,
 ) -> Vec<CygvPathSupportGvCoefficientTraceSample> {
     trace
         .iter()
         .take(CYGV_PATH_SUPPORT_GV_COEFFICIENT_TRACE_SAMPLE_LIMIT)
-        .map(|entry| CygvPathSupportGvCoefficientTraceSample {
-            element_index: entry.element_index,
-            degree: entry.degree,
-            curve_nonzero: sparse_from_i32_dense(&entry.element),
-            insertion_index: entry.insertion_index,
-            pivot_component: entry.pivot_component,
-            instanton_coefficient: entry.instanton_coefficient.clone(),
-            gv_candidate: entry.gv_candidate.clone(),
-            rounded_gv_candidate: entry.rounded_gv_candidate.clone(),
-            status: entry.status.clone(),
+        .map(|entry| {
+            let (known_qn_history_status, source_class_status) =
+                gv_coefficient_trace_classification(entry, context);
+            CygvPathSupportGvCoefficientTraceSample {
+                element_index: entry.element_index,
+                degree: entry.degree,
+                curve_nonzero: sparse_from_i32_dense(&entry.element),
+                known_qn_history_status,
+                source_class_status,
+                insertion_index: entry.insertion_index,
+                pivot_component: entry.pivot_component,
+                instanton_coefficient: entry.instanton_coefficient.clone(),
+                gv_candidate: entry.gv_candidate.clone(),
+                rounded_gv_candidate: entry.rounded_gv_candidate.clone(),
+                status: entry.status.clone(),
+            }
         })
         .collect()
 }
@@ -4278,13 +4327,14 @@ fn gv_coefficient_trace_has_noninteger_candidate(entry: &CygvGvCoefficientTrace)
 
 fn path_support_gw_noninteger_candidate_sample(
     trace: &[CygvGvCoefficientTrace],
+    context: &ValidatedContext<'_>,
 ) -> Vec<CygvPathSupportGvCoefficientTraceSample> {
     let noninteger_candidates = trace
         .iter()
         .filter(|entry| gv_coefficient_trace_has_noninteger_candidate(entry))
         .cloned()
         .collect::<Vec<_>>();
-    path_support_gv_coefficient_trace_sample(&noninteger_candidates)
+    path_support_gv_coefficient_trace_sample(&noninteger_candidates, Some(context))
 }
 
 fn path_support_target_monomial_qn_sources(
@@ -17257,6 +17307,18 @@ mod tests {
         assert_eq!(
             probe.gv_coefficient_trace_sample[0].curve_nonzero,
             vec![(0, 1)]
+        );
+        assert_eq!(
+            probe.gv_coefficient_trace_sample[0]
+                .known_qn_history_status
+                .as_deref(),
+            Some("unknown_not_toric_covered")
+        );
+        assert_eq!(
+            probe.gv_coefficient_trace_sample[0]
+                .source_class_status
+                .as_deref(),
+            Some("source_ray_context_missing_but_matches_missing_target")
         );
         assert_eq!(
             probe.gv_coefficient_trace_sample[0]
