@@ -370,7 +370,11 @@ and matrix-basis pipeline are no longer open.
    those parent-only terms are all known degree-two toric classes with `GV=-2`,
    so the remaining history problem is how the certified chamber couples a
    source-known degree-eight residual to sibling toric offsets, not how to
-   assign those lower offsets.
+   assign those lower offsets. This comparison is currently bounded to the
+   target `7`/`8` degree-ten pair: the all-target run timed out at `900s`,
+   targets `2`-`5` time out under `180s` per-target probes, and targets
+   `0`/`1`/`6` reach non-integer HKTY errors in their small path-support
+   domains.
    The source-ray summary now shows that shared ray has local charge signature
    `[-1,-1,-1,1,2]` and a matching CMS check. The residual-source predecessor
    queue now shows all three occurrences have shared origin-circuit witness

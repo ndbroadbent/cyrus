@@ -2676,6 +2676,16 @@ top-level reports now aggregate this as
 `cygv_closest_known_qn_residual_qn_domain_parent_only_offset_known_qn_history_status_counts`,
 which reads `{"known_nonzero_toric_gv":2}` for target `7` and
 `{"known_nonzero_toric_gv":1}` for target `8`.
+This residual-domain comparison is not yet an all-target result. Running the
+same schema-4 path-history/path-support report over all missing targets timed
+out after `900s` without writing JSON. Per-target `180s` probes show target
+`0` and target `1` write reports but their small path-support HKTY calls fail
+with non-integer GV invariants; targets `2` through `5` time out before writing
+reports; target `6` writes a report but its parent path-support HKTY call also
+fails with a non-integer GV invariant, while its residual subtarget alone
+materializes a one-term qN polynomial. Thus the sibling-offset qN comparison is
+currently actionable for targets `7` and `8`, and the higher-degree targets
+still need tighter bounded domains before the same comparison can be promoted.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use

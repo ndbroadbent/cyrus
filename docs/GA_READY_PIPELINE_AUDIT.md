@@ -166,6 +166,10 @@ run pass. Any remaining mismatch must be explicit and localizable.
    degree-8 residual from each parent-only term shows all offsets are known
    degree-2 toric classes with `GV=-2`; target 7 sees both its own and target
    8's residual difference, while target 8 sees target 8's residual difference.
+   The same report is not yet scalable across all nine misses: the all-target
+   schema-4 run timed out at 900 seconds, targets 2-5 time out under 180-second
+   per-target probes, and targets 0/1/6 hit non-integer HKTY errors in their
+   small path-support domains.
    Applying the trace to McAllister still requires the certified corrected-chamber
    semigroup/history domain.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
