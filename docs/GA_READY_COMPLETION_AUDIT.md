@@ -130,10 +130,10 @@ and matrix-basis pipeline are no longer open.
    `basis.dat`/`kklt_basis.dat` corrected-target vector, so it is not evidence
    that Python had reproduced this layer without replay. The schema-4
    corrected-chamber context export is now accepted by `mcallister_gv_context`;
-   its bounded target-7 path-history report aggregates the closest known `q_N`
-   residual as a source-derived degree-6 predecessor plus a toric degree-2
-   difference, leaving the certified semigroup/chamber history for that lower
-   composite term as the next source-level object.
+   bounded target-7 and target-8 path-history reports aggregate the closest
+   known `q_N` residual as the same source-derived degree-6 predecessor plus
+   toric degree-2 differences, leaving the certified semigroup/chamber history
+   for that shared lower composite term as the next source-level object.
 2. **Exact corrected KKLT volume.** The no-replay path computes a corrected
    volume but still has a documented instanton/chamber residual.
 3. **Generic matrix-basis pipeline.** Matrix divisor-basis primitives now cover

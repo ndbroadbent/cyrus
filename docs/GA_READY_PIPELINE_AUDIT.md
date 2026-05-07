@@ -108,11 +108,11 @@ run pass. Any remaining mismatch must be explicit and localizable.
    currently blocks Cyrus.
    `mcallister_gv_context` now accepts the schema-4 context export written by
    `mcallister_first_principles` and aggregates the closest known `q_N`
-   residual statuses and degree splits. A bounded target-7 run on the current
-   4-214-647 export records the live residual split as a source-derived
-   degree-6 predecessor plus a toric degree-2 difference, sharpening the next
-   source-history task to the certified semigroup/chamber history around that
-   composite lower term.
+   residual statuses and degree splits. Bounded target-7 and target-8 runs on
+   the current 4-214-647 export record the live residual split as the same
+   source-derived degree-6 predecessor plus toric degree-2 differences,
+   sharpening the next source-history task to the certified semigroup/chamber
+   history around that shared lower composite term.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for
