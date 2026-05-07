@@ -14,11 +14,14 @@
 //! - Full McAllister-sized GV validation is still too expensive for the normal
 //!   suite: the 214-dimensional cone has hundreds of thousands of rays, and
 //!   lattice-point generation needs a faster CYTools-faithful implementation
+//! - Mirror-side 4-214-647 GV validation is available as an opt-in heavy test
+//!   through the `mcallister_gv --min-points 20000` release binary
 
 #![allow(missing_docs)]
 #![allow(dead_code)]
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use cyrus_core::intersection::compute_intersection_cytools;
 use cyrus_core::{
@@ -102,6 +105,14 @@ fn read_csv_finite(path: &Path) -> Vec<F64<Finite>> {
 fn require_first_principles() -> bool {
     if !crate::first_principles_enabled() {
         eprintln!("Skipping first-principles test (set CYRUS_FIRST_PRINCIPLES=1)");
+        return false;
+    }
+    true
+}
+
+fn require_mirror_gv_heavy() -> bool {
+    if std::env::var_os("CYRUS_MCALLISTER_MIRROR_GV_HEAVY").is_none() {
+        eprintln!("Skipping mirror GV checkpoint test (set CYRUS_MCALLISTER_MIRROR_GV_HEAVY=1)");
         return false;
     }
     true
@@ -303,6 +314,76 @@ fn stage5_mcallister_gv_data_available() {
     };
 
     insta::assert_json_snapshot!("mcallister_gv_data_summary", summary);
+}
+
+/// Run the opt-in mirror-side GV binary and verify its checkpoint comparison.
+///
+/// The binary computes the dual polytope, FRST, GLSM/curve basis,
+/// intersection tensor, Mori-cap rays, grading vector, and compact GV table
+/// before reading `dual_curves.dat` / `dual_curves_gv.dat` as validation
+/// checkpoints.
+#[test]
+fn stage5_mirror_gv_checkpoint_matches_cygv_min_points() {
+    if !require_first_principles() || !require_mirror_gv_heavy() {
+        return;
+    }
+    let Some(data_dir) = crate::mcallister_data_dir() else {
+        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
+    };
+
+    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let runner = std::env::var_os("CYRUS_MCALLISTER_GV_BIN")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| workspace_root.join("target/release/mcallister_gv"));
+    if !runner.exists() {
+        eprintln!(
+            "Skipping mirror GV checkpoint test (build release mcallister_gv or set CYRUS_MCALLISTER_GV_BIN)"
+        );
+        return;
+    }
+
+    let output = Command::new(&runner)
+        .current_dir(&workspace_root)
+        .env("CYRUS_FIRST_PRINCIPLES", "1")
+        .env_remove("CYRUS_ALLOW_FIXTURES")
+        .arg("--data-dir")
+        .arg(&data_dir)
+        .arg("--min-points")
+        .arg("20000")
+        .output()
+        .unwrap_or_else(|e| panic!("failed to run {}: {e}", runner.display()));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined = format!("{stdout}\n{stderr}");
+
+    assert!(
+        output.status.success(),
+        "mirror GV runner failed with status {:?}\n{}",
+        output.status.code(),
+        combined
+    );
+    assert!(
+        combined.contains("[MODE] first-principles (.dat)"),
+        "mirror GV runner did not use the .dat first-principles path:\n{combined}"
+    );
+    assert!(
+        combined.contains(
+            "[INFO] computed dual polytope/FRST match dual_points.dat and dual_simplices.dat checkpoints"
+        ),
+        "mirror GV runner did not validate computed dual geometry checkpoints:\n{combined}"
+    );
+    assert!(
+        combined.contains("[INFO] gv invariants count: 10556"),
+        "mirror GV runner did not compute the expected ambient GV table size:\n{combined}"
+    );
+    assert!(
+        combined.contains("[INFO] dual GV checkpoint: matches=5177/5177 computed_ambient=10556"),
+        "mirror GV runner did not match every dual GV checkpoint row:\n{combined}"
+    );
+    assert!(
+        !combined.contains("[MODE] fixtures"),
+        "mirror GV runner unexpectedly used fixture mode:\n{combined}"
+    );
 }
 
 /// Compute the validation quantities attached to McAllister's potent-ray sample.
