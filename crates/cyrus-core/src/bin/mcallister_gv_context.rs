@@ -313,6 +313,10 @@ struct ContextReport {
         BTreeMap<String, usize>,
     cygv_closest_known_qn_residual_qn_domain_parent_only_offset_known_qn_history_status_counts:
         BTreeMap<String, usize>,
+    cygv_closest_known_qn_residual_qn_domain_parent_only_parent_path_support_qn_trace_status_counts:
+        BTreeMap<String, usize>,
+    cygv_closest_known_qn_residual_qn_domain_parent_only_parent_path_support_gv_coefficient_status_counts:
+        BTreeMap<String, usize>,
     cygv_closest_known_qn_residual_source_predecessor_unique_count: usize,
     cygv_closest_known_qn_residual_source_predecessor_occurrence_count: usize,
     cygv_closest_known_qn_residual_source_predecessor_degree_counts: BTreeMap<i128, usize>,
@@ -10476,6 +10480,14 @@ fn build_report(
         cygv_closest_known_qn_residual_qn_domain_parent_only_offset_known_qn_history_status_counts(
             &targets,
         );
+    let cygv_closest_known_qn_residual_qn_domain_parent_only_parent_path_support_qn_trace_status_counts =
+        cygv_closest_known_qn_residual_qn_domain_parent_only_parent_path_support_qn_trace_status_counts(
+            &targets,
+        );
+    let cygv_closest_known_qn_residual_qn_domain_parent_only_parent_path_support_gv_coefficient_status_counts =
+        cygv_closest_known_qn_residual_qn_domain_parent_only_parent_path_support_gv_coefficient_status_counts(
+            &targets,
+        );
     let cygv_closest_known_qn_residual_source_predecessor_sample =
         cygv_closest_known_qn_residual_source_predecessor_summaries(&targets, validated);
     let cygv_closest_known_qn_residual_source_predecessor_unique_count =
@@ -10774,6 +10786,8 @@ fn build_report(
         cygv_closest_known_qn_residual_qn_domain_status_counts,
         cygv_closest_known_qn_residual_qn_domain_parent_only_source_status_counts,
         cygv_closest_known_qn_residual_qn_domain_parent_only_offset_known_qn_history_status_counts,
+        cygv_closest_known_qn_residual_qn_domain_parent_only_parent_path_support_qn_trace_status_counts,
+        cygv_closest_known_qn_residual_qn_domain_parent_only_parent_path_support_gv_coefficient_status_counts,
         cygv_closest_known_qn_residual_source_predecessor_unique_count,
         cygv_closest_known_qn_residual_source_predecessor_occurrence_count,
         cygv_closest_known_qn_residual_source_predecessor_degree_counts,
@@ -10994,6 +11008,62 @@ fn cygv_closest_known_qn_residual_qn_domain_parent_only_offset_known_qn_history_
         for classification in &comparison.parent_only_term_classification_sample {
             *counts
                 .entry(classification.offset_known_qn_history_status.clone())
+                .or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn cygv_closest_known_qn_residual_qn_domain_parent_only_parent_path_support_qn_trace_status_counts(
+    targets: &[TargetReport],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        let Some(comparison) = target.cygv_path_history_probe.as_ref().and_then(|probe| {
+            probe
+                .closest_known_qn_residual_qn_domain_comparison
+                .as_ref()
+        }) else {
+            continue;
+        };
+        for classification in &comparison.parent_only_term_classification_sample {
+            *counts
+                .entry(
+                    classification
+                        .parent_path_support_qn_trace_status
+                        .clone()
+                        .unwrap_or_else(|| {
+                            "missing_parent_path_support_qn_trace_status".to_string()
+                        }),
+                )
+                .or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn cygv_closest_known_qn_residual_qn_domain_parent_only_parent_path_support_gv_coefficient_status_counts(
+    targets: &[TargetReport],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        let Some(comparison) = target.cygv_path_history_probe.as_ref().and_then(|probe| {
+            probe
+                .closest_known_qn_residual_qn_domain_comparison
+                .as_ref()
+        }) else {
+            continue;
+        };
+        for classification in &comparison.parent_only_term_classification_sample {
+            *counts
+                .entry(
+                    classification
+                        .parent_path_support_gv_coefficient_status
+                        .clone()
+                        .unwrap_or_else(|| {
+                            "missing_parent_path_support_gv_coefficient_status".to_string()
+                        }),
+                )
                 .or_insert(0usize) += 1;
         }
     }
