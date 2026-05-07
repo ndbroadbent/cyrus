@@ -722,6 +722,12 @@ struct ChamberGvDiagnostic {
     combined_diagnostic_gv_nonzero_count: Option<usize>,
     combined_diagnostic_gv_volume_correction: Option<F64<Finite>>,
     combined_diagnostic_gv_target_correction: Option<Vec<F64<Finite>>>,
+    formula_sum_diagnostic_gv_covered_count: Option<usize>,
+    formula_sum_diagnostic_gv_missing_count: Option<usize>,
+    formula_sum_diagnostic_gv_zero_count: Option<usize>,
+    formula_sum_diagnostic_gv_nonzero_count: Option<usize>,
+    formula_sum_diagnostic_gv_volume_correction: Option<F64<Finite>>,
+    formula_sum_diagnostic_gv_target_correction: Option<Vec<F64<Finite>>>,
     remaining_gv_missing_count: usize,
     first_missing_class: Option<Vec<i64>>,
     missing_required_degree_min: Option<i128>,
@@ -811,6 +817,12 @@ struct CorrectedChamberGvContextExport<'a> {
     missing_target_sample_limit: usize,
     missing_target_sample_is_complete: Option<bool>,
     missing_target_stats: Option<&'a MissingGvTargetStats>,
+    formula_sum_diagnostic_gv_covered_count: Option<usize>,
+    formula_sum_diagnostic_gv_missing_count: Option<usize>,
+    formula_sum_diagnostic_gv_zero_count: Option<usize>,
+    formula_sum_diagnostic_gv_nonzero_count: Option<usize>,
+    formula_sum_diagnostic_gv_volume_correction: Option<f64>,
+    formula_sum_diagnostic_gv_target_correction: Option<Vec<f64>>,
     uncovered_source_ray_stats_degree_bound_for_missing: Option<i128>,
     uncovered_source_ray_stats_for_missing: Option<&'a MissingGvTargetStats>,
     shared_facet_unresolved_source_ray_stats_for_missing: Option<&'a MissingGvTargetStats>,
@@ -7768,6 +7780,69 @@ fn diagnose_chamber_gv_volume_correction(
         }
     }
 
+    let ambient_dim = geom.triangulation_points.len();
+    let formula_sum_diagnostic_gvs =
+        formula_sum_diagnostic_missing_gvs(missing_target_stats.as_ref(), ambient_dim)?;
+    let mut formula_sum_diagnostic_gv_covered_count = None;
+    let mut formula_sum_diagnostic_gv_missing_count = None;
+    let mut formula_sum_diagnostic_gv_zero_count = None;
+    let mut formula_sum_diagnostic_gv_nonzero_count = None;
+    let mut formula_sum_diagnostic_gv_volume_correction = None;
+    let mut formula_sum_diagnostic_gv_target_correction = None;
+    if !formula_sum_diagnostic_gvs.is_empty() {
+        if let Some(unexpected) = formula_sum_diagnostic_gvs.keys().find(|class| {
+            !toric_missing_gv_classes
+                .iter()
+                .any(|missing| missing == *class)
+        }) {
+            return Err(format!(
+                "corrected-chamber formula-sum diagnostic GV produced a class that was not a toric miss: {:?}",
+                sparse_i64(unexpected)
+            ));
+        }
+        let (zero_count, nonzero_count) = diagnostic_gv_value_counts(&formula_sum_diagnostic_gvs);
+        formula_sum_diagnostic_gv_zero_count = Some(zero_count);
+        formula_sum_diagnostic_gv_nonzero_count = Some(nonzero_count);
+        let mut formula_sum_small_curve_gvs = toric_small_curve_gvs.clone();
+        let mut covered_count = 0usize;
+        for missing_class in &toric_missing_gv_classes {
+            if let Some(gv) = formula_sum_diagnostic_gvs.get(missing_class) {
+                covered_count += 1;
+                formula_sum_small_curve_gvs.push((missing_class.clone(), gv.clone()));
+            }
+        }
+        let missing_count = toric_missing_gv_classes.len().saturating_sub(covered_count);
+        formula_sum_diagnostic_gv_covered_count = Some(covered_count);
+        formula_sum_diagnostic_gv_missing_count = Some(missing_count);
+        if covered_count > 0 {
+            formula_sum_diagnostic_gv_volume_correction = Some(
+                cyrus_core::kklt::compute_gv_volume_correction_for_ambient_curves(
+                    &formula_sum_small_curve_gvs,
+                    &intersection.basis,
+                    kahler,
+                    Some(gamma),
+                )
+                .ok_or_else(|| {
+                    "failed to compute formula-sum diagnostic corrected-chamber GV volume correction"
+                        .to_string()
+                })?,
+            );
+            formula_sum_diagnostic_gv_target_correction = Some(
+                cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+                    &formula_sum_small_curve_gvs,
+                    &intersection.basis,
+                    kklt_basis,
+                    kahler,
+                    Some(gamma),
+                )
+                .ok_or_else(|| {
+                    "failed to compute formula-sum diagnostic corrected-chamber GV target correction"
+                        .to_string()
+                })?,
+            );
+        }
+    }
+
     let covered_gv_target_correction = if small_curve_gvs.is_empty() {
         None
     } else {
@@ -7839,6 +7914,12 @@ fn diagnose_chamber_gv_volume_correction(
         combined_diagnostic_gv_nonzero_count,
         combined_diagnostic_gv_volume_correction,
         combined_diagnostic_gv_target_correction,
+        formula_sum_diagnostic_gv_covered_count,
+        formula_sum_diagnostic_gv_missing_count,
+        formula_sum_diagnostic_gv_zero_count,
+        formula_sum_diagnostic_gv_nonzero_count,
+        formula_sum_diagnostic_gv_volume_correction,
+        formula_sum_diagnostic_gv_target_correction,
         remaining_gv_missing_count: missing_gv_classes.len(),
         first_missing_class: missing_gv_classes.first().cloned(),
         missing_required_degree_min,
@@ -8600,7 +8681,7 @@ fn write_corrected_chamber_gv_context_export(
         .as_ref()
         .map(|stats| stats.sample.len() == stats.target_count);
     let export = CorrectedChamberGvContextExport {
-        schema_version: 3,
+        schema_version: 4,
         source: "mcallister_first_principles corrected-chamber GV diagnostic",
         small_curve_cutoff: small_curve_cutoff.get(),
         small_curve_pruning: small_curve_pruning.as_str(),
@@ -8635,6 +8716,18 @@ fn write_corrected_chamber_gv_context_export(
         missing_target_sample_limit,
         missing_target_sample_is_complete,
         missing_target_stats: diag.missing_target_stats.as_ref(),
+        formula_sum_diagnostic_gv_covered_count: diag.formula_sum_diagnostic_gv_covered_count,
+        formula_sum_diagnostic_gv_missing_count: diag.formula_sum_diagnostic_gv_missing_count,
+        formula_sum_diagnostic_gv_zero_count: diag.formula_sum_diagnostic_gv_zero_count,
+        formula_sum_diagnostic_gv_nonzero_count: diag.formula_sum_diagnostic_gv_nonzero_count,
+        formula_sum_diagnostic_gv_volume_correction: diag
+            .formula_sum_diagnostic_gv_volume_correction
+            .as_ref()
+            .map(|value| value.get()),
+        formula_sum_diagnostic_gv_target_correction: diag
+            .formula_sum_diagnostic_gv_target_correction
+            .as_ref()
+            .map(|correction| correction.iter().map(|value| value.get()).collect()),
         uncovered_source_ray_stats_degree_bound_for_missing: diag
             .uncovered_source_ray_stats_degree_bound_for_missing,
         uncovered_source_ray_stats_for_missing: diag
@@ -10663,6 +10756,66 @@ fn stage_volume(
                 }
             }
         }
+        if let Some(formula_sum_covered) = diag.formula_sum_diagnostic_gv_covered_count {
+            let formula_sum_missing = diag.formula_sum_diagnostic_gv_missing_count.unwrap_or(0);
+            eprintln!(
+                "[INFO] corrected-chamber local formula-sum diagnostic GV covered {}/{} toric-missing curves; remaining={}",
+                formula_sum_covered, diag.toric_gv_missing_count, formula_sum_missing
+            );
+            if let (Some(zero_count), Some(nonzero_count)) = (
+                diag.formula_sum_diagnostic_gv_zero_count,
+                diag.formula_sum_diagnostic_gv_nonzero_count,
+            ) {
+                eprintln!(
+                    "[INFO] corrected-chamber local formula-sum diagnostic GV values: zero={} nonzero={}",
+                    zero_count, nonzero_count
+                );
+            }
+            if let Some(formula_sum_correction) =
+                diag.formula_sum_diagnostic_gv_volume_correction.as_ref()
+            {
+                let scope = if formula_sum_missing == 0 {
+                    ""
+                } else {
+                    "partial "
+                };
+                eprintln!(
+                    "[INFO] corrected-chamber local formula-sum diagnostic GV {scope}volume correction (diagnostic, not promoted) = {}",
+                    formula_sum_correction.get()
+                );
+                if let Some(input_chamber_correction) = gv_volume_correction.as_ref() {
+                    eprintln!(
+                        "[INFO] corrected-chamber local formula-sum diagnostic GV volume correction delta_vs_input_chamber (diagnostic, not promoted) = {}",
+                        formula_sum_correction.get() - input_chamber_correction.get()
+                    );
+                }
+                if let Some(covered_correction) = diag.covered_gv_volume_correction.as_ref() {
+                    eprintln!(
+                        "[INFO] corrected-chamber local formula-sum diagnostic GV volume correction delta_vs_toric_covered (diagnostic, not promoted) = {}",
+                        formula_sum_correction.get() - covered_correction.get()
+                    );
+                }
+                if let (Some(input_target_correction), Some(formula_sum_target_correction)) = (
+                    input_chamber_gv_target_correction.as_ref(),
+                    diag.formula_sum_diagnostic_gv_target_correction.as_ref(),
+                ) {
+                    let summary = target_correction_delta_summary(
+                        input_target_correction,
+                        formula_sum_target_correction,
+                    )
+                    .unwrap_or_else(|e| {
+                        eprintln!(
+                            "[ERROR] failed to compare formula-sum diagnostic GV target correction: {e}"
+                        );
+                        std::process::exit(2);
+                    });
+                    eprintln!(
+                        "[INFO] corrected-chamber local formula-sum diagnostic GV target correction delta_vs_input_chamber (diagnostic, not promoted) = {:?}",
+                        summary
+                    );
+                }
+            }
+        }
         if let Some(ray_count) = diag.basis_mori_ray_count {
             let degree_window = match (
                 diag.basis_mori_ray_degree_min,
@@ -10866,6 +11019,51 @@ fn diagnostic_gv_value_counts(
     let zero_count = diagnostic_gvs.values().filter(|gv| *gv == &zero).count();
     let nonzero_count = diagnostic_gvs.len().saturating_sub(zero_count);
     (zero_count, nonzero_count)
+}
+
+fn cms_general_divisor_formula_sum(
+    candidates: Option<&[CmsGeneralDivisorShapeCandidate]>,
+) -> Option<malachite::Integer> {
+    let mut found = false;
+    let mut sum = malachite::Integer::from(0);
+    for value in candidates
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|candidate| candidate.toric_gv1_formula_value)
+    {
+        found = true;
+        sum += malachite::Integer::from(value);
+    }
+    found.then_some(sum)
+}
+
+fn formula_sum_diagnostic_missing_gvs(
+    missing_target_stats: Option<&MissingGvTargetStats>,
+    ambient_dim: usize,
+) -> Result<HashMap<Vec<i64>, malachite::Integer>, String> {
+    let mut diagnostic_gvs = HashMap::new();
+    let Some(stats) = missing_target_stats else {
+        return Ok(diagnostic_gvs);
+    };
+    for (idx, sample) in stats.sample.iter().enumerate() {
+        let Some(gv) =
+            cms_general_divisor_formula_sum(sample.cms_general_divisor_shape_candidates.as_deref())
+        else {
+            continue;
+        };
+        let ambient_class = dense_i64_from_sparse(
+            &sample.ambient_nonzero,
+            ambient_dim,
+            &format!("formula-sum diagnostic missing target {idx}"),
+        )?;
+        insert_missing_diagnostic_gv(
+            &mut diagnostic_gvs,
+            &ambient_class,
+            &gv,
+            "local formula-sum",
+        )?;
+    }
+    Ok(diagnostic_gvs)
 }
 
 fn target_correction_delta_summary(
@@ -11439,6 +11637,12 @@ mod tests {
             combined_diagnostic_gv_nonzero_count: None,
             combined_diagnostic_gv_volume_correction: None,
             combined_diagnostic_gv_target_correction: None,
+            formula_sum_diagnostic_gv_covered_count: None,
+            formula_sum_diagnostic_gv_missing_count: None,
+            formula_sum_diagnostic_gv_zero_count: None,
+            formula_sum_diagnostic_gv_nonzero_count: None,
+            formula_sum_diagnostic_gv_volume_correction: None,
+            formula_sum_diagnostic_gv_target_correction: None,
             remaining_gv_missing_count: 1,
             first_missing_class: Some(vec![0, 1, -1]),
             missing_required_degree_min: Some(4),
@@ -12738,6 +12942,42 @@ mod tests {
         ]);
 
         assert_eq!(diagnostic_gv_value_counts(&diagnostic_gvs), (1, 2));
+    }
+
+    #[test]
+    fn cms_general_divisor_formula_sum_preserves_candidate_multiplicity() {
+        let candidates = vec![
+            CmsGeneralDivisorShapeCandidate {
+                shrinking_divisor_index: 2,
+                shrinking_divisor_coefficient: -3,
+                shrinking_divisor_coordinates: vec![1, 0],
+                inferred_other_normal_degree: 1,
+                toric_gv1_formula_value: Some(-2),
+                all_non_origin_relation_points_are_two_face: true,
+            },
+            CmsGeneralDivisorShapeCandidate {
+                shrinking_divisor_index: 5,
+                shrinking_divisor_coefficient: -1,
+                shrinking_divisor_coordinates: vec![0, 1],
+                inferred_other_normal_degree: -1,
+                toric_gv1_formula_value: Some(1),
+                all_non_origin_relation_points_are_two_face: true,
+            },
+            CmsGeneralDivisorShapeCandidate {
+                shrinking_divisor_index: 7,
+                shrinking_divisor_coefficient: -1,
+                shrinking_divisor_coordinates: vec![1, 1],
+                inferred_other_normal_degree: -1,
+                toric_gv1_formula_value: Some(1),
+                all_non_origin_relation_points_are_two_face: true,
+            },
+        ];
+
+        assert_eq!(
+            cms_general_divisor_formula_sum(Some(&candidates)),
+            Some(malachite::Integer::from(0))
+        );
+        assert_eq!(cms_general_divisor_formula_sum(None), None);
     }
 
     #[test]
