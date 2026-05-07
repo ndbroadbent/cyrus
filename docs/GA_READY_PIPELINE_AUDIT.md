@@ -98,6 +98,14 @@ run pass. Any remaining mismatch must be explicit and localizable.
    Non-promotable CMS rational solutions are now retained as diagnostics:
    two integral degree-10 solutions mismatch the inferred normal degree and one
    solution is nonintegral.
+   A fresh read of
+   `string_theory/mcallister_2107/latest_cytools/compute_kklt_iterative.py`
+   confirms the sign convention used by Cyrus,
+   `tau_target = c_i/c_tau + chi/24 - GV(t)`, but also confirms that script is
+   not a hidden solution of the 4-214-647 mixed-target problem: its primal path
+   maps `c_i` onto `basis.dat` and computes GV in the CYTools divisor basis,
+   rather than constructing the `kklt_basis.dat` corrected-target vector that
+   currently blocks Cyrus.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for
