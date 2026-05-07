@@ -190,6 +190,8 @@ struct ContextReport {
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
     local_cygv_actual_call_readiness_counts: BTreeMap<String, usize>,
     local_cygv_missing_source_input_counts: BTreeMap<String, usize>,
+    cms_general_divisor_candidate_status_counts: BTreeMap<String, usize>,
+    cms_general_divisor_intersection_check_status_counts: BTreeMap<String, usize>,
     origin_circuit_facet_context_status_counts: BTreeMap<String, usize>,
     active_support_status_counts: BTreeMap<String, usize>,
     active_support_face_certificate_status_counts: BTreeMap<String, usize>,
@@ -5104,6 +5106,10 @@ fn build_report(
             .iter()
             .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
     );
+    let cms_general_divisor_candidate_status_counts =
+        cms_general_divisor_candidate_status_counts(&targets);
+    let cms_general_divisor_intersection_check_status_counts =
+        cms_general_divisor_intersection_check_status_counts(&targets);
     let origin_circuit_facet_context_status_counts =
         origin_circuit_facet_context_status_counts(&validated.stats.sample, target_index_filter);
     let active_support_status_counts = optional_status_counts(
@@ -5231,6 +5237,8 @@ fn build_report(
         local_cygv_target_candidate_status_counts,
         local_cygv_actual_call_readiness_counts,
         local_cygv_missing_source_input_counts,
+        cms_general_divisor_candidate_status_counts,
+        cms_general_divisor_intersection_check_status_counts,
         origin_circuit_facet_context_status_counts,
         active_support_status_counts,
         active_support_face_certificate_status_counts,
@@ -5314,6 +5322,68 @@ fn local_cygv_missing_source_input_counts<'a>(
         }
     }
     counts
+}
+
+fn cms_general_divisor_candidate_status_counts(
+    targets: &[TargetReport],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        let status = match target.cms_general_divisor_shape_candidates.as_deref() {
+            None => "cms_general_divisor_candidates_not_available",
+            Some([]) => "cms_general_divisor_no_shape_candidates",
+            Some(candidates)
+                if candidates
+                    .iter()
+                    .any(|candidate| candidate.toric_gv1_formula_value.is_some()) =>
+            {
+                "cms_general_divisor_has_formula_candidate"
+            }
+            Some(_) => "cms_general_divisor_no_formula_candidate",
+        };
+        *counts.entry(status.to_string()).or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn cms_general_divisor_intersection_check_status_counts(
+    targets: &[TargetReport],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        let Some(checks) = target.cms_general_divisor_intersection_checks.as_deref() else {
+            *counts
+                .entry("cms_general_divisor_checks_not_available".to_string())
+                .or_insert(0usize) += 1;
+            continue;
+        };
+        if checks.is_empty() {
+            *counts
+                .entry("cms_general_divisor_no_intersection_checks".to_string())
+                .or_insert(0usize) += 1;
+            continue;
+        }
+        for check in checks {
+            let status = cms_general_divisor_intersection_check_status(check);
+            *counts.entry(status.to_string()).or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn cms_general_divisor_intersection_check_status(
+    check: &CmsGeneralDivisorIntersectionCheck,
+) -> &'static str {
+    if !check.has_rational_divisor_solution {
+        return "cms_general_divisor_no_rational_divisor_solution";
+    }
+    if check.solution_is_integral != Some(true) {
+        return "cms_general_divisor_nonintegral_divisor_solution";
+    }
+    if check.matches_inferred_other_normal_degree != Some(true) {
+        return "cms_general_divisor_integral_solution_mismatches_inferred_degree";
+    }
+    "cms_general_divisor_integral_solution_matches_inferred_degree"
 }
 
 fn optional_status_counts<'a>(
@@ -7082,6 +7152,35 @@ mod tests {
         assert_eq!(
             path_support_lookup_status("unknown_not_toric_covered", "0").unwrap(),
             "path_support_zero_or_absent_unknown_not_toric_covered"
+        );
+    }
+
+    #[test]
+    fn cms_general_divisor_check_status_tracks_stable_weyl_readiness() {
+        let no_solution = CmsGeneralDivisorIntersectionCheck {
+            shrinking_divisor_index: 1,
+            has_rational_divisor_solution: false,
+            solution_basis_support_len: None,
+            solution_is_integral: None,
+            computed_other_normal_degree: None,
+            matches_inferred_other_normal_degree: None,
+        };
+        let matching_solution = CmsGeneralDivisorIntersectionCheck {
+            shrinking_divisor_index: 2,
+            has_rational_divisor_solution: true,
+            solution_basis_support_len: Some(3),
+            solution_is_integral: Some(true),
+            computed_other_normal_degree: Some("1".to_string()),
+            matches_inferred_other_normal_degree: Some(true),
+        };
+
+        assert_eq!(
+            cms_general_divisor_intersection_check_status(&no_solution),
+            "cms_general_divisor_no_rational_divisor_solution"
+        );
+        assert_eq!(
+            cms_general_divisor_intersection_check_status(&matching_solution),
+            "cms_general_divisor_integral_solution_matches_inferred_degree"
         );
     }
 

@@ -210,6 +210,14 @@ and matrix-basis pipeline are no longer open.
    rows are still incomplete, but they are validation diagnostics rather than
    blockers for the compact GA-ready GV engine.
 
+The alternative flop/stable-Weyl path is also still uncertified. The context
+report now aggregates the existing CMS divisor checks: all nine remaining
+targets have formula-shaped divisor candidates, but the 14 exact
+divisor-intersection checks all report
+`cms_general_divisor_no_rational_divisor_solution`. The algebraic flop
+transforms are present, but Cyrus still lacks a source-derived shrinking
+divisor and certified `n_C^0` for these classes.
+
 ## Next Concrete Action
 
 The next implementation should be one of these, in order:

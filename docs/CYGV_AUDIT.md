@@ -2082,3 +2082,11 @@ the small support domain can manufacture some live-looking lower-degree qN
 history, but it still does not reproduce the target correction, so those
 lookup values remain diagnostic-only and cannot replace the certified compact
 semigroup/chamber history.
+
+The stable-Weyl/flop-continuation route is now surfaced as a report-level
+readiness count rather than only per-target arrays. On the schema-3 context all
+nine remaining targets have CMS-style formula candidates, but the 14 exact
+divisor-intersection checks aggregate as
+`cms_general_divisor_no_rational_divisor_solution=14`. Thus Cyrus currently
+has the algebraic flop/Weyl primitives, but not a source-derived shrinking
+divisor certificate for these origin-circuit misses.

@@ -485,4 +485,8 @@ to make the remaining GV layer more first-principles:
    `n'^0_C=0` while rejecting conflicting duplicate data. The remaining work is
    the certification layer: Cyrus still needs to identify the shrinking curve
    and certify its `n_C^0` before these transforms can drive a corrected-chamber
-   instanton sum.
+   instanton sum. The schema-`3` context report now exposes that readiness
+   directly: all nine remaining targets have CMS-style formula candidates, but
+   the 14 exact divisor-intersection checks all fail with
+   `cms_general_divisor_no_rational_divisor_solution`, so no source-derived
+   shrinking divisor certificate is currently available.
