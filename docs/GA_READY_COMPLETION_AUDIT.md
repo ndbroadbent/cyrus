@@ -308,7 +308,11 @@ schema-3 report now records the cheap target-ray certificate as well:
 `not_extremal_by_exact_rational_cone_decomposition=4`, and
 `active_support_not_certified_as_codimension_one_face=9`. The unresolved GV
 classes therefore cannot be handled by directly treating the target rays as
-certified chamber walls.
+certified chamber walls. The `--run-integer-diamonds` diagnostic is also now
+aggregated as `target_status_counts`: three integer-semigroup diamonds compute
+target GV `0`, two fail compact HKTY with a non-integral invariant, and the
+four rational-cone targets are skipped. That diagnostic does not resolve the
+remaining GV rows.
 
 ## Next Concrete Action
 

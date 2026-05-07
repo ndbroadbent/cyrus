@@ -569,4 +569,10 @@ to make the remaining GV layer more first-principles:
    supports remain `active_support_not_certified_as_codimension_one_face`.
    This rules out treating the missing target rays themselves as certified
    chamber walls; the remaining chamber work has to recover a source-derived
-   face/continuation history.
+   face/continuation history. The same report now aggregates target statuses
+   directly. With `--run-integer-diamonds`, the five integer-semigroup
+   decompositions split into three `computed_integer_decomposition_diamond`
+   rows with target GV `0` and two `hkty_error` rows with non-integral compact
+   HKTY output, while the four rational-cone targets remain skipped. This
+   keeps the decomposition-diamond path as a diagnostic, not a promoted GV
+   computation.

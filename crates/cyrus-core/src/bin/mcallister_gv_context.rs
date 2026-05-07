@@ -191,6 +191,7 @@ struct ContextReport {
     remaining_gv_missing_count: usize,
     missing_target_count: usize,
     exact_kind_counts: HashMap<String, usize>,
+    target_status_counts: BTreeMap<String, usize>,
     local_cygv_charge_signature_counts: BTreeMap<String, usize>,
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
     local_cygv_actual_call_readiness_counts: BTreeMap<String, usize>,
@@ -6703,6 +6704,10 @@ fn build_report(
             .iter()
             .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
     );
+    let target_status_counts = optional_status_counts(
+        targets.iter().map(|target| Some(target.status.as_str())),
+        "missing",
+    );
     ContextReport {
         schema_version: context.schema_version,
         dimension: validated.dimension,
@@ -6728,6 +6733,7 @@ fn build_report(
             .stats
             .real_cone_decomposition_exact_kind_counts
             .clone(),
+        target_status_counts,
         local_cygv_charge_signature_counts,
         local_cygv_target_candidate_status_counts,
         local_cygv_actual_call_readiness_counts,

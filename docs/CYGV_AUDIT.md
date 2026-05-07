@@ -2288,3 +2288,11 @@ remaining nine targets are not themselves extremal wall rays in the
 degree-bounded finite cone; the next chamber step must identify a certified
 source face/continuation history rather than applying the flop/Weyl transform
 directly to each missing target ray.
+The integer-semigroup decomposition-diamond diagnostic is now explicitly
+summarized by `target_status_counts` in the context report. Running
+`--run-integer-diamonds` on the same schema-3 context gives
+`{"computed_integer_decomposition_diamond":3,"hkty_error":2,
+"skipped_non_integer_decomposition":4}`. The computed integer diamonds produce
+target GV `0`, and the other two integer diamonds fail the compact HKTY
+integrality check, so the decomposition diamond is not the missing chamber
+context either.
