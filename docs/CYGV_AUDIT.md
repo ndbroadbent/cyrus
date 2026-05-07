@@ -2754,6 +2754,18 @@ value `3` with pivot component `-3` requires `-9`; the missing lower
 contribution is `-3`, with GV-candidate delta `1`. This gives the next
 corrected-chamber search an exact signed residual rather than a qualitative
 formula mismatch.
+The target-monomial `q_N` source samples now carry source classifications as
+well. Regenerating target `7` shows its lower pivot-subtraction sum `3` splits
+as `+5` from a degree-two toric-covered row, `0` from the certified
+source-derived degree-six row
+`[(54,-2),(203,1),(206,1),(209,1)]`, and `-2` from a degree-eight composite
+outside the exported source-ray list. Regenerating target `8` shows its lower
+sum `-6` splits as `-10` from a degree-two toric-covered row, `+2` from the
+same certified source-derived degree-six row, and `+2` from the degree-eight
+composite outside the exported source-ray list. Thus the remaining signed
+residuals `+3` and `-3` are not hidden in the now-certified degree-six source
+row; the next compact-history target is the degree-eight composite/chamber
+history.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use

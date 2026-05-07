@@ -803,6 +803,18 @@ struct CygvPathSupportTargetMonomialQnSource {
     target_pivot_coordinate: Option<usize>,
     source_component_at_target_pivot: Option<i32>,
     pivot_li2_subtraction_coefficient: Option<String>,
+    source_class_status: String,
+    source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
+    matching_missing_target_index: Option<usize>,
+    matching_missing_target_degree: Option<i128>,
+    matching_missing_target_origin_circuit_pattern: Option<String>,
+    matching_missing_target_exact_kind: Option<String>,
+    matching_uncovered_source_ray_index: Option<usize>,
+    matching_uncovered_source_ray_degree: Option<i128>,
+    matching_uncovered_source_ray_origin_circuit_pattern: Option<String>,
+    matching_uncovered_source_ray_exact_kind: Option<String>,
+    matching_uncovered_source_ray_local_cygv_readiness: Option<String>,
+    matching_uncovered_source_ray_local_missing_inputs: Vec<String>,
 }
 
 struct CygvPathSupportTargetLi2SubtractionBalance {
@@ -2510,8 +2522,12 @@ fn path_support_generator_probe_inner(
         .into_iter()
         .map(|(curve, value)| (curve, value.to_string()))
         .collect::<HashMap<_, _>>();
-    let target_monomial_qn_sources =
-        path_support_target_monomial_qn_sources(&traced.qn_trace, &gvs_by_curve, &target_i32);
+    let target_monomial_qn_sources = path_support_target_monomial_qn_sources(
+        &traced.qn_trace,
+        &gvs_by_curve,
+        &target_i32,
+        Some(context),
+    )?;
     let target_monomial_qn_source_count = target_monomial_qn_sources.len();
     let target_li2_subtraction_balance = path_support_target_li2_subtraction_balance(
         &target_monomial_qn_sources,
@@ -4143,7 +4159,8 @@ fn path_support_target_monomial_qn_sources(
     qn_trace: &[CygvQnTracePolynomial],
     gvs_by_curve: &HashMap<Vec<i32>, String>,
     target: &[i32],
-) -> Vec<CygvPathSupportTargetMonomialQnSource> {
+    context: Option<&ValidatedContext<'_>>,
+) -> Result<Vec<CygvPathSupportTargetMonomialQnSource>, String> {
     let target_pivot_coordinate = target.iter().position(|&value| value != 0);
     qn_trace
         .iter()
@@ -4156,6 +4173,9 @@ fn path_support_target_monomial_qn_sources(
             if target_terms.is_empty() {
                 return None;
             }
+            Some((poly, target_terms))
+        })
+        .map(|(poly, target_terms)| {
             let li2_coefficient = poly
                 .li2_terms
                 .iter()
@@ -4185,7 +4205,36 @@ fn path_support_target_monomial_qn_sources(
                 (Some(pivot), _, _) => (poly.element.get(pivot).copied(), None),
                 (None, _, _) => (None, None),
             };
-            Some(CygvPathSupportTargetMonomialQnSource {
+            let source_context = match context {
+                Some(context) => {
+                    let source_curve = poly
+                        .element
+                        .iter()
+                        .map(|&value| i64::from(value))
+                        .collect::<Vec<_>>();
+                    path_support_source_class_context(&source_curve, context)?
+                }
+                None => PathSupportSourceClassContext {
+                    status: "not_classified_no_context".to_string(),
+                    source_ray_ambient_nonzero: None,
+                    matching_missing_target_index: None,
+                    matching_missing_target_degree: None,
+                    matching_missing_target_origin_circuit_pattern: None,
+                    matching_missing_target_exact_kind: None,
+                    matching_uncovered_source_ray_index: None,
+                    matching_uncovered_source_ray_degree: None,
+                    matching_uncovered_source_ray_origin_circuit_pattern: None,
+                    matching_uncovered_source_ray_exact_kind: None,
+                    matching_uncovered_source_ray_cms_check_status_counts: BTreeMap::new(),
+                    matching_uncovered_source_ray_cms_solution_summaries: Vec::new(),
+                    matching_uncovered_source_ray_local_charge_signature: None,
+                    matching_uncovered_source_ray_local_cygv_readiness: None,
+                    matching_uncovered_source_ray_local_missing_inputs: Vec::new(),
+                    matching_uncovered_source_ray_local_cygv_input_skeleton: None,
+                    matching_uncovered_source_ray_local_unit_phase_probe: None,
+                },
+            };
+            Ok(CygvPathSupportTargetMonomialQnSource {
                 element_index: poly.element_index,
                 degree: poly.degree,
                 curve_nonzero: sparse_from_i32_dense(&poly.element),
@@ -4205,6 +4254,26 @@ fn path_support_target_monomial_qn_sources(
                 target_pivot_coordinate,
                 source_component_at_target_pivot,
                 pivot_li2_subtraction_coefficient,
+                source_class_status: source_context.status,
+                source_ray_ambient_nonzero: source_context.source_ray_ambient_nonzero,
+                matching_missing_target_index: source_context.matching_missing_target_index,
+                matching_missing_target_degree: source_context.matching_missing_target_degree,
+                matching_missing_target_origin_circuit_pattern: source_context
+                    .matching_missing_target_origin_circuit_pattern,
+                matching_missing_target_exact_kind: source_context
+                    .matching_missing_target_exact_kind,
+                matching_uncovered_source_ray_index: source_context
+                    .matching_uncovered_source_ray_index,
+                matching_uncovered_source_ray_degree: source_context
+                    .matching_uncovered_source_ray_degree,
+                matching_uncovered_source_ray_origin_circuit_pattern: source_context
+                    .matching_uncovered_source_ray_origin_circuit_pattern,
+                matching_uncovered_source_ray_exact_kind: source_context
+                    .matching_uncovered_source_ray_exact_kind,
+                matching_uncovered_source_ray_local_cygv_readiness: source_context
+                    .matching_uncovered_source_ray_local_cygv_readiness,
+                matching_uncovered_source_ray_local_missing_inputs: source_context
+                    .matching_uncovered_source_ray_local_missing_inputs,
             })
         })
         .collect()
@@ -15799,6 +15868,14 @@ mod tests {
             vec![(0, 1)]
         );
         assert_eq!(
+            probe.target_monomial_qn_source_sample[0].source_class_status,
+            "source_ray_context_missing_but_matches_missing_target"
+        );
+        assert_eq!(
+            probe.target_monomial_qn_source_sample[0].matching_missing_target_index,
+            Some(0)
+        );
+        assert_eq!(
             probe.target_monomial_qn_source_sample[0].target_term_coefficients,
             vec!["1"]
         );
@@ -15879,7 +15956,9 @@ mod tests {
         let mut gvs_by_curve = HashMap::new();
         gvs_by_curve.insert(vec![1, -1, 0], "-2".to_string());
 
-        let sources = path_support_target_monomial_qn_sources(&trace, &gvs_by_curve, &[2, -3, 1]);
+        let sources =
+            path_support_target_monomial_qn_sources(&trace, &gvs_by_curve, &[2, -3, 1], None)
+                .expect("target monomial sources should be traced");
 
         assert_eq!(sources.len(), 1);
         assert_eq!(sources[0].element_index, 7);
@@ -15901,6 +15980,7 @@ mod tests {
             sources[0].pivot_li2_subtraction_coefficient.as_deref(),
             Some("2")
         );
+        assert_eq!(sources[0].source_class_status, "not_classified_no_context");
     }
 
     #[test]
@@ -15951,7 +16031,8 @@ mod tests {
         let mut gvs_by_curve = HashMap::new();
         gvs_by_curve.insert(vec![1], "3".to_string());
 
-        let sources = path_support_target_monomial_qn_sources(&trace, &gvs_by_curve, &[2]);
+        let sources = path_support_target_monomial_qn_sources(&trace, &gvs_by_curve, &[2], None)
+            .expect("target monomial sources should use Li2 trace data");
 
         assert_eq!(sources.len(), 1);
         assert_eq!(
