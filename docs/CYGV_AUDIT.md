@@ -2040,12 +2040,16 @@ The current `cygv` crate source sharpens the same boundary:
   windows are not a source-derived substitute for the missing semigroup and
   chamber data. The exact supporting-face verifier also rejects those windows
   as codimension-one chamber faces:
-  `active_support_not_certified_as_codimension_one_face=9`.
-  The corrected-chamber context export has therefore been advanced to schema
-  `2` and now serializes the full source-derived pair of facets for each
-  origin-circuit witness, not just their sizes. Schema-`1` context dumps remain
+  `active_support_not_certified_as_codimension_one_face=9`. The per-target
+  report now serializes that same face-certificate status next to the
+  active-support GV/HKTY result, so a `GV=0` active-support lookup cannot be
+  mistaken for a certified chamber computation.
+  The corrected-chamber context export is schema `3` and serializes the full
+  source-derived pair of facets for each origin-circuit witness, not just their
+  sizes, together with the degree-bounded Mori-ray context used by the active
+  dependency diagnostics. Schema-`1` context dumps remain
   readable and are reported as `origin_circuit_missing_full_facet_context=9`;
-  the regenerated schema-`2` context report verifies the new data as
+  the regenerated schema-`3` context report verifies the new data as
   `source_derived_full_facet_context=9`. This supplies the facet provenance
   needed for the next chamber/semigroup certificate step.
 
@@ -2298,10 +2302,10 @@ integrality check, so the decomposition diamond is not the missing chamber
 context either.
 The same report now aggregates the active decomposition generators themselves:
 `active_decomposition_generator_source_status_counts =
-{"active_generator_known_source_derived_gv":2,
+{"active_generator_known_source_derived_gv":3,
 "active_generator_known_toric_covered":12,
 "active_generator_matches_missing_target":2,
-"active_generator_matches_uncovered_source_ray":6}` on
+"active_generator_matches_uncovered_source_ray":5}` on
 `/tmp/cyrus_gv_context_schema3_active_dependencies_report.json`. This report
 uses the first-principles context export that unions active non-covered
 dependency rays into the uncovered source-ray diagnostic set before computing
@@ -2347,9 +2351,9 @@ candidate set is `{-2,1}`. Thus four of the five origin-circuit lower leaves
 still require a certified local phase/intersection/chamber model rather than a
 unit-tensor promotion. The top-level aggregate is
 `active_decomposition_source_leaf_unit_phase_probe_status_counts =
-{"not_available":3,"unit_tensor_probe_matches_expected_formula_set_but_uncertified":1,
+{"not_available":2,"unit_tensor_probe_matches_expected_formula_set_but_uncertified":1,
 "unit_tensor_probe_mismatch_expected_formula_set":4}` and the origin-omitted
-aggregate is `{"not_available":3,"origin_omitted_unit_tensor_probe_hkty_error":2,
+aggregate is `{"not_available":2,"origin_omitted_unit_tensor_probe_hkty_error":2,
 "origin_omitted_unit_tensor_probe_mismatch_expected_formula_set":3}`.
 The active-leaf CMS summaries now retain rational divisor solutions even when
 they are not promotable. The current aggregate is

@@ -308,10 +308,13 @@ schema-3 report now records the cheap target-ray certificate as well:
 `not_extremal_by_exact_rational_cone_decomposition=4`, and
 `active_support_not_certified_as_codimension_one_face=9`. The unresolved GV
 classes therefore cannot be handled by directly treating the target rays as
-certified chamber walls. The `--run-integer-diamonds` diagnostic is also now
-aggregated as `target_status_counts`: three integer-semigroup diamonds compute
-target GV `0`, two fail compact HKTY with a non-integral invariant, and the
-four rational-cone targets are skipped. That diagnostic does not resolve the
+certified chamber walls. The per-target active-support report now serializes
+that same face-certificate status next to each active-support GV/HKTY result,
+so the six active-support `GV=0` diagnostics remain visibly non-promotable. The
+`--run-integer-diamonds` diagnostic is also now aggregated as
+`target_status_counts`: three integer-semigroup diamonds compute target GV
+`0`, two fail compact HKTY with a non-integral invariant, and the four
+rational-cone targets are skipped. That diagnostic does not resolve the
 remaining GV rows. The active decomposition generators now classify as 12
 toric-covered leaves, three source-derived GV leaves, two other missing
 targets, and five concrete uncovered source-ray leaves after the
