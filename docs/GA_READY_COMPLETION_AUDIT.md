@@ -664,6 +664,16 @@ at tensor value `1`, while the compact bounded diamond's target raw GW
 candidate is `4/3`. This keeps the q-matrix orientation in the plausible
 bucket and moves the unresolved discrepancy to certified chamber/intersection
 tensor history.
+Origin-circuit witness-domain compact `cygv` probes are now opt-in and guarded
+by `--origin-witness-cygv-generator-limit`. For target `8`, the
+single-generator relation domain computes `GV=2`, the 14-generator
+shared-facet domain computes `GV=0`, and the 458-generator facet union is
+skipped with the default diagnostic guard. For target `7`, the relation domain
+fails compact HKTY integrality with target candidate `3/2`, the 21-generator
+shared-facet domain computes `GV=0`, and the 506-generator facet union is
+skipped. These are not promoted because the LP/exact witness-domain face
+certificates still fail, but they rule out the small relation/shared-facet
+domains as the corrected McAllister compact histories.
 
 ## Next Concrete Action
 

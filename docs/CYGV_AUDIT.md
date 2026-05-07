@@ -3004,6 +3004,21 @@ shows that the local charge orientation and unit semigroup can reproduce the
 expected scalar formula while the compact bounded diamond reads the target as
 `4/3`. The remaining gap is therefore the certified local/compact chamber
 tensor history, not a missing one-parameter q-matrix orientation.
+The origin-circuit witness domains now have an opt-in compact `cygv` probe in
+addition to the LP/exact face certificate. With
+`--run-origin-witness-cygv --origin-witness-cygv-generator-limit 64`, target
+`8`'s two identical witnesses compute the single-generator relation domain
+with target `GV=2`, compute the 14-generator shared-facet domain with target
+`GV=0`, and skip the 458-generator facet union under the guard. The same run
+still reports `origin_support_lp_no_certificate_rank_9_dim_214` for the
+shared facet and `origin_support_lp_no_certificate_rank_177_dim_214` for the
+facet union, so these compact HKTY readouts remain diagnostic. Target `7`
+contrasts again: its single-generator relation domain fails compact HKTY
+integrality at the target row with candidate `3/2`, its 21-generator
+shared-facet domain computes target `GV=0`, and its 506-generator facet union
+is skipped under the same guard. Thus the witness-domain compact probes do not
+promote either degree-10 target; they show that the small relation/shared-facet
+domains have the wrong compact history before any larger facet-union question.
 Thus the current blocker is not hidden by a missing scalar source readout: the
 candidate domains contain fractional lower coefficient history and still lack
 a supporting-face/chamber certificate.

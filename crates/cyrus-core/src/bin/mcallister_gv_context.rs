@@ -280,6 +280,9 @@ struct ContextReport {
     origin_circuit_witness_relation_support_face_certificate_status_counts: BTreeMap<String, usize>,
     origin_circuit_witness_shared_facet_face_certificate_status_counts: BTreeMap<String, usize>,
     origin_circuit_witness_facet_union_face_certificate_status_counts: BTreeMap<String, usize>,
+    origin_circuit_witness_relation_cygv_status_counts: BTreeMap<String, usize>,
+    origin_circuit_witness_shared_facet_cygv_status_counts: BTreeMap<String, usize>,
+    origin_circuit_witness_facet_union_cygv_status_counts: BTreeMap<String, usize>,
     origin_circuit_witness_domain_sample: Vec<OriginCircuitWitnessDomainSummary>,
     origin_circuit_witness_domain_unresolved_generator_unique_count: usize,
     origin_circuit_witness_domain_unresolved_generator_occurrence_count: usize,
@@ -7080,6 +7083,17 @@ struct OriginCircuitWitnessDomainSummary {
     relation_support_face_certificate_status: String,
     shared_facet_face_certificate_status: String,
     facet_union_face_certificate_status: String,
+    relation_cygv_probe: Option<OriginCircuitWitnessDomainCygvProbe>,
+    shared_facet_cygv_probe: Option<OriginCircuitWitnessDomainCygvProbe>,
+    facet_union_cygv_probe: Option<OriginCircuitWitnessDomainCygvProbe>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct OriginCircuitWitnessDomainCygvProbe {
+    generator_count: Option<usize>,
+    status: String,
+    gv: Option<String>,
+    error: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -7214,21 +7228,28 @@ fn origin_circuit_witness_domain_summaries(
     target_index_filter: Option<usize>,
     certify_domains: bool,
     generator_limit: usize,
+    run_cygv: bool,
+    cygv_generator_limit: usize,
 ) -> Vec<OriginCircuitWitnessDomainSummary> {
     let mut summaries = Vec::new();
     for (target_index, sample) in samples.iter().enumerate() {
         if target_index_filter.is_some_and(|filter| filter != target_index) {
             continue;
         }
+        let target = dense_from_sparse(&sample.basis_nonzero, context.dimension)
+            .map_err(|error| format!("origin witness target basis vector is invalid: {error}"));
         for (witness_index, witness) in origin_circuit_witnesses(sample).into_iter().enumerate() {
             summaries.push(origin_circuit_witness_domain_summary(
                 target_index,
                 sample.degree,
+                target.as_deref(),
                 witness_index,
                 witness,
                 context,
                 certify_domains,
                 generator_limit,
+                run_cygv,
+                cygv_generator_limit,
             ));
         }
     }
@@ -7238,11 +7259,14 @@ fn origin_circuit_witness_domain_summaries(
 fn origin_circuit_witness_domain_summary(
     target_index: usize,
     degree: i128,
+    target: Result<&[i64], &String>,
     witness_index: usize,
     witness: &OriginCircuitWitnessSample,
     context: &ValidatedContext<'_>,
     certify_domains: bool,
     generator_limit: usize,
+    run_cygv: bool,
+    cygv_generator_limit: usize,
 ) -> OriginCircuitWitnessDomainSummary {
     let supports = origin_circuit_witness_ambient_support_sets(witness);
     let relation = origin_circuit_witness_domain_stats(
@@ -7251,6 +7275,10 @@ fn origin_circuit_witness_domain_summary(
         &supports.relation_support,
         certify_domains,
         generator_limit,
+        run_cygv,
+        cygv_generator_limit,
+        target,
+        "origin_witness_relation",
     );
     let shared = origin_circuit_witness_domain_stats(
         context,
@@ -7258,6 +7286,10 @@ fn origin_circuit_witness_domain_summary(
         &supports.shared_facet,
         certify_domains,
         generator_limit,
+        run_cygv,
+        cygv_generator_limit,
+        target,
+        "origin_witness_shared_facet",
     );
     let union = origin_circuit_witness_domain_stats(
         context,
@@ -7265,6 +7297,10 @@ fn origin_circuit_witness_domain_summary(
         &supports.facet_union,
         certify_domains,
         generator_limit,
+        run_cygv,
+        cygv_generator_limit,
+        target,
+        "origin_witness_facet_union",
     );
     OriginCircuitWitnessDomainSummary {
         target_index,
@@ -7291,6 +7327,9 @@ fn origin_circuit_witness_domain_summary(
         relation_support_face_certificate_status: relation.certificate_status,
         shared_facet_face_certificate_status: shared.certificate_status,
         facet_union_face_certificate_status: union.certificate_status,
+        relation_cygv_probe: relation.cygv_probe,
+        shared_facet_cygv_probe: shared.cygv_probe,
+        facet_union_cygv_probe: union.cygv_probe,
     }
 }
 
@@ -7300,6 +7339,7 @@ struct OriginCircuitWitnessDomainStats {
     support_face_profile: String,
     source_status_counts: BTreeMap<String, usize>,
     certificate_status: String,
+    cygv_probe: Option<OriginCircuitWitnessDomainCygvProbe>,
 }
 
 fn origin_circuit_witness_domain_stats(
@@ -7308,6 +7348,10 @@ fn origin_circuit_witness_domain_stats(
     allowed_ambient_support: &HashSet<usize>,
     certify_domain: bool,
     generator_limit: usize,
+    run_cygv: bool,
+    cygv_generator_limit: usize,
+    target: Result<&[i64], &String>,
+    cygv_label: &str,
 ) -> OriginCircuitWitnessDomainStats {
     let Some(ray_context) = context.degree_bounded_ray_context else {
         return OriginCircuitWitnessDomainStats {
@@ -7316,6 +7360,7 @@ fn origin_circuit_witness_domain_stats(
             support_face_profile: "missing_degree_bounded_mori_ray_context".to_string(),
             source_status_counts: BTreeMap::new(),
             certificate_status: "missing_degree_bounded_mori_ray_context".to_string(),
+            cygv_probe: None,
         };
     };
     let generators = degree_bounded_ray_context_support_generators(
@@ -7339,6 +7384,7 @@ fn origin_circuit_witness_domain_stats(
                     "origin_witness_domain_error_{}",
                     status_error_fragment(&error)
                 ),
+                cygv_probe: None,
             };
         }
     };
@@ -7360,6 +7406,7 @@ fn origin_circuit_witness_domain_stats(
                         "origin_witness_domain_error_{}",
                         status_error_fragment(&error.to_string())
                     ),
+                    cygv_probe: None,
                 };
             }
         }
@@ -7378,12 +7425,78 @@ fn origin_circuit_witness_domain_stats(
     } else {
         "not_run".to_string()
     };
+    let cygv_probe = origin_circuit_witness_domain_cygv_probe(
+        &generators,
+        target,
+        degree,
+        context,
+        cygv_label,
+        run_cygv,
+        cygv_generator_limit,
+    );
     OriginCircuitWitnessDomainStats {
         generator_count: Some(generators.len()),
         rank,
         support_face_profile,
         source_status_counts,
         certificate_status,
+        cygv_probe,
+    }
+}
+
+fn origin_circuit_witness_domain_cygv_probe(
+    generators: &[Vec<i64>],
+    target: Result<&[i64], &String>,
+    degree: i128,
+    context: &ValidatedContext<'_>,
+    label: &str,
+    run_cygv: bool,
+    generator_limit: usize,
+) -> Option<OriginCircuitWitnessDomainCygvProbe> {
+    if !run_cygv {
+        return None;
+    }
+    let target = match target {
+        Ok(target) => target,
+        Err(error) => {
+            return Some(OriginCircuitWitnessDomainCygvProbe {
+                generator_count: Some(generators.len()),
+                status: "origin_witness_cygv_error_invalid_target".to_string(),
+                gv: None,
+                error: Some(error.clone()),
+            });
+        }
+    };
+    if generators.is_empty() {
+        return Some(OriginCircuitWitnessDomainCygvProbe {
+            generator_count: Some(0),
+            status: "origin_witness_cygv_skipped_empty_domain".to_string(),
+            gv: None,
+            error: None,
+        });
+    }
+    if generators.len() > generator_limit {
+        return Some(OriginCircuitWitnessDomainCygvProbe {
+            generator_count: Some(generators.len()),
+            status: format!("origin_witness_cygv_skipped_generator_limit_{generator_limit}"),
+            gv: None,
+            error: None,
+        });
+    }
+
+    match run_provided_generator_target_gv(generators, target, degree, context, label, false) {
+        Ok(probe) => Some(OriginCircuitWitnessDomainCygvProbe {
+            generator_count: Some(probe.generator_count),
+            status: probe.status,
+            gv: probe.gv,
+            error: probe.error,
+        }),
+        Err(error) => Some(OriginCircuitWitnessDomainCygvProbe {
+            generator_count: Some(generators.len()),
+            status: "origin_witness_cygv_error".to_string(),
+            gv: None,
+            error: Some(error),
+        }),
     }
 }
 
@@ -7458,6 +7571,20 @@ fn origin_circuit_witness_domain_status_counts(
     let mut counts = BTreeMap::new();
     for summary in summaries {
         *counts.entry(status(summary).to_string()).or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn origin_circuit_witness_domain_cygv_status_counts(
+    summaries: &[OriginCircuitWitnessDomainSummary],
+    probe: impl Fn(&OriginCircuitWitnessDomainSummary) -> Option<&OriginCircuitWitnessDomainCygvProbe>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        let status = probe(summary)
+            .map(|probe| probe.status.as_str())
+            .unwrap_or("not_run");
+        *counts.entry(status.to_string()).or_insert(0usize) += 1;
     }
     counts
 }
@@ -12691,6 +12818,8 @@ fn build_report(
     certify_origin_support_domains: bool,
     certify_origin_witness_domains: bool,
     origin_support_certificate_limit: usize,
+    run_origin_witness_cygv: bool,
+    origin_witness_cygv_generator_limit: usize,
     certify_target_extremal_rays: bool,
     target_extremal_generator_limit: usize,
     target_extremal_max_degree: Option<i128>,
@@ -12893,6 +13022,8 @@ fn build_report(
         target_index_filter,
         certify_origin_witness_domains,
         origin_support_certificate_limit,
+        run_origin_witness_cygv,
+        origin_witness_cygv_generator_limit,
     );
     let origin_circuit_witness_relation_support_face_profile_counts =
         origin_circuit_witness_domain_status_counts(
@@ -12923,6 +13054,21 @@ fn build_report(
         origin_circuit_witness_domain_status_counts(
             &origin_circuit_witness_domain_sample,
             |summary| &summary.facet_union_face_certificate_status,
+        );
+    let origin_circuit_witness_relation_cygv_status_counts =
+        origin_circuit_witness_domain_cygv_status_counts(
+            &origin_circuit_witness_domain_sample,
+            |summary| summary.relation_cygv_probe.as_ref(),
+        );
+    let origin_circuit_witness_shared_facet_cygv_status_counts =
+        origin_circuit_witness_domain_cygv_status_counts(
+            &origin_circuit_witness_domain_sample,
+            |summary| summary.shared_facet_cygv_probe.as_ref(),
+        );
+    let origin_circuit_witness_facet_union_cygv_status_counts =
+        origin_circuit_witness_domain_cygv_status_counts(
+            &origin_circuit_witness_domain_sample,
+            |summary| summary.facet_union_cygv_probe.as_ref(),
         );
     let origin_circuit_witness_domain_unresolved_generators =
         origin_circuit_witness_domain_unresolved_generator_summaries(
@@ -13484,6 +13630,9 @@ fn build_report(
         origin_circuit_witness_relation_support_face_certificate_status_counts,
         origin_circuit_witness_shared_facet_face_certificate_status_counts,
         origin_circuit_witness_facet_union_face_certificate_status_counts,
+        origin_circuit_witness_relation_cygv_status_counts,
+        origin_circuit_witness_shared_facet_cygv_status_counts,
+        origin_circuit_witness_facet_union_cygv_status_counts,
         origin_circuit_witness_domain_sample,
         origin_circuit_witness_domain_unresolved_generator_unique_count,
         origin_circuit_witness_domain_unresolved_generator_occurrence_count,
@@ -14767,7 +14916,7 @@ fn selected_target_indices(
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--trace-support-overlap-qn] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--certify-origin-witness-domains] [--origin-support-certificate-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--supporting-face-lp-anchor-attempts N] [--supporting-face-lp-cutting-rounds N] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--scan-local-integer-tensors] [--local-tensor-scan-bound N] [--element-limit N] [--closure-generation-limit N] [--out path | --per-target-out-dir path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
+            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--trace-support-overlap-qn] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--certify-origin-witness-domains] [--origin-support-certificate-limit N] [--run-origin-witness-cygv] [--origin-witness-cygv-generator-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--supporting-face-lp-anchor-attempts N] [--supporting-face-lp-cutting-rounds N] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--scan-local-integer-tensors] [--local-tensor-scan-bound N] [--element-limit N] [--closure-generation-limit N] [--out path | --per-target-out-dir path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
         );
         std::process::exit(2);
     };
@@ -14784,6 +14933,9 @@ fn main() {
     let certify_origin_witness_domains = parse_flag("--certify-origin-witness-domains");
     let origin_support_certificate_limit =
         parse_arg_value::<usize>("--origin-support-certificate-limit").unwrap_or(256);
+    let run_origin_witness_cygv = parse_flag("--run-origin-witness-cygv");
+    let origin_witness_cygv_generator_limit =
+        parse_arg_value::<usize>("--origin-witness-cygv-generator-limit").unwrap_or(64);
     let certify_target_extremal_rays = parse_flag("--certify-target-extremal-rays");
     let target_extremal_generator_limit =
         parse_arg_value::<usize>("--target-extremal-generator-limit").unwrap_or(256);
@@ -14853,6 +15005,8 @@ fn main() {
                 certify_origin_support_domains,
                 certify_origin_witness_domains,
                 origin_support_certificate_limit,
+                run_origin_witness_cygv,
+                origin_witness_cygv_generator_limit,
                 certify_target_extremal_rays,
                 target_extremal_generator_limit,
                 target_extremal_max_degree,
@@ -14896,6 +15050,8 @@ fn main() {
         certify_origin_support_domains,
         certify_origin_witness_domains,
         origin_support_certificate_limit,
+        run_origin_witness_cygv,
+        origin_witness_cygv_generator_limit,
         certify_target_extremal_rays,
         target_extremal_generator_limit,
         target_extremal_max_degree,
@@ -15296,6 +15452,8 @@ mod tests {
             None,
             false,
             2,
+            false,
+            64,
         );
         assert_eq!(summaries.len(), 1);
         assert_eq!(

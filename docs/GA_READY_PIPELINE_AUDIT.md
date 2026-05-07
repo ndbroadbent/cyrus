@@ -897,4 +897,12 @@ to make the remaining GV layer more first-principles:
    problem is therefore not the one-parameter orientation itself, but the
    certified chamber/intersection tensor history that would make such a local
    value promotable in the compact pipeline.
+   Origin-circuit witness-domain reports now optionally run compact `cygv` on
+   relation, shared-facet, and guarded facet-union generator domains. For
+   target `8`, relation-only gives `GV=2` while the shared facet gives `GV=0`;
+   for target `7`, relation-only fails integrality at candidate `3/2` while
+   the shared facet gives `GV=0`. Both large facet unions exceed the default
+   `64`-generator compact probe guard. These readouts are diagnostic because
+   the witness-domain supporting-face certificates remain absent, but they
+   show the small witness domains are not the missing corrected chamber.
    generators over `7360` occurrences.
