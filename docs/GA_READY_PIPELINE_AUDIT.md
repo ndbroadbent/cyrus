@@ -914,4 +914,7 @@ to make the remaining GV layer more first-principles:
    facet unions have full/aggregate/anchor `lp_no_solution`. These readouts
    are diagnostic because the witness-domain supporting-face certificates
    remain absent, but they show the small witness domains are not the missing
-   corrected chamber.
+   corrected chamber. A smoke run with
+   `--supporting-face-lp-anchor-attempts 2 --supporting-face-lp-cutting-rounds 1`
+   now confirms the origin-witness diagnostics honor the CLI LP search limits
+   instead of using hardcoded defaults.

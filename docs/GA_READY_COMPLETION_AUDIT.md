@@ -682,7 +682,10 @@ aggregate `lp_no_solution`, and anchors split `9` cutting-round limits to `7`
 no-solution outcomes; both facet unions have full/aggregate/anchor
 `lp_no_solution`. These are not promoted because the LP/exact witness-domain
 face certificates still fail, but they rule out the small relation/shared-facet
-domains as the corrected McAllister compact histories.
+domains as the corrected McAllister compact histories. Origin-witness
+certificate diagnostics now also honor the `--supporting-face-lp-*` CLI
+limits; a target `8` smoke run with `2` anchors and `1` cutting round reports
+exactly two anchor attempts in the shared and union domains.
 
 ## Next Concrete Action
 

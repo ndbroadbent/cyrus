@@ -3034,7 +3034,10 @@ facet-union domains have full/aggregate `lp_no_solution` and all `16` anchor
 attempts at `lp_no_solution`. Thus the witness-domain compact probes do not
 promote either degree-10 target; they show that the small
 relation/shared-facet domains have the wrong compact history before any larger
-facet-union question.
+facet-union question. A target `8` smoke report with
+`--supporting-face-lp-anchor-attempts 2 --supporting-face-lp-cutting-rounds 1`
+now verifies that the origin-witness diagnostic path uses the requested CLI LP
+limits; the shared and union domains both report two anchor attempts.
 Thus the current blocker is not hidden by a missing scalar source readout: the
 candidate domains contain fractional lower coefficient history and still lack
 a supporting-face/chamber certificate.

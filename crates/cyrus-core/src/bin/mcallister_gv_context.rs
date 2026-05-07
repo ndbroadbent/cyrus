@@ -7331,6 +7331,7 @@ fn origin_circuit_witness_domain_summaries(
     target_index_filter: Option<usize>,
     certify_domains: bool,
     generator_limit: usize,
+    supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
     run_cygv: bool,
     cygv_generator_limit: usize,
 ) -> Vec<OriginCircuitWitnessDomainSummary> {
@@ -7351,6 +7352,7 @@ fn origin_circuit_witness_domain_summaries(
                 context,
                 certify_domains,
                 generator_limit,
+                supporting_face_lp_options,
                 run_cygv,
                 cygv_generator_limit,
             ));
@@ -7368,6 +7370,7 @@ fn origin_circuit_witness_domain_summary(
     context: &ValidatedContext<'_>,
     certify_domains: bool,
     generator_limit: usize,
+    supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
     run_cygv: bool,
     cygv_generator_limit: usize,
 ) -> OriginCircuitWitnessDomainSummary {
@@ -7378,6 +7381,7 @@ fn origin_circuit_witness_domain_summary(
         &supports.relation_support,
         certify_domains,
         generator_limit,
+        supporting_face_lp_options,
         run_cygv,
         cygv_generator_limit,
         target,
@@ -7389,6 +7393,7 @@ fn origin_circuit_witness_domain_summary(
         &supports.shared_facet,
         certify_domains,
         generator_limit,
+        supporting_face_lp_options,
         run_cygv,
         cygv_generator_limit,
         target,
@@ -7400,6 +7405,7 @@ fn origin_circuit_witness_domain_summary(
         &supports.facet_union,
         certify_domains,
         generator_limit,
+        supporting_face_lp_options,
         run_cygv,
         cygv_generator_limit,
         target,
@@ -7454,6 +7460,7 @@ fn origin_circuit_witness_support_face_certificate_probe(
     rank: Option<usize>,
     context: &ValidatedContext<'_>,
     generator_limit: usize,
+    supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
 ) -> OriginCircuitWitnessSupportFaceCertificateProbe {
     if generators.is_empty() {
         return origin_circuit_witness_support_face_certificate_probe_empty(
@@ -7517,11 +7524,10 @@ fn origin_circuit_witness_support_face_certificate_probe(
         };
     }
 
-    let options = SupportingMoriFaceLpSearchOptions::default();
     match diagnose_supporting_mori_face_by_lp_search(
         generators,
         context.degree_bounded_rays,
-        &options,
+        supporting_face_lp_options,
     ) {
         Ok(diagnostic) => {
             let certificate = diagnostic.certificate.as_ref();
@@ -7563,6 +7569,7 @@ fn origin_circuit_witness_domain_stats(
     allowed_ambient_support: &HashSet<usize>,
     certify_domain: bool,
     generator_limit: usize,
+    supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
     run_cygv: bool,
     cygv_generator_limit: usize,
     target: Result<&[i64], &String>,
@@ -7649,6 +7656,7 @@ fn origin_circuit_witness_domain_stats(
             rank,
             context,
             generator_limit,
+            supporting_face_lp_options,
         )
     } else {
         origin_circuit_witness_support_face_certificate_probe_empty("not_run".to_string())
@@ -13287,6 +13295,7 @@ fn build_report(
         target_index_filter,
         certify_origin_witness_domains,
         origin_support_certificate_limit,
+        supporting_face_lp_options,
         run_origin_witness_cygv,
         origin_witness_cygv_generator_limit,
     );
@@ -15717,6 +15726,7 @@ mod tests {
             None,
             false,
             2,
+            &SupportingMoriFaceLpSearchOptions::default(),
             false,
             64,
         );
@@ -15739,6 +15749,7 @@ mod tests {
             None,
             true,
             2,
+            &SupportingMoriFaceLpSearchOptions::default(),
             false,
             64,
         );
@@ -15834,6 +15845,7 @@ mod tests {
             Some(1),
             &context,
             16,
+            &SupportingMoriFaceLpSearchOptions::default(),
         );
         assert_eq!(
             probe.status,
