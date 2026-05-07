@@ -165,7 +165,12 @@ and matrix-basis pipeline are no longer open.
    `99317` previous-window elements, giving a bounded source-history slice for
    the next qN-history analysis. It also samples the actual predecessor pairs;
    both degree-10 targets have eight first-layer predecessor differences, with
-   nearest degree split `8+2`.
+   nearest degree split `8+2`. After exporting corrected-chamber toric-covered
+   rows into the context, those predecessor pairs split as
+   `difference_only_toric_covered=2`, `predecessor_only_toric_covered=2`, and
+   `neither_toric_covered=4`, with no pair where both sides are toric-covered.
+   This keeps the next compact-GV task focused on lower-degree non-toric
+   history, not just the nine target classes.
 5. **Potent-ray local diagnostics.** Rank-two N=10 and rank-four potent-ray
    rows are still incomplete, but they are validation diagnostics rather than
    blockers for the compact GA-ready GV engine.

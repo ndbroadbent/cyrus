@@ -386,6 +386,7 @@ struct CygvPathHistoryProbe {
     predecessor_counts_complete: bool,
     predecessor_difference_count: Option<usize>,
     improving_predecessor_difference_count: Option<usize>,
+    predecessor_toric_coverage_counts: BTreeMap<String, usize>,
     closest_series_distance: Option<String>,
     closest_series_predecessor_nonzero: Option<Vec<(usize, i64)>>,
     closest_series_difference_nonzero: Option<Vec<(usize, i64)>>,
@@ -426,6 +427,7 @@ struct CygvPathPredecessorStats {
     previous_window_element_count: usize,
     predecessor_difference_count: usize,
     improving_predecessor_difference_count: usize,
+    toric_coverage_counts: BTreeMap<String, usize>,
     closest_distance: f64,
     closest_predecessor: Option<Vec<i64>>,
     closest_difference: Option<Vec<i64>>,
@@ -3477,6 +3479,7 @@ fn cygv_path_history_probe(
             predecessor_counts_complete: false,
             predecessor_difference_count: None,
             improving_predecessor_difference_count: None,
+            predecessor_toric_coverage_counts: BTreeMap::new(),
             closest_series_distance: None,
             closest_series_predecessor_nonzero: None,
             closest_series_difference_nonzero: None,
@@ -3534,6 +3537,7 @@ fn cygv_path_history_probe_inner(
             predecessor_counts_complete: false,
             predecessor_difference_count: None,
             improving_predecessor_difference_count: None,
+            predecessor_toric_coverage_counts: BTreeMap::new(),
             closest_series_distance: None,
             closest_series_predecessor_nonzero: None,
             closest_series_difference_nonzero: None,
@@ -3566,6 +3570,7 @@ fn cygv_path_history_probe_inner(
             predecessor_counts_complete: false,
             predecessor_difference_count: None,
             improving_predecessor_difference_count: None,
+            predecessor_toric_coverage_counts: BTreeMap::new(),
             closest_series_distance: None,
             closest_series_predecessor_nonzero: None,
             closest_series_difference_nonzero: None,
@@ -3630,6 +3635,7 @@ fn cygv_path_history_probe_inner(
             improving_predecessor_difference_count: Some(
                 predecessor_stats.improving_predecessor_difference_count,
             ),
+            predecessor_toric_coverage_counts: predecessor_stats.toric_coverage_counts,
             closest_series_distance: Some(format!("{:.6}", predecessor_stats.closest_distance)),
             closest_series_predecessor_nonzero: predecessor_stats
                 .closest_predecessor
@@ -3670,6 +3676,7 @@ fn cygv_path_history_probe_inner(
         improving_predecessor_difference_count: Some(
             predecessor_stats.improving_predecessor_difference_count,
         ),
+        predecessor_toric_coverage_counts: predecessor_stats.toric_coverage_counts,
         closest_series_distance: Some(format!("{:.6}", predecessor_stats.closest_distance)),
         closest_series_predecessor_nonzero: predecessor_stats
             .closest_predecessor
@@ -3707,6 +3714,7 @@ fn cygv_path_predecessor_stats(
     let mut closest_predecessor = None;
     let mut closest_difference = None;
     let mut candidate_sample = Vec::new();
+    let mut toric_coverage_counts = BTreeMap::new();
     let mut sorted_elements = elements.iter().collect::<Vec<_>>();
     sorted_elements.sort();
     for element in sorted_elements {
@@ -3720,6 +3728,17 @@ fn cygv_path_predecessor_stats(
             continue;
         }
         predecessor_difference_count += 1;
+        let predecessor_is_toric_covered = covered_toric_gv_by_basis.contains_key(element);
+        let difference_is_toric_covered = covered_toric_gv_by_basis.contains_key(&difference);
+        let coverage_key = match (predecessor_is_toric_covered, difference_is_toric_covered) {
+            (true, true) => "both_toric_covered",
+            (true, false) => "predecessor_only_toric_covered",
+            (false, true) => "difference_only_toric_covered",
+            (false, false) => "neither_toric_covered",
+        };
+        *toric_coverage_counts
+            .entry(coverage_key.to_string())
+            .or_insert(0) += 1;
         let difference_degree = curve_degree(&difference, grading)?;
         let distance = cygv_series_distance(&difference);
         if candidate_sample.len() < CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT {
@@ -3776,6 +3795,7 @@ fn cygv_path_predecessor_stats(
         previous_window_element_count,
         predecessor_difference_count,
         improving_predecessor_difference_count,
+        toric_coverage_counts,
         closest_distance,
         closest_predecessor,
         closest_difference,
@@ -6257,6 +6277,13 @@ mod tests {
         assert!(probe.predecessor_counts_complete);
         assert_eq!(probe.predecessor_difference_count, Some(2));
         assert_eq!(probe.improving_predecessor_difference_count, Some(1));
+        assert_eq!(
+            probe
+                .predecessor_toric_coverage_counts
+                .get("both_toric_covered")
+                .copied(),
+            Some(2)
+        );
         assert_eq!(probe.closest_series_distance.as_deref(), Some("1.000000"));
         assert_eq!(probe.closest_series_predecessor_nonzero, Some(vec![(1, 1)]));
         assert_eq!(probe.closest_series_difference_nonzero, Some(vec![(0, 1)]));

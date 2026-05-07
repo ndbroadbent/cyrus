@@ -1624,6 +1624,14 @@ all eight predecessor differences under the sample cap. Target `7` has nearest
 degree split `8+2` at distance `4`, while target `8` has nearest degree split
 `8+2` at distance `3`. These pairs are not new GV values; they are the source
 history entries that cygv would use when constructing `q_N` for the target.
+The same report now annotates those predecessor candidates with any
+source-derived toric GV values exported from the corrected-chamber context and
+aggregates coverage over all predecessor pairs. On the fresh context with
+covered toric rows, both degree-10 targets have coverage counts
+`difference_only_toric_covered=2`, `predecessor_only_toric_covered=2`,
+`neither_toric_covered=4`, and no `both_toric_covered` pairs. The nearest
+`8+2` splits therefore still require lower-degree non-toric history, not just a
+missing degree-10 toric formula.
 
 After rebuilding `mcallister_gv_context`, the dry-run report now preserves the
 origin-circuit provenance exported by `mcallister_first_principles`. A fresh

@@ -238,7 +238,12 @@ to make the remaining GV layer more first-principles:
    `99317` previous-window elements, and eight predecessor differences. The
    path-history report now samples those qN predecessor pairs directly; the
    nearest candidates for both degree-10 targets are degree splits `8+2`
-   (distances `4` and `3`). A
+   (distances `4` and `3`). With the corrected-chamber covered-toric context
+   included, both degree-10 targets have predecessor-pair coverage counts
+   `difference_only_toric_covered=2`, `predecessor_only_toric_covered=2`,
+   `neither_toric_covered=4`, and no `both_toric_covered` pairs, so the
+   immediate missing history includes lower-degree non-toric terms rather than
+   only the degree-10 target formulas. A
    structured export now exists via
    `--dump-corrected-chamber-gv-context`; it records the local charge basis,
    target degree, degree-bounded projected Mori rays, exact active-generator
