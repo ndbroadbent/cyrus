@@ -2807,6 +2807,16 @@ target `8`'s missing-target-shaped diamond hits a compact HKTY error. Thus the
 remaining mismatch is not leaf identification or the degree-eight source qN
 alone; it is how the parent compact domain integrates these finite lower
 histories into the degree-ten target's degree-ordered subtraction history.
+The report now compares each target-monomial source's parent-domain qN
+signature with the bounded-diamond qN signature for the same source curve. On
+fresh target `7` and target `8` runs, the main path-support domain reports
+`different_qn_term_counts` for the shared degree-six source and for the
+degree-eight composite source. The residual subdomain still reports
+`same_qn_term_signatures` for its degree-eight identity case. This pins the
+remaining issue to domain-dependent compact qN history: the tiny diamond's
+scalar GV and one-term qN are real `cygv` outputs, but they are not the same
+parent-domain qN polynomial that participates in the degree-ten target
+subtraction.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use

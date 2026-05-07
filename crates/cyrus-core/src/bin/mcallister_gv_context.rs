@@ -796,6 +796,9 @@ struct CygvPathSupportTargetMonomialQnSource {
     curve_nonzero: Vec<(usize, i64)>,
     curve_gv: Option<String>,
     term_count: usize,
+    source_qn_term_sample_complete: bool,
+    source_qn_polynomial_shape_status: String,
+    source_qn_term_signature_sample: Vec<CygvPathSupportQnTraceTermSignature>,
     target_term_count: usize,
     target_term_monomial_indices: Vec<usize>,
     target_term_coefficients: Vec<String>,
@@ -820,6 +823,7 @@ struct CygvPathSupportTargetMonomialQnSource {
     source_is_reduced_seed: Option<bool>,
     source_first_generation_seed_sum: Option<CygvSeedSumDecomposition>,
     source_bounded_seed_decomposition: Option<CygvBoundedSeedDecompositionSummary>,
+    source_bounded_diamond_parent_qn_comparison_status: Option<String>,
 }
 
 struct CygvPathSupportTargetLi2SubtractionBalance {
@@ -4299,6 +4303,19 @@ fn path_support_target_monomial_qn_sources(
                 curve_nonzero: sparse_from_i32_dense(&poly.element),
                 curve_gv,
                 term_count: poly.terms.len(),
+                source_qn_term_sample_complete: poly.terms.len()
+                    <= CYGV_PATH_SUPPORT_QN_TRACE_TERM_SAMPLE_LIMIT,
+                source_qn_polynomial_shape_status: qn_polynomial_shape_status(poly, &poly.element)
+                    .to_string(),
+                source_qn_term_signature_sample: poly
+                    .terms
+                    .iter()
+                    .take(CYGV_PATH_SUPPORT_QN_TRACE_TERM_SAMPLE_LIMIT)
+                    .map(|term| CygvPathSupportQnTraceTermSignature {
+                        exponent_nonzero: sparse_from_i32_dense(&term.exponent),
+                        coefficient: term.coefficient.clone(),
+                    })
+                    .collect(),
                 target_term_count: target_terms.len(),
                 target_term_monomial_indices: target_terms
                     .iter()
@@ -4337,6 +4354,7 @@ fn path_support_target_monomial_qn_sources(
                 source_is_reduced_seed: None,
                 source_first_generation_seed_sum: None,
                 source_bounded_seed_decomposition: None,
+                source_bounded_diamond_parent_qn_comparison_status: None,
             })
         })
         .collect()
@@ -4529,14 +4547,52 @@ fn annotate_target_monomial_qn_sources_with_seed_decompositions(
             &context.covered_toric_gv_by_basis,
             &context.source_derived_gv_by_basis,
         )?;
-        source.source_bounded_seed_decomposition = Some(bounded_seed_decomposition_summary(
-            &curve,
-            seed_set,
-            4,
-            Some(context),
-        )?);
+        let bounded_seed_decomposition =
+            bounded_seed_decomposition_summary(&curve, seed_set, 4, Some(context))?;
+        source.source_bounded_diamond_parent_qn_comparison_status =
+            bounded_diamond_parent_qn_comparison_status(source, &bounded_seed_decomposition);
+        source.source_bounded_seed_decomposition = Some(bounded_seed_decomposition);
     }
     Ok(())
+}
+
+fn bounded_diamond_parent_qn_comparison_status(
+    source: &CygvPathSupportTargetMonomialQnSource,
+    bounded: &CygvBoundedSeedDecompositionSummary,
+) -> Option<String> {
+    if bounded.diamond_status.as_deref() != Some("computed_bounded_decomposition_diamond_qn_trace")
+    {
+        return None;
+    }
+    let diamond_qn = bounded
+        .diamond_qn_trace_sample
+        .iter()
+        .find(|sample| sample.curve_nonzero.as_slice() == source.curve_nonzero.as_slice());
+    let Some(diamond_qn) = diamond_qn else {
+        return Some(
+            if bounded.diamond_target_qn_trace_term_count.is_some() {
+                "bounded_diamond_target_qn_sample_truncated"
+            } else {
+                "missing_in_bounded_diamond"
+            }
+            .to_string(),
+        );
+    };
+    if source.term_count != diamond_qn.term_count {
+        return Some("different_qn_term_counts".to_string());
+    }
+    if !source.source_qn_term_sample_complete || !qn_trace_sample_is_complete(Some(diamond_qn)) {
+        return Some("same_count_but_sample_truncated".to_string());
+    }
+    let diamond_terms = qn_trace_term_signatures(Some(diamond_qn));
+    Some(
+        if source.source_qn_term_signature_sample == diamond_terms {
+            "same_qn_term_signatures"
+        } else {
+            "same_count_different_qn_term_signatures"
+        }
+        .to_string(),
+    )
 }
 
 fn path_support_target_li2_subtraction_balance(
@@ -16273,6 +16329,28 @@ mod tests {
         assert_eq!(sources[0].curve_nonzero, vec![(0, 1), (1, -1)]);
         assert_eq!(sources[0].curve_gv.as_deref(), Some("-2"));
         assert_eq!(sources[0].term_count, 3);
+        assert!(sources[0].source_qn_term_sample_complete);
+        assert_eq!(
+            sources[0].source_qn_polynomial_shape_status,
+            "multi_term_qn_polynomial_with_identity_term"
+        );
+        assert_eq!(
+            sources[0].source_qn_term_signature_sample,
+            vec![
+                CygvPathSupportQnTraceTermSignature {
+                    exponent_nonzero: vec![(0, 1), (1, -1)],
+                    coefficient: "1".to_string(),
+                },
+                CygvPathSupportQnTraceTermSignature {
+                    exponent_nonzero: vec![(0, 2), (1, -3), (2, 1)],
+                    coefficient: "-2".to_string(),
+                },
+                CygvPathSupportQnTraceTermSignature {
+                    exponent_nonzero: vec![(0, 2), (1, -3), (2, 1)],
+                    coefficient: "1".to_string(),
+                },
+            ]
+        );
         assert_eq!(sources[0].target_term_count, 2);
         assert_eq!(sources[0].target_term_monomial_indices, vec![11, 13]);
         assert_eq!(sources[0].target_term_coefficients, vec!["-2", "1"]);
@@ -16384,6 +16462,71 @@ mod tests {
         assert_eq!(bounded.diamond_target_qn_trace_status, None);
         assert_eq!(bounded.diamond_target_qn_trace_term_count, None);
         assert!(bounded.diamond_qn_trace_sample.is_empty());
+        assert_eq!(
+            sources[0].source_bounded_diamond_parent_qn_comparison_status,
+            None
+        );
+    }
+
+    #[test]
+    fn bounded_diamond_parent_qn_comparison_flags_domain_dependent_shape() {
+        let trace = vec![CygvQnTracePolynomial {
+            element_index: 3,
+            degree: 2,
+            element: vec![1, 0],
+            terms: vec![
+                CygvQnTraceTerm {
+                    monomial_index: 3,
+                    exponent: vec![1, 0],
+                    coefficient: "1".to_string(),
+                },
+                CygvQnTraceTerm {
+                    monomial_index: 4,
+                    exponent: vec![2, 0],
+                    coefficient: "-1".to_string(),
+                },
+            ],
+            li2_terms: vec![CygvQnTraceTerm {
+                monomial_index: 4,
+                exponent: vec![2, 0],
+                coefficient: "-1".to_string(),
+            }],
+        }];
+        let sources =
+            path_support_target_monomial_qn_sources(&trace, &HashMap::new(), &[2, 0], None)
+                .expect("target monomial source should be traced");
+        let bounded = CygvBoundedSeedDecompositionSummary {
+            max_terms: 4,
+            status: "found_lower_seed_decomposition".to_string(),
+            term_count: Some(2),
+            terms_nonzero: Some(vec![vec![(0, 1)], vec![(0, 1)]]),
+            diamond_element_count: Some(3),
+            diamond_status: Some("computed_bounded_decomposition_diamond_qn_trace".to_string()),
+            diamond_gv: Some("5".to_string()),
+            diamond_error: None,
+            diamond_qn_trace_polynomial_count: Some(1),
+            diamond_target_qn_trace_status: Some(
+                "path_support_qn_materialized_for_nonzero_gv".to_string(),
+            ),
+            diamond_target_qn_trace_term_count: Some(1),
+            diamond_qn_trace_sample: vec![CygvPathSupportQnTracePolynomialSample {
+                element_index: 1,
+                degree: 1,
+                curve_nonzero: vec![(0, 1)],
+                term_count: 1,
+                term_sample_limit: CYGV_PATH_SUPPORT_QN_TRACE_TERM_SAMPLE_LIMIT,
+                term_sample: vec![CygvPathSupportQnTraceTermSample {
+                    monomial_index: 1,
+                    exponent_nonzero: vec![(0, 1)],
+                    coefficient: "1".to_string(),
+                }],
+            }],
+        };
+
+        assert_eq!(
+            bounded_diamond_parent_qn_comparison_status(&sources[0], &bounded).as_deref(),
+            Some("different_qn_term_counts")
+        );
     }
 
     #[test]
