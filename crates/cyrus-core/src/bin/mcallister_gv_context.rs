@@ -248,6 +248,7 @@ struct ContextReport {
     local_cygv_source_resolution_resolved_support_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_projection_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_status_counts: BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_reduction_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_hint_sample: Vec<LocalCygvSourceResolutionHintSummary>,
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
     local_cygv_actual_call_readiness_counts: BTreeMap<String, usize>,
@@ -552,6 +553,9 @@ struct LocalCygvSourceResolutionHintSummary {
     shared_two_simplex_star_support_affine_rank: Option<usize>,
     shared_two_simplex_star_support_charge_basis: Option<Vec<Vec<i64>>>,
     shared_two_simplex_star_support_charge_row_sums: Option<Vec<i64>>,
+    shared_two_simplex_star_reduction_status: String,
+    shared_two_simplex_star_reduced_zero_charge_points: Vec<usize>,
+    shared_two_simplex_star_reduced_charge_row: Option<Vec<i64>>,
     zero_relation_shared_two_simplex_points: Vec<usize>,
     zero_relation_shared_two_simplex_point_samples: Vec<OriginCircuitRelationPointSample>,
     resolved_shared_support_status: String,
@@ -13595,6 +13599,8 @@ fn build_report(
         local_cygv_source_resolution_projection_status_counts(&targets);
     let local_cygv_source_resolution_star_status_counts =
         local_cygv_source_resolution_star_status_counts(&targets);
+    let local_cygv_source_resolution_star_reduction_status_counts =
+        local_cygv_source_resolution_star_reduction_status_counts(&targets);
     let local_cygv_source_resolution_hint_sample =
         local_cygv_source_resolution_hint_summaries(&targets);
     let missing_local_cygv_missing_source_input_counts = local_cygv_missing_source_input_counts(
@@ -14332,6 +14338,7 @@ fn build_report(
         local_cygv_source_resolution_resolved_support_status_counts,
         local_cygv_source_resolution_projection_status_counts,
         local_cygv_source_resolution_star_status_counts,
+        local_cygv_source_resolution_star_reduction_status_counts,
         local_cygv_source_resolution_hint_sample,
         local_cygv_target_candidate_status_counts,
         local_cygv_actual_call_readiness_counts: missing_local_cygv_actual_call_readiness_counts,
@@ -14564,6 +14571,8 @@ fn local_cygv_source_resolution_hint_summaries(
             let star_support_hint = local_cygv_shared_two_simplex_star_support_hint(
                 target.origin_circuit_first_witness.as_ref(),
             );
+            let star_reduction_hint =
+                local_cygv_shared_two_simplex_star_reduction_hint(&star_support_hint);
             let star_extra_affine_heights =
                 origin_circuit_shared_two_simplex_star_extra_affine_heights(
                     target.origin_circuit_first_witness.as_ref(),
@@ -14596,6 +14605,10 @@ fn local_cygv_source_resolution_hint_summaries(
                 shared_two_simplex_star_support_affine_rank: star_support_hint.affine_rank,
                 shared_two_simplex_star_support_charge_basis: star_support_hint.charge_basis,
                 shared_two_simplex_star_support_charge_row_sums: star_support_hint.charge_row_sums,
+                shared_two_simplex_star_reduction_status: star_reduction_hint.status,
+                shared_two_simplex_star_reduced_zero_charge_points: star_reduction_hint
+                    .zero_charge_points,
+                shared_two_simplex_star_reduced_charge_row: star_reduction_hint.reduced_charge_row,
                 zero_relation_shared_two_simplex_points:
                     origin_circuit_zero_relation_shared_two_simplex_points(
                         target.origin_circuit_first_witness.as_ref(),
@@ -14670,6 +14683,33 @@ fn local_cygv_source_resolution_star_status_counts<'a>(
             target.origin_circuit_first_witness.as_ref(),
         );
         *counts.entry(status).or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_star_reduction_status_counts<'a>(
+    targets: impl IntoIterator<Item = &'a TargetReport>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        let Some(skeleton) = target.local_cygv_input_skeleton.as_ref() else {
+            continue;
+        };
+        let star_status = local_cygv_zero_shared_star_status(
+            skeleton,
+            target.origin_circuit_first_witness.as_ref(),
+        );
+        if star_status != "weighted_p2_zero_shared_star_uses_two_alternate_chamber_points" {
+            *counts
+                .entry(format!("star_reduction_skipped:{star_status}"))
+                .or_insert(0usize) += 1;
+            continue;
+        }
+        let star_support_hint = local_cygv_shared_two_simplex_star_support_hint(
+            target.origin_circuit_first_witness.as_ref(),
+        );
+        let reduction = local_cygv_shared_two_simplex_star_reduction_hint(&star_support_hint);
+        *counts.entry(reduction.status).or_insert(0usize) += 1;
     }
     counts
 }
@@ -15092,6 +15132,12 @@ struct LocalCygvStarSupportHint {
     charge_row_sums: Option<Vec<i64>>,
 }
 
+struct LocalCygvStarReductionHint {
+    status: String,
+    zero_charge_points: Vec<usize>,
+    reduced_charge_row: Option<Vec<i64>>,
+}
+
 fn local_cygv_shared_two_simplex_star_support_hint(
     witness: Option<&OriginCircuitWitnessSample>,
 ) -> LocalCygvStarSupportHint {
@@ -15179,6 +15225,90 @@ fn local_cygv_shared_two_simplex_star_support_hint(
         charge_basis: Some(charge_basis),
         charge_row_sums: Some(charge_row_sums),
     }
+}
+
+fn local_cygv_shared_two_simplex_star_reduction_hint(
+    hint: &LocalCygvStarSupportHint,
+) -> LocalCygvStarReductionHint {
+    let empty = |status: &str| LocalCygvStarReductionHint {
+        status: status.to_string(),
+        zero_charge_points: Vec::new(),
+        reduced_charge_row: None,
+    };
+    let Some(charge_basis) = hint.charge_basis.as_ref() else {
+        return empty("star_reduction_blocked_missing_charge_basis");
+    };
+    if charge_basis.len() != 1 {
+        return empty("star_reduction_blocked_not_one_parameter_charge_basis");
+    }
+    let charge_row = &charge_basis[0];
+    if charge_row.len() != hint.point_indices.len() {
+        return empty("star_reduction_blocked_charge_width_mismatch");
+    }
+    let mut zero_charge_points = Vec::new();
+    let mut reduced_charge_row = Vec::new();
+    for (&point_index, &charge) in hint.point_indices.iter().zip(charge_row.iter()) {
+        if charge == 0 {
+            zero_charge_points.push(point_index);
+        } else {
+            reduced_charge_row.push(charge);
+        }
+    }
+    if zero_charge_points.is_empty() {
+        return LocalCygvStarReductionHint {
+            status: "star_reduction_no_zero_charge_columns".to_string(),
+            zero_charge_points,
+            reduced_charge_row: Some(reduced_charge_row),
+        };
+    }
+    if reduced_charge_row.is_empty() {
+        return LocalCygvStarReductionHint {
+            status: "star_reduction_all_columns_zero".to_string(),
+            zero_charge_points,
+            reduced_charge_row: Some(reduced_charge_row),
+        };
+    }
+    if reduced_charge_row.iter().sum::<i64>() != 0 {
+        return LocalCygvStarReductionHint {
+            status: "star_reduction_nonzero_reduced_charge_not_calabi_yau".to_string(),
+            zero_charge_points,
+            reduced_charge_row: Some(reduced_charge_row),
+        };
+    }
+    let status = classify_zero_charge_reduced_one_parameter_family(&reduced_charge_row);
+    LocalCygvStarReductionHint {
+        status,
+        zero_charge_points,
+        reduced_charge_row: Some(reduced_charge_row),
+    }
+}
+
+fn classify_zero_charge_reduced_one_parameter_family(charges: &[i64]) -> String {
+    let mut sorted = charges.to_vec();
+    sorted.sort_unstable();
+    if sorted == [-1, -1, 1, 1] {
+        return "star_reduction_resolved_conifold_charge_family_with_spectator_zero_charges"
+            .to_string();
+    }
+    if let Some(signature) = one_parameter_weighted_p2_split_bundle_signature(charges) {
+        return format!(
+            "star_reduction_weighted_p2_split_bundle_after_zero_charge_removal:{signature}"
+        );
+    }
+    let flipped = charges.iter().map(|&value| -value).collect::<Vec<_>>();
+    if let Some(signature) = one_parameter_weighted_p2_split_bundle_signature(&flipped) {
+        return format!(
+            "star_reduction_weighted_p2_split_bundle_after_zero_charge_removal_and_sign_flip:{signature}"
+        );
+    }
+    format!(
+        "star_reduction_uncertified_nonzero_charge_family:{}",
+        sorted
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
+    )
 }
 
 fn origin_circuit_resolved_shared_support_point_samples(
@@ -18544,6 +18674,17 @@ mod tests {
             Some(vec![vec![1, 0, 1, -1, 0, -1]])
         );
         assert_eq!(star_support_hint.charge_row_sums, Some(vec![0]));
+        let star_reduction_hint =
+            local_cygv_shared_two_simplex_star_reduction_hint(&star_support_hint);
+        assert_eq!(
+            star_reduction_hint.status,
+            "star_reduction_resolved_conifold_charge_family_with_spectator_zero_charges"
+        );
+        assert_eq!(star_reduction_hint.zero_charge_points, vec![2, 208]);
+        assert_eq!(
+            star_reduction_hint.reduced_charge_row,
+            Some(vec![1, 1, -1, -1])
+        );
         let resolved_hint = local_cygv_resolved_shared_support_hint(&skeleton, Some(&witness));
         assert_eq!(
             resolved_hint.status,
@@ -18556,6 +18697,14 @@ mod tests {
             Some(vec![vec![1, -2, 0, 3, -1, -1]])
         );
         assert_eq!(resolved_hint.charge_row_sums, Some(vec![0]));
+    }
+
+    #[test]
+    fn zero_charge_star_reduction_classifies_weighted_p2_after_sign_flip() {
+        assert_eq!(
+            classify_zero_charge_reduced_one_parameter_family(&[2, -1, -1, -2, 2]),
+            "star_reduction_weighted_p2_split_bundle_after_zero_charge_removal_and_sign_flip:base=1,1,2;bundle=2,2;base_hyperplane_square=1/2"
+        );
     }
 
     #[test]

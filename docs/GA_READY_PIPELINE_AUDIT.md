@@ -125,6 +125,10 @@ run pass. Any remaining mismatch must be explicit and localizable.
    `3`/`6` and `[1,0,1,-1,0,-1]` for targets `7`/`8`, each with affine rank
    `4` and zero total charge. These rows are candidate local chamber data, not
    promoted GV inputs until the chamber/intersection certificate is derived.
+   A zero-charge reduction pass classifies targets `3`/`6` as a sign-flipped
+   weighted `O(-2)+O(-2)->P(1,1,2)` family and targets `7`/`8` as
+   resolved-conifold charge rows with spectator zero columns. This narrows the
+   next work to certifying the local phase maps for those reduced families.
    A fresh read of
    `string_theory/mcallister_2107/latest_cytools/compute_kklt_iterative.py`
    confirms the sign convention used by Cyrus,

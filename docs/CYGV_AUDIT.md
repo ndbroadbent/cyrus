@@ -3157,6 +3157,15 @@ extra-point hyperplane heights are `[0,0]` for targets `3`/`6` and `[0,-1]`
 for targets `7`/`8`. This is now the concrete local chamber candidate to
 certify; it is not the same input as either the five-point origin-circuit
 relation or the six-point "relation support plus zero shared ray" diagnostic.
+The next reduction report,
+`/tmp/cyrus_gv_context_star_reduction_report.json`, removes only zero-charge
+spectator columns from those actual star rows. Targets `3` and `6` reduce to
+`[2,-1,-1,-2,2]`, which is the sign-flipped weighted
+`O(-2)+O(-2)->P(1,1,2)` family; targets `7` and `8` reduce to
+`[1,1,-1,-1]`, the resolved-conifold charge family with spectator zero
+columns. These remain classification results only. The missing certificate is
+still the local chamber/intersection map that makes any resulting compact or
+local `cygv` computation a first-principles input.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:
