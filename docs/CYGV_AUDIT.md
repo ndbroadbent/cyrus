@@ -2850,6 +2850,17 @@ still report `different_qn_term_counts` against the parent qN polynomial. Thus
 the parent qN term set is not a self-contained compact semigroup certificate;
 the missing object remains the broader parent-domain/chamber history that
 produces those terms integrally and in the right order.
+A follow-up seed-expanded version of this same diagnostic closes each observed
+parent qN term through bounded lower-seed decomposition diamonds before calling
+`cygv`. It still does not produce a certifiable history. For target `7`, the
+shared degree-six source grows from `7` to `17` explicit elements and still
+fails with non-integer HKTY output; the degree-eight composite grows from `4`
+to `12` elements and computes `GV=-2`, but the materialized source qN
+polynomial has two terms and still reports `different_qn_term_counts`. For
+target `8`, the expanded degree-six and degree-eight supports grow to `10` and
+`8` elements and both fail with non-integer HKTY output. Bounded seed expansion
+of observed parent terms is therefore another diagnostic boundary, not the
+missing chamber semigroup.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use

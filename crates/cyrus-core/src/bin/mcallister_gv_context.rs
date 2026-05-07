@@ -833,6 +833,7 @@ struct CygvPathSupportTargetMonomialQnSource {
         Vec<CygvPathSupportQnTraceTermSignature>,
     source_bounded_diamond_parent_only_qn_term_context_sample: Vec<CygvQnTermSignatureContext>,
     source_parent_qn_term_semigroup_probe: Option<CygvSourceQnTermSemigroupProbe>,
+    source_parent_qn_term_seed_expanded_semigroup_probe: Option<CygvSourceQnTermSemigroupProbe>,
 }
 
 struct CygvPathSupportTargetLi2SubtractionBalance {
@@ -4396,6 +4397,7 @@ fn path_support_target_monomial_qn_sources(
                 source_bounded_diamond_diamond_only_qn_term_signature_sample: Vec::new(),
                 source_bounded_diamond_parent_only_qn_term_context_sample: Vec::new(),
                 source_parent_qn_term_semigroup_probe: None,
+                source_parent_qn_term_seed_expanded_semigroup_probe: None,
             })
         })
         .collect()
@@ -4605,6 +4607,8 @@ fn annotate_target_monomial_qn_sources_with_seed_decompositions(
             )?;
         source.source_parent_qn_term_semigroup_probe =
             source_parent_qn_term_semigroup_probe(source, context)?;
+        source.source_parent_qn_term_seed_expanded_semigroup_probe =
+            source_parent_qn_term_seed_expanded_semigroup_probe(source, context, seed_set)?;
         source.source_bounded_seed_decomposition = Some(bounded_seed_decomposition);
     }
     Ok(())
@@ -4761,10 +4765,47 @@ fn source_parent_qn_term_semigroup_probe(
     {
         return Ok(None);
     }
-    let source_curve = dense_from_sparse(&source.curve_nonzero, context.dimension)?;
+    let elements = source_qn_term_support_elements(source, context.dimension)?;
+    source_qn_term_semigroup_probe_from_elements(
+        source,
+        context,
+        elements,
+        "computed_source_qn_term_semigroup",
+        "source qN-term semigroup",
+    )
+}
+
+fn source_parent_qn_term_seed_expanded_semigroup_probe(
+    source: &CygvPathSupportTargetMonomialQnSource,
+    context: &ValidatedContext<'_>,
+    seed_set: &HashSet<Vec<i64>>,
+) -> Result<Option<CygvSourceQnTermSemigroupProbe>, String> {
+    if source
+        .source_bounded_diamond_parent_qn_comparison_status
+        .as_deref()
+        != Some("different_qn_term_counts")
+    {
+        return Ok(None);
+    }
+    let elements =
+        source_qn_term_seed_expanded_support_elements(source, context.dimension, seed_set)?;
+    source_qn_term_semigroup_probe_from_elements(
+        source,
+        context,
+        elements,
+        "computed_source_qn_term_seed_expanded_semigroup",
+        "source qN-term seed-expanded semigroup",
+    )
+}
+
+fn source_qn_term_support_elements(
+    source: &CygvPathSupportTargetMonomialQnSource,
+    dimension: usize,
+) -> Result<Vec<Vec<i64>>, String> {
+    let source_curve = dense_from_sparse(&source.curve_nonzero, dimension)?;
     let mut elements = Vec::new();
     let mut seen = HashSet::new();
-    let zero = vec![0i64; context.dimension];
+    let zero = vec![0i64; dimension];
     if seen.insert(zero.clone()) {
         elements.push(zero);
     }
@@ -4772,12 +4813,53 @@ fn source_parent_qn_term_semigroup_probe(
         elements.push(source_curve.clone());
     }
     for signature in &source.source_qn_term_signature_sample {
-        let element = dense_from_sparse(&signature.exponent_nonzero, context.dimension)?;
+        let element = dense_from_sparse(&signature.exponent_nonzero, dimension)?;
         if seen.insert(element.clone()) {
             elements.push(element);
         }
     }
     elements.sort();
+    Ok(elements)
+}
+
+fn source_qn_term_seed_expanded_support_elements(
+    source: &CygvPathSupportTargetMonomialQnSource,
+    dimension: usize,
+    seed_set: &HashSet<Vec<i64>>,
+) -> Result<Vec<Vec<i64>>, String> {
+    let mut elements = source_qn_term_support_elements(source, dimension)?;
+    let mut seen = elements.iter().cloned().collect::<HashSet<_>>();
+    let mut seeds = seed_set.iter().cloned().collect::<Vec<_>>();
+    seeds.sort();
+    if seeds.is_empty() {
+        return Ok(elements);
+    }
+    let base_elements = elements.clone();
+    for element in base_elements {
+        if element.iter().all(|&coordinate| coordinate == 0) {
+            continue;
+        }
+        let Some(terms) = bounded_seed_decomposition(&element, &seeds, 4)? else {
+            continue;
+        };
+        for diamond_element in decomposition_diamond_elements(&terms, &element)? {
+            if seen.insert(diamond_element.clone()) {
+                elements.push(diamond_element);
+            }
+        }
+    }
+    elements.sort();
+    Ok(elements)
+}
+
+fn source_qn_term_semigroup_probe_from_elements(
+    source: &CygvPathSupportTargetMonomialQnSource,
+    context: &ValidatedContext<'_>,
+    elements: Vec<Vec<i64>>,
+    computed_status: &str,
+    error_label: &str,
+) -> Result<Option<CygvSourceQnTermSemigroupProbe>, String> {
+    let source_curve = dense_from_sparse(&source.curve_nonzero, context.dimension)?;
     if elements.len() > CYGV_BOUNDED_DECOMPOSITION_DIAMOND_ELEMENT_LIMIT {
         return Ok(Some(CygvSourceQnTermSemigroupProbe {
             element_count: Some(elements.len()),
@@ -4837,7 +4919,7 @@ fn source_parent_qn_term_semigroup_probe(
                 element_count: Some(elements.len()),
                 status: "hkty_error".to_string(),
                 gv: None,
-                error: Some(format!("source qN-term semigroup HKTY failed: {error}")),
+                error: Some(format!("{error_label} HKTY failed: {error}")),
                 qn_trace_polynomial_count: None,
                 source_qn_trace_term_count: None,
                 parent_qn_comparison_status: None,
@@ -4849,7 +4931,7 @@ fn source_parent_qn_term_semigroup_probe(
                 status: "hkty_panic".to_string(),
                 gv: None,
                 error: Some(format!(
-                    "source qN-term semigroup HKTY panicked: {}",
+                    "{error_label} HKTY panicked: {}",
                     panic_payload_message(payload.as_ref())
                 )),
                 qn_trace_polynomial_count: None,
@@ -4885,7 +4967,7 @@ fn source_parent_qn_term_semigroup_probe(
         .unwrap_or_else(|| "0".to_string());
     Ok(Some(CygvSourceQnTermSemigroupProbe {
         element_count: Some(elements.len()),
-        status: "computed_source_qn_term_semigroup".to_string(),
+        status: computed_status.to_string(),
         gv: Some(gv),
         error: None,
         qn_trace_polynomial_count: Some(qn_trace_polynomial_count),
@@ -16975,6 +17057,15 @@ mod tests {
             .expect("mismatched source should request a qN-term semigroup probe");
         assert_eq!(semigroup_probe.element_count, Some(3));
         assert_eq!(semigroup_probe.status, "skipped_no_q_matrix");
+        let seed_expanded_probe = source_parent_qn_term_seed_expanded_semigroup_probe(
+            &compared_source,
+            &context,
+            &HashSet::from([vec![1]]),
+        )
+        .expect("seed-expanded qN-term semigroup probe should build a bounded diagnostic")
+        .expect("mismatched source should request a seed-expanded qN-term semigroup probe");
+        assert_eq!(seed_expanded_probe.element_count, Some(3));
+        assert_eq!(seed_expanded_probe.status, "skipped_no_q_matrix");
         assert_eq!(
             target_monomial_qn_source_diamond_parent_qn_comparison_status_counts(&[
                 sources[0].clone(),
@@ -16985,6 +17076,31 @@ mod tests {
                 ("not_compared".to_string(), 1),
             ])
         );
+    }
+
+    #[test]
+    fn seed_expanded_qn_term_support_adds_bounded_diamond_elements() {
+        let trace = vec![CygvQnTracePolynomial {
+            element_index: 3,
+            degree: 3,
+            element: vec![3],
+            terms: vec![CygvQnTraceTerm {
+                monomial_index: 3,
+                exponent: vec![3],
+                coefficient: "1".to_string(),
+            }],
+            li2_terms: Vec::new(),
+        }];
+        let sources = path_support_target_monomial_qn_sources(&trace, &HashMap::new(), &[3], None)
+            .expect("target monomial source should be traced");
+        let base = source_qn_term_support_elements(&sources[0], 1)
+            .expect("base qN-term support should build");
+        assert_eq!(base, vec![vec![0], vec![3]]);
+
+        let seed_set = HashSet::from([vec![1], vec![2]]);
+        let expanded = source_qn_term_seed_expanded_support_elements(&sources[0], 1, &seed_set)
+            .expect("seed-expanded qN-term support should build");
+        assert_eq!(expanded, vec![vec![0], vec![1], vec![2], vec![3]]);
     }
 
     #[test]

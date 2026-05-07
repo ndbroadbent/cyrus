@@ -392,6 +392,15 @@ and matrix-basis pipeline are no longer open.
    and mismatch the parent qN term counts. Thus the parent qN term set itself
    is not the missing compact/chamber semigroup; the broader certified
    parent-domain history is still required.
+   A seed-expanded variant, which closes those observed parent qN terms through
+   bounded lower-seed diamonds before calling actual `cygv`, also remains
+   diagnostic-only. Target `7`'s shared degree-six source expands to `17`
+   elements and still fails HKTY integrality; its degree-eight composite
+   expands to `12` elements and computes `GV=-2` but still has
+   `different_qn_term_counts`. Target `8`'s expanded degree-six and
+   degree-eight supports expand to `10` and `8` elements and both fail HKTY
+   integrality. The missing object is therefore not just a bounded closure of
+   observed parent qN terms.
    The target-coefficient balance reconstructs the small-domain
    pre-subtraction readouts: target `7` has lower-source sum `3`,
    post-subtraction coefficient `0`, pivot component `2`, and
