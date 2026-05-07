@@ -994,7 +994,10 @@ to make the remaining GV layer more first-principles:
    the union relation lattice (`[1/2,1/2,-3/2]` and `[1/2,-2,3/2]`), while
    targets `7`/`8` are integral (`[3,0,-1]` and `[1,0,-1]`). This keeps the
    next chamber-map step focused on a real lattice/projection obstruction
-   rather than a missing serialization detail. A raw point-index projection
-   through the global `q` matrix has also been ruled out for all four weighted
-   rows, so the reusable fix needs the explicit CYTools ambient-column map for
-   the compact `cygv` handoff.
+   rather than a missing serialization detail. The context consumer now applies
+   CYTools' no-origin `q`-matrix column convention and projects all four
+   weighted target/star rows plus target±star combinations to integral global
+   curve-basis classes; the target projections match the missing-target rows
+   exactly. The remaining reusable fix is therefore not the global column map,
+   but the local chamber/intersection certificate needed before those rows can
+   determine a GV value.

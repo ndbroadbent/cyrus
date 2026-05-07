@@ -742,11 +742,12 @@ coordinates in `/tmp/cyrus_gv_context_star_union_rational_report.json` are
 `target 3 = [1/2,1/2,-3/2]`, `target 6 = [1/2,-2,3/2]`,
 `target 7 = [3,0,-1]`, and `target 8 = [1,0,-1]`; the corresponding actual
 star rows are integral (`[0,0,1]`, `[0,2,-1]`, `[0,1,0]`, `[0,1,0]`).
-The raw point-index global-basis projection guardrail is negative for all four
-weighted rows: `/tmp/cyrus_gv_context_star_union_global_basis_report.json`
-reports missing target/star/target-minus-star/target-plus-star coordinates.
-So the chamber map cannot be obtained by treating local point IDs as direct
-columns of the global `q` matrix.
+The CYTools no-origin global-basis projection is now explicit: using the
+`curve_basis(include_origin=False)` convention, all four weighted target/star
+rows and target±star combinations project integrally. The projected target
+rows match the missing target basis rows exactly; for example target `7`
+projects to `[(44,2),(203,1),(206,-3),(209,1)]` and target `8` to
+`[(203,-3),(206,1),(209,1)]`.
 Origin-circuit witness-domain compact `cygv` probes are now opt-in and guarded
 by `--origin-witness-cygv-generator-limit`. The traced target `8` report shows
 the single-generator relation domain computes `GV=2` with one materialized
