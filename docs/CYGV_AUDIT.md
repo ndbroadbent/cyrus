@@ -3180,6 +3180,15 @@ rows report `star_target_relation_not_supported_by_star_support`: targets
 `[208,211]`, `[49,52]`, `[208,214]`, and `[211,214]` from their actual star
 supports. Therefore the reduced star rows are neighboring chamber data, not
 the missing target relations themselves.
+The union-support comparison then places each missing target relation and its
+actual star relation in the same affine relation lattice. The current
+`/tmp/cyrus_gv_context_star_union_report.json` counts are
+`star_union_target_and_star_integral_in_union_charge_basis=2`,
+`star_union_target_coordinate_error:target_relation_has_non_integral_local_charge_coordinates=2`,
+and five skipped non-weighted rows. Targets `7`/`8` have integral union
+coordinates (`target=[3,0,-1]` / `[1,0,-1]`, star `[0,1,0]`), while targets
+`3`/`6` already fail integrality in this union basis. This is the first
+explicit chamber-history object; it still does not determine a GV value.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

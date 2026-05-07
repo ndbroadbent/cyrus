@@ -137,6 +137,10 @@ run pass. Any remaining mismatch must be explicit and localizable.
    assigned to the missing targets directly: each weighted target relation has
    relation points absent from the actual star support. The chamber map still
    has to explain how these neighboring rows determine the target GV history.
+   A union-support diagnostic now separates the four weighted cases: targets
+   `7`/`8` are integral in the union relation lattice with their star rows,
+   while targets `3`/`6` have non-integral target coordinates. That is the next
+   local chamber/history object to certify.
    A fresh read of
    `string_theory/mcallister_2107/latest_cytools/compute_kklt_iterative.py`
    confirms the sign convention used by Cyrus,

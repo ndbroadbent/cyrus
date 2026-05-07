@@ -734,6 +734,10 @@ The target-vs-star support guardrail now shows why: each of the four weighted
 actual star supports is missing at least two points from the target
 origin-circuit relation. The star rows are neighboring chamber rows, not the
 target rows whose GV values are missing.
+The union-support comparison narrows the next chamber-history task further:
+targets `7`/`8` are integral in the union relation lattice with the star row,
+whereas targets `3`/`6` have non-integral target coordinates in that lattice.
+That split is now serialized instead of inferred from point IDs.
 Origin-circuit witness-domain compact `cygv` probes are now opt-in and guarded
 by `--origin-witness-cygv-generator-limit`. The traced target `8` report shows
 the single-generator relation domain computes `GV=2` with one materialized
