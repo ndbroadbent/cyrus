@@ -413,6 +413,13 @@ and matrix-basis pipeline are no longer open.
    `[(54,1),(203,-2)]` offset. The next missing object is the chamber history
    that couples a degree-eight composite to several known degree-two toric
    offsets in one parent qN polynomial.
+   A provided-generator diagnostic using the source decomposition plus those
+   known offsets now reproduces the parent qN term multiset for target `7`'s
+   shared degree-six and degree-eight source rows, and for target `8`'s shared
+   degree-six row. Target `8`'s degree-eight row still fails with a non-integer
+   `cygv` invariant. These matching rows are explanatory candidates, not
+   production inputs, until a chamber/face certificate supplies the generator
+   set from geometry.
    The target-coefficient balance reconstructs the small-domain
    pre-subtraction readouts: target `7` has lower-source sum `3`,
    post-subtraction coefficient `0`, pivot component `2`, and

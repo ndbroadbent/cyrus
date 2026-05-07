@@ -834,6 +834,7 @@ struct CygvPathSupportTargetMonomialQnSource {
     source_bounded_diamond_parent_only_qn_term_context_sample: Vec<CygvQnTermSignatureContext>,
     source_parent_qn_term_semigroup_probe: Option<CygvSourceQnTermSemigroupProbe>,
     source_parent_qn_term_seed_expanded_semigroup_probe: Option<CygvSourceQnTermSemigroupProbe>,
+    source_parent_qn_term_offset_generator_probe: Option<CygvSourceQnTermSemigroupProbe>,
 }
 
 struct CygvPathSupportTargetLi2SubtractionBalance {
@@ -847,6 +848,7 @@ struct CygvPathSupportTargetLi2SubtractionBalance {
 #[derive(Clone, Debug, Serialize)]
 struct CygvSourceQnTermSemigroupProbe {
     element_count: Option<usize>,
+    generator_count: Option<usize>,
     status: String,
     gv: Option<String>,
     error: Option<String>,
@@ -4405,6 +4407,7 @@ fn path_support_target_monomial_qn_sources(
                 source_bounded_diamond_parent_only_qn_term_context_sample: Vec::new(),
                 source_parent_qn_term_semigroup_probe: None,
                 source_parent_qn_term_seed_expanded_semigroup_probe: None,
+                source_parent_qn_term_offset_generator_probe: None,
             })
         })
         .collect()
@@ -4613,11 +4616,13 @@ fn annotate_target_monomial_qn_sources_with_seed_decompositions(
                 reduced_seed_set,
                 Some(&curve),
             )?;
+        source.source_bounded_seed_decomposition = Some(bounded_seed_decomposition);
         source.source_parent_qn_term_semigroup_probe =
             source_parent_qn_term_semigroup_probe(source, context)?;
         source.source_parent_qn_term_seed_expanded_semigroup_probe =
             source_parent_qn_term_seed_expanded_semigroup_probe(source, context, seed_set)?;
-        source.source_bounded_seed_decomposition = Some(bounded_seed_decomposition);
+        source.source_parent_qn_term_offset_generator_probe =
+            source_parent_qn_term_offset_generator_probe(source, context)?;
     }
     Ok(())
 }
@@ -4685,7 +4690,10 @@ fn bounded_diamond_parent_qn_comparison(
     }
     CygvBoundedDiamondParentQnComparison {
         status: Some(
-            if source.source_qn_term_signature_sample == diamond_terms {
+            if qn_term_signature_multisets_match(
+                &source.source_qn_term_signature_sample,
+                &diamond_terms,
+            ) {
                 "same_qn_term_signatures"
             } else {
                 "same_count_different_qn_term_signatures"
@@ -4840,6 +4848,31 @@ fn source_parent_qn_term_seed_expanded_semigroup_probe(
     )
 }
 
+fn source_parent_qn_term_offset_generator_probe(
+    source: &CygvPathSupportTargetMonomialQnSource,
+    context: &ValidatedContext<'_>,
+) -> Result<Option<CygvSourceQnTermSemigroupProbe>, String> {
+    if source
+        .source_bounded_diamond_parent_qn_comparison_status
+        .as_deref()
+        != Some("different_qn_term_counts")
+    {
+        return Ok(None);
+    }
+    let (generators, max_degree) = source_qn_term_offset_generators(source, context)?;
+    if generators.is_empty() {
+        return Ok(None);
+    }
+    source_qn_term_provided_generator_probe_from_generators(
+        source,
+        context,
+        generators,
+        max_degree,
+        "computed_source_qn_term_offset_generators",
+        "source qN-term offset generators",
+    )
+}
+
 fn source_qn_term_support_elements(
     source: &CygvPathSupportTargetMonomialQnSource,
     dimension: usize,
@@ -4862,6 +4895,56 @@ fn source_qn_term_support_elements(
     }
     elements.sort();
     Ok(elements)
+}
+
+fn source_qn_term_offset_generators(
+    source: &CygvPathSupportTargetMonomialQnSource,
+    context: &ValidatedContext<'_>,
+) -> Result<(Vec<Vec<i64>>, i128), String> {
+    let source_curve = dense_from_sparse(&source.curve_nonzero, context.dimension)?;
+    let mut generators = Vec::new();
+    let mut seen = HashSet::new();
+    let mut add_generator = |generator: Vec<i64>| {
+        if generator.iter().any(|&coordinate| coordinate != 0) && seen.insert(generator.clone()) {
+            generators.push(generator);
+        }
+    };
+
+    let mut used_source_decomposition = false;
+    if let Some(bounded) = &source.source_bounded_seed_decomposition
+        && bounded.status == "found_lower_seed_decomposition"
+        && let Some(terms) = bounded.terms_nonzero.as_deref()
+    {
+        for term in terms {
+            add_generator(dense_from_sparse(term, context.dimension)?);
+        }
+        used_source_decomposition = true;
+    }
+    if !used_source_decomposition {
+        add_generator(source_curve.clone());
+    }
+
+    for term_context in &source.source_bounded_diamond_parent_only_qn_term_context_sample {
+        if term_context
+            .offset_from_source_known_qn_history_status
+            .as_deref()
+            .is_some_and(|status| status.starts_with("known_nonzero"))
+            && let Some(offset) = term_context.offset_from_source_nonzero.as_deref()
+        {
+            add_generator(dense_from_sparse(offset, context.dimension)?);
+        }
+    }
+
+    generators.sort();
+    let mut max_degree = curve_degree(&source_curve, context.grading)?;
+    for signature in &source.source_qn_term_signature_sample {
+        let curve = dense_from_sparse(&signature.exponent_nonzero, context.dimension)?;
+        max_degree = max_degree.max(curve_degree(&curve, context.grading)?);
+    }
+    for term_context in &source.source_bounded_diamond_parent_only_qn_term_context_sample {
+        max_degree = max_degree.max(term_context.degree);
+    }
+    Ok((generators, max_degree))
 }
 
 fn source_qn_term_seed_expanded_support_elements(
@@ -4894,6 +4977,152 @@ fn source_qn_term_seed_expanded_support_elements(
     Ok(elements)
 }
 
+fn source_qn_term_provided_generator_probe_from_generators(
+    source: &CygvPathSupportTargetMonomialQnSource,
+    context: &ValidatedContext<'_>,
+    generators: Vec<Vec<i64>>,
+    max_degree: i128,
+    computed_status: &str,
+    error_label: &str,
+) -> Result<Option<CygvSourceQnTermSemigroupProbe>, String> {
+    let source_curve = dense_from_sparse(&source.curve_nonzero, context.dimension)?;
+    if generators.len() > CYGV_BOUNDED_DECOMPOSITION_DIAMOND_ELEMENT_LIMIT {
+        return Ok(Some(CygvSourceQnTermSemigroupProbe {
+            element_count: None,
+            generator_count: Some(generators.len()),
+            status: format!(
+                "skipped_generator_limit_{CYGV_BOUNDED_DECOMPOSITION_DIAMOND_ELEMENT_LIMIT}"
+            ),
+            gv: None,
+            error: None,
+            qn_trace_polynomial_count: None,
+            source_qn_trace_term_count: None,
+            source_qn_trace_term_sample_complete: None,
+            source_qn_trace_term_signature_sample: Vec::new(),
+            parent_qn_comparison_status: None,
+        }));
+    }
+    if context.q_matrix.is_empty() || context.q_cols == 0 {
+        return Ok(Some(CygvSourceQnTermSemigroupProbe {
+            element_count: None,
+            generator_count: Some(generators.len()),
+            status: "skipped_no_q_matrix".to_string(),
+            gv: None,
+            error: None,
+            qn_trace_polynomial_count: None,
+            source_qn_trace_term_count: None,
+            source_qn_trace_term_sample_complete: None,
+            source_qn_trace_term_signature_sample: Vec::new(),
+            parent_qn_comparison_status: None,
+        }));
+    }
+    if cfg!(panic = "abort") {
+        return Ok(Some(CygvSourceQnTermSemigroupProbe {
+            element_count: None,
+            generator_count: Some(generators.len()),
+            status: "hkty_unavailable_panic_abort".to_string(),
+            gv: None,
+            error: Some(
+                "running cygv provided-generator HKTY requires a panic=unwind build for diagnostics"
+                    .to_string(),
+            ),
+            qn_trace_polynomial_count: None,
+            source_qn_trace_term_count: None,
+            source_qn_trace_term_sample_complete: None,
+            source_qn_trace_term_signature_sample: Vec::new(),
+            parent_qn_comparison_status: None,
+        }));
+    }
+    let max_degree = u32::try_from(max_degree)
+        .map_err(|_| format!("source qN-term offset max degree {max_degree} does not fit u32"))?;
+    let source_i32 = curve_i64_to_i32(&source_curve, "source qN-term offset-generator curve")?;
+    let previous_panic_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let traced_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        compute_gv_invariants_with_provided_generators_qn_trace(
+            &generators,
+            context.grading,
+            context.q_matrix,
+            &context.intersection,
+            None,
+            Some(max_degree),
+        )
+    }));
+    std::panic::set_hook(previous_panic_hook);
+
+    let traced = match traced_result {
+        Ok(Ok(traced)) => traced,
+        Ok(Err(error)) => {
+            return Ok(Some(CygvSourceQnTermSemigroupProbe {
+                element_count: None,
+                generator_count: Some(generators.len()),
+                status: "hkty_error".to_string(),
+                gv: None,
+                error: Some(format!("{error_label} HKTY failed: {error}")),
+                qn_trace_polynomial_count: None,
+                source_qn_trace_term_count: None,
+                source_qn_trace_term_sample_complete: None,
+                source_qn_trace_term_signature_sample: Vec::new(),
+                parent_qn_comparison_status: None,
+            }));
+        }
+        Err(payload) => {
+            return Ok(Some(CygvSourceQnTermSemigroupProbe {
+                element_count: None,
+                generator_count: Some(generators.len()),
+                status: "hkty_panic".to_string(),
+                gv: None,
+                error: Some(format!(
+                    "{error_label} HKTY panicked: {}",
+                    panic_payload_message(payload.as_ref())
+                )),
+                qn_trace_polynomial_count: None,
+                source_qn_trace_term_count: None,
+                source_qn_trace_term_sample_complete: None,
+                source_qn_trace_term_signature_sample: Vec::new(),
+                parent_qn_comparison_status: None,
+            }));
+        }
+    };
+
+    let qn_trace_polynomial_count = traced.qn_trace.len();
+    let source_qn = traced
+        .qn_trace
+        .iter()
+        .find(|poly| poly.element == source_i32);
+    let source_qn_trace_term_count = source_qn.map(|poly| poly.terms.len());
+    let source_qn_trace_term_sample_complete =
+        source_qn.map(|poly| poly.terms.len() <= CYGV_PATH_SUPPORT_QN_TRACE_TERM_SAMPLE_LIMIT);
+    let generated_terms = source_qn
+        .map(qn_trace_poly_term_signatures)
+        .unwrap_or_default();
+    let parent_qn_comparison_status = Some(qn_term_signature_comparison_status(
+        source.term_count,
+        source.source_qn_term_sample_complete,
+        &source.source_qn_term_signature_sample,
+        source_qn_trace_term_count,
+        source_qn_trace_term_sample_complete.unwrap_or(false),
+        &generated_terms,
+    ));
+    let gv = traced
+        .invariants
+        .into_iter()
+        .find_map(|(curve, value)| (curve == source_i32).then(|| value.to_string()))
+        .unwrap_or_else(|| "0".to_string());
+    Ok(Some(CygvSourceQnTermSemigroupProbe {
+        element_count: None,
+        generator_count: Some(generators.len()),
+        status: computed_status.to_string(),
+        gv: Some(gv),
+        error: None,
+        qn_trace_polynomial_count: Some(qn_trace_polynomial_count),
+        source_qn_trace_term_count,
+        source_qn_trace_term_sample_complete,
+        source_qn_trace_term_signature_sample: generated_terms,
+        parent_qn_comparison_status,
+    }))
+}
+
 fn source_qn_term_semigroup_probe_from_elements(
     source: &CygvPathSupportTargetMonomialQnSource,
     context: &ValidatedContext<'_>,
@@ -4905,6 +5134,7 @@ fn source_qn_term_semigroup_probe_from_elements(
     if elements.len() > CYGV_BOUNDED_DECOMPOSITION_DIAMOND_ELEMENT_LIMIT {
         return Ok(Some(CygvSourceQnTermSemigroupProbe {
             element_count: Some(elements.len()),
+            generator_count: None,
             status: format!(
                 "skipped_element_limit_{CYGV_BOUNDED_DECOMPOSITION_DIAMOND_ELEMENT_LIMIT}"
             ),
@@ -4920,6 +5150,7 @@ fn source_qn_term_semigroup_probe_from_elements(
     if context.q_matrix.is_empty() || context.q_cols == 0 {
         return Ok(Some(CygvSourceQnTermSemigroupProbe {
             element_count: Some(elements.len()),
+            generator_count: None,
             status: "skipped_no_q_matrix".to_string(),
             gv: None,
             error: None,
@@ -4933,6 +5164,7 @@ fn source_qn_term_semigroup_probe_from_elements(
     if cfg!(panic = "abort") {
         return Ok(Some(CygvSourceQnTermSemigroupProbe {
             element_count: Some(elements.len()),
+            generator_count: None,
             status: "hkty_unavailable_panic_abort".to_string(),
             gv: None,
             error: Some(
@@ -4965,6 +5197,7 @@ fn source_qn_term_semigroup_probe_from_elements(
         Ok(Err(error)) => {
             return Ok(Some(CygvSourceQnTermSemigroupProbe {
                 element_count: Some(elements.len()),
+                generator_count: None,
                 status: "hkty_error".to_string(),
                 gv: None,
                 error: Some(format!("{error_label} HKTY failed: {error}")),
@@ -4978,6 +5211,7 @@ fn source_qn_term_semigroup_probe_from_elements(
         Err(payload) => {
             return Ok(Some(CygvSourceQnTermSemigroupProbe {
                 element_count: Some(elements.len()),
+                generator_count: None,
                 status: "hkty_panic".to_string(),
                 gv: None,
                 error: Some(format!(
@@ -5021,6 +5255,7 @@ fn source_qn_term_semigroup_probe_from_elements(
         .unwrap_or_else(|| "0".to_string());
     Ok(Some(CygvSourceQnTermSemigroupProbe {
         element_count: Some(elements.len()),
+        generator_count: None,
         status: computed_status.to_string(),
         gv: Some(gv),
         error: None,
@@ -5062,11 +5297,19 @@ fn qn_term_signature_comparison_status(
     if !expected_sample_complete || !actual_sample_complete {
         return "same_count_but_sample_truncated".to_string();
     }
-    if expected_terms == actual_terms {
+    if qn_term_signature_multisets_match(expected_terms, actual_terms) {
         "same_qn_term_signatures".to_string()
     } else {
         "same_count_different_qn_term_signatures".to_string()
     }
+}
+
+fn qn_term_signature_multisets_match(
+    left: &[CygvPathSupportQnTraceTermSignature],
+    right: &[CygvPathSupportQnTraceTermSignature],
+) -> bool {
+    qn_term_signature_multiset_difference(left, right, 1).is_empty()
+        && qn_term_signature_multiset_difference(right, left, 1).is_empty()
 }
 
 fn target_monomial_qn_source_diamond_parent_qn_comparison_status_counts(
@@ -17060,6 +17303,35 @@ mod tests {
                 coefficient: "1".to_string(),
             }]
         );
+        assert_eq!(
+            qn_term_signature_comparison_status(
+                2,
+                true,
+                &[
+                    CygvPathSupportQnTraceTermSignature {
+                        exponent_nonzero: vec![(0, 1)],
+                        coefficient: "1".to_string(),
+                    },
+                    CygvPathSupportQnTraceTermSignature {
+                        exponent_nonzero: vec![(0, 2)],
+                        coefficient: "-1".to_string(),
+                    },
+                ],
+                Some(2),
+                true,
+                &[
+                    CygvPathSupportQnTraceTermSignature {
+                        exponent_nonzero: vec![(0, 2)],
+                        coefficient: "-1".to_string(),
+                    },
+                    CygvPathSupportQnTraceTermSignature {
+                        exponent_nonzero: vec![(0, 1)],
+                        coefficient: "1".to_string(),
+                    },
+                ],
+            ),
+            "same_qn_term_signatures"
+        );
 
         let stats = MissingGvTargetStats {
             target_count: 1,
@@ -17127,6 +17399,25 @@ mod tests {
         let mut compared_source = sources[0].clone();
         compared_source.source_bounded_diamond_parent_qn_comparison_status =
             Some("different_qn_term_counts".to_string());
+        compared_source.source_bounded_diamond_parent_only_qn_term_context_sample =
+            term_context.clone();
+        compared_source.source_bounded_seed_decomposition =
+            Some(CygvBoundedSeedDecompositionSummary {
+                max_terms: 4,
+                status: "found_lower_seed_decomposition".to_string(),
+                term_count: Some(2),
+                terms_nonzero: Some(vec![vec![(0, 1)], vec![(0, 1)]]),
+                diamond_element_count: Some(3),
+                diamond_status: Some("computed_bounded_decomposition_diamond_qn_trace".to_string()),
+                diamond_gv: Some("5".to_string()),
+                diamond_error: None,
+                diamond_qn_trace_polynomial_count: Some(1),
+                diamond_target_qn_trace_status: Some(
+                    "path_support_qn_materialized_for_nonzero_gv".to_string(),
+                ),
+                diamond_target_qn_trace_term_count: Some(1),
+                diamond_qn_trace_sample: Vec::new(),
+            });
         let semigroup_probe = source_parent_qn_term_semigroup_probe(&compared_source, &context)
             .expect("qN-term semigroup probe should build a bounded diagnostic")
             .expect("mismatched source should request a qN-term semigroup probe");
@@ -17141,6 +17432,17 @@ mod tests {
         .expect("mismatched source should request a seed-expanded qN-term semigroup probe");
         assert_eq!(seed_expanded_probe.element_count, Some(3));
         assert_eq!(seed_expanded_probe.status, "skipped_no_q_matrix");
+        let (offset_generators, offset_max_degree) =
+            source_qn_term_offset_generators(&compared_source, &context)
+                .expect("offset generators should build from source decomposition plus offsets");
+        assert_eq!(offset_generators, vec![vec![1]]);
+        assert_eq!(offset_max_degree, 2);
+        let offset_generator_probe =
+            source_parent_qn_term_offset_generator_probe(&compared_source, &context)
+                .expect("offset-generator probe should build a bounded diagnostic")
+                .expect("mismatched source with known offset should request offset generators");
+        assert_eq!(offset_generator_probe.generator_count, Some(1));
+        assert_eq!(offset_generator_probe.status, "skipped_no_q_matrix");
         assert_eq!(
             target_monomial_qn_source_diamond_parent_qn_comparison_status_counts(&[
                 sources[0].clone(),

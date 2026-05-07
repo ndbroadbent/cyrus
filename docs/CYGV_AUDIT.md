@@ -2880,6 +2880,16 @@ degree-eight source has its final target monomial with that same
 `[(54,1),(203,-2)]`, `GV=-2` offset. The blocker has therefore narrowed to a
 certified chamber history coupling the degree-eight composite with multiple
 known degree-two toric offsets.
+Running those source decompositions plus known degree-two offsets as
+caller-provided generators through actual `cygv` is a useful but still
+uncertified refinement. For target `7`, the shared degree-six source uses four
+generators and the degree-eight composite uses three; both compute `GV=-2` and
+reproduce the parent qN term multiset exactly. Target `8`'s shared degree-six
+source also matches the parent qN term multiset with three generators, while
+its degree-eight composite uses three generators and fails in `cygv` series
+inversion with a non-integer GV invariant. The matching target-`7` domains are
+therefore candidate explanatory histories, but they are not yet
+source-certified chamber semigroups.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use
