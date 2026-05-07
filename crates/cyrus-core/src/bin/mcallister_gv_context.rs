@@ -192,6 +192,7 @@ struct ContextReport {
     missing_target_count: usize,
     exact_kind_counts: HashMap<String, usize>,
     target_status_counts: BTreeMap<String, usize>,
+    active_decomposition_generator_source_status_counts: BTreeMap<String, usize>,
     local_cygv_charge_signature_counts: BTreeMap<String, usize>,
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
     local_cygv_actual_call_readiness_counts: BTreeMap<String, usize>,
@@ -2070,6 +2071,63 @@ fn sparse_matches_dense(sparse: &[(usize, i64)], dense: &[i64]) -> bool {
         .iter()
         .enumerate()
         .all(|(idx, &value)| value == 0 || seen.contains(&idx))
+}
+
+fn active_decomposition_generator_source_status_counts(
+    samples: &[MissingGvTargetSample],
+    context: &ValidatedContext<'_>,
+    target_index_filter: Option<usize>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for (idx, sample) in samples.iter().enumerate() {
+        if !target_index_selected(idx, target_index_filter) {
+            continue;
+        }
+        let Some(active_generators) = sample
+            .real_cone_decomposition_active_generator_basis_nonzero
+            .as_ref()
+        else {
+            continue;
+        };
+        for generator in active_generators {
+            let status = match dense_from_sparse(generator, context.dimension)
+                .and_then(|curve| active_decomposition_generator_source_status(&curve, context))
+            {
+                Ok(status) => status,
+                Err(error) => format!(
+                    "active_generator_source_status_error_{}",
+                    status_error_fragment(&error)
+                ),
+            };
+            *counts.entry(status).or_insert(0) += 1;
+        }
+    }
+    counts
+}
+
+fn active_decomposition_generator_source_status(
+    curve: &[i64],
+    context: &ValidatedContext<'_>,
+) -> Result<String, String> {
+    if context.covered_toric_gv_by_basis.contains_key(curve) {
+        return Ok("active_generator_known_toric_covered".to_string());
+    }
+    if matching_missing_target_for_curve(curve, context)?.is_some() {
+        return Ok("active_generator_matches_missing_target".to_string());
+    }
+    if matching_uncovered_source_ray_for_curve(curve, context)?.is_some() {
+        return Ok("active_generator_matches_uncovered_source_ray".to_string());
+    }
+    let Some(ray_context) = context.degree_bounded_ray_context else {
+        return Ok("active_generator_source_context_missing".to_string());
+    };
+    if ray_context
+        .iter()
+        .any(|sample| sparse_matches_dense(&sample.basis_nonzero, curve))
+    {
+        return Ok("active_generator_source_ray_not_toric_covered".to_string());
+    }
+    Ok("active_generator_not_source_degree_bounded_ray".to_string())
 }
 
 fn path_support_lookup_status(
@@ -6708,6 +6766,12 @@ fn build_report(
         targets.iter().map(|target| Some(target.status.as_str())),
         "missing",
     );
+    let active_decomposition_generator_source_status_counts =
+        active_decomposition_generator_source_status_counts(
+            &validated.stats.sample,
+            validated,
+            target_index_filter,
+        );
     ContextReport {
         schema_version: context.schema_version,
         dimension: validated.dimension,
@@ -6734,6 +6798,7 @@ fn build_report(
             .real_cone_decomposition_exact_kind_counts
             .clone(),
         target_status_counts,
+        active_decomposition_generator_source_status_counts,
         local_cygv_charge_signature_counts,
         local_cygv_target_candidate_status_counts,
         local_cygv_actual_call_readiness_counts,
@@ -9131,6 +9196,116 @@ mod tests {
         assert!(!sparse_matches_dense(&[(0, 2), (4, 1)], &[2, 0, 0, -1]));
         assert!(!sparse_matches_dense(&[(0, 2), (0, 2)], &[2, 0, 0, -1]));
         assert!(!sparse_matches_dense(&[(0, 0)], &[0]));
+    }
+
+    #[test]
+    fn active_decomposition_source_status_counts_classify_generator_dependencies() {
+        let target_sample = MissingGvTargetSample {
+            degree: 2,
+            generators_le_degree: 5,
+            is_mori_generator: false,
+            origin_circuit_pattern: None,
+            origin_circuit_witness_count: None,
+            origin_circuit_first_witness: None,
+            origin_circuit_affine_support: None,
+            cms_general_divisor_shape_candidates: None,
+            cms_general_divisor_intersection_checks: None,
+            branch_diagnostic: None,
+            real_cone_decomposable_by_other_generators: true,
+            real_cone_decomposition_active_generators: Some(5),
+            real_cone_decomposition_active_generator_basis_nonzero: Some(vec![
+                vec![(0, 1)],
+                vec![(0, 1), (1, 1)],
+                vec![(1, 1)],
+                vec![(2, 1)],
+                vec![(0, 1), (2, 1)],
+            ]),
+            real_cone_decomposition_exact_coefficients: Some(vec![
+                "1".to_string(),
+                "1".to_string(),
+                "1".to_string(),
+                "1".to_string(),
+                "1".to_string(),
+            ]),
+            real_cone_decomposition_exact_kind: Some("integer_semigroup".to_string()),
+            ambient_nonzero: Vec::new(),
+            basis_nonzero: vec![(0, 1), (1, 1)],
+        };
+        let uncovered_sample = MissingGvTargetSample {
+            degree: 1,
+            generators_le_degree: 1,
+            is_mori_generator: false,
+            origin_circuit_pattern: None,
+            origin_circuit_witness_count: None,
+            origin_circuit_first_witness: None,
+            origin_circuit_affine_support: None,
+            cms_general_divisor_shape_candidates: None,
+            cms_general_divisor_intersection_checks: None,
+            branch_diagnostic: None,
+            real_cone_decomposable_by_other_generators: false,
+            real_cone_decomposition_active_generators: None,
+            real_cone_decomposition_active_generator_basis_nonzero: None,
+            real_cone_decomposition_exact_coefficients: None,
+            real_cone_decomposition_exact_kind: None,
+            ambient_nonzero: Vec::new(),
+            basis_nonzero: vec![(1, 1)],
+        };
+        let stats = MissingGvTargetStats {
+            target_count: 1,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: vec![target_sample],
+        };
+        let uncovered_stats = MissingGvTargetStats {
+            target_count: 1,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: vec![uncovered_sample],
+        };
+        let ray_context = vec![DegreeBoundedMoriRayContextSample {
+            degree: 1,
+            ambient_nonzero: Vec::new(),
+            basis_nonzero: vec![(2, 1)],
+        }];
+        let grading = vec![1, 1, 1];
+        let q_matrix = Vec::new();
+        let degree_bounded_rays = Vec::new();
+        let mut covered_toric_gv_by_basis = HashMap::new();
+        covered_toric_gv_by_basis.insert(vec![1, 0, 0], "7".to_string());
+        let context = ValidatedContext {
+            dimension: 3,
+            degree_bound: 2,
+            q_cols: 3,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: Some(&ray_context),
+            covered_toric_gv_by_basis,
+            source_derived_gv_by_basis: HashMap::new(),
+            intersection: Intersection::new(3),
+            stats: &stats,
+            uncovered_source_ray_stats: Some(&uncovered_stats),
+        };
+
+        let counts =
+            active_decomposition_generator_source_status_counts(&stats.sample, &context, None);
+        assert_eq!(
+            counts,
+            BTreeMap::from([
+                ("active_generator_known_toric_covered".to_string(), 1),
+                ("active_generator_matches_missing_target".to_string(), 1),
+                (
+                    "active_generator_matches_uncovered_source_ray".to_string(),
+                    1
+                ),
+                (
+                    "active_generator_source_ray_not_toric_covered".to_string(),
+                    1
+                ),
+                (
+                    "active_generator_not_source_degree_bounded_ray".to_string(),
+                    1
+                ),
+            ])
+        );
     }
 
     #[test]

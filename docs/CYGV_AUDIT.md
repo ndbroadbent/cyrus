@@ -2296,3 +2296,12 @@ summarized by `target_status_counts` in the context report. Running
 target GV `0`, and the other two integer diamonds fail the compact HKTY
 integrality check, so the decomposition diamond is not the missing chamber
 context either.
+The same report now aggregates the active decomposition generators themselves:
+`active_decomposition_generator_source_status_counts =
+{"active_generator_known_toric_covered":12,
+"active_generator_matches_missing_target":2,
+"active_generator_matches_uncovered_source_ray":2,
+"active_generator_source_ray_not_toric_covered":6}`. The unresolved target
+classes therefore depend on a smaller lower-source-ray graph, with most leaves
+already toric-covered but eight lower generators still requiring source-derived
+GV/chamber treatment.
