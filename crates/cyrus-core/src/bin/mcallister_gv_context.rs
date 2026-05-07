@@ -242,6 +242,12 @@ struct ContextReport {
         BTreeMap<String, usize>,
     shared_facet_unresolved_source_ray_cms_general_divisor_intersection_check_status_counts:
         BTreeMap<String, usize>,
+    shared_facet_unresolved_source_ray_cms_solution_status_counts: BTreeMap<String, usize>,
+    shared_facet_unresolved_source_ray_cms_intersection_tensor_status_counts:
+        BTreeMap<String, usize>,
+    shared_facet_unresolved_source_ray_cms_primitive_probe_status_counts: BTreeMap<String, usize>,
+    shared_facet_unresolved_source_ray_cms_primitive_probe_gv_counts: BTreeMap<String, usize>,
+    shared_facet_unresolved_source_ray_cms_solution_summary_error_counts: BTreeMap<String, usize>,
     shared_facet_unresolved_source_ray_unit_phase_probe_status_counts: BTreeMap<String, usize>,
     shared_facet_unresolved_source_ray_origin_omitted_unit_phase_probe_status_counts:
         BTreeMap<String, usize>,
@@ -311,6 +317,8 @@ struct TargetReport {
     local_cygv_input_skeleton: Option<LocalCygvInputSkeleton>,
     cms_general_divisor_shape_candidates: Option<Vec<CmsGeneralDivisorShapeCandidate>>,
     cms_general_divisor_intersection_checks: Option<Vec<CmsGeneralDivisorIntersectionCheck>>,
+    cms_general_divisor_solution_summaries: Vec<CmsGeneralDivisorSolutionSummary>,
+    cms_general_divisor_solution_summary_error: Option<String>,
     branch_diagnostic: Option<MissingGvBranchDiagnostic>,
     real_cone_decomposable_by_other_generators: bool,
     ambient_nonzero: Vec<(usize, i64)>,
@@ -2763,6 +2771,49 @@ fn path_support_uncovered_source_ray_local_cygv_primitive_probe_status_counts(
     counts
 }
 
+fn target_cms_solution_status_counts(
+    targets: &[TargetReport],
+    key: impl Fn(&CmsGeneralDivisorSolutionSummary) -> &str,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        if target.cms_general_divisor_solution_summaries.is_empty() {
+            *counts
+                .entry("no_cms_solution_summary".to_string())
+                .or_insert(0usize) += 1;
+            continue;
+        }
+        for summary in &target.cms_general_divisor_solution_summaries {
+            *counts.entry(key(summary).to_string()).or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn target_cms_primitive_probe_gv_counts(targets: &[TargetReport]) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        for summary in &target.cms_general_divisor_solution_summaries {
+            let key = summary
+                .local_cygv_primitive_probe
+                .as_ref()
+                .and_then(|probe| probe.candidate_gv.clone())
+                .unwrap_or_else(|| "missing_cms_primitive_probe_gv".to_string());
+            *counts.entry(key).or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn target_cms_solution_summary_error_counts(targets: &[TargetReport]) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        targets
+            .iter()
+            .map(|target| target.cms_general_divisor_solution_summary_error.as_deref()),
+        "no_cms_solution_summary_error",
+    )
+}
+
 fn path_candidate_support(
     target: &[i64],
     candidates: &[CygvPathPredecessorCandidate],
@@ -5115,6 +5166,11 @@ fn report_target(
                 None
             }
         };
+    let (cms_general_divisor_solution_summaries, cms_general_divisor_solution_summary_error) =
+        match cms_general_divisor_solution_summaries(Some(sample), &context.intersection) {
+            Ok(summaries) => (summaries, None),
+            Err(error) => (Vec::new(), Some(error)),
+        };
     let local_cygv_hypersurface_shape = match local_cygv_hypersurface_shape(sample) {
         Ok(shape) => shape,
         Err(error) => {
@@ -5136,6 +5192,8 @@ fn report_target(
                 cms_general_divisor_intersection_checks: sample
                     .cms_general_divisor_intersection_checks
                     .clone(),
+                cms_general_divisor_solution_summaries,
+                cms_general_divisor_solution_summary_error,
                 branch_diagnostic: sample.branch_diagnostic.clone(),
                 real_cone_decomposable_by_other_generators: sample
                     .real_cone_decomposable_by_other_generators,
@@ -5210,6 +5268,8 @@ fn report_target(
                 cms_general_divisor_intersection_checks: sample
                     .cms_general_divisor_intersection_checks
                     .clone(),
+                cms_general_divisor_solution_summaries,
+                cms_general_divisor_solution_summary_error,
                 branch_diagnostic: sample.branch_diagnostic.clone(),
                 real_cone_decomposable_by_other_generators: sample
                     .real_cone_decomposable_by_other_generators,
@@ -5284,6 +5344,8 @@ fn report_target(
                 cms_general_divisor_intersection_checks: sample
                     .cms_general_divisor_intersection_checks
                     .clone(),
+                cms_general_divisor_solution_summaries,
+                cms_general_divisor_solution_summary_error,
                 branch_diagnostic: sample.branch_diagnostic.clone(),
                 real_cone_decomposable_by_other_generators: sample
                     .real_cone_decomposable_by_other_generators,
@@ -5362,6 +5424,8 @@ fn report_target(
                 cms_general_divisor_intersection_checks: sample
                     .cms_general_divisor_intersection_checks
                     .clone(),
+                cms_general_divisor_solution_summaries,
+                cms_general_divisor_solution_summary_error,
                 branch_diagnostic: sample.branch_diagnostic.clone(),
                 real_cone_decomposable_by_other_generators: sample
                     .real_cone_decomposable_by_other_generators,
@@ -5453,6 +5517,8 @@ fn report_target(
         cms_general_divisor_intersection_checks: sample
             .cms_general_divisor_intersection_checks
             .clone(),
+        cms_general_divisor_solution_summaries,
+        cms_general_divisor_solution_summary_error,
         branch_diagnostic: sample.branch_diagnostic.clone(),
         real_cone_decomposable_by_other_generators: sample
             .real_cone_decomposable_by_other_generators,
@@ -7577,6 +7643,27 @@ fn build_report(
         cms_general_divisor_intersection_check_status_counts(
             &shared_facet_unresolved_source_ray_sample,
         );
+    let shared_facet_unresolved_source_ray_cms_solution_status_counts =
+        target_cms_solution_status_counts(&shared_facet_unresolved_source_ray_sample, |summary| {
+            summary.cms_check_status.as_str()
+        });
+    let shared_facet_unresolved_source_ray_cms_intersection_tensor_status_counts =
+        target_cms_solution_status_counts(&shared_facet_unresolved_source_ray_sample, |summary| {
+            summary.local_intersection_tensor_candidate_status.as_str()
+        });
+    let shared_facet_unresolved_source_ray_cms_primitive_probe_status_counts =
+        target_cms_solution_status_counts(&shared_facet_unresolved_source_ray_sample, |summary| {
+            summary
+                .local_cygv_primitive_probe
+                .as_ref()
+                .map_or("local_cygv_primitive_probe_not_run", |probe| {
+                    probe.status.as_str()
+                })
+        });
+    let shared_facet_unresolved_source_ray_cms_primitive_probe_gv_counts =
+        target_cms_primitive_probe_gv_counts(&shared_facet_unresolved_source_ray_sample);
+    let shared_facet_unresolved_source_ray_cms_solution_summary_error_counts =
+        target_cms_solution_summary_error_counts(&shared_facet_unresolved_source_ray_sample);
     let shared_facet_unresolved_source_ray_unit_phase_probe_sample =
         local_cygv_target_unit_phase_probe_summaries(&shared_facet_unresolved_source_ray_sample);
     let shared_facet_unresolved_source_ray_unit_phase_probe_status_counts =
@@ -7898,6 +7985,11 @@ fn build_report(
         shared_facet_unresolved_source_ray_local_cygv_missing_source_input_counts,
         shared_facet_unresolved_source_ray_cms_general_divisor_candidate_status_counts,
         shared_facet_unresolved_source_ray_cms_general_divisor_intersection_check_status_counts,
+        shared_facet_unresolved_source_ray_cms_solution_status_counts,
+        shared_facet_unresolved_source_ray_cms_intersection_tensor_status_counts,
+        shared_facet_unresolved_source_ray_cms_primitive_probe_status_counts,
+        shared_facet_unresolved_source_ray_cms_primitive_probe_gv_counts,
+        shared_facet_unresolved_source_ray_cms_solution_summary_error_counts,
         shared_facet_unresolved_source_ray_unit_phase_probe_status_counts,
         shared_facet_unresolved_source_ray_origin_omitted_unit_phase_probe_status_counts,
         shared_facet_unresolved_source_ray_unit_phase_probe_sample,

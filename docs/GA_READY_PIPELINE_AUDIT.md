@@ -666,5 +666,7 @@ to make the remaining GV layer more first-principles:
    shared-source unit-tensor probe matches only `5/20` expected formula sets
    (`GV=-2` cases); formula-`3` rows give unit candidate `6` and
    origin-omitted candidate `-9`, so tensor/chamber certification remains the
-   blocker.
+   blocker. The CMS raw-divisor-cubic primitive probe also fails for the four
+   integral formula-`3` rows, producing `-36`, `-42`, `-42`, and `-48`, so the
+   needed tensor is neither the unit tensor nor the raw divisor cubic.
    generators over `7360` occurrences.

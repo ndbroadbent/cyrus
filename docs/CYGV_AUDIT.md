@@ -2423,6 +2423,12 @@ uncertified `GV=-2` cases. The formula-`3` rows instead give unit-tensor
 candidate `6` and origin-omitted candidate `-9`, so the factor/sign mismatch is
 real evidence that the local intersection tensor and chamber phase still need
 to be derived rather than guessed.
+The report also exposes the CMS divisor solution summaries and primitive
+`cygv` probes using the raw divisor cubic as the one-parameter tensor. This
+does not fix the mismatch: the four integral formula-`3` rows produce raw-cubic
+primitive candidates `-36`, `-42`, `-42`, and `-48`, while two nonintegral
+solutions are blocked before probing. Thus neither the unit tensor nor the raw
+divisor cubic is the certified local tensor.
 The same active-leaf records now run the existing one-parameter unit-tensor
 phase probe against those lower source rays. This is still diagnostic-only,
 because the local intersection tensor and chamber certificate are not

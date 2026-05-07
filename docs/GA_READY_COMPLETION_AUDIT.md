@@ -365,7 +365,10 @@ integral inferred-degree matches with formula value `3`, `2` non-integral
 matches, and `22` no-solution checks. The local unit-tensor probe matches only
 `5/20` expected formula sets (`GV=-2` cases); formula-`3` rows give unit
 candidate `6` and origin-omitted candidate `-9`, so the tensor/chamber model
-cannot be guessed from the unit probe. The
+cannot be guessed from the unit probe. The CMS raw-divisor-cubic primitive
+probe also fails for the four integral formula-`3` rows, producing `-36`,
+`-42`, `-42`, and `-48`, so the missing tensor is not the raw divisor cubic
+either. The
 enriched active-leaf report
 now also carries the matching source rays' local q rows and CMS check counts:
 two origin-circuit lower leaves are primitive `neg2` q-row candidates, while
