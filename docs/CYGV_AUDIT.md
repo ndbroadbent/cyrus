@@ -2966,6 +2966,23 @@ Full-trace classification counts make this stronger: all `9` fractional
 target-`8` degree-eight GW candidates are `unknown_not_toric_covered`; among
 them, `8` are `not_source_degree_bounded_ray` and `1` is the
 `source_ray_matches_missing_target` row above.
+The bounded-decomposition diamond path now runs the same raw GW coefficient
+trace on explicit semigroups before returning the usual compact HKTY result.
+Regenerating
+`/tmp/cyrus_gv_context_target8_explicit_diamond_gw_report.json` shows that
+target `8`'s parent-only bounded diamond has `diamond_status=hkty_error` but
+also `diamond_gw_coefficient_trace_count=7`,
+`diamond_gw_noninteger_candidate_count=1`,
+`diamond_gw_noninteger_known_qn_history_status_counts =
+{"unknown_not_toric_covered":1}`, and
+`diamond_gw_noninteger_source_class_status_counts =
+{"source_ray_matches_missing_target":1}`. The target-row coefficient itself is
+`diamond_target_gw_coefficient_status=nonzero_gw` with
+`diamond_target_gw_candidate=4/3`, matching the cygv error's
+`element_nonzero=[(203,-3),(206,1),(209,1)]`, pivot component `-3`, and
+instanton coefficient `-4`. This removes the opacity of the bounded-diamond
+HKTY error: the failing fractional coefficient is the missing target row
+itself, not a hidden lower leaf.
 Thus the current blocker is not hidden by a missing scalar source readout: the
 candidate domains contain fractional lower coefficient history and still lack
 a supporting-face/chamber certificate.

@@ -26,6 +26,7 @@ use cyrus_core::{
     compute_gv_invariants_with_explicit_semigroup_qn_trace,
     compute_gv_invariants_with_provided_generators,
     compute_gv_invariants_with_provided_generators_qn_trace,
+    compute_gw_coefficient_trace_with_explicit_semigroup,
     compute_gw_coefficient_trace_with_provided_generators, curve_row_span_rank,
     diagnose_affine_toric_circuit, integer_math::solve_linear_system_rational, utils::gcd_list_int,
 };
@@ -337,6 +338,14 @@ struct ContextReport {
     cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_error_counts:
         BTreeMap<String, usize>,
     cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_qn_trace_status_counts:
+        BTreeMap<String, usize>,
+    cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_gw_noninteger_candidate_count_counts:
+        BTreeMap<String, usize>,
+    cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_gw_noninteger_known_qn_history_status_counts:
+        BTreeMap<String, usize>,
+    cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_gw_noninteger_source_class_status_counts:
+        BTreeMap<String, usize>,
+    cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_target_gw_coefficient_status_counts:
         BTreeMap<String, usize>,
     cygv_closest_known_qn_residual_source_predecessor_unique_count: usize,
     cygv_closest_known_qn_residual_source_predecessor_occurrence_count: usize,
@@ -1307,6 +1316,15 @@ struct CygvBoundedSeedDecompositionSummary {
     diamond_target_qn_trace_status: Option<String>,
     diamond_target_qn_trace_term_count: Option<usize>,
     diamond_qn_trace_sample: Vec<CygvPathSupportQnTracePolynomialSample>,
+    diamond_gw_coefficient_trace_count: Option<usize>,
+    diamond_gw_noninteger_candidate_count: Option<usize>,
+    diamond_gw_noninteger_known_qn_history_status_counts: BTreeMap<String, usize>,
+    diamond_gw_noninteger_source_class_status_counts: BTreeMap<String, usize>,
+    diamond_gw_noninteger_candidate_sample: Vec<CygvPathSupportGvCoefficientTraceSample>,
+    diamond_gw_coefficient_trace_error: Option<String>,
+    diamond_target_gw_coefficient_status: Option<String>,
+    diamond_target_gw_instanton_coefficient: Option<String>,
+    diamond_target_gw_candidate: Option<String>,
 }
 
 struct CygvBoundedDecompositionDiamondProbe {
@@ -1318,6 +1336,15 @@ struct CygvBoundedDecompositionDiamondProbe {
     target_qn_trace_status: Option<String>,
     target_qn_trace_term_count: Option<usize>,
     qn_trace_sample: Vec<CygvPathSupportQnTracePolynomialSample>,
+    gw_coefficient_trace_count: Option<usize>,
+    gw_noninteger_candidate_count: Option<usize>,
+    gw_noninteger_known_qn_history_status_counts: BTreeMap<String, usize>,
+    gw_noninteger_source_class_status_counts: BTreeMap<String, usize>,
+    gw_noninteger_candidate_sample: Vec<CygvPathSupportGvCoefficientTraceSample>,
+    gw_coefficient_trace_error: Option<String>,
+    target_gw_coefficient_status: Option<String>,
+    target_gw_instanton_coefficient: Option<String>,
+    target_gw_candidate: Option<String>,
 }
 
 struct PathSupportSourceClassContext {
@@ -2432,6 +2459,55 @@ fn path_support_gw_coefficient_diagnostic(
         &context.intersection,
         None,
         Some(max_deg),
+    ) {
+        Ok(trace) => {
+            let noninteger_count = trace
+                .iter()
+                .filter(|entry| gv_coefficient_trace_has_noninteger_candidate(entry))
+                .count();
+            let (known_counts, source_counts) =
+                gw_noninteger_classification_counts(&trace, context);
+            let sample = path_support_gw_noninteger_candidate_sample(&trace, context);
+            let target_trace = trace
+                .iter()
+                .find(|entry| entry.element.as_slice() == target);
+            PathSupportGwCoefficientDiagnostic {
+                trace_count: Some(trace.len()),
+                noninteger_candidate_count: Some(noninteger_count),
+                noninteger_known_qn_history_status_counts: known_counts,
+                noninteger_source_class_status_counts: source_counts,
+                noninteger_candidate_sample: sample,
+                error: None,
+                target_status: target_trace.map(|entry| entry.status.clone()),
+                target_instanton_coefficient: target_trace
+                    .and_then(|entry| entry.instanton_coefficient.clone()),
+                target_gw_candidate: target_trace.and_then(|entry| entry.gv_candidate.clone()),
+            }
+        }
+        Err(error) => PathSupportGwCoefficientDiagnostic {
+            trace_count: None,
+            noninteger_candidate_count: None,
+            noninteger_known_qn_history_status_counts: BTreeMap::new(),
+            noninteger_source_class_status_counts: BTreeMap::new(),
+            noninteger_candidate_sample: Vec::new(),
+            error: Some(error.to_string()),
+            target_status: None,
+            target_instanton_coefficient: None,
+            target_gw_candidate: None,
+        },
+    }
+}
+
+fn explicit_semigroup_gw_coefficient_diagnostic(
+    elements: &[Vec<i64>],
+    context: &ValidatedContext<'_>,
+    target: &[i32],
+) -> PathSupportGwCoefficientDiagnostic {
+    match compute_gw_coefficient_trace_with_explicit_semigroup(
+        elements,
+        context.grading,
+        context.q_matrix,
+        &context.intersection,
     ) {
         Ok(trace) => {
             let noninteger_count = trace
@@ -4574,8 +4650,39 @@ fn bounded_seed_decomposition_summary(
                     .as_ref()
                     .and_then(|probe| probe.target_qn_trace_term_count),
                 diamond_qn_trace_sample: diamond
-                    .map(|probe| probe.qn_trace_sample)
+                    .as_ref()
+                    .map(|probe| probe.qn_trace_sample.clone())
                     .unwrap_or_default(),
+                diamond_gw_coefficient_trace_count: diamond
+                    .as_ref()
+                    .and_then(|probe| probe.gw_coefficient_trace_count),
+                diamond_gw_noninteger_candidate_count: diamond
+                    .as_ref()
+                    .and_then(|probe| probe.gw_noninteger_candidate_count),
+                diamond_gw_noninteger_known_qn_history_status_counts: diamond
+                    .as_ref()
+                    .map(|probe| probe.gw_noninteger_known_qn_history_status_counts.clone())
+                    .unwrap_or_default(),
+                diamond_gw_noninteger_source_class_status_counts: diamond
+                    .as_ref()
+                    .map(|probe| probe.gw_noninteger_source_class_status_counts.clone())
+                    .unwrap_or_default(),
+                diamond_gw_noninteger_candidate_sample: diamond
+                    .as_ref()
+                    .map(|probe| probe.gw_noninteger_candidate_sample.clone())
+                    .unwrap_or_default(),
+                diamond_gw_coefficient_trace_error: diamond
+                    .as_ref()
+                    .and_then(|probe| probe.gw_coefficient_trace_error.clone()),
+                diamond_target_gw_coefficient_status: diamond
+                    .as_ref()
+                    .and_then(|probe| probe.target_gw_coefficient_status.clone()),
+                diamond_target_gw_instanton_coefficient: diamond
+                    .as_ref()
+                    .and_then(|probe| probe.target_gw_instanton_coefficient.clone()),
+                diamond_target_gw_candidate: diamond
+                    .as_ref()
+                    .and_then(|probe| probe.target_gw_candidate.clone()),
             })
         }
         None => Ok(CygvBoundedSeedDecompositionSummary {
@@ -4591,6 +4698,15 @@ fn bounded_seed_decomposition_summary(
             diamond_target_qn_trace_status: None,
             diamond_target_qn_trace_term_count: None,
             diamond_qn_trace_sample: Vec::new(),
+            diamond_gw_coefficient_trace_count: None,
+            diamond_gw_noninteger_candidate_count: None,
+            diamond_gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
+            diamond_gw_noninteger_source_class_status_counts: BTreeMap::new(),
+            diamond_gw_noninteger_candidate_sample: Vec::new(),
+            diamond_gw_coefficient_trace_error: None,
+            diamond_target_gw_coefficient_status: None,
+            diamond_target_gw_instanton_coefficient: None,
+            diamond_target_gw_candidate: None,
         }),
     }
 }
@@ -4613,6 +4729,15 @@ fn bounded_decomposition_diamond_qn_trace(
             target_qn_trace_status: None,
             target_qn_trace_term_count: None,
             qn_trace_sample: Vec::new(),
+            gw_coefficient_trace_count: None,
+            gw_noninteger_candidate_count: None,
+            gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
+            gw_noninteger_source_class_status_counts: BTreeMap::new(),
+            gw_noninteger_candidate_sample: Vec::new(),
+            gw_coefficient_trace_error: None,
+            target_gw_coefficient_status: None,
+            target_gw_instanton_coefficient: None,
+            target_gw_candidate: None,
         });
     }
     if context.q_matrix.is_empty() || context.q_cols == 0 {
@@ -4625,6 +4750,15 @@ fn bounded_decomposition_diamond_qn_trace(
             target_qn_trace_status: None,
             target_qn_trace_term_count: None,
             qn_trace_sample: Vec::new(),
+            gw_coefficient_trace_count: None,
+            gw_noninteger_candidate_count: None,
+            gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
+            gw_noninteger_source_class_status_counts: BTreeMap::new(),
+            gw_noninteger_candidate_sample: Vec::new(),
+            gw_coefficient_trace_error: None,
+            target_gw_coefficient_status: None,
+            target_gw_instanton_coefficient: None,
+            target_gw_candidate: None,
         });
     }
     if cfg!(panic = "abort") {
@@ -4640,9 +4774,20 @@ fn bounded_decomposition_diamond_qn_trace(
             target_qn_trace_status: None,
             target_qn_trace_term_count: None,
             qn_trace_sample: Vec::new(),
+            gw_coefficient_trace_count: None,
+            gw_noninteger_candidate_count: None,
+            gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
+            gw_noninteger_source_class_status_counts: BTreeMap::new(),
+            gw_noninteger_candidate_sample: Vec::new(),
+            gw_coefficient_trace_error: None,
+            target_gw_coefficient_status: None,
+            target_gw_instanton_coefficient: None,
+            target_gw_candidate: None,
         });
     }
     let target_i32 = curve_i64_to_i32(target, "bounded-decomposition target")?;
+    let gw_diagnostic =
+        explicit_semigroup_gw_coefficient_diagnostic(&elements, context, &target_i32);
     let previous_panic_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
     let traced_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -4669,6 +4814,17 @@ fn bounded_decomposition_diamond_qn_trace(
                 target_qn_trace_status: None,
                 target_qn_trace_term_count: None,
                 qn_trace_sample: Vec::new(),
+                gw_coefficient_trace_count: gw_diagnostic.trace_count,
+                gw_noninteger_candidate_count: gw_diagnostic.noninteger_candidate_count,
+                gw_noninteger_known_qn_history_status_counts: gw_diagnostic
+                    .noninteger_known_qn_history_status_counts,
+                gw_noninteger_source_class_status_counts: gw_diagnostic
+                    .noninteger_source_class_status_counts,
+                gw_noninteger_candidate_sample: gw_diagnostic.noninteger_candidate_sample,
+                gw_coefficient_trace_error: gw_diagnostic.error,
+                target_gw_coefficient_status: gw_diagnostic.target_status,
+                target_gw_instanton_coefficient: gw_diagnostic.target_instanton_coefficient,
+                target_gw_candidate: gw_diagnostic.target_gw_candidate,
             });
         }
         Err(payload) => {
@@ -4684,6 +4840,17 @@ fn bounded_decomposition_diamond_qn_trace(
                 target_qn_trace_status: None,
                 target_qn_trace_term_count: None,
                 qn_trace_sample: Vec::new(),
+                gw_coefficient_trace_count: gw_diagnostic.trace_count,
+                gw_noninteger_candidate_count: gw_diagnostic.noninteger_candidate_count,
+                gw_noninteger_known_qn_history_status_counts: gw_diagnostic
+                    .noninteger_known_qn_history_status_counts,
+                gw_noninteger_source_class_status_counts: gw_diagnostic
+                    .noninteger_source_class_status_counts,
+                gw_noninteger_candidate_sample: gw_diagnostic.noninteger_candidate_sample,
+                gw_coefficient_trace_error: gw_diagnostic.error,
+                target_gw_coefficient_status: gw_diagnostic.target_status,
+                target_gw_instanton_coefficient: gw_diagnostic.target_instanton_coefficient,
+                target_gw_candidate: gw_diagnostic.target_gw_candidate,
             });
         }
     };
@@ -4708,6 +4875,17 @@ fn bounded_decomposition_diamond_qn_trace(
         target_qn_trace_status: Some(target_qn_trace_status),
         target_qn_trace_term_count,
         qn_trace_sample: path_support_qn_trace_sample(&traced.qn_trace),
+        gw_coefficient_trace_count: gw_diagnostic.trace_count,
+        gw_noninteger_candidate_count: gw_diagnostic.noninteger_candidate_count,
+        gw_noninteger_known_qn_history_status_counts: gw_diagnostic
+            .noninteger_known_qn_history_status_counts,
+        gw_noninteger_source_class_status_counts: gw_diagnostic
+            .noninteger_source_class_status_counts,
+        gw_noninteger_candidate_sample: gw_diagnostic.noninteger_candidate_sample,
+        gw_coefficient_trace_error: gw_diagnostic.error,
+        target_gw_coefficient_status: gw_diagnostic.target_status,
+        target_gw_instanton_coefficient: gw_diagnostic.target_instanton_coefficient,
+        target_gw_candidate: gw_diagnostic.target_gw_candidate,
     })
 }
 
@@ -12995,6 +13173,22 @@ fn build_report(
         cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_qn_trace_status_counts(
             &targets,
         );
+    let cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_gw_noninteger_candidate_count_counts =
+        cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_gw_noninteger_candidate_count_counts(
+            &targets,
+        );
+    let cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_gw_noninteger_known_qn_history_status_counts =
+        cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_gw_noninteger_known_qn_history_status_counts(
+            &targets,
+        );
+    let cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_gw_noninteger_source_class_status_counts =
+        cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_gw_noninteger_source_class_status_counts(
+            &targets,
+        );
+    let cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_target_gw_coefficient_status_counts =
+        cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_target_gw_coefficient_status_counts(
+            &targets,
+        );
     let cygv_closest_known_qn_residual_source_predecessor_sample =
         cygv_closest_known_qn_residual_source_predecessor_summaries(&targets, validated);
     let cygv_closest_known_qn_residual_source_predecessor_unique_count =
@@ -13305,6 +13499,10 @@ fn build_report(
         cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_gv_counts,
         cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_error_counts,
         cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_qn_trace_status_counts,
+        cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_gw_noninteger_candidate_count_counts,
+        cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_gw_noninteger_known_qn_history_status_counts,
+        cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_gw_noninteger_source_class_status_counts,
+        cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_target_gw_coefficient_status_counts,
         cygv_closest_known_qn_residual_source_predecessor_unique_count,
         cygv_closest_known_qn_residual_source_predecessor_occurrence_count,
         cygv_closest_known_qn_residual_source_predecessor_degree_counts,
@@ -13745,6 +13943,104 @@ fn cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_qn_
                 .as_ref()
                 .and_then(|summary| summary.diamond_target_qn_trace_status.as_deref())
                 .unwrap_or("missing_bounded_seed_diamond_target_qn_trace_status");
+            *counts.entry(status.to_string()).or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_gw_noninteger_candidate_count_counts(
+    targets: &[TargetReport],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        let Some(comparison) = target.cygv_path_history_probe.as_ref().and_then(|probe| {
+            probe
+                .closest_known_qn_residual_qn_domain_comparison
+                .as_ref()
+        }) else {
+            continue;
+        };
+        for classification in &comparison.parent_only_term_classification_sample {
+            let key = classification
+                .source_bounded_seed_decomposition
+                .as_ref()
+                .and_then(|summary| summary.diamond_gw_noninteger_candidate_count)
+                .map_or_else(
+                    || "missing_bounded_seed_diamond_gw_noninteger_count".to_string(),
+                    |count| count.to_string(),
+                );
+            *counts.entry(key).or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_gw_noninteger_known_qn_history_status_counts(
+    targets: &[TargetReport],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        let Some(comparison) = target.cygv_path_history_probe.as_ref().and_then(|probe| {
+            probe
+                .closest_known_qn_residual_qn_domain_comparison
+                .as_ref()
+        }) else {
+            continue;
+        };
+        for classification in &comparison.parent_only_term_classification_sample {
+            if let Some(summary) = &classification.source_bounded_seed_decomposition {
+                for (status, count) in &summary.diamond_gw_noninteger_known_qn_history_status_counts
+                {
+                    *counts.entry(status.clone()).or_insert(0usize) += count;
+                }
+            }
+        }
+    }
+    counts
+}
+
+fn cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_gw_noninteger_source_class_status_counts(
+    targets: &[TargetReport],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        let Some(comparison) = target.cygv_path_history_probe.as_ref().and_then(|probe| {
+            probe
+                .closest_known_qn_residual_qn_domain_comparison
+                .as_ref()
+        }) else {
+            continue;
+        };
+        for classification in &comparison.parent_only_term_classification_sample {
+            if let Some(summary) = &classification.source_bounded_seed_decomposition {
+                for (status, count) in &summary.diamond_gw_noninteger_source_class_status_counts {
+                    *counts.entry(status.clone()).or_insert(0usize) += count;
+                }
+            }
+        }
+    }
+    counts
+}
+
+fn cygv_closest_known_qn_residual_qn_domain_parent_only_bounded_seed_diamond_target_gw_coefficient_status_counts(
+    targets: &[TargetReport],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        let Some(comparison) = target.cygv_path_history_probe.as_ref().and_then(|probe| {
+            probe
+                .closest_known_qn_residual_qn_domain_comparison
+                .as_ref()
+        }) else {
+            continue;
+        };
+        for classification in &comparison.parent_only_term_classification_sample {
+            let status = classification
+                .source_bounded_seed_decomposition
+                .as_ref()
+                .and_then(|summary| summary.diamond_target_gw_coefficient_status.as_deref())
+                .unwrap_or("missing_bounded_seed_diamond_target_gw_coefficient_status");
             *counts.entry(status.to_string()).or_insert(0usize) += 1;
         }
     }
@@ -18160,6 +18456,15 @@ mod tests {
                     coefficient: "1".to_string(),
                 }],
             }],
+            diamond_gw_coefficient_trace_count: None,
+            diamond_gw_noninteger_candidate_count: None,
+            diamond_gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
+            diamond_gw_noninteger_source_class_status_counts: BTreeMap::new(),
+            diamond_gw_noninteger_candidate_sample: Vec::new(),
+            diamond_gw_coefficient_trace_error: None,
+            diamond_target_gw_coefficient_status: None,
+            diamond_target_gw_instanton_coefficient: None,
+            diamond_target_gw_candidate: None,
         };
 
         let comparison = bounded_diamond_parent_qn_comparison(&sources[0], &bounded);
@@ -18313,6 +18618,15 @@ mod tests {
                 ),
                 diamond_target_qn_trace_term_count: Some(1),
                 diamond_qn_trace_sample: Vec::new(),
+                diamond_gw_coefficient_trace_count: None,
+                diamond_gw_noninteger_candidate_count: None,
+                diamond_gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
+                diamond_gw_noninteger_source_class_status_counts: BTreeMap::new(),
+                diamond_gw_noninteger_candidate_sample: Vec::new(),
+                diamond_gw_coefficient_trace_error: None,
+                diamond_target_gw_coefficient_status: None,
+                diamond_target_gw_instanton_coefficient: None,
+                diamond_target_gw_candidate: None,
             });
         let semigroup_probe = source_parent_qn_term_semigroup_probe(&compared_source, &context)
             .expect("qN-term semigroup probe should build a bounded diagnostic")

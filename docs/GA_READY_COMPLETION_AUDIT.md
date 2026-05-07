@@ -637,6 +637,18 @@ targets. With scan bound `8`, four targets match their CMS formula candidate
 at tensor value `1`, but five do not match any integer tensor in the scan
 range. Those four matches are still uncertified, so this narrows the work but
 does not close the corrected-chamber GV blocker.
+The bounded-decomposition diamond diagnostic now exposes raw GW coefficient
+history for explicit semigroups even when the integral compact HKTY run fails.
+On
+`/tmp/cyrus_gv_context_target8_explicit_diamond_gw_report.json`, target `8`'s
+parent-only diamond still has `diamond_status=hkty_error`, but the raw trace
+has seven coefficient entries and exactly one nonintegral candidate. That
+candidate is classified as
+`known_qn_history_status=unknown_not_toric_covered` and
+`source_class_status=source_ray_matches_missing_target`; the target coefficient
+status is `nonzero_gw` with candidate `4/3`. This is evidence against a hidden
+lower-leaf explanation for the target-`8` failure, but it remains a diagnostic
+because the semigroup/chamber certificate is still absent.
 
 ## Next Concrete Action
 

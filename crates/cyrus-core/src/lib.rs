@@ -135,6 +135,7 @@ pub use gv::{
     compute_gv_invariants_with_explicit_semigroup_qn_trace,
     compute_gv_invariants_with_provided_generators,
     compute_gv_invariants_with_provided_generators_qn_trace,
+    compute_gw_coefficient_trace_with_explicit_semigroup,
     compute_gw_coefficient_trace_with_provided_generators, compute_local_p2_genus_zero_gv_series,
     compute_local_toric_circuit_gv_series, compute_mori_cone_cap_rays,
     compute_one_dimensional_ray_gv_series, compute_origin_circuit_curve_diagnostics,

@@ -876,4 +876,12 @@ to make the remaining GV layer more first-principles:
    blocker. The CMS raw-divisor-cubic primitive probe also fails for the four
    integral formula-`3` rows, producing `-36`, `-42`, `-42`, and `-48`, so the
    needed tensor is neither the unit tensor nor the raw divisor cubic.
+   The context report now also aggregates raw GW coefficient diagnostics for
+   bounded-decomposition diamonds built from explicit semigroups. On the fresh
+   target-`8` path-support report, the parent-only bounded diamond still fails
+   compact HKTY integrality, but the raw trace localizes the failure to one
+   nonintegral target-row candidate: `GV` candidate `4/3`, classified as
+   `source_ray_matches_missing_target` and `unknown_not_toric_covered`. This
+   keeps the target-`8` diamond in the diagnostic bucket rather than promoting
+   it, while narrowing the remaining chamber-history problem.
    generators over `7360` occurrences.

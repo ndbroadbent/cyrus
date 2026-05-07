@@ -11484,6 +11484,36 @@ pub fn compute_gv_invariants_with_explicit_semigroup_qn_trace(
     )
 }
 
+/// Compute raw GW/GV coefficient candidates using an explicitly truncated
+/// semigroup without enforcing GV integrality.
+///
+/// This is the explicit-semigroup analogue of
+/// [`compute_gw_coefficient_trace_with_provided_generators`]. It is intended
+/// for diagnostics of small source/chamber candidate domains where the normal
+/// integral GV path fails with a non-integer candidate.
+///
+/// # Errors
+/// Returns an error if the explicit semigroup, grading, GLSM charge matrix, or
+/// intersection numbers are inconsistent, or if cygv fails before coefficient
+/// readout.
+#[doc(hidden)]
+#[allow(clippy::too_many_lines)]
+pub fn compute_gw_coefficient_trace_with_explicit_semigroup(
+    elements: &[Vec<i64>],
+    grading_vector: &[i64],
+    q_matrix: &[Vec<i64>],
+    intnums: &Intersection,
+) -> Result<Vec<CygvGvCoefficientTrace>> {
+    let (semigroup, q, intnums_map) =
+        explicit_cygv_semigroup_inputs(elements, grading_vector, q_matrix, intnums)?;
+    compute_cygv_rat_threefold_gw_coefficient_trace_from_semigroup(
+        semigroup,
+        &q,
+        intnums_map,
+        "explicit GW semigroup coefficient trace",
+    )
+}
+
 fn provided_cygv_semigroup_inputs(
     generators: &[Vec<i64>],
     grading_vector: &[i64],
@@ -13059,6 +13089,7 @@ mod tests {
         compute_gv_invariants_with_explicit_semigroup_qn_trace,
         compute_gv_invariants_with_provided_generators,
         compute_gv_invariants_with_provided_generators_qn_trace,
+        compute_gw_coefficient_trace_with_explicit_semigroup,
         compute_gw_coefficient_trace_with_provided_generators,
         compute_local_p2_genus_zero_gv_series, compute_local_toric_circuit_gv_series,
         compute_one_dimensional_ray_gv_series, compute_ray_gv_series_with_provided_generators,
@@ -17300,6 +17331,29 @@ mod tests {
             Some(1),
         )
         .expect("provided-generator quintic should expose raw GW coefficient trace");
+
+        assert_eq!(trace.len(), 1);
+        assert_eq!(trace[0].element, vec![1]);
+        assert_eq!(trace[0].insertion_index, 0);
+        assert_eq!(trace[0].pivot_component, 1);
+        assert_eq!(trace[0].instanton_coefficient.as_deref(), Some("2875"));
+        assert_eq!(trace[0].gv_candidate.as_deref(), Some("2875"));
+        assert_eq!(trace[0].rounded_gv_candidate, None);
+        assert_eq!(trace[0].status, "nonzero_gw");
+    }
+
+    #[test]
+    fn explicit_semigroup_gw_coefficient_trace_exposes_raw_candidate() {
+        let mut intnums = Intersection::new(1);
+        set_intersection_i64(&mut intnums, 0, 0, 0, 5);
+
+        let trace = compute_gw_coefficient_trace_with_explicit_semigroup(
+            &[vec![1]],
+            &[1],
+            &[vec![1, 1, 1, 1, 1]],
+            &intnums,
+        )
+        .expect("explicit quintic semigroup should expose raw GW coefficient trace");
 
         assert_eq!(trace.len(), 1);
         assert_eq!(trace[0].element, vec![1]);
