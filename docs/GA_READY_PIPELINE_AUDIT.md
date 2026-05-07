@@ -536,7 +536,10 @@ to make the remaining GV layer more first-principles:
    that unit tensor normalization explains the `[-1,-2,1,1,1]` lower ray, and
    that omitting the origin/canonical divisor column explains the
    resolved-conifold-like `[-1,1,-1,1,-1,1]` lower ray. These are still
-   phase/chamber diagnostics, not promoted GV values. The first-principles context export
+   phase/chamber diagnostics, not promoted GV values. Across all nine
+   unresolved origin circuits, the origin-omitted shape aggregate now reports
+   five compact-threefold-shaped no-origin rows and four CY-dimension-2 rows.
+   The first-principles context export
    now serializes the nonzero divisor-basis and ambient-basis coefficients from
    successful CMS-general-divisor solves, preserving the source-derived divisor
    input needed by the next chamber/intersection certificate step.

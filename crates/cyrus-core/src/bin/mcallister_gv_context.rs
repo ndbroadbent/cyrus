@@ -218,6 +218,7 @@ struct ContextReport {
     local_cygv_q_matrix_orientation_status_counts: BTreeMap<String, usize>,
     local_cygv_q_matrix_layout_status_counts: BTreeMap<String, usize>,
     local_cygv_origin_point_status_counts: BTreeMap<String, usize>,
+    local_cygv_origin_omitted_compact_shape_status_counts: BTreeMap<String, usize>,
     local_cytools_origin_circuit_status_counts: BTreeMap<String, usize>,
     local_cygv_grading_vector_status_counts: BTreeMap<String, usize>,
     targets: Vec<TargetReport>,
@@ -6520,6 +6521,12 @@ fn build_report(
             .iter()
             .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
     );
+    let local_cygv_origin_omitted_compact_shape_status_counts =
+        local_cygv_origin_omitted_compact_shape_status_counts(
+            targets
+                .iter()
+                .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
+        );
     let local_cytools_origin_circuit_status_counts = local_cytools_origin_circuit_status_counts(
         targets
             .iter()
@@ -6581,6 +6588,7 @@ fn build_report(
         local_cygv_q_matrix_orientation_status_counts,
         local_cygv_q_matrix_layout_status_counts,
         local_cygv_origin_point_status_counts,
+        local_cygv_origin_omitted_compact_shape_status_counts,
         local_cytools_origin_circuit_status_counts,
         local_cygv_grading_vector_status_counts,
         targets,
@@ -6838,6 +6846,49 @@ fn local_cygv_origin_point_status_counts<'a>(
     counts
 }
 
+fn local_cygv_origin_omitted_compact_shape_status_counts<'a>(
+    skeletons: impl IntoIterator<Item = &'a LocalCygvInputSkeleton>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for skeleton in skeletons {
+        *counts
+            .entry(local_cygv_origin_omitted_compact_shape_status(skeleton))
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_origin_omitted_compact_shape_status(skeleton: &LocalCygvInputSkeleton) -> String {
+    let q_matrix = match local_origin_omitted_wrapper_q_matrix(skeleton) {
+        Ok(Some(q_matrix)) => q_matrix,
+        Ok(None) => return "origin_omitted_q_matrix_not_available".to_string(),
+        Err(error) => return format!("origin_omitted_q_matrix_error:{error}"),
+    };
+    let Some(first_row) = q_matrix.first() else {
+        return "origin_omitted_q_matrix_not_available".to_string();
+    };
+    if first_row.is_empty() {
+        return "origin_omitted_q_matrix_empty".to_string();
+    }
+    if q_matrix.iter().any(|row| row.len() != first_row.len()) {
+        return "origin_omitted_q_matrix_inconsistent_row_widths".to_string();
+    }
+    let h11 = match i64::try_from(q_matrix.len()) {
+        Ok(value) => value,
+        Err(_) => return "origin_omitted_q_matrix_rank_overflow".to_string(),
+    };
+    let h11pd = match i64::try_from(first_row.len()) {
+        Ok(value) => value,
+        Err(_) => return "origin_omitted_q_matrix_divisor_count_overflow".to_string(),
+    };
+    let cy_dim = h11pd - h11 - 1;
+    if cy_dim == 3 {
+        "origin_omitted_compact_threefold_hypersurface_shape".to_string()
+    } else {
+        format!("origin_omitted_cy_dim_{cy_dim}_not_compact_threefold")
+    }
+}
+
 fn local_cytools_origin_circuit_status_counts<'a>(
     skeletons: impl IntoIterator<Item = &'a LocalCygvInputSkeleton>,
 ) -> BTreeMap<String, usize> {
@@ -7011,6 +7062,34 @@ mod tests {
             real_cone_decomposition_exact_kind: None,
             ambient_nonzero: basis_nonzero.clone(),
             basis_nonzero,
+        }
+    }
+
+    fn skeleton_with_origin_phase_probe(
+        support_point_indices: Vec<usize>,
+        wrapper_q_matrix: Option<Vec<Vec<i64>>>,
+    ) -> LocalCygvInputSkeleton {
+        LocalCygvInputSkeleton {
+            support_contains_origin_point: support_point_indices.contains(&0),
+            support_point_indices,
+            local_cygv_origin_point_status: String::new(),
+            origin_point_relation_coefficient: None,
+            local_cytools_origin_circuit_status: String::new(),
+            local_q_matrix_rows: Vec::new(),
+            target_relation_coefficients: None,
+            target_relation_in_charge_basis: None,
+            target_relation_status: String::new(),
+            local_semigroup_generators_candidate: None,
+            local_semigroup_generator_status: String::new(),
+            orientation_candidates: Vec::new(),
+            local_q_matrix_orientation_candidate: None,
+            local_q_matrix_orientation_status: String::new(),
+            local_cygv_q_matrix_rows_candidate: None,
+            local_cygv_wrapper_q_matrix_candidate: wrapper_q_matrix,
+            local_cygv_q_matrix_layout_status: String::new(),
+            local_grading_vector_candidate: None,
+            local_grading_vector_status: String::new(),
+            remaining_uncertified_inputs: Vec::new(),
         }
     }
 
@@ -8059,6 +8138,42 @@ mod tests {
             cytools_origin_counts
                 .get("not_cytools_origin_circuit_support")
                 .copied(),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn local_cygv_origin_omitted_compact_shape_counts_phase_candidates() {
+        let compact_threefold = skeleton_with_origin_phase_probe(
+            vec![0, 1, 2, 3, 4, 5],
+            Some(vec![vec![-1, 1, -1, 1, -1, 1]]),
+        );
+        let too_low_dimensional = skeleton_with_origin_phase_probe(
+            vec![0, 1, 2, 3, 4],
+            Some(vec![vec![-1, -2, 1, 1, 1]]),
+        );
+        let no_origin = skeleton_with_origin_phase_probe(vec![1, 2, 3], Some(vec![vec![1, 1, 1]]));
+
+        let counts = local_cygv_origin_omitted_compact_shape_status_counts([
+            &compact_threefold,
+            &too_low_dimensional,
+            &no_origin,
+        ]);
+
+        assert_eq!(
+            counts
+                .get("origin_omitted_compact_threefold_hypersurface_shape")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(
+            counts
+                .get("origin_omitted_cy_dim_2_not_compact_threefold")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(
+            counts.get("origin_omitted_q_matrix_not_available").copied(),
             Some(1)
         );
     }

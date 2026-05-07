@@ -2246,6 +2246,15 @@ below three. Thus one lower source ray may be a normalization/certificate
 problem, while the resolved-conifold-like ray points specifically at the
 origin-column phase convention. Neither is promoted without a chamber
 certificate.
+The all-target shape report
+(`/tmp/cyrus_gv_context_schema3_origin_omitted_shape_report.json`) now records
+this source-derived split directly:
+`local_cygv_origin_omitted_compact_shape_status_counts =
+{"origin_omitted_compact_threefold_hypersurface_shape":5,
+"origin_omitted_cy_dim_2_not_compact_threefold":4}`. Thus the nine unresolved
+origin circuits are no longer a single local-phase bucket: five have a
+CYTools-style no-origin compact-threefold `q` shape, while four require a
+different local/noncompact or chamber-continuation construction.
 These are source-derived local-intersection candidates, not a certified local
 `cygv` intersection tensor yet, so the skeleton still lists the missing
 `local_q_matrix_phase`, `local_intersection_tensor`, and

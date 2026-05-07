@@ -198,6 +198,10 @@ and matrix-basis pipeline are no longer open.
    resolved-conifold-like row (`1` against expected `1`) and rejects the
    `[-1,-2,1,1,1]` row with the compact-HKTY dimension guard. This is evidence
    for the local `q` phase convention, not a chamber certificate.
+   The all-target origin-omitted shape aggregate splits the nine unresolved
+   origin circuits into five compact-threefold-shaped no-origin rows and four
+   CY-dimension-2 rows, so the remaining phase work is now split rather than a
+   single generic bucket.
    The first seed-sum
    sample for the degree-8 side splits it as another toric-covered degree-2
    reduced seed plus an uncovered degree-6 seed that does not survive pair
