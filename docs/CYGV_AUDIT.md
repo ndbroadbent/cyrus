@@ -2680,7 +2680,14 @@ readout. In
 missing-target-shaped parent-only term is likewise `GV=0` with no parent-domain
 qN polynomial. This rules out interpreting the missing-target monomial as a
 nonzero small-domain target; the only nonzero extra parent-domain term observed
-so far is the generated target-7 side term.
+so far is the generated target-7 side term. The report now aggregates these
+lookups at top level as
+`cygv_closest_known_qn_residual_qn_domain_parent_only_parent_path_support_qn_trace_status_counts`
+and
+`cygv_closest_known_qn_residual_qn_domain_parent_only_parent_path_support_gv_coefficient_status_counts`;
+the regenerated target-7 report reads one nonzero/materialized and one
+zero/absent parent-only term, while target `8` reads one zero/absent
+parent-only term.
 Subtracting the degree-eight residual from each parent-only term shows that all
 of these terms are residual plus a known degree-two toric offset. Target `7`
 has two such offsets, both `known_nonzero_toric_gv` with `GV=-2`: its own
