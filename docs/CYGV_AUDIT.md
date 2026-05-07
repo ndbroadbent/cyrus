@@ -2766,6 +2766,14 @@ composite outside the exported source-ray list. Thus the remaining signed
 residuals `+3` and `-3` are not hidden in the now-certified degree-six source
 row; the next compact-history target is the degree-eight composite/chamber
 history.
+Those samples now also carry first-generation seed decomposition context. For
+both target `7` and target `8`, the degree-eight qN source is neither a raw
+seed nor a cygv pair-reduced seed. It first decomposes as degree `2 + 6`, where
+the degree-two side has known toric GV and the degree-six side is the same
+source-derived nonreduced seed; that degree-six seed then pair-reduces as
+degree `4 + 2` with known toric/source scalar GV leaves. This makes the
+remaining compact task precise: reproduce the degree-ordered `q_N` subtraction
+history of this composite chain, not discover another scalar GV leaf.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use

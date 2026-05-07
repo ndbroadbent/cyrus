@@ -815,6 +815,9 @@ struct CygvPathSupportTargetMonomialQnSource {
     matching_uncovered_source_ray_exact_kind: Option<String>,
     matching_uncovered_source_ray_local_cygv_readiness: Option<String>,
     matching_uncovered_source_ray_local_missing_inputs: Vec<String>,
+    source_is_seed: Option<bool>,
+    source_is_reduced_seed: Option<bool>,
+    source_first_generation_seed_sum: Option<CygvSeedSumDecomposition>,
 }
 
 struct CygvPathSupportTargetLi2SubtractionBalance {
@@ -4274,9 +4277,34 @@ fn path_support_target_monomial_qn_sources(
                     .matching_uncovered_source_ray_local_cygv_readiness,
                 matching_uncovered_source_ray_local_missing_inputs: source_context
                     .matching_uncovered_source_ray_local_missing_inputs,
+                source_is_seed: None,
+                source_is_reduced_seed: None,
+                source_first_generation_seed_sum: None,
             })
         })
         .collect()
+}
+
+fn annotate_target_monomial_qn_sources_with_seed_decompositions(
+    sources: &mut [CygvPathSupportTargetMonomialQnSource],
+    seed_set: &HashSet<Vec<i64>>,
+    reduced_seed_set: &HashSet<Vec<i64>>,
+    context: &ValidatedContext<'_>,
+) -> Result<(), String> {
+    for source in sources {
+        let curve = dense_from_sparse(&source.curve_nonzero, context.dimension)?;
+        source.source_is_seed = Some(seed_set.contains(&curve));
+        source.source_is_reduced_seed = Some(reduced_seed_set.contains(&curve));
+        source.source_first_generation_seed_sum = first_generation_seed_sum_decomposition(
+            &curve,
+            context.grading,
+            seed_set,
+            reduced_seed_set,
+            &context.covered_toric_gv_by_basis,
+            &context.source_derived_gv_by_basis,
+        )?;
+    }
+    Ok(())
 }
 
 fn path_support_target_li2_subtraction_balance(
@@ -8981,20 +9009,34 @@ fn cygv_path_history_probe_inner(
         &context.covered_toric_gv_by_basis,
         &context.source_derived_gv_by_basis,
     )?;
-    let closest_known_qn_residual_path_support_probe = residual_path_support_generator_probe(
+    let mut closest_known_qn_residual_path_support_probe = residual_path_support_generator_probe(
         closest_known_qn_residual_predecessor.as_ref(),
         context,
         run_path_support_generators,
         &seen,
         &reduced_seeds,
     )?;
-    let path_support_generators = path_support_generator_probe(
+    if let Some(probe) = closest_known_qn_residual_path_support_probe.as_mut() {
+        annotate_target_monomial_qn_sources_with_seed_decompositions(
+            &mut probe.target_monomial_qn_source_sample,
+            &seen,
+            &reduced_seeds,
+            context,
+        )?;
+    }
+    let mut path_support_generators = path_support_generator_probe(
         target,
         sample.degree,
         &predecessor_stats.candidate_sample,
         context,
         run_path_support_generators,
     );
+    annotate_target_monomial_qn_sources_with_seed_decompositions(
+        &mut path_support_generators.target_monomial_qn_source_sample,
+        &seen,
+        &reduced_seeds,
+        context,
+    )?;
     let expected_formula_values = sample_expected_toric_gv1_formula_values(sample);
     let expected_formula_sum = sample_expected_toric_gv1_formula_value_sum(sample);
     let path_support_target_reconstructed_pre_subtraction_formula_status =
@@ -15981,6 +16023,80 @@ mod tests {
             Some("2")
         );
         assert_eq!(sources[0].source_class_status, "not_classified_no_context");
+    }
+
+    #[test]
+    fn target_monomial_qn_sources_export_seed_decomposition_context() {
+        let trace = vec![CygvQnTracePolynomial {
+            element_index: 3,
+            degree: 2,
+            element: vec![1, 1],
+            terms: vec![CygvQnTraceTerm {
+                monomial_index: 5,
+                exponent: vec![2, 2],
+                coefficient: "1".to_string(),
+            }],
+            li2_terms: vec![CygvQnTraceTerm {
+                monomial_index: 5,
+                exponent: vec![2, 2],
+                coefficient: "1".to_string(),
+            }],
+        }];
+        let mut gvs_by_curve = HashMap::new();
+        gvs_by_curve.insert(vec![1, 1], "-2".to_string());
+        let mut sources =
+            path_support_target_monomial_qn_sources(&trace, &gvs_by_curve, &[2, 2], None)
+                .expect("target monomial sources should be traced");
+        let seed_set = [vec![1, 0], vec![0, 1]].into_iter().collect::<HashSet<_>>();
+        let reduced_seed_set = seed_set.clone();
+        let grading = vec![1, 1];
+        let q_matrix: Vec<Vec<i64>> = Vec::new();
+        let degree_bounded_rays: Vec<Vec<i64>> = Vec::new();
+        let stats = MissingGvTargetStats {
+            target_count: 0,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: Vec::new(),
+        };
+        let context = ValidatedContext {
+            dimension: 2,
+            degree_bound: 2,
+            q_cols: 0,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: None,
+            covered_toric_gv_by_basis: HashMap::new(),
+            source_derived_gv_by_basis: HashMap::new(),
+            intersection: Intersection::new(2),
+            stats: &stats,
+            uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
+        };
+
+        annotate_target_monomial_qn_sources_with_seed_decompositions(
+            &mut sources,
+            &seed_set,
+            &reduced_seed_set,
+            &context,
+        )
+        .expect("seed decomposition annotation should succeed");
+
+        assert_eq!(sources[0].source_is_seed, Some(false));
+        assert_eq!(sources[0].source_is_reduced_seed, Some(false));
+        let decomposition = sources[0]
+            .source_first_generation_seed_sum
+            .as_ref()
+            .expect("source should decompose into first-generation seed sum");
+        assert_eq!(decomposition.reduced_seed_degree, 1);
+        assert_eq!(decomposition.seed_degree, 1);
+        assert_eq!(
+            decomposition.reduced_seed_known_qn_history_status,
+            "unknown_not_toric_covered"
+        );
+        assert_eq!(
+            decomposition.seed_known_qn_history_status,
+            "unknown_not_toric_covered"
+        );
     }
 
     #[test]
