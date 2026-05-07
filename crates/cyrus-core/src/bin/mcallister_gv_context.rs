@@ -400,6 +400,7 @@ struct CygvPathHistoryProbe {
     closest_series_distance: Option<String>,
     closest_series_predecessor_nonzero: Option<Vec<(usize, i64)>>,
     closest_series_difference_nonzero: Option<Vec<(usize, i64)>>,
+    closest_known_qn_predecessor: Option<CygvClosestKnownQnPredecessor>,
     predecessor_candidate_sample_limit: usize,
     predecessor_candidate_sample: Vec<CygvPathPredecessorCandidate>,
     lower_seed_decomposition_max_terms: usize,
@@ -455,6 +456,21 @@ struct CygvPathPredecessorCandidate {
     difference_is_reduced_seed: bool,
     predecessor_first_generation_seed_sum: Option<CygvSeedSumDecomposition>,
     difference_first_generation_seed_sum: Option<CygvSeedSumDecomposition>,
+    predecessor_nonzero: Vec<(usize, i64)>,
+    difference_nonzero: Vec<(usize, i64)>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CygvClosestKnownQnPredecessor {
+    predecessor_degree: i128,
+    difference_degree: i128,
+    series_distance: String,
+    predecessor_toric_gv: Option<String>,
+    predecessor_source_derived_gv: Option<String>,
+    predecessor_known_qn_history_status: String,
+    difference_toric_gv: Option<String>,
+    difference_source_derived_gv: Option<String>,
+    difference_known_qn_history_status: String,
     predecessor_nonzero: Vec<(usize, i64)>,
     difference_nonzero: Vec<(usize, i64)>,
 }
@@ -573,6 +589,7 @@ struct CygvPathPredecessorStats {
     closest_distance: f64,
     closest_predecessor: Option<Vec<i64>>,
     closest_difference: Option<Vec<i64>>,
+    closest_known_qn_predecessor: Option<CygvClosestKnownQnPredecessor>,
     candidate_sample: Vec<CygvPathPredecessorCandidate>,
 }
 
@@ -4488,6 +4505,7 @@ fn cygv_path_history_probe(
             closest_series_distance: None,
             closest_series_predecessor_nonzero: None,
             closest_series_difference_nonzero: None,
+            closest_known_qn_predecessor: None,
             predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
             predecessor_candidate_sample: Vec::new(),
             lower_seed_decomposition_max_terms: 4,
@@ -4563,6 +4581,7 @@ fn cygv_path_history_probe_inner(
             closest_series_distance: None,
             closest_series_predecessor_nonzero: None,
             closest_series_difference_nonzero: None,
+            closest_known_qn_predecessor: None,
             predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
             predecessor_candidate_sample: Vec::new(),
             lower_seed_decomposition_max_terms: 4,
@@ -4612,6 +4631,7 @@ fn cygv_path_history_probe_inner(
             closest_series_distance: None,
             closest_series_predecessor_nonzero: None,
             closest_series_difference_nonzero: None,
+            closest_known_qn_predecessor: None,
             predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
             predecessor_candidate_sample: Vec::new(),
             lower_seed_decomposition_max_terms: 4,
@@ -4720,6 +4740,7 @@ fn cygv_path_history_probe_inner(
                 .closest_difference
                 .as_deref()
                 .map(sparse_from_dense),
+            closest_known_qn_predecessor: predecessor_stats.closest_known_qn_predecessor,
             predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
             predecessor_candidate_sample: predecessor_stats.candidate_sample,
             lower_seed_decomposition_max_terms: 4,
@@ -4780,6 +4801,7 @@ fn cygv_path_history_probe_inner(
             .closest_difference
             .as_deref()
             .map(sparse_from_dense),
+        closest_known_qn_predecessor: predecessor_stats.closest_known_qn_predecessor,
         predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
         predecessor_candidate_sample: predecessor_stats.candidate_sample,
         lower_seed_decomposition_max_terms: 4,
@@ -4846,6 +4868,10 @@ fn known_qn_history_pair_status(predecessor_status: &str, difference_status: &st
     format!("predecessor_{predecessor_status}__difference_{difference_status}")
 }
 
+fn is_known_nonzero_qn_history_status(status: &str) -> bool {
+    matches!(status, "known_nonzero_toric_gv" | "known_nonzero_source_gv")
+}
+
 fn cygv_path_predecessor_stats(
     elements: &HashSet<Vec<i64>>,
     grading: &[i64],
@@ -4859,9 +4885,11 @@ fn cygv_path_predecessor_stats(
     let mut previous_window_element_count = 0usize;
     let mut predecessor_difference_count = 0usize;
     let mut improving_predecessor_difference_count = 0usize;
-    let mut closest_distance = cygv_series_distance(target);
+    let target_series_distance = cygv_series_distance(target);
+    let mut closest_distance = target_series_distance;
     let mut closest_predecessor = None;
     let mut closest_difference = None;
+    let mut closest_known_qn_predecessor = None;
     let mut candidate_sample = Vec::new();
     let mut toric_coverage_counts = BTreeMap::new();
     let mut known_qn_history_counts = BTreeMap::new();
@@ -4910,6 +4938,31 @@ fn cygv_path_predecessor_stats(
             .or_insert(0) += 1;
         let difference_degree = curve_degree(&difference, grading)?;
         let distance = cygv_series_distance(&difference);
+        if is_known_nonzero_qn_history_status(predecessor_known_qn_history_status)
+            && distance < target_series_distance
+            && closest_known_qn_predecessor
+                .as_ref()
+                .is_none_or(|(best_distance, _)| distance < *best_distance)
+        {
+            closest_known_qn_predecessor = Some((
+                distance,
+                CygvClosestKnownQnPredecessor {
+                    predecessor_degree: degree,
+                    difference_degree,
+                    series_distance: format!("{distance:.6}"),
+                    predecessor_toric_gv: predecessor_toric_gv.cloned(),
+                    predecessor_source_derived_gv: predecessor_source_derived_gv.cloned(),
+                    predecessor_known_qn_history_status: predecessor_known_qn_history_status
+                        .to_string(),
+                    difference_toric_gv: difference_toric_gv.cloned(),
+                    difference_source_derived_gv: difference_source_derived_gv.cloned(),
+                    difference_known_qn_history_status: difference_known_qn_history_status
+                        .to_string(),
+                    predecessor_nonzero: sparse_from_dense(element),
+                    difference_nonzero: sparse_from_dense(&difference),
+                },
+            ));
+        }
         if candidate_sample.len() < CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT {
             candidate_sample.push((
                 distance,
@@ -5023,6 +5076,8 @@ fn cygv_path_predecessor_stats(
         closest_distance,
         closest_predecessor,
         closest_difference,
+        closest_known_qn_predecessor: closest_known_qn_predecessor
+            .map(|(_, predecessor)| predecessor),
         candidate_sample: candidate_sample
             .into_iter()
             .map(|(_, candidate)| candidate)
@@ -8080,6 +8135,14 @@ mod tests {
         assert_eq!(probe.closest_series_distance.as_deref(), Some("1.000000"));
         assert_eq!(probe.closest_series_predecessor_nonzero, Some(vec![(1, 1)]));
         assert_eq!(probe.closest_series_difference_nonzero, Some(vec![(0, 1)]));
+        let closest_known = probe.closest_known_qn_predecessor.as_ref().unwrap();
+        assert_eq!(closest_known.series_distance, "1.000000");
+        assert_eq!(closest_known.predecessor_nonzero, vec![(1, 1)]);
+        assert_eq!(closest_known.difference_nonzero, vec![(0, 1)]);
+        assert_eq!(
+            closest_known.predecessor_known_qn_history_status,
+            "known_nonzero_toric_gv"
+        );
         assert_eq!(
             probe.predecessor_candidate_sample_limit,
             CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT

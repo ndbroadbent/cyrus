@@ -2160,6 +2160,21 @@ report file was produced. This reinforces that the next productive step is a
 source-derived finite semigroup/chamber certificate for the relevant composite
 history, not just increasing the supplied generator set.
 
+The path-history probe now mirrors the `cygv::series_inversion` nearest-qN
+selection rule separately from raw additive predecessor enumeration. For each
+target class it asks which certified nonzero lower class could actually serve
+as the `previous_qn` base with a residual monomial present in the finite
+monomial map. On the schema-`3` target `7` report, the closest raw additive
+split has distance `4` but starts from an unknown degree-eight class; the
+closest certified qN predecessor is instead the toric degree-two class
+`[(44,1),(54,1),(206,-2)]` with residual degree eight and distance `5`. For
+target `8`, the analogous closest certified qN predecessor is the toric
+degree-two class `[(54,1),(203,-2)]` with residual degree eight and distance
+`4`, while the closest raw split again starts from an unknown degree-eight
+class. Thus the next missing object is specifically the qN polynomial history
+of the degree-eight residuals in a certified compact semigroup, not merely the
+existence of lower source-ray GV numbers.
+
 The stable-Weyl/flop-continuation route is now surfaced as a report-level
 readiness count rather than only per-target arrays. On the schema-3 context all
 nine remaining targets have CMS-style formula candidates, but the 14 exact

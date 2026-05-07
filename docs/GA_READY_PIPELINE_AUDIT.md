@@ -506,7 +506,12 @@ to make the remaining GV layer more first-principles:
    shortcut. The naive larger-domain alternative is currently too expensive:
    the actual Rust `cygv` call with all `720` degree-bounded generators through
    target degree `10` timed out after `1200s` in release mode for target `7`
-   after `600s` debug timeouts for targets `7` and `8`.
+   after `600s` debug timeouts for targets `7` and `8`. The report now also
+   applies `cygv`'s nearest live-`q_N` predecessor rule: target `7` would start
+   from toric degree-two `[(44,1),(54,1),(206,-2)]` and target `8` from toric
+   degree-two `[(54,1),(203,-2)]`, each leaving an unknown degree-eight
+   residual monomial. The next compact-HKTY task is therefore the degree-eight
+   residual qN history inside a certified semigroup/chamber.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.
    The exact classical-data transform is now available as

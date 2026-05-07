@@ -237,6 +237,12 @@ and matrix-basis pipeline are no longer open.
    after `1200s` in release mode after earlier debug runs for targets `7` and
    `8` timed out at `600s`. This leaves certified semigroup/chamber reduction
    as the next required implementation, not brute-force enlargement.
+   The path-history report now also mirrors `cygv`'s nearest live-`q_N`
+   predecessor selection. The closest certified qN predecessor for target `7`
+   is the toric degree-two class `[(44,1),(54,1),(206,-2)]` with an unknown
+   degree-eight residual; for target `8` it is `[(54,1),(203,-2)]`, again with
+   an unknown degree-eight residual. So the next missing object is the
+   certified qN history for those degree-eight residuals.
    These lower classes are now classified against the exported source-ray
    context: for both degree-10 targets the sampled lookups split as four known
    toric source rays, four non-toric source rays, and eight composite classes
