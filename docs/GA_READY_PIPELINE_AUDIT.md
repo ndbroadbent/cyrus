@@ -113,6 +113,12 @@ run pass. Any remaining mismatch must be explicit and localizable.
    extra ray is unit-height resolution data off the local CY hyperplane; the
    unresolved step is choosing/certifying the source chamber projection, not
    discovering another missing point.
+   A follow-up star export shows the actual shared two-simplex chamber star
+   uses alternate neighbor pairs in every weighted case:
+   targets `3` and `6` use `[2]`/`[46]`, and targets `7` and `8` use
+   `[195]`/`[212]`. The origin-circuit exclusive pair is therefore diagnostic
+   relation data, not the chamber-star pair that should be fed into a resolved
+   source projection.
    A fresh read of
    `string_theory/mcallister_2107/latest_cytools/compute_kklt_iterative.py`
    confirms the sign convention used by Cyrus,

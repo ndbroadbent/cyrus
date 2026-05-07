@@ -3138,6 +3138,15 @@ from the fresh shared-point context as
 hyperplanes are `[0,1,0,-1,0]` for targets `3`, `7`, and `8`, and
 `[0,0,1,0,0]` for target `6`; the zero-shared ray has signed height `-1` in
 all four weighted cases.
+The follow-up star diagnostic in
+`/tmp/cyrus_gv_context_star_report.json` records the actual triangulation star
+of each zero-relation shared two-simplex. All four weighted rows classify as
+`weighted_p2_zero_shared_star_uses_two_alternate_chamber_points`, while the
+other five misses remain `zero_shared_star_not_weighted_p2_split_bundle`.
+Targets `3` and `6` use alternate chamber extras `[2]` and `[46]`; targets `7`
+and `8` use `[195]` and `[212]`. Thus the origin-circuit exclusive pair is a
+witness of the unresolved local relation, not the pair of neighboring chamber
+points in the current triangulation star.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

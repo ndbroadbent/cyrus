@@ -1062,6 +1062,7 @@ struct OriginCircuitWitnessSample {
     second_facet_exclusive_point: usize,
     shared_two_simplex: Vec<usize>,
     shared_two_simplex_points: Vec<OriginCircuitRelationPointSample>,
+    shared_two_simplex_star_simplices: Vec<Vec<usize>>,
     first_facet: Vec<usize>,
     second_facet: Vec<usize>,
     first_facet_size: usize,
@@ -2495,6 +2496,7 @@ fn degree_filtered_basis_rays(
 fn missing_gv_target_stats(
     ambient_classes: &[Vec<i64>],
     triangulation_points: &[Point],
+    triangulation: Option<&Triangulation>,
     basis_rays: &[Vec<i64>],
     basis: &[usize],
     grading: &[i64],
@@ -2691,13 +2693,17 @@ fn missing_gv_target_stats(
             origin_circuit_diagnostic.map(|diagnostic| diagnostic.witnesses.len());
         let origin_circuit_first_witness = origin_circuit_diagnostic
             .and_then(|diagnostic| diagnostic.witnesses.first())
-            .map(|witness| origin_circuit_witness_sample(witness, triangulation_points));
+            .map(|witness| {
+                origin_circuit_witness_sample(witness, triangulation_points, triangulation)
+            });
         let origin_circuit_witnesses = origin_circuit_diagnostic
             .map(|diagnostic| {
                 diagnostic
                     .witnesses
                     .iter()
-                    .map(|witness| origin_circuit_witness_sample(witness, triangulation_points))
+                    .map(|witness| {
+                        origin_circuit_witness_sample(witness, triangulation_points, triangulation)
+                    })
                     .collect::<Vec<_>>()
             })
             .filter(|witnesses| !witnesses.is_empty());
@@ -3084,6 +3090,7 @@ fn origin_circuit_pattern(diagnostic: &cyrus_core::OriginCircuitCurveDiagnostic)
 fn origin_circuit_witness_sample(
     witness: &cyrus_core::OriginCircuitCurveWitness,
     triangulation_points: &[Point],
+    triangulation: Option<&Triangulation>,
 ) -> OriginCircuitWitnessSample {
     OriginCircuitWitnessSample {
         first_facet_exclusive_point: witness.first_facet_exclusive_point,
@@ -3092,6 +3099,10 @@ fn origin_circuit_witness_sample(
         shared_two_simplex_points: origin_circuit_shared_two_simplex_point_samples(
             witness,
             triangulation_points,
+        ),
+        shared_two_simplex_star_simplices: origin_circuit_shared_two_simplex_star_simplices(
+            witness,
+            triangulation,
         ),
         first_facet: witness.first_facet.clone(),
         second_facet: witness.second_facet.clone(),
@@ -3141,6 +3152,37 @@ fn origin_circuit_shared_two_simplex_point_samples(
             })
         })
         .collect()
+}
+
+fn origin_circuit_shared_two_simplex_star_simplices(
+    witness: &cyrus_core::OriginCircuitCurveWitness,
+    triangulation: Option<&Triangulation>,
+) -> Vec<Vec<usize>> {
+    let Some(triangulation) = triangulation else {
+        return Vec::new();
+    };
+    let shared = witness
+        .shared_two_simplex
+        .iter()
+        .copied()
+        .collect::<HashSet<_>>();
+    let mut simplices = triangulation
+        .simplices()
+        .iter()
+        .filter(|simplex| {
+            shared
+                .iter()
+                .all(|point_index| simplex.contains(point_index))
+        })
+        .map(|simplex| {
+            let mut simplex = simplex.clone();
+            simplex.sort_unstable();
+            simplex
+        })
+        .collect::<Vec<_>>();
+    simplices.sort();
+    simplices.dedup();
+    simplices
 }
 
 fn origin_circuit_affine_support_sample(
@@ -7291,6 +7333,7 @@ fn diagnose_chamber_gv_volume_correction(
         let target_stats = missing_gv_target_stats(
             &missing_gv_classes,
             &geom.triangulation_points,
+            Some(tri),
             &basis_rays,
             &intersection.basis,
             &grading,
@@ -7331,6 +7374,7 @@ fn diagnose_chamber_gv_volume_correction(
         let uncovered_source_ray_stats = missing_gv_target_stats(
             &uncovered_source_ray_classes,
             &geom.triangulation_points,
+            Some(tri),
             &basis_rays,
             &intersection.basis,
             &grading,
@@ -7363,6 +7407,7 @@ fn diagnose_chamber_gv_volume_correction(
         let shared_facet_unresolved_source_ray_stats = missing_gv_target_stats(
             &shared_facet_unresolved_source_ray_classes,
             &geom.triangulation_points,
+            Some(tri),
             &basis_rays,
             &intersection.basis,
             &grading,
@@ -12149,6 +12194,7 @@ mod tests {
         let stats = missing_gv_target_stats(
             &ambient_classes,
             &[],
+            None,
             &basis_rays,
             &[1, 2],
             &[2, 3],
@@ -12241,6 +12287,7 @@ mod tests {
         let stats = missing_gv_target_stats(
             &[vec![0, 2, 0]],
             &[],
+            None,
             &[vec![1, 0], vec![0, 1], vec![1, 1]],
             &[1, 2],
             &[2, 3],
@@ -12384,6 +12431,7 @@ mod tests {
             second_facet_exclusive_point: 3,
             shared_two_simplex: vec![2],
             shared_two_simplex_points: Vec::new(),
+            shared_two_simplex_star_simplices: Vec::new(),
             first_facet: vec![1, 2],
             second_facet: vec![2, 3],
             first_facet_size: 2,
@@ -12528,6 +12576,7 @@ mod tests {
         let stats = missing_gv_target_stats(
             &[vec![1, 0]],
             &[],
+            None,
             &[vec![1]],
             &[0],
             &[1],
@@ -12605,10 +12654,12 @@ mod tests {
                 witnesses: vec![first_witness, second_witness],
             },
         );
+        let triangulation = Triangulation::new(vec![vec![0, 1, 2], vec![0, 1, 3]]);
 
         let stats = missing_gv_target_stats(
             std::slice::from_ref(&class),
             &points,
+            Some(&triangulation),
             &[vec![-1, 1, 1]],
             &[1, 2, 3],
             &[3, 2, 2],
@@ -12660,6 +12711,10 @@ mod tests {
         assert_eq!(
             first_witness.shared_two_simplex_points[0].coordinates,
             vec![1, 1]
+        );
+        assert_eq!(
+            first_witness.shared_two_simplex_star_simplices,
+            vec![vec![0, 1, 2], vec![0, 1, 3]]
         );
     }
 

@@ -708,6 +708,13 @@ weighted rows as
 `weighted_p2_zero_shared_ray_has_primitive_unit_height_off_relation_hyperplane_requires_projection_or_chamber_map`;
 the zero-shared ray has signed height `-1` above the relation hyperplane in
 each case.
+The fresh star export then checks the actual chamber neighbors of those shared
+two-simplices: all four weighted rows are
+`weighted_p2_zero_shared_star_uses_two_alternate_chamber_points`. Targets `3`
+and `6` use alternate extras `[2]`/`[46]`, while targets `7` and `8` use
+`[195]`/`[212]`. That sharpens the blocker to constructing the resolved source
+projection/chamber map from the actual triangulation star, not from the
+exclusive pair that appears in the origin-circuit witness relation.
 Origin-circuit witness-domain compact `cygv` probes are now opt-in and guarded
 by `--origin-witness-cygv-generator-limit`. The traced target `8` report shows
 the single-generator relation domain computes `GV=2` with one materialized
