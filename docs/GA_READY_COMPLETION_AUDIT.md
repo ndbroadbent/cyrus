@@ -200,7 +200,12 @@ and matrix-basis pipeline are no longer open.
    unknown/unknown pairs. No sampled pair has both sides certified as known
    nonzero lower-degree history, so the next compact-GV task is still the
    unknown lower-degree non-toric history or a certified chamber-continuation
-   source for it.
+   source for it. The same small path-support `cygv` domain now reports
+   per-predecessor lookups: it matches the four known degree-two toric values
+   and assigns six nonzero plus six zero/absent values among the unknown
+   non-toric lower classes, but the target remains `GV=0`. These lower-class
+   values are therefore diagnostic artifacts of the small domain, not
+   promotable compact GV history.
 5. **Potent-ray local diagnostics.** Rank-two N=10 and rank-four potent-ray
    rows are still incomplete, but they are validation diagnostics rather than
    blockers for the compact GA-ready GV engine.

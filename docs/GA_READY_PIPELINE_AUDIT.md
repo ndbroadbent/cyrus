@@ -468,7 +468,13 @@ to make the remaining GV layer more first-principles:
    known nonzero lower-degree history: the split is `2/2/4` across
    known-nonzero/unknown, unknown/known-nonzero, and unknown/unknown. Raw
    predecessor decomposability is therefore not enough to explain the missing
-   corrected-chamber GV value.
+   corrected-chamber GV value. The path-support provided-generator diagnostic
+   now also looks up the sampled lower classes inside that same small `cygv`
+   domain: it matches the four known nonzero toric degree-two values and gives
+   six nonzero plus six zero/absent values across the unknown non-toric lower
+   classes, while the target still evaluates to `GV=0`. This confirms that
+   small-domain lower-history values are diagnostic only until the source
+   compact semigroup/chamber history is certified.
 4. Implement explicit chamber/flop continuation rules for the Kähler-coordinate
    instanton sums, including the cases where the original real branch is invalid.
    The exact classical-data transform is now available as

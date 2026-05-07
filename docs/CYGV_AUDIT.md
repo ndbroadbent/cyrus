@@ -2072,3 +2072,13 @@ and the actual-`cygv` path-support generator probe still returns `GV=0` for
 both targets. The missing datum is therefore lower-degree non-toric compact
 history or a certified chamber/continuation source for it, not mere existence
 of a semigroup predecessor pair.
+
+The same path-support provided-generator run now looks up every sampled
+predecessor and difference inside that small `cygv` domain. For both degree-10
+targets it matches the four known nonzero toric degree-two lookups, and among
+the twelve unknown non-toric lookups it reports six nonzero and six zero/absent
+values. The target lookup remains `GV=0`. This is an important negative check:
+the small support domain can manufacture some live-looking lower-degree qN
+history, but it still does not reproduce the target correction, so those
+lookup values remain diagnostic-only and cannot replace the certified compact
+semigroup/chamber history.
