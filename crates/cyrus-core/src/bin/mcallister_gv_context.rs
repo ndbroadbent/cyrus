@@ -365,6 +365,7 @@ struct CygvPathHistoryProbe {
     reduced_seed_count: Option<usize>,
     closure_element_count: Option<usize>,
     closure_degree_counts: BTreeMap<i128, usize>,
+    closure_generation_counts: Vec<CygvClosureGenerationCount>,
     target_in_closure: Option<bool>,
     previous_level_count: usize,
     previous_window_degrees: Vec<i128>,
@@ -385,6 +386,15 @@ struct CygvPathHistoryProbe {
     lower_seed_diamond_element_count: Option<usize>,
     lower_seed_diamond_gv: Option<String>,
     lower_seed_diamond_error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CygvClosureGenerationCount {
+    generation: usize,
+    starting_element_count: usize,
+    new_element_count: usize,
+    total_element_count_after_full_generation: usize,
+    truncated_at_limit: bool,
 }
 
 struct CygvPathPredecessorStats {
@@ -3368,6 +3378,7 @@ struct BoundedCygvClosure {
     status: String,
     elements: HashSet<Vec<i64>>,
     degree_counts: BTreeMap<i128, usize>,
+    generation_counts: Vec<CygvClosureGenerationCount>,
     completed: bool,
 }
 
@@ -3394,6 +3405,7 @@ fn cygv_path_history_probe(
             reduced_seed_count: None,
             closure_element_count: None,
             closure_degree_counts: BTreeMap::new(),
+            closure_generation_counts: Vec::new(),
             target_in_closure: None,
             previous_level_count: cygv_previous_level_count(context.dimension),
             previous_window_degrees: Vec::new(),
@@ -3447,6 +3459,7 @@ fn cygv_path_history_probe_inner(
             reduced_seed_count: Some(0),
             closure_element_count: None,
             closure_degree_counts: BTreeMap::new(),
+            closure_generation_counts: Vec::new(),
             target_in_closure: None,
             previous_level_count,
             previous_window_degrees: Vec::new(),
@@ -3476,6 +3489,7 @@ fn cygv_path_history_probe_inner(
             reduced_seed_count: None,
             closure_element_count: None,
             closure_degree_counts: BTreeMap::new(),
+            closure_generation_counts: Vec::new(),
             target_in_closure: None,
             previous_level_count,
             previous_window_degrees: Vec::new(),
@@ -3530,6 +3544,7 @@ fn cygv_path_history_probe_inner(
             closure_element_count: Some(closure.elements.len()),
             previous_window_degrees: selected_degree_vec,
             closure_degree_counts: closure.degree_counts,
+            closure_generation_counts: closure.generation_counts,
             target_in_closure: Some(target_in_closure),
             previous_level_count,
             previous_window_degree_count: Some(selected_degrees.len()),
@@ -3566,6 +3581,7 @@ fn cygv_path_history_probe_inner(
         reduced_seed_count: Some(reduced_seed_count),
         closure_element_count: Some(closure.elements.len()),
         closure_degree_counts: closure.degree_counts,
+        closure_generation_counts: closure.generation_counts,
         target_in_closure: Some(target_in_closure),
         previous_level_count,
         previous_window_degrees: selected_degree_vec,
@@ -3687,6 +3703,7 @@ fn bounded_cygv_semigroup_closure(
     let zero = vec![0i64; dimension];
     let mut elements = HashSet::new();
     let mut starting_elements = HashSet::new();
+    let mut generation_counts = Vec::new();
     elements.insert(zero);
     for seed in seeds {
         elements.insert(seed.clone());
@@ -3698,11 +3715,14 @@ fn bounded_cygv_semigroup_closure(
             status: format!("exceeded_element_limit_initial_{element_limit}"),
             elements,
             degree_counts,
+            generation_counts,
             completed: false,
         });
     }
 
+    let mut generation = 0usize;
     loop {
+        generation += 1;
         let mut new_elements = HashSet::new();
         for generator in &generators {
             for element in &starting_elements {
@@ -3719,12 +3739,24 @@ fn bounded_cygv_semigroup_closure(
                 status: "completed_bounded_closure".to_string(),
                 elements,
                 degree_counts,
+                generation_counts,
                 completed: true,
             });
         }
         let mut sorted_new_elements = new_elements.into_iter().collect::<Vec<_>>();
         sorted_new_elements.sort();
-        if elements.len() + sorted_new_elements.len() > element_limit {
+        let total_after_full_generation = elements
+            .len()
+            .checked_add(sorted_new_elements.len())
+            .ok_or_else(|| "cygv closure generation count overflowed usize".to_string())?;
+        if total_after_full_generation > element_limit {
+            generation_counts.push(CygvClosureGenerationCount {
+                generation,
+                starting_element_count: starting_elements.len(),
+                new_element_count: sorted_new_elements.len(),
+                total_element_count_after_full_generation: total_after_full_generation,
+                truncated_at_limit: true,
+            });
             for element in sorted_new_elements {
                 if elements.len() >= element_limit {
                     break;
@@ -3736,9 +3768,17 @@ fn bounded_cygv_semigroup_closure(
                 status: format!("exceeded_element_limit_{element_limit}"),
                 elements,
                 degree_counts,
+                generation_counts,
                 completed: false,
             });
         }
+        generation_counts.push(CygvClosureGenerationCount {
+            generation,
+            starting_element_count: starting_elements.len(),
+            new_element_count: sorted_new_elements.len(),
+            total_element_count_after_full_generation: total_after_full_generation,
+            truncated_at_limit: false,
+        });
         for element in &sorted_new_elements {
             elements.insert(element.clone());
         }
@@ -5893,6 +5933,15 @@ mod tests {
         assert_eq!(closure.degree_counts.get(&1), Some(&2));
         assert_eq!(closure.degree_counts.get(&2), Some(&3));
         assert!(closure.elements.contains(&vec![1, 1]));
+        assert_eq!(closure.generation_counts.len(), 1);
+        assert_eq!(closure.generation_counts[0].generation, 1);
+        assert_eq!(closure.generation_counts[0].starting_element_count, 2);
+        assert_eq!(closure.generation_counts[0].new_element_count, 3);
+        assert_eq!(
+            closure.generation_counts[0].total_element_count_after_full_generation,
+            6
+        );
+        assert!(!closure.generation_counts[0].truncated_at_limit);
     }
 
     #[test]
@@ -5939,6 +5988,13 @@ mod tests {
             closure.elements,
             HashSet::from([vec![0, 0], vec![0, 1], vec![1, 0], vec![0, 2]])
         );
+        assert_eq!(closure.generation_counts.len(), 1);
+        assert_eq!(closure.generation_counts[0].new_element_count, 3);
+        assert_eq!(
+            closure.generation_counts[0].total_element_count_after_full_generation,
+            6
+        );
+        assert!(closure.generation_counts[0].truncated_at_limit);
     }
 
     #[test]

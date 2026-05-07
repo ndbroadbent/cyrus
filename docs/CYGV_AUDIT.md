@@ -1602,6 +1602,14 @@ contains `7608` elements. Both targets also admit short lower-seed
 decompositions, but those tiny domains are not valid substitutes for the full
 HKTY history: target `7` computes `GV=0` on a 6-element lower-seed diamond, and
 target `8` fails the 8-element diamond with non-integral cygv output.
+The same probe now records generation-growth counts. With `--element-limit
+100000`, both degree-10 targets still truncate inside the first generated
+closure layer: the first layer starts from `720` seed elements, would add
+`130414` new elements, and would bring the degree-10 source closure to `131135`
+elements before any later layer. The capped report already has `74148`
+previous-window elements and finds eight monomial-map predecessor differences,
+so the relevant qN history is large but structured, not the tiny active
+decomposition diamond.
 
 After rebuilding `mcallister_gv_context`, the dry-run report now preserves the
 origin-circuit provenance exported by `mcallister_first_principles`. A fresh

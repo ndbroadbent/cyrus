@@ -157,8 +157,9 @@ and matrix-basis pipeline are no longer open.
    alone. The path-history probe now aggregates closure/lower-seed status
    counts; on the two degree-10 targets, bounded closure hits the `10000`
    element cap and the small lower-seed diamonds either give `GV=0` or
-   non-integral cygv output, so the first visible decomposition is not a valid
-   replacement for the full HKTY history.
+   non-integral cygv output. The generation counters show the first closure
+   layer alone would add `130414` elements from `720` seeds, so the first
+   visible decomposition is not a valid replacement for the full HKTY history.
 5. **Potent-ray local diagnostics.** Rank-two N=10 and rank-four potent-ray
    rows are still incomplete, but they are validation diagnostics rather than
    blockers for the compact GA-ready GV engine.

@@ -228,7 +228,11 @@ to make the remaining GV layer more first-principles:
    closure and lower-seed diamond statuses at the top level; for the two
    degree-10 targets, the bounded probe reaches the `10000` element cap with
    `7608` previous-window elements, while the small lower-seed diamonds return
-   `GV=0` for one target and non-integral cygv output for the other. A
+   `GV=0` for one target and non-integral cygv output for the other. The
+   generation-growth counters show that raising the cap to `100000` still
+   truncates in the first closure layer: `720` seeds would generate `130414`
+   new elements and `131135` total degree-bounded closure elements before any
+   later layer. A
    structured export now exists via
    `--dump-corrected-chamber-gv-context`; it records the local charge basis,
    target degree, degree-bounded projected Mori rays, exact active-generator
