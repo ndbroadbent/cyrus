@@ -2373,7 +2373,15 @@ relation and shared-facet domains return LP no-certificate statuses. The two
 degree-10 facet-union domains under the guard also return no certificate
 (`rank_177` or `rank_194`); larger facet unions are explicitly skipped by the
 guard. Thus the missing chamber is not exposed merely by selecting an
-individual facet-pair witness.
+individual facet-pair witness. The same summaries classify the degree-bounded
+generators inside those domains by source status. Across the 14 shared-facet
+domains, Cyrus sees `1727` toric-covered generators, `671` source-derived GV
+generators, `20` generators matching other missing targets, `10` matching
+uncovered source rays, and `228` source rays with no toric/source-derived GV
+value yet. Across facet unions, the unresolved source-ray bucket is much larger
+(`9000` aggregate occurrences). This keeps the next semigroup task tied to
+unresolved lower source-ray closure, not to a finite domain whose generator GV
+values are already known.
 The same active-leaf records now run the existing one-parameter unit-tensor
 phase probe against those lower source rays. This is still diagnostic-only,
 because the local intersection tensor and chamber certificate are not

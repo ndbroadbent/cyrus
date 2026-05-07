@@ -637,4 +637,11 @@ to make the remaining GV layer more first-principles:
    certifies a supporting face. The two degree-10 facet-union domains under the
    same guard also fail certification, while larger facet unions remain skipped
    explicitly. This rules out hiding the chamber certificate in one selected
-   facet-pair witness.
+   facet-pair witness. The same per-witness report now classifies each domain's
+   generators by source status. The shared-facet domains aggregate to `1727`
+   toric-covered generator occurrences and `671` source-derived GV generator
+   occurrences, but still contain `228` source rays without a derived GV value,
+   `20` occurrences of other missing targets, and `10` uncovered-source-ray
+   hits. Facet unions contain a much larger unresolved source-ray bucket, so a
+   reusable semigroup handoff still needs lower source-ray closure rather than
+   a small all-known witness domain.

@@ -344,7 +344,11 @@ per-witness domain diagnostic now checks the same point more directly: all 14
 witness relation domains and all 14 shared-facet domains fail the existing
 LP/exact supporting-face certificate, and the two degree-10 facet-union domains
 small enough for the `512` generator guard fail as well. Larger facet unions
-remain explicitly skipped. The
+remain explicitly skipped. These witness domains also still contain unresolved
+source data: the shared-facet domains aggregate to `228` source rays without a
+derived GV value, `20` other missing-target hits, and `10` uncovered-source-ray
+hits, despite also containing many toric-covered and source-derived-GV
+generators. The
 enriched active-leaf report
 now also carries the matching source rays' local q rows and CMS check counts:
 two origin-circuit lower leaves are primitive `neg2` q-row candidates, while

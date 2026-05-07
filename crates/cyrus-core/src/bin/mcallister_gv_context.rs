@@ -3189,6 +3189,9 @@ struct OriginCircuitWitnessDomainSummary {
     relation_rank: Option<usize>,
     shared_facet_rank: Option<usize>,
     facet_union_rank: Option<usize>,
+    relation_source_status_counts: BTreeMap<String, usize>,
+    shared_facet_source_status_counts: BTreeMap<String, usize>,
+    facet_union_source_status_counts: BTreeMap<String, usize>,
     relation_support_face_certificate_status: String,
     shared_facet_face_certificate_status: String,
     facet_union_face_certificate_status: String,
@@ -3376,6 +3379,9 @@ fn origin_circuit_witness_domain_summary(
         relation_rank: relation.rank,
         shared_facet_rank: shared.rank,
         facet_union_rank: union.rank,
+        relation_source_status_counts: relation.source_status_counts,
+        shared_facet_source_status_counts: shared.source_status_counts,
+        facet_union_source_status_counts: union.source_status_counts,
         relation_support_face_certificate_status: relation.certificate_status,
         shared_facet_face_certificate_status: shared.certificate_status,
         facet_union_face_certificate_status: union.certificate_status,
@@ -3385,6 +3391,7 @@ fn origin_circuit_witness_domain_summary(
 struct OriginCircuitWitnessDomainStats {
     generator_count: Option<usize>,
     rank: Option<usize>,
+    source_status_counts: BTreeMap<String, usize>,
     certificate_status: String,
 }
 
@@ -3399,6 +3406,7 @@ fn origin_circuit_witness_domain_stats(
         return OriginCircuitWitnessDomainStats {
             generator_count: None,
             rank: None,
+            source_status_counts: BTreeMap::new(),
             certificate_status: "missing_degree_bounded_mori_ray_context".to_string(),
         };
     };
@@ -3414,6 +3422,7 @@ fn origin_circuit_witness_domain_stats(
             return OriginCircuitWitnessDomainStats {
                 generator_count: None,
                 rank: None,
+                source_status_counts: BTreeMap::new(),
                 certificate_status: format!(
                     "origin_witness_domain_error_{}",
                     status_error_fragment(&error)
@@ -3430,6 +3439,7 @@ fn origin_circuit_witness_domain_stats(
                 return OriginCircuitWitnessDomainStats {
                     generator_count: Some(generators.len()),
                     rank: None,
+                    source_status_counts: BTreeMap::new(),
                     certificate_status: format!(
                         "origin_witness_domain_error_{}",
                         status_error_fragment(&error.to_string())
@@ -3438,6 +3448,7 @@ fn origin_circuit_witness_domain_stats(
             }
         }
     };
+    let source_status_counts = source_status_counts_for_generators(&generators, context);
     let certificate_status = if certify_domain {
         origin_circuit_ambient_support_face_certificate_status(
             ray_context,
@@ -3452,8 +3463,27 @@ fn origin_circuit_witness_domain_stats(
     OriginCircuitWitnessDomainStats {
         generator_count: Some(generators.len()),
         rank,
+        source_status_counts,
         certificate_status,
     }
+}
+
+fn source_status_counts_for_generators(
+    generators: &[Vec<i64>],
+    context: &ValidatedContext<'_>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for generator in generators {
+        let status = active_decomposition_generator_source_status(generator, context)
+            .unwrap_or_else(|error| {
+                format!(
+                    "generator_source_status_error_{}",
+                    status_error_fragment(&error)
+                )
+            });
+        *counts.entry(status).or_insert(0usize) += 1;
+    }
+    counts
 }
 
 fn origin_circuit_witness_domain_status_counts(
