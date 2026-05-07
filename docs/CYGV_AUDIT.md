@@ -2225,7 +2225,9 @@ The neighboring resolved-conifold-like summary has raw cubic `26`, q-row
 `[-1,1,-1,1,-1,1]`, and primitive probe value `0` versus expected `1`. Both are
 reported as `primitive_cygv_probe_mismatch_raw_cubic_is_not_certified_tensor`,
 which confirms that the divisor cubic is not the certified local intersection
-tensor normalization by itself.
+tensor normalization by itself. The target-`7` report aggregates this at top
+level as
+`path_support_uncovered_source_ray_local_cygv_primitive_probe_status_counts = {"primitive_cygv_probe_mismatch_raw_cubic_is_not_certified_tensor":2}`.
 These are source-derived local-intersection candidates, not a certified local
 `cygv` intersection tensor yet, so the skeleton still lists the missing
 `local_q_matrix_phase`, `local_intersection_tensor`, and

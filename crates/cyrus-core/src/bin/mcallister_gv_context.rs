@@ -212,6 +212,8 @@ struct ContextReport {
     path_support_uncovered_source_ray_degree_counts: BTreeMap<i128, usize>,
     path_support_uncovered_source_ray_lookup_status_counts: BTreeMap<String, usize>,
     path_support_uncovered_source_ray_path_support_gv_counts: BTreeMap<String, usize>,
+    path_support_uncovered_source_ray_local_cygv_primitive_probe_status_counts:
+        BTreeMap<String, usize>,
     path_support_uncovered_source_ray_sample: Vec<CygvPathSupportSourceRaySummary>,
     local_cygv_q_matrix_orientation_status_counts: BTreeMap<String, usize>,
     local_cygv_q_matrix_layout_status_counts: BTreeMap<String, usize>,
@@ -1981,6 +1983,24 @@ fn path_support_uncovered_source_ray_path_support_gv_counts(
     for summary in summaries {
         for (gv, count) in &summary.path_support_gv_counts {
             *counts.entry(gv.clone()).or_insert(0) += count;
+        }
+    }
+    counts
+}
+
+fn path_support_uncovered_source_ray_local_cygv_primitive_probe_status_counts(
+    summaries: &[CygvPathSupportSourceRaySummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        for solution in &summary.uncovered_source_ray_cms_solution_summaries {
+            let status = solution
+                .local_cygv_primitive_probe
+                .as_ref()
+                .map_or("local_cygv_primitive_probe_not_run", |probe| {
+                    probe.status.as_str()
+                });
+            *counts.entry(status.to_string()).or_insert(0) += 1;
         }
     }
     counts
@@ -6345,6 +6365,10 @@ fn build_report(
         path_support_uncovered_source_ray_path_support_gv_counts(
             &path_support_uncovered_source_ray_sample,
         );
+    let path_support_uncovered_source_ray_local_cygv_primitive_probe_status_counts =
+        path_support_uncovered_source_ray_local_cygv_primitive_probe_status_counts(
+            &path_support_uncovered_source_ray_sample,
+        );
     let local_cygv_q_matrix_orientation_status_counts =
         local_cygv_q_matrix_orientation_status_counts(
             targets
@@ -6417,6 +6441,7 @@ fn build_report(
         path_support_uncovered_source_ray_degree_counts,
         path_support_uncovered_source_ray_lookup_status_counts,
         path_support_uncovered_source_ray_path_support_gv_counts,
+        path_support_uncovered_source_ray_local_cygv_primitive_probe_status_counts,
         path_support_uncovered_source_ray_sample,
         local_cygv_q_matrix_orientation_status_counts,
         local_cygv_q_matrix_layout_status_counts,
@@ -8699,6 +8724,68 @@ mod tests {
         );
         assert_eq!(summary.occurrences[0].target_index, 7);
         assert_eq!(summary.occurrences[1].side, "predecessor");
+    }
+
+    #[test]
+    fn path_support_primitive_probe_status_counts_aggregate_solution_summaries() {
+        let summary = CygvPathSupportSourceRaySummary {
+            degree: 6,
+            occurrence_count: 1,
+            known_qn_history_status_counts: BTreeMap::new(),
+            path_support_lookup_status_counts: BTreeMap::new(),
+            path_support_gv_counts: BTreeMap::new(),
+            uncovered_source_ray_origin_circuit_pattern: None,
+            uncovered_source_ray_exact_kind: None,
+            uncovered_source_ray_cms_check_status_counts: BTreeMap::new(),
+            uncovered_source_ray_cms_solution_summaries: vec![
+                CmsGeneralDivisorSolutionSummary {
+                    shrinking_divisor_index: 1,
+                    solution_basis_nonzero: vec![(0, "1".to_string())],
+                    solution_ambient_basis_nonzero: vec![(1, "1".to_string())],
+                    computed_other_normal_degree: "0".to_string(),
+                    solution_basis_cubic_self_intersection: "3".to_string(),
+                    local_intersection_tensor_candidate_status: String::new(),
+                    local_intersection_tensor_candidate: None,
+                    local_cygv_primitive_probe: Some(LocalCygvPrimitiveProbe {
+                        status: "primitive_cygv_probe_mismatch_raw_cubic_is_not_certified_tensor"
+                            .to_string(),
+                        q_matrix: vec![vec![-1, -2, 1, 1, 1]],
+                        grading_vector: vec![1],
+                        semigroup_elements: vec![vec![0], vec![1]],
+                        candidate_gv: Some("-6".to_string()),
+                        expected_toric_gv1_formula_value: Some("-2".to_string()),
+                        error: None,
+                    }),
+                },
+                CmsGeneralDivisorSolutionSummary {
+                    shrinking_divisor_index: 2,
+                    solution_basis_nonzero: vec![(0, "1".to_string())],
+                    solution_ambient_basis_nonzero: vec![(2, "1".to_string())],
+                    computed_other_normal_degree: "0".to_string(),
+                    solution_basis_cubic_self_intersection: "0".to_string(),
+                    local_intersection_tensor_candidate_status: String::new(),
+                    local_intersection_tensor_candidate: None,
+                    local_cygv_primitive_probe: None,
+                },
+            ],
+            uncovered_source_ray_local_charge_signature: None,
+            uncovered_source_ray_local_cygv_readiness_counts: BTreeMap::new(),
+            uncovered_source_ray_local_missing_input_counts: BTreeMap::new(),
+            source_ray_ambient_nonzero: Vec::new(),
+            curve_nonzero: Vec::new(),
+            occurrences: Vec::new(),
+        };
+
+        assert_eq!(
+            path_support_uncovered_source_ray_local_cygv_primitive_probe_status_counts(&[summary]),
+            BTreeMap::from([
+                ("local_cygv_primitive_probe_not_run".to_string(), 1),
+                (
+                    "primitive_cygv_probe_mismatch_raw_cubic_is_not_certified_tensor".to_string(),
+                    1
+                )
+            ])
+        );
     }
 
     #[test]
