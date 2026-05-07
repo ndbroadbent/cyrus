@@ -387,6 +387,10 @@ The McAllister pipeline uses GV data in two different regimes:
 1. Mirror/racetrack GV data on the low-dimensional mirror side. For 4-214-647
    this is the `dual_curves.dat` / `dual_curves_gv.dat` data, and the Python
    reproduction notes validate it with `cy.compute_gvs(min_points=20000)`.
+   Cyrus now mirrors this with `mcallister_gv --min-points 20000`: it computes
+   the compact table through the actual Rust `cygv` crate, maps the basis
+   charges back to ambient curve rows, and matches all `5177` checkpoint rows
+   while producing `10556` ambient invariants.
 2. Kähler-coordinate corrections on the high-`h11` primal side. This is the
    `small_curves.dat` / `small_curves_gv.dat` data. The paper explicitly says
    systematic high-degree GV computation at large `h11` is infeasible, and that
@@ -1588,6 +1592,9 @@ dump of `cy.compute_gvs` inputs from `dual_points.dat` and
 in-basis intersection dictionary match exactly. CYTools hands cygv `505`
 generator rows, while Cyrus dumps `496`, but CYTools' rows have only `496`
 unique vectors and the unique generator sets are identical. This means the
+same handoff boundary also supports the full min-points checkpoint comparison:
+`mcallister_gv --min-points 20000` validates all `5177`
+`dual_curves*.dat` rows against the source-computed Cyrus/cygv table.
 standard compact GV path is not currently blocked by a q-matrix, grading,
 intersection, or Mori/lattice generator handoff mismatch. The remaining
 corrected-chamber misses are a chamber/local source-domain problem, not an
