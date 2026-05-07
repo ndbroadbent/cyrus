@@ -186,7 +186,11 @@ and matrix-basis pipeline are no longer open.
    corrected basis intersection tensor and records their cubic
    self-intersections as structured one-entry local-intersection tensor
    candidates, with a status that still requires the local phase and chamber
-   certificate before promotion. The first seed-sum
+   certificate before promotion. The report now also runs a primitive actual
+   `cygv` probe against those raw cubic candidates; the target-`7` lower-ray
+   summaries explicitly mismatch (`-6` versus expected `-2`, and `0` versus
+   expected `1`), so the cubic evidence is guarded against promotion as a
+   fitted local tensor. The first seed-sum
    sample for the degree-8 side splits it as another toric-covered degree-2
    reduced seed plus an uncovered degree-6 seed that does not survive pair
    reduction; that degree-6 seed pair-reduces into degree-4 and degree-2

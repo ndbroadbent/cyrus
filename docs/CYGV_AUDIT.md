@@ -2216,6 +2216,16 @@ other target-`7` lower source-ray solution has `D^3=26`. For the source-derived
 one-parameter skeletons, the report also serializes explicit one-entry local
 intersection tensor candidates such as `{indices:[0,0,0], value:"3"}` with
 status `candidate_from_cms_divisor_cubic_needs_phase_and_chamber_certificate`.
+The same summaries now run a primitive-degree actual-`cygv` probe with the raw
+cubic candidate, the source-derived one-parameter q-row, grading `[1]`, and
+semigroup elements `[[0],[1]]`. This deliberately does not promote a value:
+for the shared degree-six ray, q-row `[-1,-2,1,1,1]` with raw cubic `3`
+produces primitive `cygv` value `-6`, while the CMS formula checkpoint is `-2`.
+The neighboring resolved-conifold-like summary has raw cubic `26`, q-row
+`[-1,1,-1,1,-1,1]`, and primitive probe value `0` versus expected `1`. Both are
+reported as `primitive_cygv_probe_mismatch_raw_cubic_is_not_certified_tensor`,
+which confirms that the divisor cubic is not the certified local intersection
+tensor normalization by itself.
 These are source-derived local-intersection candidates, not a certified local
 `cygv` intersection tensor yet, so the skeleton still lists the missing
 `local_q_matrix_phase`, `local_intersection_tensor`, and

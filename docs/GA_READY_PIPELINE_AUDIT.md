@@ -73,8 +73,10 @@ run pass. Any remaining mismatch must be explicit and localizable.
    evidence needed by the next local intersection-certificate step. The same
    summaries now include the divisor cubic self-intersection computed from the
    corrected basis κ tensor and serialize it as a structured one-entry local
-   tensor candidate, but this remains candidate evidence until the full local
-   `cygv` intersection tensor and chamber certificate are derived.
+   tensor candidate. A primitive actual-`cygv` probe now checks those raw
+   candidates and records the mismatch against the CMS formula values, so this
+   remains candidate evidence until the full local `cygv` intersection tensor
+   and chamber certificate are derived.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for

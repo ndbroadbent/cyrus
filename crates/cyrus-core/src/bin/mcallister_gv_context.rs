@@ -551,12 +551,24 @@ struct CmsGeneralDivisorSolutionSummary {
     solution_basis_cubic_self_intersection: String,
     local_intersection_tensor_candidate_status: String,
     local_intersection_tensor_candidate: Option<Vec<LocalCygvIntersectionTensorEntry>>,
+    local_cygv_primitive_probe: Option<LocalCygvPrimitiveProbe>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 struct LocalCygvIntersectionTensorEntry {
     indices: [usize; 3],
     value: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+struct LocalCygvPrimitiveProbe {
+    status: String,
+    q_matrix: Vec<Vec<i64>>,
+    grading_vector: Vec<i64>,
+    semigroup_elements: Vec<Vec<i64>>,
+    candidate_gv: Option<String>,
+    expected_toric_gv1_formula_value: Option<String>,
+    error: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1502,16 +1514,23 @@ fn cms_general_divisor_solution_summaries(
         };
         let solution_basis_cubic_self_intersection =
             divisor_cubic_self_intersection(intersection, &solution_basis_nonzero)?;
-        let (local_intersection_tensor_candidate, local_intersection_tensor_candidate_status) =
-            local_cygv_intersection_tensor_candidate_from_cms_divisor(
-                sample,
-                &solution_basis_cubic_self_intersection,
-            )?;
+        let expected_toric_gv1_formula_value =
+            cms_matching_toric_gv1_formula_value(sample, check.shrinking_divisor_index)?;
+        let (
+            local_intersection_tensor_candidate,
+            local_intersection_tensor_candidate_status,
+            local_cygv_primitive_probe,
+        ) = local_cygv_intersection_tensor_candidate_from_cms_divisor(
+            sample,
+            &solution_basis_cubic_self_intersection,
+            expected_toric_gv1_formula_value,
+        )?;
         summaries.push(CmsGeneralDivisorSolutionSummary {
             shrinking_divisor_index: check.shrinking_divisor_index,
             solution_basis_cubic_self_intersection,
             local_intersection_tensor_candidate_status,
             local_intersection_tensor_candidate,
+            local_cygv_primitive_probe,
             solution_basis_nonzero,
             solution_ambient_basis_nonzero,
             computed_other_normal_degree,
@@ -1525,17 +1544,27 @@ fn cms_general_divisor_solution_summaries(
 fn local_cygv_intersection_tensor_candidate_from_cms_divisor(
     sample: &MissingGvTargetSample,
     divisor_cubic_self_intersection: &str,
-) -> Result<(Option<Vec<LocalCygvIntersectionTensorEntry>>, String), String> {
+    expected_toric_gv1_formula_value: Option<i64>,
+) -> Result<
+    (
+        Option<Vec<LocalCygvIntersectionTensorEntry>>,
+        String,
+        Option<LocalCygvPrimitiveProbe>,
+    ),
+    String,
+> {
     let Some(support) = sample.origin_circuit_affine_support.as_ref() else {
         return Ok((
             None,
             "local_intersection_candidate_missing_affine_support".to_string(),
+            None,
         ));
     };
     let Some(skeleton) = local_cygv_input_skeleton(sample, Some(support))? else {
         return Ok((
             None,
             "local_intersection_candidate_missing_skeleton".to_string(),
+            None,
         ));
     };
     let has_unit_semigroup = skeleton
@@ -1554,15 +1583,121 @@ fn local_cygv_intersection_tensor_candidate_from_cms_divisor(
         return Ok((
             None,
             "local_intersection_candidate_not_one_parameter_source_derived_skeleton".to_string(),
+            None,
         ));
     }
+    let local_cygv_primitive_probe = Some(local_cygv_primitive_probe_from_cms_divisor(
+        &skeleton,
+        divisor_cubic_self_intersection,
+        expected_toric_gv1_formula_value,
+    )?);
     Ok((
         Some(vec![LocalCygvIntersectionTensorEntry {
             indices: [0, 0, 0],
             value: divisor_cubic_self_intersection.to_string(),
         }]),
         "candidate_from_cms_divisor_cubic_needs_phase_and_chamber_certificate".to_string(),
+        local_cygv_primitive_probe,
     ))
+}
+
+fn cms_matching_toric_gv1_formula_value(
+    sample: &MissingGvTargetSample,
+    shrinking_divisor_index: usize,
+) -> Result<Option<i64>, String> {
+    let Some(candidates) = sample.cms_general_divisor_shape_candidates.as_deref() else {
+        return Ok(None);
+    };
+    let mut values = candidates
+        .iter()
+        .filter(|candidate| candidate.shrinking_divisor_index == shrinking_divisor_index)
+        .filter_map(|candidate| candidate.toric_gv1_formula_value)
+        .collect::<Vec<_>>();
+    values.sort_unstable();
+    values.dedup();
+    match values.as_slice() {
+        [] => Ok(None),
+        [value] => Ok(Some(*value)),
+        _ => Err(format!(
+            "CMS divisor {shrinking_divisor_index} has conflicting toric GV1 formula values {values:?}"
+        )),
+    }
+}
+
+fn local_cygv_primitive_probe_from_cms_divisor(
+    skeleton: &LocalCygvInputSkeleton,
+    divisor_cubic_self_intersection: &str,
+    expected_toric_gv1_formula_value: Option<i64>,
+) -> Result<LocalCygvPrimitiveProbe, String> {
+    let q_matrix = skeleton
+        .local_cygv_wrapper_q_matrix_candidate
+        .clone()
+        .ok_or_else(|| "local primitive cygv probe is missing q-matrix candidate".to_string())?;
+    let grading_vector = skeleton
+        .local_grading_vector_candidate
+        .clone()
+        .ok_or_else(|| "local primitive cygv probe is missing grading vector".to_string())?;
+    let semigroup_elements = vec![vec![0], vec![1]];
+    let expected_toric_gv1_formula_value =
+        expected_toric_gv1_formula_value.map(|value| value.to_string());
+
+    let cubic = parse_rational(divisor_cubic_self_intersection)?;
+    if cubic.denominator_ref() != &1u32 {
+        return Ok(LocalCygvPrimitiveProbe {
+            status: "primitive_cygv_probe_blocked_nonintegral_raw_cubic".to_string(),
+            q_matrix,
+            grading_vector,
+            semigroup_elements,
+            candidate_gv: None,
+            expected_toric_gv1_formula_value,
+            error: Some(format!(
+                "raw cubic candidate {divisor_cubic_self_intersection} is not integral"
+            )),
+        });
+    }
+
+    let mut intnums = Intersection::new(1);
+    intnums.set(0, 0, 0, Rational::<Finite>::new(cubic));
+    let result = compute_gv_invariants_with_explicit_semigroup(
+        &semigroup_elements,
+        &grading_vector,
+        &q_matrix,
+        &intnums,
+    );
+    let gvs = match result {
+        Ok(gvs) => gvs,
+        Err(error) => {
+            return Ok(LocalCygvPrimitiveProbe {
+                status: "primitive_cygv_probe_hkty_error".to_string(),
+                q_matrix,
+                grading_vector,
+                semigroup_elements,
+                candidate_gv: None,
+                expected_toric_gv1_formula_value,
+                error: Some(error.to_string()),
+            });
+        }
+    };
+    let candidate_gv = gvs
+        .iter()
+        .find(|(curve, _)| curve.as_slice() == [1])
+        .map_or_else(|| "0".to_string(), |(_, value)| value.to_string());
+    let status = match expected_toric_gv1_formula_value.as_deref() {
+        Some(expected) if expected == candidate_gv => {
+            "primitive_cygv_probe_matches_expected_formula_but_chamber_uncertified"
+        }
+        Some(_) => "primitive_cygv_probe_mismatch_raw_cubic_is_not_certified_tensor",
+        None => "primitive_cygv_probe_computed_without_expected_formula",
+    };
+    Ok(LocalCygvPrimitiveProbe {
+        status: status.to_string(),
+        q_matrix,
+        grading_vector,
+        semigroup_elements,
+        candidate_gv: Some(candidate_gv),
+        expected_toric_gv1_formula_value,
+        error: None,
+    })
 }
 
 fn divisor_cubic_self_intersection(
@@ -8487,6 +8622,7 @@ mod tests {
                             value: "0".to_string(),
                         },
                     ]),
+                    local_cygv_primitive_probe: None,
                 },
             ],
             matching_uncovered_source_ray_local_charge_signature: Some("-2,-1,1,1,1".to_string()),
@@ -8541,6 +8677,7 @@ mod tests {
                     indices: [0, 0, 0],
                     value: "0".to_string(),
                 }]),
+                local_cygv_primitive_probe: None,
             }]
         );
         assert_eq!(
@@ -8695,6 +8832,99 @@ mod tests {
                 indices: [0, 0, 0],
                 value: "3".to_string(),
             }])
+        );
+    }
+
+    #[test]
+    fn cms_solution_summary_probe_flags_raw_cubic_mismatch() {
+        let mut sample = minimal_missing_sample(vec![(0, 1)]);
+        sample.origin_circuit_first_witness = Some(OriginCircuitWitnessSample {
+            first_facet_exclusive_point: 3,
+            second_facet_exclusive_point: 4,
+            shared_two_simplex: vec![1, 2],
+            first_facet: Vec::new(),
+            second_facet: Vec::new(),
+            first_facet_size: 2,
+            second_facet_size: 2,
+            sparse_relation: vec![(0, -1), (1, -2), (2, 1), (3, 1), (4, 1)],
+            relation_points: vec![
+                OriginCircuitRelationPointSample {
+                    point_index: 0,
+                    coefficient: -1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 1,
+                    coefficient: -2,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 2,
+                    coefficient: 1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 3,
+                    coefficient: 1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 4,
+                    coefficient: 1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+            ],
+        });
+        sample.origin_circuit_affine_support = Some(OriginCircuitAffineSupportSample {
+            affine_rank: 3,
+            coefficient_counts: BTreeMap::new(),
+            local_charge_basis: vec![vec![1, 2, -1, -1, -1]],
+            local_coordinates: Vec::new(),
+            local_coordinates_2d: None,
+        });
+        sample.cms_general_divisor_shape_candidates = Some(vec![CmsGeneralDivisorShapeCandidate {
+            shrinking_divisor_index: 1,
+            shrinking_divisor_coefficient: -2,
+            shrinking_divisor_coordinates: Vec::new(),
+            inferred_other_normal_degree: 0,
+            toric_gv1_formula_value: Some(-2),
+            all_non_origin_relation_points_are_two_face: false,
+        }]);
+        sample.cms_general_divisor_intersection_checks =
+            Some(vec![CmsGeneralDivisorIntersectionCheck {
+                shrinking_divisor_index: 1,
+                has_rational_divisor_solution: true,
+                solution_basis_support_len: Some(1),
+                solution_basis_nonzero: Some(vec![(0, "1".to_string())]),
+                solution_ambient_basis_nonzero: Some(vec![(1, "1".to_string())]),
+                solution_is_integral: Some(true),
+                computed_other_normal_degree: Some("0".to_string()),
+                matches_inferred_other_normal_degree: Some(true),
+            }]);
+        let mut intersection = Intersection::new(1);
+        intersection.set(0, 0, 0, Rational::<Finite>::new(MalachiteRational::from(3)));
+
+        let summaries =
+            cms_general_divisor_solution_summaries(Some(&sample), &intersection).unwrap();
+        let probe = summaries[0]
+            .local_cygv_primitive_probe
+            .as_ref()
+            .expect("one-parameter CMS summary should run primitive cygv probe");
+
+        assert_eq!(
+            probe.status,
+            "primitive_cygv_probe_mismatch_raw_cubic_is_not_certified_tensor"
+        );
+        assert_eq!(probe.q_matrix, vec![vec![-1, -2, 1, 1, 1]]);
+        assert_eq!(probe.candidate_gv.as_deref(), Some("-6"));
+        assert_eq!(
+            probe.expected_toric_gv1_formula_value.as_deref(),
+            Some("-2")
         );
     }
 
