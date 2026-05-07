@@ -3227,6 +3227,13 @@ opposite target-plus-star rows have degrees `10` and `12`; all four remain
 `1`, but the target and target-plus-star rows remain unknown. Thus sign
 reversal supplies adjacent wall evidence in the resolved-conifold-like cases,
 not a promotable corrected-target GV value.
+The provenance-enriched version,
+`/tmp/cyrus_gv_context_star_union_opposite_provenance_report.json`, serializes
+the source-ray status beside the lookup. The target `7`/`8` opposite-star row is
+the resolved-conifold origin relation `[(0,-1),(55,-1),(195,1),(212,1)]` in
+ambient coordinates. Target `6`'s opposite star is a degree-bounded source ray
+with ambient relation `[(0,-2),(2,1),(46,1),(200,2),(210,-2)]` but no known GV
+value, while target `3`'s opposite star is not a source degree-bounded ray.
 Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
 serializes a role-tagged height profile over the full union support. For
 targets `3`/`6`, the off-hyperplane zero-shared ray has height `-1` but zero

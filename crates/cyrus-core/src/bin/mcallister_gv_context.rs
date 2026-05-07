@@ -669,11 +669,15 @@ struct LocalCygvStarUnionGlobalBasisLookup {
     known_qn_history_status: String,
     toric_gv: Option<String>,
     source_derived_gv: Option<String>,
+    source_class_status: Option<String>,
+    source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
     opposite_basis_nonzero: Option<Vec<(usize, i64)>>,
     opposite_degree: Option<i128>,
     opposite_known_qn_history_status: Option<String>,
     opposite_toric_gv: Option<String>,
     opposite_source_derived_gv: Option<String>,
+    opposite_source_class_status: Option<String>,
+    opposite_source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
     opposite_error: Option<String>,
     error: Option<String>,
 }
@@ -16561,11 +16565,15 @@ fn local_cygv_star_union_global_basis_lookup(
             known_qn_history_status: "missing_global_basis_projection".to_string(),
             toric_gv: None,
             source_derived_gv: None,
+            source_class_status: None,
+            source_ray_ambient_nonzero: None,
             opposite_basis_nonzero: None,
             opposite_degree: None,
             opposite_known_qn_history_status: None,
             opposite_toric_gv: None,
             opposite_source_derived_gv: None,
+            opposite_source_class_status: None,
+            opposite_source_ray_ambient_nonzero: None,
             opposite_error: None,
             error: None,
         };
@@ -16580,11 +16588,15 @@ fn local_cygv_star_union_global_basis_lookup(
                 known_qn_history_status: "invalid_global_basis_projection".to_string(),
                 toric_gv: None,
                 source_derived_gv: None,
+                source_class_status: None,
+                source_ray_ambient_nonzero: None,
                 opposite_basis_nonzero: None,
                 opposite_degree: None,
                 opposite_known_qn_history_status: None,
                 opposite_toric_gv: None,
                 opposite_source_derived_gv: None,
+                opposite_source_class_status: None,
+                opposite_source_ray_ambient_nonzero: None,
                 opposite_error: None,
                 error: Some(error),
             };
@@ -16600,11 +16612,15 @@ fn local_cygv_star_union_global_basis_lookup(
                 known_qn_history_status: "invalid_global_basis_degree".to_string(),
                 toric_gv: None,
                 source_derived_gv: None,
+                source_class_status: None,
+                source_ray_ambient_nonzero: None,
                 opposite_basis_nonzero: None,
                 opposite_degree: None,
                 opposite_known_qn_history_status: None,
                 opposite_toric_gv: None,
                 opposite_source_derived_gv: None,
+                opposite_source_class_status: None,
+                opposite_source_ray_ambient_nonzero: None,
                 opposite_error: None,
                 error: Some(error),
             };
@@ -16612,12 +16628,16 @@ fn local_cygv_star_union_global_basis_lookup(
     };
     let (known_qn_history_status, toric_gv, source_derived_gv, error) =
         global_basis_known_qn_history(&basis_dense, context);
+    let (source_class_status, source_ray_ambient_nonzero) =
+        global_basis_source_class_lookup(&basis_dense, context);
     let (
         opposite_basis_nonzero,
         opposite_degree,
         opposite_known_qn_history_status,
         opposite_toric_gv,
         opposite_source_derived_gv,
+        opposite_source_class_status,
+        opposite_source_ray_ambient_nonzero,
         opposite_error,
     ) = if degree.is_some_and(|degree| degree < 0) {
         match basis_dense
@@ -16639,22 +16659,35 @@ fn local_cygv_star_union_global_basis_lookup(
                             opposite_source_derived_gv,
                             opposite_error,
                         ) = global_basis_known_qn_history(&opposite_dense, context);
+                        let (opposite_source_class_status, opposite_source_ray_ambient_nonzero) =
+                            global_basis_source_class_lookup(&opposite_dense, context);
                         (
                             opposite_basis_nonzero,
                             Some(opposite_degree),
                             Some(opposite_status),
                             opposite_toric_gv,
                             opposite_source_derived_gv,
+                            opposite_source_class_status,
+                            opposite_source_ray_ambient_nonzero,
                             opposite_error,
                         )
                     }
-                    Err(error) => (opposite_basis_nonzero, None, None, None, None, Some(error)),
+                    Err(error) => (
+                        opposite_basis_nonzero,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        Some(error),
+                    ),
                 }
             }
-            Err(error) => (None, None, None, None, None, Some(error)),
+            Err(error) => (None, None, None, None, None, None, None, Some(error)),
         }
     } else {
-        (None, None, None, None, None, None)
+        (None, None, None, None, None, None, None, None)
     };
     LocalCygvStarUnionGlobalBasisLookup {
         role: role.to_string(),
@@ -16663,11 +16696,15 @@ fn local_cygv_star_union_global_basis_lookup(
         known_qn_history_status,
         toric_gv,
         source_derived_gv,
+        source_class_status,
+        source_ray_ambient_nonzero,
         opposite_basis_nonzero,
         opposite_degree,
         opposite_known_qn_history_status,
         opposite_toric_gv,
         opposite_source_derived_gv,
+        opposite_source_class_status,
+        opposite_source_ray_ambient_nonzero,
         opposite_error,
         error,
     }
@@ -16685,6 +16722,25 @@ fn global_basis_known_qn_history(
             Err(error) => ("known_qn_history_conflict".to_string(), Some(error)),
         };
     (known_qn_history_status, toric_gv, source_derived_gv, error)
+}
+
+fn global_basis_source_class_lookup(
+    basis_dense: &[i64],
+    context: &ValidatedContext<'_>,
+) -> (Option<String>, Option<Vec<(usize, i64)>>) {
+    match path_support_source_class_context(basis_dense, context) {
+        Ok(source_context) => (
+            Some(source_context.status),
+            source_context.source_ray_ambient_nonzero,
+        ),
+        Err(error) => (
+            Some(format!(
+                "source_classification_error_{}",
+                status_error_fragment(&error)
+            )),
+            None,
+        ),
+    }
 }
 
 fn origin_circuit_star_union_point_samples(
@@ -18588,6 +18644,10 @@ mod tests {
         );
         assert_eq!(source_lookup.degree, Some(2));
         assert_eq!(source_lookup.source_derived_gv.as_deref(), Some("1"));
+        assert_eq!(
+            source_lookup.source_class_status.as_deref(),
+            Some("source_ray_known_source_derived_gv")
+        );
         let negative_toric_basis = vec![(0, -1)];
         let negative_toric_lookup = local_cygv_star_union_global_basis_lookup(
             "star",
@@ -18613,6 +18673,16 @@ mod tests {
         assert_eq!(
             negative_toric_lookup.opposite_toric_gv.as_deref(),
             Some("42")
+        );
+        assert_eq!(
+            negative_toric_lookup
+                .opposite_source_class_status
+                .as_deref(),
+            Some("source_ray_known_toric_covered")
+        );
+        assert_eq!(
+            negative_toric_lookup.opposite_source_ray_ambient_nonzero,
+            Some(vec![(5, 1)])
         );
         assert_eq!(
             degree_bounded_mori_ray_context_status(&validated),

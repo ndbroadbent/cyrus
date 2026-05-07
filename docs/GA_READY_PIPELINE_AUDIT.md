@@ -1016,6 +1016,11 @@ to make the remaining GV layer more first-principles:
    target and target-plus-star rows still have no known toric/source-derived
    scalar value. So the adjacent source row is evidence for the wall history,
    not the corrected target GV itself.
+   The lookup now carries source provenance too. The target `7`/`8`
+   opposite-star source is the resolved-conifold origin relation
+   `[(0,-1),(55,-1),(195,1),(212,1)]`; target `6`'s opposite star is a
+   degree-bounded source ray without known GV, and target `3`'s opposite star is
+   not a degree-bounded source ray.
    The full union-support height profile is now serialized as well. For
    targets `3`/`6`, the off-hyperplane zero-shared ray carries zero target and
    star coefficient; for targets `7`/`8`, the height `-1` zero-shared ray and

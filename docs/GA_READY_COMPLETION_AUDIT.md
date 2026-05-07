@@ -763,6 +763,12 @@ adjacent-effective-class shortcut for targets `3`/`6`: `-star` and
 `-star` is a known source-derived degree-4 class with GV `1`, but the target
 and target-plus-star rows remain unknown. This makes the star row useful
 adjacent-source evidence, not a replacement for the missing target GV history.
+The provenance-enriched report also shows the source relation for that known
+target `7`/`8` opposite-star row:
+`[(0,-1),(55,-1),(195,1),(212,1)]`, the resolved-conifold origin circuit. The
+target `6` opposite-star row is at least a degree-bounded source ray, but has no
+known toric/source-derived GV value; target `3`'s opposite star is not in the
+degree-bounded source-ray context.
 The height-profile report now tags every union-support point by role and
 coefficient. Targets `3`/`6` have only a coefficient-zero zero-shared ray off
 the relation hyperplane, while targets `7`/`8` have a height `-1` star-side
