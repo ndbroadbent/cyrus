@@ -294,6 +294,10 @@ struct ContextReport {
     cygv_closest_known_qn_residual_source_predecessor_degree_counts: BTreeMap<i128, usize>,
     cygv_closest_known_qn_residual_source_predecessor_source_class_status_counts:
         BTreeMap<String, usize>,
+    cygv_closest_known_qn_residual_source_predecessor_origin_witness_relation_status_counts:
+        BTreeMap<String, usize>,
+    cygv_closest_known_qn_residual_source_predecessor_facet_context_status_counts:
+        BTreeMap<String, usize>,
     cygv_closest_known_qn_residual_source_predecessor_local_cygv_readiness_counts:
         BTreeMap<String, usize>,
     cygv_closest_known_qn_residual_source_predecessor_local_missing_input_counts:
@@ -793,6 +797,8 @@ struct CygvClosestKnownQnResidualSourcePredecessorSummary {
     matching_uncovered_source_ray_index: Option<usize>,
     matching_uncovered_source_ray_origin_circuit_pattern: Option<String>,
     matching_uncovered_source_ray_exact_kind: Option<String>,
+    matching_uncovered_source_ray_origin_witness_relation_status: Option<String>,
+    matching_uncovered_source_ray_facet_context_status: Option<String>,
     matching_uncovered_source_ray_cms_check_status_counts: BTreeMap<String, usize>,
     matching_uncovered_source_ray_cms_solution_summaries: Vec<CmsGeneralDivisorSolutionSummary>,
     matching_uncovered_source_ray_local_charge_signature: Option<String>,
@@ -873,6 +879,8 @@ struct CygvClosestKnownQnResidualSourcePredecessorSummaryBuilder {
     matching_uncovered_source_ray_index: Option<usize>,
     matching_uncovered_source_ray_origin_circuit_pattern: Option<String>,
     matching_uncovered_source_ray_exact_kind: Option<String>,
+    matching_uncovered_source_ray_origin_witness_relation_status: Option<String>,
+    matching_uncovered_source_ray_facet_context_status: Option<String>,
     matching_uncovered_source_ray_cms_check_status_counts: BTreeMap<String, usize>,
     matching_uncovered_source_ray_cms_solution_summaries: Vec<CmsGeneralDivisorSolutionSummary>,
     matching_uncovered_source_ray_local_charge_signature: Option<String>,
@@ -7093,6 +7101,10 @@ fn cygv_closest_known_qn_residual_source_predecessor_summaries(
                     .matching_uncovered_source_ray_origin_circuit_pattern,
                 matching_uncovered_source_ray_exact_kind: builder
                     .matching_uncovered_source_ray_exact_kind,
+                matching_uncovered_source_ray_origin_witness_relation_status: builder
+                    .matching_uncovered_source_ray_origin_witness_relation_status,
+                matching_uncovered_source_ray_facet_context_status: builder
+                    .matching_uncovered_source_ray_facet_context_status,
                 matching_uncovered_source_ray_cms_check_status_counts: builder
                     .matching_uncovered_source_ray_cms_check_status_counts,
                 matching_uncovered_source_ray_cms_solution_summaries: builder
@@ -7137,6 +7149,14 @@ fn add_cygv_closest_known_qn_residual_source_predecessor(
     };
     let source_context_result = path_support_source_class_context(&curve, context);
     let source_context = source_context_result.ok();
+    let source_ray_sample = matching_uncovered_source_ray_for_curve(&curve, context)
+        .ok()
+        .flatten()
+        .map(|(_, sample)| sample);
+    let source_ray_origin_witness_relation_status =
+        source_ray_sample.map(origin_circuit_witness_relation_status);
+    let source_ray_facet_context_status =
+        source_ray_sample.map(origin_circuit_facet_context_status);
     let source_class_status = source_context.as_ref().map_or_else(
         || "source_context_lookup_error".to_string(),
         |source_context| source_context.status.clone(),
@@ -7170,6 +7190,9 @@ fn add_cygv_closest_known_qn_residual_source_predecessor(
                             .clone()
                     },
                 ),
+                matching_uncovered_source_ray_origin_witness_relation_status:
+                    source_ray_origin_witness_relation_status,
+                matching_uncovered_source_ray_facet_context_status: source_ray_facet_context_status,
                 matching_uncovered_source_ray_cms_check_status_counts: source_context
                     .as_ref()
                     .map(|source_context| {
@@ -7280,6 +7303,34 @@ fn cygv_closest_known_qn_residual_source_predecessor_source_class_status_counts(
         for (status, count) in &summary.source_class_status_counts {
             *counts.entry(status.clone()).or_insert(0) += count;
         }
+    }
+    counts
+}
+
+fn cygv_closest_known_qn_residual_source_predecessor_origin_witness_relation_status_counts(
+    summaries: &[CygvClosestKnownQnResidualSourcePredecessorSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        let status = summary
+            .matching_uncovered_source_ray_origin_witness_relation_status
+            .as_deref()
+            .unwrap_or("not_available");
+        *counts.entry(status.to_string()).or_insert(0) += summary.occurrence_count;
+    }
+    counts
+}
+
+fn cygv_closest_known_qn_residual_source_predecessor_facet_context_status_counts(
+    summaries: &[CygvClosestKnownQnResidualSourcePredecessorSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        let status = summary
+            .matching_uncovered_source_ray_facet_context_status
+            .as_deref()
+            .unwrap_or("not_available");
+        *counts.entry(status.to_string()).or_insert(0) += summary.occurrence_count;
     }
     counts
 }
@@ -8535,6 +8586,14 @@ fn build_report(
         cygv_closest_known_qn_residual_source_predecessor_source_class_status_counts(
             &cygv_closest_known_qn_residual_source_predecessor_sample,
         );
+    let cygv_closest_known_qn_residual_source_predecessor_origin_witness_relation_status_counts =
+        cygv_closest_known_qn_residual_source_predecessor_origin_witness_relation_status_counts(
+            &cygv_closest_known_qn_residual_source_predecessor_sample,
+        );
+    let cygv_closest_known_qn_residual_source_predecessor_facet_context_status_counts =
+        cygv_closest_known_qn_residual_source_predecessor_facet_context_status_counts(
+            &cygv_closest_known_qn_residual_source_predecessor_sample,
+        );
     let cygv_closest_known_qn_residual_source_predecessor_local_cygv_readiness_counts =
         cygv_closest_known_qn_residual_source_predecessor_local_cygv_readiness_counts(
             &cygv_closest_known_qn_residual_source_predecessor_sample,
@@ -8785,6 +8844,8 @@ fn build_report(
         cygv_closest_known_qn_residual_source_predecessor_occurrence_count,
         cygv_closest_known_qn_residual_source_predecessor_degree_counts,
         cygv_closest_known_qn_residual_source_predecessor_source_class_status_counts,
+        cygv_closest_known_qn_residual_source_predecessor_origin_witness_relation_status_counts,
+        cygv_closest_known_qn_residual_source_predecessor_facet_context_status_counts,
         cygv_closest_known_qn_residual_source_predecessor_local_cygv_readiness_counts,
         cygv_closest_known_qn_residual_source_predecessor_local_missing_input_counts,
         cygv_closest_known_qn_residual_source_predecessor_sample,
@@ -11873,6 +11934,48 @@ mod tests {
         let mut source_sample = minimal_missing_sample(vec![(1, 1)]);
         source_sample.degree = 1;
         source_sample.origin_circuit_pattern = Some("origin=-2;neg={};pos={1: 3}".to_string());
+        source_sample.origin_circuit_first_witness = Some(OriginCircuitWitnessSample {
+            first_facet_exclusive_point: 203,
+            second_facet_exclusive_point: 206,
+            shared_two_simplex: vec![54, 209],
+            first_facet: vec![54, 203, 209],
+            second_facet: vec![54, 206, 209],
+            first_facet_size: 3,
+            second_facet_size: 3,
+            sparse_relation: vec![(0, -1), (54, -2), (203, 1), (206, 1), (209, 1)],
+            relation_points: vec![
+                OriginCircuitRelationPointSample {
+                    point_index: 0,
+                    coefficient: -1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 54,
+                    coefficient: -2,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 203,
+                    coefficient: 1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 206,
+                    coefficient: 1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+                OriginCircuitRelationPointSample {
+                    point_index: 209,
+                    coefficient: 1,
+                    coordinates: Vec::new(),
+                    face_dimension: None,
+                },
+            ],
+        });
         source_sample.real_cone_decomposition_exact_kind =
             Some("source_derived_origin_circuit".to_string());
         source_sample.cms_general_divisor_shape_candidates =
@@ -11976,6 +12079,18 @@ mod tests {
                 .matching_uncovered_source_ray_origin_circuit_pattern
                 .as_deref(),
             Some("origin=-2;neg={};pos={1: 3}")
+        );
+        assert_eq!(
+            summary
+                .matching_uncovered_source_ray_origin_witness_relation_status
+                .as_deref(),
+            Some("single_origin_circuit_witness")
+        );
+        assert_eq!(
+            summary
+                .matching_uncovered_source_ray_facet_context_status
+                .as_deref(),
+            Some("source_derived_full_facet_context")
         );
         assert_eq!(
             summary

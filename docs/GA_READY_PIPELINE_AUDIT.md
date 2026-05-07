@@ -116,8 +116,10 @@ run pass. Any remaining mismatch must be explicit and localizable.
    report now promotes closest-known residual source predecessors into their own
    queue: two unique source-derived predecessors occur three times, target 7/8
    share the degree-6 ray, target 6 has the analogous degree-4 ray, and every
-   occurrence is blocked on `local_intersection_tensor` and
-   `local_chamber_certificate`.
+   occurrence has shared origin-circuit witness relations plus
+   `source_derived_full_facet_context`. The remaining blocker is therefore
+   `local_intersection_tensor` and `local_chamber_certificate` extraction from
+   that source context.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for
@@ -572,10 +574,12 @@ to make the remaining GV layer more first-principles:
    for that source-derived degree-six ray and its degree-eight composites inside
    a certified semigroup/chamber. The new source-ray readiness fields sharpen
    this to a concrete input list: the shared degree-six ray has local charge
-   signature `[-1,-1,-1,1,2]` and matching CMS checks, but still lacks
+   signature `[-1,-1,-1,1,2]`, matching CMS checks, shared origin-circuit
+   witness relations, and `source_derived_full_facet_context`, but still lacks
    `local_intersection_tensor` and `local_chamber_certificate`. The residual
    predecessor queue also shows target `6` has an analogous degree-four source
-   predecessor with the same local signature and blockers. The CMS divisor cubic
+   predecessor with the same local signature, facet context, and blockers. The
+   CMS divisor cubic
    suggests tensor value `3`, but the raw-cubic primitive probe gives `GV=-6`;
    the unit-tensor probe gives the expected `GV=-2` and is not promotable without
    the chamber/tensor source certificate. Its one-parameter unit semigroup
