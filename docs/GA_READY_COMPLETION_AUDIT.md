@@ -401,6 +401,11 @@ and matrix-basis pipeline are no longer open.
    degree-eight supports expand to `10` and `8` elements and both fail HKTY
    integrality. The missing object is therefore not just a bounded closure of
    observed parent qN terms.
+   The generated-term sample from the one computed expanded case is also
+   specific: target `7`'s degree-eight composite now materializes the identity
+   term and the final target-`7` monomial, but still omits the sibling
+   non-source degree-ten cancellation monomial
+   `[(44,1),(203,-1),(206,-1),(209,1)]` with coefficient `-1`.
    The target-coefficient balance reconstructs the small-domain
    pre-subtraction readouts: target `7` has lower-source sum `3`,
    post-subtraction coefficient `0`, pivot component `2`, and

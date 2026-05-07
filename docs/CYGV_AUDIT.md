@@ -2861,6 +2861,15 @@ target `8`, the expanded degree-six and degree-eight supports grow to `10` and
 `8` elements and both fail with non-integer HKTY output. Bounded seed expansion
 of observed parent terms is therefore another diagnostic boundary, not the
 missing chamber semigroup.
+Exporting the generated source-qN term samples sharpens the one computed
+seed-expanded case: target `7`'s degree-eight composite materializes the
+identity monomial plus the final target-`7` monomial
+`[(44,2),(203,1),(206,-3),(209,1)]` with coefficient `+1`, but still misses
+the parent-domain non-source degree-ten monomial
+`[(44,1),(203,-1),(206,-1),(209,1)]` with coefficient `-1`. The remaining
+parent-history coupling is therefore not just whether the final target
+monomial appears; it must also produce the sibling non-source cancellation term
+in the same certified compact history.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use

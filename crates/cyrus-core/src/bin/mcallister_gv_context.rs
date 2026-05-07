@@ -852,6 +852,8 @@ struct CygvSourceQnTermSemigroupProbe {
     error: Option<String>,
     qn_trace_polynomial_count: Option<usize>,
     source_qn_trace_term_count: Option<usize>,
+    source_qn_trace_term_sample_complete: Option<bool>,
+    source_qn_trace_term_signature_sample: Vec<CygvPathSupportQnTraceTermSignature>,
     parent_qn_comparison_status: Option<String>,
 }
 
@@ -4870,6 +4872,8 @@ fn source_qn_term_semigroup_probe_from_elements(
             error: None,
             qn_trace_polynomial_count: None,
             source_qn_trace_term_count: None,
+            source_qn_trace_term_sample_complete: None,
+            source_qn_trace_term_signature_sample: Vec::new(),
             parent_qn_comparison_status: None,
         }));
     }
@@ -4881,6 +4885,8 @@ fn source_qn_term_semigroup_probe_from_elements(
             error: None,
             qn_trace_polynomial_count: None,
             source_qn_trace_term_count: None,
+            source_qn_trace_term_sample_complete: None,
+            source_qn_trace_term_signature_sample: Vec::new(),
             parent_qn_comparison_status: None,
         }));
     }
@@ -4895,6 +4901,8 @@ fn source_qn_term_semigroup_probe_from_elements(
             ),
             qn_trace_polynomial_count: None,
             source_qn_trace_term_count: None,
+            source_qn_trace_term_sample_complete: None,
+            source_qn_trace_term_signature_sample: Vec::new(),
             parent_qn_comparison_status: None,
         }));
     }
@@ -4922,6 +4930,8 @@ fn source_qn_term_semigroup_probe_from_elements(
                 error: Some(format!("{error_label} HKTY failed: {error}")),
                 qn_trace_polynomial_count: None,
                 source_qn_trace_term_count: None,
+                source_qn_trace_term_sample_complete: None,
+                source_qn_trace_term_signature_sample: Vec::new(),
                 parent_qn_comparison_status: None,
             }));
         }
@@ -4936,6 +4946,8 @@ fn source_qn_term_semigroup_probe_from_elements(
                 )),
                 qn_trace_polynomial_count: None,
                 source_qn_trace_term_count: None,
+                source_qn_trace_term_sample_complete: None,
+                source_qn_trace_term_signature_sample: Vec::new(),
                 parent_qn_comparison_status: None,
             }));
         }
@@ -4947,6 +4959,8 @@ fn source_qn_term_semigroup_probe_from_elements(
         .iter()
         .find(|poly| poly.element == source_i32);
     let source_qn_trace_term_count = source_qn.map(|poly| poly.terms.len());
+    let source_qn_trace_term_sample_complete =
+        source_qn.map(|poly| poly.terms.len() <= CYGV_PATH_SUPPORT_QN_TRACE_TERM_SAMPLE_LIMIT);
     let generated_terms = source_qn
         .map(qn_trace_poly_term_signatures)
         .unwrap_or_default();
@@ -4972,6 +4986,8 @@ fn source_qn_term_semigroup_probe_from_elements(
         error: None,
         qn_trace_polynomial_count: Some(qn_trace_polynomial_count),
         source_qn_trace_term_count,
+        source_qn_trace_term_sample_complete,
+        source_qn_trace_term_signature_sample: generated_terms,
         parent_qn_comparison_status,
     }))
 }
