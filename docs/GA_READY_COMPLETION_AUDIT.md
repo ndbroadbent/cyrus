@@ -178,11 +178,12 @@ and matrix-basis pipeline are no longer open.
    decompositions. This is not a substitute for the missing compact/chamber
    semigroup, because GV values are not determined by finite-cone extremality
    alone. The path-history probe now aggregates closure/lower-seed status
-   counts; on the two degree-10 targets, bounded closure hits the `10000`
-   element cap and the small lower-seed diamonds either give `GV=0` or
-   non-integral cygv output. The generation counters show the first closure
-   layer alone would add `130414` elements from `720` seeds, so the first
-   visible decomposition is not a valid replacement for the full HKTY history.
+   counts; the actual-local-cygv lower-diamond report has six raw lower-seed
+   diamonds compute `GV=0`, three raw lower-seed domains fail with non-integral
+   cygv output, and all nine pair-expanded reduced-seed diamonds compute
+   `GV=0`. The generation counters show the first closure layer alone would add
+   `130414` elements from `720` seeds, so the first visible decomposition is
+   not a valid replacement for the full HKTY history.
    The path-history probe can now stop after a full generated layer; for the
    two degree-10 targets the first layer is complete at `131135` elements and
    `99317` previous-window elements, giving a bounded source-history slice for

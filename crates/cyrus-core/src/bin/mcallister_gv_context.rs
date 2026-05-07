@@ -290,6 +290,9 @@ struct ContextReport {
     cygv_path_history_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_decomposition_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_diamond_status_counts: BTreeMap<String, usize>,
+    cygv_lower_seed_diamond_gv_counts: BTreeMap<String, usize>,
+    cygv_pair_expanded_lower_seed_diamond_status_counts: BTreeMap<String, usize>,
+    cygv_pair_expanded_lower_seed_diamond_gv_counts: BTreeMap<String, usize>,
     cygv_closest_known_qn_residual_status_counts: BTreeMap<String, usize>,
     cygv_closest_known_qn_residual_degree_split_counts: BTreeMap<String, usize>,
     cygv_closest_known_qn_residual_source_predecessor_unique_count: usize,
@@ -8873,6 +8876,33 @@ fn build_report(
         }),
         "not_run",
     );
+    let cygv_lower_seed_diamond_gv_counts = optional_status_counts(
+        targets.iter().map(|target| {
+            target
+                .cygv_path_history_probe
+                .as_ref()
+                .and_then(|probe| probe.lower_seed_diamond_gv.as_deref())
+        }),
+        "not_computed",
+    );
+    let cygv_pair_expanded_lower_seed_diamond_status_counts = optional_status_counts(
+        targets.iter().map(|target| {
+            target
+                .cygv_path_history_probe
+                .as_ref()
+                .and_then(|probe| probe.pair_expanded_lower_seed_diamond_status.as_deref())
+        }),
+        "not_run",
+    );
+    let cygv_pair_expanded_lower_seed_diamond_gv_counts = optional_status_counts(
+        targets.iter().map(|target| {
+            target
+                .cygv_path_history_probe
+                .as_ref()
+                .and_then(|probe| probe.pair_expanded_lower_seed_diamond_gv.as_deref())
+        }),
+        "not_computed",
+    );
     let cygv_closest_known_qn_residual_status_counts =
         cygv_closest_known_qn_residual_status_counts(&targets);
     let cygv_closest_known_qn_residual_degree_split_counts =
@@ -9148,6 +9178,9 @@ fn build_report(
         cygv_path_history_status_counts,
         cygv_lower_seed_decomposition_status_counts,
         cygv_lower_seed_diamond_status_counts,
+        cygv_lower_seed_diamond_gv_counts,
+        cygv_pair_expanded_lower_seed_diamond_status_counts,
+        cygv_pair_expanded_lower_seed_diamond_gv_counts,
         cygv_closest_known_qn_residual_status_counts,
         cygv_closest_known_qn_residual_degree_split_counts,
         cygv_closest_known_qn_residual_source_predecessor_unique_count,
