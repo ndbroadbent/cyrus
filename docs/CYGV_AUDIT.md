@@ -2899,6 +2899,27 @@ is promoted: target `7`'s matching degree-six and degree-eight histories return
 return `offset_generators_lp_no_certificate_rank_3_dim_214`. The qN matches
 therefore identify a plausible local history pattern, not a certified
 corrected-chamber face.
+The offset-generator report now also serializes the generator degree buckets,
+sparse generator samples, and a raw `FIND_GV=false` GW coefficient trace for
+the same provided-generator domain. Regenerating target `7` and `8` reports
+as
+`/tmp/cyrus_gv_context_target7_offset_generator_trace_report.json` and
+`/tmp/cyrus_gv_context_target8_offset_generator_trace_report.json` shows the
+non-promotable nature of these domains more explicitly. Target `7`'s shared
+degree-six domain has four generators with degrees `{2:3,4:1}`, computes
+source `GV=-2`, and has `13` non-integral lower GW candidates even though the
+source readout itself is integral (`instanton=4`, `candidate=-2`). Target `7`'s
+degree-eight domain has three generators with degrees `{2:2,6:1}`, computes
+source `GV=-2`, and has `8` non-integral lower GW candidates. Target `8`'s
+shared degree-six domain has three generators with degrees `{2:2,4:1}`,
+computes source `GV=-2`, and has `9` non-integral lower GW candidates. Target
+`8`'s degree-eight domain has three generators with degrees `{2:2,6:1}` and
+still fails the integral GV run; the raw GW trace nevertheless reaches the
+source row with `instanton=-2` and candidate `2`, while exposing `9`
+non-integral lower candidates, including a degree-ten candidate `4/3`.
+Thus the current blocker is not hidden by a missing scalar source readout: the
+candidate domains contain fractional lower coefficient history and still lack
+a supporting-face/chamber certificate.
 The same fresh schema-4 run rules out the nearby support-overlap windows as a
 replacement chamber. For target `7`, traced overlap thresholds `1..4` use
 `64`, `41`, `24`, and `10` supplied generators; for target `8`, they use

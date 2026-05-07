@@ -425,6 +425,17 @@ and matrix-basis pipeline are no longer open.
    statuses at ranks `4` and `3` in dimension `214`, and target `8` reports LP
    no-certificate at rank `3` for both the matching degree-six row and the
    failing degree-eight row.
+   The offset-generator report now also records the exact sparse generators,
+   generator degree buckets, and a raw `FIND_GV=false` GW coefficient trace for
+   the provided-generator domain. Fresh target `7`/`8` runs show that the
+   target `7` degree-six and degree-eight candidate domains and target `8`
+   degree-six candidate domain have integral source readouts with `GV=-2`, but
+   still contain `13`, `8`, and `9` non-integral lower GW candidates,
+   respectively. Target `8`'s degree-eight domain remains an integral-run
+   `hkty_error`; the raw trace reaches source candidate `2` and exposes `9`
+   non-integral lower candidates, including a degree-ten candidate `4/3`.
+   These traces explain why the candidate domains cannot be promoted without a
+   source-derived supporting-face/chamber certificate.
    The target-coefficient balance reconstructs the small-domain
    pre-subtraction readouts: target `7` has lower-source sum `3`,
    post-subtraction coefficient `0`, pivot component `2`, and

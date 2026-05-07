@@ -195,6 +195,17 @@ run pass. Any remaining mismatch must be explicit and localizable.
    schema-4 run timed out at 900 seconds, targets 2-5 time out under 180-second
    per-target probes, and targets 0/1/6 hit non-integer HKTY errors in their
    small path-support domains.
+   The offset-generator qN-history diagnostic now exports the candidate
+   generator degree buckets, sparse generator samples, and raw `FIND_GV=false`
+   GW coefficient traces. Regenerated target `7` and `8` reports show that
+   the matching target-`7` degree-six/degree-eight and target-`8` degree-six
+   domains compute the expected source `GV=-2`, while target `8`'s
+   degree-eight domain still fails the integral `cygv` run but reaches raw
+   source candidate `2`. All four domains expose non-integral lower
+   coefficient history (`13`, `8`, `9`, and `9` non-integer GW candidates,
+   respectively), and all remain without supporting-face certificates. This
+   keeps the blocker at certified chamber-semigroup construction, not scalar
+   source-GV recovery.
    Applying the trace to McAllister still requires the certified corrected-chamber
    semigroup/history domain.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for

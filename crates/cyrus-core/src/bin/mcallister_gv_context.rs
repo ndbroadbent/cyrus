@@ -849,6 +849,9 @@ struct CygvPathSupportTargetLi2SubtractionBalance {
 struct CygvSourceQnTermSemigroupProbe {
     element_count: Option<usize>,
     generator_count: Option<usize>,
+    generator_degree_counts: BTreeMap<i128, usize>,
+    generator_sample_limit: usize,
+    generator_nonzero_sample: Vec<Vec<(usize, i64)>>,
     status: String,
     gv: Option<String>,
     error: Option<String>,
@@ -861,6 +864,13 @@ struct CygvSourceQnTermSemigroupProbe {
     generator_face_certificate_normal_nonzero: Option<Vec<(usize, i64)>>,
     generator_face_certificate_zero_count: Option<usize>,
     generator_face_certificate_positive_count: Option<usize>,
+    gw_coefficient_trace_count: Option<usize>,
+    gw_noninteger_candidate_count: Option<usize>,
+    gw_noninteger_candidate_sample: Vec<CygvPathSupportGvCoefficientTraceSample>,
+    gw_coefficient_trace_error: Option<String>,
+    source_gw_coefficient_status: Option<String>,
+    source_gw_instanton_coefficient: Option<String>,
+    source_gw_candidate: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -5095,11 +5105,17 @@ fn source_qn_term_provided_generator_probe_from_generators(
     error_label: &str,
 ) -> Result<Option<CygvSourceQnTermSemigroupProbe>, String> {
     let source_curve = dense_from_sparse(&source.curve_nonzero, context.dimension)?;
+    let generator_degree_counts =
+        path_support_generator_degree_counts(&generators, context.grading)?;
+    let generator_nonzero_sample = path_support_generator_nonzero_sample(&generators);
     let face_certificate = source_qn_term_generator_face_certificate(&generators, context)?;
     if generators.len() > CYGV_BOUNDED_DECOMPOSITION_DIAMOND_ELEMENT_LIMIT {
         return Ok(Some(CygvSourceQnTermSemigroupProbe {
             element_count: None,
             generator_count: Some(generators.len()),
+            generator_degree_counts,
+            generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+            generator_nonzero_sample,
             status: format!(
                 "skipped_generator_limit_{CYGV_BOUNDED_DECOMPOSITION_DIAMOND_ELEMENT_LIMIT}"
             ),
@@ -5114,12 +5130,22 @@ fn source_qn_term_provided_generator_probe_from_generators(
             generator_face_certificate_normal_nonzero: face_certificate.normal_nonzero,
             generator_face_certificate_zero_count: face_certificate.zero_count,
             generator_face_certificate_positive_count: face_certificate.positive_count,
+            gw_coefficient_trace_count: None,
+            gw_noninteger_candidate_count: None,
+            gw_noninteger_candidate_sample: Vec::new(),
+            gw_coefficient_trace_error: None,
+            source_gw_coefficient_status: None,
+            source_gw_instanton_coefficient: None,
+            source_gw_candidate: None,
         }));
     }
     if context.q_matrix.is_empty() || context.q_cols == 0 {
         return Ok(Some(CygvSourceQnTermSemigroupProbe {
             element_count: None,
             generator_count: Some(generators.len()),
+            generator_degree_counts,
+            generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+            generator_nonzero_sample,
             status: "skipped_no_q_matrix".to_string(),
             gv: None,
             error: None,
@@ -5132,12 +5158,22 @@ fn source_qn_term_provided_generator_probe_from_generators(
             generator_face_certificate_normal_nonzero: face_certificate.normal_nonzero,
             generator_face_certificate_zero_count: face_certificate.zero_count,
             generator_face_certificate_positive_count: face_certificate.positive_count,
+            gw_coefficient_trace_count: None,
+            gw_noninteger_candidate_count: None,
+            gw_noninteger_candidate_sample: Vec::new(),
+            gw_coefficient_trace_error: None,
+            source_gw_coefficient_status: None,
+            source_gw_instanton_coefficient: None,
+            source_gw_candidate: None,
         }));
     }
     if cfg!(panic = "abort") {
         return Ok(Some(CygvSourceQnTermSemigroupProbe {
             element_count: None,
             generator_count: Some(generators.len()),
+            generator_degree_counts,
+            generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+            generator_nonzero_sample,
             status: "hkty_unavailable_panic_abort".to_string(),
             gv: None,
             error: Some(
@@ -5153,6 +5189,13 @@ fn source_qn_term_provided_generator_probe_from_generators(
             generator_face_certificate_normal_nonzero: face_certificate.normal_nonzero,
             generator_face_certificate_zero_count: face_certificate.zero_count,
             generator_face_certificate_positive_count: face_certificate.positive_count,
+            gw_coefficient_trace_count: None,
+            gw_noninteger_candidate_count: None,
+            gw_noninteger_candidate_sample: Vec::new(),
+            gw_coefficient_trace_error: None,
+            source_gw_coefficient_status: None,
+            source_gw_instanton_coefficient: None,
+            source_gw_candidate: None,
         }));
     }
     let max_degree = u32::try_from(max_degree)
@@ -5175,9 +5218,18 @@ fn source_qn_term_provided_generator_probe_from_generators(
     let traced = match traced_result {
         Ok(Ok(traced)) => traced,
         Ok(Err(error)) => {
+            let gw_diagnostic = path_support_gw_coefficient_diagnostic(
+                &generators,
+                context,
+                max_degree,
+                &source_i32,
+            );
             return Ok(Some(CygvSourceQnTermSemigroupProbe {
                 element_count: None,
                 generator_count: Some(generators.len()),
+                generator_degree_counts,
+                generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+                generator_nonzero_sample,
                 status: "hkty_error".to_string(),
                 gv: None,
                 error: Some(format!("{error_label} HKTY failed: {error}")),
@@ -5190,12 +5242,28 @@ fn source_qn_term_provided_generator_probe_from_generators(
                 generator_face_certificate_normal_nonzero: face_certificate.normal_nonzero,
                 generator_face_certificate_zero_count: face_certificate.zero_count,
                 generator_face_certificate_positive_count: face_certificate.positive_count,
+                gw_coefficient_trace_count: gw_diagnostic.trace_count,
+                gw_noninteger_candidate_count: gw_diagnostic.noninteger_candidate_count,
+                gw_noninteger_candidate_sample: gw_diagnostic.noninteger_candidate_sample,
+                gw_coefficient_trace_error: gw_diagnostic.error,
+                source_gw_coefficient_status: gw_diagnostic.target_status,
+                source_gw_instanton_coefficient: gw_diagnostic.target_instanton_coefficient,
+                source_gw_candidate: gw_diagnostic.target_gw_candidate,
             }));
         }
         Err(payload) => {
+            let gw_diagnostic = path_support_gw_coefficient_diagnostic(
+                &generators,
+                context,
+                max_degree,
+                &source_i32,
+            );
             return Ok(Some(CygvSourceQnTermSemigroupProbe {
                 element_count: None,
                 generator_count: Some(generators.len()),
+                generator_degree_counts,
+                generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+                generator_nonzero_sample,
                 status: "hkty_panic".to_string(),
                 gv: None,
                 error: Some(format!(
@@ -5211,6 +5279,13 @@ fn source_qn_term_provided_generator_probe_from_generators(
                 generator_face_certificate_normal_nonzero: face_certificate.normal_nonzero,
                 generator_face_certificate_zero_count: face_certificate.zero_count,
                 generator_face_certificate_positive_count: face_certificate.positive_count,
+                gw_coefficient_trace_count: gw_diagnostic.trace_count,
+                gw_noninteger_candidate_count: gw_diagnostic.noninteger_candidate_count,
+                gw_noninteger_candidate_sample: gw_diagnostic.noninteger_candidate_sample,
+                gw_coefficient_trace_error: gw_diagnostic.error,
+                source_gw_coefficient_status: gw_diagnostic.target_status,
+                source_gw_instanton_coefficient: gw_diagnostic.target_instanton_coefficient,
+                source_gw_candidate: gw_diagnostic.target_gw_candidate,
             }));
         }
     };
@@ -5239,9 +5314,14 @@ fn source_qn_term_provided_generator_probe_from_generators(
         .into_iter()
         .find_map(|(curve, value)| (curve == source_i32).then(|| value.to_string()))
         .unwrap_or_else(|| "0".to_string());
+    let gw_diagnostic =
+        path_support_gw_coefficient_diagnostic(&generators, context, max_degree, &source_i32);
     Ok(Some(CygvSourceQnTermSemigroupProbe {
         element_count: None,
         generator_count: Some(generators.len()),
+        generator_degree_counts,
+        generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+        generator_nonzero_sample,
         status: computed_status.to_string(),
         gv: Some(gv),
         error: None,
@@ -5254,6 +5334,13 @@ fn source_qn_term_provided_generator_probe_from_generators(
         generator_face_certificate_normal_nonzero: face_certificate.normal_nonzero,
         generator_face_certificate_zero_count: face_certificate.zero_count,
         generator_face_certificate_positive_count: face_certificate.positive_count,
+        gw_coefficient_trace_count: gw_diagnostic.trace_count,
+        gw_noninteger_candidate_count: gw_diagnostic.noninteger_candidate_count,
+        gw_noninteger_candidate_sample: gw_diagnostic.noninteger_candidate_sample,
+        gw_coefficient_trace_error: gw_diagnostic.error,
+        source_gw_coefficient_status: gw_diagnostic.target_status,
+        source_gw_instanton_coefficient: gw_diagnostic.target_instanton_coefficient,
+        source_gw_candidate: gw_diagnostic.target_gw_candidate,
     }))
 }
 
@@ -5269,6 +5356,9 @@ fn source_qn_term_semigroup_probe_from_elements(
         return Ok(Some(CygvSourceQnTermSemigroupProbe {
             element_count: Some(elements.len()),
             generator_count: None,
+            generator_degree_counts: BTreeMap::new(),
+            generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+            generator_nonzero_sample: Vec::new(),
             status: format!(
                 "skipped_element_limit_{CYGV_BOUNDED_DECOMPOSITION_DIAMOND_ELEMENT_LIMIT}"
             ),
@@ -5283,12 +5373,22 @@ fn source_qn_term_semigroup_probe_from_elements(
             generator_face_certificate_normal_nonzero: None,
             generator_face_certificate_zero_count: None,
             generator_face_certificate_positive_count: None,
+            gw_coefficient_trace_count: None,
+            gw_noninteger_candidate_count: None,
+            gw_noninteger_candidate_sample: Vec::new(),
+            gw_coefficient_trace_error: None,
+            source_gw_coefficient_status: None,
+            source_gw_instanton_coefficient: None,
+            source_gw_candidate: None,
         }));
     }
     if context.q_matrix.is_empty() || context.q_cols == 0 {
         return Ok(Some(CygvSourceQnTermSemigroupProbe {
             element_count: Some(elements.len()),
             generator_count: None,
+            generator_degree_counts: BTreeMap::new(),
+            generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+            generator_nonzero_sample: Vec::new(),
             status: "skipped_no_q_matrix".to_string(),
             gv: None,
             error: None,
@@ -5301,12 +5401,22 @@ fn source_qn_term_semigroup_probe_from_elements(
             generator_face_certificate_normal_nonzero: None,
             generator_face_certificate_zero_count: None,
             generator_face_certificate_positive_count: None,
+            gw_coefficient_trace_count: None,
+            gw_noninteger_candidate_count: None,
+            gw_noninteger_candidate_sample: Vec::new(),
+            gw_coefficient_trace_error: None,
+            source_gw_coefficient_status: None,
+            source_gw_instanton_coefficient: None,
+            source_gw_candidate: None,
         }));
     }
     if cfg!(panic = "abort") {
         return Ok(Some(CygvSourceQnTermSemigroupProbe {
             element_count: Some(elements.len()),
             generator_count: None,
+            generator_degree_counts: BTreeMap::new(),
+            generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+            generator_nonzero_sample: Vec::new(),
             status: "hkty_unavailable_panic_abort".to_string(),
             gv: None,
             error: Some(
@@ -5322,6 +5432,13 @@ fn source_qn_term_semigroup_probe_from_elements(
             generator_face_certificate_normal_nonzero: None,
             generator_face_certificate_zero_count: None,
             generator_face_certificate_positive_count: None,
+            gw_coefficient_trace_count: None,
+            gw_noninteger_candidate_count: None,
+            gw_noninteger_candidate_sample: Vec::new(),
+            gw_coefficient_trace_error: None,
+            source_gw_coefficient_status: None,
+            source_gw_instanton_coefficient: None,
+            source_gw_candidate: None,
         }));
     }
 
@@ -5344,6 +5461,9 @@ fn source_qn_term_semigroup_probe_from_elements(
             return Ok(Some(CygvSourceQnTermSemigroupProbe {
                 element_count: Some(elements.len()),
                 generator_count: None,
+                generator_degree_counts: BTreeMap::new(),
+                generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+                generator_nonzero_sample: Vec::new(),
                 status: "hkty_error".to_string(),
                 gv: None,
                 error: Some(format!("{error_label} HKTY failed: {error}")),
@@ -5356,12 +5476,22 @@ fn source_qn_term_semigroup_probe_from_elements(
                 generator_face_certificate_normal_nonzero: None,
                 generator_face_certificate_zero_count: None,
                 generator_face_certificate_positive_count: None,
+                gw_coefficient_trace_count: None,
+                gw_noninteger_candidate_count: None,
+                gw_noninteger_candidate_sample: Vec::new(),
+                gw_coefficient_trace_error: None,
+                source_gw_coefficient_status: None,
+                source_gw_instanton_coefficient: None,
+                source_gw_candidate: None,
             }));
         }
         Err(payload) => {
             return Ok(Some(CygvSourceQnTermSemigroupProbe {
                 element_count: Some(elements.len()),
                 generator_count: None,
+                generator_degree_counts: BTreeMap::new(),
+                generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+                generator_nonzero_sample: Vec::new(),
                 status: "hkty_panic".to_string(),
                 gv: None,
                 error: Some(format!(
@@ -5377,6 +5507,13 @@ fn source_qn_term_semigroup_probe_from_elements(
                 generator_face_certificate_normal_nonzero: None,
                 generator_face_certificate_zero_count: None,
                 generator_face_certificate_positive_count: None,
+                gw_coefficient_trace_count: None,
+                gw_noninteger_candidate_count: None,
+                gw_noninteger_candidate_sample: Vec::new(),
+                gw_coefficient_trace_error: None,
+                source_gw_coefficient_status: None,
+                source_gw_instanton_coefficient: None,
+                source_gw_candidate: None,
             }));
         }
     };
@@ -5410,6 +5547,9 @@ fn source_qn_term_semigroup_probe_from_elements(
     Ok(Some(CygvSourceQnTermSemigroupProbe {
         element_count: Some(elements.len()),
         generator_count: None,
+        generator_degree_counts: BTreeMap::new(),
+        generator_sample_limit: CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT,
+        generator_nonzero_sample: Vec::new(),
         status: computed_status.to_string(),
         gv: Some(gv),
         error: None,
@@ -5422,6 +5562,13 @@ fn source_qn_term_semigroup_probe_from_elements(
         generator_face_certificate_normal_nonzero: None,
         generator_face_certificate_zero_count: None,
         generator_face_certificate_positive_count: None,
+        gw_coefficient_trace_count: None,
+        gw_noninteger_candidate_count: None,
+        gw_noninteger_candidate_sample: Vec::new(),
+        gw_coefficient_trace_error: None,
+        source_gw_coefficient_status: None,
+        source_gw_instanton_coefficient: None,
+        source_gw_candidate: None,
     }))
 }
 
@@ -17173,6 +17320,40 @@ mod tests {
             probe.target_li2_subtraction_balance_status.as_deref(),
             Some("reconstructed_from_target_readout_plus_li2_subtractions")
         );
+
+        let mut offset_source = probe.target_monomial_qn_source_sample[0].clone();
+        offset_source.source_bounded_diamond_parent_qn_comparison_status =
+            Some("different_qn_term_counts".to_string());
+        let offset_probe = source_parent_qn_term_offset_generator_probe(&offset_source, &context)
+            .expect("offset-generator probe should run against the actual cygv wrapper")
+            .expect("mismatched qN source should request an offset-generator probe");
+        assert_eq!(
+            offset_probe.status,
+            "computed_source_qn_term_offset_generators"
+        );
+        assert_eq!(offset_probe.generator_count, Some(1));
+        assert_eq!(
+            offset_probe.generator_degree_counts,
+            BTreeMap::from([(1, 1)])
+        );
+        assert_eq!(
+            offset_probe.generator_sample_limit,
+            CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT
+        );
+        assert_eq!(offset_probe.generator_nonzero_sample, vec![vec![(0, 1)]]);
+        assert_eq!(offset_probe.gw_coefficient_trace_count, Some(1));
+        assert_eq!(offset_probe.gw_noninteger_candidate_count, Some(0));
+        assert!(offset_probe.gw_noninteger_candidate_sample.is_empty());
+        assert_eq!(offset_probe.gw_coefficient_trace_error, None);
+        assert_eq!(
+            offset_probe.source_gw_coefficient_status.as_deref(),
+            Some("nonzero_gw")
+        );
+        assert_eq!(
+            offset_probe.source_gw_instanton_coefficient.as_deref(),
+            Some("2875")
+        );
+        assert_eq!(offset_probe.source_gw_candidate.as_deref(), Some("2875"));
     }
 
     #[test]
@@ -17600,6 +17781,18 @@ mod tests {
                 .expect("offset-generator probe should build a bounded diagnostic")
                 .expect("mismatched source with known offset should request offset generators");
         assert_eq!(offset_generator_probe.generator_count, Some(1));
+        assert_eq!(
+            offset_generator_probe.generator_degree_counts,
+            BTreeMap::from([(1, 1)])
+        );
+        assert_eq!(
+            offset_generator_probe.generator_sample_limit,
+            CYGV_PATH_SUPPORT_GENERATOR_SAMPLE_LIMIT
+        );
+        assert_eq!(
+            offset_generator_probe.generator_nonzero_sample,
+            vec![vec![(0, 1)]]
+        );
         assert_eq!(offset_generator_probe.status, "skipped_no_q_matrix");
         assert_eq!(
             offset_generator_probe
