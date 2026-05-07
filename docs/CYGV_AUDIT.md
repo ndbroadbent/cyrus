@@ -2687,7 +2687,12 @@ and
 `cygv_closest_known_qn_residual_qn_domain_parent_only_parent_path_support_gv_coefficient_status_counts`;
 the regenerated target-7 report reads one nonzero/materialized and one
 zero/absent parent-only term, while target `8` reads one zero/absent
-parent-only term.
+parent-only term. A follow-up qN-shape trace confirms that the nonzero
+target-7 side term has no hidden lower-history polynomial of its own:
+`parent_path_support_qn_polynomial_shape_status=identity_single_term_qn_polynomial`
+with the one term equal to the curve itself. The missing-target-shaped
+parent-only terms have no parent-domain qN polynomial shape because the parent
+domain reads them as zero/absent.
 Subtracting the degree-eight residual from each parent-only term shows that all
 of these terms are residual plus a known degree-two toric offset. Target `7`
 has two such offsets, both `known_nonzero_toric_gv` with `GV=-2`: its own

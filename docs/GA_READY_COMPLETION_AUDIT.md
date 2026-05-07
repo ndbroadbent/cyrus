@@ -377,7 +377,10 @@ and matrix-basis pipeline are no longer open.
    parent-only terms for targets `7` and `8` are both parent-domain `GV=0` with
    no qN polynomial and `integer_zero_or_absent_gv` coefficient readouts. The
    small domains therefore expose qN-history coupling but still do not compute
-   the missing target GV. This comparison is currently bounded to the
+   the missing target GV. The qN-shape trace further shows the generated
+   target-`7` side term is only an `identity_single_term_qn_polynomial`, so it
+   is not concealing a lower-history expansion inside its own qN polynomial.
+   This comparison is currently bounded to the
    target `7`/`8` degree-ten pair: the all-target run timed out at `900s`,
    targets `2`-`5` time out under `180s` per-target probes, and targets
    `0`/`1`/`6` reach non-integer HKTY errors in their small path-support

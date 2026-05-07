@@ -175,7 +175,12 @@ run pass. Any remaining mismatch must be explicit and localizable.
    parent-only term has the same zero/absent parent-domain status. Thus the
    observed small domains still do not compute the missing target GV; they
    expose how lower residual history and a generated sibling term enter the
-   parent residual polynomial.
+   parent residual polynomial. A follow-up qN-shape lookup shows the generated
+   target 7 side term is an `identity_single_term_qn_polynomial`, so it has no
+   hidden lower-history terms of its own in this parent domain. The
+   missing-target-shaped parent-only terms for targets 7 and 8 have no
+   parent-domain qN polynomial shape because those same parent domains read
+   them as zero/absent.
    The same report is not yet scalable across all nine misses: the all-target
    schema-4 run timed out at 900 seconds, targets 2-5 time out under 180-second
    per-target probes, and targets 0/1/6 hit non-integer HKTY errors in their
