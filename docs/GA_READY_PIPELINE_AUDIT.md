@@ -201,9 +201,16 @@ to make the remaining GV layer more first-principles:
    are the relevant Kähler wall/chamber context and identifies the shrinking
    divisor from geometry rather than from a fitted candidate list. The
    LP-witness face diagnostic is useful but currently uncertified, so it must
-   remain a diagnostic rather than a fallback. The immediate audit checkpoint is to
-   reconstruct the smallest exact semigroup/chamber context for these
-   higher-rank origin circuits. The prior checkpoint of distinguishing exact
+   remain a diagnostic rather than a fallback. Cyrus now has a reusable
+   LP-assisted supporting-face certificate search for higher-codimension
+   supports, but it only promotes normals that pass exact integer verification.
+   On the schema-3 corrected-chamber context, the bounded origin-support pass
+   found no promoted relation-support certificate for eight targets, reported
+   solver errors for one relation support and three small shared-facet supports,
+   and skipped larger facet-union supports under the 256-generator cap. The
+   immediate audit checkpoint is still to reconstruct the smallest exact
+   semigroup/chamber context for these higher-rank origin circuits. The prior
+   checkpoint of distinguishing exact
    integer-semigroup decompositions from rational-cone-only LP witnesses is now
    complete: the nine current solved-t misses split into five integer-semigroup
    LP active-generator decompositions and four rational-cone-only

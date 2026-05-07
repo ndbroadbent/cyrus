@@ -14,7 +14,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 
 use cyrus_core::gv::{
-    certify_supporting_mori_face_by_exact_kernel, cygv_pair_reduced_seed_generators,
+    SupportingMoriFaceLpSearchOptions, certify_supporting_mori_face_by_exact_kernel,
+    certify_supporting_mori_face_by_lp_search, cygv_pair_reduced_seed_generators,
 };
 use cyrus_core::types::rational::Rational;
 use cyrus_core::types::tags::Finite;
@@ -1190,8 +1191,14 @@ fn origin_circuit_ambient_support_face_certificate_status(
         allowed_ambient_support,
         context.dimension,
     );
-    let Ok(generators) = generators else {
-        return "origin_support_certificate_error".to_string();
+    let generators = match generators {
+        Ok(generators) => generators,
+        Err(error) => {
+            return format!(
+                "origin_support_certificate_error_{}",
+                status_error_fragment(&error)
+            );
+        }
     };
     if generators.is_empty() {
         return "origin_support_no_generators".to_string();
@@ -1204,19 +1211,63 @@ fn origin_circuit_ambient_support_face_certificate_status(
     }
     let rank = match curve_row_span_rank(&generators) {
         Ok(rank) => rank,
-        Err(_) => return "origin_support_certificate_error".to_string(),
+        Err(error) => {
+            return format!(
+                "origin_support_certificate_error_{}",
+                status_error_fragment(&error.to_string())
+            );
+        }
     };
     if rank != context.dimension.saturating_sub(1) {
-        return format!(
-            "origin_support_not_codimension_one_rank_{rank}_dim_{}",
-            context.dimension
-        );
+        let options = SupportingMoriFaceLpSearchOptions::default();
+        return match certify_supporting_mori_face_by_lp_search(
+            &generators,
+            context.degree_bounded_rays,
+            &options,
+        ) {
+            Ok(Some(certificate)) => format!(
+                "origin_support_certified_lp_containing_face_rank_{rank}_dim_{}_zero_{}_positive_{}",
+                context.dimension,
+                certificate.zero_generator_count,
+                certificate.positive_generator_count
+            ),
+            Ok(None) => format!(
+                "origin_support_lp_no_certificate_rank_{rank}_dim_{}",
+                context.dimension
+            ),
+            Err(error) => format!(
+                "origin_support_certificate_error_{}",
+                status_error_fragment(&error.to_string())
+            ),
+        };
     }
     match certify_supporting_mori_face_by_exact_kernel(&generators, context.degree_bounded_rays) {
         Ok(Some(_)) => "origin_support_certified_codimension_one_face".to_string(),
         Ok(None) => "origin_support_codimension_one_but_not_supporting".to_string(),
-        Err(_) => "origin_support_certificate_error".to_string(),
+        Err(error) => format!(
+            "origin_support_certificate_error_{}",
+            status_error_fragment(&error.to_string())
+        ),
     }
+}
+
+fn status_error_fragment(error: &str) -> String {
+    let mut out = String::new();
+    for ch in error.chars() {
+        let mapped = if ch.is_ascii_alphanumeric() {
+            ch.to_ascii_lowercase()
+        } else {
+            '_'
+        };
+        if out.ends_with('_') && mapped == '_' {
+            continue;
+        }
+        out.push(mapped);
+        if out.len() >= 160 {
+            break;
+        }
+    }
+    out.trim_matches('_').to_string()
 }
 
 fn degree_bounded_ray_context_support_generators(
@@ -4449,7 +4500,7 @@ mod tests {
         );
         assert_eq!(
             certificates.shared_facet.as_deref(),
-            Some("origin_support_not_codimension_one_rank_2_dim_2")
+            Some("origin_support_lp_no_certificate_rank_2_dim_2")
         );
         assert_eq!(
             certificates.facet_union.as_deref(),
@@ -5356,6 +5407,14 @@ mod tests {
         assert!(target_index_selected(3, None));
         assert!(target_index_selected(3, Some(3)));
         assert!(!target_index_selected(3, Some(4)));
+    }
+
+    #[test]
+    fn status_error_fragment_is_stable_for_report_keys() {
+        assert_eq!(
+            status_error_fragment("supporting Mori face normal LP failed: infeasible?"),
+            "supporting_mori_face_normal_lp_failed_infeasible"
+        );
     }
 
     #[test]

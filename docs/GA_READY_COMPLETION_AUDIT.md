@@ -143,7 +143,11 @@ and matrix-basis pipeline are no longer open.
    vector-only.
 4. **Compact GV semigroup/face certification.** Missing corrected-chamber GV
    classes need a source-derived compact or certified face semigroup that can
-   be handed to `cygv`, not an unproven local CKYZ substitute.
+   be handed to `cygv`, not an unproven local CKYZ substitute. Cyrus now has an
+   LP-assisted supporting-face search whose successful outputs are exact
+   integer certificates, but the current schema-3 McAllister origin-support
+   pass still finds no promoted certificate for the remaining relation supports
+   and leaves several larger shared/union supports capped or solver-blocked.
 5. **Potent-ray local diagnostics.** Rank-two N=10 and rank-four potent-ray
    rows are still incomplete, but they are validation diagnostics rather than
    blockers for the compact GA-ready GV engine.

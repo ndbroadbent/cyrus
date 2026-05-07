@@ -747,6 +747,35 @@ pub struct SupportingMoriFaceCertificate {
     pub positive_generator_count: usize,
 }
 
+/// Search controls for LP-assisted supporting Mori face certificates.
+///
+/// The LP only proposes candidate normals. Any returned certificate is verified
+/// exactly with integer arithmetic by [`check_supporting_mori_face_normal`].
+/// A failed search is inconclusive: it does not prove that no supporting normal
+/// exists.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SupportingMoriFaceLpSearchOptions {
+    /// Maximum number of anchor rays to try after the aggregate-normal pass.
+    pub anchor_attempts: usize,
+    /// Maximum cutting-plane rounds used to add violated Mori inequalities.
+    pub cutting_rounds: usize,
+    /// Largest integer scale used when rounding an LP normal.
+    pub scale_limit: i64,
+    /// Symmetric bound for each LP normal coordinate.
+    pub variable_bound: f64,
+}
+
+impl Default for SupportingMoriFaceLpSearchOptions {
+    fn default() -> Self {
+        Self {
+            anchor_attempts: 16,
+            cutting_rounds: 64,
+            scale_limit: 100_000,
+            variable_bound: 1.0e9,
+        }
+    }
+}
+
 /// Exact certificate that a target curve spans an extremal Mori ray.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExtremalMoriRayCertificate {
@@ -8386,6 +8415,456 @@ pub fn certify_supporting_mori_face_by_exact_kernel(
     check_supporting_mori_face_normal(&opposite_normal, face_generators, mori_generators)
 }
 
+/// Search for an exact supporting Mori face certificate using LP candidates.
+///
+/// This handles higher-codimension faces where the integer kernel has dimension
+/// greater than one. The LP pass chooses a candidate normal inside that kernel,
+/// then Cyrus rounds/scales candidate normals and verifies them exactly with
+/// [`check_supporting_mori_face_normal`]. A successful return is therefore an
+/// exact certificate; `Ok(None)` only means this bounded LP search did not find
+/// one.
+pub fn certify_supporting_mori_face_by_lp_search(
+    face_generators: &[Vec<i64>],
+    mori_generators: &[Vec<i64>],
+    options: &SupportingMoriFaceLpSearchOptions,
+) -> Result<Option<SupportingMoriFaceCertificate>> {
+    if face_generators.is_empty() {
+        return Ok(None);
+    }
+    validate_supporting_face_lp_inputs(face_generators, mori_generators, options)?;
+    if let Some(certificate) =
+        certify_supporting_mori_face_by_exact_kernel(face_generators, mori_generators)?
+    {
+        return Ok(Some(certificate));
+    }
+
+    if let Some(lp_normal) =
+        solve_supporting_face_normal_aggregate_lp(face_generators, mori_generators, options)?
+        && let Some(certificate) = integer_supporting_face_certificate_from_lp(
+            &lp_normal,
+            face_generators,
+            mori_generators,
+            options,
+        )?
+    {
+        return Ok(Some(certificate));
+    }
+
+    let anchors = supporting_face_anchor_candidates(face_generators, mori_generators, options)?;
+    for anchor in anchors {
+        let Some(lp_normal) =
+            solve_supporting_face_normal_lp(face_generators, mori_generators, &anchor, options)?
+        else {
+            continue;
+        };
+        if let Some(certificate) = integer_supporting_face_certificate_from_lp(
+            &lp_normal,
+            face_generators,
+            mori_generators,
+            options,
+        )? {
+            return Ok(Some(certificate));
+        }
+    }
+
+    Ok(None)
+}
+
+fn validate_supporting_face_lp_inputs(
+    face_generators: &[Vec<i64>],
+    mori_generators: &[Vec<i64>],
+    options: &SupportingMoriFaceLpSearchOptions,
+) -> Result<()> {
+    let Some(first_mori_generator) = mori_generators.first() else {
+        return Err(Error::InvalidInput(
+            "supporting Mori face LP search requires Mori generators".into(),
+        ));
+    };
+    let dim = first_mori_generator.len();
+    if dim == 0 {
+        return Err(Error::InvalidInput(
+            "supporting Mori face LP search dimension is zero".into(),
+        ));
+    }
+    for generator in face_generators {
+        validate_curve_dimension("face generator", generator, dim)?;
+    }
+    for generator in mori_generators {
+        validate_curve_dimension("Mori generator", generator, dim)?;
+    }
+    if options.cutting_rounds == 0 {
+        return Err(Error::InvalidInput(
+            "supporting Mori face LP search cutting rounds must be positive".into(),
+        ));
+    }
+    if options.scale_limit <= 0 {
+        return Err(Error::InvalidInput(
+            "supporting Mori face LP search scale limit must be positive".into(),
+        ));
+    }
+    if !options.variable_bound.is_finite() || options.variable_bound <= 0.0 {
+        return Err(Error::InvalidInput(
+            "supporting Mori face LP search variable bound must be positive and finite".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn supporting_face_anchor_candidates(
+    face_generators: &[Vec<i64>],
+    mori_generators: &[Vec<i64>],
+    options: &SupportingMoriFaceLpSearchOptions,
+) -> Result<Vec<Vec<i64>>> {
+    if face_generators.is_empty() {
+        return Ok(Vec::new());
+    }
+    let dim = face_generators[0].len();
+    let face_rank = curve_row_span_rank(face_generators)?;
+    if face_rank >= dim {
+        return Ok(Vec::new());
+    }
+
+    let mut anchors = Vec::new();
+    let mut seen = HashSet::new();
+    for ray in mori_generators {
+        if face_generators.iter().any(|generator| generator == ray) || !seen.insert(ray.clone()) {
+            continue;
+        }
+        let mut rows = face_generators.to_vec();
+        rows.push(ray.clone());
+        if curve_row_span_rank(&rows)? > face_rank {
+            anchors.push(ray.clone());
+            if anchors.len() >= options.anchor_attempts {
+                break;
+            }
+        }
+    }
+    Ok(anchors)
+}
+
+fn solve_supporting_face_normal_aggregate_lp(
+    face_generators: &[Vec<i64>],
+    mori_generators: &[Vec<i64>],
+    options: &SupportingMoriFaceLpSearchOptions,
+) -> Result<Option<Vec<f64>>> {
+    let aggregate = aggregate_mori_ray_coefficients(mori_generators)?;
+    let mut enforced_ray_indices = Vec::new();
+    let mut enforced_ray_set = HashSet::new();
+    for _ in 0..options.cutting_rounds {
+        let Some(normal) = solve_supporting_face_normal_aggregate_lp_with_enforced_rays(
+            face_generators,
+            mori_generators,
+            &aggregate,
+            &enforced_ray_indices,
+            options,
+        )?
+        else {
+            return Ok(None);
+        };
+        let Some(violating_idx) = most_negative_lp_normal_violation(&normal, mori_generators)
+        else {
+            return Ok(Some(normal));
+        };
+        if !enforced_ray_set.insert(violating_idx) {
+            return Ok(None);
+        }
+        enforced_ray_indices.push(violating_idx);
+    }
+    Ok(None)
+}
+
+fn aggregate_mori_ray_coefficients(mori_generators: &[Vec<i64>]) -> Result<Vec<i128>> {
+    let Some(first_ray) = mori_generators.first() else {
+        return Err(Error::InvalidInput(
+            "supporting Mori face aggregate normal LP requires Mori generators".into(),
+        ));
+    };
+    let dim = first_ray.len();
+    let mut aggregate = vec![0_i128; dim];
+    for ray in mori_generators {
+        validate_curve_dimension("Mori generator", ray, dim)?;
+        for (slot, &coefficient) in aggregate.iter_mut().zip(ray) {
+            *slot = (*slot)
+                .checked_add(i128::from(coefficient))
+                .ok_or_else(|| {
+                    Error::InvalidInput(
+                        "supporting Mori face aggregate normal LP coefficient overflowed".into(),
+                    )
+                })?;
+        }
+    }
+    Ok(aggregate)
+}
+
+fn solve_supporting_face_normal_aggregate_lp_with_enforced_rays(
+    face_generators: &[Vec<i64>],
+    mori_generators: &[Vec<i64>],
+    aggregate: &[i128],
+    enforced_ray_indices: &[usize],
+    options: &SupportingMoriFaceLpSearchOptions,
+) -> Result<Option<Vec<f64>>> {
+    let normal_vars = supporting_face_normal_vars(aggregate.len(), options)?;
+    let vars = normal_vars.variables;
+    let mut objective = Expression::from(0.0);
+    objective.add_mul(0.0, normal_vars.normal[0]);
+    let mut model = vars.minimise(objective).using(default_solver);
+
+    model = add_supporting_face_zero_constraints(model, &normal_vars.normal, face_generators);
+
+    let mut aggregate_expr = Expression::from(0.0);
+    for (var, &coefficient) in normal_vars.normal.iter().zip(aggregate) {
+        if coefficient != 0 {
+            aggregate_expr.add_mul(coefficient as f64, *var);
+        }
+    }
+    model = model.with(aggregate_expr.geq(1.0));
+
+    model = add_supporting_face_enforced_ray_constraints(
+        model,
+        &normal_vars.normal,
+        mori_generators,
+        enforced_ray_indices,
+    )?;
+    solve_supporting_face_normal_lp_model(model, &normal_vars.normal)
+}
+
+fn solve_supporting_face_normal_lp(
+    face_generators: &[Vec<i64>],
+    mori_generators: &[Vec<i64>],
+    anchor: &[i64],
+    options: &SupportingMoriFaceLpSearchOptions,
+) -> Result<Option<Vec<f64>>> {
+    let mut enforced_ray_indices = Vec::new();
+    let mut enforced_ray_set = HashSet::new();
+    for _ in 0..options.cutting_rounds {
+        let Some(normal) = solve_supporting_face_normal_lp_with_enforced_rays(
+            face_generators,
+            mori_generators,
+            anchor,
+            &enforced_ray_indices,
+            options,
+        )?
+        else {
+            return Ok(None);
+        };
+        let Some(violating_idx) = most_negative_lp_normal_violation(&normal, mori_generators)
+        else {
+            return Ok(Some(normal));
+        };
+        if !enforced_ray_set.insert(violating_idx) {
+            return Ok(None);
+        }
+        enforced_ray_indices.push(violating_idx);
+    }
+    Ok(None)
+}
+
+fn solve_supporting_face_normal_lp_with_enforced_rays(
+    face_generators: &[Vec<i64>],
+    mori_generators: &[Vec<i64>],
+    anchor: &[i64],
+    enforced_ray_indices: &[usize],
+    options: &SupportingMoriFaceLpSearchOptions,
+) -> Result<Option<Vec<f64>>> {
+    let normal_vars = supporting_face_normal_vars(anchor.len(), options)?;
+    let vars = normal_vars.variables;
+    let mut objective = Expression::from(0.0);
+    objective.add_mul(0.0, normal_vars.normal[0]);
+    let mut model = vars.minimise(objective).using(default_solver);
+
+    model = add_supporting_face_zero_constraints(model, &normal_vars.normal, face_generators);
+
+    let mut anchor_expr = Expression::from(0.0);
+    for (var, &coefficient) in normal_vars.normal.iter().zip(anchor) {
+        if coefficient != 0 {
+            anchor_expr.add_mul(coefficient as f64, *var);
+        }
+    }
+    model = model.with(anchor_expr.eq(1.0));
+
+    model = add_supporting_face_enforced_ray_constraints(
+        model,
+        &normal_vars.normal,
+        mori_generators,
+        enforced_ray_indices,
+    )?;
+    solve_supporting_face_normal_lp_model(model, &normal_vars.normal)
+}
+
+struct SupportingFaceNormalVars {
+    variables: ProblemVariables,
+    normal: Vec<Variable>,
+}
+
+fn supporting_face_normal_vars(
+    dim: usize,
+    options: &SupportingMoriFaceLpSearchOptions,
+) -> Result<SupportingFaceNormalVars> {
+    if dim == 0 {
+        return Err(Error::InvalidInput(
+            "supporting Mori face LP dimension is zero".into(),
+        ));
+    }
+    let mut variables = ProblemVariables::new();
+    let normal = (0..dim)
+        .map(|_| {
+            variables.add(
+                variable()
+                    .min(-options.variable_bound)
+                    .max(options.variable_bound),
+            )
+        })
+        .collect::<Vec<_>>();
+    Ok(SupportingFaceNormalVars { variables, normal })
+}
+
+fn add_supporting_face_zero_constraints<M: SolverModel>(
+    mut model: M,
+    normal_vars: &[Variable],
+    face_generators: &[Vec<i64>],
+) -> M {
+    for generator in face_generators {
+        let mut expr = Expression::from(0.0);
+        for (var, &coefficient) in normal_vars.iter().zip(generator) {
+            if coefficient != 0 {
+                expr.add_mul(coefficient as f64, *var);
+            }
+        }
+        model = model.with(expr.eq(0.0));
+    }
+    model
+}
+
+fn add_supporting_face_enforced_ray_constraints<M: SolverModel>(
+    mut model: M,
+    normal_vars: &[Variable],
+    mori_generators: &[Vec<i64>],
+    enforced_ray_indices: &[usize],
+) -> Result<M> {
+    for &ray_idx in enforced_ray_indices {
+        let ray = mori_generators.get(ray_idx).ok_or_else(|| {
+            Error::InvalidInput(format!(
+                "supporting Mori face enforced ray index {ray_idx} is out of bounds"
+            ))
+        })?;
+        let mut expr = Expression::from(0.0);
+        for (var, &coefficient) in normal_vars.iter().zip(ray) {
+            if coefficient != 0 {
+                expr.add_mul(coefficient as f64, *var);
+            }
+        }
+        model = model.with(expr.geq(0.0));
+    }
+    Ok(model)
+}
+
+fn solve_supporting_face_normal_lp_model<M: SolverModel<Error = ResolutionError>>(
+    model: M,
+    normal_vars: &[Variable],
+) -> Result<Option<Vec<f64>>> {
+    let solution = match model.solve() {
+        Ok(solution) => solution,
+        Err(ResolutionError::Infeasible) => return Ok(None),
+        Err(err) => {
+            return Err(Error::InvalidInput(format!(
+                "supporting Mori face normal LP failed: {err}"
+            )));
+        }
+    };
+    let normal = normal_vars
+        .iter()
+        .map(|var| solution.value(*var))
+        .collect::<Vec<_>>();
+    if normal.iter().all(|value| value.is_finite()) {
+        Ok(Some(normal))
+    } else {
+        Err(Error::InvalidInput(
+            "supporting Mori face normal LP returned a non-finite value".into(),
+        ))
+    }
+}
+
+fn most_negative_lp_normal_violation(
+    lp_normal: &[f64],
+    mori_generators: &[Vec<i64>],
+) -> Option<usize> {
+    let mut worst_idx = None;
+    let mut worst_dot = -1.0e-7;
+    for (idx, ray) in mori_generators.iter().enumerate() {
+        let dot = lp_normal
+            .iter()
+            .zip(ray)
+            .map(|(&normal_coeff, &ray_coeff)| normal_coeff * ray_coeff as f64)
+            .sum::<f64>();
+        if dot < worst_dot {
+            worst_dot = dot;
+            worst_idx = Some(idx);
+        }
+    }
+    worst_idx
+}
+
+fn integer_supporting_face_certificate_from_lp(
+    lp_normal: &[f64],
+    face_generators: &[Vec<i64>],
+    mori_generators: &[Vec<i64>],
+    options: &SupportingMoriFaceLpSearchOptions,
+) -> Result<Option<SupportingMoriFaceCertificate>> {
+    let mut seen_normals = HashSet::new();
+    for scale in 1..=options.scale_limit {
+        let Some(normal) = rounded_reduced_i64_normal(lp_normal, scale)? else {
+            continue;
+        };
+        if !seen_normals.insert(normal.clone()) {
+            continue;
+        }
+        if let Some(certificate) =
+            check_supporting_mori_face_normal(&normal, face_generators, mori_generators)?
+        {
+            return Ok(Some(certificate));
+        }
+    }
+    Ok(None)
+}
+
+fn rounded_reduced_i64_normal(lp_normal: &[f64], scale: i64) -> Result<Option<Vec<i64>>> {
+    let mut normal = Vec::with_capacity(lp_normal.len());
+    for &value in lp_normal {
+        let scaled = value * scale as f64;
+        if !scaled.is_finite() || scaled < i64::MIN as f64 || scaled > i64::MAX as f64 {
+            return Err(Error::InvalidInput(
+                "supporting Mori face LP normal does not fit in i64 after scaling".into(),
+            ));
+        }
+        normal.push(scaled.round() as i64);
+    }
+    reduce_i64_vector_preserve_sign(&normal)
+}
+
+fn reduce_i64_vector_preserve_sign(values: &[i64]) -> Result<Option<Vec<i64>>> {
+    let mut gcd = 0i64;
+    for &value in values {
+        if value == i64::MIN {
+            return Err(Error::InvalidInput(
+                "supporting Mori face normal coefficient is i64::MIN".into(),
+            ));
+        }
+        gcd = gcd_i64(gcd, value.abs());
+    }
+    if gcd == 0 {
+        return Ok(None);
+    }
+    values
+        .iter()
+        .map(|&value| {
+            value.checked_div(gcd).ok_or_else(|| {
+                Error::InvalidInput("supporting Mori face normal reduction divided by zero".into())
+            })
+        })
+        .collect::<Result<Vec<_>>>()
+        .map(Some)
+}
+
 /// Extract the Mori generators cut out by an exact supporting normal.
 ///
 /// The returned generators are the rows of `mori_generators` whose exact
@@ -11845,8 +12324,9 @@ mod tests {
         CkyzMonomialDomain, CurveDecompositionTerm, CurvePruningStrategy, GvCachePolicy,
         GvLatticeAugmentation, LocalToricCircuitKind, LocalToricCoordinate2D,
         NilpotentRayCandidate, NilpotentRayDegreeSlice, NilpotentRaySliceDistance,
-        OriginCircuitCurveWitness, OriginCircuitRelationPoint, ToricCurveCandidate,
-        certify_supporting_mori_face_by_exact_kernel, check_extremal_mori_ray_separator,
+        OriginCircuitCurveWitness, OriginCircuitRelationPoint, SupportingMoriFaceLpSearchOptions,
+        ToricCurveCandidate, certify_supporting_mori_face_by_exact_kernel,
+        certify_supporting_mori_face_by_lp_search, check_extremal_mori_ray_separator,
         check_supporting_mori_face_normal, ckyz_cover_closed_target_degrees,
         ckyz_cygv_previous_qn_level_count, ckyz_expalpha_power_caches_domain, ckyz_grading_degree,
         ckyz_grading_vector_from_cover_weights, ckyz_indexed_alpha_series,
@@ -11886,7 +12366,7 @@ mod tests {
         curve_row_span_rank, curve_volume_in_divisor_basis, cygv_pair_reduced_seed_generators,
         detect_apparent_nilpotent_ray_from_gv_multiples,
         detect_apparent_nilpotent_rays_from_gv_table, diagnose_affine_toric_circuit,
-        dump_mori_rays_cdd, extract_ckyz_local_gv_invariants_from_potential,
+        dump_mori_rays_cdd, exact_i64_dot_checked, extract_ckyz_local_gv_invariants_from_potential,
         extract_ckyz_local_gv_invariants_from_potential_for_degrees,
         extract_ckyz_local_gv_invariants_from_z_potential_for_degrees,
         find_extremal_mori_ray_separator, find_pair_decomposition, find_semigroup_decomposition,
@@ -14283,6 +14763,68 @@ mod tests {
         .unwrap();
 
         assert!(certificate.is_none());
+    }
+
+    #[test]
+    fn supporting_mori_face_lp_search_certifies_higher_codimension_face() {
+        let certificate = certify_supporting_mori_face_by_lp_search(
+            &[vec![1, 0, 0]],
+            &[vec![1, 0, 0], vec![0, 1, 0], vec![0, 0, 1], vec![1, 1, 1]],
+            &SupportingMoriFaceLpSearchOptions::default(),
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(
+            exact_i64_dot_checked(&certificate.normal, &[1, 0, 0]).unwrap(),
+            0
+        );
+        assert!(certificate.zero_generator_count >= 1);
+        assert!(certificate.positive_generator_count >= 1);
+        assert_eq!(
+            certificate.zero_generator_count + certificate.positive_generator_count,
+            4
+        );
+    }
+
+    #[test]
+    fn supporting_mori_face_lp_search_rejects_full_dimensional_support() {
+        let certificate = certify_supporting_mori_face_by_lp_search(
+            &[vec![1, 0], vec![0, 1]],
+            &[vec![1, 0], vec![0, 1], vec![1, 1]],
+            &SupportingMoriFaceLpSearchOptions::default(),
+        )
+        .unwrap();
+
+        assert!(certificate.is_none());
+    }
+
+    #[test]
+    fn supporting_mori_face_lp_search_declines_empty_support() {
+        let certificate = certify_supporting_mori_face_by_lp_search(
+            &[],
+            &[vec![1, 0], vec![0, 1]],
+            &SupportingMoriFaceLpSearchOptions::default(),
+        )
+        .unwrap();
+
+        assert!(certificate.is_none());
+    }
+
+    #[test]
+    fn supporting_mori_face_lp_search_checks_options() {
+        let options = SupportingMoriFaceLpSearchOptions {
+            scale_limit: 0,
+            ..SupportingMoriFaceLpSearchOptions::default()
+        };
+        let err = certify_supporting_mori_face_by_lp_search(
+            &[vec![1, 0, 0]],
+            &[vec![1, 0, 0], vec![0, 1, 0]],
+            &options,
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("scale limit must be positive"));
     }
 
     #[test]

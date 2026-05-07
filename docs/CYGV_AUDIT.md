@@ -216,11 +216,14 @@ separate operations:
   directly from the integer kernel of the supplied face generators, then runs
   the same verifier.
 
-The exact-kernel path is deliberately conservative. If the face has a
-higher-dimensional kernel, Cyrus returns no certificate instead of choosing an
-LP-rounded normal. That leaves the harder higher-codimension face-selection
-problem open, but prevents an approximate diagnostic from becoming a hidden
-assumption in the GV pipeline.
+The exact-kernel path is deliberately conservative for codimension-one faces.
+For higher-codimension supports, Cyrus also has an LP-assisted search that
+proposes candidate normals and then verifies any returned normal exactly with
+integer arithmetic. A successful LP-assisted result is an exact certificate;
+failure remains inconclusive and must not be interpreted as proof that no face
+exists. The diagnostic status explicitly says when it found only a containing
+face, because the HKTY semigroup would have to use the full zero-pairing face,
+not just the smaller sampled support.
 
 The McAllister corrected-chamber LP-witness diagnostic confirms this boundary.
 With exact-kernel and aggregate-normal LP certificate attempts enabled, the
@@ -247,9 +250,13 @@ surface diagrams: the rank inventory is `{3: 4, 4: 5}`. Each has a one-row
 local affine charge basis because the sampled support has `points = affine_rank
 + 2`, but no rank-two local coordinate model is available. Therefore the
 rank-two CKYZ/potent-ray machinery cannot simply be reused for these missing
-nilpotent origin circuits. The next source-derived object has to be the
-higher-rank local semigroup or flop/chamber context for these origin-circuit
-supports.
+nilpotent origin circuits. A bounded origin-support LP-certificate pass on the
+schema-3 context found no exact certificate for eight relation supports and hit
+solver errors for one relation support plus three small shared-facet supports;
+larger facet-union supports were intentionally skipped by the 256-generator
+cap. The next source-derived object therefore remains the higher-rank local
+semigroup or flop/chamber context for these origin-circuit supports, not a
+promoted LP-witness fallback.
 
 The missing-target diagnostic now also records the B-field parity and real-axis
 polylog branch status for these unresolved classes. For the current solved-t
