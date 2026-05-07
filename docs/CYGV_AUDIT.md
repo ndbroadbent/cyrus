@@ -2344,7 +2344,12 @@ phase/tensor normalization. The three degree-10 rows give origin-included
 unit-tensor GV `0` and origin-omitted unit-tensor GV `-1`, while their formula
 candidate set is `{-2,1}`. Thus four of the five origin-circuit lower leaves
 still require a certified local phase/intersection/chamber model rather than a
-unit-tensor promotion.
+unit-tensor promotion. The top-level aggregate is
+`active_decomposition_source_leaf_unit_phase_probe_status_counts =
+{"not_available":3,"unit_tensor_probe_matches_expected_formula_set_but_uncertified":1,
+"unit_tensor_probe_mismatch_expected_formula_set":4}` and the origin-omitted
+aggregate is `{"not_available":3,"origin_omitted_unit_tensor_probe_hkty_error":2,
+"origin_omitted_unit_tensor_probe_mismatch_expected_formula_set":3}`.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

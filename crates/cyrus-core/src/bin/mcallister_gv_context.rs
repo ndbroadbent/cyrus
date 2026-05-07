@@ -194,6 +194,9 @@ struct ContextReport {
     target_status_counts: BTreeMap<String, usize>,
     active_decomposition_generator_source_status_counts: BTreeMap<String, usize>,
     active_decomposition_unresolved_source_leaf_sample: Vec<ActiveDecompositionSourceLeafSummary>,
+    active_decomposition_source_leaf_unit_phase_probe_status_counts: BTreeMap<String, usize>,
+    active_decomposition_source_leaf_origin_omitted_unit_phase_probe_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_charge_signature_counts: BTreeMap<String, usize>,
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
     local_cygv_actual_call_readiness_counts: BTreeMap<String, usize>,
@@ -2372,6 +2375,34 @@ fn active_decomposition_unresolved_source_leaf_summaries(
         }
     }
     summaries.into_values().collect()
+}
+
+fn active_decomposition_source_leaf_unit_phase_probe_status_counts(
+    summaries: &[ActiveDecompositionSourceLeafSummary],
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        summaries.iter().map(|summary| {
+            summary
+                .matching_uncovered_source_ray_local_unit_phase_probe
+                .as_ref()
+                .map(|probe| probe.unit_tensor_probe_status.as_str())
+        }),
+        "not_available",
+    )
+}
+
+fn active_decomposition_source_leaf_origin_omitted_unit_phase_probe_status_counts(
+    summaries: &[ActiveDecompositionSourceLeafSummary],
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        summaries.iter().map(|summary| {
+            summary
+                .matching_uncovered_source_ray_local_unit_phase_probe
+                .as_ref()
+                .map(|probe| probe.origin_omitted_unit_tensor_probe_status.as_str())
+        }),
+        "not_available",
+    )
 }
 
 fn path_support_lookup_status(
@@ -7022,6 +7053,14 @@ fn build_report(
             validated,
             target_index_filter,
         );
+    let active_decomposition_source_leaf_unit_phase_probe_status_counts =
+        active_decomposition_source_leaf_unit_phase_probe_status_counts(
+            &active_decomposition_unresolved_source_leaf_sample,
+        );
+    let active_decomposition_source_leaf_origin_omitted_unit_phase_probe_status_counts =
+        active_decomposition_source_leaf_origin_omitted_unit_phase_probe_status_counts(
+            &active_decomposition_unresolved_source_leaf_sample,
+        );
     ContextReport {
         schema_version: context.schema_version,
         dimension: validated.dimension,
@@ -7050,6 +7089,8 @@ fn build_report(
         target_status_counts,
         active_decomposition_generator_source_status_counts,
         active_decomposition_unresolved_source_leaf_sample,
+        active_decomposition_source_leaf_unit_phase_probe_status_counts,
+        active_decomposition_source_leaf_origin_omitted_unit_phase_probe_status_counts,
         local_cygv_charge_signature_counts,
         local_cygv_target_candidate_status_counts,
         local_cygv_actual_call_readiness_counts,
@@ -9685,6 +9726,10 @@ mod tests {
                     .as_deref()
                     == Some("origin=-1;neg={};pos={1: 1}")
         }));
+        let phase_counts =
+            active_decomposition_source_leaf_unit_phase_probe_status_counts(&summaries);
+        assert_eq!(phase_counts.values().sum::<usize>(), 4);
+        assert_eq!(phase_counts.get("not_available").copied(), Some(3));
     }
 
     #[test]
