@@ -2487,6 +2487,19 @@ intersection-number dictionary and `instanton::compute_inst_thread` consumes
 that tensor directly, so there is no hidden `cygv` routine that derives this
 local tensor from `q`; Cyrus must still source the tensor/chamber from toric
 phase data or a justified local model.
+That justified local model is now implemented for this residual family. The
+including-origin phase `q=[-1,-2,1,1,1]`, oriented primitive semigroup
+`[[1]]`, and grading `[1]` identify the local bundle `O(-1)+O(-2)->P^2`.
+Cyrus assigns the source-derived hyperplane tensor `κ_000=1` and records the
+positive-base chamber certificate. Regenerating
+`/tmp/cyrus_gv_context_all_source_residual_p2_certificate_report.json` moves
+the residual predecessor queue to no local missing-input counts and
+`{"ready_for_actual_cygv_call":3}`. The unit probe status for both residual
+source rows is now
+`unit_tensor_probe_matches_expected_formula_set_with_source_derived_tensor_chamber`.
+The next step is therefore not tensor guessing; it is replacing or validating
+the CMS scalar import with the ready actual local-`cygv` source computation and
+checking the effect on qN history.
 An opt-in target-level integer tensor scan now runs the same one-parameter
 local skeletons through the actual compact `cygv` call while varying the single
 intersection tensor entry over a bounded integer range. On the fresh

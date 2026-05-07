@@ -464,6 +464,9 @@ struct LocalCygvInputSkeleton {
     local_cygv_q_matrix_layout_status: String,
     local_cygv_phase_q_matrix_candidate: Option<Vec<Vec<i64>>>,
     local_cygv_q_matrix_phase_status: String,
+    local_intersection_tensor_candidate: Option<Vec<LocalCygvIntersectionTensorEntry>>,
+    local_intersection_tensor_status: String,
+    local_chamber_certificate_status: String,
     local_grading_vector_candidate: Option<Vec<i64>>,
     local_grading_vector_status: String,
     remaining_uncertified_inputs: Vec<String>,
@@ -2159,8 +2162,11 @@ fn local_cygv_unit_phase_probe_from_skeleton(
                     MalachiteRational::from(1),
                 ) {
                     Ok(value) => {
-                        let status =
-                            unit_phase_probe_status(&value, &expected_toric_gv1_formula_values);
+                        let status = unit_phase_probe_status(
+                            &value,
+                            &expected_toric_gv1_formula_values,
+                            local_cygv_has_source_derived_unit_tensor_chamber(skeleton),
+                        );
                         (Some(value), status, None)
                     }
                     Err(error) => (
@@ -2342,12 +2348,36 @@ fn effective_tensor_requirement_for_unit_probe(
     }
 }
 
-fn unit_phase_probe_status(value: &str, expected_values: &[String]) -> String {
+fn local_cygv_has_source_derived_unit_tensor_chamber(skeleton: &LocalCygvInputSkeleton) -> bool {
+    skeleton.local_chamber_certificate_status
+        == "source_derived_local_p2_bundle_positive_base_chamber"
+        && skeleton
+            .local_intersection_tensor_candidate
+            .as_ref()
+            .is_some_and(|entries| {
+                entries
+                    == &[LocalCygvIntersectionTensorEntry {
+                        indices: [0, 0, 0],
+                        value: "1".to_string(),
+                    }]
+            })
+}
+
+fn unit_phase_probe_status(
+    value: &str,
+    expected_values: &[String],
+    has_source_derived_unit_tensor_chamber: bool,
+) -> String {
     if expected_values.is_empty() {
         return "unit_tensor_probe_computed_without_expected_formula".to_string();
     }
     if expected_values.iter().any(|expected| expected == value) {
-        "unit_tensor_probe_matches_expected_formula_set_but_uncertified".to_string()
+        if has_source_derived_unit_tensor_chamber {
+            "unit_tensor_probe_matches_expected_formula_set_with_source_derived_tensor_chamber"
+                .to_string()
+        } else {
+            "unit_tensor_probe_matches_expected_formula_set_but_uncertified".to_string()
+        }
     } else {
         "unit_tensor_probe_mismatch_expected_formula_set".to_string()
     }
@@ -4651,6 +4681,16 @@ fn local_cygv_input_skeleton(
         );
     let (local_grading_vector_candidate, local_grading_vector_status) =
         local_cygv_grading_vector_candidate(&orientation_candidates);
+    let (
+        local_intersection_tensor_candidate,
+        local_intersection_tensor_status,
+        local_chamber_certificate_status,
+    ) = local_p2_bundle_tensor_chamber_certificate(
+        local_cygv_phase_q_matrix_candidate.as_deref(),
+        local_semigroup_generators_candidate.as_deref(),
+        local_grading_vector_candidate.as_deref(),
+        &local_cygv_q_matrix_phase_status,
+    );
     let mut remaining_uncertified_inputs = Vec::new();
     if local_semigroup_generators_candidate.is_none() {
         remaining_uncertified_inputs.push("local_semigroup_generators".to_string());
@@ -4661,10 +4701,12 @@ fn local_cygv_input_skeleton(
     if local_cygv_phase_q_matrix_candidate.is_none() {
         remaining_uncertified_inputs.push("local_q_matrix_orientation_and_phase".to_string());
     }
-    remaining_uncertified_inputs.extend([
-        "local_intersection_tensor".to_string(),
-        "local_chamber_certificate".to_string(),
-    ]);
+    if local_intersection_tensor_candidate.is_none() {
+        remaining_uncertified_inputs.push("local_intersection_tensor".to_string());
+    }
+    if local_chamber_certificate_status != "source_derived_local_p2_bundle_positive_base_chamber" {
+        remaining_uncertified_inputs.push("local_chamber_certificate".to_string());
+    }
     Ok(Some(LocalCygvInputSkeleton {
         support_point_indices,
         support_contains_origin_point,
@@ -4685,10 +4727,80 @@ fn local_cygv_input_skeleton(
         local_cygv_q_matrix_layout_status,
         local_cygv_phase_q_matrix_candidate,
         local_cygv_q_matrix_phase_status,
+        local_intersection_tensor_candidate,
+        local_intersection_tensor_status,
+        local_chamber_certificate_status,
         local_grading_vector_candidate,
         local_grading_vector_status,
         remaining_uncertified_inputs,
     }))
+}
+
+fn local_p2_bundle_tensor_chamber_certificate(
+    q_matrix: Option<&[Vec<i64>]>,
+    semigroup_generators: Option<&[Vec<i64>]>,
+    grading_vector: Option<&[i64]>,
+    phase_status: &str,
+) -> (
+    Option<Vec<LocalCygvIntersectionTensorEntry>>,
+    String,
+    String,
+) {
+    let blocked = |reason: &str| {
+        (
+            None,
+            format!("local_intersection_tensor_blocked_{reason}"),
+            format!("local_chamber_certificate_blocked_{reason}"),
+        )
+    };
+    if phase_status != "source_derived_unique_compact_threefold_phase_including_origin" {
+        return blocked("not_including_origin_p2_bundle_phase");
+    }
+    let Some(q_matrix) = q_matrix else {
+        return blocked("missing_q_matrix");
+    };
+    if q_matrix.len() != 1 {
+        return blocked("not_one_parameter_q_matrix");
+    }
+    let charges = &q_matrix[0];
+    if charges.len() != 5 || charges.iter().sum::<i64>() != 0 {
+        return blocked("not_local_calabi_yau_threefold_charge");
+    }
+    let Some(semigroup_generators) = semigroup_generators else {
+        return blocked("missing_semigroup_generators");
+    };
+    if semigroup_generators != [vec![1]] {
+        return blocked("not_primitive_one_parameter_semigroup");
+    }
+    let Some(grading_vector) = grading_vector else {
+        return blocked("missing_grading_vector");
+    };
+    if grading_vector != [1] {
+        return blocked("not_primitive_one_parameter_grading");
+    }
+    let mut positive = charges
+        .iter()
+        .copied()
+        .filter(|&value| value > 0)
+        .collect::<Vec<_>>();
+    let mut negative = charges
+        .iter()
+        .copied()
+        .filter(|&value| value < 0)
+        .collect::<Vec<_>>();
+    positive.sort_unstable();
+    negative.sort_unstable();
+    if positive != [1, 1, 1] || negative != [-2, -1] {
+        return blocked("not_o_minus_one_o_minus_two_over_p2");
+    }
+    (
+        Some(vec![LocalCygvIntersectionTensorEntry {
+            indices: [0, 0, 0],
+            value: "1".to_string(),
+        }]),
+        "source_derived_local_p2_bundle_unit_intersection_tensor".to_string(),
+        "source_derived_local_p2_bundle_positive_base_chamber".to_string(),
+    )
 }
 
 fn local_cygv_semigroup_generators_candidate(
@@ -9962,6 +10074,9 @@ mod tests {
             local_cygv_q_matrix_layout_status: String::new(),
             local_cygv_phase_q_matrix_candidate: phase_q_matrix,
             local_cygv_q_matrix_phase_status: phase_status,
+            local_intersection_tensor_candidate: None,
+            local_intersection_tensor_status: String::new(),
+            local_chamber_certificate_status: String::new(),
             local_grading_vector_candidate: Some(vec![1]),
             local_grading_vector_status: "source_derived_primitive_one_parameter_grading"
                 .to_string(),
@@ -10684,6 +10799,9 @@ mod tests {
             local_cygv_q_matrix_layout_status: String::new(),
             local_cygv_phase_q_matrix_candidate: None,
             local_cygv_q_matrix_phase_status: String::new(),
+            local_intersection_tensor_candidate: None,
+            local_intersection_tensor_status: String::new(),
+            local_chamber_certificate_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -10711,6 +10829,9 @@ mod tests {
             local_cygv_q_matrix_layout_status: String::new(),
             local_cygv_phase_q_matrix_candidate: None,
             local_cygv_q_matrix_phase_status: String::new(),
+            local_intersection_tensor_candidate: None,
+            local_intersection_tensor_status: String::new(),
+            local_chamber_certificate_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -10765,6 +10886,9 @@ mod tests {
             local_cygv_q_matrix_layout_status: String::new(),
             local_cygv_phase_q_matrix_candidate: None,
             local_cygv_q_matrix_phase_status: String::new(),
+            local_intersection_tensor_candidate: None,
+            local_intersection_tensor_status: String::new(),
+            local_chamber_certificate_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: vec!["local_intersection_tensor".to_string()],
@@ -10789,6 +10913,9 @@ mod tests {
             local_cygv_q_matrix_layout_status: String::new(),
             local_cygv_phase_q_matrix_candidate: None,
             local_cygv_q_matrix_phase_status: String::new(),
+            local_intersection_tensor_candidate: None,
+            local_intersection_tensor_status: String::new(),
+            local_chamber_certificate_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -10816,6 +10943,9 @@ mod tests {
             local_cygv_q_matrix_layout_status: String::new(),
             local_cygv_phase_q_matrix_candidate: None,
             local_cygv_q_matrix_phase_status: String::new(),
+            local_intersection_tensor_candidate: None,
+            local_intersection_tensor_status: String::new(),
+            local_chamber_certificate_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -10874,6 +11004,9 @@ mod tests {
             local_cygv_q_matrix_layout_status: String::new(),
             local_cygv_phase_q_matrix_candidate: None,
             local_cygv_q_matrix_phase_status: String::new(),
+            local_intersection_tensor_candidate: None,
+            local_intersection_tensor_status: String::new(),
+            local_chamber_certificate_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: vec![
@@ -10901,6 +11034,9 @@ mod tests {
             local_cygv_q_matrix_layout_status: String::new(),
             local_cygv_phase_q_matrix_candidate: None,
             local_cygv_q_matrix_phase_status: String::new(),
+            local_intersection_tensor_candidate: None,
+            local_intersection_tensor_status: String::new(),
+            local_chamber_certificate_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: vec![
@@ -10960,6 +11096,9 @@ mod tests {
             local_cygv_q_matrix_layout_status: String::new(),
             local_cygv_phase_q_matrix_candidate: None,
             local_cygv_q_matrix_phase_status: String::new(),
+            local_intersection_tensor_candidate: None,
+            local_intersection_tensor_status: String::new(),
+            local_chamber_certificate_status: String::new(),
             local_grading_vector_candidate: Some(vec![1]),
             local_grading_vector_status: "source_derived_primitive_one_parameter_grading"
                 .to_string(),
@@ -10985,6 +11124,9 @@ mod tests {
             local_cygv_q_matrix_layout_status: String::new(),
             local_cygv_phase_q_matrix_candidate: None,
             local_cygv_q_matrix_phase_status: String::new(),
+            local_intersection_tensor_candidate: None,
+            local_intersection_tensor_status: String::new(),
+            local_chamber_certificate_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: "local_grading_blocked_no_positive_primitive_target"
                 .to_string(),
@@ -11010,6 +11152,9 @@ mod tests {
             local_cygv_q_matrix_layout_status: String::new(),
             local_cygv_phase_q_matrix_candidate: None,
             local_cygv_q_matrix_phase_status: String::new(),
+            local_intersection_tensor_candidate: None,
+            local_intersection_tensor_status: String::new(),
+            local_chamber_certificate_status: String::new(),
             local_grading_vector_candidate: Some(vec![1]),
             local_grading_vector_status: "source_derived_primitive_one_parameter_grading"
                 .to_string(),
@@ -11058,6 +11203,9 @@ mod tests {
                 .to_string(),
             local_cygv_phase_q_matrix_candidate: None,
             local_cygv_q_matrix_phase_status: String::new(),
+            local_intersection_tensor_candidate: None,
+            local_intersection_tensor_status: String::new(),
+            local_chamber_certificate_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -11084,6 +11232,9 @@ mod tests {
                 .to_string(),
             local_cygv_phase_q_matrix_candidate: None,
             local_cygv_q_matrix_phase_status: String::new(),
+            local_intersection_tensor_candidate: None,
+            local_intersection_tensor_status: String::new(),
+            local_chamber_certificate_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -11112,6 +11263,9 @@ mod tests {
                 .to_string(),
             local_cygv_phase_q_matrix_candidate: None,
             local_cygv_q_matrix_phase_status: String::new(),
+            local_intersection_tensor_candidate: None,
+            local_intersection_tensor_status: String::new(),
+            local_chamber_certificate_status: String::new(),
             local_grading_vector_candidate: None,
             local_grading_vector_status: String::new(),
             remaining_uncertified_inputs: Vec::new(),
@@ -12302,8 +12456,27 @@ mod tests {
             "source_derived_unique_compact_threefold_phase_including_origin"
         );
         assert_eq!(
-            skeleton.remaining_uncertified_inputs,
-            ["local_intersection_tensor", "local_chamber_certificate"]
+            skeleton.local_intersection_tensor_candidate,
+            Some(vec![LocalCygvIntersectionTensorEntry {
+                indices: [0, 0, 0],
+                value: "1".to_string(),
+            }])
+        );
+        assert_eq!(
+            skeleton.local_intersection_tensor_status,
+            "source_derived_local_p2_bundle_unit_intersection_tensor"
+        );
+        assert_eq!(
+            skeleton.local_chamber_certificate_status,
+            "source_derived_local_p2_bundle_positive_base_chamber"
+        );
+        assert!(
+            skeleton.remaining_uncertified_inputs.is_empty(),
+            "the local P2 bundle certificate should clear the tensor/chamber blockers"
+        );
+        assert_eq!(
+            summary.matching_uncovered_source_ray_local_cygv_readiness_counts,
+            BTreeMap::from([("ready_for_actual_cygv_call".to_string(), 2)])
         );
         let unit_probe = summary
             .matching_uncovered_source_ray_local_unit_phase_probe
@@ -12311,7 +12484,7 @@ mod tests {
             .expect("residual source predecessor should preserve unit phase probe");
         assert_eq!(
             unit_probe.unit_tensor_probe_status,
-            "unit_tensor_probe_matches_expected_formula_set_but_uncertified"
+            "unit_tensor_probe_matches_expected_formula_set_with_source_derived_tensor_chamber"
         );
         assert_eq!(
             summary

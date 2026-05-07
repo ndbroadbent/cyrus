@@ -310,16 +310,18 @@ and matrix-basis pipeline are no longer open.
    `-1,-1,-1,1,2` family. The residual predecessor sample now carries its
    local `cygv` skeleton: both residual source rows use including-origin
    `q=[-1,-2,1,1,1]`, semigroup `[[1]]`, grading `[1]`, and a unit-tensor
-   probe that gives `GV=-2` against expected `-2`. The
+   probe that gives `GV=-2` against expected `-2`. Cyrus now certifies this as
+   the source-derived local bundle phase `O(-1)+O(-2)->P^2`, with unit
+   hyperplane tensor `κ_000=1` and a positive-base chamber certificate; the
+   residual queue now has no local missing-input counts and all three
+   occurrences are `ready_for_actual_cygv_call`. The
    CMS divisor cubic suggests tensor value `3`,
-   but the raw-cubic primitive probe gives `GV=-6`; the unit-tensor probe gives
-   the expected `GV=-2` and remains unpromoted until the chamber/tensor source is
-   certified. The one-parameter unit semigroup generator `[[1]]`, grading `[1]`,
-   and q-matrix phase are source-derived for this local skeleton. The context
-   export now also keeps the nonzero rational divisor-basis and ambient-basis
-   coefficients from successful CMS-general-divisor solves, so the next
-   chamber/intersection step has the source-derived divisor data rather than
-   only a pass/fail status.
+   but the raw-cubic primitive probe gives `GV=-6`; the certified local bundle
+   tensor gives the expected `GV=-2`. The context export now also keeps the
+   nonzero rational divisor-basis and ambient-basis coefficients from
+   successful CMS-general-divisor solves, so the next step is to promote or
+   consume the ready actual local-`cygv` source calculation rather than relying
+   on the CMS scalar formula status.
    These lower classes are now classified against the exported source-ray
    context: for both degree-10 targets the sampled lookups split as four known
    toric source rays, four non-toric source rays, and eight composite classes

@@ -130,9 +130,11 @@ run pass. Any remaining mismatch must be explicit and localizable.
    sample now also serializes the source-derived local `cygv` skeleton: both
    source predecessors have compact including-origin phase
    `q=[-1,-2,1,1,1]`, semigroup `[[1]]`, grading `[1]`, unit-tensor probe
-   `GV=-2`, and expected formula value `-2`, but still list
-   `local_intersection_tensor` and `local_chamber_certificate` as the only
-   uncertified inputs.
+   `GV=-2`, and expected formula value `-2`. Cyrus now recognizes this as the
+   source-derived local bundle phase `O(-1)+O(-2)->P^2`, assigns the unit
+   hyperplane tensor `κ_000=1`, and records a positive-base chamber
+   certificate; the residual predecessor queue has no remaining local
+   missing-input counts and all three occurrences are `ready_for_actual_cygv_call`.
 2. Potent-ray convergence checks now compute rank, volumes, and decay slopes for
    supplied ray/GV samples. Cyrus also reconstructs the first four saved GV
    entries for all 395 rank-two CKYZ potent-ray rows, plus all ten entries for
