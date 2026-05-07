@@ -579,6 +579,7 @@ struct LocalCygvSourceResolutionHintSummary {
     shared_two_simplex_star_union_star_basis_nonzero: Option<Vec<(usize, i64)>>,
     shared_two_simplex_star_union_target_minus_star_basis_nonzero: Option<Vec<(usize, i64)>>,
     shared_two_simplex_star_union_target_plus_star_basis_nonzero: Option<Vec<(usize, i64)>>,
+    shared_two_simplex_star_union_global_basis_lookup: Vec<LocalCygvStarUnionGlobalBasisLookup>,
     shared_two_simplex_star_union_target_minus_star: Vec<(usize, i64)>,
     shared_two_simplex_star_union_target_plus_star: Vec<(usize, i64)>,
     zero_relation_shared_two_simplex_points: Vec<usize>,
@@ -632,6 +633,17 @@ struct LocalCygvInputSkeleton {
     local_grading_vector_candidate: Option<Vec<i64>>,
     local_grading_vector_status: String,
     remaining_uncertified_inputs: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvStarUnionGlobalBasisLookup {
+    role: String,
+    basis_nonzero: Option<Vec<(usize, i64)>>,
+    degree: Option<i128>,
+    known_qn_history_status: String,
+    toric_gv: Option<String>,
+    source_derived_gv: Option<String>,
+    error: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -13748,7 +13760,7 @@ fn build_report(
     let local_cygv_source_resolution_star_union_status_counts =
         local_cygv_source_resolution_star_union_status_counts(&targets);
     let local_cygv_source_resolution_hint_sample =
-        local_cygv_source_resolution_hint_summaries(&targets, Some(validated.q_matrix));
+        local_cygv_source_resolution_hint_summaries(&targets, validated);
     let missing_local_cygv_missing_source_input_counts = local_cygv_missing_source_input_counts(
         targets
             .iter()
@@ -14694,7 +14706,7 @@ fn local_cygv_one_parameter_family_status_counts<'a>(
 
 fn local_cygv_source_resolution_hint_summaries(
     targets: &[TargetReport],
-    global_q_matrix: Option<&[Vec<i64>]>,
+    context: &ValidatedContext<'_>,
 ) -> Vec<LocalCygvSourceResolutionHintSummary> {
     targets
         .iter()
@@ -14730,7 +14742,11 @@ fn local_cygv_source_resolution_hint_summaries(
             let star_union_relation_hint = local_cygv_star_union_relation_hint(
                 target.origin_circuit_first_witness.as_ref(),
                 &star_support_hint,
-                global_q_matrix,
+                Some(context.q_matrix),
+            );
+            let star_union_global_basis_lookup = local_cygv_star_union_global_basis_lookup_sample(
+                &star_union_relation_hint,
+                context,
             );
             let star_extra_affine_heights =
                 origin_circuit_shared_two_simplex_star_extra_affine_heights(
@@ -14807,6 +14823,7 @@ fn local_cygv_source_resolution_hint_summaries(
                     star_union_relation_hint.target_minus_star_basis_nonzero,
                 shared_two_simplex_star_union_target_plus_star_basis_nonzero:
                     star_union_relation_hint.target_plus_star_basis_nonzero,
+                shared_two_simplex_star_union_global_basis_lookup: star_union_global_basis_lookup,
                 shared_two_simplex_star_union_target_minus_star: star_union_relation_hint
                     .target_minus_star,
                 shared_two_simplex_star_union_target_plus_star: star_union_relation_hint
@@ -16206,6 +16223,88 @@ fn project_star_union_relation_to_global_basis(
         return Ok(None);
     }
     Ok(Some(integral_coordinates_from_rational(&coordinates)?))
+}
+
+fn local_cygv_star_union_global_basis_lookup_sample(
+    hint: &LocalCygvStarUnionRelationHint,
+    context: &ValidatedContext<'_>,
+) -> Vec<LocalCygvStarUnionGlobalBasisLookup> {
+    [
+        ("target", &hint.target_basis_nonzero),
+        ("star", &hint.star_basis_nonzero),
+        ("target_minus_star", &hint.target_minus_star_basis_nonzero),
+        ("target_plus_star", &hint.target_plus_star_basis_nonzero),
+    ]
+    .into_iter()
+    .map(|(role, basis_nonzero)| {
+        local_cygv_star_union_global_basis_lookup(role, basis_nonzero.as_ref(), context)
+    })
+    .collect()
+}
+
+fn local_cygv_star_union_global_basis_lookup(
+    role: &str,
+    basis_nonzero: Option<&Vec<(usize, i64)>>,
+    context: &ValidatedContext<'_>,
+) -> LocalCygvStarUnionGlobalBasisLookup {
+    let Some(basis_nonzero) = basis_nonzero else {
+        return LocalCygvStarUnionGlobalBasisLookup {
+            role: role.to_string(),
+            basis_nonzero: None,
+            degree: None,
+            known_qn_history_status: "missing_global_basis_projection".to_string(),
+            toric_gv: None,
+            source_derived_gv: None,
+            error: None,
+        };
+    };
+    let basis_dense = match dense_from_sparse(basis_nonzero, context.dimension) {
+        Ok(basis_dense) => basis_dense,
+        Err(error) => {
+            return LocalCygvStarUnionGlobalBasisLookup {
+                role: role.to_string(),
+                basis_nonzero: Some(basis_nonzero.clone()),
+                degree: None,
+                known_qn_history_status: "invalid_global_basis_projection".to_string(),
+                toric_gv: None,
+                source_derived_gv: None,
+                error: Some(error),
+            };
+        }
+    };
+    let degree = match curve_degree(&basis_dense, context.grading) {
+        Ok(degree) => Some(degree),
+        Err(error) => {
+            return LocalCygvStarUnionGlobalBasisLookup {
+                role: role.to_string(),
+                basis_nonzero: Some(basis_nonzero.clone()),
+                degree: None,
+                known_qn_history_status: "invalid_global_basis_degree".to_string(),
+                toric_gv: None,
+                source_derived_gv: None,
+                error: Some(error),
+            };
+        }
+    };
+    let toric_gv = context.covered_toric_gv_by_basis.get(&basis_dense).cloned();
+    let source_derived_gv = context
+        .source_derived_gv_by_basis
+        .get(&basis_dense)
+        .cloned();
+    let (known_qn_history_status, error) =
+        match known_qn_history_status(toric_gv.as_deref(), source_derived_gv.as_deref()) {
+            Ok(status) => (status.to_string(), None),
+            Err(error) => ("known_qn_history_conflict".to_string(), Some(error)),
+        };
+    LocalCygvStarUnionGlobalBasisLookup {
+        role: role.to_string(),
+        basis_nonzero: Some(basis_nonzero.clone()),
+        degree,
+        known_qn_history_status,
+        toric_gv,
+        source_derived_gv,
+        error,
+    }
 }
 
 fn origin_circuit_star_union_point_samples(
@@ -18088,6 +18187,27 @@ mod tests {
                 .status,
             "source_ray_known_source_derived_gv"
         );
+        let toric_basis = vec![(0, 1)];
+        let toric_lookup =
+            local_cygv_star_union_global_basis_lookup("target", Some(&toric_basis), &validated);
+        assert_eq!(
+            toric_lookup.known_qn_history_status,
+            "known_nonzero_toric_gv"
+        );
+        assert_eq!(toric_lookup.degree, Some(1));
+        assert_eq!(toric_lookup.toric_gv.as_deref(), Some("42"));
+        let source_basis = vec![(0, 1), (1, 1)];
+        let source_lookup = local_cygv_star_union_global_basis_lookup(
+            "target_plus_star",
+            Some(&source_basis),
+            &validated,
+        );
+        assert_eq!(
+            source_lookup.known_qn_history_status,
+            "known_nonzero_source_gv"
+        );
+        assert_eq!(source_lookup.degree, Some(2));
+        assert_eq!(source_lookup.source_derived_gv.as_deref(), Some("1"));
         assert_eq!(
             degree_bounded_mori_ray_context_status(&validated),
             "source_derived_ambient_and_basis_degree_bounded_mori_ray_context"

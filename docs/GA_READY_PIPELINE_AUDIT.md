@@ -1001,3 +1001,11 @@ to make the remaining GV layer more first-principles:
    exactly. The remaining reusable fix is therefore not the global column map,
    but the local chamber/intersection certificate needed before those rows can
    determine a GV value.
+   The subsequent global-basis lookup confirms this is still a chamber-history
+   object, not an already-known scalar GV row: every projected target/star and
+   target±star role for targets `3`, `6`, `7`, and `8` is
+   `unknown_not_toric_covered`. The target degrees are `26/12/10/10`, the
+   star degrees are `-36/-24/-4/-4`, the target-minus-star degrees are
+   `62/36/14/14`, and the target-plus-star degrees are `-10/-12/6/6`. The
+   negative star-side degrees rule out treating the star relation as an
+   effective covered GV contribution.

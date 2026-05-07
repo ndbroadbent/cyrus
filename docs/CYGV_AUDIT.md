@@ -3203,6 +3203,20 @@ reported missing-target basis classes exactly, e.g. target `7` projects to
 projects to `[(53,1),(190,-1),(207,-1)]`. This provides the global curve
 coordinates for the chamber-history object, but still does not certify a GV
 value without the local chamber/intersection data.
+The next lookup report,
+`/tmp/cyrus_gv_context_star_union_lookup_report.json`, classifies those
+projected global classes against the known toric-covered and source-derived GV
+maps. All sixteen projected roles (`target`, `star`, `target_minus_star`, and
+`target_plus_star` for targets `3`, `6`, `7`, and `8`) are
+`unknown_not_toric_covered`, with no toric or source-derived scalar GV value.
+The target degrees are `26`, `12`, `10`, and `10`; the star rows have degrees
+`-36`, `-24`, `-4`, and `-4`; the target-minus-star rows have degrees `62`,
+`36`, `14`, and `14`; and the target-plus-star rows have degrees `-10`,
+`-12`, `6`, and `6`. The negative star and target-plus-star degrees show that
+these are chamber-history rows, not direct effective GV rows. This rules out
+closing the gap by reusing an already-covered scalar GV entry; the remaining
+input is still the source-derived local chamber/intersection/semigroup
+certificate.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

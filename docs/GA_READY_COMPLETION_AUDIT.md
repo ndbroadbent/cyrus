@@ -748,6 +748,14 @@ rows and target±star combinations project integrally. The projected target
 rows match the missing target basis rows exactly; for example target `7`
 projects to `[(44,2),(203,1),(206,-3),(209,1)]` and target `8` to
 `[(203,-3),(206,1),(209,1)]`.
+The follow-up lookup against the known toric-covered and source-derived GV
+maps keeps this result negative: all projected target/star/target±star roles
+for targets `3`, `6`, `7`, and `8` are `unknown_not_toric_covered`. Their
+degrees are target `26/12/10/10`, star `-36/-24/-4/-4`,
+target-minus-star `62/36/14/14`, and target-plus-star `-10/-12/6/6`. The
+negative star-side degrees confirm that the star-union object is chamber
+history rather than an effective scalar GV row already present in the known
+maps.
 Origin-circuit witness-domain compact `cygv` probes are now opt-in and guarded
 by `--origin-witness-cygv-generator-limit`. The traced target `8` report shows
 the single-generator relation domain computes `GV=2` with one materialized
