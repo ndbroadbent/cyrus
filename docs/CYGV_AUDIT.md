@@ -2561,6 +2561,11 @@ The residual-source predecessor regression verifies that the certified
 returning the expected local `GV=-2`. This is still source-local history; it is
 evidence to compare against the compact corrected-chamber qN queue, not a
 replacement for it.
+Regenerating
+`/tmp/cyrus_gv_context_schema3_local_source_qn_trace_report.json` also shows
+that all nine target-level one-parameter unit probes materialize one local qN
+polynomial (`local_unit_qn_materialized_for_nonzero_gv`), while the target
+local skeletons remain blocked on source-derived tensor/chamber certification.
 An opt-in target-level integer tensor scan now runs the same one-parameter
 local skeletons through the actual compact `cygv` call while varying the single
 intersection tensor entry over a bounded integer range. On the fresh

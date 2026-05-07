@@ -628,6 +628,10 @@ to make the remaining GV layer more first-principles:
    one materialized target qN polynomial for the source-local `GV=-2` row.
    This is trace evidence for the source-local model, not a promoted compact
    corrected-chamber qN polynomial.
+   The fresh schema-3 local-source qN trace report confirms the distinction:
+   all nine target-level unit probes now expose one materialized local qN
+   polynomial, but all nine target skeletons are still blocked on
+   source-derived tensor/chamber certification.
    The CMS divisor cubic suggested tensor value `3`, but the raw-cubic primitive
    probe gave `GV=-6`; the source-derived unit tensor gives the expected `GV=-2`
    and is now the promoted source value for this lower ray. The follow-up
