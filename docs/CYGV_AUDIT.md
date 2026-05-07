@@ -2207,6 +2207,16 @@ report file was produced. This reinforces that the next productive step is a
 source-derived finite semigroup/chamber certificate for the relevant composite
 history, not just increasing the supplied generator set.
 
+The support-overlap runner now accepts `--trace-support-overlap-qn`, which
+switches that provided-generator call to Cyrus' traced `cygv` boundary and
+serializes the qN polynomial count, target qN materialization status, target
+term count, and bounded term samples when the call completes. The regression
+`support_overlap_generator_probe_can_trace_target_qn_polynomial` checks the
+small quintic handoff against the actual `cygv` qN history and recovers the
+degree-one `2875` polynomial. This is an observability tool for certified
+support-overlap reductions; it does not make the broad degree-10 McAllister
+generator set computationally viable.
+
 The path-history probe now mirrors the `cygv::series_inversion` nearest-qN
 selection rule separately from raw additive predecessor enumeration. For each
 target class it asks which certified nonzero lower class could actually serve

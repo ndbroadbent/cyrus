@@ -385,6 +385,13 @@ to make the remaining GV layer more first-principles:
    degree-10 input to `450` generators, but that optimized release run
    still exceeded `900s`. These probes produced no GV value or panic. This is a
    measured runtime blocker, not a reason to reimplement compact cygv locally.
+   The support-overlap runner now has an opt-in `--trace-support-overlap-qn`
+   mode that uses the same provided-generator `cygv` qN trace boundary as the
+   smaller path-support probe and exports target qN materialization fields when
+   the call finishes. A quintic-sized regression proves the flag reaches actual
+   `cygv` qN history and recovers the degree-one `2875` target polynomial; the
+   broad McAllister degree-10 support-overlap domains remain too large to use as
+   the missing chamber history.
    A direct cygv semigroup-size diagnostic now confirms why: the degree-10
    missing targets already have `720` seed rows at or below the target degree,
    and an unguarded cygv semigroup closure measurement did not finish within

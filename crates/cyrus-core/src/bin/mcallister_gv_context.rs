@@ -406,6 +406,10 @@ struct TargetReport {
     support_overlap_run_status: Option<String>,
     support_overlap_run_gv: Option<String>,
     support_overlap_run_error: Option<String>,
+    support_overlap_run_qn_trace_polynomial_count: Option<usize>,
+    support_overlap_run_target_qn_trace_status: Option<String>,
+    support_overlap_run_target_qn_trace_term_count: Option<usize>,
+    support_overlap_run_qn_trace_sample: Vec<CygvPathSupportQnTracePolynomialSample>,
     cygv_semigroup_measure_status: Option<String>,
     cygv_semigroup_seed_count: Option<usize>,
     cygv_semigroup_reduced_seed_count: Option<usize>,
@@ -717,6 +721,18 @@ struct CygvPathSupportQnTraceCurveSummary {
     target_indices: Vec<usize>,
     term_count_counts: BTreeMap<usize, usize>,
     first_term_sample: Vec<CygvPathSupportQnTraceTermSample>,
+}
+
+#[derive(Clone, Debug)]
+struct ProvidedGeneratorTargetGvProbe {
+    generator_count: usize,
+    status: String,
+    gv: Option<String>,
+    error: Option<String>,
+    qn_trace_polynomial_count: Option<usize>,
+    target_qn_trace_status: Option<String>,
+    target_qn_trace_term_count: Option<usize>,
+    qn_trace_sample: Vec<CygvPathSupportQnTracePolynomialSample>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -2987,6 +3003,22 @@ fn path_support_qn_trace_status(
         (false, Some(0)) => "path_support_qn_materialized_empty_for_zero_or_absent_gv",
         (false, Some(_)) => "path_support_qn_materialized_for_zero_or_absent_gv",
         (false, None) => "path_support_qn_not_required_zero_or_absent_gv",
+    };
+    Ok(status)
+}
+
+fn support_overlap_qn_trace_status(
+    support_overlap_gv: &str,
+    qn_trace_term_count: Option<usize>,
+) -> Result<&'static str, String> {
+    let support_overlap_nonzero = parse_rational(support_overlap_gv)? != MalachiteRational::from(0);
+    let status = match (support_overlap_nonzero, qn_trace_term_count) {
+        (true, Some(0)) => "support_overlap_qn_materialized_empty_for_nonzero_gv",
+        (true, Some(_)) => "support_overlap_qn_materialized_for_nonzero_gv",
+        (true, None) => "support_overlap_qn_missing_for_nonzero_gv",
+        (false, Some(0)) => "support_overlap_qn_materialized_empty_for_zero_or_absent_gv",
+        (false, Some(_)) => "support_overlap_qn_materialized_for_zero_or_absent_gv",
+        (false, None) => "support_overlap_qn_not_required_zero_or_absent_gv",
     };
     Ok(status)
 }
@@ -6042,6 +6074,7 @@ fn report_target(
     support_overlap_min_for_run: Option<usize>,
     support_overlap_max_target_degree: Option<i128>,
     support_overlap_pair_reduce_for_run: bool,
+    trace_support_overlap_qn: bool,
     certify_origin_support_domains: bool,
     origin_support_certificate_limit: usize,
     certify_target_extremal_rays: bool,
@@ -6153,6 +6186,10 @@ fn report_target(
                 support_overlap_run_status: None,
                 support_overlap_run_gv: None,
                 support_overlap_run_error: None,
+                support_overlap_run_qn_trace_polynomial_count: None,
+                support_overlap_run_target_qn_trace_status: None,
+                support_overlap_run_target_qn_trace_term_count: None,
+                support_overlap_run_qn_trace_sample: Vec::new(),
                 cygv_semigroup_measure_status: None,
                 cygv_semigroup_seed_count: None,
                 cygv_semigroup_reduced_seed_count: None,
@@ -6229,6 +6266,10 @@ fn report_target(
                 support_overlap_run_status: None,
                 support_overlap_run_gv: None,
                 support_overlap_run_error: None,
+                support_overlap_run_qn_trace_polynomial_count: None,
+                support_overlap_run_target_qn_trace_status: None,
+                support_overlap_run_target_qn_trace_term_count: None,
+                support_overlap_run_qn_trace_sample: Vec::new(),
                 cygv_semigroup_measure_status: None,
                 cygv_semigroup_seed_count: None,
                 cygv_semigroup_reduced_seed_count: None,
@@ -6305,6 +6346,10 @@ fn report_target(
                 support_overlap_run_status: None,
                 support_overlap_run_gv: None,
                 support_overlap_run_error: None,
+                support_overlap_run_qn_trace_polynomial_count: None,
+                support_overlap_run_target_qn_trace_status: None,
+                support_overlap_run_target_qn_trace_term_count: None,
+                support_overlap_run_qn_trace_sample: Vec::new(),
                 cygv_semigroup_measure_status: None,
                 cygv_semigroup_seed_count: None,
                 cygv_semigroup_reduced_seed_count: None,
@@ -6385,6 +6430,10 @@ fn report_target(
                 support_overlap_run_status: None,
                 support_overlap_run_gv: None,
                 support_overlap_run_error: None,
+                support_overlap_run_qn_trace_polynomial_count: None,
+                support_overlap_run_target_qn_trace_status: None,
+                support_overlap_run_target_qn_trace_term_count: None,
+                support_overlap_run_qn_trace_sample: Vec::new(),
                 cygv_semigroup_measure_status: None,
                 cygv_semigroup_seed_count: None,
                 cygv_semigroup_reduced_seed_count: None,
@@ -6480,6 +6529,10 @@ fn report_target(
         support_overlap_run_status: None,
         support_overlap_run_gv: None,
         support_overlap_run_error: None,
+        support_overlap_run_qn_trace_polynomial_count: None,
+        support_overlap_run_target_qn_trace_status: None,
+        support_overlap_run_target_qn_trace_term_count: None,
+        support_overlap_run_qn_trace_sample: Vec::new(),
         cygv_semigroup_measure_status: None,
         cygv_semigroup_seed_count: None,
         cygv_semigroup_reduced_seed_count: None,
@@ -6526,6 +6579,10 @@ fn report_target(
         support_overlap_run_status,
         support_overlap_run_gv,
         support_overlap_run_error,
+        support_overlap_run_qn_trace_polynomial_count,
+        support_overlap_run_target_qn_trace_status,
+        support_overlap_run_target_qn_trace_term_count,
+        support_overlap_run_qn_trace_sample,
     ) = if let Some(min_overlap) = support_overlap_min_for_run {
         if support_overlap_max_target_degree.is_some_and(|max_degree| sample.degree > max_degree) {
             (
@@ -6533,6 +6590,10 @@ fn report_target(
                 Some("skipped_target_degree_limit".to_string()),
                 None,
                 None,
+                None,
+                None,
+                None,
+                Vec::new(),
             )
         } else {
             match support_overlap_generator_gv(
@@ -6540,13 +6601,32 @@ fn report_target(
                 context,
                 min_overlap,
                 support_overlap_pair_reduce_for_run,
+                trace_support_overlap_qn,
             ) {
-                Ok((count, status, gv, error)) => (Some(count), Some(status), gv, error),
-                Err(error) => (None, Some("error".to_string()), None, Some(error)),
+                Ok(probe) => (
+                    Some(probe.generator_count),
+                    Some(probe.status),
+                    probe.gv,
+                    probe.error,
+                    probe.qn_trace_polynomial_count,
+                    probe.target_qn_trace_status,
+                    probe.target_qn_trace_term_count,
+                    probe.qn_trace_sample,
+                ),
+                Err(error) => (
+                    None,
+                    Some("error".to_string()),
+                    None,
+                    Some(error),
+                    None,
+                    None,
+                    None,
+                    Vec::new(),
+                ),
             }
         }
     } else {
-        (None, None, None, None)
+        (None, None, None, None, None, None, None, Vec::new())
     };
     let (
         cygv_semigroup_measure_status,
@@ -6683,6 +6763,10 @@ fn report_target(
             support_overlap_run_status,
             support_overlap_run_gv,
             support_overlap_run_error,
+            support_overlap_run_qn_trace_polynomial_count,
+            support_overlap_run_target_qn_trace_status,
+            support_overlap_run_target_qn_trace_term_count,
+            support_overlap_run_qn_trace_sample,
             cygv_semigroup_measure_status,
             cygv_semigroup_seed_count,
             cygv_semigroup_reduced_seed_count,
@@ -6711,6 +6795,10 @@ fn report_target(
             support_overlap_run_status,
             support_overlap_run_gv,
             support_overlap_run_error,
+            support_overlap_run_qn_trace_polynomial_count,
+            support_overlap_run_target_qn_trace_status,
+            support_overlap_run_target_qn_trace_term_count,
+            support_overlap_run_qn_trace_sample,
             cygv_semigroup_measure_status,
             cygv_semigroup_seed_count,
             cygv_semigroup_reduced_seed_count,
@@ -8706,14 +8794,19 @@ fn support_overlap_generator_gv(
     context: &ValidatedContext<'_>,
     min_overlap: usize,
     pair_reduce: bool,
-) -> Result<(usize, String, Option<String>, Option<String>), String> {
+    trace_qn: bool,
+) -> Result<ProvidedGeneratorTargetGvProbe, String> {
     if cfg!(panic = "abort") {
-        return Ok((
-            0,
-            "skipped_panic_abort".to_string(),
-            None,
-            Some("cygv diagnostic requires a panic=unwind build".to_string()),
-        ));
+        return Ok(ProvidedGeneratorTargetGvProbe {
+            generator_count: 0,
+            status: "skipped_panic_abort".to_string(),
+            gv: None,
+            error: Some("cygv diagnostic requires a panic=unwind build".to_string()),
+            qn_trace_polynomial_count: None,
+            target_qn_trace_status: None,
+            target_qn_trace_term_count: None,
+            qn_trace_sample: Vec::new(),
+        });
     }
     let target = dense_from_sparse(&sample.basis_nonzero, context.dimension)?;
     let support = if min_overlap == 0 {
@@ -8758,7 +8851,14 @@ fn support_overlap_generator_gv(
         (_, false) => "support_overlap_generators",
         (_, true) => "support_overlap_pair_reduced_generators",
     };
-    run_provided_generator_target_gv(&generators, &target, sample.degree, context, label)
+    run_provided_generator_target_gv(
+        &generators,
+        &target,
+        sample.degree,
+        context,
+        label,
+        trace_qn,
+    )
 }
 
 fn run_provided_generator_target_gv(
@@ -8767,7 +8867,8 @@ fn run_provided_generator_target_gv(
     target_degree: i128,
     context: &ValidatedContext<'_>,
     label: &str,
-) -> Result<(usize, String, Option<String>, Option<String>), String> {
+    trace_qn: bool,
+) -> Result<ProvidedGeneratorTargetGvProbe, String> {
     let max_deg = u32::try_from(target_degree)
         .map_err(|_| format!("target degree {target_degree} does not fit in u32"))?;
     let target_i32 = target
@@ -8776,6 +8877,12 @@ fn run_provided_generator_target_gv(
             i32::try_from(value).map_err(|_| "target coordinate does not fit in i32".to_string())
         })
         .collect::<Result<Vec<_>, _>>()?;
+    if trace_qn {
+        return run_provided_generator_target_gv_with_qn_trace(
+            generators, target_i32, max_deg, context, label,
+        );
+    }
+
     let previous_panic_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
     let gvs_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -8793,35 +8900,125 @@ fn run_provided_generator_target_gv(
     let gvs = match gvs_result {
         Ok(Ok(gvs)) => gvs,
         Ok(Err(error)) => {
-            return Ok((
-                generators.len(),
-                "hkty_error".to_string(),
-                None,
-                Some(format!("{label} HKTY failed: {error}")),
-            ));
+            return Ok(ProvidedGeneratorTargetGvProbe {
+                generator_count: generators.len(),
+                status: "hkty_error".to_string(),
+                gv: None,
+                error: Some(format!("{label} HKTY failed: {error}")),
+                qn_trace_polynomial_count: None,
+                target_qn_trace_status: None,
+                target_qn_trace_term_count: None,
+                qn_trace_sample: Vec::new(),
+            });
         }
         Err(payload) => {
-            return Ok((
-                generators.len(),
-                "hkty_panic".to_string(),
-                None,
-                Some(format!(
+            return Ok(ProvidedGeneratorTargetGvProbe {
+                generator_count: generators.len(),
+                status: "hkty_panic".to_string(),
+                gv: None,
+                error: Some(format!(
                     "{label} HKTY panicked: {}",
                     panic_payload_message(payload.as_ref())
                 )),
-            ));
+                qn_trace_polynomial_count: None,
+                target_qn_trace_status: None,
+                target_qn_trace_term_count: None,
+                qn_trace_sample: Vec::new(),
+            });
         }
     };
     let gv = gvs
         .into_iter()
         .find_map(|(curve, value)| (curve == target_i32).then(|| value.to_string()))
         .unwrap_or_else(|| "0".to_string());
-    Ok((
-        generators.len(),
-        format!("computed_{label}"),
-        Some(gv),
-        None,
-    ))
+    Ok(ProvidedGeneratorTargetGvProbe {
+        generator_count: generators.len(),
+        status: format!("computed_{label}"),
+        gv: Some(gv),
+        error: None,
+        qn_trace_polynomial_count: None,
+        target_qn_trace_status: None,
+        target_qn_trace_term_count: None,
+        qn_trace_sample: Vec::new(),
+    })
+}
+
+fn run_provided_generator_target_gv_with_qn_trace(
+    generators: &[Vec<i64>],
+    target_i32: Vec<i32>,
+    max_deg: u32,
+    context: &ValidatedContext<'_>,
+    label: &str,
+) -> Result<ProvidedGeneratorTargetGvProbe, String> {
+    let previous_panic_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let traced_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        compute_gv_invariants_with_provided_generators_qn_trace(
+            generators,
+            context.grading,
+            context.q_matrix,
+            &context.intersection,
+            None,
+            Some(max_deg),
+        )
+    }));
+    std::panic::set_hook(previous_panic_hook);
+
+    let traced = match traced_result {
+        Ok(Ok(traced)) => traced,
+        Ok(Err(error)) => {
+            return Ok(ProvidedGeneratorTargetGvProbe {
+                generator_count: generators.len(),
+                status: "hkty_error".to_string(),
+                gv: None,
+                error: Some(format!("{label} traced HKTY failed: {error}")),
+                qn_trace_polynomial_count: None,
+                target_qn_trace_status: None,
+                target_qn_trace_term_count: None,
+                qn_trace_sample: Vec::new(),
+            });
+        }
+        Err(payload) => {
+            return Ok(ProvidedGeneratorTargetGvProbe {
+                generator_count: generators.len(),
+                status: "hkty_panic".to_string(),
+                gv: None,
+                error: Some(format!(
+                    "{label} traced HKTY panicked: {}",
+                    panic_payload_message(payload.as_ref())
+                )),
+                qn_trace_polynomial_count: None,
+                target_qn_trace_status: None,
+                target_qn_trace_term_count: None,
+                qn_trace_sample: Vec::new(),
+            });
+        }
+    };
+
+    let qn_trace_polynomial_count = traced.qn_trace.len();
+    let qn_trace_sample = path_support_qn_trace_sample(&traced.qn_trace);
+    let target_qn_trace_term_count = traced
+        .qn_trace
+        .iter()
+        .find_map(|poly| (poly.element == target_i32).then_some(poly.terms.len()));
+    let gv = traced
+        .invariants
+        .into_iter()
+        .find_map(|(curve, value)| (curve == target_i32).then(|| value.to_string()))
+        .unwrap_or_else(|| "0".to_string());
+    let target_qn_trace_status =
+        support_overlap_qn_trace_status(&gv, target_qn_trace_term_count)?.to_string();
+
+    Ok(ProvidedGeneratorTargetGvProbe {
+        generator_count: generators.len(),
+        status: format!("computed_{label}_qn_trace"),
+        gv: Some(gv),
+        error: None,
+        qn_trace_polynomial_count: Some(qn_trace_polynomial_count),
+        target_qn_trace_status: Some(target_qn_trace_status),
+        target_qn_trace_term_count,
+        qn_trace_sample,
+    })
 }
 
 fn curve_degree(curve: &[i64], grading: &[i64]) -> Result<i128, String> {
@@ -8848,6 +9045,7 @@ fn build_report(
     support_overlap_min_for_run: Option<usize>,
     support_overlap_max_target_degree: Option<i128>,
     support_overlap_pair_reduce_for_run: bool,
+    trace_support_overlap_qn: bool,
     certify_origin_support_domains: bool,
     certify_origin_witness_domains: bool,
     origin_support_certificate_limit: usize,
@@ -8883,6 +9081,7 @@ fn build_report(
             support_overlap_min_for_run,
             support_overlap_max_target_degree,
             support_overlap_pair_reduce_for_run,
+            trace_support_overlap_qn,
             certify_origin_support_domains,
             origin_support_certificate_limit,
             certify_target_extremal_rays,
@@ -8962,6 +9161,7 @@ fn build_report(
                 false,
                 None,
                 None,
+                false,
                 false,
                 false,
                 origin_support_certificate_limit,
@@ -10363,7 +10563,7 @@ fn target_index_selected(index: usize, target_index_filter: Option<usize>) -> bo
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--certify-origin-witness-domains] [--origin-support-certificate-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--scan-local-integer-tensors] [--local-tensor-scan-bound N] [--element-limit N] [--closure-generation-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
+            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--trace-support-overlap-qn] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--certify-origin-witness-domains] [--origin-support-certificate-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--scan-local-integer-tensors] [--local-tensor-scan-bound N] [--element-limit N] [--closure-generation-limit N] [--out path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
         );
         std::process::exit(2);
     };
@@ -10373,6 +10573,7 @@ fn main() {
     let support_overlap_min_for_run = parse_arg_value::<usize>("--run-support-overlap-generators");
     let support_overlap_pair_reduce_for_run =
         parse_flag("--pair-reduce-support-overlap-generators");
+    let trace_support_overlap_qn = parse_flag("--trace-support-overlap-qn");
     let support_overlap_max_target_degree =
         parse_arg_value::<i128>("--support-overlap-max-target-degree");
     let certify_origin_support_domains = parse_flag("--certify-origin-support-domains");
@@ -10416,6 +10617,7 @@ fn main() {
         support_overlap_min_for_run,
         support_overlap_max_target_degree,
         support_overlap_pair_reduce_for_run,
+        trace_support_overlap_qn,
         certify_origin_support_domains,
         certify_origin_witness_domains,
         origin_support_certificate_limit,
@@ -13100,6 +13302,51 @@ mod tests {
     }
 
     #[test]
+    fn support_overlap_generator_probe_can_trace_target_qn_polynomial() {
+        let stats = MissingGvTargetStats {
+            target_count: 1,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: vec![minimal_missing_sample(vec![(0, 1)])],
+        };
+        let grading = vec![1];
+        let q_matrix = vec![vec![1, 1, 1, 1, 1]];
+        let degree_bounded_rays = vec![vec![1]];
+        let mut intersection = Intersection::new(1);
+        intersection.set(0, 0, 0, Rational::<Finite>::new(MalachiteRational::from(5)));
+        let context = ValidatedContext {
+            dimension: 1,
+            degree_bound: 1,
+            q_cols: 5,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: None,
+            covered_toric_gv_by_basis: HashMap::new(),
+            source_derived_gv_by_basis: HashMap::new(),
+            intersection,
+            stats: &stats,
+            uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
+        };
+
+        let probe = support_overlap_generator_gv(&stats.sample[0], &context, 0, false, true)
+            .expect("quintic-sized traced support-overlap probe should compute");
+
+        assert_eq!(probe.status, "computed_degree_bounded_generators_qn_trace");
+        assert_eq!(probe.generator_count, 1);
+        assert_eq!(probe.gv.as_deref(), Some("2875"));
+        assert_eq!(probe.qn_trace_polynomial_count, Some(1));
+        assert_eq!(
+            probe.target_qn_trace_status.as_deref(),
+            Some("support_overlap_qn_materialized_for_nonzero_gv")
+        );
+        assert_eq!(probe.target_qn_trace_term_count, Some(1));
+        assert_eq!(probe.qn_trace_sample.len(), 1);
+        assert_eq!(probe.qn_trace_sample[0].curve_nonzero, vec![(0, 1)]);
+        assert_eq!(probe.qn_trace_sample[0].term_count, 1);
+    }
+
+    #[test]
     fn sparse_matches_dense_rejects_missing_extra_or_duplicate_entries() {
         assert!(sparse_matches_dense(&[(0, 2), (3, -1)], &[2, 0, 0, -1]));
         assert!(!sparse_matches_dense(&[(0, 2)], &[2, 0, 0, -1]));
@@ -14623,6 +14870,7 @@ mod tests {
             None,
             false,
             false,
+            false,
             256,
             false,
             256,
@@ -14761,6 +15009,7 @@ mod tests {
             Some(4),
             false,
             false,
+            false,
             256,
             false,
             256,
@@ -14793,6 +15042,7 @@ mod tests {
             false,
             None,
             None,
+            false,
             false,
             false,
             256,

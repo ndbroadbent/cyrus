@@ -296,6 +296,13 @@ and matrix-basis pipeline are no longer open.
    after `1200s` in release mode after earlier debug runs for targets `7` and
    `8` timed out at `600s`. This leaves certified semigroup/chamber reduction
    as the next required implementation, not brute-force enlargement.
+   The same support-overlap provided-generator path can now be run with
+   `--trace-support-overlap-qn`; when the `cygv` call completes, the report
+   records qN polynomial count, target qN status, target qN term count, and a
+   bounded qN term sample. A tiny quintic regression verifies that this traces
+   the actual `cygv` history and recovers the degree-one `2875` qN polynomial.
+   This improves observability but does not change the broad-domain timeout
+   conclusion above.
    The path-history report now also mirrors `cygv`'s nearest live-`q_N`
    predecessor selection. The closest certified qN predecessor for target `7`
    is the toric degree-two class `[(44,1),(54,1),(206,-2)]` with an unknown
