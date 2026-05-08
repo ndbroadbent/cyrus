@@ -391,6 +391,16 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_generator_ckyz_kind_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_decomposition_term_context_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_decomposition_term_degree_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_decomposition_term_local_toric_kind_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_decomposition_term_ckyz_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_decomposition_term_bounded_lower_seed_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_flipped_chamber_cygv_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_flipped_chamber_cygv_gv_counts: BTreeMap<String, usize>,
@@ -413,6 +423,16 @@ struct ContextReport {
     local_cygv_source_resolution_star_union_flipped_chamber_generator_ckyz_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_flipped_chamber_generator_ckyz_kind_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_context_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_degree_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_local_toric_kind_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_ckyz_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_bounded_lower_seed_status_counts:
         BTreeMap<String, usize>,
     local_phase_chamber_membership_certificate_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_hint_sample: Vec<LocalCygvSourceResolutionHintSummary>,
@@ -16303,6 +16323,33 @@ fn build_report(
         chamber_semigroup_generator_ckyz_kind_counts(current_chamber_generator_contexts(
             &local_cygv_source_resolution_hint_sample,
         ));
+    let local_cygv_source_resolution_star_union_current_chamber_decomposition_term_context_status_counts =
+        chamber_decomposition_term_context_status_counts(chamber_decomposition_term_contexts(
+            &local_cygv_source_resolution_hint_sample,
+            ChamberSide::Current,
+        ));
+    let local_cygv_source_resolution_star_union_current_chamber_decomposition_term_degree_counts =
+        chamber_decomposition_term_degree_counts(chamber_decomposition_term_contexts(
+            &local_cygv_source_resolution_hint_sample,
+            ChamberSide::Current,
+        ));
+    let local_cygv_source_resolution_star_union_current_chamber_decomposition_term_local_toric_kind_counts =
+        chamber_decomposition_term_local_toric_kind_counts(chamber_decomposition_term_contexts(
+            &local_cygv_source_resolution_hint_sample,
+            ChamberSide::Current,
+        ));
+    let local_cygv_source_resolution_star_union_current_chamber_decomposition_term_ckyz_status_counts =
+        chamber_decomposition_term_ckyz_status_counts(chamber_decomposition_term_contexts(
+            &local_cygv_source_resolution_hint_sample,
+            ChamberSide::Current,
+        ));
+    let local_cygv_source_resolution_star_union_current_chamber_decomposition_term_bounded_lower_seed_status_counts =
+        chamber_decomposition_term_bounded_lower_seed_status_counts(
+            chamber_decomposition_term_contexts(
+                &local_cygv_source_resolution_hint_sample,
+                ChamberSide::Current,
+            ),
+        );
     let local_cygv_source_resolution_star_union_flipped_chamber_cygv_status_counts =
         provided_generator_cygv_probe_status_counts(
             local_cygv_source_resolution_hint_sample
@@ -16357,6 +16404,33 @@ fn build_report(
         chamber_semigroup_generator_ckyz_kind_counts(flipped_chamber_generator_contexts(
             &local_cygv_source_resolution_hint_sample,
         ));
+    let local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_context_status_counts =
+        chamber_decomposition_term_context_status_counts(chamber_decomposition_term_contexts(
+            &local_cygv_source_resolution_hint_sample,
+            ChamberSide::Flipped,
+        ));
+    let local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_degree_counts =
+        chamber_decomposition_term_degree_counts(chamber_decomposition_term_contexts(
+            &local_cygv_source_resolution_hint_sample,
+            ChamberSide::Flipped,
+        ));
+    let local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_local_toric_kind_counts =
+        chamber_decomposition_term_local_toric_kind_counts(chamber_decomposition_term_contexts(
+            &local_cygv_source_resolution_hint_sample,
+            ChamberSide::Flipped,
+        ));
+    let local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_ckyz_status_counts =
+        chamber_decomposition_term_ckyz_status_counts(chamber_decomposition_term_contexts(
+            &local_cygv_source_resolution_hint_sample,
+            ChamberSide::Flipped,
+        ));
+    let local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_bounded_lower_seed_status_counts =
+        chamber_decomposition_term_bounded_lower_seed_status_counts(
+            chamber_decomposition_term_contexts(
+                &local_cygv_source_resolution_hint_sample,
+                ChamberSide::Flipped,
+            ),
+        );
     let missing_local_cygv_missing_source_input_counts = local_cygv_missing_source_input_counts(
         targets
             .iter()
@@ -17349,6 +17423,11 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_kind_counts,
         local_cygv_source_resolution_star_union_current_chamber_generator_ckyz_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_generator_ckyz_kind_counts,
+        local_cygv_source_resolution_star_union_current_chamber_decomposition_term_context_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_decomposition_term_degree_counts,
+        local_cygv_source_resolution_star_union_current_chamber_decomposition_term_local_toric_kind_counts,
+        local_cygv_source_resolution_star_union_current_chamber_decomposition_term_ckyz_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_decomposition_term_bounded_lower_seed_status_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_cygv_status_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_cygv_gv_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_cygv_qn_status_counts,
@@ -17361,6 +17440,11 @@ fn build_report(
         local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_kind_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_generator_ckyz_status_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_generator_ckyz_kind_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_context_status_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_degree_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_local_toric_kind_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_ckyz_status_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_bounded_lower_seed_status_counts,
         local_phase_chamber_membership_certificate_status_counts,
         local_cygv_source_resolution_hint_sample,
         local_cygv_target_candidate_status_counts,
@@ -18711,6 +18795,43 @@ fn flipped_chamber_generator_contexts(
     })
 }
 
+#[derive(Clone, Copy)]
+enum ChamberSide {
+    Current,
+    Flipped,
+}
+
+fn chamber_decomposition_term_contexts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+    side: ChamberSide,
+) -> Vec<Option<&LocalCygvChamberSemigroupGeneratorContext>> {
+    let mut out = Vec::new();
+    for summary in summaries {
+        let transport = &summary.shared_two_simplex_star_union_chamber_semigroup_transport;
+        let (contexts, decomposition) = match side {
+            ChamberSide::Current => (
+                &transport.current_chamber_generator_context,
+                transport.current_chamber_decomposition.as_ref(),
+            ),
+            ChamberSide::Flipped => (
+                &transport.flipped_chamber_generator_context,
+                transport.flipped_chamber_decomposition.as_ref(),
+            ),
+        };
+        let Some(decomposition) = decomposition else {
+            continue;
+        };
+        for term in decomposition {
+            out.push(
+                contexts
+                    .iter()
+                    .find(|context| context.generator_index == term.generator_index),
+            );
+        }
+    }
+    out
+}
+
 fn provided_generator_cygv_probe_status_counts<'a>(
     probes: impl IntoIterator<Item = Option<&'a ProvidedGeneratorTargetGvProbe>>,
 ) -> BTreeMap<String, usize> {
@@ -18854,6 +18975,64 @@ fn chamber_semigroup_generator_ckyz_kind_counts<'a>(
             .map(|context| context.local_toric_diagnostic.ckyz_kind.as_deref()),
         "not_identified",
     )
+}
+
+fn chamber_decomposition_term_context_status_counts<'a>(
+    contexts: impl IntoIterator<Item = Option<&'a LocalCygvChamberSemigroupGeneratorContext>>,
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        contexts
+            .into_iter()
+            .map(|context| context.map(|_| "context_found")),
+        "missing_generator_context",
+    )
+}
+
+fn chamber_decomposition_term_degree_counts<'a>(
+    contexts: impl IntoIterator<Item = Option<&'a LocalCygvChamberSemigroupGeneratorContext>>,
+) -> BTreeMap<String, usize> {
+    optional_i128_count_counts(
+        contexts
+            .into_iter()
+            .map(|context| context.and_then(|c| c.degree)),
+        "missing_degree_or_context",
+    )
+}
+
+fn chamber_decomposition_term_local_toric_kind_counts<'a>(
+    contexts: impl IntoIterator<Item = Option<&'a LocalCygvChamberSemigroupGeneratorContext>>,
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        contexts.into_iter().map(|context| {
+            context.and_then(|c| c.local_toric_diagnostic.local_toric_kind.as_deref())
+        }),
+        "not_identified_or_missing_context",
+    )
+}
+
+fn chamber_decomposition_term_ckyz_status_counts<'a>(
+    contexts: impl IntoIterator<Item = Option<&'a LocalCygvChamberSemigroupGeneratorContext>>,
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        contexts
+            .into_iter()
+            .map(|context| context.map(|c| c.local_toric_diagnostic.ckyz_status.as_str())),
+        "missing_generator_context",
+    )
+}
+
+fn chamber_decomposition_term_bounded_lower_seed_status_counts<'a>(
+    contexts: impl IntoIterator<Item = Option<&'a LocalCygvChamberSemigroupGeneratorContext>>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for context in contexts {
+        let status = context.map_or_else(
+            || "missing_generator_context".to_string(),
+            chamber_semigroup_generator_bounded_lower_seed_status,
+        );
+        *counts.entry(status).or_insert(0usize) += 1;
+    }
+    counts
 }
 
 fn local_cygv_source_resolution_star_union_opposite_star_wall_circuit_status_counts(
@@ -30683,6 +30862,18 @@ mod tests {
             chamber_semigroup_generator_ckyz_status_counts([&known, &unknown, &invalid, &not_run]);
         let ckyz_kind_counts =
             chamber_semigroup_generator_ckyz_kind_counts([&known, &unknown, &invalid, &not_run]);
+        let term_contexts = [Some(&known), Some(&unknown), None];
+        let term_context_status_counts =
+            chamber_decomposition_term_context_status_counts(term_contexts.iter().copied());
+        let term_degree_counts =
+            chamber_decomposition_term_degree_counts(term_contexts.iter().copied());
+        let term_kind_counts =
+            chamber_decomposition_term_local_toric_kind_counts(term_contexts.iter().copied());
+        let term_ckyz_status_counts =
+            chamber_decomposition_term_ckyz_status_counts(term_contexts.iter().copied());
+        let term_lower_seed_counts = chamber_decomposition_term_bounded_lower_seed_status_counts(
+            term_contexts.iter().copied(),
+        );
 
         assert_eq!(
             history_counts.get("known_nonzero_source_gv").copied(),
@@ -30751,6 +30942,64 @@ mod tests {
         );
         assert_eq!(ckyz_kind_counts.get("local_p2").copied(), Some(1));
         assert_eq!(ckyz_kind_counts.get("not_identified").copied(), Some(3));
+        assert_eq!(
+            term_context_status_counts.get("context_found").copied(),
+            Some(2)
+        );
+        assert_eq!(
+            term_context_status_counts
+                .get("missing_generator_context")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(term_degree_counts.get("4").copied(), Some(1));
+        assert_eq!(term_degree_counts.get("6").copied(), Some(1));
+        assert_eq!(
+            term_degree_counts.get("missing_degree_or_context").copied(),
+            Some(1)
+        );
+        assert_eq!(
+            term_kind_counts.get("rank_two_quadrilateral").copied(),
+            Some(1)
+        );
+        assert_eq!(
+            term_kind_counts
+                .get("not_identified_or_missing_context")
+                .copied(),
+            Some(2)
+        );
+        assert_eq!(
+            term_ckyz_status_counts.get("ckyz_no_source_match").copied(),
+            Some(1)
+        );
+        assert_eq!(
+            term_ckyz_status_counts
+                .get("ckyz_not_run_non_rank_two_support")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(
+            term_ckyz_status_counts
+                .get("missing_generator_context")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(
+            term_lower_seed_counts
+                .get("decomposed_into_two_lower_seeds")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(
+            term_lower_seed_counts.get("not_found_up_to_4").copied(),
+            Some(1)
+        );
+        assert_eq!(
+            term_lower_seed_counts
+                .get("missing_generator_context")
+                .copied(),
+            Some(1)
+        );
     }
 
     #[test]

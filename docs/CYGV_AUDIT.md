@@ -3860,6 +3860,19 @@ quadrilateral circuits but still lack source-certified compact qN history, and
 the rank-three/rank-four terms are outside the rank-two potent-ray extractor.
 No local CKYZ or quadrilateral candidate is promoted into corrected-chamber GV
 history from this diagnostic.
+The report now aggregates the decomposition-term subset separately from the
+ambient chamber generators. In
+`/tmp/cyrus_star_union_all_chamber_decomposition_term_aggregate.json`, all five
+current decomposition terms have generator contexts; their degrees are
+`{2:2, 4:2, 16:1}`, their local-toric kinds are
+`rank_two_quadrilateral:2` and `not_identified_or_missing_context:3`, their
+CKYZ statuses are `ckyz_no_source_match:2` and
+`ckyz_not_run_non_rank_two_support:3`, and their lower-seed statuses are
+`found_lower_seed_decomposition:2`, `not_found_up_to_4:2`, and
+`not_run_or_not_applicable:1`. The flipped decomposition-term aggregate has six
+context-found terms with degrees `{-4:2, 2:2, 8:2}`; because it includes the
+negative degree terms and remains CKYZ/source-history uncertified, it stays a
+neighboring diagnostic rather than a compact HKTY history.
 
 The no-replay boundary around the standalone GV binary is stricter now:
 `mcallister_gv` no longer reads `dual_curves.dat` or `dual_curves_gv.dat`.

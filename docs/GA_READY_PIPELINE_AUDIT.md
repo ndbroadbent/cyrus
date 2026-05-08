@@ -1585,6 +1585,17 @@ to make the remaining GV layer more first-principles:
    source-certified compact qN history, and the rank-three/rank-four terms are
    outside the rank-two extractor. This keeps the next step at certified
    chamber/source construction rather than promoting a local CKYZ value.
+   The report now also aggregates only the chamber decomposition terms, so the
+   actual blocker queue is visible without inspecting all generators:
+   `/tmp/cyrus_star_union_all_chamber_decomposition_term_aggregate.json` records
+   five current terms with contexts found, degree buckets `{2:2, 4:2, 16:1}`,
+   local-toric-kind buckets `rank_two_quadrilateral:2` and
+   `not_identified_or_missing_context:3`, CKYZ buckets
+   `ckyz_no_source_match:2` and `ckyz_not_run_non_rank_two_support:3`, and
+   lower-seed buckets `found_lower_seed_decomposition:2`,
+   `not_found_up_to_4:2`, and `not_run_or_not_applicable:1`. The flipped
+   decomposition has six context-found terms, but two have negative degree
+   `-4`, and all remain non-promotable diagnostics.
    A follow-up compact-omission wall-side summary confirms this selected side
    is not one of the compact omission phases: both target rows have four
    compact omissions, but zero full-positive-side or full-negative-side
