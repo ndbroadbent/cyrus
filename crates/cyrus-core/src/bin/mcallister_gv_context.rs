@@ -655,6 +655,18 @@ struct LocalCygvHypersurfaceShape {
 }
 
 #[derive(Clone, Debug, Serialize)]
+struct LocalCygvCompleteIntersectionShapeCandidate {
+    q_rows: usize,
+    q_cols: usize,
+    cy_codim: usize,
+    ambient_dim: i64,
+    cy_dim: i64,
+    nef_partition_part_count: usize,
+    status: String,
+    missing_inputs: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
 struct LocalChargeMultiplicity {
     charge: i64,
     count: usize,
@@ -980,6 +992,7 @@ struct LocalCygvStarUnionTargetPlusStarSupportHint {
 struct LocalCygvStarUnionTargetPlusStarLocalCygvReadiness {
     status: String,
     hypersurface_shape: Option<LocalCygvHypersurfaceShape>,
+    complete_intersection_shape_candidate: Option<LocalCygvCompleteIntersectionShapeCandidate>,
     local_q_matrix_rows: Option<Vec<Vec<i64>>>,
     local_cygv_wrapper_q_matrix_candidate: Option<Vec<Vec<i64>>>,
     local_cygv_phase_q_matrix_candidate: Option<Vec<Vec<i64>>>,
@@ -9941,6 +9954,33 @@ fn local_cygv_hypersurface_shape_from_dimensions_and_charge_basis(
         is_compact_threefold_hypersurface_shape,
         cygv_compact_input_status,
         cygv_compact_input_missing,
+    })
+}
+
+fn local_cygv_complete_intersection_shape_candidate(
+    hypersurface_shape: &LocalCygvHypersurfaceShape,
+) -> Option<LocalCygvCompleteIntersectionShapeCandidate> {
+    let required_codim = hypersurface_shape.ambient_dim.checked_sub(3)?;
+    if required_codim <= 1 {
+        return None;
+    }
+    let cy_codim = usize::try_from(required_codim).ok()?;
+    if cy_codim > hypersurface_shape.q_rows {
+        return None;
+    }
+    Some(LocalCygvCompleteIntersectionShapeCandidate {
+        q_rows: hypersurface_shape.q_rows,
+        q_cols: hypersurface_shape.q_cols,
+        cy_codim,
+        ambient_dim: hypersurface_shape.ambient_dim,
+        cy_dim: 3,
+        nef_partition_part_count: cy_codim,
+        status: "complete_intersection_cy3_shape_requires_source_derived_nef_partition".to_string(),
+        missing_inputs: vec![
+            "source_derived_nef_partition".to_string(),
+            "complete_intersection_intersection_tensor".to_string(),
+            "complete_intersection_chamber_certificate".to_string(),
+        ],
     })
 }
 
@@ -21932,6 +21972,8 @@ fn local_cygv_star_union_target_plus_star_local_cygv_readiness(
             );
         }
     };
+    let complete_intersection_shape_candidate =
+        local_cygv_complete_intersection_shape_candidate(&shape);
     let relation_coordinates = support.relation_coordinates.as_deref();
     let target_relation_status = match relation_coordinates {
         Some(coordinates) if !coordinates.is_empty() => {
@@ -21995,7 +22037,15 @@ fn local_cygv_star_union_target_plus_star_local_cygv_readiness(
     );
     let mut missing_inputs = Vec::new();
     if !shape.is_compact_threefold_hypersurface_shape {
-        missing_inputs.push("compact_threefold_hypersurface_shape".to_string());
+        if complete_intersection_shape_candidate.is_some() {
+            missing_inputs.push("source_derived_nef_partition".to_string());
+        } else {
+            missing_inputs.push("compact_threefold_hypersurface_shape".to_string());
+        }
+    }
+    if complete_intersection_shape_candidate.is_some() {
+        missing_inputs.push("complete_intersection_intersection_tensor".to_string());
+        missing_inputs.push("complete_intersection_chamber_certificate".to_string());
     }
     if relation_coordinates.is_none() {
         missing_inputs.push("target_class_to_local_semigroup_coordinate".to_string());
@@ -22031,6 +22081,10 @@ fn local_cygv_star_union_target_plus_star_local_cygv_readiness(
     .to_string();
     let status = if actual_call_readiness == "ready_for_actual_cygv_call" {
         "target_plus_star_local_cygv_ready_for_actual_call"
+    } else if !shape.is_compact_threefold_hypersurface_shape
+        && complete_intersection_shape_candidate.is_some()
+    {
+        "target_plus_star_local_cygv_blocked_complete_intersection_nef_partition_not_certified"
     } else if !shape.is_compact_threefold_hypersurface_shape {
         "target_plus_star_local_cygv_blocked_not_compact_threefold_shape"
     } else if relation_coordinates.is_none() {
@@ -22046,6 +22100,7 @@ fn local_cygv_star_union_target_plus_star_local_cygv_readiness(
     LocalCygvStarUnionTargetPlusStarLocalCygvReadiness {
         status,
         hypersurface_shape: Some(shape),
+        complete_intersection_shape_candidate,
         local_q_matrix_rows: Some(local_q_matrix_rows),
         local_cygv_wrapper_q_matrix_candidate,
         local_cygv_phase_q_matrix_candidate,
@@ -22260,6 +22315,7 @@ fn blocked_target_plus_star_local_cygv_readiness(
     LocalCygvStarUnionTargetPlusStarLocalCygvReadiness {
         status: status.to_string(),
         hypersurface_shape: None,
+        complete_intersection_shape_candidate: None,
         local_q_matrix_rows: None,
         local_cygv_wrapper_q_matrix_candidate: None,
         local_cygv_phase_q_matrix_candidate: None,
@@ -25227,6 +25283,7 @@ mod tests {
                 LocalCygvStarUnionTargetPlusStarLocalCygvReadiness {
                     status: "test".to_string(),
                     hypersurface_shape: None,
+                    complete_intersection_shape_candidate: None,
                     local_q_matrix_rows: None,
                     local_cygv_wrapper_q_matrix_candidate: None,
                     local_cygv_phase_q_matrix_candidate: None,
@@ -28331,7 +28388,7 @@ mod tests {
 
         assert_eq!(
             readiness.status,
-            "target_plus_star_local_cygv_blocked_not_compact_threefold_shape"
+            "target_plus_star_local_cygv_blocked_complete_intersection_nef_partition_not_certified"
         );
         assert_eq!(
             readiness.actual_call_readiness,
@@ -28346,6 +28403,16 @@ mod tests {
         assert_eq!(shape.cy_dim, 4);
         assert!(shape.is_calabi_yau_charge);
         assert!(!shape.is_compact_threefold_hypersurface_shape);
+        let complete_intersection = readiness
+            .complete_intersection_shape_candidate
+            .as_ref()
+            .expect("codimension-two complete-intersection shape should be visible");
+        assert_eq!(complete_intersection.cy_codim, 2);
+        assert_eq!(complete_intersection.cy_dim, 3);
+        assert_eq!(
+            complete_intersection.status,
+            "complete_intersection_cy3_shape_requires_source_derived_nef_partition"
+        );
         assert_eq!(
             readiness.target_relation_status,
             "target_relation_integral_in_target_plus_star_charge_basis"
@@ -28360,6 +28427,11 @@ mod tests {
         );
         assert!(
             readiness
+                .missing_inputs
+                .contains(&"source_derived_nef_partition".to_string())
+        );
+        assert!(
+            !readiness
                 .missing_inputs
                 .contains(&"compact_threefold_hypersurface_shape".to_string())
         );
@@ -28452,6 +28524,17 @@ mod tests {
         let readiness = local_cygv_star_union_target_plus_star_local_cygv_readiness(&support);
 
         assert_eq!(
+            readiness.status,
+            "target_plus_star_local_cygv_blocked_complete_intersection_nef_partition_not_certified"
+        );
+        assert_eq!(
+            readiness
+                .complete_intersection_shape_candidate
+                .as_ref()
+                .map(|candidate| (candidate.cy_codim, candidate.cy_dim)),
+            Some((2, 3))
+        );
+        assert_eq!(
             readiness.local_q_matrix_orientation_status,
             "source_derived_target_positive_orientation"
         );
@@ -28480,6 +28563,11 @@ mod tests {
             readiness
                 .missing_inputs
                 .contains(&"local_grading_vector".to_string())
+        );
+        assert!(
+            readiness
+                .missing_inputs
+                .contains(&"source_derived_nef_partition".to_string())
         );
         assert_eq!(readiness.single_column_omission_candidates.len(), 7);
         assert!(readiness.single_column_omission_candidates.iter().all(

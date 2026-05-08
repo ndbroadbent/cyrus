@@ -3427,30 +3427,35 @@ remaining chamber/qN object is a two-parameter local support with an integral
 target direction; reducing it to a one-parameter formula would be another
 shortcut.
 Regenerating as
-`/tmp/cyrus_gv_context_target_plus_star_local_cygv_readiness_report.json` now
+`/tmp/cyrus_target7_cicy_readiness_report.json` and
+`/tmp/cyrus_target8_cicy_readiness_report.json` now
 evaluates that support against the actual compact `cygv` input shape
-requirements before any value is attempted. All nine target-plus-star local
-handoffs remain `blocked_missing_source_derived_inputs`. In aggregate, four
-rows are blocked as
-`target_plus_star_local_cygv_blocked_not_compact_threefold_shape`, two lack an
-integral target coordinate, two lack a charge basis because the target-plus-star
-relation is absent, and one reaches a compact threefold phase but still lacks
-tensor/chamber certification. For the concrete target `7`/`8` blocker, both
-supports are Calabi-Yau charge rows with `q_rows=7`, `q_cols=2`,
-`ambient_dim=5`, and `cy_dim=4`; target `7` also has no nonnegative primitive
-orientation for coordinates `[3,-1]`, while target `8` has positive
-coordinates `[1,1]` but is blocked on a higher-rank semigroup and grading
-certificate plus the missing compact-threefold phase. The same report checks
-the cheap one-column reductions by recomputing the affine charge basis after
-each omission. Across all target-plus-star rows there are now `12` compact
-threefold Calabi-Yau omissions, `7` dimension-three non-Calabi-Yau omissions,
-and `26` omissions that are not dimension three. None of the compact-threefold
-omissions are the target `7`/`8` blocker: for targets `7` and `8`
+requirements before any value is attempted. Cyrus now distinguishes the
+hypersurface and complete-intersection readings: the target `7`/`8`
+seven-point supports are not hypersurface CY3 inputs (`q_rows=7`, `q_cols=2`,
+`ambient_dim=5`, hypersurface `cy_dim=4`), but they are codimension-2
+complete-intersection CY3 shape candidates (`cy_codim=2`, `cy_dim=3`). The
+target-plus-star readiness status for each is now
+`target_plus_star_local_cygv_blocked_complete_intersection_nef_partition_not_certified`.
+This does not promote a GV value: the missing inputs are now sharper and include
+`source_derived_nef_partition`,
+`complete_intersection_intersection_tensor`,
+`complete_intersection_chamber_certificate`, plus the existing semigroup,
+grading, phase, tensor, and chamber certificates. Target `7` also has no
+nonnegative primitive orientation for coordinates `[3,-1]`, while target `8`
+has positive coordinates `[1,1]` but still lacks the higher-rank semigroup and
+grading certificate. The same report checks the cheap one-column reductions by
+recomputing the affine charge basis after each omission. Across all
+target-plus-star rows there are now `12` compact threefold Calabi-Yau omissions,
+`7` dimension-three non-Calabi-Yau omissions, and `26` omissions that are not
+dimension three. None of the compact-threefold omissions are the target `7`/`8`
+blocker: for targets `7` and `8`
 specifically, every single-column omission recomputes to one charge row with
 `q_rows=6`, `q_cols=1`, `cy_dim=4`, and Calabi-Yau charge. This rules out
 handing the two-parameter target-plus-star row directly to compact `cygv` or
 fixing targets `7`/`8` by dropping one support point; the next object must be a
-source-derived chamber/reduction history, not a raw local `cygv` call.
+source-derived nef partition and chamber/reduction history, not a raw local
+`cygv` hypersurface call.
 The same readiness report now recomputes every two-column omission from the
 remaining point coordinates rather than deleting columns from the original
 charge basis. Across all target-plus-star rows it finds `9` compact

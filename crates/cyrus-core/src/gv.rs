@@ -11292,6 +11292,45 @@ pub fn compute_gv_invariants_with_provided_generators(
     )
 }
 
+/// Compute GV invariants using exactly the caller-provided semigroup generators
+/// and an explicit `cygv` nef partition.
+///
+/// This is the complete-intersection analogue of
+/// [`compute_gv_invariants_with_provided_generators`]. Cyrus still delegates the
+/// HKTY computation to upstream `cygv`; this function only prepares the finite
+/// semigroup, GLSM matrix, intersection tensor, and nef partition boundary.
+///
+/// # Errors
+/// Returns an error if the input shapes or numeric ranges are invalid, if `cygv`
+/// cannot construct the semigroup, or if the nef partition is inconsistent with
+/// the supplied charge matrix.
+pub fn compute_gv_invariants_with_provided_generators_and_nef_partition(
+    generators: &[Vec<i64>],
+    grading_vector: &[i64],
+    q_matrix: &[Vec<i64>],
+    nef_partition: &[Vec<usize>],
+    intnums: &Intersection,
+    min_points: Option<u32>,
+    max_deg: Option<u32>,
+) -> Result<Vec<(Vec<i32>, Integer)>> {
+    let (semigroup, q, intnums_map) = provided_cygv_semigroup_inputs(
+        generators,
+        grading_vector,
+        q_matrix,
+        intnums,
+        min_points,
+        max_deg,
+    )?;
+    let nefpart = cygv_nef_partition(nef_partition, q.nrows())?;
+    compute_cygv_rat_threefold_from_semigroup_with_nefpart(
+        semigroup,
+        &q,
+        &nefpart,
+        intnums_map,
+        "provided-generator complete-intersection GV",
+    )
+}
+
 /// Compute GV invariants and compact `q_N` polynomial history from
 /// caller-provided semigroup generators.
 ///
@@ -11455,6 +11494,36 @@ pub fn compute_gv_invariants_with_explicit_semigroup(
     let (semigroup, q, intnums_map) =
         explicit_cygv_semigroup_inputs(elements, grading_vector, q_matrix, intnums)?;
     compute_cygv_rat_threefold_from_semigroup(semigroup, &q, intnums_map, "explicit GV semigroup")
+}
+
+/// Compute GV invariants using an explicitly truncated semigroup and an
+/// explicit `cygv` nef partition.
+///
+/// This is intended for source-derived local complete-intersection diagnostics
+/// where the finite HKTY domain is already known. It does not close the supplied
+/// elements under addition; it passes the exact semigroup to `cygv`.
+///
+/// # Errors
+/// Returns an error if the semigroup, grading, GLSM charge matrix, nef
+/// partition, or intersection numbers are inconsistent.
+#[allow(clippy::too_many_lines)]
+pub fn compute_gv_invariants_with_explicit_semigroup_and_nef_partition(
+    elements: &[Vec<i64>],
+    grading_vector: &[i64],
+    q_matrix: &[Vec<i64>],
+    nef_partition: &[Vec<usize>],
+    intnums: &Intersection,
+) -> Result<Vec<(Vec<i32>, Integer)>> {
+    let (semigroup, q, intnums_map) =
+        explicit_cygv_semigroup_inputs(elements, grading_vector, q_matrix, intnums)?;
+    let nefpart = cygv_nef_partition(nef_partition, q.nrows())?;
+    compute_cygv_rat_threefold_from_semigroup_with_nefpart(
+        semigroup,
+        &q,
+        &nefpart,
+        intnums_map,
+        "explicit complete-intersection GV semigroup",
+    )
 }
 
 /// Compute GV invariants and compact `q_N` polynomial history using an
@@ -12092,6 +12161,23 @@ fn compute_cygv_rat_threefold_from_semigroup(
     intnums_map: HashMap<(usize, usize, usize), i32>,
     context: &str,
 ) -> Result<Vec<(Vec<i32>, Integer)>> {
+    let nefpart: Vec<DVector<i32>> = Vec::new();
+    compute_cygv_rat_threefold_from_semigroup_with_nefpart(
+        semigroup,
+        q,
+        &nefpart,
+        intnums_map,
+        context,
+    )
+}
+
+fn compute_cygv_rat_threefold_from_semigroup_with_nefpart(
+    semigroup: cygv::Semigroup,
+    q: &DMatrix<i32>,
+    nefpart: &[DVector<i32>],
+    intnums_map: HashMap<(usize, usize, usize), i32>,
+    context: &str,
+) -> Result<Vec<(Vec<i32>, Integer)>> {
     if cfg!(panic = "abort") {
         return Err(Error::InvalidInput(format!(
             "{context}: cygv HKTY execution requires a panic=unwind build because upstream cygv can still panic internally"
@@ -12101,7 +12187,13 @@ fn compute_cygv_rat_threefold_from_semigroup(
     let previous_panic_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        compute_cygv_rat_threefold_from_semigroup_unchecked(semigroup, q, intnums_map, context)
+        compute_cygv_rat_threefold_from_semigroup_unchecked(
+            semigroup,
+            q,
+            nefpart,
+            intnums_map,
+            context,
+        )
     }));
     std::panic::set_hook(previous_panic_hook);
 
@@ -12183,12 +12275,14 @@ fn compute_cygv_rat_threefold_gw_coefficient_trace_from_semigroup(
 fn compute_cygv_rat_threefold_from_semigroup_unchecked(
     semigroup: cygv::Semigroup,
     q: &DMatrix<i32>,
+    nefpart: &[DVector<i32>],
     intnums_map: HashMap<(usize, usize, usize), i32>,
     context: &str,
 ) -> Result<Vec<(Vec<i32>, Integer)>> {
     compute_cygv_rat_threefold_raw_from_semigroup_unchecked(
         semigroup,
         q,
+        nefpart,
         intnums_map,
         context,
         false,
@@ -12202,9 +12296,11 @@ fn compute_cygv_rat_threefold_from_semigroup_with_qn_trace_unchecked(
     intnums_map: HashMap<(usize, usize, usize), i32>,
     context: &str,
 ) -> Result<GvInvariantsWithQnTrace> {
+    let nefpart: Vec<DVector<i32>> = Vec::new();
     compute_cygv_rat_threefold_raw_from_semigroup_unchecked(
         semigroup,
         q,
+        &nefpart,
         intnums_map,
         context,
         true,
@@ -12294,6 +12390,7 @@ fn convert_cygv_gv_coefficient_trace(
 fn compute_cygv_rat_threefold_raw_from_semigroup_unchecked(
     semigroup: cygv::Semigroup,
     q: &DMatrix<i32>,
+    nefpart: &[DVector<i32>],
     intnums_map: HashMap<(usize, usize, usize), i32>,
     context: &str,
     collect_qn_trace: bool,
@@ -12314,13 +12411,11 @@ fn compute_cygv_rat_threefold_raw_from_semigroup_unchecked(
         .map(|_| cygv::NumberPool::new(poly_props.zero_cutoff.clone(), pool_size))
         .collect();
     let mut all_pools = (main_pool, thread_pools);
-    let nefpart: Vec<DVector<i32>> = Vec::new();
-
     let fp = cygv::fundamental_period::compute_omega(
         &poly_props,
         &semigroup,
         q,
-        &nefpart,
+        nefpart,
         &intnum_idxpairs,
         &mut all_pools,
     )
@@ -12455,6 +12550,42 @@ fn cygv_q_matrix(q_matrix: &[Vec<i64>], dim: usize) -> Result<DMatrix<i32>> {
     let q = DMatrix::from_row_slice(q_rows, q_cols, &q_data);
     // cygv expects q with shape (n_divisors, h11), i.e. transpose of curve basis.
     Ok(q.transpose())
+}
+
+fn cygv_nef_partition(
+    nef_partition: &[Vec<usize>],
+    q_row_count: usize,
+) -> Result<Vec<DVector<i32>>> {
+    if nef_partition.is_empty() {
+        return Err(Error::InvalidInput("nef partition is empty".into()));
+    }
+    let mut seen = HashSet::new();
+    let mut out = Vec::with_capacity(nef_partition.len());
+    for part in nef_partition {
+        if part.is_empty() {
+            return Err(Error::InvalidInput(
+                "nef partition contains an empty part".into(),
+            ));
+        }
+        let mut converted = Vec::with_capacity(part.len());
+        for &idx in part {
+            if idx >= q_row_count {
+                return Err(Error::InvalidInput(format!(
+                    "nef partition index {idx} is out of range for q row count {q_row_count}"
+                )));
+            }
+            if !seen.insert(idx) {
+                return Err(Error::InvalidInput(format!(
+                    "nef partition index {idx} appears in more than one part"
+                )));
+            }
+            converted.push(i32::try_from(idx).map_err(|_| {
+                Error::InvalidInput("nef partition index does not fit in i32".into())
+            })?);
+        }
+        out.push(DVector::from_column_slice(&converted));
+    }
+    Ok(out)
 }
 
 fn cygv_intnums_map(intnums: &Intersection) -> Result<HashMap<(usize, usize, usize), i32>> {
@@ -13086,8 +13217,10 @@ mod tests {
         compute_ckyz_log_period_corrections, compute_ckyz_log_period_corrections_domain,
         compute_grading_vector, compute_gv_invariants_inner,
         compute_gv_invariants_with_explicit_semigroup,
+        compute_gv_invariants_with_explicit_semigroup_and_nef_partition,
         compute_gv_invariants_with_explicit_semigroup_qn_trace,
         compute_gv_invariants_with_provided_generators,
+        compute_gv_invariants_with_provided_generators_and_nef_partition,
         compute_gv_invariants_with_provided_generators_qn_trace,
         compute_gw_coefficient_trace_with_explicit_semigroup,
         compute_gw_coefficient_trace_with_provided_generators,
@@ -13257,6 +13390,48 @@ mod tests {
         assert!(
             err.to_string()
                 .contains("cygv semigroup construction failed")
+        );
+    }
+
+    #[test]
+    fn provided_generator_complete_intersection_path_validates_nef_partition() {
+        let mut intnums = Intersection::new(1);
+        set_intersection_i64(&mut intnums, 0, 0, 0, 1);
+
+        let err = compute_gv_invariants_with_provided_generators_and_nef_partition(
+            &[vec![1]],
+            &[1],
+            &[vec![1, 1, 1, 1, 1, 1]],
+            &[vec![0, 1], vec![1, 2]],
+            &intnums,
+            None,
+            Some(1),
+        )
+        .unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains("nef partition index 1 appears in more than one part")
+        );
+    }
+
+    #[test]
+    fn explicit_complete_intersection_path_passes_nef_partition_to_cygv() {
+        let mut intnums = Intersection::new(1);
+        set_intersection_i64(&mut intnums, 0, 0, 0, 1);
+
+        let err = compute_gv_invariants_with_explicit_semigroup_and_nef_partition(
+            &[vec![0], vec![1]],
+            &[1],
+            &[vec![1, 1, 1, 1, 1, 1]],
+            &[vec![0], vec![1], vec![2]],
+            &intnums,
+        )
+        .unwrap_err();
+
+        assert!(
+            err.to_string().contains("cygv fundamental period failed"),
+            "expected a cygv-stage error after nef partition conversion, got {err}"
         );
     }
 
