@@ -1522,7 +1522,13 @@ to make the remaining GV layer more first-principles:
    component (`GV=-2`), while the decompositions still use unknown generators.
    This confirms the semigroup candidate is globally meaningful local chamber
    data, but it is not yet the certified compact `q_N` history needed for
-   promotion.
+   promotion. The same generator-level export now attaches the existing
+   bounded lower-seed decomposition diagnostic: the known degree-4 wall
+   component decomposes into two lower seeds, and some unknown degree-4 chamber
+   generators also have two-term bounded decompositions. The remaining unknown
+   degree-2 and degree-6 chamber generators report `not_found_up_to_4`, so the
+   unresolved part is still a compact/source chamber history problem rather
+   than a scalar lookup problem.
    A follow-up compact-omission wall-side summary confirms this selected side
    is not one of the compact omission phases: both target rows have four
    compact omissions, but zero full-positive-side or full-negative-side

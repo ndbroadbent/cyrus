@@ -3799,7 +3799,12 @@ current chamber's known row is the degree-4 source wall component with `GV=1`;
 the flipped chamber's known row is the degree-8 source component with `GV=-2`.
 The target-plus-star decompositions still depend on unknown generators, so this
 is evidence for a real global chamber-semigroup object but not a replacement
-for source-certified compact qN history.
+for source-certified compact qN history. Those generator rows now also carry
+bounded lower-seed diagnostics. The known degree-4 wall row decomposes into two
+lower seeds, and several unknown degree-4 chamber generators do as well, but
+the unknown degree-2 and degree-6 generators in the target `7`/`8` chamber
+decompositions are still `not_found_up_to_4`. That keeps the missing object at
+the chamber/history level rather than at a single missing scalar source row.
 
 The no-replay boundary around the standalone GV binary is stricter now:
 `mcallister_gv` no longer reads `dual_curves.dat` or `dual_curves_gv.dat`.

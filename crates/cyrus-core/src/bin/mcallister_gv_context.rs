@@ -993,6 +993,9 @@ struct LocalCygvChamberSemigroupGeneratorContext {
     source_derived_gv: Option<String>,
     source_class_status: Option<String>,
     source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
+    lower_seed_sum_decomposition: Option<CygvSeedSumDecomposition>,
+    bounded_lower_seed_decomposition: Option<CygvBoundedSeedDecompositionSummary>,
+    lower_seed_decomposition_error: Option<String>,
     error: Option<String>,
 }
 
@@ -22079,6 +22082,9 @@ fn chamber_semigroup_generator_context(
             source_derived_gv: None,
             source_class_status: None,
             source_ray_ambient_nonzero: None,
+            lower_seed_sum_decomposition: None,
+            bounded_lower_seed_decomposition: None,
+            lower_seed_decomposition_error: None,
             error,
         }
     };
@@ -22116,6 +22122,9 @@ fn chamber_semigroup_generator_context(
             source_derived_gv: None,
             source_class_status: None,
             source_ray_ambient_nonzero: None,
+            lower_seed_sum_decomposition: None,
+            bounded_lower_seed_decomposition: None,
+            lower_seed_decomposition_error: None,
             error: None,
         };
     }
@@ -22164,6 +22173,9 @@ fn chamber_semigroup_generator_context(
                 source_derived_gv: None,
                 source_class_status: None,
                 source_ray_ambient_nonzero: None,
+                lower_seed_sum_decomposition: None,
+                bounded_lower_seed_decomposition: None,
+                lower_seed_decomposition_error: None,
                 error: Some(error),
             };
         }
@@ -22172,6 +22184,11 @@ fn chamber_semigroup_generator_context(
         global_basis_known_qn_history(&basis_dense, context);
     let (source_class_status, source_ray_ambient_nonzero) =
         global_basis_source_class_lookup(&basis_dense, context);
+    let (
+        lower_seed_sum_decomposition,
+        bounded_lower_seed_decomposition,
+        lower_seed_decomposition_error,
+    ) = star_union_lower_seed_diagnostics(&basis_dense, degree, context);
 
     LocalCygvChamberSemigroupGeneratorContext {
         generator_index,
@@ -22186,6 +22203,9 @@ fn chamber_semigroup_generator_context(
         source_derived_gv,
         source_class_status,
         source_ray_ambient_nonzero,
+        lower_seed_sum_decomposition,
+        bounded_lower_seed_decomposition,
+        lower_seed_decomposition_error,
         error,
     }
 }
