@@ -1197,11 +1197,15 @@ to make the remaining GV layer more first-principles:
    `target_in_closure=false`, `not_found_up_to_4` lower-seed decomposition,
    and top-level status bucket `stopped_generation_limit_1`. The same probe now
    uses streaming element-limit enforcement, so the formerly timing-out
-   generation-2 run completes in 24.50s with status
+   generation-2 run completes with status
    `exceeded_element_limit_150000_during_generation_2`, `150000` retained
    closure elements, generation-2 partial count `84462`, and
-   `target_in_closure=false`. This pushes the next task back to certified
-   chamber semigroup/history construction.
+   `target_in_closure=false`. A regenerated target `7` run has the same
+   degree-6 profile (`463` seeds, `355` reduced seeds, no lower-seed
+   decomposition up to four terms, target not in closure), and the report now
+   exposes top-level buckets for path-history closure and lower-seed status:
+   `target_not_in_closure:1` and `not_found_up_to_4:1`. This pushes the next
+   task back to certified chamber semigroup/history construction.
    The shared-face fan over the full star-union support has now been checked
    directly as a candidate chamber certificate: regenerating
    `/tmp/cyrus_gv_context_star_union_shared_face_secondary_report.json`

@@ -340,6 +340,10 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_target_plus_star_path_history_target_closure_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_target_plus_star_path_history_lower_seed_status_counts:
+        BTreeMap<String, usize>,
     local_phase_chamber_membership_certificate_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_hint_sample: Vec<LocalCygvSourceResolutionHintSummary>,
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
@@ -15824,6 +15828,14 @@ fn build_report(
         local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts(
             &local_cygv_source_resolution_hint_sample,
         );
+    let local_cygv_source_resolution_star_union_target_plus_star_path_history_target_closure_counts =
+        local_cygv_source_resolution_star_union_target_plus_star_path_history_target_closure_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
+    let local_cygv_source_resolution_star_union_target_plus_star_path_history_lower_seed_status_counts =
+        local_cygv_source_resolution_star_union_target_plus_star_path_history_lower_seed_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
     let missing_local_cygv_missing_source_input_counts = local_cygv_missing_source_input_counts(
         targets
             .iter()
@@ -16780,6 +16792,8 @@ fn build_report(
         local_cygv_target_relation_global_secondary_height_status_counts,
         local_cygv_target_relation_global_secondary_height_branch_match_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts,
+        local_cygv_source_resolution_star_union_target_plus_star_path_history_target_closure_counts,
+        local_cygv_source_resolution_star_union_target_plus_star_path_history_lower_seed_status_counts,
         local_phase_chamber_membership_certificate_status_counts,
         local_cygv_source_resolution_hint_sample,
         local_cygv_target_candidate_status_counts,
@@ -17929,6 +17943,38 @@ fn local_cygv_source_resolution_star_union_target_plus_star_path_history_status_
                 .shared_two_simplex_star_union_target_plus_star_path_history_probe
                 .as_ref()
                 .map(|probe| probe.status.as_str())
+        }),
+        "not_run",
+    )
+}
+
+fn local_cygv_source_resolution_star_union_target_plus_star_path_history_target_closure_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        summaries.iter().map(|summary| {
+            summary
+                .shared_two_simplex_star_union_target_plus_star_path_history_probe
+                .as_ref()
+                .map(|probe| match probe.target_in_closure {
+                    Some(true) => "target_in_closure",
+                    Some(false) => "target_not_in_closure",
+                    None => "target_closure_not_evaluated",
+                })
+        }),
+        "not_run",
+    )
+}
+
+fn local_cygv_source_resolution_star_union_target_plus_star_path_history_lower_seed_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        summaries.iter().map(|summary| {
+            summary
+                .shared_two_simplex_star_union_target_plus_star_path_history_probe
+                .as_ref()
+                .map(|probe| probe.lower_seed_decomposition_status.as_str())
         }),
         "not_run",
     )
@@ -25762,10 +25808,22 @@ mod tests {
         };
 
         assert_eq!(
-            local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts(&[
-                summary
-            ]),
+            local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts(
+                std::slice::from_ref(&summary)
+            ),
             BTreeMap::from([("completed_bounded_closure".to_string(), 1)])
+        );
+        assert_eq!(
+            local_cygv_source_resolution_star_union_target_plus_star_path_history_target_closure_counts(
+                std::slice::from_ref(&summary)
+            ),
+            BTreeMap::from([("target_in_closure".to_string(), 1)])
+        );
+        assert_eq!(
+            local_cygv_source_resolution_star_union_target_plus_star_path_history_lower_seed_status_counts(
+                std::slice::from_ref(&summary)
+            ),
+            BTreeMap::from([("found_lower_seed_decomposition".to_string(), 1)])
         );
     }
 

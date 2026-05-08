@@ -3333,12 +3333,16 @@ first-layer closure elements, and `target_in_closure=false`; the lower-seed
 decomposition remains `not_found_up_to_4`, and the top-level status bucket is
 `stopped_generation_limit_1`. The same probe now uses streaming element-limit
 enforcement for diagnostic closure, so the generation-2 run with the same
-element cap writes a report instead of timing out: it completes in `24.50s`
-with status `exceeded_element_limit_150000_during_generation_2`, retains
+element cap writes a report instead of timing out: it completes with status
+`exceeded_element_limit_150000_during_generation_2`, retains
 `150000` closure elements, records generation-2 partial count `84462`, and
-still has `target_in_closure=false`. Thus the degree-6 chamber row is already
-beyond the cheap first-layer history; resolving it still requires the certified
-corrected-chamber semigroup/history, not a small visible-generator shortcut.
+still has `target_in_closure=false`. A regenerated target `7` run has the same
+degree-6 profile (`463` seeds, `355` reduced seeds, no lower-seed decomposition
+up to four terms, target not in closure), and the report now exposes top-level
+path-history buckets `target_not_in_closure:1` and `not_found_up_to_4:1`. Thus
+the degree-6 chamber row is already beyond the cheap first-layer history;
+resolving it still requires the certified corrected-chamber semigroup/history,
+not a small visible-generator shortcut.
 Regenerating
 `/tmp/cyrus_gv_context_star_union_shared_face_secondary_report.json` now also
 tests the obvious full star-union shared-face fan: the two target-exclusive
