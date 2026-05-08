@@ -911,6 +911,11 @@ for both targets. The same rows still record
 global corrected height selects the serialized star extras, but the
 exclusive-pair resolved local phase remains on a wall and cannot certify a
 promoted local semigroup or intersection tensor.
+The all-target refined report
+`/tmp/cyrus_all_refined_local_phase_report.json` splits the nine missing rows
+as five non-`P2`/origin-omitting phase blockers, two weighted rows blocked by
+nonintegral target coordinates in the star-union charge basis, and the two
+target `7`/`8` resolved-shared chamber-wall blockers.
 A bounded supporting-face rerun for the two integral weighted rows (`target 7`
 and `target 8`) does not provide that missing certificate. With
 `--certify-origin-witness-domains`, two LP anchors, and the facet-union cap
