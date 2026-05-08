@@ -212,6 +212,11 @@ run pass. Any remaining mismatch must be explicit and localizable.
    The context report now aggregates those parent-only offset degrees separately
    from known-qN status, so future reports can distinguish low-degree known
    toric offsets from broader unknown qN history without mining each sample row.
+   It also distinguishes disabled qN-domain comparisons from requested
+   path-history probes that stopped at a closure limit: a current target-7
+   schema-4 smoke report records
+   `unavailable_exceeded_element_limit_10000`, not `not_run`, for the
+   rational-cone residual comparison.
    The parent-only classifications now include parent-path-support runtime
    lookups from the same `cygv` run. On the regenerated target 7 report, the
    generated degree-10 side term is a real parent-domain nonzero object

@@ -14355,20 +14355,8 @@ fn build_report(
         cygv_closest_known_qn_residual_difference_known_qn_history_status_counts(
             &cygv_closest_known_qn_residual_difference_sample,
         );
-    let cygv_closest_known_qn_residual_qn_domain_status_counts = optional_status_counts(
-        targets.iter().map(|target| {
-            target
-                .cygv_path_history_probe
-                .as_ref()
-                .and_then(|probe| {
-                    probe
-                        .closest_known_qn_residual_qn_domain_comparison
-                        .as_ref()
-                })
-                .map(|comparison| comparison.term_signature_comparison_status.as_str())
-        }),
-        "not_run",
-    );
+    let cygv_closest_known_qn_residual_qn_domain_status_counts =
+        cygv_closest_known_qn_residual_qn_domain_status_counts(&targets);
     let cygv_closest_known_qn_residual_qn_domain_parent_only_source_status_counts =
         cygv_closest_known_qn_residual_qn_domain_parent_only_source_status_counts(&targets);
     let cygv_closest_known_qn_residual_qn_domain_parent_only_offset_known_qn_history_status_counts =
@@ -18149,6 +18137,42 @@ fn cygv_closest_known_qn_residual_qn_domain_parent_only_source_status_counts(
         for (status, count) in &comparison.parent_only_term_source_status_counts {
             *counts.entry(status.clone()).or_insert(0usize) += count;
         }
+    }
+    counts
+}
+
+fn cygv_closest_known_qn_residual_qn_domain_status(probe: Option<&CygvPathHistoryProbe>) -> String {
+    let Some(probe) = probe else {
+        return "not_run".to_string();
+    };
+    if let Some(comparison) = &probe.closest_known_qn_residual_qn_domain_comparison {
+        return comparison.term_signature_comparison_status.clone();
+    }
+    if probe.status.starts_with("exceeded_element_limit") {
+        return format!("unavailable_{}", probe.status);
+    }
+    if probe.closest_known_qn_residual_predecessor.is_none() {
+        return format!(
+            "unavailable_no_closest_known_qn_residual_predecessor__path_{}",
+            status_error_fragment(&probe.status)
+        );
+    }
+    format!(
+        "unavailable_missing_qn_domain_comparison__path_{}",
+        status_error_fragment(&probe.status)
+    )
+}
+
+fn cygv_closest_known_qn_residual_qn_domain_status_counts(
+    targets: &[TargetReport],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        *counts
+            .entry(cygv_closest_known_qn_residual_qn_domain_status(
+                target.cygv_path_history_probe.as_ref(),
+            ))
+            .or_insert(0usize) += 1;
     }
     counts
 }
@@ -25416,6 +25440,14 @@ mod tests {
         assert!(!probe.predecessor_counts_complete);
         assert_eq!(probe.predecessor_difference_count, Some(2));
         assert_eq!(probe.closest_series_distance.as_deref(), Some("1.000000"));
+        assert_eq!(
+            cygv_closest_known_qn_residual_qn_domain_status(Some(&probe)),
+            "unavailable_exceeded_element_limit_initial_2"
+        );
+        assert_eq!(
+            cygv_closest_known_qn_residual_qn_domain_status(None),
+            "not_run"
+        );
     }
 
     #[test]
