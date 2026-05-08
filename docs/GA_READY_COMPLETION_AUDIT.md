@@ -1055,9 +1055,12 @@ secondary status `star_union_shared_face_secondary_on_wall`, corrected
 global-height status
 `star_union_shared_face_secondary_global_height_crosses_oriented_walls`, and
 the new missing input `target_plus_star_wall_crossing_chamber_transport`.
-This narrows the unresolved object to wall-crossing chamber transport plus
-qN/semigroup history; it still does not compute the missing degree-6
-`target+star` GV value.
+The main target-plus-star promotion object now carries the same wall-transport
+status and missing inputs, so even a future local phase/tensor certificate
+cannot promote the `target+star` class while wall-crossing transport remains
+uncertified. This narrows the unresolved object to wall-crossing chamber
+transport plus qN/semigroup history; it still does not compute the missing
+degree-6 `target+star` GV value.
 
 The Stage 0 no-replay policy gate is green for the touched paths:
 `cargo test -p cyrus-core --test mcallister_e2e stage0_data_integrity -- --nocapture`

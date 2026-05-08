@@ -1316,7 +1316,10 @@ to make the remaining GV layer more first-principles:
    `target_plus_star_chamber_semigroup_transport`,
    `target_plus_star_wall_crossing_chamber_transport`, and
    `shrinking_divisor_or_flop_certificate`. The top-level missing-input
-   aggregate records the new wall-crossing transport gap twice. This is a
+   aggregate records the new wall-crossing transport gap twice. The
+   target-plus-star promotion readiness object now also carries the same
+   wall-transport status and missing inputs, so its promotion-missing aggregate
+   includes `target_plus_star_wall_crossing_chamber_transport:2`. This is a
    blocker certificate, not a GV computation shortcut.
    `/tmp/cyrus_star_union_wall_branch_smoke_all.json` now additionally records
    the B-field branch status of the same crossed wall. The targets `7`/`8`

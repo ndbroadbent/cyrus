@@ -1071,6 +1071,8 @@ struct LocalCygvStarUnionTargetPlusStarLocalCygvReadiness {
     actual_call_readiness: String,
     missing_inputs: Vec<String>,
     local_phase_chamber_membership_certificate_status: Option<String>,
+    wall_transport_readiness_status: Option<String>,
+    wall_transport_missing_inputs: Vec<String>,
     promotion_readiness: String,
     promotion_missing_inputs: Vec<String>,
 }
@@ -17277,6 +17279,11 @@ fn local_cygv_source_resolution_hint_summaries(
                 target_plus_star_support_face_certificate_status.as_deref(),
                 Some(crossed_wall_stable_weyl_certificate),
             );
+            let star_union_target_plus_star_local_cygv_readiness =
+                attach_wall_transport_to_target_plus_star_readiness(
+                    star_union_target_plus_star_local_cygv_readiness,
+                    &wall_transport_readiness,
+                );
             let star_union_global_regular_triangulation =
                 local_cygv_star_union_global_regular_triangulation_hint(
                     target.origin_circuit_first_witness.as_ref(),
@@ -23096,6 +23103,8 @@ fn local_cygv_star_union_target_plus_star_local_cygv_readiness(
         actual_call_readiness,
         missing_inputs,
         local_phase_chamber_membership_certificate_status: None,
+        wall_transport_readiness_status: None,
+        wall_transport_missing_inputs: Vec::new(),
         promotion_readiness,
         promotion_missing_inputs,
     }
@@ -23174,6 +23183,28 @@ fn attach_local_phase_chamber_to_target_plus_star_readiness(
     } else {
         readiness.actual_call_readiness.clone()
     };
+    readiness
+}
+
+fn attach_wall_transport_to_target_plus_star_readiness(
+    mut readiness: LocalCygvStarUnionTargetPlusStarLocalCygvReadiness,
+    wall_transport: &LocalCygvStarUnionWallTransportReadiness,
+) -> LocalCygvStarUnionTargetPlusStarLocalCygvReadiness {
+    readiness.wall_transport_readiness_status = Some(wall_transport.status.clone());
+    readiness.wall_transport_missing_inputs = wall_transport.missing_inputs.clone();
+    if !wall_transport.missing_inputs.is_empty() {
+        readiness
+            .promotion_missing_inputs
+            .extend(wall_transport.missing_inputs.iter().cloned());
+        readiness.promotion_missing_inputs.sort();
+        readiness.promotion_missing_inputs.dedup();
+        if readiness.promotion_readiness == "ready_for_promoted_actual_cygv_call" {
+            readiness.promotion_readiness = format!(
+                "blocked_wall_transport_certificate:{}",
+                status_error_fragment(&wall_transport.status)
+            );
+        }
+    }
     readiness
 }
 
@@ -23402,6 +23433,8 @@ fn blocked_target_plus_star_local_cygv_readiness(
         actual_call_readiness: "blocked_missing_source_derived_inputs".to_string(),
         missing_inputs: missing_inputs.clone(),
         local_phase_chamber_membership_certificate_status: None,
+        wall_transport_readiness_status: None,
+        wall_transport_missing_inputs: Vec::new(),
         promotion_readiness: "blocked_missing_source_derived_inputs".to_string(),
         promotion_missing_inputs: missing_inputs,
     }
@@ -26378,6 +26411,8 @@ mod tests {
                     actual_call_readiness: "test".to_string(),
                     missing_inputs: Vec::new(),
                     local_phase_chamber_membership_certificate_status: None,
+                    wall_transport_readiness_status: None,
+                    wall_transport_missing_inputs: Vec::new(),
                     promotion_readiness: "test".to_string(),
                     promotion_missing_inputs: Vec::new(),
                 },
@@ -29509,6 +29544,38 @@ mod tests {
             readiness
                 .missing_inputs
                 .contains(&"shrinking_divisor_or_flop_certificate".to_string())
+        );
+
+        let mut promotable = blocked_target_plus_star_local_cygv_readiness(
+            "target_plus_star_local_cygv_ready_for_actual_call",
+            Vec::new(),
+        );
+        promotable.actual_call_readiness = "ready_for_actual_cygv_call".to_string();
+        promotable.missing_inputs.clear();
+        promotable.promotion_missing_inputs.clear();
+        let promotable = attach_local_phase_chamber_to_target_plus_star_readiness(
+            promotable,
+            "source_derived_local_phase_chamber_certificate_weighted_p2_resolved_shared_chamber",
+        );
+        assert_eq!(
+            promotable.promotion_readiness,
+            "ready_for_promoted_actual_cygv_call"
+        );
+
+        let blocked_by_wall =
+            attach_wall_transport_to_target_plus_star_readiness(promotable, &readiness);
+        assert_eq!(
+            blocked_by_wall.wall_transport_readiness_status.as_deref(),
+            Some("wall_transport_known_wall_remainder_requires_wall_crossing_chamber_transport")
+        );
+        assert_eq!(
+            blocked_by_wall.promotion_readiness,
+            "blocked_wall_transport_certificate:wall_transport_known_wall_remainder_requires_wall_crossing_chamber_transport"
+        );
+        assert!(
+            blocked_by_wall
+                .promotion_missing_inputs
+                .contains(&"target_plus_star_wall_crossing_chamber_transport".to_string())
         );
     }
 

@@ -3649,9 +3649,12 @@ corrected global-height status
 missing-input aggregate now counts `target_plus_star_qn_history:9`,
 `target_plus_star_chamber_semigroup_transport:8`,
 `target_plus_star_wall_crossing_chamber_transport:2`, and
-`shrinking_divisor_or_flop_certificate:2`. This keeps the known wall component
-as certified input evidence without promoting it to a corrected-chamber GV
-value.
+`shrinking_divisor_or_flop_certificate:2`. The target-plus-star promotion
+readiness now stores this wall-transport status directly, and its promotion
+missing-input aggregate includes the same
+`target_plus_star_wall_crossing_chamber_transport:2` blocker. This keeps the
+known wall component as certified input evidence without promoting it to a
+corrected-chamber GV value.
 `/tmp/cyrus_star_union_wall_branch_smoke_all.json` now carries the B-field
 branch diagnostic for that same crossed wall. For targets `7`/`8`, the known
 opposite-star wall curve has `q.t=0.42571113815643002`, parity mod 2 equal to
