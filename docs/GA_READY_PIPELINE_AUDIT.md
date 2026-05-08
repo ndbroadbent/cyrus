@@ -1035,6 +1035,12 @@ to make the remaining GV layer more first-principles:
    GV `0` for both targets. The report labels the compressed one-parameter
    row as `not_compact_threefold_shape_cy_dim_5`, so it stays diagnostic and
    does not close the corrected-chamber GV gap.
+   A temporary synthetic target-8 context then runs the existing bounded
+   path-history probe directly on the degree-6 `target+star` row. The
+   first-layer closure has `463` seeds, `355` reduced seeds, and `65538`
+   elements, with `target_in_closure=false` and no predecessor differences; a
+   second-layer run exceeded a `180s` guard. This pushes the next task back to
+   certified chamber semigroup/history construction.
    The full union-support height profile is now serialized as well. For
    targets `3`/`6`, the off-hyperplane zero-shared ray carries zero target and
    star coefficient; for targets `7`/`8`, the height `-1` zero-shared ray and
