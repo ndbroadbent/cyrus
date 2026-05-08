@@ -3701,7 +3701,10 @@ promote the known wall GV into a corrected-chamber target value because the
 star-union global regular chamber selects the serialized star extras and the
 missing transport inputs remain the target-plus-star chamber semigroup,
 target-plus-star qN history, wall-crossing chamber transport, and non-Weyl
-transport certificate.
+transport certificate. The matched opposite-star wall hint and wall-readiness
+object now carry that orientation and signed role profile directly, so later
+transport code no longer has to rediscover the crossed wall from the raw
+circuit list.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

@@ -157,7 +157,9 @@ and matrix-basis pipeline are no longer open.
    sharpens the chamber-transport object that must be certified, but the rows
    still require target-plus-star qN history, target-plus-star chamber
    semigroup transport, wall-crossing chamber transport, and a non-Weyl
-   transport certificate.
+   transport certificate. The matched opposite-star wall hint and wall
+   readiness output now expose this same orientation and signed role profile
+   directly for subsequent transport checks.
 2. **Exact corrected KKLT volume.** The no-replay path computes a corrected
    volume but still has a documented instanton/chamber residual.
 3. **Generic matrix-basis pipeline.** Matrix divisor-basis primitives now cover

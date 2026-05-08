@@ -1474,7 +1474,9 @@ to make the remaining GV layer more first-principles:
    the concrete chamber-map handle for the next step, not a promotion
    certificate: the same rows still report
    `wall_transport_known_wall_remainder_requires_wall_crossing_chamber_transport`
-   and missing target-plus-star qN/chamber transport inputs.
+   and missing target-plus-star qN/chamber transport inputs. The matched
+   opposite-star wall hint and wall-readiness object now carry this orientation
+   and role signature directly for later transport checks.
    A direct off-height global projection lookup now rules out another shortcut:
    the target `7`/`8` star-side off-height pair `[(55,1),(212,-1)]` is not an
    integral global curve-basis class, and targets `3`/`6` have no nonzero

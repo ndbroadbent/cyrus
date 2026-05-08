@@ -890,6 +890,9 @@ struct LocalCygvStarUnionOppositeStarWallCircuitHint {
     circuit_nonzero: Option<Vec<(usize, i64)>>,
     circuit_pairing: Option<String>,
     circuit_global_height_pairing: Option<String>,
+    circuit_global_height_orientation: Option<String>,
+    circuit_role_counts: Option<BTreeMap<String, usize>>,
+    circuit_role_signed_sums: Option<BTreeMap<String, i64>>,
     opposite_star_known_qn_history_status: Option<String>,
     opposite_star_source_derived_gv: Option<String>,
     opposite_star_source_class_status: Option<String>,
@@ -904,6 +907,9 @@ struct LocalCygvStarUnionWallTransportReadiness {
     local_shared_face_secondary_global_height_status: Option<String>,
     crossed_wall_curve_basis_nonzero: Option<Vec<(usize, i64)>>,
     crossed_wall_curve_ambient_nonzero: Option<Vec<(usize, i64)>>,
+    crossed_wall_global_height_orientation: Option<String>,
+    crossed_wall_role_counts: Option<BTreeMap<String, usize>>,
+    crossed_wall_role_signed_sums: Option<BTreeMap<String, i64>>,
     crossed_wall_gv: Option<String>,
     crossed_wall_branch_q_dot_t: Option<String>,
     crossed_wall_parity_mod2: Option<i128>,
@@ -20687,6 +20693,9 @@ fn local_cygv_star_union_opposite_star_wall_circuit_hint(
         circuit_nonzero: None,
         circuit_pairing: None,
         circuit_global_height_pairing: None,
+        circuit_global_height_orientation: None,
+        circuit_role_counts: None,
+        circuit_role_signed_sums: None,
         opposite_star_known_qn_history_status: None,
         opposite_star_source_derived_gv: None,
         opposite_star_source_class_status: None,
@@ -20700,6 +20709,9 @@ fn local_cygv_star_union_opposite_star_wall_circuit_hint(
             circuit_nonzero: None,
             circuit_pairing: None,
             circuit_global_height_pairing: None,
+            circuit_global_height_orientation: None,
+            circuit_role_counts: None,
+            circuit_role_signed_sums: None,
             opposite_star_known_qn_history_status: star.opposite_known_qn_history_status.clone(),
             opposite_star_source_derived_gv: star.opposite_source_derived_gv.clone(),
             opposite_star_source_class_status: star.opposite_source_class_status.clone(),
@@ -20715,6 +20727,9 @@ fn local_cygv_star_union_opposite_star_wall_circuit_hint(
             circuit_nonzero: None,
             circuit_pairing: None,
             circuit_global_height_pairing: None,
+            circuit_global_height_orientation: None,
+            circuit_role_counts: None,
+            circuit_role_signed_sums: None,
             opposite_star_known_qn_history_status: star.opposite_known_qn_history_status.clone(),
             opposite_star_source_derived_gv: star.opposite_source_derived_gv.clone(),
             opposite_star_source_class_status: star.opposite_source_class_status.clone(),
@@ -20736,6 +20751,9 @@ fn local_cygv_star_union_opposite_star_wall_circuit_hint(
         circuit_nonzero: Some(circuit.nonzero.clone()),
         circuit_pairing: Some(circuit.pairing.clone()),
         circuit_global_height_pairing: circuit.global_height_pairing.clone(),
+        circuit_global_height_orientation: circuit.global_height_orientation.clone(),
+        circuit_role_counts: Some(circuit.role_counts.clone()),
+        circuit_role_signed_sums: Some(circuit.role_signed_sums.clone()),
         opposite_star_known_qn_history_status: star.opposite_known_qn_history_status.clone(),
         opposite_star_source_derived_gv: star.opposite_source_derived_gv.clone(),
         opposite_star_source_class_status: star.opposite_source_class_status.clone(),
@@ -21193,6 +21211,9 @@ fn local_cygv_star_union_wall_transport_readiness(
         crossed_wall_curve_basis_nonzero: star
             .and_then(|lookup| lookup.opposite_basis_nonzero.clone()),
         crossed_wall_curve_ambient_nonzero: wall.circuit_nonzero.clone(),
+        crossed_wall_global_height_orientation: wall.circuit_global_height_orientation.clone(),
+        crossed_wall_role_counts: wall.circuit_role_counts.clone(),
+        crossed_wall_role_signed_sums: wall.circuit_role_signed_sums.clone(),
         crossed_wall_gv: wall.opposite_star_source_derived_gv.clone(),
         crossed_wall_branch_q_dot_t: crossed_wall_branch.map(|branch| branch.q_dot_t.clone()),
         crossed_wall_parity_mod2: crossed_wall_branch.map(|branch| branch.parity_mod2),
@@ -26700,6 +26721,9 @@ mod tests {
                     circuit_nonzero: None,
                     circuit_pairing: None,
                     circuit_global_height_pairing: None,
+                    circuit_global_height_orientation: None,
+                    circuit_role_counts: None,
+                    circuit_role_signed_sums: None,
                     opposite_star_known_qn_history_status: None,
                     opposite_star_source_derived_gv: None,
                     opposite_star_source_class_status: None,
@@ -26713,6 +26737,9 @@ mod tests {
                     local_shared_face_secondary_global_height_status: None,
                     crossed_wall_curve_basis_nonzero: None,
                     crossed_wall_curve_ambient_nonzero: None,
+                    crossed_wall_global_height_orientation: None,
+                    crossed_wall_role_counts: None,
+                    crossed_wall_role_signed_sums: None,
                     crossed_wall_gv: None,
                     crossed_wall_branch_q_dot_t: None,
                     crossed_wall_parity_mod2: None,
@@ -29807,8 +29834,16 @@ mod tests {
                 pairing: "0".to_string(),
                 global_height_pairing: Some("1/2".to_string()),
                 global_height_orientation: Some("positive".to_string()),
-                role_counts: BTreeMap::new(),
-                role_signed_sums: BTreeMap::new(),
+                role_counts: BTreeMap::from([
+                    ("origin".to_string(), 1),
+                    ("star_extra".to_string(), 2),
+                    ("zero_relation_shared_two_simplex".to_string(), 1),
+                ]),
+                role_signed_sums: BTreeMap::from([
+                    ("origin".to_string(), -1),
+                    ("star_extra".to_string(), 2),
+                    ("zero_relation_shared_two_simplex".to_string(), -1),
+                ]),
             }],
         };
         let wall_hint = local_cygv_star_union_opposite_star_wall_circuit_hint(&secondary, &lookups);
@@ -29820,6 +29855,17 @@ mod tests {
         assert_eq!(
             wall_hint.circuit_global_height_pairing.as_deref(),
             Some("1/2")
+        );
+        assert_eq!(
+            wall_hint.circuit_global_height_orientation.as_deref(),
+            Some("positive")
+        );
+        assert_eq!(
+            wall_hint
+                .circuit_role_signed_sums
+                .as_ref()
+                .and_then(|sums| sums.get("star_extra")),
+            Some(&2)
         );
         assert_eq!(
             wall_hint.opposite_star_source_derived_gv.as_deref(),
@@ -29856,6 +29902,17 @@ mod tests {
         assert_eq!(
             readiness.crossed_wall_branch_q_dot_t.as_deref(),
             Some("0.5")
+        );
+        assert_eq!(
+            readiness.crossed_wall_global_height_orientation.as_deref(),
+            Some("positive")
+        );
+        assert_eq!(
+            readiness
+                .crossed_wall_role_signed_sums
+                .as_ref()
+                .and_then(|sums| sums.get("origin")),
+            Some(&-1)
         );
         assert_eq!(readiness.crossed_wall_parity_mod2, Some(0));
         assert_eq!(
