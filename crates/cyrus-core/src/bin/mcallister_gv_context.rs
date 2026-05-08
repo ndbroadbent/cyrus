@@ -358,6 +358,7 @@ struct ContextReport {
     cygv_path_support_gw_noninteger_candidate_count_counts: BTreeMap<String, usize>,
     cygv_path_support_gw_coefficient_trace_error_counts: BTreeMap<String, usize>,
     cygv_path_support_target_pre_subtraction_formula_status_counts: BTreeMap<String, usize>,
+    cygv_path_support_target_gw_formula_instanton_balance_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_decomposition_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_predecessor_candidate_count_counts: BTreeMap<String, usize>,
     cygv_lower_seed_predecessor_degree_split_counts: BTreeMap<String, usize>,
@@ -887,6 +888,11 @@ struct CygvPathHistoryProbe {
     path_support_target_gw_coefficient_status: Option<String>,
     path_support_target_gw_instanton_coefficient: Option<String>,
     path_support_target_gw_candidate: Option<String>,
+    path_support_target_gw_pivot_coordinate: Option<usize>,
+    path_support_target_gw_pivot_component: Option<i32>,
+    path_support_target_gw_formula_required_instanton_coefficient: Option<String>,
+    path_support_target_gw_formula_missing_instanton_coefficient: Option<String>,
+    path_support_target_gw_formula_instanton_balance_status: Option<String>,
     path_support_qn_trace_sample: Vec<CygvPathSupportQnTracePolynomialSample>,
     path_support_target_monomial_qn_source_count: Option<usize>,
     path_support_target_monomial_qn_source_diamond_parent_qn_comparison_status_counts:
@@ -1791,6 +1797,11 @@ struct PathSupportGeneratorProbe {
     target_gw_coefficient_status: Option<String>,
     target_gw_instanton_coefficient: Option<String>,
     target_gw_candidate: Option<String>,
+    target_gw_pivot_coordinate: Option<usize>,
+    target_gw_pivot_component: Option<i32>,
+    target_gw_formula_required_instanton_coefficient: Option<String>,
+    target_gw_formula_missing_instanton_coefficient: Option<String>,
+    target_gw_formula_instanton_balance_status: Option<String>,
     qn_trace_sample: Vec<CygvPathSupportQnTracePolynomialSample>,
     target_monomial_qn_source_count: Option<usize>,
     target_monomial_qn_source_sample: Vec<CygvPathSupportTargetMonomialQnSource>,
@@ -2232,6 +2243,7 @@ fn path_support_generator_probe(
     candidates: &[CygvPathPredecessorCandidate],
     context: &ValidatedContext<'_>,
     run_path_support_generators: bool,
+    expected_formula_sum: Option<&String>,
 ) -> PathSupportGeneratorProbe {
     if !run_path_support_generators {
         return PathSupportGeneratorProbe {
@@ -2267,6 +2279,11 @@ fn path_support_generator_probe(
             target_gw_coefficient_status: None,
             target_gw_instanton_coefficient: None,
             target_gw_candidate: None,
+            target_gw_pivot_coordinate: None,
+            target_gw_pivot_component: None,
+            target_gw_formula_required_instanton_coefficient: None,
+            target_gw_formula_missing_instanton_coefficient: None,
+            target_gw_formula_instanton_balance_status: None,
             qn_trace_sample: Vec::new(),
             target_monomial_qn_source_count: None,
             target_monomial_qn_source_sample: Vec::new(),
@@ -2281,7 +2298,13 @@ fn path_support_generator_probe(
             gv_coefficient_trace_by_curve: HashMap::new(),
         };
     }
-    match path_support_generator_probe_inner(target, target_degree, candidates, context) {
+    match path_support_generator_probe_inner(
+        target,
+        target_degree,
+        candidates,
+        context,
+        expected_formula_sum,
+    ) {
         Ok(probe) => probe,
         Err(error) => PathSupportGeneratorProbe {
             support_size: None,
@@ -2316,6 +2339,11 @@ fn path_support_generator_probe(
             target_gw_coefficient_status: None,
             target_gw_instanton_coefficient: None,
             target_gw_candidate: None,
+            target_gw_pivot_coordinate: None,
+            target_gw_pivot_component: None,
+            target_gw_formula_required_instanton_coefficient: None,
+            target_gw_formula_missing_instanton_coefficient: None,
+            target_gw_formula_instanton_balance_status: None,
             qn_trace_sample: Vec::new(),
             target_monomial_qn_source_count: None,
             target_monomial_qn_source_sample: Vec::new(),
@@ -2394,6 +2422,7 @@ fn residual_path_support_generator_probe(
         &[candidate],
         context,
         run_path_support_generators,
+        None,
     )))
 }
 
@@ -2922,6 +2951,7 @@ fn path_support_generator_probe_inner(
     target_degree: i128,
     candidates: &[CygvPathPredecessorCandidate],
     context: &ValidatedContext<'_>,
+    expected_formula_sum: Option<&String>,
 ) -> Result<PathSupportGeneratorProbe, String> {
     let support = path_candidate_support(target, candidates);
     if support.is_empty() {
@@ -2958,6 +2988,11 @@ fn path_support_generator_probe_inner(
             target_gw_coefficient_status: None,
             target_gw_instanton_coefficient: None,
             target_gw_candidate: None,
+            target_gw_pivot_coordinate: None,
+            target_gw_pivot_component: None,
+            target_gw_formula_required_instanton_coefficient: None,
+            target_gw_formula_missing_instanton_coefficient: None,
+            target_gw_formula_instanton_balance_status: None,
             qn_trace_sample: Vec::new(),
             target_monomial_qn_source_count: None,
             target_monomial_qn_source_sample: Vec::new(),
@@ -3017,6 +3052,12 @@ fn path_support_generator_probe_inner(
         Ok(Err(error)) => {
             let gw_diagnostic =
                 path_support_gw_coefficient_diagnostic(&generators, context, max_deg, &target_i32);
+            let gw_formula_balance = target_gw_formula_instanton_balance(
+                gw_diagnostic.target_instanton_coefficient.as_ref(),
+                gw_diagnostic.target_pivot_component,
+                expected_formula_sum,
+                "path_support_gw_formula_instanton",
+            )?;
             return Ok(PathSupportGeneratorProbe {
                 support_size: Some(support.len()),
                 generator_count: Some(generators.len()),
@@ -3050,6 +3091,13 @@ fn path_support_generator_probe_inner(
                 target_gw_coefficient_status: gw_diagnostic.target_status,
                 target_gw_instanton_coefficient: gw_diagnostic.target_instanton_coefficient,
                 target_gw_candidate: gw_diagnostic.target_gw_candidate,
+                target_gw_pivot_coordinate: gw_diagnostic.target_pivot_coordinate,
+                target_gw_pivot_component: gw_diagnostic.target_pivot_component,
+                target_gw_formula_required_instanton_coefficient: gw_formula_balance
+                    .required_instanton_coefficient,
+                target_gw_formula_missing_instanton_coefficient: gw_formula_balance
+                    .missing_instanton_coefficient,
+                target_gw_formula_instanton_balance_status: Some(gw_formula_balance.status),
                 qn_trace_sample: Vec::new(),
                 target_monomial_qn_source_count: None,
                 target_monomial_qn_source_sample: Vec::new(),
@@ -3067,6 +3115,12 @@ fn path_support_generator_probe_inner(
         Err(payload) => {
             let gw_diagnostic =
                 path_support_gw_coefficient_diagnostic(&generators, context, max_deg, &target_i32);
+            let gw_formula_balance = target_gw_formula_instanton_balance(
+                gw_diagnostic.target_instanton_coefficient.as_ref(),
+                gw_diagnostic.target_pivot_component,
+                expected_formula_sum,
+                "path_support_gw_formula_instanton",
+            )?;
             return Ok(PathSupportGeneratorProbe {
                 support_size: Some(support.len()),
                 generator_count: Some(generators.len()),
@@ -3100,6 +3154,13 @@ fn path_support_generator_probe_inner(
                 target_gw_coefficient_status: gw_diagnostic.target_status,
                 target_gw_instanton_coefficient: gw_diagnostic.target_instanton_coefficient,
                 target_gw_candidate: gw_diagnostic.target_gw_candidate,
+                target_gw_pivot_coordinate: gw_diagnostic.target_pivot_coordinate,
+                target_gw_pivot_component: gw_diagnostic.target_pivot_component,
+                target_gw_formula_required_instanton_coefficient: gw_formula_balance
+                    .required_instanton_coefficient,
+                target_gw_formula_missing_instanton_coefficient: gw_formula_balance
+                    .missing_instanton_coefficient,
+                target_gw_formula_instanton_balance_status: Some(gw_formula_balance.status),
                 qn_trace_sample: Vec::new(),
                 target_monomial_qn_source_count: None,
                 target_monomial_qn_source_sample: Vec::new(),
@@ -3192,6 +3253,12 @@ fn path_support_generator_probe_inner(
         )?;
     let gw_diagnostic =
         path_support_gw_coefficient_diagnostic(&generators, context, max_deg, &target_i32);
+    let gw_formula_balance = target_gw_formula_instanton_balance(
+        gw_diagnostic.target_instanton_coefficient.as_ref(),
+        gw_diagnostic.target_pivot_component,
+        expected_formula_sum,
+        "path_support_gw_formula_instanton",
+    )?;
     Ok(PathSupportGeneratorProbe {
         support_size: Some(support.len()),
         generator_count: Some(generators.len()),
@@ -3229,6 +3296,13 @@ fn path_support_generator_probe_inner(
         target_gw_coefficient_status: gw_diagnostic.target_status,
         target_gw_instanton_coefficient: gw_diagnostic.target_instanton_coefficient,
         target_gw_candidate: gw_diagnostic.target_gw_candidate,
+        target_gw_pivot_coordinate: gw_diagnostic.target_pivot_coordinate,
+        target_gw_pivot_component: gw_diagnostic.target_pivot_component,
+        target_gw_formula_required_instanton_coefficient: gw_formula_balance
+            .required_instanton_coefficient,
+        target_gw_formula_missing_instanton_coefficient: gw_formula_balance
+            .missing_instanton_coefficient,
+        target_gw_formula_instanton_balance_status: Some(gw_formula_balance.status),
         qn_trace_sample,
         target_monomial_qn_source_count: Some(target_monomial_qn_source_count),
         target_monomial_qn_source_sample,
@@ -11881,6 +11955,11 @@ fn cygv_path_history_probe(
             path_support_target_gw_coefficient_status: None,
             path_support_target_gw_instanton_coefficient: None,
             path_support_target_gw_candidate: None,
+            path_support_target_gw_pivot_coordinate: None,
+            path_support_target_gw_pivot_component: None,
+            path_support_target_gw_formula_required_instanton_coefficient: None,
+            path_support_target_gw_formula_missing_instanton_coefficient: None,
+            path_support_target_gw_formula_instanton_balance_status: None,
             path_support_qn_trace_sample: Vec::new(),
             path_support_target_monomial_qn_source_count: None,
             path_support_target_monomial_qn_source_diamond_parent_qn_comparison_status_counts:
@@ -12003,6 +12082,11 @@ fn cygv_path_history_probe_inner(
             path_support_target_gw_coefficient_status: None,
             path_support_target_gw_instanton_coefficient: None,
             path_support_target_gw_candidate: None,
+            path_support_target_gw_pivot_coordinate: None,
+            path_support_target_gw_pivot_component: None,
+            path_support_target_gw_formula_required_instanton_coefficient: None,
+            path_support_target_gw_formula_missing_instanton_coefficient: None,
+            path_support_target_gw_formula_instanton_balance_status: None,
             path_support_qn_trace_sample: Vec::new(),
             path_support_target_monomial_qn_source_count: None,
             path_support_target_monomial_qn_source_diamond_parent_qn_comparison_status_counts:
@@ -12100,6 +12184,11 @@ fn cygv_path_history_probe_inner(
             path_support_target_gw_coefficient_status: None,
             path_support_target_gw_instanton_coefficient: None,
             path_support_target_gw_candidate: None,
+            path_support_target_gw_pivot_coordinate: None,
+            path_support_target_gw_pivot_component: None,
+            path_support_target_gw_formula_required_instanton_coefficient: None,
+            path_support_target_gw_formula_missing_instanton_coefficient: None,
+            path_support_target_gw_formula_instanton_balance_status: None,
             path_support_qn_trace_sample: Vec::new(),
             path_support_target_monomial_qn_source_count: None,
             path_support_target_monomial_qn_source_diamond_parent_qn_comparison_status_counts:
@@ -12201,6 +12290,7 @@ fn cygv_path_history_probe_inner(
         &predecessor_stats.candidate_sample,
         context,
         run_path_support_generators,
+        expected_formula_sum.as_ref(),
     );
     annotate_target_monomial_qn_sources_with_seed_decompositions(
         &mut path_support_generators.target_monomial_qn_source_sample,
@@ -12366,6 +12456,16 @@ fn cygv_path_history_probe_inner(
             path_support_target_gw_instanton_coefficient: path_support_generators
                 .target_gw_instanton_coefficient,
             path_support_target_gw_candidate: path_support_generators.target_gw_candidate,
+            path_support_target_gw_pivot_coordinate: path_support_generators
+                .target_gw_pivot_coordinate,
+            path_support_target_gw_pivot_component: path_support_generators
+                .target_gw_pivot_component,
+            path_support_target_gw_formula_required_instanton_coefficient: path_support_generators
+                .target_gw_formula_required_instanton_coefficient,
+            path_support_target_gw_formula_missing_instanton_coefficient: path_support_generators
+                .target_gw_formula_missing_instanton_coefficient,
+            path_support_target_gw_formula_instanton_balance_status: path_support_generators
+                .target_gw_formula_instanton_balance_status,
             path_support_qn_trace_sample: path_support_generators.qn_trace_sample,
             path_support_target_monomial_qn_source_count: path_support_generators
                 .target_monomial_qn_source_count,
@@ -12497,6 +12597,14 @@ fn cygv_path_history_probe_inner(
         path_support_target_gw_instanton_coefficient: path_support_generators
             .target_gw_instanton_coefficient,
         path_support_target_gw_candidate: path_support_generators.target_gw_candidate,
+        path_support_target_gw_pivot_coordinate: path_support_generators.target_gw_pivot_coordinate,
+        path_support_target_gw_pivot_component: path_support_generators.target_gw_pivot_component,
+        path_support_target_gw_formula_required_instanton_coefficient: path_support_generators
+            .target_gw_formula_required_instanton_coefficient,
+        path_support_target_gw_formula_missing_instanton_coefficient: path_support_generators
+            .target_gw_formula_missing_instanton_coefficient,
+        path_support_target_gw_formula_instanton_balance_status: path_support_generators
+            .target_gw_formula_instanton_balance_status,
         path_support_qn_trace_sample: path_support_generators.qn_trace_sample,
         path_support_target_monomial_qn_source_count: path_support_generators
             .target_monomial_qn_source_count,
@@ -14640,6 +14748,17 @@ fn build_report(
         }),
         "not_run",
     );
+    let cygv_path_support_target_gw_formula_instanton_balance_status_counts =
+        optional_status_counts(
+            targets.iter().map(|target| {
+                target.cygv_path_history_probe.as_ref().and_then(|probe| {
+                    probe
+                        .path_support_target_gw_formula_instanton_balance_status
+                        .as_deref()
+                })
+            }),
+            "not_run",
+        );
     let cygv_lower_seed_decomposition_status_counts = optional_status_counts(
         targets.iter().map(|target| {
             target
@@ -15213,6 +15332,7 @@ fn build_report(
         cygv_path_support_gw_noninteger_candidate_count_counts,
         cygv_path_support_gw_coefficient_trace_error_counts,
         cygv_path_support_target_pre_subtraction_formula_status_counts,
+        cygv_path_support_target_gw_formula_instanton_balance_status_counts,
         cygv_lower_seed_decomposition_status_counts,
         cygv_lower_seed_predecessor_candidate_count_counts,
         cygv_lower_seed_predecessor_degree_split_counts,
@@ -20133,39 +20253,38 @@ fn candidate_pair_formula_sum_status(
     Ok((status, Some(delta.to_string())))
 }
 
-fn candidate_pair_target_gw_formula_instanton_balance(
+fn target_gw_formula_instanton_balance(
     target_instanton_coefficient: Option<&String>,
     target_pivot_component: Option<i32>,
     expected_sum: Option<&String>,
+    label: &str,
 ) -> Result<CygvCandidatePairFormulaInstantonBalance, String> {
     let Some(expected_sum) = expected_sum else {
         return Ok(CygvCandidatePairFormulaInstantonBalance {
             required_instanton_coefficient: None,
             missing_instanton_coefficient: None,
-            status: "candidate_pair_diamond_gw_formula_instanton_expected_formula_sum_missing"
-                .to_string(),
+            status: format!("{label}_expected_formula_sum_missing"),
         });
     };
     let Some(target_instanton_coefficient) = target_instanton_coefficient else {
         return Ok(CygvCandidatePairFormulaInstantonBalance {
             required_instanton_coefficient: None,
             missing_instanton_coefficient: None,
-            status: "candidate_pair_diamond_gw_formula_instanton_target_coefficient_missing"
-                .to_string(),
+            status: format!("{label}_target_coefficient_missing"),
         });
     };
     let Some(target_pivot_component) = target_pivot_component else {
         return Ok(CygvCandidatePairFormulaInstantonBalance {
             required_instanton_coefficient: None,
             missing_instanton_coefficient: None,
-            status: "candidate_pair_diamond_gw_formula_instanton_target_pivot_missing".to_string(),
+            status: format!("{label}_target_pivot_missing"),
         });
     };
     if target_pivot_component == 0 {
         return Ok(CygvCandidatePairFormulaInstantonBalance {
             required_instanton_coefficient: None,
             missing_instanton_coefficient: None,
-            status: "candidate_pair_diamond_gw_formula_instanton_zero_target_pivot".to_string(),
+            status: format!("{label}_zero_target_pivot"),
         });
     }
 
@@ -20174,15 +20293,28 @@ fn candidate_pair_target_gw_formula_instanton_balance(
     let required = expected_sum * MalachiteRational::from(Integer::from(target_pivot_component));
     let missing = required.clone() - target_instanton_coefficient;
     let status = if missing == 0 {
-        "candidate_pair_diamond_gw_formula_instanton_balanced"
+        format!("{label}_balanced")
     } else {
-        "candidate_pair_diamond_gw_formula_instanton_mismatch"
+        format!("{label}_mismatch")
     };
     Ok(CygvCandidatePairFormulaInstantonBalance {
         required_instanton_coefficient: Some(required.to_string()),
         missing_instanton_coefficient: Some(missing.to_string()),
-        status: status.to_string(),
+        status,
     })
+}
+
+fn candidate_pair_target_gw_formula_instanton_balance(
+    target_instanton_coefficient: Option<&String>,
+    target_pivot_component: Option<i32>,
+    expected_sum: Option<&String>,
+) -> Result<CygvCandidatePairFormulaInstantonBalance, String> {
+    target_gw_formula_instanton_balance(
+        target_instanton_coefficient,
+        target_pivot_component,
+        expected_sum,
+        "candidate_pair_diamond_gw_formula_instanton",
+    )
 }
 
 fn expected_toric_gv1_formula_values(
@@ -24558,6 +24690,11 @@ mod tests {
                 target_gw_coefficient_status: None,
                 target_gw_instanton_coefficient: None,
                 target_gw_candidate: None,
+                target_gw_pivot_coordinate: None,
+                target_gw_pivot_component: None,
+                target_gw_formula_required_instanton_coefficient: None,
+                target_gw_formula_missing_instanton_coefficient: None,
+                target_gw_formula_instanton_balance_status: None,
                 qn_trace_sample,
                 target_monomial_qn_source_count: None,
                 target_monomial_qn_source_sample: Vec::new(),
@@ -24653,6 +24790,11 @@ mod tests {
                 target_gw_coefficient_status: None,
                 target_gw_instanton_coefficient: None,
                 target_gw_candidate: None,
+                target_gw_pivot_coordinate: None,
+                target_gw_pivot_component: None,
+                target_gw_formula_required_instanton_coefficient: None,
+                target_gw_formula_missing_instanton_coefficient: None,
+                target_gw_formula_instanton_balance_status: None,
                 qn_trace_sample: vec![sample],
                 target_monomial_qn_source_count: None,
                 target_monomial_qn_source_sample: Vec::new(),
@@ -24910,7 +25052,7 @@ mod tests {
             secondary_cone_height_certificate: None,
         };
 
-        let probe = path_support_generator_probe_inner(&[1], 1, &[], &context)
+        let probe = path_support_generator_probe_inner(&[1], 1, &[], &context, None)
             .expect("quintic-sized path-support probe should compute");
 
         assert_eq!(

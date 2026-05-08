@@ -287,6 +287,17 @@ run pass. Any remaining mismatch must be explicit and localizable.
    by `6` on the HKTY-error branch toward required coefficient `3`. This keeps
    the next task on parent-domain subtraction history rather than scalar
    candidate-pair values.
+   The broader path-support generator probe now serializes the same target
+   `GW` formula-instanton balance and aggregate balance statuses even when
+   compact HKTY fails. Fresh
+   target-specific schema-4 runs show target `8` has path-support coefficient
+   `-6`, formula-required coefficient `-9`, and missing coefficient `-3`;
+   target `7` has `hkty_error` but still exposes coefficient `3`, required
+   `6`, and missing `3`; target `6` has pivot `47` with component `1` but no
+   target instanton coefficient, so it is explicitly classified as
+   `path_support_gw_formula_instanton_target_coefficient_missing`. This moves
+   the signed residual from pair-diamond-only evidence into the parent
+   path-support diagnostic boundary.
    The parent-only classifications now include parent-path-support runtime
    lookups from the same `cygv` run. On the regenerated target 7 report, the
    generated degree-10 side term is a real parent-domain nonzero object
