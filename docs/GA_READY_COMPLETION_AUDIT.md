@@ -859,6 +859,13 @@ certified; promotion is still blocked until the local phase supplies its own
 phase `q` matrix and chamber certificate. The report also aggregates those
 local chamber-membership statuses, so this blocker is visible as a top-level
 count rather than only in sampled target rows.
+With the validation-only global certificate present, the available 4-214-647
+contexts split those local blockers into five no-origin/non-CY phase rows and
+four weighted-`P2` rows. If the context does not carry triangulation-star
+samples, the weighted rows stop at an explicit missing-star-simplices blocker;
+when star samples are present, the same status path follows the actual
+star-union relation and records whether the target/star relation is integral
+in the union chamber lattice or fails at rational-coordinate integrality.
 Because the full corrected-chamber GV context export still exceeded a `300s`
 debug timeout before writing JSON, the runner also has a narrow
 `--dump-corrected-chamber-secondary-certificate` flag. On the validation-only

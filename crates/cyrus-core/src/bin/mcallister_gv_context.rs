@@ -14924,7 +14924,11 @@ fn local_cygv_source_resolution_hint_summaries(
                     .secondary_cone_height_certificate
                     .map(|certificate| certificate.status.clone()),
                 local_phase_chamber_membership_certificate_status:
-                    local_phase_chamber_membership_certificate_status(skeleton, context),
+                    local_phase_chamber_membership_certificate_status_with_witness(
+                        skeleton,
+                        target.origin_circuit_first_witness.as_ref(),
+                        context,
+                    ),
                 zero_shared_affine_projection_status: affine_projection_hint.status,
                 relation_support_affine_hyperplane: affine_projection_hint.hyperplane,
                 zero_relation_shared_two_simplex_affine_heights: affine_projection_hint.heights,
@@ -15167,14 +15171,25 @@ fn local_phase_chamber_membership_certificate_status_counts<'a>(
     targets: impl IntoIterator<Item = &'a TargetReport>,
     context: &ValidatedContext<'_>,
 ) -> BTreeMap<String, usize> {
-    local_phase_chamber_membership_certificate_status_counts_for_skeletons(
-        targets
-            .into_iter()
-            .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
-        context,
-    )
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        let Some(skeleton) = target.local_cygv_input_skeleton.as_ref() else {
+            continue;
+        };
+        *counts
+            .entry(
+                local_phase_chamber_membership_certificate_status_with_witness(
+                    skeleton,
+                    target.origin_circuit_first_witness.as_ref(),
+                    context,
+                ),
+            )
+            .or_insert(0usize) += 1;
+    }
+    counts
 }
 
+#[cfg(test)]
 fn local_phase_chamber_membership_certificate_status_counts_for_skeletons<'a>(
     skeletons: impl IntoIterator<Item = &'a LocalCygvInputSkeleton>,
     context: &ValidatedContext<'_>,
@@ -15515,6 +15530,34 @@ fn local_phase_chamber_membership_certificate_status(
     format!(
         "local_phase_chamber_blocked_{}",
         skeleton.local_chamber_certificate_status
+    )
+}
+
+fn local_phase_chamber_membership_certificate_status_with_witness(
+    skeleton: &LocalCygvInputSkeleton,
+    witness: Option<&OriginCircuitWitnessSample>,
+    context: &ValidatedContext<'_>,
+) -> String {
+    let status = local_phase_chamber_membership_certificate_status(skeleton, context);
+    if status
+        != "local_phase_chamber_blocked_local_chamber_certificate_blocked_weighted_p2_split_bundle_requires_source_derived_resolution_chamber"
+    {
+        return status;
+    }
+
+    let star_status = local_cygv_zero_shared_star_status(skeleton, witness);
+    if star_status != "weighted_p2_zero_shared_star_uses_two_alternate_chamber_points" {
+        return format!(
+            "local_phase_chamber_blocked_weighted_p2_resolution_star_status:{star_status}"
+        );
+    }
+
+    let star_support_hint = local_cygv_shared_two_simplex_star_support_hint(witness);
+    let star_union_relation_hint =
+        local_cygv_star_union_relation_hint(witness, &star_support_hint, Some(context.q_matrix));
+    format!(
+        "local_phase_chamber_blocked_weighted_p2_star_union_chamber_history:{}",
+        star_union_relation_hint.status
     )
 }
 
@@ -20678,10 +20721,20 @@ mod tests {
 
     #[test]
     fn weighted_p2_resolution_hint_records_zero_relation_shared_ray() {
-        let skeleton = skeleton_with_origin_phase_probe(
+        let mut skeleton = skeleton_with_origin_phase_probe(
             vec![0, 2, 208, 211, 214],
             Some(vec![vec![-1, 2, -3, 1, 1]]),
         );
+        let (tensor_candidate, tensor_status, chamber_status) =
+            local_p2_bundle_tensor_chamber_certificate(
+                skeleton.local_cygv_phase_q_matrix_candidate.as_deref(),
+                skeleton.local_semigroup_generators_candidate.as_deref(),
+                skeleton.local_grading_vector_candidate.as_deref(),
+                &skeleton.local_cygv_q_matrix_phase_status,
+            );
+        skeleton.local_intersection_tensor_candidate = tensor_candidate;
+        skeleton.local_intersection_tensor_status = tensor_status;
+        skeleton.local_chamber_certificate_status = chamber_status;
         let witness = OriginCircuitWitnessSample {
             first_facet_exclusive_point: 214,
             second_facet_exclusive_point: 211,
@@ -20996,6 +21049,15 @@ mod tests {
                 },
             ]),
         );
+        context.secondary_cone_height_certificate = Some(SecondaryConeHeightCertificate {
+            status: "strictly_inside_secondary_cone".to_string(),
+            epsilon: 1e-6,
+            hyperplane_count: 1,
+            pairing_count: 1,
+            min_pairing: Some(0.5),
+            max_pairing: Some(0.5),
+            strictly_inside: true,
+        });
         let mut q_matrix = vec![vec![0; 214], vec![0; 214]];
         q_matrix[0][54] = 1;
         q_matrix[1][211] = 1;
@@ -21021,6 +21083,14 @@ mod tests {
         assert_eq!(
             off_height_lookup[1].known_qn_history_status,
             "unknown_not_toric_covered"
+        );
+        assert_eq!(
+            local_phase_chamber_membership_certificate_status_with_witness(
+                &skeleton,
+                Some(&witness),
+                &validated,
+            ),
+            "local_phase_chamber_blocked_weighted_p2_star_union_chamber_history:star_union_target_and_star_integral_in_union_charge_basis"
         );
         let resolved_hint = local_cygv_resolved_shared_support_hint(&skeleton, Some(&witness));
         assert_eq!(
