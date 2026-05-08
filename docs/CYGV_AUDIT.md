@@ -4299,3 +4299,20 @@ targets `7`/`8`, the resolved-conifold degree-`2` rows are closed; the remaining
 target `7`/`8` rows are the shared unclassified degree-`2` family, the shared
 weighted-`P2` split-bundle degree-`6` family, and the two weighted-`P2`
 split-bundle degree-`4` rows whose bounded diamonds still give `GV=0`.
+
+`/tmp/cyrus_local_p2_bundle_import_v1.json` reclassifies the
+`[-2,-1,1,1,1]` rows as local-`P2` bundle one-parameter charge families and
+feeds their unit tensor into the existing `cygv` one-parameter wrapper. For
+regular current star-union chambers this produces `source_derived_gv=-2`,
+materializes the local `q_N` term, and promotes those chamber generators to
+`known_nonzero_source_gv` with
+`source_class_status=source_ray_known_local_p2_bundle_unit_tensor_cygv_certified_chamber`.
+The current-chamber unresolved queue drops again to `4` unique classes / `5`
+occurrences, with history counts
+`known_nonzero_source_gv=9`, `known_nonzero_toric_gv=1`, and
+`unknown_not_toric_covered=5`. For targets `7`/`8`, the shared degree-`6`
+local-`P2` bundle row and both target-specific degree-`4` local-`P2` bundle rows
+are now closed. Their remaining shared current-chamber blocker is the
+degree-`2` six-point family
+`local_toric_one_parameter_charge_family_unclassified:-2,-1,-1,1,1,2`, whose
+bounded lower seed is still `not_found_up_to_4`.

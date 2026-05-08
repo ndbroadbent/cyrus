@@ -1242,15 +1242,26 @@ current-chamber generator queue drops from `10` unique / `12` occurrences to
 the shared unclassified degree-`2` local family plus the weighted-`P2`
 split-bundle degree-`6` and degree-`4` families.
 
+`/tmp/cyrus_local_p2_bundle_import_v1.json` closes the
+`[-2,-1,1,1,1]` local-`P2` bundle rows by running the existing `cygv`
+one-parameter unit-tensor path and promoting only rows whose current
+star-union chamber certificate is regular. These rows produce
+`source_derived_gv=-2`, materialize a local `q_N` term, and become
+`known_nonzero_source_gv`. The finite current-chamber unresolved queue is now
+`4` unique / `5` occurrences. For targets `7`/`8`, the remaining shared
+current-chamber blocker is the unclassified six-point one-parameter charge
+family `-2,-1,-1,1,1,2`; the local-`P2` bundle degree-`6` and degree-`4` rows
+are no longer future work.
+
 ## Next Concrete Action
 
 The next implementation should be one of these, in order:
 
-1. For corrected-chamber missing GV classes, construct a source-derived compact
-   semigroup or certified supporting-face semigroup for the weighted-`P2`
-   split-bundle and unclassified six-point local charge families, then hand it
-   to the existing `cygv` wrappers. If the semigroup cannot be certified, keep
-   the result diagnostic-only.
+1. For the remaining corrected-chamber missing GV classes, classify and certify
+   the six-point one-parameter local charge family `-2,-1,-1,1,1,2`, then hand
+   a source-derived compact semigroup or certified supporting-face semigroup to
+   the existing `cygv` wrappers. If the semigroup cannot be certified, keep the
+   result diagnostic-only.
 2. Extend any new local phase or supporting-face semigroup with an explicit
    secondary-cone/chamber-membership certificate before promotion.
 3. Clean up the remaining matrix-basis diagnostic/export edges in

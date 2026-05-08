@@ -25828,6 +25828,9 @@ fn local_toric_charge_family_status(
     if sorted == [-1, -1, 1, 1] {
         return "local_toric_resolved_conifold_charge_family".to_string();
     }
+    if sorted == [-2, -1, 1, 1, 1] {
+        return "local_toric_local_p2_bundle_charge_family".to_string();
+    }
     if sorted == [-3, 1, 1, 1] {
         return "local_toric_local_p2_charge_family".to_string();
     }
@@ -25864,9 +25867,11 @@ fn local_toric_unit_tensor_probe(
         target_qn_trace_term_count: None,
     };
 
-    if charge_family_status != "local_toric_resolved_conifold_charge_family" {
+    if charge_family_status != "local_toric_resolved_conifold_charge_family"
+        && charge_family_status != "local_toric_local_p2_bundle_charge_family"
+    {
         return empty(
-            "local_toric_unit_tensor_probe_not_run_not_resolved_conifold_charge_family",
+            "local_toric_unit_tensor_probe_not_run_not_supported_one_parameter_charge_family",
             None,
         );
     }
@@ -25890,10 +25895,14 @@ fn local_toric_unit_tensor_probe(
         MalachiteRational::from(1),
     ) {
         Ok(trace) => {
-            let status = if trace.gv == "1" {
+            let status = if charge_family_status == "local_toric_resolved_conifold_charge_family"
+                && trace.gv == "1"
+            {
                 "local_toric_unit_tensor_probe_resolved_conifold_gv1_uncertified"
+            } else if charge_family_status == "local_toric_local_p2_bundle_charge_family" {
+                "local_toric_unit_tensor_probe_local_p2_bundle_computed_uncertified"
             } else {
-                "local_toric_unit_tensor_probe_resolved_conifold_unexpected_gv_uncertified"
+                "local_toric_unit_tensor_probe_unexpected_gv_uncertified"
             };
             LocalToricUnitTensorProbe {
                 candidate_gv: Some(trace.gv),
@@ -25912,40 +25921,67 @@ fn chamber_generator_local_source_formula_gv(
     local_toric_diagnostic: &LocalCygvChamberGeneratorLocalToricDiagnostic,
     chamber_secondary_certificate: Option<&LocalCygvStarUnionChamberSecondaryCertificate>,
 ) -> Option<(String, String)> {
-    if local_toric_diagnostic.local_toric_charge_family_status
-        != "local_toric_resolved_conifold_charge_family"
-    {
-        return None;
-    }
     let certificate = chamber_secondary_certificate?;
     if !chamber_secondary_certificate_is_regular(certificate) {
         return None;
     }
-    Some((
-        "1".to_string(),
-        "source_ray_known_local_resolved_conifold_formula_certified_chamber".to_string(),
-    ))
+    match local_toric_diagnostic
+        .local_toric_charge_family_status
+        .as_str()
+    {
+        "local_toric_resolved_conifold_charge_family" => Some((
+            "1".to_string(),
+            "source_ray_known_local_resolved_conifold_formula_certified_chamber".to_string(),
+        )),
+        "local_toric_local_p2_bundle_charge_family" => {
+            if local_toric_diagnostic.local_toric_unit_tensor_probe_status
+                != "local_toric_unit_tensor_probe_local_p2_bundle_computed_uncertified"
+            {
+                return None;
+            }
+            local_toric_diagnostic
+                .local_toric_unit_tensor_candidate_gv
+                .clone()
+                .map(|gv| {
+                    (
+                        gv,
+                        "source_ray_known_local_p2_bundle_unit_tensor_cygv_certified_chamber"
+                            .to_string(),
+                    )
+                })
+        }
+        _ => None,
+    }
 }
 
 fn chamber_generator_local_source_formula_blocker(
     local_toric_diagnostic: &LocalCygvChamberGeneratorLocalToricDiagnostic,
     chamber_secondary_certificate: Option<&LocalCygvStarUnionChamberSecondaryCertificate>,
 ) -> Option<String> {
-    if local_toric_diagnostic.local_toric_charge_family_status
-        != "local_toric_resolved_conifold_charge_family"
-    {
+    let charge_family = local_toric_diagnostic
+        .local_toric_charge_family_status
+        .as_str();
+    if !matches!(
+        charge_family,
+        "local_toric_resolved_conifold_charge_family" | "local_toric_local_p2_bundle_charge_family"
+    ) {
         return None;
     }
     match chamber_secondary_certificate {
         Some(certificate) if chamber_secondary_certificate_is_regular(certificate) => None,
         Some(certificate) => Some(format!(
-            "source_ray_local_resolved_conifold_formula_blocked_uncertified_chamber:{}",
-            certificate.status
+            "source_ray_{}_source_import_blocked_uncertified_chamber:{}",
+            charge_family
+                .strip_prefix("local_toric_")
+                .unwrap_or(charge_family),
+            certificate.status,
         )),
-        None => Some(
-            "source_ray_local_resolved_conifold_formula_blocked_missing_chamber_certificate"
-                .to_string(),
-        ),
+        None => Some(format!(
+            "source_ray_{}_source_import_blocked_missing_chamber_certificate",
+            charge_family
+                .strip_prefix("local_toric_")
+                .unwrap_or(charge_family),
+        )),
     }
 }
 
@@ -31880,7 +31916,7 @@ mod tests {
                 &diagnostic,
                 Some(&blocked_certificate)
             ),
-            Some("source_ray_local_resolved_conifold_formula_blocked_uncertified_chamber:chamber_secondary_certificate_no_strict_interior_point".to_string())
+            Some("source_ray_resolved_conifold_charge_family_source_import_blocked_uncertified_chamber:chamber_secondary_certificate_no_strict_interior_point".to_string())
         );
         assert_eq!(diagnostic.circuit_triangulation_choice_count, Some(2));
         assert_eq!(diagnostic.circuit_triangulation_error, None);
@@ -31898,6 +31934,59 @@ mod tests {
                 vec![vec![(10, -1), (11, 1), (12, -1), (13, 1)]],
                 vec![vec![(10, 1), (11, -1), (12, 1), (13, -1)]],
             ])
+        );
+    }
+
+    #[test]
+    fn local_toric_diagnostic_imports_certified_local_p2_bundle_unit_tensor() {
+        let point_relation_nonzero = vec![(0, -1), (195, 2), (208, -1), (211, -1), (214, 1)];
+        let point_samples = vec![
+            relation_point_sample(0, -1, &[0, 0, 0], None),
+            relation_point_sample(195, 2, &[1, 1, 0], None),
+            relation_point_sample(208, -1, &[2, 2, 1], None),
+            relation_point_sample(211, -1, &[2, 3, 1], None),
+            relation_point_sample(214, 1, &[2, 3, 2], None),
+        ];
+
+        let diagnostic =
+            chamber_generator_local_toric_diagnostic(&point_relation_nonzero, &point_samples);
+
+        assert_eq!(
+            diagnostic.local_toric_charge_family_status,
+            "local_toric_local_p2_bundle_charge_family"
+        );
+        assert_eq!(
+            diagnostic.local_toric_unit_tensor_candidate_gv.as_deref(),
+            Some("-2")
+        );
+        assert_eq!(
+            diagnostic.local_toric_unit_tensor_probe_status,
+            "local_toric_unit_tensor_probe_local_p2_bundle_computed_uncertified"
+        );
+        assert_eq!(
+            diagnostic
+                .local_toric_unit_tensor_target_qn_trace_status
+                .as_deref(),
+            Some("local_unit_qn_materialized_for_nonzero_gv")
+        );
+
+        let regular_certificate = LocalCygvStarUnionChamberSecondaryCertificate {
+            status: "chamber_secondary_certificate_regular_strictly_inside_secondary_cone"
+                .to_string(),
+            simplex_count: Some(3),
+            hyperplane_count: Some(1),
+            height_count: Some(5),
+            min_pairing: Some("1".to_string()),
+            max_pairing: Some("1".to_string()),
+            zero_pairing_count: Some(0),
+            strictly_inside: Some(true),
+        };
+        assert_eq!(
+            chamber_generator_local_source_formula_gv(&diagnostic, Some(&regular_certificate)),
+            Some((
+                "-2".to_string(),
+                "source_ray_known_local_p2_bundle_unit_tensor_cygv_certified_chamber".to_string()
+            ))
         );
     }
 
