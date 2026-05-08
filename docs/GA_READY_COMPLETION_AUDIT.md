@@ -195,7 +195,11 @@ and matrix-basis pipeline are no longer open.
    inputs, keeping their unit-tensor scalar agreement separate from a promoted
    compact GV computation. Their chamber transport blockers are now explicit
    in the same missing-input queue as restricted resolved-chamber wall
-   certificates and full star-union chamber-transport certificates.
+   certificates and full star-union chamber-transport certificates. Bounded
+   star-union probes show targets `7`/`8` reach an integral union lattice but
+   still give current-chamber GV `0` and no bounded target closure at element
+   limit `256`; targets `3`/`6` are blocked before that by non-integral
+   target coordinates in the union lattice.
 2. **Exact corrected KKLT volume.** The no-replay path computes a corrected
    volume but still has a documented instanton/chamber residual.
 3. **Generic matrix-basis pipeline.** Matrix divisor-basis primitives now cover

@@ -1448,6 +1448,12 @@ to make the remaining GV layer more first-principles:
    blockers behind those rows:
    `weighted_p2_restricted_resolved_chamber_wall_certificate:4` and
    `weighted_p2_full_chamber_transport_certificate:4`.
+   Bounded target-specific star-union probes split the weighted rows further:
+   targets `7`/`8` have integral target/star union coordinates, but the
+   current-chamber provided-generator `cygv` call returns GV `0` and the
+   target-plus-star path history exceeds the initial 256-element limit without
+   reaching the target; targets `3`/`6` are blocked earlier by non-integral
+   target coordinates in that union lattice.
    The local phase-membership aggregation now reports the stricter
    resolved-shared secondary-cone blocker for the integral weighted rows before
    falling back to the coarser star-union relation label. Fresh target `7` and

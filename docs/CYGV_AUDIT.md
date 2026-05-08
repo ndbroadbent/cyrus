@@ -3628,6 +3628,18 @@ phase status
 `local_phase_chamber_blocked_weighted_p2_resolved_shared_affine_wall_global_height_strict:weighted_p2_resolved_shared_chamber_outside_or_on_wall`
 and the full-union status
 `resolved_global_height_strict_but_full_union_selects_star_extras_requires_chamber_transport`.
+Bounded target-specific probes with
+`--probe-star-union-path-history --run-lower-seed-diamonds --element-limit 256`
+make the weighted split more concrete. Targets `7` and `8` are integral in the
+target/star union charge lattice, but the current-chamber provided-generator
+`cygv` call returns GV `0`, the wall-readiness status is
+`wall_transport_known_wall_remainder_requires_wall_crossing_chamber_transport`,
+and the target-plus-star path history stops at
+`exceeded_element_limit_initial_256` with the target outside the bounded
+closure. Targets `3` and `6` are blocked earlier: their target relation is
+non-integral in the same union lattice. Thus even inside the weighted-`P2`
+family there are two separate chamber-transport obstructions, neither of which
+is a scalar local GV formula.
 This is useful but still not a source rule: it proves that Cyrus must derive
 which split, if any, comes from the star-union/CICY geometry instead of choosing
 one by scalar GV agreement. Target `7` also has no nonnegative primitive
