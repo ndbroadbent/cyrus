@@ -841,15 +841,24 @@ square diagonal circuit, wall/outside height rejection, dimension mismatch, and
 non-full-dimensional simplex rejection. This is not a corrected-chamber GV
 certificate yet; it is the reusable chamber-membership primitive needed before
 local chamber/intersection data can be promoted.
+`mcallister_first_principles --dump-corrected-chamber-gv-context` now exports a
+top-level `secondary_cone_height_certificate` for the corrected chamber,
+including CYTools' `1e-6` wall tolerance, hyperplane count, pairing min/max,
+and strict-interior status. The export test
+`corrected_chamber_context_export_includes_uncovered_source_toric_diagnostics`
+asserts the field is serialized. `mcallister_gv_context` now deserializes,
+validates, and reports that certificate, including rejecting inconsistent
+hyperplane/pairing counts. This still certifies only the global exported
+chamber; candidate local phases remain unpromoted until they carry their own
+source-derived chamber/intersection certificates.
 
 ## Next Concrete Action
 
 The next implementation should be one of these, in order:
 
-1. Wire the native secondary-cone primitive into the corrected-chamber context
-   export so each candidate local phase carries an explicit height-vector
-   chamber-membership certificate before its intersection tensor or semigroup
-   can be promoted.
+1. Extend the secondary-cone certificate from the global corrected chamber to
+   each candidate local phase, so a local intersection tensor or semigroup
+   cannot be promoted without an explicit chamber-membership certificate.
 2. For corrected-chamber missing GV classes, construct a source-derived compact
    semigroup or certified supporting-face semigroup and hand it to the existing
    `cygv` wrappers. If the semigroup cannot be certified, keep the result
