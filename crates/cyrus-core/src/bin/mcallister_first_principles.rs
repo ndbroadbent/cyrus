@@ -12955,6 +12955,26 @@ mod tests {
             first_witness.shared_two_simplex_star_simplices,
             vec![vec![0, 1, 2], vec![0, 1, 3]]
         );
+        let star_extra_points = first_witness
+            .shared_two_simplex_star_extra_point_samples
+            .iter()
+            .map(|simplex| {
+                simplex
+                    .iter()
+                    .map(|point| {
+                        (
+                            point.point_index,
+                            point.coefficient,
+                            point.coordinates.clone(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            star_extra_points,
+            vec![vec![(2, 0, vec![1, 0])], vec![(3, 0, vec![0, 1])]]
+        );
     }
 
     #[test]
