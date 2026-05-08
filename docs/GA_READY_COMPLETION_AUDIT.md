@@ -1337,7 +1337,8 @@ and numerical-GV status
 `weighted_p2_rank_three_visible_phase_is_not_numerical_cy3_requires_source_codim2_or_insertion_history`.
 This records why the named phase is not enough: the next task is still finding
 or deriving the missing codimension-2/twisted source model and qN chamber
-history, not guessing a one-parameter tensor.
+history, not guessing a one-parameter tensor. The focused source-read note is
+`docs/WEIGHTED_P2_RANK3_SOURCE_READ.md`.
 
 `/tmp/cyrus_six_point_overlap_annotations_v1.json` also annotates the nearest
 degree-bounded support-overlap samples. For the shared target `7`/`8`
