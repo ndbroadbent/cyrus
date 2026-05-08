@@ -3423,10 +3423,14 @@ supports are Calabi-Yau charge rows with `q_rows=7`, `q_cols=2`,
 `ambient_dim=5`, and `cy_dim=4`; target `7` also has no nonnegative primitive
 orientation for coordinates `[3,-1]`, while target `8` has positive
 coordinates `[1,1]` but is blocked on a higher-rank semigroup and grading
-certificate plus the missing compact-threefold phase. This rules out handing
-the two-parameter target-plus-star row directly to compact `cygv`; the next
-object must be a source-derived chamber/reduction history, not a raw local
-`cygv` call.
+certificate plus the missing compact-threefold phase. The same report checks
+the cheap one-column reductions: across all target-plus-star rows there are
+`28` dimension-three non-Calabi-Yau omissions and `17` omissions that are not
+dimension three. For targets `7` and `8` specifically, all seven single-column
+omissions are dimension three but non-Calabi-Yau. This rules out handing the
+two-parameter target-plus-star row directly to compact `cygv` or fixing it by
+dropping one support point; the next object must be a source-derived
+chamber/reduction history, not a raw local `cygv` call.
 Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
 serializes a role-tagged height profile over the full union support. For
 targets `3`/`6`, the off-hyperplane zero-shared ray has height `-1` but zero

@@ -294,6 +294,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_local_cygv_phase_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_target_plus_star_single_column_omission_phase_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_chamber_coverage_status_counts: BTreeMap<String, usize>,
@@ -905,8 +907,21 @@ struct LocalCygvStarUnionTargetPlusStarLocalCygvReadiness {
     local_grading_vector_status: String,
     local_intersection_tensor_status: String,
     local_chamber_certificate_status: String,
+    single_column_omission_candidates: Vec<LocalCygvSingleColumnOmissionCandidate>,
     actual_call_readiness: String,
     missing_inputs: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvSingleColumnOmissionCandidate {
+    omitted_point_index: usize,
+    omitted_charge_column: Vec<i64>,
+    q_rows: usize,
+    q_cols: usize,
+    cy_dim: i64,
+    charge_sums_after_omission: Vec<i64>,
+    is_calabi_yau_charge: bool,
+    phase_status: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -15051,6 +15066,10 @@ fn build_report(
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_phase_status_counts(
             &local_cygv_source_resolution_hint_sample,
         );
+    let local_cygv_source_resolution_star_union_target_plus_star_single_column_omission_phase_status_counts =
+        local_cygv_source_resolution_star_union_target_plus_star_single_column_omission_phase_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
     let local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts =
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts(
             &local_cygv_source_resolution_hint_sample,
@@ -16005,6 +16024,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_readiness_counts,
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_phase_status_counts,
+        local_cygv_source_resolution_star_union_target_plus_star_single_column_omission_phase_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts,
         local_cygv_source_resolution_star_union_chamber_coverage_status_counts,
         local_cygv_source_resolution_star_union_shared_face_secondary_status_counts,
@@ -16926,6 +16946,23 @@ fn local_cygv_source_resolution_star_union_target_plus_star_local_cygv_phase_sta
                     .clone(),
             )
             .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_star_union_target_plus_star_single_column_omission_phase_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        for candidate in &summary
+            .shared_two_simplex_star_union_target_plus_star_local_cygv_readiness
+            .single_column_omission_candidates
+        {
+            *counts
+                .entry(candidate.phase_status.clone())
+                .or_insert(0usize) += 1;
+        }
     }
     counts
 }
@@ -20762,6 +20799,8 @@ fn local_cygv_star_union_target_plus_star_local_cygv_readiness(
         );
     let (local_grading_vector_candidate, local_grading_vector_status) =
         local_cygv_grading_vector_candidate(&orientation_candidates);
+    let single_column_omission_candidates =
+        local_cygv_single_column_omission_candidates(&support.point_indices, charge_basis);
     let (
         local_intersection_tensor_candidate,
         local_intersection_tensor_status,
@@ -20837,9 +20876,89 @@ fn local_cygv_star_union_target_plus_star_local_cygv_readiness(
         local_grading_vector_status,
         local_intersection_tensor_status,
         local_chamber_certificate_status,
+        single_column_omission_candidates,
         actual_call_readiness,
         missing_inputs,
     }
+}
+
+fn local_cygv_single_column_omission_candidates(
+    point_indices: &[usize],
+    charge_basis: &[Vec<i64>],
+) -> Vec<LocalCygvSingleColumnOmissionCandidate> {
+    let Some(width) = charge_basis.first().map(Vec::len) else {
+        return Vec::new();
+    };
+    if width == 0
+        || width != point_indices.len()
+        || charge_basis.iter().any(|row| row.len() != width)
+    {
+        return Vec::new();
+    }
+    let mut candidates = Vec::with_capacity(width);
+    for omitted_position in 0..width {
+        let reduced_point_indices = point_indices
+            .iter()
+            .enumerate()
+            .filter_map(|(position, &point_index)| {
+                (position != omitted_position).then_some(point_index)
+            })
+            .collect::<Vec<_>>();
+        let reduced_charge_basis = charge_basis
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .enumerate()
+                    .filter_map(|(position, &entry)| {
+                        (position != omitted_position).then_some(entry)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let omitted_charge_column = charge_basis
+            .iter()
+            .map(|row| row[omitted_position])
+            .collect::<Vec<_>>();
+        let shape = local_cygv_hypersurface_shape_from_charge_basis(&reduced_charge_basis).ok();
+        let (_phase_q_matrix, phase_status) = local_cygv_q_matrix_phase_candidate(
+            &reduced_point_indices,
+            Some(&reduced_charge_basis),
+        );
+        let (q_rows, q_cols, cy_dim, charge_sums_after_omission, is_calabi_yau_charge) = shape
+            .as_ref()
+            .map(|shape| {
+                (
+                    shape.q_rows,
+                    shape.q_cols,
+                    shape.cy_dim,
+                    shape.charge_sums.clone(),
+                    shape.is_calabi_yau_charge,
+                )
+            })
+            .unwrap_or_else(|| {
+                (
+                    reduced_point_indices.len(),
+                    reduced_charge_basis.len(),
+                    i64::MIN,
+                    reduced_charge_basis
+                        .iter()
+                        .map(|row| row.iter().sum())
+                        .collect(),
+                    false,
+                )
+            });
+        candidates.push(LocalCygvSingleColumnOmissionCandidate {
+            omitted_point_index: point_indices[omitted_position],
+            omitted_charge_column,
+            q_rows,
+            q_cols,
+            cy_dim,
+            charge_sums_after_omission,
+            is_calabi_yau_charge,
+            phase_status,
+        });
+    }
+    candidates
 }
 
 fn blocked_target_plus_star_local_cygv_readiness(
@@ -20861,6 +20980,7 @@ fn blocked_target_plus_star_local_cygv_readiness(
         local_grading_vector_status: "local_grading_not_evaluated".to_string(),
         local_intersection_tensor_status: "local_intersection_tensor_not_evaluated".to_string(),
         local_chamber_certificate_status: "local_chamber_certificate_not_evaluated".to_string(),
+        single_column_omission_candidates: Vec::new(),
         actual_call_readiness: "blocked_missing_source_derived_inputs".to_string(),
         missing_inputs,
     }
@@ -23781,6 +23901,7 @@ mod tests {
                     local_grading_vector_status: "test".to_string(),
                     local_intersection_tensor_status: "test".to_string(),
                     local_chamber_certificate_status: "test".to_string(),
+                    single_column_omission_candidates: Vec::new(),
                     actual_call_readiness: "test".to_string(),
                     missing_inputs: Vec::new(),
                 },
@@ -26687,6 +26808,13 @@ mod tests {
                 .missing_inputs
                 .contains(&"local_chamber_certificate".to_string())
         );
+        assert_eq!(readiness.single_column_omission_candidates.len(), 7);
+        assert!(readiness.single_column_omission_candidates.iter().all(
+            |candidate| candidate.cy_dim == 3
+                && !candidate.is_calabi_yau_charge
+                && candidate.phase_status
+                    == "source_derived_unique_dimension_three_non_calabi_yau_phase_including_origin"
+        ));
     }
 
     #[test]
@@ -26739,6 +26867,13 @@ mod tests {
                 .missing_inputs
                 .contains(&"local_grading_vector".to_string())
         );
+        assert_eq!(readiness.single_column_omission_candidates.len(), 7);
+        assert!(readiness.single_column_omission_candidates.iter().all(
+            |candidate| candidate.cy_dim == 3
+                && !candidate.is_calabi_yau_charge
+                && candidate.phase_status
+                    == "source_derived_unique_dimension_three_non_calabi_yau_phase_including_origin"
+        ));
     }
 
     #[test]
