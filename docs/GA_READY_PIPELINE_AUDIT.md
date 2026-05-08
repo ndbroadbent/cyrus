@@ -544,7 +544,10 @@ to make the remaining GV layer more first-principles:
    of a supplied finite Mori-generator cone, plus
    `check_stable_weyl_candidate_certificate` and
    `find_stable_weyl_candidate_certificate` to require all of these algebraic
-   subchecks together. These are necessary pieces for the stable-Weyl test, but
+   subchecks together. The exact helper
+   `apply_certified_flop_continuation_sequence` now applies an ordered certified
+   path to `kappa`, `c2`, and the GV table together. These are necessary pieces
+   for the stable-Weyl test, but
    they are not a chamber certificate by themselves. Cyrus still needs the
    source-level certification step that proves the supplied finite generators
    are the relevant Kähler wall/chamber context and identifies the shrinking
@@ -975,9 +978,11 @@ to make the remaining GV layer more first-principles:
    `kappa'_{abc}=kappa_{abc}-n_C^0 C_a C_b C_c` and
    `c'_a=c_a+2 n_C^0 C_a`. The exact table transform
    `flop_reassign_gv_invariants` also applies `n'^0_{-C}=n^0_C` and
-   `n'^0_C=0` while rejecting conflicting duplicate data. The remaining work is
-   the certification layer: Cyrus still needs to identify the shrinking curve
-   and certify its `n_C^0` before these transforms can drive a corrected-chamber
+   `n'^0_C=0` while rejecting conflicting duplicate data.
+   `apply_certified_flop_continuation_sequence` applies these three exact
+   updates in lockstep for an ordered certified path. The remaining work is the
+   certification layer: Cyrus still needs to identify the shrinking curve and
+   certify its `n_C^0` before these transforms can drive a corrected-chamber
    instanton sum. The schema-`3` context report now exposes that readiness
    directly: all nine remaining targets have CMS-style formula candidates, but
    the 14 exact divisor-intersection checks all fail with

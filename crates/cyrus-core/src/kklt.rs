@@ -59,6 +59,30 @@ pub struct StableWeylCandidateCertificate {
     pub weyl_matrix: Vec<Vec<Rational>>,
 }
 
+/// One already-certified flop or stable-Weyl continuation step.
+///
+/// This is deliberately only the algebraic payload. The caller must still
+/// prove that `curve_class` is the shrinking wall curve and that
+/// `gv_invariant` is its source-derived genus-zero invariant.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CertifiedFlopContinuationStep {
+    /// Shrinking curve class `C` in the current chamber basis.
+    pub curve_class: Vec<i64>,
+    /// Certified genus-zero invariant `n_C^0` for the shrinking curve.
+    pub gv_invariant: Integer,
+}
+
+/// Exact geometric/GV data after applying a certified continuation path.
+#[derive(Clone, Debug)]
+pub struct FlopContinuationState {
+    /// Transformed triple-intersection tensor.
+    pub intersection_numbers: Intersection,
+    /// Transformed linear second-Chern/vector term.
+    pub c2_vector: Vec<Integer>,
+    /// GV table after reassigning every crossed shrinking class.
+    pub gv_invariants: Vec<(Vec<i64>, Integer)>,
+}
+
 /// Why a real-axis GV dilogarithm evaluation failed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GvDilogFailure {
@@ -228,6 +252,42 @@ pub fn flop_reassign_gv_invariants(
     let mut out: Vec<_> = reassigned.into_iter().collect();
     out.sort_unstable_by(|(lhs, _), (rhs, _)| lhs.cmp(rhs));
     Some(out)
+}
+
+/// Apply a sequence of already-certified flop/stable-Weyl continuation steps.
+///
+/// Each step applies the exact transformations
+/// `kappa' = kappa - n_C C^3`, `c2' = c2 + 2 n_C C`, and
+/// `n'_{-C} = n_C`, `n'_C = 0` to the output of the previous step. This helper
+/// does not discover or certify the chamber path; it only keeps the algebraic
+/// state updates coupled once that path is known.
+#[must_use]
+pub fn apply_certified_flop_continuation_sequence(
+    kappa: &Intersection,
+    c2_vector: &[Integer],
+    gv_invariants: &[(Vec<i64>, Integer)],
+    steps: &[CertifiedFlopContinuationStep],
+) -> Option<FlopContinuationState> {
+    let mut current_kappa = kappa.clone();
+    let mut current_c2 = c2_vector.to_vec();
+    let mut current_gvs = gv_invariants.to_vec();
+
+    for step in steps {
+        current_kappa = flop_transform_intersection_numbers(
+            &current_kappa,
+            &step.curve_class,
+            &step.gv_invariant,
+        )?;
+        current_c2 = flop_transform_c2_vector(&current_c2, &step.curve_class, &step.gv_invariant)?;
+        current_gvs =
+            flop_reassign_gv_invariants(&current_gvs, &step.curve_class, &step.gv_invariant)?;
+    }
+
+    Some(FlopContinuationState {
+        intersection_numbers: current_kappa,
+        c2_vector: current_c2,
+        gv_invariants: current_gvs,
+    })
 }
 
 /// Compute the exact Weyl reflection matrix across a finite-distance gauge
@@ -2724,6 +2784,67 @@ mod tests {
             transformed,
             vec![Integer::from(17), Integer::from(-13), Integer::from(24)]
         );
+    }
+
+    #[test]
+    fn test_apply_certified_flop_continuation_sequence_updates_state_in_order() {
+        let mut kappa = Intersection::new(2);
+        kappa.set(0, 0, 0, finite_rational(10));
+        kappa.set(0, 1, 1, finite_rational(4));
+        kappa.set(1, 1, 1, finite_rational(-5));
+        let c2 = vec![Integer::from(1), Integer::from(2)];
+        let invariants = vec![
+            (vec![1, 0], Integer::from(2)),
+            (vec![0, 1], Integer::from(-1)),
+            (vec![1, 1], Integer::from(3)),
+        ];
+        let steps = vec![
+            CertifiedFlopContinuationStep {
+                curve_class: vec![1, 0],
+                gv_invariant: Integer::from(2),
+            },
+            CertifiedFlopContinuationStep {
+                curve_class: vec![0, 1],
+                gv_invariant: Integer::from(-1),
+            },
+        ];
+
+        let state =
+            apply_certified_flop_continuation_sequence(&kappa, &c2, &invariants, &steps).unwrap();
+
+        assert_eq!(
+            state.intersection_numbers.get(0, 0, 0).get(),
+            &Rational::from(8)
+        );
+        assert_eq!(
+            state.intersection_numbers.get(0, 1, 1).get(),
+            &Rational::from(4)
+        );
+        assert_eq!(
+            state.intersection_numbers.get(1, 1, 1).get(),
+            &Rational::from(-4)
+        );
+        assert_eq!(state.c2_vector, vec![Integer::from(5), Integer::from(0)]);
+        assert_eq!(
+            state.gv_invariants,
+            vec![
+                (vec![-1, 0], Integer::from(2)),
+                (vec![0, -1], Integer::from(-1)),
+                (vec![1, 1], Integer::from(3)),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_apply_certified_flop_continuation_sequence_rejects_malformed_step() {
+        let kappa = Intersection::new(2);
+        let c2 = vec![Integer::from(1)];
+        let steps = vec![CertifiedFlopContinuationStep {
+            curve_class: vec![1, 0],
+            gv_invariant: Integer::from(1),
+        }];
+
+        assert!(apply_certified_flop_continuation_sequence(&kappa, &c2, &[], &steps).is_none());
     }
 
     #[test]
