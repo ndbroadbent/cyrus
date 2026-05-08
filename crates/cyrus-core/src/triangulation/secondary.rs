@@ -694,6 +694,49 @@ pub fn fine_regular_triangulation_choices_on_polytope_2faces_4d(
     Ok(choices)
 }
 
+/// Build 4D two-face FRT choices with CYTools-style exact-or-sampled policy.
+///
+/// Faces with at most `max_exact_face_points` points are enumerated exactly
+/// with [`fine_regular_triangulations_of_face_2d`]. Larger faces are sampled
+/// with [`sample_fine_regular_triangulations_of_face_2d`], matching the role of
+/// CYTools `face_triangs(..., triang_method="grow2d")`.
+///
+/// # Errors
+///
+/// Returns an error if 4D face construction fails, exact enumeration fails, or
+/// a large face has no positive sampling budget.
+pub fn fine_regular_triangulation_choices_on_polytope_2faces_4d_with_sampling(
+    points: &[Point],
+    polytope: &Polytope,
+    max_exact_face_points: usize,
+    samples_per_large_face: usize,
+    max_sampling_attempts_per_face: usize,
+    seed: u64,
+) -> Result<Vec<Vec<Triangulation>>> {
+    let faces = polytope.faces_4d_for_points(points)?;
+    let mut choices = Vec::with_capacity(faces.twofaces.len());
+    for (face_idx, face) in faces.twofaces.iter().enumerate() {
+        if face.len() <= max_exact_face_points {
+            choices.push(fine_regular_triangulations_of_face_2d(points, face)?);
+            continue;
+        }
+        if samples_per_large_face == 0 || max_sampling_attempts_per_face == 0 {
+            return Err(Error::InvalidInput(format!(
+                "2-face {face_idx} has {} points, exceeding exact enumeration limit {max_exact_face_points}, but sampling budget is empty",
+                face.len()
+            )));
+        }
+        choices.push(sample_fine_regular_triangulations_of_face_2d(
+            points,
+            face,
+            samples_per_large_face,
+            max_sampling_attempts_per_face,
+            seed.wrapping_add(u64::try_from(face_idx).unwrap_or(u64::MAX)),
+        )?);
+    }
+    Ok(choices)
+}
+
 /// Enumerate exact 4D two-face FRT choices and compute native inequalities.
 ///
 /// This composes [`fine_regular_triangulation_choices_on_polytope_2faces_4d`]
@@ -3640,6 +3683,48 @@ mod tests {
                 .to_string()
                 .contains("exceeding exact enumeration limit 2")
         );
+    }
+
+    #[test]
+    fn fine_regular_choices_on_polytope_2faces_4d_with_sampling_uses_large_face_sampler() {
+        let points = vec![
+            Point::new(vec![1, 0, 0, 0]),
+            Point::new(vec![0, 1, 0, 0]),
+            Point::new(vec![0, 0, 1, 0]),
+            Point::new(vec![0, 0, 0, 1]),
+            Point::new(vec![-1, -1, -1, -1]),
+        ];
+        let polytope = Polytope::from_vertices(points.clone()).unwrap();
+
+        let choices = fine_regular_triangulation_choices_on_polytope_2faces_4d_with_sampling(
+            &points, &polytope, 2, 1, 16, 0,
+        )
+        .unwrap();
+
+        assert_eq!(choices.len(), 10);
+        assert!(choices.iter().all(|face_choices| face_choices.len() == 1));
+        assert!(choices.iter().all(|face_choices| {
+            face_choices[0].simplices().len() == 1 && face_choices[0].simplices()[0].len() == 3
+        }));
+    }
+
+    #[test]
+    fn fine_regular_choices_on_polytope_2faces_4d_with_sampling_requires_budget() {
+        let points = vec![
+            Point::new(vec![1, 0, 0, 0]),
+            Point::new(vec![0, 1, 0, 0]),
+            Point::new(vec![0, 0, 1, 0]),
+            Point::new(vec![0, 0, 0, 1]),
+            Point::new(vec![-1, -1, -1, -1]),
+        ];
+        let polytope = Polytope::from_vertices(points.clone()).unwrap();
+
+        let error = fine_regular_triangulation_choices_on_polytope_2faces_4d_with_sampling(
+            &points, &polytope, 2, 0, 16, 0,
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("sampling budget is empty"));
     }
 
     #[test]

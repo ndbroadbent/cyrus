@@ -1780,7 +1780,10 @@ to make the remaining GV layer more first-principles:
    two-face, while `sample_fine_regular_triangulations_of_face_2d` mirrors
    `grow_frt` by retaining only secondary-cone-regular samples. This is the
    per-face sampler needed before large-face automatic policy can replace the
-   current exact-enumeration guard.
+   current exact-enumeration guard. The first automatic policy wrapper,
+   `fine_regular_triangulation_choices_on_polytope_2faces_4d_with_sampling`,
+   now exact-enumerates faces below a point threshold and uses the `grow2d`
+   sampler above it.
    The top-level `ntfe_hypers` materialization logic for already-known
    face-inequality data is now exposed through
    `expanded_secondary_chamber_count_from_face_inequality_choices`,
