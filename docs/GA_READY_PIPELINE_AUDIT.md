@@ -1765,7 +1765,11 @@ to make the remaining GV layer more first-principles:
    CYTools-style two-face sets from a 4D polytope and applies the exact
    enumerator to each face, failing loudly through `max_face_points` instead of
    silently switching to sampling. The `P^4` simplex regression pins the ten
-   triangular two-face choices and the size-guard error path.
+   triangular two-face choices and the size-guard error path. The exact choices
+   can now be converted directly into reusable native or star-constrained
+   expanded-secondary face blocks through
+   `expanded_secondary_face_inequality_choices_on_polytope_2faces_4d` and
+   `expanded_secondary_face_inequality_choices_on_polytope_2faces_with_star_4d`.
    The top-level `ntfe_hypers` materialization logic for already-known
    face-inequality data is now exposed through
    `expanded_secondary_chamber_count_from_face_inequality_choices`,

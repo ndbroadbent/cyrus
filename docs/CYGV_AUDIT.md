@@ -120,7 +120,11 @@ replacement for CYTools' broader `grow2d` sampling. The 4D wrapper
 `fine_regular_triangulation_choices_on_polytope_2faces_4d` now applies this
 exact path to every computed two-face of a 4D polytope with an explicit
 `max_face_points` guard; the `P^4` simplex regression pins the ten triangular
-two-face choices and the guard failure mode.
+two-face choices and the guard failure mode. The same exact choices now feed
+directly into reusable native and star-constrained expanded-secondary
+inequality builders:
+`expanded_secondary_face_inequality_choices_on_polytope_2faces_4d` and
+`expanded_secondary_face_inequality_choices_on_polytope_2faces_with_star_4d`.
 
 CYTools' `Cone.find_lattice_points` is a separate operation. It first checks
 that the grading vector has only the origin at nonpositive degree, then uses

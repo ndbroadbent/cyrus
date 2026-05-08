@@ -534,6 +534,62 @@ pub fn fine_regular_triangulation_choices_on_polytope_2faces_4d(
     Ok(choices)
 }
 
+/// Enumerate exact 4D two-face FRT choices and compute native inequalities.
+///
+/// This composes [`fine_regular_triangulation_choices_on_polytope_2faces_4d`]
+/// with [`expanded_secondary_face_inequality_choices_from_triangulations`] for
+/// the small exact path of CYTools `Polytope.face_triangs(dim=2,
+/// only_regular=True)` followed by `Polytope.triangface_ineqs` with
+/// `require_star=False`.
+///
+/// # Errors
+///
+/// Returns an error if exact 4D two-face triangulation enumeration fails or if
+/// the resulting triangulations cannot be converted to secondary-cone rows.
+pub fn expanded_secondary_face_inequality_choices_on_polytope_2faces_4d(
+    points: &[Point],
+    polytope: &Polytope,
+    max_face_points: Option<usize>,
+) -> Result<Vec<Vec<Vec<Vec<i64>>>>> {
+    let face_triangulation_choices = fine_regular_triangulation_choices_on_polytope_2faces_4d(
+        points,
+        polytope,
+        max_face_points,
+    )?;
+    expanded_secondary_face_inequality_choices_from_triangulations(
+        points,
+        &face_triangulation_choices,
+    )
+}
+
+/// Enumerate exact 4D two-face FRT choices and compute star-constrained rows.
+///
+/// This is the exact small-face counterpart of the CYTools
+/// `require_star=True` path: two-face FRT choices are enumerated from the 4D
+/// polytope and each choice is converted to native CPL rows plus `_2d_s_cone`
+/// star constraints.
+///
+/// # Errors
+///
+/// Returns an error if exact 4D two-face triangulation enumeration fails, if
+/// native secondary rows fail, or if a star circuit cannot be certified.
+pub fn expanded_secondary_face_inequality_choices_on_polytope_2faces_with_star_4d(
+    points: &[Point],
+    polytope: &Polytope,
+    max_face_points: Option<usize>,
+) -> Result<Vec<Vec<Vec<Vec<i64>>>>> {
+    let face_triangulation_choices = fine_regular_triangulation_choices_on_polytope_2faces_4d(
+        points,
+        polytope,
+        max_face_points,
+    )?;
+    expanded_secondary_face_inequality_choices_from_triangulations_with_star_4d(
+        points,
+        &face_triangulation_choices,
+        polytope,
+    )
+}
+
 /// Compute per-face expanded-secondary inequality choices.
 ///
 /// This ports the provided-`face_triangs`, `require_star=False` branch of
@@ -3208,6 +3264,61 @@ mod tests {
             error
                 .to_string()
                 .contains("exceeding exact enumeration limit 2")
+        );
+    }
+
+    #[test]
+    fn expanded_secondary_face_choices_on_polytope_2faces_4d_use_exact_enumeration() {
+        let points = vec![
+            Point::new(vec![1, 0, 0, 0]),
+            Point::new(vec![0, 1, 0, 0]),
+            Point::new(vec![0, 0, 1, 0]),
+            Point::new(vec![0, 0, 0, 1]),
+            Point::new(vec![-1, -1, -1, -1]),
+        ];
+        let polytope = Polytope::from_vertices(points.clone()).unwrap();
+
+        let choices = expanded_secondary_face_inequality_choices_on_polytope_2faces_4d(
+            &points,
+            &polytope,
+            Some(3),
+        )
+        .unwrap();
+
+        assert_eq!(choices.len(), 10);
+        assert!(choices.iter().all(|face_choices| face_choices.len() == 1));
+        assert!(
+            choices
+                .iter()
+                .all(|face_choices| face_choices[0].is_empty())
+        );
+    }
+
+    #[test]
+    fn expanded_secondary_face_choices_on_polytope_2faces_with_star_4d_add_star_rows() {
+        let points = vec![
+            Point::new(vec![0, 0, 0, 0]),
+            Point::new(vec![1, 0, 0, 0]),
+            Point::new(vec![0, 1, 0, 0]),
+            Point::new(vec![0, 0, 1, 0]),
+            Point::new(vec![0, 0, 0, 1]),
+            Point::new(vec![-1, -1, -1, -1]),
+        ];
+        let polytope = Polytope::from_vertices(points[1..].to_vec()).unwrap();
+
+        let choices = expanded_secondary_face_inequality_choices_on_polytope_2faces_with_star_4d(
+            &points,
+            &polytope,
+            Some(3),
+        )
+        .unwrap();
+
+        assert_eq!(choices.len(), 10);
+        assert!(choices.iter().all(|face_choices| face_choices.len() == 1));
+        assert!(
+            choices
+                .iter()
+                .all(|face_choices| face_choices[0] == vec![vec![-5, 1, 1, 1, 1, 1]])
         );
     }
 }
