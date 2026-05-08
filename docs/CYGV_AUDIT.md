@@ -3829,6 +3829,17 @@ degrees `{-4:1, 2:1, 4:1, 6:1, 8:1}` with bounded lower-seed statuses
 `known_nonzero_source_gv:1` and `unknown_not_toric_covered:4`. This rules out
 the visible current/flipped chamber generator sets as standalone compact HKTY
 histories.
+The all-target aggregate gives the next queue explicitly. Among the nine
+remaining corrected-chamber misses, only targets `1`, `7`, and `8` run the
+current-chamber provided-generator probe, and all three return `GV=0`; targets
+`2` and `4` are skipped for nonpositive target-plus-star degree, while targets
+`0`, `3`, `5`, and `6` never produce target-plus-star coordinates. The actual
+current decomposition terms are all `unknown_not_toric_covered`: target `1`
+uses a degree-16 generator, and targets `7`/`8` each use a degree-2
+`not_found_up_to_4` generator plus a degree-4
+`found_lower_seed_decomposition` generator. The next compact-history problem is
+therefore those unknown decomposition-term generators, not the known toric or
+source-derived rows around them.
 
 The no-replay boundary around the standalone GV binary is stricter now:
 `mcallister_gv` no longer reads `dual_curves.dat` or `dual_curves_gv.dat`.

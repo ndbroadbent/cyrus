@@ -1552,6 +1552,18 @@ to make the remaining GV layer more first-principles:
    the qN-history split remains `known_nonzero_source_gv:1` and
    `unknown_not_toric_covered:4`. Thus the visible chamber generator set is
    not the missing compact HKTY history by itself.
+   Running the same aggregate over all nine missing targets narrows the
+   chamber-semigroup decomposition queue further: only targets `1`, `7`, and
+   `8` reach an actual current-chamber provided-generator `cygv` call, and all
+   three return `GV=0`; targets `2` and `4` are skipped because the
+   target-plus-star degree is nonpositive; targets `0`, `3`, `5`, and `6` are
+   blocked before target-plus-star coordinates. The current decomposition terms
+   that do exist are all still `unknown_not_toric_covered`: target `1` depends
+   on one degree-16 generator, while targets `7` and `8` each depend on one
+   degree-2 generator with `not_found_up_to_4` and one degree-4 generator with
+   `found_lower_seed_decomposition`. This makes the next source-history task
+   the unknown decomposition-term generators, not the surrounding known toric or
+   source-derived chamber rows.
    A follow-up compact-omission wall-side summary confirms this selected side
    is not one of the compact omission phases: both target rows have four
    compact omissions, but zero full-positive-side or full-negative-side
