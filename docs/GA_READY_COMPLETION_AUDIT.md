@@ -831,20 +831,35 @@ are all `lp_no_solution`, target `7` union domains are all `lp_no_solution`,
 and target `7` shared domains retain full LP `Unknown` but have aggregate and
 all `64` anchors at `lp_no_solution`.
 
+Cyrus now has a focused native secondary-cone chamber primitive in
+`crates/cyrus-core/src/triangulation/secondary.rs`. It ports the CYTools
+adjacent-simplex circuit step for full-dimensional triangulations, emits
+integer hyperplane normals in point-index order, and evaluates typed finite
+height-vector pairings with a strict positive interior test. The focused test
+`cargo test -p cyrus-core triangulation::secondary -- --nocapture` covers a
+square diagonal circuit, wall/outside height rejection, dimension mismatch, and
+non-full-dimensional simplex rejection. This is not a corrected-chamber GV
+certificate yet; it is the reusable chamber-membership primitive needed before
+local chamber/intersection data can be promoted.
+
 ## Next Concrete Action
 
 The next implementation should be one of these, in order:
 
-1. For corrected-chamber missing GV classes, construct a source-derived compact
+1. Wire the native secondary-cone primitive into the corrected-chamber context
+   export so each candidate local phase carries an explicit height-vector
+   chamber-membership certificate before its intersection tensor or semigroup
+   can be promoted.
+2. For corrected-chamber missing GV classes, construct a source-derived compact
    semigroup or certified supporting-face semigroup and hand it to the existing
    `cygv` wrappers. If the semigroup cannot be certified, keep the result
    diagnostic-only.
-2. Clean up the remaining matrix-basis diagnostic/export edges in
+3. Clean up the remaining matrix-basis diagnostic/export edges in
    `mcallister_first_principles`: chamber diagnostics currently operate after
    transforming production Kähler coordinates back to the computed CYTools
    index basis, which is correct for geometry but not a fully matrix-native
    diagnostic representation.
-3. Keep local CKYZ/potent-ray checks bounded as source validation. Do not raise
+4. Keep local CKYZ/potent-ray checks bounded as source validation. Do not raise
    the large local N gates or add more CKYZ performance machinery unless a
    compact `cygv` call cannot express a required, certified input.
 
