@@ -4316,3 +4316,16 @@ are now closed. Their remaining shared current-chamber blocker is the
 degree-`2` six-point family
 `local_toric_one_parameter_charge_family_unclassified:-2,-1,-1,1,1,2`, whose
 bounded lower seed is still `not_found_up_to_4`.
+
+`/tmp/cyrus_six_point_cicy_shape_v1.json` now carries compact-shape diagnostics
+on the unresolved chamber-generator queue. All four remaining six-point
+classes, including the shared target `7`/`8` degree-`2` row, report
+`local_toric_hypersurface_cy_dim=4` and
+`local_toric_hypersurface_cygv_compact_input_status=not_compact_threefold_hypersurface_shape`.
+The codimension-2 CY3 candidate check runs the same CYTools-style partition
+rule used by the target-plus-star diagnostics and reports
+`complete_intersection_cy3_shape_no_zero_degree_nef_partition_candidate_requires_source_rule`
+with zero zero-degree nef candidates. Thus the remaining source problem is not
+a missing call to the one-parameter compact hypersurface wrapper; Cyrus needs a
+source-derived phase/nef-partition rule or a different certified local model
+for the six-point circuit before any `cygv` value can be promoted.

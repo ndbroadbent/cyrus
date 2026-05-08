@@ -1308,6 +1308,12 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
     source_class_status: Option<String>,
     local_toric_kind: Option<String>,
     local_toric_charge_family_status: String,
+    local_toric_hypersurface_cy_dim: Option<i64>,
+    local_toric_hypersurface_cygv_compact_input_status: Option<String>,
+    local_toric_complete_intersection_status: Option<String>,
+    local_toric_complete_intersection_zero_degree_nef_partition_candidate_count: Option<usize>,
+    local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts:
+        Option<BTreeMap<String, usize>>,
     local_toric_unit_tensor_candidate_gv: Option<String>,
     local_toric_unit_tensor_probe_status: String,
     local_toric_unit_tensor_target_qn_trace_status: Option<String>,
@@ -1365,6 +1371,12 @@ struct LocalCygvChamberGeneratorLocalToricDiagnostic {
     local_coordinates: Option<Vec<LocalCygvChamberGeneratorLocalCoordinate>>,
     local_toric_kind: Option<String>,
     local_toric_charge_family_status: String,
+    local_toric_hypersurface_cy_dim: Option<i64>,
+    local_toric_hypersurface_cygv_compact_input_status: Option<String>,
+    local_toric_complete_intersection_status: Option<String>,
+    local_toric_complete_intersection_zero_degree_nef_partition_candidate_count: Option<usize>,
+    local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts:
+        Option<BTreeMap<String, usize>>,
     local_toric_unit_tensor_candidate_gv: Option<String>,
     local_toric_unit_tensor_probe_status: String,
     local_toric_unit_tensor_probe_error: Option<String>,
@@ -20457,6 +20469,26 @@ fn unresolved_chamber_generator_summaries(
                         .local_toric_diagnostic
                         .local_toric_charge_family_status
                         .clone(),
+                    local_toric_hypersurface_cy_dim: context
+                        .local_toric_diagnostic
+                        .local_toric_hypersurface_cy_dim,
+                    local_toric_hypersurface_cygv_compact_input_status: context
+                        .local_toric_diagnostic
+                        .local_toric_hypersurface_cygv_compact_input_status
+                        .clone(),
+                    local_toric_complete_intersection_status: context
+                        .local_toric_diagnostic
+                        .local_toric_complete_intersection_status
+                        .clone(),
+                    local_toric_complete_intersection_zero_degree_nef_partition_candidate_count:
+                        context
+                            .local_toric_diagnostic
+                            .local_toric_complete_intersection_zero_degree_nef_partition_candidate_count,
+                    local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts:
+                        context
+                            .local_toric_diagnostic
+                            .local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts
+                            .clone(),
                     local_toric_unit_tensor_candidate_gv: context
                         .local_toric_diagnostic
                         .local_toric_unit_tensor_candidate_gv
@@ -25472,6 +25504,11 @@ fn chamber_generator_local_toric_diagnostic_not_run(
         local_coordinates: None,
         local_toric_kind: None,
         local_toric_charge_family_status: "local_toric_charge_family_not_run".to_string(),
+        local_toric_hypersurface_cy_dim: None,
+        local_toric_hypersurface_cygv_compact_input_status: None,
+        local_toric_complete_intersection_status: None,
+        local_toric_complete_intersection_zero_degree_nef_partition_candidate_count: None,
+        local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts: None,
         local_toric_unit_tensor_candidate_gv: None,
         local_toric_unit_tensor_probe_status: "local_toric_unit_tensor_probe_not_run".to_string(),
         local_toric_unit_tensor_probe_error: None,
@@ -25619,6 +25656,12 @@ fn chamber_generator_local_toric_diagnostic(
             local_coordinates: None,
             local_toric_kind: None,
             local_toric_charge_family_status: "local_toric_charge_family_not_run".to_string(),
+            local_toric_hypersurface_cy_dim: None,
+            local_toric_hypersurface_cygv_compact_input_status: None,
+            local_toric_complete_intersection_status: None,
+            local_toric_complete_intersection_zero_degree_nef_partition_candidate_count: None,
+            local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts:
+                None,
             local_toric_unit_tensor_candidate_gv: None,
             local_toric_unit_tensor_probe_status: "local_toric_unit_tensor_probe_not_run"
                 .to_string(),
@@ -25649,6 +25692,7 @@ fn chamber_generator_local_toric_diagnostic(
         .collect::<BTreeMap<_, _>>();
     let mut coefficients = Vec::with_capacity(point_relation_nonzero.len());
     let mut points = Vec::with_capacity(point_relation_nonzero.len());
+    let mut support_point_samples = Vec::with_capacity(point_relation_nonzero.len());
     for &(point_index, coefficient) in point_relation_nonzero {
         let Some(sample) = point_sample_by_index.get(&point_index) else {
             return blocked(
@@ -25659,6 +25703,7 @@ fn chamber_generator_local_toric_diagnostic(
         };
         coefficients.push(coefficient);
         points.push(Point::new(sample.coordinates.clone()));
+        support_point_samples.push((*sample).clone());
     }
 
     let diagnostic = match diagnose_affine_toric_circuit(&coefficients, &points) {
@@ -25679,6 +25724,26 @@ fn chamber_generator_local_toric_diagnostic(
         }
     };
 
+    let local_charge_basis = diagnostic.local_charge_basis.clone();
+    let support_point_indices = point_relation_nonzero
+        .iter()
+        .map(|&(point_index, _)| point_index)
+        .collect::<Vec<_>>();
+    let relation_coefficients = point_relation_nonzero
+        .iter()
+        .map(|&(_, coefficient)| coefficient)
+        .collect::<Vec<_>>();
+    let hypersurface_shape =
+        local_cygv_hypersurface_shape_from_charge_basis(&local_charge_basis).ok();
+    let complete_intersection_shape_candidate = hypersurface_shape.as_ref().and_then(|shape| {
+        local_cygv_complete_intersection_shape_candidate(
+            shape,
+            &support_point_indices,
+            &support_point_samples,
+            &local_charge_basis,
+            Some(&relation_coefficients),
+        )
+    });
     let local_coordinates = diagnostic
         .local_coordinates
         .iter()
@@ -25694,10 +25759,8 @@ fn chamber_generator_local_toric_diagnostic(
         .collect::<Vec<_>>();
     let local_toric_kind = diagnostic.kind.as_ref().map(local_toric_circuit_kind_label);
     let local_toric_charge_family_status = local_toric_charge_family_status(&diagnostic);
-    let local_toric_unit_tensor_probe = local_toric_unit_tensor_probe(
-        &diagnostic.local_charge_basis,
-        &local_toric_charge_family_status,
-    );
+    let local_toric_unit_tensor_probe =
+        local_toric_unit_tensor_probe(&local_charge_basis, &local_toric_charge_family_status);
     let (ckyz_status, ckyz_kind, ckyz_source_target_direction, ckyz_first_degree, ckyz_gv) =
         chamber_generator_ckyz_diagnostic(&diagnostic);
     let (
@@ -25728,10 +25791,29 @@ fn chamber_generator_local_toric_diagnostic(
         support_point_count: point_relation_nonzero.len(),
         affine_rank: Some(diagnostic.affine_rank),
         coefficient_counts: diagnostic.coefficient_counts,
-        local_charge_basis: Some(diagnostic.local_charge_basis),
+        local_charge_basis: Some(local_charge_basis),
         local_coordinates: Some(local_coordinates),
         local_toric_kind,
         local_toric_charge_family_status,
+        local_toric_hypersurface_cy_dim: hypersurface_shape.as_ref().map(|shape| shape.cy_dim),
+        local_toric_hypersurface_cygv_compact_input_status: hypersurface_shape
+            .as_ref()
+            .map(|shape| shape.cygv_compact_input_status.clone()),
+        local_toric_complete_intersection_status: complete_intersection_shape_candidate
+            .as_ref()
+            .map(|candidate| candidate.status.clone()),
+        local_toric_complete_intersection_zero_degree_nef_partition_candidate_count:
+            complete_intersection_shape_candidate
+                .as_ref()
+                .and_then(|candidate| candidate.zero_degree_nef_partition_candidate_count),
+        local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts:
+            complete_intersection_shape_candidate
+                .as_ref()
+                .and_then(|candidate| {
+                    candidate
+                        .zero_degree_cytools_nef_certificate_status_counts
+                        .clone()
+                }),
         local_toric_unit_tensor_candidate_gv: local_toric_unit_tensor_probe.candidate_gv,
         local_toric_unit_tensor_probe_status: local_toric_unit_tensor_probe.status,
         local_toric_unit_tensor_probe_error: local_toric_unit_tensor_probe.error,
@@ -31987,6 +32069,51 @@ mod tests {
                 "-2".to_string(),
                 "source_ray_known_local_p2_bundle_unit_tensor_cygv_certified_chamber".to_string()
             ))
+        );
+    }
+
+    #[test]
+    fn local_toric_diagnostic_marks_six_point_family_as_uncertified_cicy_shape() {
+        let point_relation_nonzero =
+            vec![(0, -1), (55, -2), (208, 1), (211, 1), (212, 2), (214, -1)];
+        let point_samples = vec![
+            relation_point_sample(0, -1, &[0, 0, 0, 0], None),
+            relation_point_sample(55, -2, &[3, 4, 1, 5], None),
+            relation_point_sample(208, 1, &[2, 2, 1, 2], None),
+            relation_point_sample(211, 1, &[2, 3, 1, 3], None),
+            relation_point_sample(212, 2, &[2, 3, 1, 4], None),
+            relation_point_sample(214, -1, &[2, 3, 2, 3], None),
+        ];
+
+        let diagnostic =
+            chamber_generator_local_toric_diagnostic(&point_relation_nonzero, &point_samples);
+
+        assert_eq!(
+            diagnostic.local_toric_charge_family_status,
+            "local_toric_one_parameter_charge_family_unclassified:-2,-1,-1,1,1,2"
+        );
+        assert_eq!(diagnostic.local_toric_hypersurface_cy_dim, Some(4));
+        assert_eq!(
+            diagnostic
+                .local_toric_hypersurface_cygv_compact_input_status
+                .as_deref(),
+            Some("not_compact_threefold_hypersurface_shape")
+        );
+        assert_eq!(
+            diagnostic
+                .local_toric_complete_intersection_status
+                .as_deref(),
+            Some(
+                "complete_intersection_cy3_shape_no_zero_degree_nef_partition_candidate_requires_source_rule"
+            )
+        );
+        assert_eq!(
+            diagnostic.local_toric_complete_intersection_zero_degree_nef_partition_candidate_count,
+            Some(0)
+        );
+        assert_eq!(
+            diagnostic.local_toric_unit_tensor_probe_status,
+            "local_toric_unit_tensor_probe_not_run_not_supported_one_parameter_charge_family"
         );
     }
 

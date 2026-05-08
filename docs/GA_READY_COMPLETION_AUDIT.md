@@ -1253,15 +1253,26 @@ current-chamber blocker is the unclassified six-point one-parameter charge
 family `-2,-1,-1,1,1,2`; the local-`P2` bundle degree-`6` and degree-`4` rows
 are no longer future work.
 
+`/tmp/cyrus_six_point_cicy_shape_v1.json` adds the compact-shape evidence for
+that remaining family. Every six-point unresolved row has hypersurface
+`cy_dim=4`, so it is not a compact CY3 hypersurface input to `cygv`. The
+codimension-2 CY3 check also finds zero CYTools-style zero-degree nef
+partition candidates, including for the shared target `7`/`8` degree-`2` row.
+The next step therefore has to derive a source/chamber rule for the six-point
+local model; simply running the one-parameter compact wrapper would be another
+uncertified shortcut.
+
 ## Next Concrete Action
 
 The next implementation should be one of these, in order:
 
 1. For the remaining corrected-chamber missing GV classes, classify and certify
-   the six-point one-parameter local charge family `-2,-1,-1,1,1,2`, then hand
-   a source-derived compact semigroup or certified supporting-face semigroup to
-   the existing `cygv` wrappers. If the semigroup cannot be certified, keep the
-   result diagnostic-only.
+   the six-point one-parameter local charge family `-2,-1,-1,1,1,2`. The
+   current evidence rules out the compact hypersurface wrapper and the existing
+   CYTools-style zero-degree codimension-2 partition scan, so the next concrete
+   path is a source-derived phase/nef-partition rule or a different certified
+   local model. If it cannot be certified, keep any computed value
+   diagnostic-only.
 2. Extend any new local phase or supporting-face semigroup with an explicit
    secondary-cone/chamber-membership certificate before promotion.
 3. Clean up the remaining matrix-basis diagnostic/export edges in
