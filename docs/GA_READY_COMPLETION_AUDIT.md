@@ -851,6 +851,12 @@ validates, and reports that certificate, including rejecting inconsistent
 hyperplane/pairing counts. This still certifies only the global exported
 chamber; candidate local phases remain unpromoted until they carry their own
 source-derived chamber/intersection certificates.
+The local `cygv` source-resolution summaries now carry both the global
+secondary-cone certificate status and a separate local phase chamber-membership
+status. A local source hint can therefore say "global corrected chamber is
+strictly inside" without pretending the candidate local phase has been
+certified; promotion is still blocked until the local phase supplies its own
+phase `q` matrix and chamber certificate.
 Because the full corrected-chamber GV context export still exceeded a `300s`
 debug timeout before writing JSON, the runner also has a narrow
 `--dump-corrected-chamber-secondary-certificate` flag. On the validation-only

@@ -558,6 +558,8 @@ struct LocalCygvSourceResolutionHintSummary {
     target_index: usize,
     degree: i128,
     status: String,
+    global_secondary_cone_height_certificate_status: Option<String>,
+    local_phase_chamber_membership_certificate_status: String,
     zero_shared_affine_projection_status: String,
     relation_support_affine_hyperplane: Option<Vec<i64>>,
     zero_relation_shared_two_simplex_affine_heights: Vec<ZeroSharedAffineHeight>,
@@ -10086,6 +10088,7 @@ fn validate_context<'a>(
         shared_facet_unresolved_source_ray_stats: context
             .shared_facet_unresolved_source_ray_stats_for_missing
             .as_ref(),
+        secondary_cone_height_certificate: context.secondary_cone_height_certificate.as_ref(),
     })
 }
 
@@ -10375,6 +10378,7 @@ struct ValidatedContext<'a> {
     stats: &'a MissingGvTargetStats,
     uncovered_source_ray_stats: Option<&'a MissingGvTargetStats>,
     shared_facet_unresolved_source_ray_stats: Option<&'a MissingGvTargetStats>,
+    secondary_cone_height_certificate: Option<&'a SecondaryConeHeightCertificate>,
 }
 
 fn report_target(
@@ -14912,6 +14916,11 @@ fn local_cygv_source_resolution_hint_summaries(
                 target_index: target.index,
                 degree: target.degree,
                 status,
+                global_secondary_cone_height_certificate_status: context
+                    .secondary_cone_height_certificate
+                    .map(|certificate| certificate.status.clone()),
+                local_phase_chamber_membership_certificate_status:
+                    local_phase_chamber_membership_certificate_status(skeleton, context),
                 zero_shared_affine_projection_status: affine_projection_hint.status,
                 relation_support_affine_hyperplane: affine_projection_hint.hyperplane,
                 zero_relation_shared_two_simplex_affine_heights: affine_projection_hint.heights,
@@ -15448,6 +15457,34 @@ fn local_cygv_source_resolution_hint_status(
             "weighted_p2_split_bundle_has_multiple_zero_relation_shared_resolution_rays".to_string()
         }
     }
+}
+
+fn local_phase_chamber_membership_certificate_status(
+    skeleton: &LocalCygvInputSkeleton,
+    context: &ValidatedContext<'_>,
+) -> String {
+    let Some(certificate) = context.secondary_cone_height_certificate else {
+        return "local_phase_chamber_blocked_missing_global_secondary_cone_certificate".to_string();
+    };
+    if !certificate.strictly_inside {
+        return format!(
+            "local_phase_chamber_blocked_global_secondary_cone_status:{}",
+            certificate.status
+        );
+    }
+    if skeleton.local_cygv_phase_q_matrix_candidate.is_none() {
+        return "local_phase_chamber_blocked_missing_phase_q_matrix".to_string();
+    }
+    if skeleton.local_chamber_certificate_status
+        == "source_derived_local_p2_bundle_positive_base_chamber"
+    {
+        return "source_derived_local_phase_chamber_certificate_with_global_secondary_cone_checkpoint"
+            .to_string();
+    }
+    format!(
+        "local_phase_chamber_blocked_{}",
+        skeleton.local_chamber_certificate_status
+    )
 }
 
 fn origin_circuit_zero_relation_shared_two_simplex_points(
@@ -18816,6 +18853,42 @@ mod tests {
         }
     }
 
+    fn minimal_local_skeleton_for_chamber_status(
+        phase_q_matrix: Option<Vec<Vec<i64>>>,
+        local_chamber_certificate_status: &str,
+    ) -> LocalCygvInputSkeleton {
+        LocalCygvInputSkeleton {
+            support_point_indices: Vec::new(),
+            support_contains_origin_point: false,
+            local_cygv_origin_point_status: String::new(),
+            origin_point_relation_coefficient: None,
+            local_cytools_origin_circuit_status: String::new(),
+            local_q_matrix_rows: Vec::new(),
+            target_relation_coefficients: None,
+            target_relation_in_charge_basis: None,
+            target_relation_status: String::new(),
+            local_semigroup_generators_candidate: Some(vec![vec![1]]),
+            local_semigroup_generator_status: String::new(),
+            orientation_candidates: Vec::new(),
+            local_q_matrix_orientation_candidate: None,
+            local_q_matrix_orientation_status: String::new(),
+            local_cygv_q_matrix_rows_candidate: None,
+            local_cygv_wrapper_q_matrix_candidate: None,
+            local_cygv_q_matrix_layout_status: String::new(),
+            local_cygv_phase_q_matrix_candidate: phase_q_matrix,
+            local_cygv_q_matrix_phase_status: String::new(),
+            local_intersection_tensor_candidate: Some(vec![LocalCygvIntersectionTensorEntry {
+                indices: [0, 0, 0],
+                value: "1".to_string(),
+            }]),
+            local_intersection_tensor_status: String::new(),
+            local_chamber_certificate_status: local_chamber_certificate_status.to_string(),
+            local_grading_vector_candidate: Some(vec![1]),
+            local_grading_vector_status: String::new(),
+            remaining_uncertified_inputs: Vec::new(),
+        }
+    }
+
     fn minimal_missing_sample(basis_nonzero: Vec<(usize, i64)>) -> MissingGvTargetSample {
         MissingGvTargetSample {
             degree: 1,
@@ -19091,6 +19164,65 @@ mod tests {
     }
 
     #[test]
+    fn local_phase_chamber_status_distinguishes_global_and_local_certificates() {
+        let skeleton = minimal_local_skeleton_for_chamber_status(
+            Some(vec![vec![-1, -2, 1, 1, 1]]),
+            "source_derived_local_p2_bundle_positive_base_chamber",
+        );
+        let missing_global_context = minimal_corrected_context(
+            4,
+            Some(vec![DegreeBoundedMoriRayContextSample {
+                degree: 1,
+                ambient_nonzero: vec![(5, 1)],
+                basis_nonzero: vec![(0, 1)],
+            }]),
+        );
+        let missing_global = validate_context(&missing_global_context).unwrap();
+
+        assert_eq!(
+            local_phase_chamber_membership_certificate_status(&skeleton, &missing_global),
+            "local_phase_chamber_blocked_missing_global_secondary_cone_certificate"
+        );
+
+        let mut strict_global_context = minimal_corrected_context(
+            4,
+            Some(vec![DegreeBoundedMoriRayContextSample {
+                degree: 1,
+                ambient_nonzero: vec![(5, 1)],
+                basis_nonzero: vec![(0, 1)],
+            }]),
+        );
+        strict_global_context.secondary_cone_height_certificate =
+            Some(SecondaryConeHeightCertificate {
+                status: "strictly_inside_secondary_cone".to_string(),
+                epsilon: 1e-6,
+                hyperplane_count: 1,
+                pairing_count: 1,
+                min_pairing: Some(0.5),
+                max_pairing: Some(0.5),
+                strictly_inside: true,
+            });
+        let strict_global = validate_context(&strict_global_context).unwrap();
+
+        assert_eq!(
+            local_phase_chamber_membership_certificate_status(&skeleton, &strict_global),
+            "source_derived_local_phase_chamber_certificate_with_global_secondary_cone_checkpoint"
+        );
+
+        let missing_phase_skeleton = minimal_local_skeleton_for_chamber_status(
+            None,
+            "source_derived_local_p2_bundle_positive_base_chamber",
+        );
+        assert_eq!(
+            local_phase_chamber_membership_certificate_status(
+                &missing_phase_skeleton,
+                &strict_global
+            ),
+            "local_phase_chamber_blocked_missing_phase_q_matrix"
+        );
+    }
+
+    #[test]
     fn pair_expansion_replaces_nonreduced_seed_terms() {
         let seed_set = [vec![1, 0], vec![0, 1], vec![1, 1]]
             .into_iter()
@@ -19191,6 +19323,7 @@ mod tests {
             stats: &stats,
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
         };
         let sample = MissingGvTargetSample {
             degree: 2,
@@ -19391,6 +19524,7 @@ mod tests {
             stats: &stats,
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
         };
         let allowed_support = [4usize].into_iter().collect::<HashSet<_>>();
 
@@ -21063,6 +21197,7 @@ mod tests {
             stats: &stats,
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
         };
         let decomposition = LowerSeedDecompositionProbe {
             status: "found_lower_seed_decomposition".to_string(),
@@ -21127,6 +21262,7 @@ mod tests {
             stats: &stats,
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
         };
         let mut cache = HashMap::new();
 
@@ -21249,6 +21385,7 @@ mod tests {
             stats: &stats,
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
         };
 
         let probe = target_extremal_ray_certificate_probe(
@@ -21330,6 +21467,7 @@ mod tests {
             stats: &stats,
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
         };
 
         let probe = target_extremal_ray_certificate_probe(
@@ -21632,6 +21770,7 @@ mod tests {
             stats: &stats,
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
         };
         let trace = vec![CygvGvCoefficientTrace {
             element_index: 0,
@@ -22080,6 +22219,7 @@ mod tests {
             stats: &stats,
             uncovered_source_ray_stats: Some(&source_stats),
             shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
         };
         let residual = CygvClosestKnownQnPredecessor {
             predecessor_degree: 1,
@@ -22499,6 +22639,7 @@ mod tests {
             stats: &stats,
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
         };
 
         let seed_set = [vec![1, 0]].into_iter().collect::<HashSet<_>>();
@@ -22653,6 +22794,7 @@ mod tests {
             stats: &stats,
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
         };
 
         let probe = path_support_generator_probe_inner(&[1], 1, &[], &context)
@@ -22972,6 +23114,7 @@ mod tests {
             stats: &stats,
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
         };
 
         annotate_target_monomial_qn_sources_with_seed_decompositions(
@@ -23183,6 +23326,7 @@ mod tests {
             stats: &stats,
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
         };
         let term_context = qn_term_signature_context_sample(
             &comparison.parent_only_term_signature_sample,
@@ -23424,6 +23568,7 @@ mod tests {
             stats: &stats,
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
         };
 
         let probe = support_overlap_generator_gv(&stats.sample[0], &context, 0, false, true)
@@ -23610,6 +23755,7 @@ mod tests {
             stats: &stats,
             uncovered_source_ray_stats: Some(&uncovered_stats),
             shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
         };
 
         let counts =
@@ -24380,6 +24526,7 @@ mod tests {
             stats: &stats,
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
         };
 
         let target = vec![1, 1];
@@ -24546,6 +24693,7 @@ mod tests {
             stats: &stats,
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
         };
 
         let target = vec![1, 1];
@@ -24615,6 +24763,7 @@ mod tests {
             stats: &stats,
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
         };
 
         let target = vec![1, 1];
@@ -24986,6 +25135,7 @@ mod tests {
             stats: &stats,
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
         };
 
         let mut semigroup_measurement_cache = HashMap::new();
@@ -25126,6 +25276,7 @@ mod tests {
             stats: &stats,
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
         };
         let mut semigroup_measurement_cache = HashMap::new();
         let mut semigroup_ladder_cache = HashMap::new();
