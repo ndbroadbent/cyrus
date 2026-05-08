@@ -3672,6 +3672,15 @@ five terms: two are `rank_two_quadrilateral` supports, but both report
 `ckyz_no_source_match`; the remaining three are
 `ckyz_not_run_non_rank_two_support`. Thus the current-only obstruction is not
 another missed rank-two CKYZ source-family assignment.
+The codimension-two nef-partition scan now runs the CYTools-style nef
+certificate on all small partition candidates, not only the zero-degree subset.
+The report `/tmp/cyrus_nef_candidate_cert_all_v1.json` finds no certified
+candidate: every tested target-plus-star and origin-spectator CICY partition
+fails with
+`nef_partition_union_hull_does_not_equal_ambient_polytope_hull`. Targets `7`
+and `8` do have six zero-degree target-plus-star partition candidates each, but
+all six fail that certificate, so the missing `source_derived_nef_partition`
+cannot be filled by the current support partition scan.
 A target-`1` rerun with `--lower-seed-pair-limit 2048` shows that this is not
 only the degree-ten weighted pair. Target `1` has target-plus-star degree `16`
 and a four-term lower decomposition into known history (`3` known toric terms

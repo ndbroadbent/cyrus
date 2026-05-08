@@ -893,9 +893,13 @@ struct LocalCygvCompleteIntersectionShapeCandidate {
     cy_dim: i64,
     nef_partition_part_count: usize,
     nef_partition_candidate_count: Option<usize>,
+    nef_partition_degree_status_counts: Option<BTreeMap<String, usize>>,
+    nef_partition_cytools_nef_certificate_status_counts: Option<BTreeMap<String, usize>>,
+    cytools_nef_partition_candidate_count: Option<usize>,
     zero_degree_nef_partition_candidate_count: Option<usize>,
     zero_degree_target_relation_balance_status_counts: Option<BTreeMap<String, usize>>,
     zero_degree_cytools_nef_certificate_status_counts: Option<BTreeMap<String, usize>>,
+    cytools_nef_partition_candidate_sample: Vec<LocalCygvNefPartitionCandidate>,
     zero_degree_nef_partition_candidate_sample: Vec<LocalCygvNefPartitionCandidate>,
     status: String,
     missing_inputs: Vec<String>,
@@ -10492,6 +10496,48 @@ fn local_cygv_complete_intersection_shape_candidate(
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
+    let cytools_nef_partition_candidate_sample = nef_partition_candidates
+        .as_ref()
+        .map(|candidates| {
+            candidates
+                .iter()
+                .filter(|candidate| {
+                    candidate.cytools_nef_certificate_status.as_deref()
+                        == Some("support_polytope_cytools_nef_certificate_passed")
+                })
+                .take(8)
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let nef_partition_degree_status_counts = nef_partition_candidates.as_ref().map(|candidates| {
+        let mut counts = BTreeMap::new();
+        for candidate in candidates {
+            *counts.entry(candidate.degree_status.clone()).or_insert(0) += 1;
+        }
+        counts
+    });
+    let nef_partition_cytools_nef_certificate_status_counts =
+        nef_partition_candidates.as_ref().map(|candidates| {
+            let mut counts = BTreeMap::new();
+            for status in candidates
+                .iter()
+                .filter_map(|candidate| candidate.cytools_nef_certificate_status.as_deref())
+            {
+                *counts.entry(status.to_string()).or_insert(0) += 1;
+            }
+            counts
+        });
+    let cytools_nef_partition_candidate_count =
+        nef_partition_candidates.as_ref().map(|candidates| {
+            candidates
+                .iter()
+                .filter(|candidate| {
+                    candidate.cytools_nef_certificate_status.as_deref()
+                        == Some("support_polytope_cytools_nef_certificate_passed")
+                })
+                .count()
+        });
     let zero_degree_nef_partition_candidate_count =
         nef_partition_candidates.as_ref().map(|candidates| {
             candidates
@@ -10544,9 +10590,13 @@ fn local_cygv_complete_intersection_shape_candidate(
         cy_dim: 3,
         nef_partition_part_count: cy_codim,
         nef_partition_candidate_count,
+        nef_partition_degree_status_counts,
+        nef_partition_cytools_nef_certificate_status_counts,
+        cytools_nef_partition_candidate_count,
         zero_degree_nef_partition_candidate_count,
         zero_degree_target_relation_balance_status_counts,
         zero_degree_cytools_nef_certificate_status_counts,
+        cytools_nef_partition_candidate_sample,
         zero_degree_nef_partition_candidate_sample,
         status: status.to_string(),
         missing_inputs: vec![
@@ -10639,13 +10689,11 @@ fn local_cygv_codim_two_nef_partition_candidates(
         });
         let degree_status =
             local_cygv_nef_partition_degree_status(&first_part_degree, &second_part_degree);
-        let certificate = (degree_status == "both_parts_zero_degree").then(|| {
-            local_cygv_support_polytope_nef_certificate(
-                support_point_samples,
-                &first_part_point_indices,
-                &second_part_point_indices,
-            )
-        });
+        let certificate = Some(local_cygv_support_polytope_nef_certificate(
+            support_point_samples,
+            &first_part_point_indices,
+            &second_part_point_indices,
+        ));
         candidates.push(LocalCygvNefPartitionCandidate {
             degree_status,
             first_part_point_indices,
@@ -32700,6 +32748,14 @@ mod tests {
         assert_eq!((candidate.cy_codim, candidate.cy_dim), (2, 3));
         assert_eq!(candidate.nef_partition_part_count, 2);
         assert_eq!(candidate.nef_partition_candidate_count, Some(15));
+        assert_eq!(candidate.cytools_nef_partition_candidate_count, Some(0));
+        assert_eq!(
+            candidate.nef_partition_cytools_nef_certificate_status_counts,
+            Some(BTreeMap::from([(
+                "support_polytope_cytools_nef_certificate_failed:invalid_input_nef_partition_union_hull_does_not_equal_ambient_polytope_hull".to_string(),
+                15
+            )]))
+        );
         assert_eq!(candidate.zero_degree_nef_partition_candidate_count, Some(0));
         assert_eq!(
             candidate.status,
