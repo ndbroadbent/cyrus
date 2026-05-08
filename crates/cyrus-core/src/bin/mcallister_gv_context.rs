@@ -326,6 +326,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_two_column_omission_phase_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_target_plus_star_compact_omission_relation_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_local_cygv_promotion_missing_input_counts:
@@ -1051,6 +1053,9 @@ struct LocalCygvStarUnionTargetPlusStarLocalCygvReadiness {
     local_chamber_certificate_status: String,
     single_column_omission_candidates: Vec<LocalCygvSingleColumnOmissionCandidate>,
     two_column_omission_candidates: Vec<LocalCygvMultiColumnOmissionCandidate>,
+    compact_threefold_omission_candidate_count: usize,
+    compact_threefold_omission_preserving_target_relation_count: usize,
+    compact_threefold_omission_relation_status: String,
     actual_call_readiness: String,
     missing_inputs: Vec<String>,
     local_phase_chamber_membership_certificate_status: Option<String>,
@@ -15842,6 +15847,10 @@ fn build_report(
         local_cygv_source_resolution_star_union_target_plus_star_two_column_omission_phase_status_counts(
             &local_cygv_source_resolution_hint_sample,
         );
+    let local_cygv_source_resolution_star_union_target_plus_star_compact_omission_relation_status_counts =
+        local_cygv_source_resolution_star_union_target_plus_star_compact_omission_relation_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
     let local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts =
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts(
             &local_cygv_source_resolution_hint_sample,
@@ -16818,6 +16827,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_target_plus_star_zero_degree_nef_certificate_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_single_column_omission_phase_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_two_column_omission_phase_status_counts,
+        local_cygv_source_resolution_star_union_target_plus_star_compact_omission_relation_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts,
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_promotion_missing_input_counts,
         local_cygv_source_resolution_star_union_chamber_coverage_status_counts,
@@ -17935,6 +17945,23 @@ fn local_cygv_source_resolution_star_union_target_plus_star_two_column_omission_
                 .entry(candidate.phase_status.clone())
                 .or_insert(0usize) += 1;
         }
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_star_union_target_plus_star_compact_omission_relation_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts
+            .entry(
+                summary
+                    .shared_two_simplex_star_union_target_plus_star_local_cygv_readiness
+                    .compact_threefold_omission_relation_status
+                    .clone(),
+            )
+            .or_insert(0usize) += 1;
     }
     counts
 }
@@ -22866,6 +22893,8 @@ fn local_cygv_star_union_target_plus_star_local_cygv_readiness(
         charge_basis,
         target_relation_coefficients.as_deref(),
     );
+    let compact_omission_relation =
+        local_cygv_compact_threefold_omission_relation_summary(&two_column_omission_candidates);
     let (
         local_intersection_tensor_candidate,
         local_intersection_tensor_status,
@@ -22958,12 +22987,64 @@ fn local_cygv_star_union_target_plus_star_local_cygv_readiness(
         local_chamber_certificate_status,
         single_column_omission_candidates,
         two_column_omission_candidates,
+        compact_threefold_omission_candidate_count: compact_omission_relation.0,
+        compact_threefold_omission_preserving_target_relation_count: compact_omission_relation.1,
+        compact_threefold_omission_relation_status: compact_omission_relation.2,
         actual_call_readiness,
         missing_inputs,
         local_phase_chamber_membership_certificate_status: None,
         promotion_readiness,
         promotion_missing_inputs,
     }
+}
+
+fn local_cygv_compact_threefold_omission_relation_summary(
+    candidates: &[LocalCygvMultiColumnOmissionCandidate],
+) -> (usize, usize, String) {
+    let compact_candidates = candidates
+        .iter()
+        .filter(|candidate| local_cygv_is_compact_threefold_omission_candidate(candidate))
+        .collect::<Vec<_>>();
+    let compact_count = compact_candidates.len();
+    if compact_count == 0 {
+        return (0, 0, "no_compact_threefold_omission_candidates".to_string());
+    }
+    let preserving_count = compact_candidates
+        .iter()
+        .filter(|candidate| candidate.preserves_target_relation_support == Some(true))
+        .count();
+    if preserving_count > 0 {
+        return (
+            compact_count,
+            preserving_count,
+            "compact_threefold_omission_preserves_target_relation_support".to_string(),
+        );
+    }
+    if compact_candidates
+        .iter()
+        .any(|candidate| candidate.preserves_target_relation_support.is_none())
+    {
+        return (
+            compact_count,
+            preserving_count,
+            "compact_threefold_omission_relation_support_unknown".to_string(),
+        );
+    }
+    (
+        compact_count,
+        preserving_count,
+        "compact_threefold_omissions_delete_target_relation_terms".to_string(),
+    )
+}
+
+fn local_cygv_is_compact_threefold_omission_candidate(
+    candidate: &LocalCygvMultiColumnOmissionCandidate,
+) -> bool {
+    candidate.q_cols == 1
+        && candidate.cy_dim == 3
+        && candidate.is_calabi_yau_charge
+        && candidate.phase_status
+            == "source_derived_unique_compact_threefold_phase_including_origin"
 }
 
 fn attach_local_phase_chamber_to_target_plus_star_readiness(
@@ -23211,6 +23292,10 @@ fn blocked_target_plus_star_local_cygv_readiness(
         local_chamber_certificate_status: "local_chamber_certificate_not_evaluated".to_string(),
         single_column_omission_candidates: Vec::new(),
         two_column_omission_candidates: Vec::new(),
+        compact_threefold_omission_candidate_count: 0,
+        compact_threefold_omission_preserving_target_relation_count: 0,
+        compact_threefold_omission_relation_status: "compact_threefold_omissions_not_evaluated"
+            .to_string(),
         actual_call_readiness: "blocked_missing_source_derived_inputs".to_string(),
         missing_inputs: missing_inputs.clone(),
         local_phase_chamber_membership_certificate_status: None,
@@ -26182,6 +26267,9 @@ mod tests {
                     local_chamber_certificate_status: "test".to_string(),
                     single_column_omission_candidates: Vec::new(),
                     two_column_omission_candidates: Vec::new(),
+                    compact_threefold_omission_candidate_count: 0,
+                    compact_threefold_omission_preserving_target_relation_count: 0,
+                    compact_threefold_omission_relation_status: "test".to_string(),
                     actual_call_readiness: "test".to_string(),
                     missing_inputs: Vec::new(),
                     local_phase_chamber_membership_certificate_status: None,
@@ -26295,6 +26383,12 @@ mod tests {
                 std::slice::from_ref(&summary)
             ),
             BTreeMap::from([("found_lower_seed_decomposition".to_string(), 1)])
+        );
+        assert_eq!(
+            local_cygv_source_resolution_star_union_target_plus_star_compact_omission_relation_status_counts(
+                std::slice::from_ref(&summary)
+            ),
+            BTreeMap::from([("test".to_string(), 1)])
         );
     }
 
@@ -29491,6 +29585,15 @@ mod tests {
                 (vec![212, 214], vec![-1, 1]),
             ])
         );
+        assert_eq!(readiness.compact_threefold_omission_candidate_count, 4);
+        assert_eq!(
+            readiness.compact_threefold_omission_preserving_target_relation_count,
+            0
+        );
+        assert_eq!(
+            readiness.compact_threefold_omission_relation_status,
+            "compact_threefold_omissions_delete_target_relation_terms"
+        );
         assert!(
             readiness
                 .two_column_omission_candidates
@@ -29645,6 +29748,15 @@ mod tests {
                 (vec![195, 211], vec![-1, 1]),
                 (vec![212, 214], vec![-1, 1]),
             ])
+        );
+        assert_eq!(readiness.compact_threefold_omission_candidate_count, 4);
+        assert_eq!(
+            readiness.compact_threefold_omission_preserving_target_relation_count,
+            0
+        );
+        assert_eq!(
+            readiness.compact_threefold_omission_relation_status,
+            "compact_threefold_omissions_delete_target_relation_terms"
         );
         assert!(
             readiness

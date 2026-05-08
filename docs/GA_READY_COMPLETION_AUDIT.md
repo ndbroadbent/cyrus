@@ -958,6 +958,13 @@ five rows are skipped as non-weighted-P2 split bundles, and four rows are
 Targets `7` and `8` both pair that strict restricted-support status with
 `star_union_global_regular_shared_face_matches_serialized_star_extras`, making
 the chamber-transport gap explicit.
+The target-plus-star omission scan now also reports whether a direct compact
+hypersurface phase preserves the target relation. The aggregate is two
+`compact_threefold_omissions_delete_target_relation_terms` rows, five
+`no_compact_threefold_omission_candidates` rows, and two not-evaluated rows.
+For targets `7`/`8`, all four compact threefold two-column omissions delete
+nonzero target-relation coefficients, so those omissions cannot be promoted to
+the missing `target+star` compact `cygv` domain.
 A bounded supporting-face rerun for the two integral weighted rows (`target 7`
 and `target 8`) does not provide that missing certificate. With
 `--certify-origin-witness-domains`, two LP anchors, and the facet-union cap

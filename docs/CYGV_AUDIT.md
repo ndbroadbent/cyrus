@@ -3626,6 +3626,15 @@ global regular triangulation still has
 the unresolved object is the chamber transport/full chamber map between the
 restricted resolved support and the actual full union, not a scalar local GV
 value or a direct compact `cygv` domain on the restricted support.
+The target-plus-star compact-omission diagnostic now rules out another direct
+handoff. `/tmp/cyrus_all_compact_omission_relation_report.json` reports two
+`compact_threefold_omissions_delete_target_relation_terms` rows, five
+`no_compact_threefold_omission_candidates` rows, and two rows where the
+omission scan was not evaluated. The two deleting rows are targets `7` and
+`8`: each has four two-column omissions that leave a compact threefold
+hypersurface phase, but every such omission removes nonzero target-relation
+coefficients. Thus those compact omission phases are nearby chamber data, not
+a valid `target+star` GV domain.
 `/tmp/cyrus_star_union_wall_transport_readiness_smoke_all.json` now aggregates
 that implication directly. The readiness buckets are
 `wall_transport_blocked_missing_known_wall_circuit:6`,

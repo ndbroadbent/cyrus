@@ -1429,6 +1429,14 @@ to make the remaining GV layer more first-principles:
    triangulation still selects the serialized star extras. This keeps the next
    production task at chamber transport/full chamber-map certification rather
    than a direct local `cygv` call on the restricted support.
+   The same report path now summarizes direct compact omission phases for the
+   degree-6 target-plus-star support. The all-target count is two
+   `compact_threefold_omissions_delete_target_relation_terms` rows, five
+   `no_compact_threefold_omission_candidates` rows, and two not-evaluated rows.
+   On targets `7`/`8`, the compact two-column omissions exist, but all four
+   delete nonzero target-relation terms. They are therefore neighboring
+   chamber evidence, not a valid compact `cygv` domain for the transported
+   target-plus-star class.
    After recomputing the affine charge basis, every single-column omission for
    targets `7`/`8` remains Calabi-Yau charged but has `q_rows=6`, `q_cols=1`,
    and hypersurface `cy_dim=4`, so the next fix is a source-derived CICY
