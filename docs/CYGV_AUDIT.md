@@ -139,6 +139,14 @@ large-face policy. The wrapper
 `fine_regular_triangulation_choices_on_polytope_2faces_4d_with_sampling` now
 implements that first policy layer: exact enumeration below a point-count
 threshold and `grow2d` sampling above it.
+`mcallister_first_principles` now exposes the same policy through the
+validation-only
+`--dump-corrected-chamber-face-triangulation-choice-summary` artifact, recording
+per-face point counts, exact-vs-sampled face counts, choice counts, total mixed
+choice count, sampling limits, and seed. The runner-side `P^4` simplex
+regression forces the sampled branch and verifies that the artifact reports the
+ten triangular two-faces with one choice each. This is still chamber-search
+input evidence; it does not compute or promote any corrected-chamber GV value.
 
 CYTools' `Cone.find_lattice_points` is a separate operation. It first checks
 that the grading vector has only the origin at nonpositive degree, then uses

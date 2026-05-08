@@ -57,6 +57,13 @@
 //! - `--dump-corrected-chamber-expanded-secondary-fan-certificate path` to
 //!   export the CYTools-style expanded-secondary support certificate for the
 //!   corrected-chamber height vector.
+//! - `--dump-corrected-chamber-face-triangulation-choice-summary path` to
+//!   export exact/sampled 4D two-face FRT choice counts used by the expanded
+//!   chamber search machinery. Sampling controls are
+//!   `--face-triangulation-max-exact-points`,
+//!   `--face-triangulation-samples-per-large-face`,
+//!   `--face-triangulation-max-sampling-attempts-per-face`, and
+//!   `--face-triangulation-seed`.
 //! - `--diagnose-chamber-updated-kklt` to run a diagnostic-only KKLT
 //!   fixed-point loop that recomputes the FRST chamber, intersections, divisor
 //!   χ, and toric-covered small-curve GV target correction at each iteration.
@@ -94,6 +101,7 @@ use cyrus_core::{
     compute_toric_curve_gv_diagnostics, compute_toric_two_face_curve_gv_invariants,
     compute_w0_from_terms, divisor_basis_change_matrix, effective_prime_divisors_from_curve_basis,
     expanded_secondary_fan_hyperplanes_on_polytope_2faces_4d,
+    fine_regular_triangulation_choices_on_polytope_2faces_4d_with_sampling,
     generate_scaled_divisor_basis_branch_initializations, gv_divisor_basis_data, heights_to_kahler,
     intersection_in_basis, intersection_in_divisor_basis, is_unimodular, kahler_to_heights,
     map_basis_gv_invariants_to_ambient, project_ambient_curve_to_basis,
@@ -108,6 +116,10 @@ const DEFAULT_MCALLISTER_GV_MIN_POINTS: u32 = 20_000;
 const DEFAULT_CORRECTED_CHAMBER_GENERAL_GV_DIRECT_RAY_LIMIT: usize = 100_000;
 const DEFAULT_CORRECTED_CHAMBER_PROVIDED_GV_GENERATOR_LIMIT: usize = 2_000;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_SPAN_GENERATOR_LIMIT: usize = 64;
+const DEFAULT_FACE_TRIANGULATION_MAX_EXACT_POINTS: usize = 17;
+const DEFAULT_FACE_TRIANGULATION_SAMPLES_PER_LARGE_FACE: usize = 1_000;
+const DEFAULT_FACE_TRIANGULATION_MAX_SAMPLING_ATTEMPTS_PER_FACE: usize = 100_000;
+const DEFAULT_FACE_TRIANGULATION_SEED: u64 = 0;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_LATTICE_GENERATOR_LIMIT: usize = 64;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_LATTICE_ELEMENT_LIMIT: usize = 50_000;
 const DEFAULT_CORRECTED_CHAMBER_LP_FACE_INTEGER_DECOMPOSITION_MAX_TERMS: usize = 4;
@@ -781,6 +793,28 @@ struct SecondaryConeHeightCertificate {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+struct FaceTriangulationChoiceSummary {
+    status: String,
+    max_exact_face_points: usize,
+    samples_per_large_face: usize,
+    max_sampling_attempts_per_face: usize,
+    seed: u64,
+    face_count: usize,
+    exact_face_count: usize,
+    sampled_face_count: usize,
+    empty_choice_face_count: usize,
+    min_face_points: Option<usize>,
+    max_face_points: Option<usize>,
+    min_choice_count: Option<usize>,
+    max_choice_count: Option<usize>,
+    total_choice_count: String,
+    face_point_counts: Vec<usize>,
+    choice_counts: Vec<usize>,
+    sampled_face_indices: Vec<usize>,
+    sampled_face_point_counts: Vec<usize>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 struct SparseIntersectionEntry {
     indices: [usize; 3],
     value: String,
@@ -1253,6 +1287,11 @@ struct PipelineArgs {
     dump_corrected_chamber_secondary_certificate_path: Option<String>,
     dump_corrected_chamber_2face_secondary_certificate_path: Option<String>,
     dump_corrected_chamber_expanded_secondary_fan_certificate_path: Option<String>,
+    dump_corrected_chamber_face_triangulation_choice_summary_path: Option<String>,
+    face_triangulation_max_exact_points: usize,
+    face_triangulation_samples_per_large_face: usize,
+    face_triangulation_max_sampling_attempts_per_face: usize,
+    face_triangulation_seed: u64,
     diagnose_chamber_updated_kklt: bool,
     diagnose_chamber_updated_kklt_iterations: usize,
     production_primal_basis_override: Option<BasisOverride>,
@@ -1357,6 +1396,19 @@ fn parse_args() -> PipelineArgs {
         parse_arg_value::<String>("--dump-corrected-chamber-2face-secondary-certificate");
     let dump_corrected_chamber_expanded_secondary_fan_certificate_path =
         parse_arg_value::<String>("--dump-corrected-chamber-expanded-secondary-fan-certificate");
+    let dump_corrected_chamber_face_triangulation_choice_summary_path =
+        parse_arg_value::<String>("--dump-corrected-chamber-face-triangulation-choice-summary");
+    let face_triangulation_max_exact_points =
+        parse_arg_value::<usize>("--face-triangulation-max-exact-points")
+            .unwrap_or(DEFAULT_FACE_TRIANGULATION_MAX_EXACT_POINTS);
+    let face_triangulation_samples_per_large_face =
+        parse_arg_value::<usize>("--face-triangulation-samples-per-large-face")
+            .unwrap_or(DEFAULT_FACE_TRIANGULATION_SAMPLES_PER_LARGE_FACE);
+    let face_triangulation_max_sampling_attempts_per_face =
+        parse_arg_value::<usize>("--face-triangulation-max-sampling-attempts-per-face")
+            .unwrap_or(DEFAULT_FACE_TRIANGULATION_MAX_SAMPLING_ATTEMPTS_PER_FACE);
+    let face_triangulation_seed = parse_arg_value::<u64>("--face-triangulation-seed")
+        .unwrap_or(DEFAULT_FACE_TRIANGULATION_SEED);
     let diagnose_chamber_updated_kklt = parse_flag("--diagnose-chamber-updated-kklt");
     let diagnose_chamber_updated_kklt_iterations =
         parse_arg_value::<usize>("--diagnose-chamber-updated-kklt-iterations").unwrap_or(6);
@@ -1400,6 +1452,11 @@ fn parse_args() -> PipelineArgs {
         dump_corrected_chamber_secondary_certificate_path,
         dump_corrected_chamber_2face_secondary_certificate_path,
         dump_corrected_chamber_expanded_secondary_fan_certificate_path,
+        dump_corrected_chamber_face_triangulation_choice_summary_path,
+        face_triangulation_max_exact_points,
+        face_triangulation_samples_per_large_face,
+        face_triangulation_max_sampling_attempts_per_face,
+        face_triangulation_seed,
         diagnose_chamber_updated_kklt,
         diagnose_chamber_updated_kklt_iterations,
         production_primal_basis_override,
@@ -7328,6 +7385,88 @@ fn expanded_secondary_fan_height_certificate_for_kahler(
     secondary_cone_height_certificate_from_hyperplanes(&hyperplanes, &heights)
 }
 
+fn corrected_chamber_face_triangulation_choice_summary(
+    geom: &PrimalGeom,
+    max_exact_face_points: usize,
+    samples_per_large_face: usize,
+    max_sampling_attempts_per_face: usize,
+    seed: u64,
+) -> Result<FaceTriangulationChoiceSummary, String> {
+    let faces = geom
+        .polytope
+        .faces_4d_for_points(&geom.triangulation_points)
+        .map_err(|e| format!("failed to compute 4D two-faces for face choices: {e}"))?;
+    let face_point_counts = faces.twofaces.iter().map(Vec::len).collect::<Vec<_>>();
+    let choices = fine_regular_triangulation_choices_on_polytope_2faces_4d_with_sampling(
+        &geom.triangulation_points,
+        &geom.polytope,
+        max_exact_face_points,
+        samples_per_large_face,
+        max_sampling_attempts_per_face,
+        seed,
+    )
+    .map_err(|e| format!("failed to compute 4D two-face triangulation choices: {e}"))?;
+    let choice_counts = choices.iter().map(Vec::len).collect::<Vec<_>>();
+    if choice_counts.len() != face_point_counts.len() {
+        return Err(format!(
+            "face choice count mismatch: faces={} choice_blocks={}",
+            face_point_counts.len(),
+            choice_counts.len()
+        ));
+    }
+
+    let sampled_face_indices = face_point_counts
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, &point_count)| (point_count > max_exact_face_points).then_some(idx))
+        .collect::<Vec<_>>();
+    let sampled_face_point_counts = sampled_face_indices
+        .iter()
+        .map(|&idx| face_point_counts[idx])
+        .collect::<Vec<_>>();
+    let exact_face_count = face_point_counts
+        .len()
+        .checked_sub(sampled_face_indices.len())
+        .ok_or_else(|| "sampled face count exceeds face count".to_string())?;
+    let empty_choice_face_count = choice_counts
+        .iter()
+        .filter(|&&choice_count| choice_count == 0)
+        .count();
+    let total_choice_count = choice_counts
+        .iter()
+        .fold(malachite::Integer::from(1), |acc, &choice_count| {
+            acc * malachite::Integer::from(choice_count)
+        });
+    let status = if empty_choice_face_count > 0 {
+        "face_triangulation_choices_have_empty_face_blocks"
+    } else if sampled_face_indices.is_empty() {
+        "face_triangulation_choices_exact"
+    } else {
+        "face_triangulation_choices_exact_and_sampled"
+    };
+
+    Ok(FaceTriangulationChoiceSummary {
+        status: status.to_string(),
+        max_exact_face_points,
+        samples_per_large_face,
+        max_sampling_attempts_per_face,
+        seed,
+        face_count: face_point_counts.len(),
+        exact_face_count,
+        sampled_face_count: sampled_face_indices.len(),
+        empty_choice_face_count,
+        min_face_points: face_point_counts.iter().copied().min(),
+        max_face_points: face_point_counts.iter().copied().max(),
+        min_choice_count: choice_counts.iter().copied().min(),
+        max_choice_count: choice_counts.iter().copied().max(),
+        total_choice_count: total_choice_count.to_string(),
+        face_point_counts,
+        choice_counts,
+        sampled_face_indices,
+        sampled_face_point_counts,
+    })
+}
+
 fn secondary_cone_height_certificate_from_hyperplanes(
     hyperplanes: &[Vec<i64>],
     heights: &[F64<Finite>],
@@ -9288,6 +9427,35 @@ fn write_secondary_cone_height_certificate(
     Ok(())
 }
 
+fn write_corrected_chamber_face_triangulation_choice_summary(
+    path: &Path,
+    geom: &PrimalGeom,
+    max_exact_face_points: usize,
+    samples_per_large_face: usize,
+    max_sampling_attempts_per_face: usize,
+    seed: u64,
+) -> Result<FaceTriangulationChoiceSummary, String> {
+    let summary = corrected_chamber_face_triangulation_choice_summary(
+        geom,
+        max_exact_face_points,
+        samples_per_large_face,
+        max_sampling_attempts_per_face,
+        seed,
+    )?;
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("failed to create {}: {e}", parent.display()))?;
+    }
+    let content = serde_json::to_string_pretty(&summary).map_err(|e| {
+        format!("failed to serialize corrected-chamber face triangulation choice summary: {e}")
+    })?;
+    std::fs::write(path, content)
+        .map_err(|e| format!("failed to write {}: {e}", path.display()))?;
+    Ok(summary)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn compare_checkpoint_t_corrected_chamber_gv_target(
     data_dir: Option<&str>,
@@ -10091,6 +10259,11 @@ fn stage_volume(
     dump_corrected_chamber_secondary_certificate_path: Option<&str>,
     dump_corrected_chamber_2face_secondary_certificate_path: Option<&str>,
     dump_corrected_chamber_expanded_secondary_fan_certificate_path: Option<&str>,
+    dump_corrected_chamber_face_triangulation_choice_summary_path: Option<&str>,
+    face_triangulation_max_exact_points: usize,
+    face_triangulation_samples_per_large_face: usize,
+    face_triangulation_max_sampling_attempts_per_face: usize,
+    face_triangulation_seed: u64,
     diagnose_chamber_updated_kklt: bool,
     diagnose_chamber_updated_kklt_iterations: usize,
     production_primal_basis_override: Option<&BasisOverride>,
@@ -10178,11 +10351,20 @@ fn stage_volume(
         || diagnose_corrected_chamber_provided_generators_gv
         || diagnose_corrected_chamber_ray_gv
         || diagnose_corrected_chamber_lp_face_gv
+        || dump_corrected_chamber_face_triangulation_choice_summary_path.is_some()
         || diagnose_chamber_updated_kklt)
         && allow_downstream_kahler
     {
         eprintln!(
             "[ERROR] corrected-chamber/chamber-updated diagnostics are only valid for first-principles runs, not downstream Kähler replay"
+        );
+        std::process::exit(2);
+    }
+    if dump_corrected_chamber_face_triangulation_choice_summary_path.is_some()
+        && face_triangulation_max_sampling_attempts_per_face == 0
+    {
+        eprintln!(
+            "[ERROR] --face-triangulation-max-sampling-attempts-per-face must be positive when dumping face triangulation choices"
         );
         std::process::exit(2);
     }
@@ -11131,6 +11313,32 @@ fn stage_volume(
             path.display()
         );
     }
+    if let Some(path) = dump_corrected_chamber_face_triangulation_choice_summary_path {
+        let path = PathBuf::from(path);
+        let summary = write_corrected_chamber_face_triangulation_choice_summary(
+            &path,
+            geom,
+            face_triangulation_max_exact_points,
+            face_triangulation_samples_per_large_face,
+            face_triangulation_max_sampling_attempts_per_face,
+            face_triangulation_seed,
+        )
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "[ERROR] failed to write corrected-chamber face triangulation choice summary: {e}"
+            );
+            std::process::exit(2);
+        });
+        eprintln!(
+            "[INFO] corrected-chamber face triangulation choice summary JSON written: {} status={} faces={} sampled_faces={} empty_choice_faces={} total_choices={}",
+            path.display(),
+            summary.status,
+            summary.face_count,
+            summary.sampled_face_count,
+            summary.empty_choice_face_count,
+            summary.total_choice_count
+        );
+    }
     if let Some(kklt_basis) = kklt_basis_for_chamber_gv.as_deref() {
         let corrected_chamber_kappa_full = chamber_intersection_full(
             &corrected_chamber,
@@ -11868,6 +12076,12 @@ fn run_pipeline(args: PipelineArgs) {
             .as_deref(),
         args.dump_corrected_chamber_expanded_secondary_fan_certificate_path
             .as_deref(),
+        args.dump_corrected_chamber_face_triangulation_choice_summary_path
+            .as_deref(),
+        args.face_triangulation_max_exact_points,
+        args.face_triangulation_samples_per_large_face,
+        args.face_triangulation_max_sampling_attempts_per_face,
+        args.face_triangulation_seed,
         args.diagnose_chamber_updated_kklt,
         args.diagnose_chamber_updated_kklt_iterations,
         args.production_primal_basis_override.as_ref(),
@@ -12487,6 +12701,46 @@ mod tests {
         assert_eq!(value["strictly_inside"], true);
 
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn corrected_chamber_face_triangulation_choice_summary_tracks_sampled_faces() {
+        let vertices = vec![
+            Point::new(vec![1, 0, 0, 0]),
+            Point::new(vec![0, 1, 0, 0]),
+            Point::new(vec![0, 0, 1, 0]),
+            Point::new(vec![0, 0, 0, 1]),
+            Point::new(vec![-1, -1, -1, -1]),
+        ];
+        let mut triangulation_points = vec![Point::new(vec![0, 0, 0, 0])];
+        triangulation_points.extend(vertices.clone());
+        let heights = triangulation_points
+            .iter()
+            .map(|_| F64::<Finite>::new(0.0).expect("height is finite"))
+            .collect::<Vec<_>>();
+        let geom = PrimalGeom {
+            polytope: Polytope::from_vertices(vertices).expect("build simplex polytope"),
+            heights,
+            triangulation_points,
+            triangulation: Triangulation::new(vec![vec![1, 2, 3, 4, 5]]),
+        };
+
+        let summary = corrected_chamber_face_triangulation_choice_summary(&geom, 2, 1, 16, 0)
+            .expect("summarize sampled simplex face choices");
+
+        assert_eq!(
+            summary.status,
+            "face_triangulation_choices_exact_and_sampled"
+        );
+        assert_eq!(summary.face_count, 10);
+        assert_eq!(summary.exact_face_count, 0);
+        assert_eq!(summary.sampled_face_count, 10);
+        assert_eq!(summary.empty_choice_face_count, 0);
+        assert_eq!(summary.min_face_points, Some(3));
+        assert_eq!(summary.max_face_points, Some(3));
+        assert_eq!(summary.choice_counts, vec![1; 10]);
+        assert_eq!(summary.total_choice_count, "1");
+        assert_eq!(summary.sampled_face_point_counts, vec![3; 10]);
     }
 
     #[test]
