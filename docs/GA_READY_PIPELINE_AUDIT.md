@@ -248,7 +248,14 @@ run pass. Any remaining mismatch must be explicit and localizable.
    degree-8 composites are built entirely from degree-4 known source-derived
    leaves, while target 7/8 degree-4 composites are built from known toric
    degree-2 leaves and degree-8 composites are built from known source
-   degree-6 plus known toric degree-2 leaves.
+   degree-6 plus known toric degree-2 leaves. When `--run-lower-seed-diamonds`
+   is enabled, the same queue now runs the bounded decomposition diamond qN
+   trace for these composites. The current target 6/7/8 smokes show that some
+   mixed source+toric degree-8 diamonds materialize nonzero GV (`-2` or `2`),
+   while repeated/paired known-leaf composites can collapse to zero/absent qN;
+   two repeated cases expose nonintegral GW candidates (`-1/4`) rather than
+   promotable integer GV history. Thus known leaves alone are not a sufficient
+   promotion rule; the bounded diamond trace is the next gate.
    The parent-only classifications now include parent-path-support runtime
    lookups from the same `cygv` run. On the regenerated target 7 report, the
    generated degree-10 side term is a real parent-domain nonzero object

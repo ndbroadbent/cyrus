@@ -14510,6 +14510,7 @@ fn build_report(
                 .as_ref()
                 .map(|probe| (target.index, probe))
         }),
+        run_lower_seed_diamonds,
         validated,
     );
     let cygv_lower_seed_unknown_candidate_unique_count =
@@ -18400,6 +18401,7 @@ fn cygv_lower_seed_predecessor_known_qn_history_pair_status_counts<'a>(
 
 fn cygv_lower_seed_unknown_candidate_summaries<'a>(
     probes: impl IntoIterator<Item = (usize, &'a CygvPathHistoryProbe)>,
+    run_bounded_seed_diamonds: bool,
     context: &ValidatedContext<'_>,
 ) -> Vec<CygvLowerSeedUnknownCandidateSummary> {
     let mut summaries: BTreeMap<Vec<(usize, i64)>, CygvLowerSeedUnknownCandidateSummaryBuilder> =
@@ -18426,6 +18428,7 @@ fn cygv_lower_seed_unknown_candidate_summaries<'a>(
                 &candidate.difference_nonzero,
                 candidate.predecessor_first_generation_seed_sum.clone(),
                 &bounded_seed_set,
+                run_bounded_seed_diamonds,
                 context,
             );
             add_lower_seed_unknown_candidate_side(
@@ -18443,6 +18446,7 @@ fn cygv_lower_seed_unknown_candidate_summaries<'a>(
                 &candidate.predecessor_nonzero,
                 candidate.difference_first_generation_seed_sum.clone(),
                 &bounded_seed_set,
+                run_bounded_seed_diamonds,
                 context,
             );
         }
@@ -18533,6 +18537,7 @@ fn add_lower_seed_unknown_candidate_side(
     counterpart_nonzero: &[(usize, i64)],
     first_generation_seed_sum: Option<CygvSeedSumDecomposition>,
     bounded_seed_set: &Result<HashSet<Vec<i64>>, String>,
+    run_bounded_seed_diamonds: bool,
     context: &ValidatedContext<'_>,
 ) {
     if known_qn_history_status != "unknown_not_toric_covered" {
@@ -18644,9 +18649,14 @@ fn add_lower_seed_unknown_candidate_side(
         .or_insert(0) += 1;
     let (bounded_seed_decomposition, bounded_seed_decomposition_error) = match bounded_seed_set {
         Ok(seed_set) => {
-            match dense_from_sparse(curve_nonzero, context.dimension)
-                .and_then(|curve| bounded_seed_decomposition_summary(&curve, seed_set, 4, None))
-            {
+            match dense_from_sparse(curve_nonzero, context.dimension).and_then(|curve| {
+                bounded_seed_decomposition_summary(
+                    &curve,
+                    seed_set,
+                    4,
+                    run_bounded_seed_diamonds.then_some(context),
+                )
+            }) {
                 Ok(summary) => (Some(summary), None),
                 Err(error) => (None, Some(error)),
             }
@@ -26175,7 +26185,8 @@ mod tests {
                 2
             )])
         );
-        let lower_unknowns = cygv_lower_seed_unknown_candidate_summaries([(0, &probe)], &context);
+        let lower_unknowns =
+            cygv_lower_seed_unknown_candidate_summaries([(0, &probe)], false, &context);
         assert_eq!(lower_unknowns.len(), 2);
         assert_eq!(lower_unknowns[0].degree, 1);
         assert_eq!(lower_unknowns[0].occurrence_count, 2);
