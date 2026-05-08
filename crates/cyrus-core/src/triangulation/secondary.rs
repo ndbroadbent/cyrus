@@ -765,6 +765,40 @@ pub fn expanded_secondary_face_inequality_choices_on_polytope_2faces_4d(
     )
 }
 
+/// Build 4D two-face expanded-secondary choices with exact-or-sampled FRTs.
+///
+/// This is the large-face counterpart of
+/// [`expanded_secondary_face_inequality_choices_on_polytope_2faces_4d`].
+/// Faces with at most `max_exact_face_points` points are enumerated exactly;
+/// larger faces use the CYTools-style `grow2d` sampler.
+///
+/// # Errors
+///
+/// Returns an error if face construction, exact enumeration, sampling, or
+/// conversion to native secondary rows fails.
+pub fn expanded_secondary_face_inequality_choices_on_polytope_2faces_4d_with_sampling(
+    points: &[Point],
+    polytope: &Polytope,
+    max_exact_face_points: usize,
+    samples_per_large_face: usize,
+    max_sampling_attempts_per_face: usize,
+    seed: u64,
+) -> Result<Vec<Vec<Vec<Vec<i64>>>>> {
+    let face_triangulation_choices =
+        fine_regular_triangulation_choices_on_polytope_2faces_4d_with_sampling(
+            points,
+            polytope,
+            max_exact_face_points,
+            samples_per_large_face,
+            max_sampling_attempts_per_face,
+            seed,
+        )?;
+    expanded_secondary_face_inequality_choices_from_triangulations(
+        points,
+        &face_triangulation_choices,
+    )
+}
+
 /// Enumerate exact 4D two-face FRT choices and compute star-constrained rows.
 ///
 /// This is the exact small-face counterpart of the CYTools
@@ -786,6 +820,39 @@ pub fn expanded_secondary_face_inequality_choices_on_polytope_2faces_with_star_4
         polytope,
         max_face_points,
     )?;
+    expanded_secondary_face_inequality_choices_from_triangulations_with_star_4d(
+        points,
+        &face_triangulation_choices,
+        polytope,
+    )
+}
+
+/// Build star-constrained expanded-secondary choices with exact-or-sampled FRTs.
+///
+/// This composes the CYTools-style exact-or-`grow2d` 4D two-face FRT policy
+/// with the `require_star=True` inequality rows.
+///
+/// # Errors
+///
+/// Returns an error if face construction, exact enumeration, sampling, native
+/// row construction, or star-circuit construction fails.
+pub fn expanded_secondary_face_inequality_choices_on_polytope_2faces_with_star_4d_with_sampling(
+    points: &[Point],
+    polytope: &Polytope,
+    max_exact_face_points: usize,
+    samples_per_large_face: usize,
+    max_sampling_attempts_per_face: usize,
+    seed: u64,
+) -> Result<Vec<Vec<Vec<Vec<i64>>>>> {
+    let face_triangulation_choices =
+        fine_regular_triangulation_choices_on_polytope_2faces_4d_with_sampling(
+            points,
+            polytope,
+            max_exact_face_points,
+            samples_per_large_face,
+            max_sampling_attempts_per_face,
+            seed,
+        )?;
     expanded_secondary_face_inequality_choices_from_triangulations_with_star_4d(
         points,
         &face_triangulation_choices,
@@ -822,6 +889,41 @@ pub fn expanded_secondary_chamber_hyperplanes_on_polytope_2faces_choice_index_4d
     )
 }
 
+/// Materialize one 4D two-face chamber from exact-or-sampled FRT choices.
+///
+/// This is the large-face counterpart of
+/// [`expanded_secondary_chamber_hyperplanes_on_polytope_2faces_choice_index_4d`].
+///
+/// # Errors
+///
+/// Returns an error if face-choice construction fails or if `choice_index` is
+/// out of range.
+pub fn expanded_secondary_chamber_hyperplanes_on_polytope_2faces_choice_index_4d_with_sampling(
+    points: &[Point],
+    polytope: &Polytope,
+    max_exact_face_points: usize,
+    samples_per_large_face: usize,
+    max_sampling_attempts_per_face: usize,
+    seed: u64,
+    choice_index: usize,
+    separate_boring: bool,
+) -> Result<Vec<Vec<i64>>> {
+    let face_inequality_choices =
+        expanded_secondary_face_inequality_choices_on_polytope_2faces_4d_with_sampling(
+            points,
+            polytope,
+            max_exact_face_points,
+            samples_per_large_face,
+            max_sampling_attempts_per_face,
+            seed,
+        )?;
+    expanded_secondary_chamber_hyperplanes_from_face_inequality_choice_index(
+        &face_inequality_choices,
+        choice_index,
+        separate_boring,
+    )
+}
+
 /// Materialize one exact 4D two-face star-constrained chamber by index.
 ///
 /// This composes automatic small-face FRT enumeration with CYTools'
@@ -843,6 +945,41 @@ pub fn expanded_secondary_chamber_hyperplanes_on_polytope_2faces_choice_index_wi
             points,
             polytope,
             max_face_points,
+        )?;
+    expanded_secondary_chamber_hyperplanes_from_face_inequality_choice_index(
+        &face_inequality_choices,
+        choice_index,
+        separate_boring,
+    )
+}
+
+/// Materialize one star-constrained chamber from exact-or-sampled FRT choices.
+///
+/// This is the large-face counterpart of
+/// [`expanded_secondary_chamber_hyperplanes_on_polytope_2faces_choice_index_with_star_4d`].
+///
+/// # Errors
+///
+/// Returns an error if star-constrained face-choice construction fails or if
+/// `choice_index` is out of range.
+pub fn expanded_secondary_chamber_hyperplanes_on_polytope_2faces_choice_index_with_star_4d_with_sampling(
+    points: &[Point],
+    polytope: &Polytope,
+    max_exact_face_points: usize,
+    samples_per_large_face: usize,
+    max_sampling_attempts_per_face: usize,
+    seed: u64,
+    choice_index: usize,
+    separate_boring: bool,
+) -> Result<Vec<Vec<i64>>> {
+    let face_inequality_choices =
+        expanded_secondary_face_inequality_choices_on_polytope_2faces_with_star_4d_with_sampling(
+            points,
+            polytope,
+            max_exact_face_points,
+            samples_per_large_face,
+            max_sampling_attempts_per_face,
+            seed,
         )?;
     expanded_secondary_chamber_hyperplanes_from_face_inequality_choice_index(
         &face_inequality_choices,
@@ -3755,6 +3892,32 @@ mod tests {
     }
 
     #[test]
+    fn expanded_secondary_face_choices_on_polytope_2faces_4d_with_sampling_use_sampler() {
+        let points = vec![
+            Point::new(vec![1, 0, 0, 0]),
+            Point::new(vec![0, 1, 0, 0]),
+            Point::new(vec![0, 0, 1, 0]),
+            Point::new(vec![0, 0, 0, 1]),
+            Point::new(vec![-1, -1, -1, -1]),
+        ];
+        let polytope = Polytope::from_vertices(points.clone()).unwrap();
+
+        let choices =
+            expanded_secondary_face_inequality_choices_on_polytope_2faces_4d_with_sampling(
+                &points, &polytope, 2, 1, 16, 0,
+            )
+            .unwrap();
+
+        assert_eq!(choices.len(), 10);
+        assert!(choices.iter().all(|face_choices| face_choices.len() == 1));
+        assert!(
+            choices
+                .iter()
+                .all(|face_choices| face_choices[0].is_empty())
+        );
+    }
+
+    #[test]
     fn expanded_secondary_face_choices_on_polytope_2faces_with_star_4d_add_star_rows() {
         let points = vec![
             Point::new(vec![0, 0, 0, 0]),
@@ -3783,6 +3946,34 @@ mod tests {
     }
 
     #[test]
+    fn expanded_secondary_star_chamber_on_polytope_2faces_with_sampling_materializes_choice() {
+        let points = vec![
+            Point::new(vec![0, 0, 0, 0]),
+            Point::new(vec![1, 0, 0, 0]),
+            Point::new(vec![0, 1, 0, 0]),
+            Point::new(vec![0, 0, 1, 0]),
+            Point::new(vec![0, 0, 0, 1]),
+            Point::new(vec![-1, -1, -1, -1]),
+        ];
+        let polytope = Polytope::from_vertices(points[1..].to_vec()).unwrap();
+
+        let chamber =
+            expanded_secondary_chamber_hyperplanes_on_polytope_2faces_choice_index_with_star_4d_with_sampling(
+                &points,
+                &polytope,
+                2,
+                1,
+                16,
+                0,
+                0,
+                true,
+            )
+            .unwrap();
+
+        assert_eq!(chamber, vec![vec![-5, 1, 1, 1, 1, 1]]);
+    }
+
+    #[test]
     fn expanded_secondary_chamber_on_polytope_2faces_4d_materializes_choice() {
         let points = vec![
             Point::new(vec![1, 0, 0, 0]),
@@ -3801,6 +3992,26 @@ mod tests {
             true,
         )
         .unwrap();
+
+        assert!(chamber.is_empty());
+    }
+
+    #[test]
+    fn expanded_secondary_chamber_on_polytope_2faces_with_sampling_materializes_choice() {
+        let points = vec![
+            Point::new(vec![1, 0, 0, 0]),
+            Point::new(vec![0, 1, 0, 0]),
+            Point::new(vec![0, 0, 1, 0]),
+            Point::new(vec![0, 0, 0, 1]),
+            Point::new(vec![-1, -1, -1, -1]),
+        ];
+        let polytope = Polytope::from_vertices(points.clone()).unwrap();
+
+        let chamber =
+            expanded_secondary_chamber_hyperplanes_on_polytope_2faces_choice_index_4d_with_sampling(
+                &points, &polytope, 2, 1, 16, 0, 0, true,
+            )
+            .unwrap();
 
         assert!(chamber.is_empty());
     }

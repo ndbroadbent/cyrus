@@ -139,6 +139,10 @@ large-face policy. The wrapper
 `fine_regular_triangulation_choices_on_polytope_2faces_4d_with_sampling` now
 implements that first policy layer: exact enumeration below a point-count
 threshold and `grow2d` sampling above it.
+The same exact-or-sampled source now feeds reusable native and star-constrained
+expanded-secondary inequality builders and mixed-radix chamber materializers,
+so callers no longer have to manually convert sampled face choices before
+testing a chamber.
 `mcallister_first_principles` now exposes the same policy through the
 validation-only
 `--dump-corrected-chamber-face-triangulation-choice-summary` artifact, recording
