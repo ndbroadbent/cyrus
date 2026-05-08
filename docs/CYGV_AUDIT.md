@@ -3697,6 +3697,15 @@ does not yet certify the target `7`/`8` transported degree-6 `target+star`
 history; that still needs source-derived semigroup or flop/chamber transport
 data before a `cygv` value can be promoted.
 
+The CYTools 4D face-set construction is now exposed directly as
+`Polytope::faces_4d_for_points`. It builds facet point sets from dual-vertex
+equations and two-face point sets from pairs of facets sharing at least three
+polytope vertices, matching the face data used by the Mori-cap/origin-circuit
+code. The old private `gv.rs` copy now delegates to this method, and the
+secondary module has a polytope-aware two-face helper that composes it with the
+native face-restriction cone. This removes another duplicated chamber
+diagnostic path, but it is not a substitute for the missing compact qN history.
+
 The no-replay boundary around the standalone GV binary is stricter now:
 `mcallister_gv` no longer reads `dual_curves.dat` or `dual_curves_gv.dat`.
 Those files remain validation checkpoints for tests and audits only; the

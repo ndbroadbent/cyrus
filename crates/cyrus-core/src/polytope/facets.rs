@@ -3,10 +3,24 @@
 //! Operations for determining which points lie interior to facets,
 //! used for triangulation point filtering.
 
-use crate::error::Result;
+use std::collections::HashSet;
+
+use crate::error::{Error, Result};
 use crate::lattice::Point;
 
 use super::Polytope;
+
+/// CYTools-style face index sets for a four-dimensional reflexive polytope.
+///
+/// The indices refer to the caller-supplied point list, not necessarily to the
+/// polytope's stored lattice-point order.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PolytopeFaces4d {
+    /// Facets as point-index sets.
+    pub facets: Vec<Vec<usize>>,
+    /// Two-dimensional faces as point-index sets.
+    pub twofaces: Vec<Vec<usize>>,
+}
 
 impl Polytope {
     /// Get points that are NOT interior to facets.
@@ -87,6 +101,85 @@ impl Polytope {
             .collect())
     }
 
+    /// Compute CYTools-style facet and two-face point-index sets in 4D.
+    ///
+    /// This ports the face construction used by CYTools' 4D Mori-cap and
+    /// toric-curve routines. Facets are selected by dual-vertex equations
+    /// `p.m = -1`; two-faces are intersections of pairs of facets whose
+    /// polytope vertices share at least three points.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the polytope is not four-dimensional, if the dual
+    /// vertices cannot be computed, or if supplied points have the wrong
+    /// ambient dimension.
+    pub fn faces_4d_for_points(&self, points: &[Point]) -> Result<PolytopeFaces4d> {
+        if self.dim() != 4 {
+            return Err(Error::InvalidInput(
+                "faces_4d only defined for 4D polytopes".into(),
+            ));
+        }
+        if points.iter().any(|point| point.dim() != self.dim()) {
+            return Err(Error::InvalidInput(
+                "faces_4d point dimensions do not match polytope dimension".into(),
+            ));
+        }
+
+        let dual_vertices = self.dual_vertices()?;
+        if dual_vertices.is_empty() {
+            return Err(Error::InvalidInput("no dual vertices found".into()));
+        }
+
+        let poly_vertices = self.vertices();
+        let mut facet_vertex_sets = Vec::with_capacity(dual_vertices.len());
+        let mut facets = Vec::with_capacity(dual_vertices.len());
+        for dual_vertex in &dual_vertices {
+            let mut vertex_set = HashSet::new();
+            for (idx, vertex) in poly_vertices.iter().enumerate() {
+                if lattice_dot(vertex.coords(), dual_vertex.coords()) == -1 {
+                    vertex_set.insert(idx);
+                }
+            }
+            facet_vertex_sets.push(vertex_set);
+
+            let mut facet_points = Vec::new();
+            for (idx, point) in points.iter().enumerate() {
+                if lattice_dot(point.coords(), dual_vertex.coords()) == -1 {
+                    facet_points.push(idx);
+                }
+            }
+            facet_points.sort_unstable();
+            facets.push(facet_points);
+        }
+
+        let mut twofaces = Vec::new();
+        for (left_idx, left_vertex_set) in facet_vertex_sets.iter().enumerate() {
+            for (right_vertex_set, right_dual_vertex) in facet_vertex_sets
+                .iter()
+                .zip(dual_vertices.iter())
+                .skip(left_idx + 1)
+            {
+                let shared_vertex_count = left_vertex_set.intersection(right_vertex_set).count();
+                if shared_vertex_count < 3 {
+                    continue;
+                }
+
+                let mut face_points = Vec::new();
+                for (idx, point) in points.iter().enumerate() {
+                    if lattice_dot(point.coords(), dual_vertices[left_idx].coords()) == -1
+                        && lattice_dot(point.coords(), right_dual_vertex.coords()) == -1
+                    {
+                        face_points.push(idx);
+                    }
+                }
+                face_points.sort_unstable();
+                twofaces.push(face_points);
+            }
+        }
+
+        Ok(PolytopeFaces4d { facets, twofaces })
+    }
+
     /// Debug version that also returns saturation histogram.
     #[cfg(test)]
     pub fn points_not_interior_to_facets_debug(
@@ -145,4 +238,8 @@ impl Polytope {
             histogram,
         ))
     }
+}
+
+fn lattice_dot(left: &[i64], right: &[i64]) -> i64 {
+    left.iter().zip(right.iter()).map(|(&a, &b)| a * b).sum()
 }

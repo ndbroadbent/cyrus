@@ -258,3 +258,22 @@ fn test_points_not_interior_to_facets_mcallister() {
         "First point should be the origin"
     );
 }
+
+#[test]
+fn test_faces_4d_for_projective_simplex_points() {
+    let points = vec![
+        Point::new(vec![1, 0, 0, 0]),
+        Point::new(vec![0, 1, 0, 0]),
+        Point::new(vec![0, 0, 1, 0]),
+        Point::new(vec![0, 0, 0, 1]),
+        Point::new(vec![-1, -1, -1, -1]),
+    ];
+    let polytope = Polytope::from_vertices(points.clone()).unwrap();
+
+    let faces = polytope.faces_4d_for_points(&points).unwrap();
+
+    assert_eq!(faces.facets.len(), 5);
+    assert!(faces.facets.iter().all(|facet| facet.len() == 4));
+    assert_eq!(faces.twofaces.len(), 10);
+    assert!(faces.twofaces.iter().all(|twoface| twoface.len() == 3));
+}

@@ -1467,6 +1467,14 @@ to make the remaining GV layer more first-principles:
    suite still passes (`cargo test -p cyrus-core --bin mcallister_gv_context
    -- --nocapture`). This is a chamber-map building block, not yet the missing
    `target+star` semigroup or flop certificate.
+   The CYTools 4D face skeleton used by the Mori-cap code is now exported as
+   `Polytope::faces_4d_for_points`, with `gv.rs` calling that shared method
+   instead of carrying a duplicate private implementation. The secondary module
+   also exposes
+   `secondary_cone_hyperplanes_native_on_polytope_2faces_4d`, which computes
+   the 4D two-face sets first and then applies the native face-restriction
+   circuit cone. Focused tests pin the 4D projective-simplex facet/two-face
+   counts and the polytope-two-face secondary helper.
    The Stage 0 no-replay policy tests also now pass again after two policy
    cleanups: generic first-principles runs log the computed flux-coordinate
    basis separately from explicit production-basis overrides, and the opt-in

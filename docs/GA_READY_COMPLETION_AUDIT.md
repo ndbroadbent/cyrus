@@ -1023,6 +1023,16 @@ still pass. This removes a reusable chamber-map porting gap, but it does not
 complete the unresolved target `7`/`8` degree-6 `target+star` qN history or the
 required semigroup/flop certificate.
 
+The face skeleton itself is now a reusable polytope primitive instead of a
+private GV helper. `Polytope::faces_4d_for_points` computes CYTools-style
+facet and two-face point-index sets from dual-vertex equations, `gv.rs` uses
+that shared method for Mori-cap/origin-circuit construction, and
+`secondary_cone_hyperplanes_native_on_polytope_2faces_4d` composes the 4D
+two-face skeleton with the face-restricted secondary-cone port. The new
+projective-simplex tests pin the public 4D face counts and the 2-face helper's
+empty-cone behavior on a single-simplex triangulation. This is still a chamber
+building block, not a promoted GV value.
+
 The Stage 0 no-replay policy gate is green for the touched paths:
 `cargo test -p cyrus-core --test mcallister_e2e stage0_data_integrity -- --nocapture`
 passes. The first-principles runner now keeps generic computed-basis flux

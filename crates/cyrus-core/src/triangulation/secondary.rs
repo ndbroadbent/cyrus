@@ -12,6 +12,7 @@ use super::Triangulation;
 use crate::Point;
 use crate::error::{Error, Result};
 use crate::integer_math::{integer_kernel, matrix_rank};
+use crate::polytope::Polytope;
 use crate::types::f64::F64;
 use crate::types::tags::{Finite, Pos};
 
@@ -122,6 +123,27 @@ pub fn secondary_cone_hyperplanes_native_on_faces(
     }
 
     Ok(hyperplanes.into_iter().collect())
+}
+
+/// Compute the native secondary cone restricted to 4D polytope two-faces.
+///
+/// This is the reusable CYTools `on_faces_dim=2` path for four-dimensional
+/// reflexive polytopes: first construct CYTools-style two-face point-index
+/// sets from the polytope and caller-supplied triangulation points, then
+/// compute the induced face-skeleton circuit hyperplanes.
+///
+/// # Errors
+///
+/// Returns an error if the polytope face construction fails or if the supplied
+/// triangulation does not induce valid full-dimensional simplices on a
+/// positive-dimensional two-face.
+pub fn secondary_cone_hyperplanes_native_on_polytope_2faces_4d(
+    points: &[Point],
+    triangulation: &Triangulation,
+    polytope: &Polytope,
+) -> Result<Vec<Vec<i64>>> {
+    let faces = polytope.faces_4d_for_points(points)?;
+    secondary_cone_hyperplanes_native_on_faces(points, triangulation, &faces.twofaces)
 }
 
 fn validate_secondary_cone_input(
@@ -467,5 +489,27 @@ mod tests {
         let error = secondary_cone_hyperplanes_native(&points, &triangulation).unwrap_err();
 
         assert!(error.to_string().contains("affine rank 1, expected 2"));
+    }
+
+    #[test]
+    fn polytope_2face_secondary_cone_uses_computed_4d_faces() {
+        let points = vec![
+            Point::new(vec![1, 0, 0, 0]),
+            Point::new(vec![0, 1, 0, 0]),
+            Point::new(vec![0, 0, 1, 0]),
+            Point::new(vec![0, 0, 0, 1]),
+            Point::new(vec![-1, -1, -1, -1]),
+        ];
+        let polytope = Polytope::from_vertices(points.clone()).unwrap();
+        let triangulation = Triangulation::new(vec![vec![0, 1, 2, 3, 4]]);
+
+        let hyperplanes = secondary_cone_hyperplanes_native_on_polytope_2faces_4d(
+            &points,
+            &triangulation,
+            &polytope,
+        )
+        .unwrap();
+
+        assert!(hyperplanes.is_empty());
     }
 }

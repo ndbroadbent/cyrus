@@ -14,3 +14,4 @@ mod facets;
 mod tests;
 
 pub use self::core::Polytope;
+pub use self::facets::PolytopeFaces4d;

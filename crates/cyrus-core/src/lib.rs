@@ -202,7 +202,7 @@ pub use kklt::{
     weyl_reflection_matrix,
 };
 pub use lattice::Point;
-pub use polytope::Polytope;
+pub use polytope::{Polytope, PolytopeFaces4d};
 pub use racetrack::{
     GvInvariant, RacetrackResult, RacetrackTerm, build_racetrack_terms, compute_w0,
     compute_w0_from_terms, solve_racetrack,
@@ -210,7 +210,9 @@ pub use racetrack::{
 pub use triangulation::{
     Triangulation, compute_delaunay_heights, compute_frst_heights, compute_regular_triangulation,
     secondary_cone_height_pairings, secondary_cone_hyperplanes_native,
-    secondary_cone_hyperplanes_native_on_faces, secondary_cone_strictly_contains_height_vector,
+    secondary_cone_hyperplanes_native_on_faces,
+    secondary_cone_hyperplanes_native_on_polytope_2faces_4d,
+    secondary_cone_strictly_contains_height_vector,
 };
 pub use vacuum::{VacuumResult, compute_v0, compute_vacuum};
 pub use volume::{VolumeResult, bbhl_correction, compute_volume, volume_classical, volume_string};
