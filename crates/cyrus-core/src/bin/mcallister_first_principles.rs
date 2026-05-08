@@ -100,6 +100,7 @@ use cyrus_core::{
     compute_origin_circuit_curve_diagnostics, compute_regular_triangulation,
     compute_toric_curve_gv_diagnostics, compute_toric_two_face_curve_gv_invariants,
     compute_w0_from_terms, divisor_basis_change_matrix, effective_prime_divisors_from_curve_basis,
+    expanded_secondary_chamber_hyperplanes_from_choice,
     expanded_secondary_face_choice_indices_containing_height_vector,
     expanded_secondary_face_inequality_choices_from_triangulations,
     expanded_secondary_fan_hyperplanes_on_polytope_2faces_4d,
@@ -795,7 +796,7 @@ struct SecondaryConeHeightCertificate {
     strictly_inside: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 struct FaceTriangulationChoiceSummary {
     status: String,
     max_exact_face_points: usize,
@@ -823,6 +824,7 @@ struct FaceTriangulationChoiceSummary {
     height_first_no_compatible_face_index: Option<usize>,
     height_unique_choice_digits: Option<Vec<usize>>,
     height_unique_choice_index: Option<String>,
+    height_unique_selected_chamber_certificate: Option<SecondaryConeHeightCertificate>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -7466,6 +7468,7 @@ fn corrected_chamber_face_triangulation_choice_summary(
         height_first_no_compatible_face_index,
         height_unique_choice_digits,
         height_unique_choice_index,
+        height_unique_selected_chamber_certificate,
     ) = if let Some(heights) = heights {
         let face_inequality_choices =
             expanded_secondary_face_inequality_choices_from_triangulations(
@@ -7517,6 +7520,21 @@ fn corrected_chamber_face_triangulation_choice_summary(
                 })
                 .to_string()
         });
+        let unique_selected_chamber_certificate = if let Some(digits) = unique_digits.as_ref() {
+            let hyperplanes = expanded_secondary_chamber_hyperplanes_from_choice(
+                &face_inequality_choices,
+                digits,
+            )
+            .map_err(|e| {
+                format!("failed to materialize unique selected face-triangulation chamber: {e}")
+            })?;
+            Some(secondary_cone_height_certificate_from_hyperplanes(
+                &hyperplanes,
+                heights,
+            )?)
+        } else {
+            None
+        };
         (
             Some(compatible),
             Some(compatible_counts),
@@ -7526,9 +7544,10 @@ fn corrected_chamber_face_triangulation_choice_summary(
             first_no_choice,
             unique_digits,
             unique_choice_index,
+            unique_selected_chamber_certificate,
         )
     } else {
-        (None, None, None, None, None, None, None, None)
+        (None, None, None, None, None, None, None, None, None)
     };
 
     Ok(FaceTriangulationChoiceSummary {
@@ -7558,6 +7577,7 @@ fn corrected_chamber_face_triangulation_choice_summary(
         height_first_no_compatible_face_index,
         height_unique_choice_digits,
         height_unique_choice_index,
+        height_unique_selected_chamber_certificate,
     })
 }
 
@@ -12740,6 +12760,17 @@ mod tests {
                     height_first_no_compatible_face_index: None,
                     height_unique_choice_digits: Some(vec![1]),
                     height_unique_choice_index: Some("1".to_string()),
+                    height_unique_selected_chamber_certificate: Some(
+                        SecondaryConeHeightCertificate {
+                            status: "strictly_inside_secondary_cone".to_string(),
+                            epsilon: 1e-6,
+                            hyperplane_count: 1,
+                            pairing_count: 1,
+                            min_pairing: Some(1.0),
+                            max_pairing: Some(1.0),
+                            strictly_inside: true,
+                        },
+                    ),
                 },
             ),
             secondary_cone_height_certificate: Some(SecondaryConeHeightCertificate {
@@ -12808,6 +12839,14 @@ mod tests {
         );
         assert_eq!(face_choice_summary["face_count"], 1);
         assert_eq!(face_choice_summary["height_unique_choice_index"], "1");
+        assert_eq!(
+            face_choice_summary["height_unique_selected_chamber_certificate"]["status"],
+            "strictly_inside_secondary_cone"
+        );
+        assert_eq!(
+            face_choice_summary["height_unique_selected_chamber_certificate"]["hyperplane_count"],
+            1
+        );
         assert_eq!(
             face_choice_summary["height_compatible_choice_counts"]
                 .as_array()
@@ -12927,6 +12966,12 @@ mod tests {
         assert_eq!(summary.height_first_no_compatible_face_index, None);
         assert_eq!(summary.height_unique_choice_digits, Some(vec![0; 10]));
         assert_eq!(summary.height_unique_choice_index, Some("0".to_string()));
+        let selected_chamber = summary
+            .height_unique_selected_chamber_certificate
+            .expect("unique face choice should export selected chamber certificate");
+        assert_eq!(selected_chamber.status, "no_secondary_cone_hyperplanes");
+        assert_eq!(selected_chamber.hyperplane_count, 0);
+        assert!(selected_chamber.strictly_inside);
     }
 
     #[test]

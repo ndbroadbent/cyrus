@@ -136,6 +136,8 @@ struct FaceTriangulationChoiceSummary {
     height_first_no_compatible_face_index: Option<usize>,
     height_unique_choice_digits: Option<Vec<usize>>,
     height_unique_choice_index: Option<String>,
+    #[serde(default)]
+    height_unique_selected_chamber_certificate: Option<SecondaryConeHeightCertificate>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -326,6 +328,10 @@ struct ContextReport {
     corrected_chamber_face_choice_height_no_compatible_face_count: Option<usize>,
     corrected_chamber_face_choice_height_multi_compatible_face_count: Option<usize>,
     corrected_chamber_face_choice_height_unique_choice_index: Option<String>,
+    corrected_chamber_face_choice_selected_chamber_certificate_status: Option<String>,
+    corrected_chamber_face_choice_selected_chamber_certificate_strictly_inside: Option<bool>,
+    corrected_chamber_face_choice_selected_chamber_certificate_hyperplane_count: Option<usize>,
+    corrected_chamber_face_choice_selected_chamber_certificate_min_pairing: Option<f64>,
     q_rows: usize,
     q_cols: usize,
     kappa_nonzero_entries: usize,
@@ -12324,6 +12330,20 @@ fn validate_face_triangulation_choice_summary(
                 .into(),
         );
     }
+    if summary.height_unique_selected_chamber_certificate.is_some()
+        && summary.height_unique_choice_digits.is_none()
+    {
+        return Err(
+            "face triangulation choice summary has selected chamber certificate without unique digits"
+                .into(),
+        );
+    }
+    if let Some(certificate) = summary.height_unique_selected_chamber_certificate.as_ref() {
+        validate_secondary_cone_height_certificate(
+            certificate,
+            "face triangulation selected chamber certificate",
+        )?;
+    }
     Ok(())
 }
 
@@ -17901,6 +17921,42 @@ fn build_report(
             .corrected_chamber_face_triangulation_choice_summary
             .as_ref()
             .and_then(|summary| summary.height_unique_choice_index.clone()),
+        corrected_chamber_face_choice_selected_chamber_certificate_status: context
+            .corrected_chamber_face_triangulation_choice_summary
+            .as_ref()
+            .and_then(|summary| {
+                summary
+                    .height_unique_selected_chamber_certificate
+                    .as_ref()
+                    .map(|certificate| certificate.status.clone())
+            }),
+        corrected_chamber_face_choice_selected_chamber_certificate_strictly_inside: context
+            .corrected_chamber_face_triangulation_choice_summary
+            .as_ref()
+            .and_then(|summary| {
+                summary
+                    .height_unique_selected_chamber_certificate
+                    .as_ref()
+                    .map(|certificate| certificate.strictly_inside)
+            }),
+        corrected_chamber_face_choice_selected_chamber_certificate_hyperplane_count: context
+            .corrected_chamber_face_triangulation_choice_summary
+            .as_ref()
+            .and_then(|summary| {
+                summary
+                    .height_unique_selected_chamber_certificate
+                    .as_ref()
+                    .map(|certificate| certificate.hyperplane_count)
+            }),
+        corrected_chamber_face_choice_selected_chamber_certificate_min_pairing: context
+            .corrected_chamber_face_triangulation_choice_summary
+            .as_ref()
+            .and_then(|summary| {
+                summary
+                    .height_unique_selected_chamber_certificate
+                    .as_ref()
+                    .and_then(|certificate| certificate.min_pairing)
+            }),
         q_rows: validated.q_matrix.len(),
         q_cols: validated.q_cols,
         kappa_nonzero_entries: validated.intersection.num_nonzero(),
@@ -30138,6 +30194,15 @@ mod tests {
             height_first_no_compatible_face_index: None,
             height_unique_choice_digits: Some(vec![1, 2]),
             height_unique_choice_index: Some("5".to_string()),
+            height_unique_selected_chamber_certificate: Some(SecondaryConeHeightCertificate {
+                status: "strictly_inside_secondary_cone".to_string(),
+                epsilon: 1e-6,
+                hyperplane_count: 4,
+                pairing_count: 4,
+                min_pairing: Some(0.25),
+                max_pairing: Some(2.0),
+                strictly_inside: true,
+            }),
         }
     }
 
@@ -30589,6 +30654,24 @@ mod tests {
                 .as_deref(),
             Some("5")
         );
+        assert_eq!(
+            report
+                .corrected_chamber_face_choice_selected_chamber_certificate_status
+                .as_deref(),
+            Some("strictly_inside_secondary_cone")
+        );
+        assert_eq!(
+            report.corrected_chamber_face_choice_selected_chamber_certificate_strictly_inside,
+            Some(true)
+        );
+        assert_eq!(
+            report.corrected_chamber_face_choice_selected_chamber_certificate_hyperplane_count,
+            Some(4)
+        );
+        assert_eq!(
+            report.corrected_chamber_face_choice_selected_chamber_certificate_min_pairing,
+            Some(0.25)
+        );
     }
 
     #[test]
@@ -30611,6 +30694,29 @@ mod tests {
         };
 
         assert!(err.contains("total_choice_count 5 does not match computed 6"));
+    }
+
+    #[test]
+    fn validate_context_rejects_face_choice_certificate_without_unique_digits() {
+        let mut context = minimal_corrected_context(
+            4,
+            Some(vec![DegreeBoundedMoriRayContextSample {
+                degree: 1,
+                ambient_nonzero: vec![(5, 1)],
+                basis_nonzero: vec![(0, 1)],
+            }]),
+        );
+        let mut summary = minimal_face_choice_summary();
+        summary.height_unique_choice_digits = None;
+        summary.height_unique_choice_index = None;
+        context.corrected_chamber_face_triangulation_choice_summary = Some(summary);
+
+        let err = match validate_context(&context) {
+            Ok(_) => panic!("face-choice certificate without unique digits should fail validation"),
+            Err(err) => err,
+        };
+
+        assert!(err.contains("selected chamber certificate without unique digits"));
     }
 
     #[test]
