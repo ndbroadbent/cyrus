@@ -1326,8 +1326,9 @@ source class now reports
 so Cyrus still lacks the source-derived local intersection tensor and
 qN/chamber history for this rank-three weighted-`P2` model.
 
-`/tmp/cyrus_six_point_rank3_source_model_target7_v1.json` adds the source-model
-dimension check to that row. The selected visible phase is a rank-three
+`/tmp/cyrus_six_point_rank3_source_model_target7_v1.json` and
+`/tmp/cyrus_six_point_rank3_source_model_target8_v1.json` add the source-model
+dimension check to that shared row. The selected visible phase is a rank-three
 split-bundle total space over weighted `P(1,1,2)`: base complex dimension `2`,
 bundle rank `3`, total-space complex dimension `5`. The report therefore
 labels it

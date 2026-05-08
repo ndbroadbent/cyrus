@@ -4411,7 +4411,8 @@ It still does not promote a GV value: the row's source class is now explicitly
 because the rank-three bundle phase needs a source-derived local
 model/intersection tensor and qN/chamber history, not just a named GIT chamber.
 
-`/tmp/cyrus_six_point_rank3_source_model_target7_v1.json` now records the
+`/tmp/cyrus_six_point_rank3_source_model_target7_v1.json` and
+`/tmp/cyrus_six_point_rank3_source_model_target8_v1.json` now record the
 dimension obstruction for that same selected phase. The visible base has
 complex dimension `2`, the split bundle has rank `3`, and the total-space
 phase therefore has complex dimension `5`. The report consequently marks the

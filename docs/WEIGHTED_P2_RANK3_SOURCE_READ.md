@@ -40,8 +40,14 @@ visible total space has complex dimension `5`. A `cygv` threefold input would
 need an additional codimension-`2` source model or an equivalent insertion/qN
 history.
 
-The current report artifact is
-`/tmp/cyrus_six_point_rank3_source_model_target7_v1.json`. It records:
+The current report artifacts are:
+
+```text
+/tmp/cyrus_six_point_rank3_source_model_target7_v1.json
+/tmp/cyrus_six_point_rank3_source_model_target8_v1.json
+```
+
+Both record the same source-model obstruction:
 
 ```text
 source_model = weighted_p2_rank_three_source_model_visible_phase_is_local_cy5_total_space_not_promotable_gv_source
