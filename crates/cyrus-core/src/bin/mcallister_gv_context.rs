@@ -365,6 +365,16 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_path_history_lower_seed_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_cygv_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_cygv_gv_counts: BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_cygv_qn_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_cygv_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_cygv_gv_counts: BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_cygv_qn_status_counts:
+        BTreeMap<String, usize>,
     local_phase_chamber_membership_certificate_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_hint_sample: Vec<LocalCygvSourceResolutionHintSummary>,
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
@@ -16176,6 +16186,42 @@ fn build_report(
         local_cygv_source_resolution_star_union_target_plus_star_path_history_lower_seed_status_counts(
             &local_cygv_source_resolution_hint_sample,
         );
+    let local_cygv_source_resolution_star_union_current_chamber_cygv_status_counts =
+        provided_generator_cygv_probe_status_counts(
+            local_cygv_source_resolution_hint_sample
+                .iter()
+                .map(current_chamber_provided_generator_cygv_probe),
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_cygv_gv_counts =
+        provided_generator_cygv_probe_gv_counts(
+            local_cygv_source_resolution_hint_sample
+                .iter()
+                .map(current_chamber_provided_generator_cygv_probe),
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_cygv_qn_status_counts =
+        provided_generator_cygv_probe_qn_status_counts(
+            local_cygv_source_resolution_hint_sample
+                .iter()
+                .map(current_chamber_provided_generator_cygv_probe),
+        );
+    let local_cygv_source_resolution_star_union_flipped_chamber_cygv_status_counts =
+        provided_generator_cygv_probe_status_counts(
+            local_cygv_source_resolution_hint_sample
+                .iter()
+                .map(flipped_chamber_provided_generator_cygv_probe),
+        );
+    let local_cygv_source_resolution_star_union_flipped_chamber_cygv_gv_counts =
+        provided_generator_cygv_probe_gv_counts(
+            local_cygv_source_resolution_hint_sample
+                .iter()
+                .map(flipped_chamber_provided_generator_cygv_probe),
+        );
+    let local_cygv_source_resolution_star_union_flipped_chamber_cygv_qn_status_counts =
+        provided_generator_cygv_probe_qn_status_counts(
+            local_cygv_source_resolution_hint_sample
+                .iter()
+                .map(flipped_chamber_provided_generator_cygv_probe),
+        );
     let missing_local_cygv_missing_source_input_counts = local_cygv_missing_source_input_counts(
         targets
             .iter()
@@ -17156,6 +17202,12 @@ fn build_report(
         local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_path_history_target_closure_counts,
         local_cygv_source_resolution_star_union_target_plus_star_path_history_lower_seed_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_cygv_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_cygv_gv_counts,
+        local_cygv_source_resolution_star_union_current_chamber_cygv_qn_status_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_cygv_status_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_cygv_gv_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_cygv_qn_status_counts,
         local_phase_chamber_membership_certificate_status_counts,
         local_cygv_source_resolution_hint_sample,
         local_cygv_target_candidate_status_counts,
@@ -18462,6 +18514,57 @@ fn local_cygv_source_resolution_star_union_target_plus_star_path_history_lower_s
                 .as_ref()
                 .map(|probe| probe.lower_seed_decomposition_status.as_str())
         }),
+        "not_run",
+    )
+}
+
+fn current_chamber_provided_generator_cygv_probe(
+    summary: &LocalCygvSourceResolutionHintSummary,
+) -> Option<&ProvidedGeneratorTargetGvProbe> {
+    summary
+        .shared_two_simplex_star_union_chamber_semigroup_transport
+        .current_chamber_provided_generator_cygv_probe
+        .as_ref()
+}
+
+fn flipped_chamber_provided_generator_cygv_probe(
+    summary: &LocalCygvSourceResolutionHintSummary,
+) -> Option<&ProvidedGeneratorTargetGvProbe> {
+    summary
+        .shared_two_simplex_star_union_chamber_semigroup_transport
+        .flipped_chamber_provided_generator_cygv_probe
+        .as_ref()
+}
+
+fn provided_generator_cygv_probe_status_counts<'a>(
+    probes: impl IntoIterator<Item = Option<&'a ProvidedGeneratorTargetGvProbe>>,
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        probes
+            .into_iter()
+            .map(|probe| probe.map(|probe| probe.status.as_str())),
+        "not_run",
+    )
+}
+
+fn provided_generator_cygv_probe_gv_counts<'a>(
+    probes: impl IntoIterator<Item = Option<&'a ProvidedGeneratorTargetGvProbe>>,
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        probes
+            .into_iter()
+            .map(|probe| probe.and_then(|probe| probe.gv.as_deref())),
+        "not_computed",
+    )
+}
+
+fn provided_generator_cygv_probe_qn_status_counts<'a>(
+    probes: impl IntoIterator<Item = Option<&'a ProvidedGeneratorTargetGvProbe>>,
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        probes
+            .into_iter()
+            .map(|probe| probe.and_then(|probe| probe.target_qn_trace_status.as_deref())),
         "not_run",
     )
 }
@@ -29845,6 +29948,62 @@ mod tests {
         );
         assert_eq!(counts.get("hkty_error").copied(), Some(1));
         assert_eq!(counts.get("not_run").copied(), Some(1));
+    }
+
+    #[test]
+    fn provided_generator_cygv_probe_counts_aggregate_status_gv_and_qn_status() {
+        let computed = ProvidedGeneratorTargetGvProbe {
+            generator_count: 5,
+            status: "computed_current_chamber_generators_qn_trace".to_string(),
+            gv: Some("0".to_string()),
+            error: None,
+            qn_trace_polynomial_count: Some(1),
+            target_qn_trace_status: Some(
+                "support_overlap_qn_not_required_zero_or_absent_gv".to_string(),
+            ),
+            target_qn_trace_term_count: None,
+            qn_trace_sample: Vec::new(),
+        };
+        let skipped = ProvidedGeneratorTargetGvProbe {
+            generator_count: 5,
+            status: "skipped_nonpositive_chamber_generator_degree".to_string(),
+            gv: None,
+            error: Some("generator 1 has degree -4".to_string()),
+            qn_trace_polynomial_count: None,
+            target_qn_trace_status: None,
+            target_qn_trace_term_count: None,
+            qn_trace_sample: Vec::new(),
+        };
+
+        let status_counts =
+            provided_generator_cygv_probe_status_counts([Some(&computed), Some(&skipped), None]);
+        let gv_counts =
+            provided_generator_cygv_probe_gv_counts([Some(&computed), Some(&skipped), None]);
+        let qn_status_counts =
+            provided_generator_cygv_probe_qn_status_counts([Some(&computed), Some(&skipped), None]);
+
+        assert_eq!(
+            status_counts
+                .get("computed_current_chamber_generators_qn_trace")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(
+            status_counts
+                .get("skipped_nonpositive_chamber_generator_degree")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(status_counts.get("not_run").copied(), Some(1));
+        assert_eq!(gv_counts.get("0").copied(), Some(1));
+        assert_eq!(gv_counts.get("not_computed").copied(), Some(2));
+        assert_eq!(
+            qn_status_counts
+                .get("support_overlap_qn_not_required_zero_or_absent_gv")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(qn_status_counts.get("not_run").copied(), Some(2));
     }
 
     #[test]

@@ -1537,7 +1537,13 @@ to make the remaining GV layer more first-principles:
    target qN polynomial for both targets `7` and `8` (`1` lower qN polynomial
    for target `7`, `0` for target `8`). The locally flipped chamber is not a
    valid positive-degree `cygv` generator domain because it contains a degree
-   `-4` generator. Thus the visible chamber generator set is not the missing
+   `-4` generator. The report now aggregates this chamber-generator `cygv`
+   probe at top level: both regenerated target `7` and target `8` reports have
+   current status `computed_current_chamber_generators_qn_trace`, current
+   `GV=0`, current qN status
+   `support_overlap_qn_not_required_zero_or_absent_gv`, flipped status
+   `skipped_nonpositive_chamber_generator_degree`, and flipped GV
+   `not_computed`. Thus the visible chamber generator set is not the missing
    compact HKTY history by itself.
    A follow-up compact-omission wall-side summary confirms this selected side
    is not one of the compact omission phases: both target rows have four

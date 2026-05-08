@@ -3815,8 +3815,13 @@ actual `cygv` as a provided-generator domain for target-plus-star. Targets `7`
 and `8` both return `GV=0` with no target qN polynomial; target `7` materializes
 one lower qN polynomial and target `8` materializes none. The locally flipped
 chambers are skipped as compact `cygv` domains because each contains a degree
-`-4` generator. This rules out the visible current/flipped chamber generator
-sets as standalone compact HKTY histories.
+`-4` generator. The regenerated target `7` and target `8` context reports now
+carry aggregate chamber-generator `cygv` counts at top level, recording current
+status `computed_current_chamber_generators_qn_trace`, current `GV=0`, current
+qN status `support_overlap_qn_not_required_zero_or_absent_gv`, flipped status
+`skipped_nonpositive_chamber_generator_degree`, and flipped GV `not_computed`.
+This rules out the visible current/flipped chamber generator sets as standalone
+compact HKTY histories.
 
 The no-replay boundary around the standalone GV binary is stricter now:
 `mcallister_gv` no longer reads `dual_curves.dat` or `dual_curves_gv.dat`.
