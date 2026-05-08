@@ -4236,3 +4236,16 @@ the precise promotion blockers:
 The flipped side is additionally blocked by the uncertified secondary-cone
 status. This makes the non-promotable nature of the current-domain `GV=0`
 machine-readable, rather than relying on prose around the report.
+
+The same report now serializes the unresolved current-chamber generator queue
+directly as
+`local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample`.
+In `/tmp/cyrus_unresolved_chamber_generator_queue_v1.json` this queue has
+`10` unique generator classes across `12` occurrences. The target `7`/`8`
+blocker accounts for six unique classes: two shared by both targets at degrees
+`2` and `6`, two target-specific rank-two quadrilateral degree-`2` rows with
+`ckyz_no_source_match`, and two target-specific degree-`4` rows that have
+bounded lower-seed decompositions but still no source-derived target qN
+history. The remaining queued rows come from targets `1`, `2`, and `4` and
+are included so the all-target promotion blocker is not hidden behind the
+target `7`/`8` focus.

@@ -1194,6 +1194,15 @@ So the remaining GA-ready work is no longer just "run `cygv` on a certified
 local chamber"; it is to supply the source-derived chamber-generator qN
 history and target qN polynomial that make such a call reusable.
 
+The unresolved chamber-generator queue is now a first-class report artifact.
+`/tmp/cyrus_unresolved_chamber_generator_queue_v1.json` reports `10` unique
+current-chamber generator classes across `12` occurrences. For targets `7` and
+`8`, the finite queue is six unique classes: two shared degree-`2`/degree-`6`
+non-rank-two rows, two target-specific rank-two quadrilateral rows not matched
+by CKYZ, and two target-specific degree-`4` rows whose bounded lower-seed
+diamonds are diagnostic but not source-derived qN histories. This is the next
+implementation queue for a GA-ready chamber-history path.
+
 ## Next Concrete Action
 
 The next implementation should be one of these, in order:
