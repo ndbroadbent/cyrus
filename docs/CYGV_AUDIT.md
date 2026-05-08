@@ -4249,3 +4249,15 @@ bounded lower-seed decompositions but still no source-derived target qN
 history. The remaining queued rows come from targets `1`, `2`, and `4` and
 are included so the all-target promotion blocker is not hidden behind the
 target `7`/`8` focus.
+
+`/tmp/cyrus_unresolved_chamber_generator_queue_v2.json` now includes the
+bounded-decomposition dependency fields in that queue. The two target-specific
+degree-`4` rows decompose into two lower seed terms, but their bounded diamonds
+both report `diamond_gv=0`,
+`diamond_target_qn_trace_status=path_support_qn_not_required_zero_or_absent_gv`,
+and `diamond_target_gw_coefficient_status=missing_instanton_coefficient`.
+Thus these decompositions are useful diagnostics, not source-derived chamber
+histories that can be promoted. The remaining actionable target `7`/`8`
+classes are still the shared degree-`2`/degree-`6` non-rank-two rows and the
+two target-specific degree-`2` rank-two quadrilateral rows with no CKYZ source
+match.

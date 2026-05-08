@@ -1203,17 +1203,26 @@ by CKYZ, and two target-specific degree-`4` rows whose bounded lower-seed
 diamonds are diagnostic but not source-derived qN histories. This is the next
 implementation queue for a GA-ready chamber-history path.
 
+`/tmp/cyrus_unresolved_chamber_generator_queue_v2.json` now serializes the
+bounded-decomposition dependencies for these unresolved rows. The two
+degree-`4` target-specific rows each have a two-term lower-seed decomposition,
+but the bounded diamond reports `GV=0`, no target qN trace
+(`path_support_qn_not_required_zero_or_absent_gv`), and
+`missing_instanton_coefficient`. That rules them out as a simple promotion
+path; the chamber-history implementation has to close the degree-`2`/degree-`6`
+unresolved generator classes or derive a certified source semigroup for the
+target-plus-star chamber directly.
+
 ## Next Concrete Action
 
 The next implementation should be one of these, in order:
 
-1. Extend the secondary-cone certificate from the global corrected chamber to
-   each candidate local phase, so a local intersection tensor or semigroup
-   cannot be promoted without an explicit chamber-membership certificate.
-2. For corrected-chamber missing GV classes, construct a source-derived compact
+1. For corrected-chamber missing GV classes, construct a source-derived compact
    semigroup or certified supporting-face semigroup and hand it to the existing
    `cygv` wrappers. If the semigroup cannot be certified, keep the result
    diagnostic-only.
+2. Extend any new local phase or supporting-face semigroup with an explicit
+   secondary-cone/chamber-membership certificate before promotion.
 3. Clean up the remaining matrix-basis diagnostic/export edges in
    `mcallister_first_principles`: chamber diagnostics currently operate after
    transforming production Kähler coordinates back to the computed CYTools

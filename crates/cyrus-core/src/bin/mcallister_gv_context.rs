@@ -1309,6 +1309,18 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
     local_toric_kind: Option<String>,
     ckyz_status: String,
     bounded_lower_seed_status: String,
+    bounded_lower_seed_term_count: Option<usize>,
+    bounded_lower_seed_terms_nonzero: Option<Vec<Vec<(usize, i64)>>>,
+    bounded_lower_seed_diamond_element_count: Option<usize>,
+    bounded_lower_seed_diamond_status: Option<String>,
+    bounded_lower_seed_diamond_gv: Option<String>,
+    bounded_lower_seed_diamond_qn_trace_polynomial_count: Option<usize>,
+    bounded_lower_seed_diamond_target_qn_trace_status: Option<String>,
+    bounded_lower_seed_diamond_target_qn_trace_term_count: Option<usize>,
+    bounded_lower_seed_diamond_target_gw_coefficient_status: Option<String>,
+    bounded_lower_seed_diamond_target_gw_instanton_coefficient: Option<String>,
+    bounded_lower_seed_diamond_target_gw_candidate: Option<String>,
+    bounded_lower_seed_diamond_gw_noninteger_candidate_count: Option<usize>,
     nearest_support_overlap_status: String,
     nearest_support_best_overlap_count: Option<usize>,
     nearest_support_best_missing_point_count: Option<usize>,
@@ -20410,6 +20422,7 @@ fn unresolved_chamber_generator_summaries(
                 context.basis_nonzero, context.point_relation_nonzero
             );
             let entry = by_generator.entry(key).or_insert_with(|| {
+                let bounded_lower_seed = context.bounded_lower_seed_decomposition.as_ref();
                 LocalCygvUnresolvedChamberGeneratorSummary {
                     occurrence_count: 0,
                     target_indices: Vec::new(),
@@ -20423,6 +20436,40 @@ fn unresolved_chamber_generator_summaries(
                     ckyz_status: context.local_toric_diagnostic.ckyz_status.clone(),
                     bounded_lower_seed_status:
                         chamber_semigroup_generator_bounded_lower_seed_status(context),
+                    bounded_lower_seed_term_count: bounded_lower_seed
+                        .and_then(|decomposition| decomposition.term_count),
+                    bounded_lower_seed_terms_nonzero: bounded_lower_seed
+                        .and_then(|decomposition| decomposition.terms_nonzero.clone()),
+                    bounded_lower_seed_diamond_element_count: bounded_lower_seed
+                        .and_then(|decomposition| decomposition.diamond_element_count),
+                    bounded_lower_seed_diamond_status: bounded_lower_seed
+                        .and_then(|decomposition| decomposition.diamond_status.clone()),
+                    bounded_lower_seed_diamond_gv: bounded_lower_seed
+                        .and_then(|decomposition| decomposition.diamond_gv.clone()),
+                    bounded_lower_seed_diamond_qn_trace_polynomial_count: bounded_lower_seed
+                        .and_then(|decomposition| decomposition.diamond_qn_trace_polynomial_count),
+                    bounded_lower_seed_diamond_target_qn_trace_status: bounded_lower_seed.and_then(
+                        |decomposition| decomposition.diamond_target_qn_trace_status.clone(),
+                    ),
+                    bounded_lower_seed_diamond_target_qn_trace_term_count: bounded_lower_seed
+                        .and_then(|decomposition| decomposition.diamond_target_qn_trace_term_count),
+                    bounded_lower_seed_diamond_target_gw_coefficient_status: bounded_lower_seed
+                        .and_then(|decomposition| {
+                            decomposition.diamond_target_gw_coefficient_status.clone()
+                        }),
+                    bounded_lower_seed_diamond_target_gw_instanton_coefficient: bounded_lower_seed
+                        .and_then(|decomposition| {
+                            decomposition
+                                .diamond_target_gw_instanton_coefficient
+                                .clone()
+                        }),
+                    bounded_lower_seed_diamond_target_gw_candidate: bounded_lower_seed.and_then(
+                        |decomposition| decomposition.diamond_target_gw_candidate.clone(),
+                    ),
+                    bounded_lower_seed_diamond_gw_noninteger_candidate_count: bounded_lower_seed
+                        .and_then(|decomposition| {
+                            decomposition.diamond_gw_noninteger_candidate_count
+                        }),
                     nearest_support_overlap_status: context
                         .degree_bounded_support_overlap_diagnostic
                         .status
