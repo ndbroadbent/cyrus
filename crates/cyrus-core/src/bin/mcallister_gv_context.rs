@@ -19123,6 +19123,14 @@ fn local_phase_chamber_membership_certificate_status(
             certificate.status
         );
     }
+    if let Some(twoface_certificate) = context.secondary_cone_2face_height_certificate
+        && !twoface_certificate.strictly_inside
+    {
+        return format!(
+            "local_phase_chamber_blocked_global_2face_secondary_cone_status:{}",
+            twoface_certificate.status
+        );
+    }
     if skeleton.local_cygv_phase_q_matrix_candidate.is_none() {
         return "local_phase_chamber_blocked_missing_phase_q_matrix".to_string();
     }
@@ -26947,6 +26955,40 @@ mod tests {
         assert_eq!(
             local_phase_chamber_membership_certificate_status(&skeleton, &strict_global),
             "source_derived_local_phase_chamber_certificate_with_global_secondary_cone_checkpoint"
+        );
+
+        let mut outside_twoface_context = minimal_corrected_context(
+            4,
+            Some(vec![DegreeBoundedMoriRayContextSample {
+                degree: 1,
+                ambient_nonzero: vec![(5, 1)],
+                basis_nonzero: vec![(0, 1)],
+            }]),
+        );
+        outside_twoface_context.secondary_cone_height_certificate =
+            Some(SecondaryConeHeightCertificate {
+                status: "strictly_inside_secondary_cone".to_string(),
+                epsilon: 1e-6,
+                hyperplane_count: 1,
+                pairing_count: 1,
+                min_pairing: Some(0.5),
+                max_pairing: Some(0.5),
+                strictly_inside: true,
+            });
+        outside_twoface_context.secondary_cone_2face_height_certificate =
+            Some(SecondaryConeHeightCertificate {
+                status: "height_vector_on_or_outside_secondary_cone".to_string(),
+                epsilon: 1e-6,
+                hyperplane_count: 1,
+                pairing_count: 1,
+                min_pairing: Some(-0.5),
+                max_pairing: Some(-0.5),
+                strictly_inside: false,
+            });
+        let outside_twoface = validate_context(&outside_twoface_context).unwrap();
+        assert_eq!(
+            local_phase_chamber_membership_certificate_status(&skeleton, &outside_twoface),
+            "local_phase_chamber_blocked_global_2face_secondary_cone_status:height_vector_on_or_outside_secondary_cone"
         );
 
         let missing_phase_skeleton = minimal_local_skeleton_for_chamber_status(
