@@ -20931,7 +20931,11 @@ fn local_cygv_star_union_wall_transport_readiness(
         missing_inputs.push("target_plus_star_wall_crossing_chamber_transport".to_string());
     }
     if wall_known {
-        missing_inputs.push("shrinking_divisor_or_flop_certificate".to_string());
+        if let Some(missing_input) =
+            wall_transport_flop_certificate_missing_input(&crossed_wall_stable_weyl_certificate)
+        {
+            missing_inputs.push(missing_input.to_string());
+        }
     }
     missing_inputs.sort();
     missing_inputs.dedup();
@@ -20979,6 +20983,27 @@ fn local_cygv_star_union_wall_transport_readiness(
         target_plus_star_support_face_certificate_status:
             target_plus_star_support_face_certificate_status.map(str::to_string),
         crossed_wall_stable_weyl_certificate,
+    }
+}
+
+fn wall_transport_flop_certificate_missing_input(
+    stable_weyl_certificate: &Option<LocalCygvStarUnionCrossedWallStableWeylProbe>,
+) -> Option<&'static str> {
+    match stable_weyl_certificate
+        .as_ref()
+        .map(|probe| probe.status.as_str())
+    {
+        Some("stable_weyl_certified_exact_checks") => None,
+        Some("stable_weyl_blocked_cms_general_divisor_no_rational_divisor_solution") => {
+            Some("non_weyl_wall_crossing_transport_certificate")
+        }
+        Some(status) if status.starts_with("stable_weyl_blocked_") => {
+            Some("shrinking_divisor_or_flop_certificate")
+        }
+        Some(status) if status.starts_with("stable_weyl_error_") => {
+            Some("shrinking_divisor_or_flop_certificate")
+        }
+        _ => Some("shrinking_divisor_or_flop_certificate"),
     }
 }
 
@@ -29542,6 +29567,42 @@ mod tests {
         );
         assert!(
             readiness
+                .missing_inputs
+                .contains(&"shrinking_divisor_or_flop_certificate".to_string())
+        );
+
+        let non_weyl_readiness = local_cygv_star_union_wall_transport_readiness(
+            &summary,
+            &wall_hint,
+            &secondary,
+            &lookups,
+            Some(0),
+            Some("origin_support_no_generators"),
+            Some(LocalCygvStarUnionCrossedWallStableWeylProbe {
+                status: "stable_weyl_blocked_cms_general_divisor_no_rational_divisor_solution"
+                    .to_string(),
+                source_sample_status: "source_sample_test".to_string(),
+                matching_candidate_count: Some(1),
+                shrinking_divisor_index: Some(55),
+                cms_divisor_linear_system: None,
+                shrinking_divisor_basis_nonzero: None,
+                shrinking_divisor_ambient_basis_nonzero: None,
+                divisor_quadratic_vanishes_on_curve_facet: None,
+                weyl_reflection_matches_flop_transform: None,
+                extremal_ray_certificate_status: Some(
+                    "skipped_generator_limit_256_actual_2963".to_string(),
+                ),
+                separator_normal_nonzero: None,
+                error: None,
+            }),
+        );
+        assert!(
+            non_weyl_readiness
+                .missing_inputs
+                .contains(&"non_weyl_wall_crossing_transport_certificate".to_string())
+        );
+        assert!(
+            !non_weyl_readiness
                 .missing_inputs
                 .contains(&"shrinking_divisor_or_flop_certificate".to_string())
         );

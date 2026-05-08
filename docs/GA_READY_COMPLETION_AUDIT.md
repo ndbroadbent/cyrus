@@ -1054,7 +1054,11 @@ instead of the older generic semigroup bucket. Those rows carry local
 secondary status `star_union_shared_face_secondary_on_wall`, corrected
 global-height status
 `star_union_shared_face_secondary_global_height_crosses_oriented_walls`, and
-the new missing input `target_plus_star_wall_crossing_chamber_transport`.
+the new missing inputs `target_plus_star_wall_crossing_chamber_transport` and
+`non_weyl_wall_crossing_transport_certificate`. The latter is selected because
+the stable-Weyl probe reaches
+`stable_weyl_blocked_cms_general_divisor_no_rational_divisor_solution`, so the
+remaining transport certificate is not the simple shrinking-divisor route.
 The main target-plus-star promotion object now carries the same wall-transport
 status and missing inputs, so even a future local phase/tensor certificate
 cannot promote the `target+star` class while wall-crossing transport remains
