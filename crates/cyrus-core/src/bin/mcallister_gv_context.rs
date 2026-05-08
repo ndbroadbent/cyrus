@@ -1344,6 +1344,11 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
     local_toric_circuit_global_height_choice_pairings: Option<Vec<Vec<String>>>,
     local_toric_circuit_global_height_compatible_choice_indices: Option<Vec<usize>>,
     local_toric_circuit_global_height_selected_choice_index: Option<usize>,
+    local_toric_weighted_p2_rank_three_phase_status: String,
+    local_toric_weighted_p2_rank_three_base_point_indices: Option<Vec<usize>>,
+    local_toric_weighted_p2_rank_three_base_weights: Option<Vec<i64>>,
+    local_toric_weighted_p2_rank_three_bundle_point_indices: Option<Vec<usize>>,
+    local_toric_weighted_p2_rank_three_bundle_degrees: Option<Vec<i64>>,
     ckyz_status: String,
     bounded_lower_seed_status: String,
     bounded_lower_seed_term_count: Option<usize>,
@@ -1448,6 +1453,15 @@ struct LocalCygvCircuitGlobalHeightChoiceSummary {
     choice_pairings: Option<Vec<Vec<String>>>,
     compatible_choice_indices: Option<Vec<usize>>,
     selected_choice_index: Option<usize>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct WeightedP2RankThreePhaseSummary {
+    status: String,
+    base_point_indices: Option<Vec<usize>>,
+    base_weights: Option<Vec<i64>>,
+    bundle_point_indices: Option<Vec<usize>>,
+    bundle_degrees: Option<Vec<i64>>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -20525,6 +20539,18 @@ fn unresolved_chamber_generator_summaries(
             );
             let entry = by_generator.entry(key).or_insert_with(|| {
                 let bounded_lower_seed = context.bounded_lower_seed_decomposition.as_ref();
+                let weighted_rank_three_phase =
+                    weighted_p2_rank_three_selected_phase_summary(
+                        context.point_relation_nonzero.as_deref(),
+                        &context.local_toric_diagnostic.local_toric_charge_family_status,
+                        context
+                            .local_toric_diagnostic
+                            .circuit_triangulation_choices
+                            .as_deref(),
+                        context
+                            .circuit_global_height_choice_summary
+                            .selected_choice_index,
+                    );
                 LocalCygvUnresolvedChamberGeneratorSummary {
                     occurrence_count: 0,
                     target_indices: Vec::new(),
@@ -20640,6 +20666,16 @@ fn unresolved_chamber_generator_summaries(
                     local_toric_circuit_global_height_selected_choice_index: context
                         .circuit_global_height_choice_summary
                         .selected_choice_index,
+                    local_toric_weighted_p2_rank_three_phase_status: weighted_rank_three_phase
+                        .status,
+                    local_toric_weighted_p2_rank_three_base_point_indices:
+                        weighted_rank_three_phase.base_point_indices,
+                    local_toric_weighted_p2_rank_three_base_weights: weighted_rank_three_phase
+                        .base_weights,
+                    local_toric_weighted_p2_rank_three_bundle_point_indices:
+                        weighted_rank_three_phase.bundle_point_indices,
+                    local_toric_weighted_p2_rank_three_bundle_degrees: weighted_rank_three_phase
+                        .bundle_degrees,
                     ckyz_status: context.local_toric_diagnostic.ckyz_status.clone(),
                     bounded_lower_seed_status:
                         chamber_semigroup_generator_bounded_lower_seed_status(context),
@@ -25437,6 +25473,123 @@ fn chamber_generator_circuit_global_height_choice_summary(
         compatible_choice_indices: Some(compatible_choice_indices),
         selected_choice_index,
     }
+}
+
+fn weighted_p2_rank_three_selected_phase_summary(
+    point_relation_nonzero: Option<&[(usize, i64)]>,
+    charge_family_status: &str,
+    circuit_triangulation_choices: Option<&[Vec<Vec<usize>>]>,
+    selected_choice_index: Option<usize>,
+) -> WeightedP2RankThreePhaseSummary {
+    let empty = |status: &str| WeightedP2RankThreePhaseSummary {
+        status: status.to_string(),
+        base_point_indices: None,
+        base_weights: None,
+        bundle_point_indices: None,
+        bundle_degrees: None,
+    };
+    let base_sign = if charge_family_status
+        .starts_with("local_toric_weighted_p2_rank_three_split_bundle_charge_family:")
+    {
+        1
+    } else if charge_family_status.starts_with(
+        "local_toric_weighted_p2_rank_three_split_bundle_charge_family_after_sign_flip:",
+    ) {
+        -1
+    } else {
+        return empty("weighted_p2_rank_three_phase_not_run_not_rank_three_family");
+    };
+    let Some(point_relation_nonzero) = point_relation_nonzero else {
+        return empty("weighted_p2_rank_three_phase_blocked_missing_point_relation");
+    };
+    let mut base = Vec::new();
+    let mut bundle = Vec::new();
+    for &(point_index, coefficient) in point_relation_nonzero {
+        let oriented = base_sign * coefficient;
+        if oriented > 0 {
+            base.push((point_index, oriented));
+        } else if oriented < 0 {
+            bundle.push((point_index, -oriented));
+        }
+    }
+    base.sort_unstable_by_key(|&(point_index, weight)| (weight, point_index));
+    bundle.sort_unstable_by_key(|&(point_index, degree)| (degree, point_index));
+    let base_point_indices = base
+        .iter()
+        .map(|&(point_index, _)| point_index)
+        .collect::<Vec<_>>();
+    let base_weights = base.iter().map(|&(_, weight)| weight).collect::<Vec<_>>();
+    let bundle_point_indices = bundle
+        .iter()
+        .map(|&(point_index, _)| point_index)
+        .collect::<Vec<_>>();
+    let bundle_degrees = bundle.iter().map(|&(_, degree)| degree).collect::<Vec<_>>();
+    let with_parts = |status: &str| WeightedP2RankThreePhaseSummary {
+        status: status.to_string(),
+        base_point_indices: Some(base_point_indices.clone()),
+        base_weights: Some(base_weights.clone()),
+        bundle_point_indices: Some(bundle_point_indices.clone()),
+        bundle_degrees: Some(bundle_degrees.clone()),
+    };
+    if base.len() != 3 || bundle.len() != 3 {
+        return with_parts("weighted_p2_rank_three_phase_blocked_unexpected_point_split");
+    }
+    let Some(choices) = circuit_triangulation_choices else {
+        return with_parts("weighted_p2_rank_three_phase_blocked_missing_circuit_choices");
+    };
+    let Some(selected_choice_index) = selected_choice_index else {
+        return with_parts("weighted_p2_rank_three_phase_blocked_no_selected_global_height_choice");
+    };
+    let Some(selected_choice) = choices.get(selected_choice_index) else {
+        return with_parts("weighted_p2_rank_three_phase_blocked_selected_choice_out_of_bounds");
+    };
+    let base_set = base_point_indices.iter().copied().collect::<BTreeSet<_>>();
+    let bundle_set = bundle_point_indices
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    if selected_choice_matches_split_bundle_phase(selected_choice, &base_set, &bundle_set) {
+        return with_parts("weighted_p2_rank_three_split_bundle_selected_base_phase");
+    }
+    if selected_choice_matches_split_bundle_phase(selected_choice, &bundle_set, &base_set) {
+        return with_parts("weighted_p2_rank_three_split_bundle_selected_bundle_phase");
+    }
+    with_parts("weighted_p2_rank_three_split_bundle_selected_mixed_or_unknown_phase")
+}
+
+fn selected_choice_matches_split_bundle_phase(
+    selected_choice: &[Vec<usize>],
+    omitted_side: &BTreeSet<usize>,
+    retained_side: &BTreeSet<usize>,
+) -> bool {
+    if omitted_side.is_empty()
+        || retained_side.is_empty()
+        || selected_choice.len() != omitted_side.len()
+    {
+        return false;
+    }
+    let mut omitted_once = BTreeSet::new();
+    let expected_simplex_len = omitted_side.len() + retained_side.len() - 1;
+    for simplex in selected_choice {
+        let simplex_set = simplex.iter().copied().collect::<BTreeSet<_>>();
+        if simplex_set.len() != simplex.len() || simplex_set.len() != expected_simplex_len {
+            return false;
+        }
+        if !retained_side.is_subset(&simplex_set) {
+            return false;
+        }
+        let missing = omitted_side
+            .difference(&simplex_set)
+            .copied()
+            .collect::<Vec<_>>();
+        if missing.len() != 1 {
+            return false;
+        }
+        if !omitted_once.insert(missing[0]) {
+            return false;
+        }
+    }
+    omitted_once == *omitted_side
 }
 
 fn chamber_semigroup_generator_context(
@@ -37127,6 +37280,49 @@ mod tests {
         );
         assert_eq!(summary.compatible_choice_indices, Some(vec![0]));
         assert_eq!(summary.selected_choice_index, Some(0));
+    }
+
+    #[test]
+    fn weighted_p2_rank_three_phase_labels_selected_base_phase() {
+        let point_relation = vec![(0, -1), (55, -2), (208, 1), (211, 1), (212, 2), (214, -1)];
+        let choices = vec![
+            vec![
+                vec![0, 55, 208, 211, 214],
+                vec![0, 55, 208, 212, 214],
+                vec![0, 55, 211, 212, 214],
+            ],
+            vec![
+                vec![0, 55, 208, 211, 212],
+                vec![0, 208, 211, 212, 214],
+                vec![55, 208, 211, 212, 214],
+            ],
+        ];
+
+        let selected_base = weighted_p2_rank_three_selected_phase_summary(
+            Some(&point_relation),
+            "local_toric_weighted_p2_rank_three_split_bundle_charge_family:base=1,1,2;bundle=1,1,2;base_hyperplane_square=1/2",
+            Some(&choices),
+            Some(0),
+        );
+        assert_eq!(
+            selected_base.status,
+            "weighted_p2_rank_three_split_bundle_selected_base_phase"
+        );
+        assert_eq!(selected_base.base_point_indices, Some(vec![208, 211, 212]));
+        assert_eq!(selected_base.base_weights, Some(vec![1, 1, 2]));
+        assert_eq!(selected_base.bundle_point_indices, Some(vec![0, 214, 55]));
+        assert_eq!(selected_base.bundle_degrees, Some(vec![1, 1, 2]));
+
+        let selected_bundle = weighted_p2_rank_three_selected_phase_summary(
+            Some(&point_relation),
+            "local_toric_weighted_p2_rank_three_split_bundle_charge_family:base=1,1,2;bundle=1,1,2;base_hyperplane_square=1/2",
+            Some(&choices),
+            Some(1),
+        );
+        assert_eq!(
+            selected_bundle.status,
+            "weighted_p2_rank_three_split_bundle_selected_bundle_phase"
+        );
     }
 
     #[test]
