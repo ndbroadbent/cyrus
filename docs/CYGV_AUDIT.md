@@ -3383,6 +3383,20 @@ positive and still unknown. This keeps the next task on the compact
 chamber-transport/qN history relating a positive target row to a negative
 star-side chamber relation with a known positive opposite, rather than on
 finding another scalar GV leaf.
+The transport report `/tmp/cyrus_gv_context_transport_report.json` now makes
+that identity explicit. Eight projected star-union rows satisfy
+`target = target_plus_star + opposite(star)`; the ninth is the same missing
+projection case as above. For targets `7`/`8`, the decomposition is:
+unknown degree-10 target = unknown degree-6 target-plus-star + known degree-4
+opposite-star, with opposite-star source-derived GV `1` and target-plus-star
+bounded lower-seed status `not_found_up_to_4`. The corrected height pairings
+also add back to the target `q.t`: target `7` has
+`0.4338506799554125 + 0.42571113815644424 = 0.8595618181118709` up to
+floating tolerance, and target `8` has
+`0.4341261467531723 + 0.42571113815644424 = 0.8598372849096165`. Thus the
+remaining missing term is not the known opposite-star source value; it is the
+degree-6 positive target-plus-star qN/chamber history that combines with that
+known wall component.
 Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
 serializes a role-tagged height profile over the full union support. For
 targets `3`/`6`, the off-hyperplane zero-shared ray has height `-1` but zero

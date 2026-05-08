@@ -1247,6 +1247,14 @@ to make the remaining GV layer more first-principles:
    opposite is degree `4`, positive, and has known source-derived GV `1`. That
    makes the remaining transport object explicit in the same rows as degree
    and known-qN status.
+   `/tmp/cyrus_gv_context_transport_report.json` now serializes the algebraic
+   transport identity itself. Eight projected rows satisfy
+   `target = target_plus_star + opposite(star)`. For targets `7`/`8`, this
+   writes the unknown degree-10 target as unknown degree-6 target-plus-star
+   plus the known degree-4 positive opposite-star source row with GV `1`, and
+   the corrected height pairings add back to the target `q.t`. The remaining
+   missing object has therefore narrowed again to the positive degree-6
+   target-plus-star qN/chamber history.
    The full union-support height profile is now serialized as well. For
    targets `3`/`6`, the off-hyperplane zero-shared ray carries zero target and
    star coefficient; for targets `7`/`8`, the height `-1` zero-shared ray and

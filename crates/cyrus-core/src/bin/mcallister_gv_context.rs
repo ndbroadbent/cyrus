@@ -283,6 +283,9 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_global_basis_lookup_height_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_transport_status_counts: BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_transport_component_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_chamber_coverage_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_shared_face_secondary_status_counts:
         BTreeMap<String, usize>,
@@ -668,6 +671,8 @@ struct LocalCygvSourceResolutionHintSummary {
     shared_two_simplex_star_union_target_minus_star_basis_nonzero: Option<Vec<(usize, i64)>>,
     shared_two_simplex_star_union_target_plus_star_basis_nonzero: Option<Vec<(usize, i64)>>,
     shared_two_simplex_star_union_global_basis_lookup: Vec<LocalCygvStarUnionGlobalBasisLookup>,
+    shared_two_simplex_star_union_transport_decomposition:
+        LocalCygvStarUnionTransportDecompositionSummary,
     shared_two_simplex_star_union_chamber_coverage_status: String,
     shared_two_simplex_star_union_chamber_covered_simplex_count: usize,
     shared_two_simplex_star_union_chamber_uncovered_point_indices: Vec<usize>,
@@ -835,6 +840,27 @@ struct LocalCygvStarUnionGlobalBasisLookup {
     opposite_global_secondary_height_pairing: Option<String>,
     opposite_error: Option<String>,
     error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvStarUnionTransportDecompositionSummary {
+    status: String,
+    component_status: String,
+    target_degree: Option<i128>,
+    target_plus_star_degree: Option<i128>,
+    opposite_star_degree: Option<i128>,
+    target_minus_star_degree: Option<i128>,
+    target_height_pairing: Option<String>,
+    target_plus_star_height_pairing: Option<String>,
+    opposite_star_height_pairing: Option<String>,
+    target_minus_star_height_pairing: Option<String>,
+    target_height_delta_vs_components: Option<String>,
+    target_minus_star_height_delta_vs_components: Option<String>,
+    target_known_qn_history_status: Option<String>,
+    target_plus_star_known_qn_history_status: Option<String>,
+    opposite_star_known_qn_history_status: Option<String>,
+    opposite_star_source_derived_gv: Option<String>,
+    target_plus_star_bounded_lower_seed_status: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -14940,6 +14966,14 @@ fn build_report(
         local_cygv_source_resolution_star_union_global_basis_lookup_height_status_counts(
             &local_cygv_source_resolution_hint_sample,
         );
+    let local_cygv_source_resolution_star_union_transport_status_counts =
+        local_cygv_source_resolution_star_union_transport_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
+    let local_cygv_source_resolution_star_union_transport_component_status_counts =
+        local_cygv_source_resolution_star_union_transport_component_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
     let local_cygv_target_relation_global_secondary_height_status_counts =
         local_cygv_target_relation_global_secondary_height_status_counts(
             &local_cygv_source_resolution_hint_sample,
@@ -15884,6 +15918,8 @@ fn build_report(
         local_cygv_source_resolution_star_union_global_basis_status_counts,
         local_cygv_source_resolution_star_union_global_basis_lookup_status_counts,
         local_cygv_source_resolution_star_union_global_basis_lookup_height_status_counts,
+        local_cygv_source_resolution_star_union_transport_status_counts,
+        local_cygv_source_resolution_star_union_transport_component_status_counts,
         local_cygv_source_resolution_star_union_chamber_coverage_status_counts,
         local_cygv_source_resolution_star_union_shared_face_secondary_status_counts,
         local_cygv_source_resolution_star_union_global_secondary_height_status_counts,
@@ -16192,6 +16228,11 @@ fn local_cygv_source_resolution_hint_summaries(
                 &star_union_relation_hint,
                 context,
             );
+            let star_union_transport_decomposition =
+                local_cygv_star_union_transport_decomposition_summary(
+                    &star_union_global_basis_lookup,
+                    context.dimension,
+                );
             let star_union_chamber_coverage = local_cygv_star_union_chamber_coverage_hint(
                 target.origin_circuit_first_witness.as_ref(),
                 &star_support_hint,
@@ -16315,6 +16356,8 @@ fn local_cygv_source_resolution_hint_summaries(
                 shared_two_simplex_star_union_target_plus_star_basis_nonzero:
                     star_union_relation_hint.target_plus_star_basis_nonzero,
                 shared_two_simplex_star_union_global_basis_lookup: star_union_global_basis_lookup,
+                shared_two_simplex_star_union_transport_decomposition:
+                    star_union_transport_decomposition,
                 shared_two_simplex_star_union_chamber_coverage_status: star_union_chamber_coverage
                     .status,
                 shared_two_simplex_star_union_chamber_covered_simplex_count:
@@ -16681,6 +16724,40 @@ fn local_cygv_source_resolution_star_union_global_basis_lookup_height_status_cou
                     .or_insert(0usize) += 1;
             }
         }
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_star_union_transport_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts
+            .entry(
+                summary
+                    .shared_two_simplex_star_union_transport_decomposition
+                    .status
+                    .clone(),
+            )
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_star_union_transport_component_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts
+            .entry(
+                summary
+                    .shared_two_simplex_star_union_transport_decomposition
+                    .component_status
+                    .clone(),
+            )
+            .or_insert(0usize) += 1;
     }
     counts
 }
@@ -20107,6 +20184,175 @@ fn local_cygv_star_union_global_basis_lookup(
     }
 }
 
+fn local_cygv_star_union_transport_decomposition_summary(
+    lookups: &[LocalCygvStarUnionGlobalBasisLookup],
+    dimension: usize,
+) -> LocalCygvStarUnionTransportDecompositionSummary {
+    let empty = |status: &str| LocalCygvStarUnionTransportDecompositionSummary {
+        status: status.to_string(),
+        component_status: "star_union_transport_components_not_evaluated".to_string(),
+        target_degree: None,
+        target_plus_star_degree: None,
+        opposite_star_degree: None,
+        target_minus_star_degree: None,
+        target_height_pairing: None,
+        target_plus_star_height_pairing: None,
+        opposite_star_height_pairing: None,
+        target_minus_star_height_pairing: None,
+        target_height_delta_vs_components: None,
+        target_minus_star_height_delta_vs_components: None,
+        target_known_qn_history_status: None,
+        target_plus_star_known_qn_history_status: None,
+        opposite_star_known_qn_history_status: None,
+        opposite_star_source_derived_gv: None,
+        target_plus_star_bounded_lower_seed_status: None,
+    };
+    let Some(target) = star_union_lookup_by_role(lookups, "target") else {
+        return empty("star_union_transport_missing_target_lookup");
+    };
+    let Some(star) = star_union_lookup_by_role(lookups, "star") else {
+        return empty("star_union_transport_missing_star_lookup");
+    };
+    let Some(target_plus_star) = star_union_lookup_by_role(lookups, "target_plus_star") else {
+        return empty("star_union_transport_missing_target_plus_star_lookup");
+    };
+    let target_minus_star = star_union_lookup_by_role(lookups, "target_minus_star");
+    let Some(target_basis) = target.basis_nonzero.as_ref() else {
+        return empty("star_union_transport_missing_target_global_basis");
+    };
+    let Some(target_plus_star_basis) = target_plus_star.basis_nonzero.as_ref() else {
+        return empty("star_union_transport_missing_target_plus_star_global_basis");
+    };
+    let Some(opposite_star_basis) = star.opposite_basis_nonzero.as_ref() else {
+        return empty("star_union_transport_missing_opposite_star_global_basis");
+    };
+    let target_dense = match dense_from_sparse(target_basis, dimension) {
+        Ok(dense) => dense,
+        Err(error) => {
+            return empty(&format!(
+                "star_union_transport_invalid_target_global_basis:{}",
+                status_error_fragment(&error)
+            ));
+        }
+    };
+    let target_plus_star_dense = match dense_from_sparse(target_plus_star_basis, dimension) {
+        Ok(dense) => dense,
+        Err(error) => {
+            return empty(&format!(
+                "star_union_transport_invalid_target_plus_star_global_basis:{}",
+                status_error_fragment(&error)
+            ));
+        }
+    };
+    let opposite_star_dense = match dense_from_sparse(opposite_star_basis, dimension) {
+        Ok(dense) => dense,
+        Err(error) => {
+            return empty(&format!(
+                "star_union_transport_invalid_opposite_star_global_basis:{}",
+                status_error_fragment(&error)
+            ));
+        }
+    };
+    let target_from_components =
+        match checked_vector_sum(&target_plus_star_dense, &opposite_star_dense) {
+            Ok(sum) => sum,
+            Err(error) => {
+                return empty(&format!(
+                    "star_union_transport_target_component_sum_error:{}",
+                    status_error_fragment(&error)
+                ));
+            }
+        };
+    let target_identity_holds = target_from_components == target_dense;
+    let target_minus_star_identity_status = match target_minus_star
+        .and_then(|lookup| lookup.basis_nonzero.as_ref().map(|basis| (lookup, basis)))
+    {
+        Some((_, target_minus_star_basis)) => {
+            match dense_from_sparse(target_minus_star_basis, dimension).and_then(
+                |target_minus_star_dense| {
+                    checked_vector_sum(&target_dense, &opposite_star_dense)
+                        .map(|sum| sum == target_minus_star_dense)
+                },
+            ) {
+                Ok(true) => "target_minus_star_equals_target_plus_opposite_star",
+                Ok(false) => "target_minus_star_identity_mismatch",
+                Err(_) => "target_minus_star_identity_error",
+            }
+        }
+        None => "target_minus_star_identity_not_evaluated_missing_projection",
+    };
+    let status = if !target_identity_holds {
+        "star_union_transport_target_identity_mismatch"
+    } else if target_minus_star_identity_status == "target_minus_star_identity_mismatch" {
+        "star_union_transport_target_minus_star_identity_mismatch"
+    } else if target_minus_star_identity_status == "target_minus_star_identity_error" {
+        "star_union_transport_target_minus_star_identity_error"
+    } else {
+        "star_union_transport_target_equals_target_plus_star_plus_opposite_star"
+    };
+    let target_height_delta_vs_components = height_delta(
+        target.global_secondary_height_pairing.as_deref(),
+        target_plus_star.global_secondary_height_pairing.as_deref(),
+        star.opposite_global_secondary_height_pairing.as_deref(),
+    );
+    let target_minus_star_height_delta_vs_components = target_minus_star.and_then(|lookup| {
+        height_delta(
+            lookup.global_secondary_height_pairing.as_deref(),
+            target.global_secondary_height_pairing.as_deref(),
+            star.opposite_global_secondary_height_pairing.as_deref(),
+        )
+    });
+    let opposite_star_known_qn_history_status = star.opposite_known_qn_history_status.clone();
+    let target_plus_star_known_qn_history_status =
+        Some(target_plus_star.known_qn_history_status.clone());
+    let component_status = format!(
+        "target_plus_star:{}__opposite_star:{}",
+        target_plus_star_known_qn_history_status
+            .as_deref()
+            .unwrap_or("missing_target_plus_star_status"),
+        opposite_star_known_qn_history_status
+            .as_deref()
+            .unwrap_or("missing_opposite_star_status")
+    );
+    LocalCygvStarUnionTransportDecompositionSummary {
+        status: status.to_string(),
+        component_status,
+        target_degree: target.degree,
+        target_plus_star_degree: target_plus_star.degree,
+        opposite_star_degree: star.opposite_degree,
+        target_minus_star_degree: target_minus_star.and_then(|lookup| lookup.degree),
+        target_height_pairing: target.global_secondary_height_pairing.clone(),
+        target_plus_star_height_pairing: target_plus_star.global_secondary_height_pairing.clone(),
+        opposite_star_height_pairing: star.opposite_global_secondary_height_pairing.clone(),
+        target_minus_star_height_pairing: target_minus_star
+            .and_then(|lookup| lookup.global_secondary_height_pairing.clone()),
+        target_height_delta_vs_components,
+        target_minus_star_height_delta_vs_components,
+        target_known_qn_history_status: Some(target.known_qn_history_status.clone()),
+        target_plus_star_known_qn_history_status,
+        opposite_star_known_qn_history_status,
+        opposite_star_source_derived_gv: star.opposite_source_derived_gv.clone(),
+        target_plus_star_bounded_lower_seed_status: target_plus_star
+            .bounded_lower_seed_decomposition
+            .as_ref()
+            .map(|summary| summary.status.clone()),
+    }
+}
+
+fn star_union_lookup_by_role<'a>(
+    lookups: &'a [LocalCygvStarUnionGlobalBasisLookup],
+    role: &str,
+) -> Option<&'a LocalCygvStarUnionGlobalBasisLookup> {
+    lookups.iter().find(|lookup| lookup.role == role)
+}
+
+fn height_delta(total: Option<&str>, first: Option<&str>, second: Option<&str>) -> Option<String> {
+    let total = total.and_then(|value| parse_f64_or_fraction(value).ok())?;
+    let first = first.and_then(|value| parse_f64_or_fraction(value).ok())?;
+    let second = second.and_then(|value| parse_f64_or_fraction(value).ok())?;
+    Some((total - first - second).to_string())
+}
+
 fn global_basis_known_qn_history(
     basis_dense: &[i64],
     context: &ValidatedContext<'_>,
@@ -22975,6 +23221,26 @@ mod tests {
             shared_two_simplex_star_union_target_minus_star_basis_nonzero: None,
             shared_two_simplex_star_union_target_plus_star_basis_nonzero: None,
             shared_two_simplex_star_union_global_basis_lookup: Vec::new(),
+            shared_two_simplex_star_union_transport_decomposition:
+                LocalCygvStarUnionTransportDecompositionSummary {
+                    status: "test".to_string(),
+                    component_status: "test".to_string(),
+                    target_degree: None,
+                    target_plus_star_degree: None,
+                    opposite_star_degree: None,
+                    target_minus_star_degree: None,
+                    target_height_pairing: None,
+                    target_plus_star_height_pairing: None,
+                    opposite_star_height_pairing: None,
+                    target_minus_star_height_pairing: None,
+                    target_height_delta_vs_components: None,
+                    target_minus_star_height_delta_vs_components: None,
+                    target_known_qn_history_status: None,
+                    target_plus_star_known_qn_history_status: None,
+                    opposite_star_known_qn_history_status: None,
+                    opposite_star_source_derived_gv: None,
+                    target_plus_star_bounded_lower_seed_status: None,
+                },
             shared_two_simplex_star_union_chamber_coverage_status: "test".to_string(),
             shared_two_simplex_star_union_chamber_covered_simplex_count: 0,
             shared_two_simplex_star_union_chamber_uncovered_point_indices: Vec::new(),
@@ -25610,6 +25876,164 @@ mod tests {
                 .unwrap();
 
         assert_eq!(pairing.get(), 5.0);
+    }
+
+    #[test]
+    fn star_union_transport_decomposition_tracks_known_opposite_star() {
+        let lookup = |role: &str,
+                      basis_nonzero: Option<Vec<(usize, i64)>>,
+                      degree: Option<i128>,
+                      height: Option<&str>,
+                      known: &str,
+                      opposite_basis_nonzero: Option<Vec<(usize, i64)>>,
+                      opposite_degree: Option<i128>,
+                      opposite_height: Option<&str>,
+                      opposite_known: Option<&str>,
+                      opposite_source_gv: Option<&str>,
+                      bounded_status: Option<&str>| {
+            LocalCygvStarUnionGlobalBasisLookup {
+                role: role.to_string(),
+                basis_nonzero,
+                degree,
+                global_secondary_height_status: height
+                    .map(|_| "global_basis_secondary_height_positive")
+                    .unwrap_or("global_basis_secondary_height_not_evaluated")
+                    .to_string(),
+                global_secondary_height_pairing: height.map(str::to_string),
+                known_qn_history_status: known.to_string(),
+                toric_gv: None,
+                source_derived_gv: None,
+                source_class_status: None,
+                source_ray_ambient_nonzero: None,
+                lower_seed_sum_decomposition: None,
+                bounded_lower_seed_decomposition: bounded_status.map(|status| {
+                    CygvBoundedSeedDecompositionSummary {
+                        max_terms: 4,
+                        status: status.to_string(),
+                        term_count: None,
+                        terms_nonzero: None,
+                        diamond_element_count: None,
+                        diamond_status: None,
+                        diamond_gv: None,
+                        diamond_error: None,
+                        diamond_qn_trace_polynomial_count: None,
+                        diamond_target_qn_trace_status: None,
+                        diamond_target_qn_trace_term_count: None,
+                        diamond_qn_trace_sample: Vec::new(),
+                        diamond_gw_coefficient_trace_count: None,
+                        diamond_gw_noninteger_candidate_count: None,
+                        diamond_gw_noninteger_known_qn_history_status_counts: BTreeMap::new(),
+                        diamond_gw_noninteger_source_class_status_counts: BTreeMap::new(),
+                        diamond_gw_noninteger_candidate_sample: Vec::new(),
+                        diamond_gw_coefficient_trace_error: None,
+                        diamond_target_gw_coefficient_status: None,
+                        diamond_target_gw_instanton_coefficient: None,
+                        diamond_target_gw_candidate: None,
+                    }
+                }),
+                lower_seed_decomposition_error: None,
+                opposite_basis_nonzero,
+                opposite_degree,
+                opposite_known_qn_history_status: opposite_known.map(str::to_string),
+                opposite_toric_gv: None,
+                opposite_source_derived_gv: opposite_source_gv.map(str::to_string),
+                opposite_source_class_status: None,
+                opposite_source_ray_ambient_nonzero: None,
+                opposite_lower_seed_sum_decomposition: None,
+                opposite_bounded_lower_seed_decomposition: None,
+                opposite_lower_seed_decomposition_error: None,
+                opposite_global_secondary_height_status: opposite_height
+                    .map(|_| "global_basis_secondary_height_positive".to_string()),
+                opposite_global_secondary_height_pairing: opposite_height.map(str::to_string),
+                opposite_error: None,
+                error: None,
+            }
+        };
+        let lookups = vec![
+            lookup(
+                "target",
+                Some(vec![(0, 2), (1, 1)]),
+                Some(10),
+                Some("3"),
+                "unknown_not_toric_covered",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ),
+            lookup(
+                "star",
+                Some(vec![(0, -1)]),
+                Some(-4),
+                Some("-1"),
+                "unknown_not_toric_covered",
+                Some(vec![(0, 1)]),
+                Some(4),
+                Some("1"),
+                Some("known_nonzero_source_gv"),
+                Some("1"),
+                None,
+            ),
+            lookup(
+                "target_plus_star",
+                Some(vec![(0, 1), (1, 1)]),
+                Some(6),
+                Some("2"),
+                "unknown_not_toric_covered",
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some("not_found_up_to_4"),
+            ),
+            lookup(
+                "target_minus_star",
+                Some(vec![(0, 3), (1, 1)]),
+                Some(14),
+                Some("4"),
+                "unknown_not_toric_covered",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ),
+        ];
+
+        let summary = local_cygv_star_union_transport_decomposition_summary(&lookups, 2);
+
+        assert_eq!(
+            summary.status,
+            "star_union_transport_target_equals_target_plus_star_plus_opposite_star"
+        );
+        assert_eq!(
+            summary.component_status,
+            "target_plus_star:unknown_not_toric_covered__opposite_star:known_nonzero_source_gv"
+        );
+        assert_eq!(
+            summary.target_height_delta_vs_components.as_deref(),
+            Some("0")
+        );
+        assert_eq!(
+            summary
+                .target_minus_star_height_delta_vs_components
+                .as_deref(),
+            Some("0")
+        );
+        assert_eq!(
+            summary.opposite_star_source_derived_gv.as_deref(),
+            Some("1")
+        );
+        assert_eq!(
+            summary
+                .target_plus_star_bounded_lower_seed_status
+                .as_deref(),
+            Some("not_found_up_to_4")
+        );
     }
 
     #[test]
