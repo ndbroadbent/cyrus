@@ -3295,18 +3295,19 @@ This rules out that naive unit-tensor normalization as the missing source, but
 it is not a promotable corrected-chamber GV value because the one-parameter
 compression is not a compact threefold hypersurface shape and the real local
 intersection tensor, chamber certificate, and semigroup remain uncertified.
-A temporary synthetic context,
-`/tmp/cyrus_context_synthetic_target8_star_union_target_plus.json`, then treats
-target `8`'s degree-6 `target+star` class as the sole path-history target and
-runs the existing bounded cygv-style closure probe. With
-`--closure-generation-limit 1 --element-limit 150000`, the row has `463` seed
-rows, `355` reduced seeds, `65538` first-layer closure elements, and
-`target_in_closure=false`; no predecessor differences are found in the
-previous-degree window. Raising the closure limit to `2` with the same element
-cap exceeded a `180s` guard before writing a report. Thus the degree-6 chamber
-row is already beyond the cheap first-layer history; resolving it still
-requires the certified corrected-chamber semigroup/history, not a small
-visible-generator shortcut.
+The star-union report now exposes that same check directly through
+`--probe-star-union-path-history`, without requiring a synthetic context. On
+`/private/tmp/cyrus_corrected_chamber_gv_context_current_star_samples.json`,
+the target `8` run with `--closure-generation-limit 1 --element-limit 150000
+--lower-seed-pair-limit 2048` completed in `16.55s`: the degree-6
+`target+star` row has `463` seed rows, `355` reduced seeds, `65538`
+first-layer closure elements, and `target_in_closure=false`; the lower-seed
+decomposition remains `not_found_up_to_4`, and the top-level status bucket is
+`stopped_generation_limit_1`. The earlier synthetic closure-limit-2 run with
+the same element cap exceeded a `180s` guard before writing a report. Thus the
+degree-6 chamber row is already beyond the cheap first-layer history; resolving
+it still requires the certified corrected-chamber semigroup/history, not a
+small visible-generator shortcut.
 Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
 serializes a role-tagged height profile over the full union support. For
 targets `3`/`6`, the off-hyperplane zero-shared ray has height `-1` but zero

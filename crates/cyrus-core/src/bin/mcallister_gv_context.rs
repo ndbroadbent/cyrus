@@ -279,6 +279,8 @@ struct ContextReport {
     local_cygv_source_resolution_star_union_global_basis_lookup_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_chamber_coverage_status_counts: BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts:
+        BTreeMap<String, usize>,
     local_phase_chamber_membership_certificate_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_hint_sample: Vec<LocalCygvSourceResolutionHintSummary>,
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
@@ -660,6 +662,8 @@ struct LocalCygvSourceResolutionHintSummary {
     shared_two_simplex_star_union_target_plus_star_unit_tensor_candidate_gv: Option<String>,
     shared_two_simplex_star_union_target_plus_star_unit_tensor_probe_status: String,
     shared_two_simplex_star_union_target_plus_star_unit_tensor_probe_error: Option<String>,
+    shared_two_simplex_star_union_target_plus_star_path_history_probe:
+        Option<LocalCygvStarUnionPathHistoryProbe>,
     zero_relation_shared_two_simplex_points: Vec<usize>,
     zero_relation_shared_two_simplex_point_samples: Vec<OriginCircuitRelationPointSample>,
     resolved_shared_support_status: String,
@@ -710,6 +714,23 @@ struct LocalCygvStarUnionOffHeightLookup {
     known_qn_history_status: String,
     toric_gv: Option<String>,
     source_derived_gv: Option<String>,
+    error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvStarUnionPathHistoryProbe {
+    status: String,
+    degree: Option<i128>,
+    seed_count: Option<usize>,
+    reduced_seed_count: Option<usize>,
+    closure_element_count: Option<usize>,
+    closure_generation_counts: Vec<CygvClosureGenerationCount>,
+    closure_degree_counts: BTreeMap<i128, usize>,
+    target_in_closure: Option<bool>,
+    lower_seed_decomposition_status: String,
+    lower_seed_decomposition_term_count: Option<usize>,
+    lower_seed_decomposition_terms_nonzero: Option<Vec<Vec<(usize, i64)>>>,
+    lower_seed_decomposition_search_stats: Option<LowerSeedDecompositionSearchStats>,
     error: Option<String>,
 }
 
@@ -14655,6 +14676,7 @@ fn build_report(
     target_extremal_max_degree: Option<i128>,
     measure_cygv_semigroups: bool,
     probe_cygv_path_history: bool,
+    probe_star_union_path_history: bool,
     run_lower_seed_diamonds: bool,
     run_path_support_generators: bool,
     measure_cygv_degree_ladder: bool,
@@ -14751,8 +14773,18 @@ fn build_report(
         local_cygv_source_resolution_star_union_chamber_coverage_status_counts(&targets);
     let local_phase_chamber_membership_certificate_status_counts =
         local_phase_chamber_membership_certificate_status_counts(&targets, validated);
-    let local_cygv_source_resolution_hint_sample =
-        local_cygv_source_resolution_hint_summaries(&targets, validated);
+    let local_cygv_source_resolution_hint_sample = local_cygv_source_resolution_hint_summaries(
+        &targets,
+        validated,
+        probe_star_union_path_history,
+        element_limit,
+        lower_seed_pair_limit,
+        closure_generation_limit,
+    );
+    let local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts =
+        local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
     let missing_local_cygv_missing_source_input_counts = local_cygv_missing_source_input_counts(
         targets
             .iter()
@@ -15681,6 +15713,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_global_basis_status_counts,
         local_cygv_source_resolution_star_union_global_basis_lookup_status_counts,
         local_cygv_source_resolution_star_union_chamber_coverage_status_counts,
+        local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts,
         local_phase_chamber_membership_certificate_status_counts,
         local_cygv_source_resolution_hint_sample,
         local_cygv_target_candidate_status_counts,
@@ -15918,6 +15951,10 @@ fn local_cygv_one_parameter_family_status_counts<'a>(
 fn local_cygv_source_resolution_hint_summaries(
     targets: &[TargetReport],
     context: &ValidatedContext<'_>,
+    probe_star_union_path_history: bool,
+    element_limit: usize,
+    lower_seed_pair_limit: usize,
+    closure_generation_limit: Option<usize>,
 ) -> Vec<LocalCygvSourceResolutionHintSummary> {
     targets
         .iter()
@@ -15962,6 +15999,17 @@ fn local_cygv_source_resolution_hint_summaries(
             let star_union_target_plus_star_unit_tensor_probe =
                 local_cygv_star_union_target_plus_star_unit_tensor_probe(
                     &star_union_relation_hint.target_plus_star,
+                );
+            let star_union_target_plus_star_path_history_probe =
+                local_cygv_star_union_target_plus_star_path_history_probe(
+                    star_union_relation_hint
+                        .target_plus_star_basis_nonzero
+                        .as_ref(),
+                    context,
+                    probe_star_union_path_history,
+                    element_limit,
+                    lower_seed_pair_limit,
+                    closure_generation_limit,
                 );
             let star_union_global_basis_lookup = local_cygv_star_union_global_basis_lookup_sample(
                 &star_union_relation_hint,
@@ -16088,6 +16136,8 @@ fn local_cygv_source_resolution_hint_summaries(
                     star_union_target_plus_star_unit_tensor_probe.status,
                 shared_two_simplex_star_union_target_plus_star_unit_tensor_probe_error:
                     star_union_target_plus_star_unit_tensor_probe.error,
+                shared_two_simplex_star_union_target_plus_star_path_history_probe:
+                    star_union_target_plus_star_path_history_probe,
                 zero_relation_shared_two_simplex_points:
                     origin_circuit_zero_relation_shared_two_simplex_points(
                         target.origin_circuit_first_witness.as_ref(),
@@ -16390,6 +16440,20 @@ fn local_cygv_source_resolution_star_union_chamber_coverage_status_counts<'a>(
         *counts.entry(coverage.status).or_insert(0usize) += 1;
     }
     counts
+}
+
+fn local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        summaries.iter().map(|summary| {
+            summary
+                .shared_two_simplex_star_union_target_plus_star_path_history_probe
+                .as_ref()
+                .map(|probe| probe.status.as_str())
+        }),
+        "not_run",
+    )
 }
 
 fn local_cygv_source_resolution_resolved_shared_chamber_certificate_status_counts<'a>(
@@ -17436,6 +17500,188 @@ fn local_cygv_star_union_target_plus_star_unit_tensor_probe(
             error: Some(error),
         },
     }
+}
+
+fn local_cygv_star_union_target_plus_star_path_history_probe(
+    target_plus_star_basis_nonzero: Option<&Vec<(usize, i64)>>,
+    context: &ValidatedContext<'_>,
+    run_probe: bool,
+    element_limit: usize,
+    lower_seed_pair_limit: usize,
+    closure_generation_limit: Option<usize>,
+) -> Option<LocalCygvStarUnionPathHistoryProbe> {
+    if !run_probe {
+        return None;
+    }
+
+    let empty = |status: &str,
+                 degree: Option<i128>,
+                 seed_count: Option<usize>,
+                 reduced_seed_count: Option<usize>,
+                 error: Option<String>|
+     -> LocalCygvStarUnionPathHistoryProbe {
+        LocalCygvStarUnionPathHistoryProbe {
+            status: status.to_string(),
+            degree,
+            seed_count,
+            reduced_seed_count,
+            closure_element_count: None,
+            closure_generation_counts: Vec::new(),
+            closure_degree_counts: BTreeMap::new(),
+            target_in_closure: None,
+            lower_seed_decomposition_status: status.to_string(),
+            lower_seed_decomposition_term_count: None,
+            lower_seed_decomposition_terms_nonzero: None,
+            lower_seed_decomposition_search_stats: None,
+            error,
+        }
+    };
+
+    let Some(target_plus_star_basis_nonzero) = target_plus_star_basis_nonzero else {
+        return Some(empty(
+            "skipped_missing_target_plus_star_global_basis_projection",
+            None,
+            None,
+            None,
+            None,
+        ));
+    };
+    let target = match dense_from_sparse(target_plus_star_basis_nonzero, context.dimension) {
+        Ok(target) => target,
+        Err(error) => {
+            return Some(empty(
+                "error_invalid_target_plus_star_global_basis_projection",
+                None,
+                None,
+                None,
+                Some(error),
+            ));
+        }
+    };
+    let target_degree = match curve_degree(&target, context.grading) {
+        Ok(degree) => degree,
+        Err(error) => {
+            return Some(empty(
+                "error_invalid_target_plus_star_degree",
+                None,
+                None,
+                None,
+                Some(error),
+            ));
+        }
+    };
+    if target_degree <= 0 {
+        return Some(empty(
+            "skipped_nonpositive_target_plus_star_degree",
+            Some(target_degree),
+            None,
+            None,
+            None,
+        ));
+    }
+
+    let mut seeds = Vec::new();
+    let mut seen = HashSet::new();
+    for ray in context.degree_bounded_rays {
+        let degree = match curve_degree(ray, context.grading) {
+            Ok(degree) => degree,
+            Err(error) => {
+                return Some(empty(
+                    "error_invalid_degree_bounded_seed_degree",
+                    Some(target_degree),
+                    None,
+                    None,
+                    Some(error),
+                ));
+            }
+        };
+        if degree <= 0 || degree > target_degree {
+            continue;
+        }
+        if seen.insert(ray.clone()) {
+            seeds.push(ray.clone());
+        }
+    }
+    if seeds.is_empty() {
+        return Some(empty(
+            "skipped_empty_target_plus_star_seed_set",
+            Some(target_degree),
+            Some(0),
+            Some(0),
+            None,
+        ));
+    }
+    if seeds.len() > lower_seed_pair_limit {
+        return Some(empty(
+            &format!("skipped_seed_pair_limit_{lower_seed_pair_limit}"),
+            Some(target_degree),
+            Some(seeds.len()),
+            None,
+            None,
+        ));
+    }
+
+    let reduced_seed_count = match cygv_pair_reduced_seed_generators(&seeds) {
+        Ok(reduced_seeds) => reduced_seeds.len(),
+        Err(error) => {
+            return Some(empty(
+                "error_cygv_seed_reduction_failed",
+                Some(target_degree),
+                Some(seeds.len()),
+                None,
+                Some(error.to_string()),
+            ));
+        }
+    };
+    let lower_seed_decomposition = lower_seed_decomposition_probe(
+        &target,
+        &seeds,
+        STAR_UNION_LOWER_SEED_DECOMPOSITION_MAX_TERMS,
+        lower_seed_pair_limit,
+        Some(context.grading),
+    );
+    let closure = match bounded_cygv_semigroup_closure(
+        &seeds,
+        context.grading,
+        target_degree,
+        element_limit,
+        closure_generation_limit,
+    ) {
+        Ok(closure) => closure,
+        Err(error) => {
+            return Some(LocalCygvStarUnionPathHistoryProbe {
+                status: "error_bounded_closure_failed".to_string(),
+                degree: Some(target_degree),
+                seed_count: Some(seeds.len()),
+                reduced_seed_count: Some(reduced_seed_count),
+                closure_element_count: None,
+                closure_generation_counts: Vec::new(),
+                closure_degree_counts: BTreeMap::new(),
+                target_in_closure: None,
+                lower_seed_decomposition_status: lower_seed_decomposition.status,
+                lower_seed_decomposition_term_count: lower_seed_decomposition.term_count,
+                lower_seed_decomposition_terms_nonzero: lower_seed_decomposition.terms_nonzero,
+                lower_seed_decomposition_search_stats: lower_seed_decomposition.search_stats,
+                error: Some(error),
+            });
+        }
+    };
+
+    Some(LocalCygvStarUnionPathHistoryProbe {
+        status: closure.status,
+        degree: Some(target_degree),
+        seed_count: Some(seeds.len()),
+        reduced_seed_count: Some(reduced_seed_count),
+        closure_element_count: Some(closure.elements.len()),
+        closure_generation_counts: closure.generation_counts,
+        closure_degree_counts: closure.degree_counts,
+        target_in_closure: Some(closure.elements.contains(&target)),
+        lower_seed_decomposition_status: lower_seed_decomposition.status,
+        lower_seed_decomposition_term_count: lower_seed_decomposition.term_count,
+        lower_seed_decomposition_terms_nonzero: lower_seed_decomposition.terms_nonzero,
+        lower_seed_decomposition_search_stats: lower_seed_decomposition.search_stats,
+        error: lower_seed_decomposition.error,
+    })
 }
 
 fn local_cygv_star_target_relation_hint(
@@ -21107,7 +21353,7 @@ fn selected_target_indices(
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--trace-support-overlap-qn] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--certify-origin-witness-domains] [--origin-support-certificate-limit N] [--run-origin-witness-cygv] [--origin-witness-cygv-generator-limit N] [--scan-origin-witness-span-closure] [--origin-witness-span-closure-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--supporting-face-lp-anchor-attempts N] [--supporting-face-lp-cutting-rounds N] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--scan-local-integer-tensors] [--local-tensor-scan-bound N] [--element-limit N] [--lower-seed-pair-limit N] [--closure-generation-limit N] [--out path | --per-target-out-dir path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
+            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--trace-support-overlap-qn] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--certify-origin-witness-domains] [--origin-support-certificate-limit N] [--run-origin-witness-cygv] [--origin-witness-cygv-generator-limit N] [--scan-origin-witness-span-closure] [--origin-witness-span-closure-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--probe-star-union-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--supporting-face-lp-anchor-attempts N] [--supporting-face-lp-cutting-rounds N] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--scan-local-integer-tensors] [--local-tensor-scan-bound N] [--element-limit N] [--lower-seed-pair-limit N] [--closure-generation-limit N] [--out path | --per-target-out-dir path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
         );
         std::process::exit(2);
     };
@@ -21135,6 +21381,7 @@ fn main() {
     let target_extremal_max_degree = parse_arg_value::<i128>("--target-extremal-max-degree");
     let measure_cygv_semigroups = parse_flag("--measure-cygv-semigroups");
     let probe_cygv_path_history = parse_flag("--probe-cygv-path-history");
+    let probe_star_union_path_history = parse_flag("--probe-star-union-path-history");
     let run_lower_seed_diamonds = parse_flag("--run-lower-seed-diamonds");
     let run_path_support_generators = parse_flag("--run-path-support-generators");
     let supporting_face_lp_defaults = SupportingMoriFaceLpSearchOptions::default();
@@ -21207,6 +21454,7 @@ fn main() {
                 target_extremal_max_degree,
                 measure_cygv_semigroups,
                 probe_cygv_path_history,
+                probe_star_union_path_history,
                 run_lower_seed_diamonds,
                 run_path_support_generators,
                 measure_cygv_degree_ladder,
@@ -21254,6 +21502,7 @@ fn main() {
         target_extremal_max_degree,
         measure_cygv_semigroups,
         probe_cygv_path_history,
+        probe_star_union_path_history,
         run_lower_seed_diamonds,
         run_path_support_generators,
         measure_cygv_degree_ladder,
@@ -21353,6 +21602,153 @@ mod tests {
             project_star_union_relation_to_global_basis(&point_indices, &coefficients, &q_matrix)
                 .unwrap(),
             Some(vec![2, 3])
+        );
+    }
+
+    #[test]
+    fn star_union_target_plus_star_path_history_probe_is_opt_in() {
+        let stats = MissingGvTargetStats {
+            target_count: 0,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: Vec::new(),
+        };
+        let grading = vec![1, 1];
+        let q_matrix = vec![vec![1, 0], vec![0, 1]];
+        let degree_bounded_rays = vec![vec![1, 0], vec![0, 1]];
+        let intersection = Intersection::new(2);
+        let context = ValidatedContext {
+            dimension: 2,
+            degree_bound: 2,
+            q_cols: 2,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: None,
+            covered_toric_gv_by_basis: HashMap::new(),
+            source_derived_gv_by_basis: HashMap::new(),
+            intersection,
+            stats: &stats,
+            uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
+        };
+        let target_plus_star = vec![(0, 1), (1, 1)];
+
+        assert!(
+            local_cygv_star_union_target_plus_star_path_history_probe(
+                Some(&target_plus_star),
+                &context,
+                false,
+                16,
+                DEFAULT_CYGV_LOWER_SEED_PAIR_LIMIT,
+                None,
+            )
+            .is_none()
+        );
+
+        let probe = local_cygv_star_union_target_plus_star_path_history_probe(
+            Some(&target_plus_star),
+            &context,
+            true,
+            16,
+            DEFAULT_CYGV_LOWER_SEED_PAIR_LIMIT,
+            None,
+        )
+        .expect("enabled probe should serialize a path-history summary");
+
+        assert_eq!(probe.status, "completed_bounded_closure");
+        assert_eq!(probe.degree, Some(2));
+        assert_eq!(probe.seed_count, Some(2));
+        assert_eq!(probe.reduced_seed_count, Some(2));
+        assert_eq!(probe.target_in_closure, Some(true));
+        assert_eq!(probe.closure_element_count, Some(6));
+        assert_eq!(
+            probe.lower_seed_decomposition_status,
+            "found_lower_seed_decomposition"
+        );
+        assert_eq!(probe.lower_seed_decomposition_term_count, Some(2));
+
+        let summary = LocalCygvSourceResolutionHintSummary {
+            target_index: 0,
+            degree: 2,
+            status: "test".to_string(),
+            global_secondary_cone_height_certificate_status: None,
+            local_phase_chamber_membership_certificate_status: "test".to_string(),
+            zero_shared_affine_projection_status: "test".to_string(),
+            relation_support_affine_hyperplane: None,
+            zero_relation_shared_two_simplex_affine_heights: Vec::new(),
+            shared_two_simplex_star_status: "test".to_string(),
+            shared_two_simplex_star_simplices: Vec::new(),
+            shared_two_simplex_star_extra_points: Vec::new(),
+            shared_two_simplex_star_extra_point_samples: Vec::new(),
+            shared_two_simplex_star_extra_affine_heights: Vec::new(),
+            shared_two_simplex_star_support_status: "test".to_string(),
+            shared_two_simplex_star_support_point_indices: Vec::new(),
+            shared_two_simplex_star_support_affine_rank: None,
+            shared_two_simplex_star_support_charge_basis: None,
+            shared_two_simplex_star_support_charge_row_sums: None,
+            shared_two_simplex_star_reduction_status: "test".to_string(),
+            shared_two_simplex_star_reduced_zero_charge_points: Vec::new(),
+            shared_two_simplex_star_reduced_charge_row: None,
+            shared_two_simplex_star_reduced_unit_tensor_candidate_gv: None,
+            shared_two_simplex_star_reduced_unit_tensor_probe_status: "test".to_string(),
+            shared_two_simplex_star_reduced_unit_tensor_probe_error: None,
+            shared_two_simplex_star_target_relation_status: "test".to_string(),
+            shared_two_simplex_star_target_relation_missing_points: Vec::new(),
+            shared_two_simplex_star_target_relation_extra_star_points: Vec::new(),
+            shared_two_simplex_star_target_relation_coordinates: None,
+            shared_two_simplex_star_union_status: "test".to_string(),
+            shared_two_simplex_star_union_point_indices: Vec::new(),
+            shared_two_simplex_star_union_affine_rank: None,
+            shared_two_simplex_star_union_charge_basis: None,
+            shared_two_simplex_star_union_affine_height_profile: Vec::new(),
+            shared_two_simplex_star_union_off_height_lookup: Vec::new(),
+            shared_two_simplex_star_union_target_coordinates: None,
+            shared_two_simplex_star_union_target_rational_coordinates: None,
+            shared_two_simplex_star_union_target_rational_denominators: None,
+            shared_two_simplex_star_union_star_coordinates: None,
+            shared_two_simplex_star_union_star_rational_coordinates: None,
+            shared_two_simplex_star_union_star_rational_denominators: None,
+            shared_two_simplex_star_union_target_minus_star_coordinates: None,
+            shared_two_simplex_star_union_target_plus_star_coordinates: None,
+            shared_two_simplex_star_union_global_basis_status: "test".to_string(),
+            shared_two_simplex_star_union_target_basis_nonzero: None,
+            shared_two_simplex_star_union_star_basis_nonzero: None,
+            shared_two_simplex_star_union_target_minus_star_basis_nonzero: None,
+            shared_two_simplex_star_union_target_plus_star_basis_nonzero: None,
+            shared_two_simplex_star_union_global_basis_lookup: Vec::new(),
+            shared_two_simplex_star_union_chamber_coverage_status: "test".to_string(),
+            shared_two_simplex_star_union_chamber_covered_simplex_count: 0,
+            shared_two_simplex_star_union_chamber_uncovered_point_indices: Vec::new(),
+            shared_two_simplex_star_union_target_minus_star: Vec::new(),
+            shared_two_simplex_star_union_target_plus_star: Vec::new(),
+            shared_two_simplex_star_union_target_plus_star_unit_tensor_candidate_gv: None,
+            shared_two_simplex_star_union_target_plus_star_unit_tensor_probe_status: "test"
+                .to_string(),
+            shared_two_simplex_star_union_target_plus_star_unit_tensor_probe_error: None,
+            shared_two_simplex_star_union_target_plus_star_path_history_probe: Some(probe),
+            zero_relation_shared_two_simplex_points: Vec::new(),
+            zero_relation_shared_two_simplex_point_samples: Vec::new(),
+            resolved_shared_support_status: "test".to_string(),
+            resolved_shared_support_affine_rank: None,
+            resolved_shared_support_point_indices: Vec::new(),
+            resolved_shared_support_charge_basis: None,
+            resolved_shared_support_charge_row_sums: None,
+            resolved_shared_chamber_certificate_status: "test".to_string(),
+            resolved_shared_chamber_certificate_hyperplane_count: None,
+            resolved_shared_chamber_certificate_min_pairing: None,
+            resolved_shared_chamber_certificate_max_pairing: None,
+            resolved_shared_chamber_certificate_strictly_inside: None,
+            relation_support_point_indices: Vec::new(),
+            local_phase_q_matrix: None,
+            local_one_parameter_family_status: None,
+        };
+
+        assert_eq!(
+            local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts(&[
+                summary
+            ]),
+            BTreeMap::from([("completed_bounded_closure".to_string(), 1)])
         );
     }
 
