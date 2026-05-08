@@ -258,7 +258,11 @@ run pass. Any remaining mismatch must be explicit and localizable.
    `integer_nonzero_gv`, `integer_zero_or_absent_gv`, and
    `blocked_noninteger_gw_candidates` candidate statuses. Thus known leaves
    alone are not a sufficient promotion rule; the bounded diamond trace is the
-   next gate.
+   next gate. The lower-seed predecessor split report now joins each known side
+   with the bounded-diamond status of the unknown side, so target-level
+   candidate pairs can be read directly. Fresh target-6 and target-8 smokes
+   show the expected split between known-source/known-toric partners and
+   bounded integer-nonzero, zero/absent, or noninteger-blocked composites.
    The parent-only classifications now include parent-path-support runtime
    lookups from the same `cygv` run. On the regenerated target 7 report, the
    generated degree-10 side term is a real parent-domain nonzero object

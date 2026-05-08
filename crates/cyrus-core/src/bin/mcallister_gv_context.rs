@@ -362,6 +362,7 @@ struct ContextReport {
     cygv_lower_seed_predecessor_candidate_count_counts: BTreeMap<String, usize>,
     cygv_lower_seed_predecessor_degree_split_counts: BTreeMap<String, usize>,
     cygv_lower_seed_predecessor_known_qn_history_pair_status_counts: BTreeMap<String, usize>,
+    cygv_lower_seed_predecessor_bounded_candidate_pair_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_unknown_candidate_unique_count: usize,
     cygv_lower_seed_unknown_candidate_occurrence_count: usize,
     cygv_lower_seed_unknown_candidate_degree_counts: BTreeMap<i128, usize>,
@@ -14535,6 +14536,13 @@ fn build_report(
         cygv_lower_seed_unknown_candidate_bounded_seed_diamond_candidate_status_counts(
             &cygv_lower_seed_unknown_candidate_sample,
         );
+    let cygv_lower_seed_predecessor_bounded_candidate_pair_status_counts =
+        cygv_lower_seed_predecessor_bounded_candidate_pair_status_counts(
+            targets
+                .iter()
+                .map(|target| target.cygv_path_history_probe.as_ref()),
+            &cygv_lower_seed_unknown_candidate_sample,
+        );
     let cygv_lower_seed_diamond_status_counts = optional_status_counts(
         targets.iter().map(|target| {
             target
@@ -14997,6 +15005,7 @@ fn build_report(
         cygv_lower_seed_predecessor_candidate_count_counts,
         cygv_lower_seed_predecessor_degree_split_counts,
         cygv_lower_seed_predecessor_known_qn_history_pair_status_counts,
+        cygv_lower_seed_predecessor_bounded_candidate_pair_status_counts,
         cygv_lower_seed_unknown_candidate_unique_count,
         cygv_lower_seed_unknown_candidate_occurrence_count,
         cygv_lower_seed_unknown_candidate_degree_counts,
@@ -18407,6 +18416,70 @@ fn cygv_lower_seed_predecessor_known_qn_history_pair_status_counts<'a>(
         }
     }
     counts
+}
+
+fn cygv_lower_seed_predecessor_bounded_candidate_pair_status_counts<'a>(
+    probes: impl IntoIterator<Item = Option<&'a CygvPathHistoryProbe>>,
+    summaries: &[CygvLowerSeedUnknownCandidateSummary],
+) -> BTreeMap<String, usize> {
+    let summary_by_curve = summaries
+        .iter()
+        .map(|summary| (summary.curve_nonzero.clone(), summary))
+        .collect::<BTreeMap<_, _>>();
+    let mut counts = BTreeMap::new();
+    for probe in probes.into_iter().flatten() {
+        for candidate in &probe.lower_seed_predecessor_candidate_sample {
+            let predecessor_status = lower_seed_predecessor_bounded_candidate_side_status(
+                &candidate.predecessor_known_qn_history_status,
+                &candidate.predecessor_nonzero,
+                &summary_by_curve,
+            );
+            let difference_status = lower_seed_predecessor_bounded_candidate_side_status(
+                &candidate.difference_known_qn_history_status,
+                &candidate.difference_nonzero,
+                &summary_by_curve,
+            );
+            *counts
+                .entry(format!(
+                    "predecessor_{predecessor_status}__difference_{difference_status}"
+                ))
+                .or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn lower_seed_predecessor_bounded_candidate_side_status(
+    known_qn_history_status: &str,
+    curve_nonzero: &[(usize, i64)],
+    summary_by_curve: &BTreeMap<Vec<(usize, i64)>, &CygvLowerSeedUnknownCandidateSummary>,
+) -> String {
+    if known_qn_history_status != "unknown_not_toric_covered" {
+        return known_qn_history_status.to_string();
+    }
+    let Some(summary) = summary_by_curve.get(curve_nonzero) else {
+        return "unknown_missing_lower_seed_candidate_summary".to_string();
+    };
+    lower_seed_unknown_bounded_candidate_status_label(summary)
+}
+
+fn lower_seed_unknown_bounded_candidate_status_label(
+    summary: &CygvLowerSeedUnknownCandidateSummary,
+) -> String {
+    let counts = &summary.bounded_seed_decomposition_diamond_candidate_status_counts;
+    if counts.is_empty() {
+        return "unknown_missing_bounded_diamond_candidate_status".to_string();
+    }
+    if counts.len() == 1 {
+        let status = counts.keys().next().expect("single status exists");
+        return format!("bounded_{status}");
+    }
+    let fragments = counts
+        .iter()
+        .map(|(status, count)| format!("{status}_{count}"))
+        .collect::<Vec<_>>()
+        .join("__");
+    format!("bounded_mixed_{fragments}")
 }
 
 fn cygv_lower_seed_unknown_candidate_summaries<'a>(
@@ -26262,6 +26335,17 @@ mod tests {
         );
         let lower_unknowns =
             cygv_lower_seed_unknown_candidate_summaries([(0, &probe)], false, &context);
+        assert_eq!(
+            cygv_lower_seed_predecessor_bounded_candidate_pair_status_counts(
+                [Some(&probe)],
+                &lower_unknowns,
+            ),
+            BTreeMap::from([(
+                "predecessor_bounded_not_found_up_to_4__difference_bounded_not_found_up_to_4"
+                    .to_string(),
+                2
+            )])
+        );
         assert_eq!(lower_unknowns.len(), 2);
         assert_eq!(lower_unknowns[0].degree, 1);
         assert_eq!(lower_unknowns[0].occurrence_count, 2);
