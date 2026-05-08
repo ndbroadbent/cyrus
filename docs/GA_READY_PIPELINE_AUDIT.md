@@ -1496,6 +1496,15 @@ to make the remaining GV layer more first-principles:
    `[[0,55,195],[0,55,212]]` and the opposite facets are
    `[[0,195,212],[55,195,212]]`. This is still transport input, not a
    promoted GV value.
+   The same module now exposes the GKZ circuit flip primitive. A strict flip
+   of the full target `7`/`8` star-union triangulation is correctly rejected:
+   the selected wall facets also appear over unrelated partial links, for
+   example `[208,211]`. The complete local witness link `[46,211]` is valid,
+   removing `[[0,46,55,195,211],[0,46,55,211,212]]` and adding
+   `[[0,46,195,211,212],[46,55,195,211,212]]`. This identifies an adjacent
+   local chamber candidate, but the report still marks target-plus-star qN
+   history, chamber transport, semigroup transport, and non-Weyl wall-crossing
+   transport as missing.
    A follow-up compact-omission wall-side summary confirms this selected side
    is not one of the compact omission phases: both target rows have four
    compact omissions, but zero full-positive-side or full-negative-side

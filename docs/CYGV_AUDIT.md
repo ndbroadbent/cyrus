@@ -219,6 +219,16 @@ by the GLSM charge matrix and dispatches only the 0-, 1-, and
 for a class is not just read off independently: lower-degree `Li2(qN)` terms are
 subtracted from the remaining instanton polynomials degree by degree.
 
+The source read also confirms what `cygv` does not do. It has no notion of a
+secondary fan, wall crossing, flop discovery, chamber selection, or toric
+triangulation. CYTools computes the chamber-specific objects first
+(`mori_cone_cap`, lattice-point augmentation, grading vector, curve-basis
+matrix, intersection tensor, and optional nef partition) and only then calls
+`cygv`. Therefore the corrected-chamber McAllister blocker is a Cyrus/CYTools
+geometry-transport problem before it is a `cygv` problem: Cyrus must derive the
+adjacent chamber semigroup/q/intersection input, then call the upstream `cygv`
+HKTY engine on that certified input.
+
 Therefore, when a saved McAllister ray has a GV sequence in
 `potent_rays_gv.dat`, the hidden input is not just the ray vector. It is the
 low-dimensional face semigroup in which that ray was evaluated, including the
