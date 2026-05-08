@@ -7356,7 +7356,9 @@ fn bounded_seed_decomposition_impl(
     if seeds.iter().any(|seed| seed.len() != target.len()) {
         return Err("bounded seed decomposition seed dimension mismatch".to_string());
     }
-    let (seed_degrees, target_degree) = if let Some(grading) = positive_grading {
+    let (seed_degrees, _target_degree, pair_sum_max_degree) = if let Some(grading) =
+        positive_grading
+    {
         if grading.len() != target.len() {
             return Err("bounded seed decomposition grading dimension mismatch".to_string());
         }
@@ -7377,9 +7379,20 @@ fn bounded_seed_decomposition_impl(
                     .to_string(),
             );
         }
-        (Some(seed_degrees), Some(target_degree))
+        let min_seed_degree = *seed_degrees
+            .iter()
+            .min()
+            .expect("seed degrees are nonempty because seeds is nonempty");
+        let pair_sum_max_degree = target_degree.checked_sub(min_seed_degree).ok_or_else(|| {
+            "positive-graded bounded seed decomposition pair degree underflowed".to_string()
+        })?;
+        (
+            Some(seed_degrees),
+            Some(target_degree),
+            Some(pair_sum_max_degree),
+        )
     } else {
-        (None, None)
+        (None, None, None)
     };
 
     let target_sparse = sparse_from_dense(target);
@@ -7387,8 +7400,7 @@ fn bounded_seed_decomposition_impl(
         .iter()
         .map(|seed| sparse_from_dense(seed))
         .collect::<Vec<_>>();
-    let pair_sums = sparse_seed_pair_sums(&seed_sparse, seed_degrees.as_deref(), target_degree)?;
-    if let Some(&(i, j)) = pair_sums.get(&target_sparse) {
+    if let Some((i, j)) = first_sparse_seed_pair_for_sum(&target_sparse, &seed_sparse)? {
         return Ok(Some(sorted_decomposition(vec![
             seeds[i].clone(),
             seeds[j].clone(),
@@ -7398,6 +7410,8 @@ fn bounded_seed_decomposition_impl(
         return Ok(None);
     }
 
+    let pair_sums =
+        sparse_seed_pair_sums(&seed_sparse, seed_degrees.as_deref(), pair_sum_max_degree)?;
     for (seed_index, seed) in seed_sparse.iter().enumerate() {
         let remainder = checked_sparse_difference(&target_sparse, seed)?;
         if let Some(&(i, j)) = pair_sums.get(&remainder) {
@@ -7430,6 +7444,30 @@ fn bounded_seed_decomposition_impl(
         ])));
     }
 
+    Ok(None)
+}
+
+fn first_sparse_seed_pair_for_sum(
+    target: &[(usize, i64)],
+    seeds: &[Vec<(usize, i64)>],
+) -> Result<Option<(usize, usize)>, String> {
+    let mut seed_indices_by_sparse = HashMap::<Vec<(usize, i64)>, Vec<usize>>::new();
+    for (index, seed) in seeds.iter().enumerate() {
+        seed_indices_by_sparse
+            .entry(seed.clone())
+            .or_default()
+            .push(index);
+    }
+    for (i, seed) in seeds.iter().enumerate() {
+        let remainder = checked_sparse_difference(target, seed)?;
+        let Some(indices) = seed_indices_by_sparse.get(&remainder) else {
+            continue;
+        };
+        let candidate_index = indices.partition_point(|&index| index < i);
+        if let Some(&j) = indices.get(candidate_index) {
+            return Ok(Some((i, j)));
+        }
+    }
     Ok(None)
 }
 
@@ -21972,6 +22010,24 @@ mod tests {
         dense_keys.sort();
 
         assert_eq!(sparse_as_dense, dense_keys);
+    }
+
+    #[test]
+    fn first_sparse_seed_pair_for_sum_preserves_nested_pair_order() {
+        let sparse = vec![
+            sparse_from_dense(&[1, 0]),
+            sparse_from_dense(&[0, 1]),
+            sparse_from_dense(&[1, 0]),
+        ];
+
+        assert_eq!(
+            first_sparse_seed_pair_for_sum(&sparse_from_dense(&[1, 1]), &sparse).unwrap(),
+            Some((0, 1))
+        );
+        assert_eq!(
+            first_sparse_seed_pair_for_sum(&sparse_from_dense(&[2, 0]), &sparse).unwrap(),
+            Some((0, 0))
+        );
     }
 
     #[test]

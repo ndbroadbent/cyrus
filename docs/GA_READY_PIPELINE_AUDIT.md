@@ -336,10 +336,11 @@ run pass. Any remaining mismatch must be explicit and localizable.
    these reports keep the closure status as `stopped_generation_limit_0`, so
    they are decomposition/history triage rather than certified compact HKTY
    histories. The lower-seed decomposition search now also has a
-   positive-grading pair-degree filter for corrected-chamber probes, skipping
-   pair sums whose grading degree already exceeds the target degree. On the
+   positive-grading pair-degree filter for corrected-chamber probes. It first
+   checks exact two-seed hits directly, then skips pair sums that are too high
+   in grading degree to combine with any remaining positive seed. On the
    target-`5` zero-generation smoke this preserved the exact decomposition and
-   predecessor sample while reducing runtime from 210.63 seconds to 171.42
+   predecessor sample while reducing runtime from 210.63 seconds to 128.75
    seconds.
    The parent-only classifications now include parent-path-support runtime
    lookups from the same `cygv` run. On the regenerated target 7 report, the
