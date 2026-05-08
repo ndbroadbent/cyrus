@@ -269,7 +269,11 @@ run pass. Any remaining mismatch must be explicit and localizable.
    noninteger candidates, while target 8 reports four integer-nonzero pair
    domains with GV `2` and two HKTY-error pair domains. This distinguishes
    "the unknown side has a nonzero bounded diamond" from "the candidate pair
-   computes the missing target."
+   computes the missing target." The report now aggregates candidate-pair
+   diamond GV values, compressed errors, qN-trace statuses, noninteger counts,
+   and target GW coefficient statuses; the target-8 smoke records GV `2` for
+   the four integer-nonzero pair domains and one noninteger GW candidate for
+   each of the two HKTY-error domains.
    The parent-only classifications now include parent-path-support runtime
    lookups from the same `cygv` run. On the regenerated target 7 report, the
    generated degree-10 side term is a real parent-domain nonzero object

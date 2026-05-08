@@ -365,6 +365,14 @@ struct ContextReport {
     cygv_lower_seed_predecessor_bounded_candidate_pair_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_predecessor_candidate_pair_diamond_candidate_status_counts:
         BTreeMap<String, usize>,
+    cygv_lower_seed_predecessor_candidate_pair_diamond_gv_counts: BTreeMap<String, usize>,
+    cygv_lower_seed_predecessor_candidate_pair_diamond_error_counts: BTreeMap<String, usize>,
+    cygv_lower_seed_predecessor_candidate_pair_diamond_qn_trace_status_counts:
+        BTreeMap<String, usize>,
+    cygv_lower_seed_predecessor_candidate_pair_diamond_gw_noninteger_candidate_count_counts:
+        BTreeMap<String, usize>,
+    cygv_lower_seed_predecessor_candidate_pair_diamond_target_gw_coefficient_status_counts:
+        BTreeMap<String, usize>,
     cygv_lower_seed_unknown_candidate_unique_count: usize,
     cygv_lower_seed_unknown_candidate_occurrence_count: usize,
     cygv_lower_seed_unknown_candidate_degree_counts: BTreeMap<i128, usize>,
@@ -14621,6 +14629,36 @@ fn build_report(
                 .iter()
                 .map(|target| target.cygv_path_history_probe.as_ref()),
         );
+    let cygv_lower_seed_predecessor_candidate_pair_diamond_gv_counts =
+        cygv_lower_seed_predecessor_candidate_pair_diamond_gv_counts(
+            targets
+                .iter()
+                .map(|target| target.cygv_path_history_probe.as_ref()),
+        );
+    let cygv_lower_seed_predecessor_candidate_pair_diamond_error_counts =
+        cygv_lower_seed_predecessor_candidate_pair_diamond_error_counts(
+            targets
+                .iter()
+                .map(|target| target.cygv_path_history_probe.as_ref()),
+        );
+    let cygv_lower_seed_predecessor_candidate_pair_diamond_qn_trace_status_counts =
+        cygv_lower_seed_predecessor_candidate_pair_diamond_qn_trace_status_counts(
+            targets
+                .iter()
+                .map(|target| target.cygv_path_history_probe.as_ref()),
+        );
+    let cygv_lower_seed_predecessor_candidate_pair_diamond_gw_noninteger_candidate_count_counts =
+        cygv_lower_seed_predecessor_candidate_pair_diamond_gw_noninteger_candidate_count_counts(
+            targets
+                .iter()
+                .map(|target| target.cygv_path_history_probe.as_ref()),
+        );
+    let cygv_lower_seed_predecessor_candidate_pair_diamond_target_gw_coefficient_status_counts =
+        cygv_lower_seed_predecessor_candidate_pair_diamond_target_gw_coefficient_status_counts(
+            targets
+                .iter()
+                .map(|target| target.cygv_path_history_probe.as_ref()),
+        );
     let cygv_lower_seed_diamond_status_counts = optional_status_counts(
         targets.iter().map(|target| {
             target
@@ -15085,6 +15123,11 @@ fn build_report(
         cygv_lower_seed_predecessor_known_qn_history_pair_status_counts,
         cygv_lower_seed_predecessor_bounded_candidate_pair_status_counts,
         cygv_lower_seed_predecessor_candidate_pair_diamond_candidate_status_counts,
+        cygv_lower_seed_predecessor_candidate_pair_diamond_gv_counts,
+        cygv_lower_seed_predecessor_candidate_pair_diamond_error_counts,
+        cygv_lower_seed_predecessor_candidate_pair_diamond_qn_trace_status_counts,
+        cygv_lower_seed_predecessor_candidate_pair_diamond_gw_noninteger_candidate_count_counts,
+        cygv_lower_seed_predecessor_candidate_pair_diamond_target_gw_coefficient_status_counts,
         cygv_lower_seed_unknown_candidate_unique_count,
         cygv_lower_seed_unknown_candidate_occurrence_count,
         cygv_lower_seed_unknown_candidate_degree_counts,
@@ -18538,6 +18581,97 @@ fn cygv_lower_seed_predecessor_candidate_pair_diamond_candidate_status_counts<'a
                 .candidate_pair_diamond
                 .as_ref()
                 .map_or("not_run", |diamond| diamond.candidate_status.as_str());
+            *counts.entry(status.to_string()).or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn cygv_lower_seed_predecessor_candidate_pair_diamond_gv_counts<'a>(
+    probes: impl IntoIterator<Item = Option<&'a CygvPathHistoryProbe>>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes.into_iter().flatten() {
+        for candidate in &probe.lower_seed_predecessor_candidate_sample {
+            let gv = candidate
+                .candidate_pair_diamond
+                .as_ref()
+                .and_then(|diamond| diamond.gv.as_deref())
+                .unwrap_or("missing_candidate_pair_diamond_gv");
+            *counts.entry(gv.to_string()).or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn cygv_lower_seed_predecessor_candidate_pair_diamond_error_counts<'a>(
+    probes: impl IntoIterator<Item = Option<&'a CygvPathHistoryProbe>>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes.into_iter().flatten() {
+        for candidate in &probe.lower_seed_predecessor_candidate_sample {
+            let error = candidate
+                .candidate_pair_diamond
+                .as_ref()
+                .and_then(|diamond| diamond.error.as_deref())
+                .map_or_else(
+                    || "none".to_string(),
+                    |error| format!("error_{}", status_error_fragment(error)),
+                );
+            *counts.entry(error).or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn cygv_lower_seed_predecessor_candidate_pair_diamond_qn_trace_status_counts<'a>(
+    probes: impl IntoIterator<Item = Option<&'a CygvPathHistoryProbe>>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes.into_iter().flatten() {
+        for candidate in &probe.lower_seed_predecessor_candidate_sample {
+            let status = candidate
+                .candidate_pair_diamond
+                .as_ref()
+                .and_then(|diamond| diamond.target_qn_trace_status.as_deref())
+                .unwrap_or("missing_candidate_pair_diamond_target_qn_trace_status");
+            *counts.entry(status.to_string()).or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn cygv_lower_seed_predecessor_candidate_pair_diamond_gw_noninteger_candidate_count_counts<'a>(
+    probes: impl IntoIterator<Item = Option<&'a CygvPathHistoryProbe>>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes.into_iter().flatten() {
+        for candidate in &probe.lower_seed_predecessor_candidate_sample {
+            let key = candidate
+                .candidate_pair_diamond
+                .as_ref()
+                .and_then(|diamond| diamond.gw_noninteger_candidate_count)
+                .map_or_else(
+                    || "missing_candidate_pair_diamond_gw_noninteger_count".to_string(),
+                    |count| count.to_string(),
+                );
+            *counts.entry(key).or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn cygv_lower_seed_predecessor_candidate_pair_diamond_target_gw_coefficient_status_counts<'a>(
+    probes: impl IntoIterator<Item = Option<&'a CygvPathHistoryProbe>>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes.into_iter().flatten() {
+        for candidate in &probe.lower_seed_predecessor_candidate_sample {
+            let status = candidate
+                .candidate_pair_diamond
+                .as_ref()
+                .and_then(|diamond| diamond.target_gw_coefficient_status.as_deref())
+                .unwrap_or("missing_candidate_pair_diamond_target_gw_coefficient_status");
             *counts.entry(status.to_string()).or_insert(0usize) += 1;
         }
     }
@@ -26458,6 +26592,41 @@ mod tests {
                 &probe
             )]),
             BTreeMap::from([("not_run".to_string(), 2)])
+        );
+        assert_eq!(
+            cygv_lower_seed_predecessor_candidate_pair_diamond_gv_counts([Some(&probe)]),
+            BTreeMap::from([("missing_candidate_pair_diamond_gv".to_string(), 2)])
+        );
+        assert_eq!(
+            cygv_lower_seed_predecessor_candidate_pair_diamond_error_counts([Some(&probe)]),
+            BTreeMap::from([("none".to_string(), 2)])
+        );
+        assert_eq!(
+            cygv_lower_seed_predecessor_candidate_pair_diamond_qn_trace_status_counts([Some(
+                &probe
+            )]),
+            BTreeMap::from([(
+                "missing_candidate_pair_diamond_target_qn_trace_status".to_string(),
+                2
+            )])
+        );
+        assert_eq!(
+            cygv_lower_seed_predecessor_candidate_pair_diamond_gw_noninteger_candidate_count_counts(
+                [Some(&probe)]
+            ),
+            BTreeMap::from([(
+                "missing_candidate_pair_diamond_gw_noninteger_count".to_string(),
+                2
+            )])
+        );
+        assert_eq!(
+            cygv_lower_seed_predecessor_candidate_pair_diamond_target_gw_coefficient_status_counts(
+                [Some(&probe)]
+            ),
+            BTreeMap::from([(
+                "missing_candidate_pair_diamond_target_gw_coefficient_status".to_string(),
+                2
+            )])
         );
         assert_eq!(lower_unknowns.len(), 2);
         assert_eq!(lower_unknowns[0].degree, 1);
