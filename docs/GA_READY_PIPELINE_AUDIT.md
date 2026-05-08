@@ -1270,10 +1270,11 @@ to make the remaining GV layer more first-principles:
    not a compact CY3 hypersurface input. Target `7` has no positive primitive
    orientation for `[3,-1]`; target `8` has positive `[1,1]` coordinates but
    still needs a source-derived higher-rank semigroup/grading certificate and
-   chamber/tensor data. Every single-column omission for targets `7`/`8` is
-   dimension three but non-Calabi-Yau, so the next fix is a source-derived
-   reduction or chamber-transport history, not a direct raw `cygv` call or a
-   simple point deletion.
+   chamber/tensor data. After recomputing the affine charge basis, every
+   single-column omission for targets `7`/`8` remains Calabi-Yau charged but
+   has `q_rows=6`, `q_cols=1`, and `cy_dim=4`, so the next fix is a
+   source-derived reduction or chamber-transport history, not a direct raw
+   `cygv` call or a simple point deletion.
    The full union-support height profile is now serialized as well. For
    targets `3`/`6`, the off-hyperplane zero-shared ray carries zero target and
    star coefficient; for targets `7`/`8`, the height `-1` zero-shared ray and

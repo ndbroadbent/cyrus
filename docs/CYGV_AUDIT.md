@@ -3424,13 +3424,16 @@ supports are Calabi-Yau charge rows with `q_rows=7`, `q_cols=2`,
 orientation for coordinates `[3,-1]`, while target `8` has positive
 coordinates `[1,1]` but is blocked on a higher-rank semigroup and grading
 certificate plus the missing compact-threefold phase. The same report checks
-the cheap one-column reductions: across all target-plus-star rows there are
-`28` dimension-three non-Calabi-Yau omissions and `17` omissions that are not
-dimension three. For targets `7` and `8` specifically, all seven single-column
-omissions are dimension three but non-Calabi-Yau. This rules out handing the
-two-parameter target-plus-star row directly to compact `cygv` or fixing it by
-dropping one support point; the next object must be a source-derived
-chamber/reduction history, not a raw local `cygv` call.
+the cheap one-column reductions by recomputing the affine charge basis after
+each omission. Across all target-plus-star rows there are now `12` compact
+threefold Calabi-Yau omissions, `7` dimension-three non-Calabi-Yau omissions,
+and `26` omissions that are not dimension three. None of the compact-threefold
+omissions are the target `7`/`8` blocker: for targets `7` and `8`
+specifically, every single-column omission recomputes to one charge row with
+`q_rows=6`, `q_cols=1`, `cy_dim=4`, and Calabi-Yau charge. This rules out
+handing the two-parameter target-plus-star row directly to compact `cygv` or
+fixing targets `7`/`8` by dropping one support point; the next object must be a
+source-derived chamber/reduction history, not a raw local `cygv` call.
 Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
 serializes a role-tagged height profile over the full union support. For
 targets `3`/`6`, the off-hyperplane zero-shared ray has height `-1` but zero

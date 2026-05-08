@@ -883,6 +883,7 @@ struct LocalCygvStarUnionTransportDecompositionSummary {
 struct LocalCygvStarUnionTargetPlusStarSupportHint {
     status: String,
     point_indices: Vec<usize>,
+    point_samples: Vec<OriginCircuitRelationPointSample>,
     affine_rank: Option<usize>,
     charge_basis: Option<Vec<Vec<i64>>>,
     charge_row_sums: Option<Vec<i64>>,
@@ -20581,6 +20582,7 @@ fn local_cygv_star_union_target_plus_star_support_hint(
     let empty = |status: &str| LocalCygvStarUnionTargetPlusStarSupportHint {
         status: status.to_string(),
         point_indices: Vec::new(),
+        point_samples: Vec::new(),
         affine_rank: None,
         charge_basis: None,
         charge_row_sums: None,
@@ -20609,6 +20611,7 @@ fn local_cygv_star_union_target_plus_star_support_hint_for_samples(
         |status: &str, point_indices: Vec<usize>| LocalCygvStarUnionTargetPlusStarSupportHint {
             status: status.to_string(),
             point_indices,
+            point_samples: Vec::new(),
             affine_rank: None,
             charge_basis: None,
             charge_row_sums: None,
@@ -20656,6 +20659,7 @@ fn local_cygv_star_union_target_plus_star_support_hint_for_samples(
                     status_error_fragment(&error)
                 ),
                 point_indices,
+                point_samples: support,
                 affine_rank: None,
                 charge_basis: None,
                 charge_row_sums: None,
@@ -20674,6 +20678,7 @@ fn local_cygv_star_union_target_plus_star_support_hint_for_samples(
                     status_error_fragment(&error)
                 ),
                 point_indices,
+                point_samples: support,
                 affine_rank: Some(affine_rank),
                 charge_basis: None,
                 charge_row_sums: None,
@@ -20703,6 +20708,7 @@ fn local_cygv_star_union_target_plus_star_support_hint_for_samples(
                     status_error_fragment(&error)
                 ),
                 point_indices,
+                point_samples: support,
                 affine_rank: Some(affine_rank),
                 charge_basis: Some(charge_basis),
                 charge_row_sums: Some(charge_row_sums),
@@ -20730,6 +20736,7 @@ fn local_cygv_star_union_target_plus_star_support_hint_for_samples(
             charge_basis.len()
         ),
         point_indices,
+        point_samples: support,
         affine_rank: Some(affine_rank),
         charge_basis: Some(charge_basis),
         charge_row_sums: Some(charge_row_sums),
@@ -20800,7 +20807,7 @@ fn local_cygv_star_union_target_plus_star_local_cygv_readiness(
     let (local_grading_vector_candidate, local_grading_vector_status) =
         local_cygv_grading_vector_candidate(&orientation_candidates);
     let single_column_omission_candidates =
-        local_cygv_single_column_omission_candidates(&support.point_indices, charge_basis);
+        local_cygv_single_column_omission_candidates(&support.point_samples, charge_basis);
     let (
         local_intersection_tensor_candidate,
         local_intersection_tensor_status,
@@ -20883,46 +20890,59 @@ fn local_cygv_star_union_target_plus_star_local_cygv_readiness(
 }
 
 fn local_cygv_single_column_omission_candidates(
-    point_indices: &[usize],
+    point_samples: &[OriginCircuitRelationPointSample],
     charge_basis: &[Vec<i64>],
 ) -> Vec<LocalCygvSingleColumnOmissionCandidate> {
     let Some(width) = charge_basis.first().map(Vec::len) else {
         return Vec::new();
     };
     if width == 0
-        || width != point_indices.len()
+        || width != point_samples.len()
         || charge_basis.iter().any(|row| row.len() != width)
     {
         return Vec::new();
     }
     let mut candidates = Vec::with_capacity(width);
     for omitted_position in 0..width {
-        let reduced_point_indices = point_indices
+        let reduced_samples = point_samples
             .iter()
             .enumerate()
-            .filter_map(|(position, &point_index)| {
-                (position != omitted_position).then_some(point_index)
-            })
-            .collect::<Vec<_>>();
-        let reduced_charge_basis = charge_basis
-            .iter()
-            .map(|row| {
-                row.iter()
-                    .enumerate()
-                    .filter_map(|(position, &entry)| {
-                        (position != omitted_position).then_some(entry)
-                    })
-                    .collect::<Vec<_>>()
+            .filter_map(|(position, sample)| {
+                (position != omitted_position).then_some(sample.clone())
             })
             .collect::<Vec<_>>();
         let omitted_charge_column = charge_basis
             .iter()
             .map(|row| row[omitted_position])
             .collect::<Vec<_>>();
-        let shape = local_cygv_hypersurface_shape_from_charge_basis(&reduced_charge_basis).ok();
+        let recomputed_charge_basis = match affine_charge_basis_for_point_samples(&reduced_samples)
+        {
+            Ok(charge_basis) => charge_basis,
+            Err(error) => {
+                candidates.push(LocalCygvSingleColumnOmissionCandidate {
+                    omitted_point_index: point_samples[omitted_position].point_index,
+                    omitted_charge_column,
+                    q_rows: reduced_samples.len(),
+                    q_cols: 0,
+                    cy_dim: i64::MIN,
+                    charge_sums_after_omission: Vec::new(),
+                    is_calabi_yau_charge: false,
+                    phase_status: format!(
+                        "single_column_omission_charge_basis_error:{}",
+                        status_error_fragment(&error)
+                    ),
+                });
+                continue;
+            }
+        };
+        let shape = local_cygv_hypersurface_shape_from_charge_basis(&recomputed_charge_basis).ok();
+        let reduced_point_indices = reduced_samples
+            .iter()
+            .map(|sample| sample.point_index)
+            .collect::<Vec<_>>();
         let (_phase_q_matrix, phase_status) = local_cygv_q_matrix_phase_candidate(
             &reduced_point_indices,
-            Some(&reduced_charge_basis),
+            Some(&recomputed_charge_basis),
         );
         let (q_rows, q_cols, cy_dim, charge_sums_after_omission, is_calabi_yau_charge) = shape
             .as_ref()
@@ -20937,10 +20957,10 @@ fn local_cygv_single_column_omission_candidates(
             })
             .unwrap_or_else(|| {
                 (
-                    reduced_point_indices.len(),
-                    reduced_charge_basis.len(),
+                    reduced_samples.len(),
+                    recomputed_charge_basis.len(),
                     i64::MIN,
-                    reduced_charge_basis
+                    recomputed_charge_basis
                         .iter()
                         .map(|row| row.iter().sum())
                         .collect(),
@@ -20948,7 +20968,7 @@ fn local_cygv_single_column_omission_candidates(
                 )
             });
         candidates.push(LocalCygvSingleColumnOmissionCandidate {
-            omitted_point_index: point_indices[omitted_position],
+            omitted_point_index: point_samples[omitted_position].point_index,
             omitted_charge_column,
             q_rows,
             q_cols,
@@ -23672,6 +23692,20 @@ mod tests {
     use super::*;
     use cyrus_core::CygvQnTraceTerm;
 
+    fn relation_point_sample(
+        point_index: usize,
+        coefficient: i64,
+        coordinates: &[i64],
+        face_dimension: Option<usize>,
+    ) -> OriginCircuitRelationPointSample {
+        OriginCircuitRelationPointSample {
+            point_index,
+            coefficient,
+            coordinates: coordinates.to_vec(),
+            face_dimension,
+        }
+    }
+
     #[test]
     fn dense_from_sparse_rejects_duplicate_or_out_of_bounds_entries() {
         assert_eq!(
@@ -23878,6 +23912,7 @@ mod tests {
                 LocalCygvStarUnionTargetPlusStarSupportHint {
                     status: "test".to_string(),
                     point_indices: Vec::new(),
+                    point_samples: Vec::new(),
                     affine_rank: None,
                     charge_basis: None,
                     charge_row_sums: None,
@@ -26751,6 +26786,15 @@ mod tests {
                 "target_plus_star_support_multi_parameter_integral_relation:affine_rank_4:charge_rows_2"
                     .to_string(),
             point_indices: vec![46, 55, 195, 208, 211, 212, 214],
+            point_samples: vec![
+                relation_point_sample(46, 0, &[1, 2, 0, 2], Some(1)),
+                relation_point_sample(55, 0, &[3, 4, 1, 5], None),
+                relation_point_sample(195, 0, &[1, 1, 0, 1], None),
+                relation_point_sample(208, 0, &[2, 2, 1, 2], Some(2)),
+                relation_point_sample(211, 0, &[2, 3, 1, 3], Some(2)),
+                relation_point_sample(212, 0, &[2, 3, 1, 4], None),
+                relation_point_sample(214, 0, &[2, 3, 2, 3], Some(2)),
+            ],
             affine_rank: Some(4),
             charge_basis: Some(vec![
                 vec![1, 0, -1, 1, -1, 0, 0],
@@ -26810,10 +26854,10 @@ mod tests {
         );
         assert_eq!(readiness.single_column_omission_candidates.len(), 7);
         assert!(readiness.single_column_omission_candidates.iter().all(
-            |candidate| candidate.cy_dim == 3
-                && !candidate.is_calabi_yau_charge
+            |candidate| candidate.cy_dim == 4
+                && candidate.is_calabi_yau_charge
                 && candidate.phase_status
-                    == "source_derived_unique_dimension_three_non_calabi_yau_phase_including_origin"
+                    == "local_q_matrix_phase_blocked_no_dimension_three_phase"
         ));
     }
 
@@ -26824,6 +26868,15 @@ mod tests {
                 "target_plus_star_support_multi_parameter_integral_relation:affine_rank_4:charge_rows_2"
                     .to_string(),
             point_indices: vec![2, 55, 195, 208, 211, 212, 214],
+            point_samples: vec![
+                relation_point_sample(2, 0, &[1, 0, 0, 0], Some(0)),
+                relation_point_sample(55, 0, &[3, 4, 1, 5], None),
+                relation_point_sample(195, 0, &[1, 1, 0, 1], None),
+                relation_point_sample(208, 0, &[2, 2, 1, 2], Some(2)),
+                relation_point_sample(211, 0, &[2, 3, 1, 3], Some(2)),
+                relation_point_sample(212, 0, &[2, 3, 1, 4], None),
+                relation_point_sample(214, 0, &[2, 3, 2, 3], Some(2)),
+            ],
             affine_rank: Some(4),
             charge_basis: Some(vec![
                 vec![1, 0, -1, -1, 1, 0, 0],
@@ -26869,10 +26922,10 @@ mod tests {
         );
         assert_eq!(readiness.single_column_omission_candidates.len(), 7);
         assert!(readiness.single_column_omission_candidates.iter().all(
-            |candidate| candidate.cy_dim == 3
-                && !candidate.is_calabi_yau_charge
+            |candidate| candidate.cy_dim == 4
+                && candidate.is_calabi_yau_charge
                 && candidate.phase_status
-                    == "source_derived_unique_dimension_three_non_calabi_yau_phase_including_origin"
+                    == "local_q_matrix_phase_blocked_no_dimension_three_phase"
         ));
     }
 
