@@ -1340,9 +1340,12 @@ to make the remaining GV layer more first-principles:
    CMS divisor check has no rational divisor solution. The exposed linear-system
    diagnostic is exact rank obstruction, not a floating mismatch:
    `row_count=219`, `column_count=214`, `rank=6`, `augmented_rank=7`. The
-   opposite-wall extremal check is also still guard-skipped at `2963` generators
-   under the smoke limit. Thus the exact stable-Weyl algebra is wired into the
-   blocker, but it still has no source-derived shrinking divisor to check or
+   opposite-wall extremal check now also runs an LP-assisted separator attempt
+   before falling back to the DDM guard. For both target rows the smoke report
+   records `skipped_generator_limit_256_actual_2963_lp_no_solution`, so the
+   cheap real separator problem did not find a candidate exact certificate
+   either. Thus the exact stable-Weyl algebra is wired into the blocker, but it
+   still has no source-derived shrinking divisor or extremal-wall separator to
    promote.
    `/tmp/cyrus_gv_context_target_plus_star_support_report.json` now reconstructs
    the point-support charge bases for that degree-6 component. Targets `7`/`8`

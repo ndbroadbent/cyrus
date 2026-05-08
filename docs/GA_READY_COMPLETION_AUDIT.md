@@ -1058,7 +1058,11 @@ the new missing inputs `target_plus_star_wall_crossing_chamber_transport` and
 `non_weyl_wall_crossing_transport_certificate`. The latter is selected because
 the stable-Weyl probe reaches
 `stable_weyl_blocked_cms_general_divisor_no_rational_divisor_solution`, so the
-remaining transport certificate is not the simple shrinking-divisor route.
+remaining transport certificate is not the simple shrinking-divisor route. The
+opposite-wall extremal subcheck now runs an LP-assisted exact-verification
+separator attempt before the DDM guard; targets `7`/`8` both report
+`skipped_generator_limit_256_actual_2963_lp_no_solution`, so this path also has
+no cheap exact wall separator certificate.
 The main target-plus-star promotion object now carries the same wall-transport
 status and missing inputs, so even a future local phase/tensor certificate
 cannot promote the `target+star` class while wall-crossing transport remains

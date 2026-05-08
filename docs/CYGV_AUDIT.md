@@ -3681,10 +3681,12 @@ check says that candidate has no rational divisor solution. The refreshed
 diagnostics expose the exact linear system behind that failure:
 `row_count=219`, `column_count=214`, `rank=6`, and `augmented_rank=7`, so the
 ambient curve class is not in the rational column span of the tested
-divisor-intersection map. The same smoke has the opposite-wall extremal
-separator guard-skipped at `2963` generators under the smoke limit. This keeps
-the stable-Weyl path blocked at concrete missing source certificates rather
-than at the earlier vague
+divisor-intersection map. The same smoke now tries an LP-assisted extremal-wall
+separator before falling back to the broad DDM guard. For both target rows the
+opposite-wall status is `skipped_generator_limit_256_actual_2963_lp_no_solution`,
+so the cheap real separator problem also finds no candidate exact certificate.
+This keeps the stable-Weyl path blocked at concrete missing source certificates
+rather than at the earlier vague
 `shrinking_divisor_or_flop_certificate` label.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved

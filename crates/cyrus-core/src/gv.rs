@@ -880,6 +880,22 @@ pub struct ExtremalMoriRayCertificate {
     pub positive_other_generator_count: usize,
 }
 
+/// Diagnostic for LP-assisted extremal Mori ray separator search.
+///
+/// The LP phase only proposes a real normal. `certificate` is populated only
+/// when a rounded integer normal passes exact separator verification.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExtremalMoriRayLpSearchDiagnostic {
+    /// Search outcome.
+    pub status: String,
+    /// Whether the LP solver returned a finite real normal.
+    pub lp_solution_found: bool,
+    /// Number of distinct rounded integer normals tested exactly.
+    pub exact_normal_candidate_count: usize,
+    /// Exact certificate, if one was found.
+    pub certificate: Option<ExtremalMoriRayCertificate>,
+}
+
 /// Mori generators lying on an exactly certified supporting face.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SupportingMoriFace {
@@ -9301,6 +9317,149 @@ pub fn find_extremal_mori_ray_separator(
     Ok(None)
 }
 
+/// Find an exact integer separator for a target extremal Mori ray using an LP
+/// candidate normal followed by exact verification.
+///
+/// This is a cheaper companion to [`find_extremal_mori_ray_separator`]. The LP
+/// solve only proposes a real normal satisfying `n.target <= -1` and
+/// `n.other >= 0`; any returned certificate has still passed
+/// [`check_extremal_mori_ray_separator`] with integer arithmetic. A failed LP
+/// search is inconclusive and must not be read as proof that no separator
+/// exists.
+pub fn find_extremal_mori_ray_separator_by_lp_search(
+    target_curve: &[i64],
+    mori_generators: &[Vec<i64>],
+    options: &SupportingMoriFaceLpSearchOptions,
+) -> Result<Option<ExtremalMoriRayCertificate>> {
+    Ok(
+        diagnose_extremal_mori_ray_separator_by_lp_search(target_curve, mori_generators, options)?
+            .certificate,
+    )
+}
+
+/// Diagnose LP-assisted extremal Mori ray separator search.
+///
+/// This exposes whether the LP failed to find a real normal, found one that
+/// could not be converted to an exact integer certificate within the scale
+/// limit, or produced a fully verified separator.
+pub fn diagnose_extremal_mori_ray_separator_by_lp_search(
+    target_curve: &[i64],
+    mori_generators: &[Vec<i64>],
+    options: &SupportingMoriFaceLpSearchOptions,
+) -> Result<ExtremalMoriRayLpSearchDiagnostic> {
+    validate_extremal_mori_ray_lp_inputs(target_curve, mori_generators, options)?;
+
+    let target_primitive =
+        primitive_ray_from_curve_class(target_curve, "extremal Mori ray target")?;
+    let normal_vars = supporting_face_normal_vars(target_curve.len(), options)?;
+    let vars = normal_vars.variables;
+    let mut objective = Expression::from(0.0);
+    objective.add_mul(0.0, normal_vars.normal[0]);
+    let mut model = vars.minimise(objective).using(default_solver);
+
+    let mut target_expr = Expression::from(0.0);
+    for (var, &coefficient) in normal_vars.normal.iter().zip(target_curve) {
+        if coefficient != 0 {
+            target_expr.add_mul(coefficient as f64, *var);
+        }
+    }
+    model = model.with(target_expr.leq(-1.0));
+
+    for generator in mori_generators {
+        if same_positive_rational_ray(&target_primitive, generator)? {
+            continue;
+        }
+        let mut expr = Expression::from(0.0);
+        for (var, &coefficient) in normal_vars.normal.iter().zip(generator) {
+            if coefficient != 0 {
+                expr.add_mul(coefficient as f64, *var);
+            }
+        }
+        model = model.with(expr.geq(0.0));
+    }
+
+    match solve_supporting_face_normal_lp_model(model, &normal_vars.normal)? {
+        SupportingFaceLpNormalSearchOutcome::Found(normal) => {
+            integer_extremal_ray_certificate_from_lp_diagnostic(
+                &normal,
+                target_curve,
+                mori_generators,
+                options,
+            )
+        }
+        other => Ok(ExtremalMoriRayLpSearchDiagnostic {
+            status: other.status(),
+            lp_solution_found: false,
+            exact_normal_candidate_count: 0,
+            certificate: None,
+        }),
+    }
+}
+
+fn validate_extremal_mori_ray_lp_inputs(
+    target_curve: &[i64],
+    mori_generators: &[Vec<i64>],
+    options: &SupportingMoriFaceLpSearchOptions,
+) -> Result<()> {
+    if target_curve.is_empty() {
+        return Err(Error::InvalidInput(
+            "extremal Mori ray LP target is empty".into(),
+        ));
+    }
+    if mori_generators.is_empty() {
+        return Err(Error::InvalidInput(
+            "extremal Mori ray LP search requires Mori generators".into(),
+        ));
+    }
+    for generator in mori_generators {
+        validate_curve_dimension("Mori generator", generator, target_curve.len())?;
+    }
+    if options.scale_limit <= 0 {
+        return Err(Error::InvalidInput(
+            "extremal Mori ray LP search scale limit must be positive".into(),
+        ));
+    }
+    if !options.variable_bound.is_finite() || options.variable_bound <= 0.0 {
+        return Err(Error::InvalidInput(
+            "extremal Mori ray LP search variable bound must be positive and finite".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn integer_extremal_ray_certificate_from_lp_diagnostic(
+    lp_normal: &[f64],
+    target_curve: &[i64],
+    mori_generators: &[Vec<i64>],
+    options: &SupportingMoriFaceLpSearchOptions,
+) -> Result<ExtremalMoriRayLpSearchDiagnostic> {
+    let mut seen_normals = HashSet::new();
+    for scale in 1..=options.scale_limit {
+        let Some(normal) = rounded_reduced_i64_normal(lp_normal, scale)? else {
+            continue;
+        };
+        if !seen_normals.insert(normal.clone()) {
+            continue;
+        }
+        if let Some(certificate) =
+            check_extremal_mori_ray_separator(&normal, target_curve, mori_generators)?
+        {
+            return Ok(ExtremalMoriRayLpSearchDiagnostic {
+                status: "certified_lp_separator".to_string(),
+                lp_solution_found: true,
+                exact_normal_candidate_count: seen_normals.len(),
+                certificate: Some(certificate),
+            });
+        }
+    }
+    Ok(ExtremalMoriRayLpSearchDiagnostic {
+        status: "lp_solution_no_exact_integer_separator".to_string(),
+        lp_solution_found: true,
+        exact_normal_candidate_count: seen_normals.len(),
+        certificate: None,
+    })
+}
+
 fn check_extremal_mori_ray_separator_oriented(
     separator_normal: &[i64],
     target_curve: &[i64],
@@ -13151,7 +13310,8 @@ mod tests {
         extract_ckyz_local_gv_invariants_from_potential,
         extract_ckyz_local_gv_invariants_from_potential_for_degrees,
         extract_ckyz_local_gv_invariants_from_z_potential_for_degrees,
-        find_extremal_mori_ray_separator, find_pair_decomposition, find_semigroup_decomposition,
+        find_extremal_mori_ray_separator, find_extremal_mori_ray_separator_by_lp_search,
+        find_pair_decomposition, find_semigroup_decomposition,
         finite_cutoff_gv_charges_excluding_primitive_rays, finite_gv_nonzero_degree_slice_points,
         gv_divisor_basis_data, gv_lattice_augmentation_grading, gv_lattice_search_request,
         intersection_in_divisor_basis, intersection_in_matrix_divisor_basis, load_grading_cache,
@@ -15823,10 +15983,41 @@ mod tests {
     }
 
     #[test]
+    fn extremal_mori_ray_lp_search_finds_exact_separator() {
+        let certificate = find_extremal_mori_ray_separator_by_lp_search(
+            &[1, 0],
+            &[vec![1, 0], vec![0, 1], vec![1, 1]],
+            &SupportingMoriFaceLpSearchOptions::default(),
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(certificate.same_ray_generator_count, 1);
+        assert_eq!(certificate.zero_other_generator_count, 1);
+        assert_eq!(certificate.positive_other_generator_count, 1);
+        assert!(
+            certificate.separator_normal[0] < 0,
+            "separator must pair negatively with the target curve"
+        );
+    }
+
+    #[test]
     fn extremal_mori_ray_separator_finder_rejects_decomposable_target() {
         let certificate =
             find_extremal_mori_ray_separator(&[1, 1], &[vec![1, 0], vec![0, 1], vec![1, 1]])
                 .unwrap();
+
+        assert!(certificate.is_none());
+    }
+
+    #[test]
+    fn extremal_mori_ray_lp_search_rejects_decomposable_target() {
+        let certificate = find_extremal_mori_ray_separator_by_lp_search(
+            &[1, 1],
+            &[vec![1, 0], vec![0, 1], vec![1, 1]],
+            &SupportingMoriFaceLpSearchOptions::default(),
+        )
+        .unwrap();
 
         assert!(certificate.is_none());
     }

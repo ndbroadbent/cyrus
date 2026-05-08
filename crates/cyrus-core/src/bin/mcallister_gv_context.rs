@@ -17,8 +17,8 @@ use cyrus_core::geometry::ConvexHull;
 use cyrus_core::gv::{
     CygvGvCoefficientTrace, SupportingMoriFaceLpSearchOptions,
     certify_supporting_mori_face_by_exact_kernel, certify_supporting_mori_face_by_lp_search,
-    cygv_pair_reduced_seed_generators, diagnose_supporting_mori_face_by_lp_search,
-    find_extremal_mori_ray_separator,
+    cygv_pair_reduced_seed_generators, diagnose_extremal_mori_ray_separator_by_lp_search,
+    diagnose_supporting_mori_face_by_lp_search, find_extremal_mori_ray_separator,
 };
 use cyrus_core::triangulation::{
     Triangulation, compute_regular_triangulation, secondary_cone_height_pairings,
@@ -9731,20 +9731,68 @@ fn curve_extremal_ray_certificate_probe(
         });
     }
     if context.degree_bounded_rays.len() > generator_limit {
-        return Some(TargetExtremalRayCertificateProbe {
-            status: format!(
-                "skipped_generator_limit_{generator_limit}_actual_{}",
-                context.degree_bounded_rays.len()
-            ),
-            same_ray_generator_count: Some(same_ray_generator_count),
-            zero_other_generator_count: None,
-            positive_other_generator_count: None,
-            separator_normal_nonzero: None,
-            decomposition_kind: None,
-            decomposition_active_generator_count: None,
-            decomposition_exact_coefficients: None,
-            decomposition_active_generators_nonzero: None,
-        });
+        let lp_options = SupportingMoriFaceLpSearchOptions {
+            scale_limit: 4096,
+            ..SupportingMoriFaceLpSearchOptions::default()
+        };
+        match diagnose_extremal_mori_ray_separator_by_lp_search(
+            curve,
+            context.degree_bounded_rays,
+            &lp_options,
+        ) {
+            Ok(diagnostic) => {
+                if let Some(certificate) = diagnostic.certificate {
+                    return Some(TargetExtremalRayCertificateProbe {
+                        status: "certified_exact_extremal_ray_by_lp_after_generator_limit"
+                            .to_string(),
+                        same_ray_generator_count: Some(certificate.same_ray_generator_count),
+                        zero_other_generator_count: Some(certificate.zero_other_generator_count),
+                        positive_other_generator_count: Some(
+                            certificate.positive_other_generator_count,
+                        ),
+                        separator_normal_nonzero: Some(sparse_from_dense(
+                            &certificate.separator_normal,
+                        )),
+                        decomposition_kind: None,
+                        decomposition_active_generator_count: None,
+                        decomposition_exact_coefficients: None,
+                        decomposition_active_generators_nonzero: None,
+                    });
+                }
+                return Some(TargetExtremalRayCertificateProbe {
+                    status: format!(
+                        "skipped_generator_limit_{generator_limit}_actual_{}_{}",
+                        context.degree_bounded_rays.len(),
+                        status_error_fragment(&diagnostic.status)
+                    ),
+                    same_ray_generator_count: Some(same_ray_generator_count),
+                    zero_other_generator_count: None,
+                    positive_other_generator_count: None,
+                    separator_normal_nonzero: None,
+                    decomposition_kind: None,
+                    decomposition_active_generator_count: None,
+                    decomposition_exact_coefficients: None,
+                    decomposition_active_generators_nonzero: None,
+                });
+            }
+            Err(error) => {
+                return Some(TargetExtremalRayCertificateProbe {
+                    status: format!(
+                        "skipped_generator_limit_{generator_limit}_actual_{}_lp_error_{}",
+                        context.degree_bounded_rays.len(),
+                        status_error_fragment(&error.to_string())
+                    ),
+                    same_ray_generator_count: Some(same_ray_generator_count),
+                    zero_other_generator_count: None,
+                    positive_other_generator_count: None,
+                    separator_normal_nonzero: None,
+                    decomposition_kind: None,
+                    decomposition_active_generator_count: None,
+                    decomposition_exact_coefficients: None,
+                    decomposition_active_generators_nonzero: None,
+                });
+            }
+        }
     }
     match find_extremal_mori_ray_separator(curve, context.degree_bounded_rays) {
         Ok(Some(certificate)) => Some(TargetExtremalRayCertificateProbe {
@@ -20896,7 +20944,10 @@ fn local_cygv_star_union_crossed_wall_stable_weyl_candidate_probe(
         probe.status = "stable_weyl_blocked_extremal_certificate_not_run".to_string();
         return probe;
     };
-    if extremal_probe.status != "certified_exact_extremal_ray" {
+    if !matches!(
+        extremal_probe.status.as_str(),
+        "certified_exact_extremal_ray" | "certified_exact_extremal_ray_by_lp_after_generator_limit"
+    ) {
         probe.status = format!(
             "stable_weyl_blocked_extremal_certificate_{}",
             status_error_fragment(&extremal_probe.status)
@@ -30688,8 +30739,14 @@ mod tests {
             None,
         )
         .expect("enabled probe should report a limit status");
-        assert_eq!(limited.status, "skipped_generator_limit_2_actual_3");
+        assert_eq!(
+            limited.status,
+            "certified_exact_extremal_ray_by_lp_after_generator_limit"
+        );
         assert_eq!(limited.same_ray_generator_count, Some(1));
+        assert_eq!(limited.zero_other_generator_count, Some(1));
+        assert_eq!(limited.positive_other_generator_count, Some(1));
+        assert!(limited.separator_normal_nonzero.is_some());
     }
 
     #[test]
