@@ -326,7 +326,16 @@ run pass. Any remaining mismatch must be explicit and localizable.
    `--lower-seed-pair-limit 2048` completed in 45.40 seconds, pair-reduced
    `1616` seeds to `702`, found a repeated-term three-seed decomposition, and
    exported four lower-seed predecessor candidates with status
-   `stopped_generation_limit_0`.
+   `stopped_generation_limit_0`. The zero-generation mode now maps the rest
+   of the default-skipped target set at decomposition level without expanding
+   the broad semigroup closure: target `2` completed in 107.10 seconds
+   (`2560 -> 1124`, three terms, four candidates), target `3` in 191.04
+   seconds (`2963 -> 1316`, three terms, four candidates), target `4` in
+   85.22 seconds (`2212 -> 949`, three terms, four candidates), and target `5`
+   in 210.63 seconds (`2560 -> 1124`, four terms, six candidates). All of
+   these reports keep the closure status as `stopped_generation_limit_0`, so
+   they are decomposition/history triage rather than certified compact HKTY
+   histories.
    The parent-only classifications now include parent-path-support runtime
    lookups from the same `cygv` run. On the regenerated target 7 report, the
    generated degree-10 side term is a real parent-domain nonzero object
