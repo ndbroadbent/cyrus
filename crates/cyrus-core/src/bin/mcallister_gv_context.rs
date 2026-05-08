@@ -366,6 +366,8 @@ struct ContextReport {
     cygv_lower_seed_unknown_candidate_occurrence_count: usize,
     cygv_lower_seed_unknown_candidate_degree_counts: BTreeMap<i128, usize>,
     cygv_lower_seed_unknown_candidate_source_class_status_counts: BTreeMap<String, usize>,
+    cygv_lower_seed_unknown_candidate_bounded_seed_diamond_candidate_status_counts:
+        BTreeMap<String, usize>,
     cygv_lower_seed_unknown_candidate_sample: Vec<CygvLowerSeedUnknownCandidateSummary>,
     cygv_lower_seed_diamond_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_diamond_gv_counts: BTreeMap<String, usize>,
@@ -923,6 +925,7 @@ struct CygvLowerSeedUnknownCandidateSummary {
     bounded_seed_decomposition_status_counts: BTreeMap<String, usize>,
     bounded_seed_decomposition_term_degree_counts: BTreeMap<i128, usize>,
     bounded_seed_decomposition_term_known_qn_history_status_counts: BTreeMap<String, usize>,
+    bounded_seed_decomposition_diamond_candidate_status_counts: BTreeMap<String, usize>,
     source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
     matching_missing_target_index: Option<usize>,
     matching_missing_target_degree: Option<i128>,
@@ -956,6 +959,7 @@ struct CygvLowerSeedUnknownCandidateOccurrence {
     bounded_seed_decomposition_error: Option<String>,
     bounded_seed_decomposition_terms: Vec<CygvBoundedSeedDecompositionTermSummary>,
     bounded_seed_decomposition_term_error: Option<String>,
+    bounded_seed_decomposition_diamond_candidate_status: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1453,6 +1457,7 @@ struct CygvLowerSeedUnknownCandidateSummaryBuilder {
     bounded_seed_decomposition_status_counts: BTreeMap<String, usize>,
     bounded_seed_decomposition_term_degree_counts: BTreeMap<i128, usize>,
     bounded_seed_decomposition_term_known_qn_history_status_counts: BTreeMap<String, usize>,
+    bounded_seed_decomposition_diamond_candidate_status_counts: BTreeMap<String, usize>,
     source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
     matching_missing_target_index: Option<usize>,
     matching_missing_target_degree: Option<i128>,
@@ -14526,6 +14531,10 @@ fn build_report(
         cygv_lower_seed_unknown_candidate_source_class_status_counts(
             &cygv_lower_seed_unknown_candidate_sample,
         );
+    let cygv_lower_seed_unknown_candidate_bounded_seed_diamond_candidate_status_counts =
+        cygv_lower_seed_unknown_candidate_bounded_seed_diamond_candidate_status_counts(
+            &cygv_lower_seed_unknown_candidate_sample,
+        );
     let cygv_lower_seed_diamond_status_counts = optional_status_counts(
         targets.iter().map(|target| {
             target
@@ -14992,6 +15001,7 @@ fn build_report(
         cygv_lower_seed_unknown_candidate_occurrence_count,
         cygv_lower_seed_unknown_candidate_degree_counts,
         cygv_lower_seed_unknown_candidate_source_class_status_counts,
+        cygv_lower_seed_unknown_candidate_bounded_seed_diamond_candidate_status_counts,
         cygv_lower_seed_unknown_candidate_sample,
         cygv_lower_seed_diamond_status_counts,
         cygv_lower_seed_diamond_gv_counts,
@@ -18468,6 +18478,8 @@ fn cygv_lower_seed_unknown_candidate_summaries<'a>(
                 .bounded_seed_decomposition_term_degree_counts,
             bounded_seed_decomposition_term_known_qn_history_status_counts: builder
                 .bounded_seed_decomposition_term_known_qn_history_status_counts,
+            bounded_seed_decomposition_diamond_candidate_status_counts: builder
+                .bounded_seed_decomposition_diamond_candidate_status_counts,
             source_ray_ambient_nonzero: builder.source_ray_ambient_nonzero,
             matching_missing_target_index: builder.matching_missing_target_index,
             matching_missing_target_degree: builder.matching_missing_target_degree,
@@ -18560,6 +18572,7 @@ fn add_lower_seed_unknown_candidate_side(
             bounded_seed_decomposition_status_counts: BTreeMap::new(),
             bounded_seed_decomposition_term_degree_counts: BTreeMap::new(),
             bounded_seed_decomposition_term_known_qn_history_status_counts: BTreeMap::new(),
+            bounded_seed_decomposition_diamond_candidate_status_counts: BTreeMap::new(),
             source_ray_ambient_nonzero: source_context
                 .as_ref()
                 .and_then(|source_context| source_context.source_ray_ambient_nonzero.clone()),
@@ -18670,6 +18683,14 @@ fn add_lower_seed_unknown_candidate_side(
             bounded_seed_decomposition_error.as_deref(),
         ))
         .or_insert(0) += 1;
+    let bounded_seed_decomposition_diamond_candidate_status =
+        lower_seed_unknown_bounded_seed_diamond_candidate_status(
+            bounded_seed_decomposition.as_ref(),
+        );
+    *entry
+        .bounded_seed_decomposition_diamond_candidate_status_counts
+        .entry(bounded_seed_decomposition_diamond_candidate_status.clone())
+        .or_insert(0) += 1;
     let (bounded_seed_decomposition_terms, bounded_seed_decomposition_term_error) =
         lower_seed_unknown_bounded_seed_decomposition_terms(
             bounded_seed_decomposition.as_ref(),
@@ -18728,6 +18749,7 @@ fn add_lower_seed_unknown_candidate_side(
             bounded_seed_decomposition_error,
             bounded_seed_decomposition_terms,
             bounded_seed_decomposition_term_error,
+            bounded_seed_decomposition_diamond_candidate_status,
         });
 }
 
@@ -18759,6 +18781,47 @@ fn lower_seed_unknown_bounded_seed_decomposition_status(
         },
         |decomposition| decomposition.status.clone(),
     )
+}
+
+fn lower_seed_unknown_bounded_seed_diamond_candidate_status(
+    decomposition: Option<&CygvBoundedSeedDecompositionSummary>,
+) -> String {
+    let Some(decomposition) = decomposition else {
+        return "missing_bounded_seed_decomposition".to_string();
+    };
+    if decomposition.status != "found_lower_seed_decomposition" {
+        return decomposition.status.clone();
+    }
+    let Some(diamond_status) = decomposition.diamond_status.as_deref() else {
+        return "diamond_not_run".to_string();
+    };
+    if diamond_status != "computed_bounded_decomposition_diamond_qn_trace" {
+        return format!("diamond_{diamond_status}");
+    }
+    if decomposition
+        .diamond_gw_noninteger_candidate_count
+        .is_some_and(|count| count > 0)
+    {
+        return "blocked_noninteger_gw_candidates".to_string();
+    }
+    let Some(gv) = decomposition.diamond_gv.as_deref() else {
+        return "missing_diamond_gv".to_string();
+    };
+    let parsed_gv = match parse_rational(gv) {
+        Ok(value) => value,
+        Err(error) => return format!("error_{}", status_error_fragment(&error)),
+    };
+    if parsed_gv.denominator_ref() != &1u32 {
+        return "blocked_noninteger_diamond_gv".to_string();
+    }
+    if parsed_gv == MalachiteRational::from(0) {
+        return "integer_zero_or_absent_gv".to_string();
+    }
+    match decomposition.diamond_target_qn_trace_status.as_deref() {
+        Some("path_support_qn_materialized_for_nonzero_gv") => "integer_nonzero_gv".to_string(),
+        Some(status) => format!("integer_nonzero_gv_with_{status}"),
+        None => "integer_nonzero_gv_missing_qn_trace_status".to_string(),
+    }
 }
 
 fn lower_seed_unknown_bounded_seed_decomposition_terms(
@@ -18814,6 +18877,18 @@ fn cygv_lower_seed_unknown_candidate_source_class_status_counts(
     let mut counts = BTreeMap::new();
     for summary in summaries {
         for (status, count) in &summary.source_class_status_counts {
+            *counts.entry(status.clone()).or_insert(0) += count;
+        }
+    }
+    counts
+}
+
+fn cygv_lower_seed_unknown_candidate_bounded_seed_diamond_candidate_status_counts(
+    summaries: &[CygvLowerSeedUnknownCandidateSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        for (status, count) in &summary.bounded_seed_decomposition_diamond_candidate_status_counts {
             *counts.entry(status.clone()).or_insert(0) += count;
         }
     }
@@ -26203,6 +26278,10 @@ mod tests {
                 lower_unknown.bounded_seed_decomposition_status_counts,
                 BTreeMap::from([("not_found_up_to_4".to_string(), 2)])
             );
+            assert_eq!(
+                lower_unknown.bounded_seed_decomposition_diamond_candidate_status_counts,
+                BTreeMap::from([("not_found_up_to_4".to_string(), 2)])
+            );
             assert!(
                 lower_unknown
                     .bounded_seed_decomposition_term_degree_counts
@@ -26222,8 +26301,16 @@ mod tests {
             assert!(lower_unknown.occurrences.iter().all(|occurrence| {
                 occurrence.bounded_seed_decomposition_terms.is_empty()
                     && occurrence.bounded_seed_decomposition_term_error.is_none()
+                    && occurrence.bounded_seed_decomposition_diamond_candidate_status
+                        == "not_found_up_to_4"
             }));
         }
+        assert_eq!(
+            cygv_lower_seed_unknown_candidate_bounded_seed_diamond_candidate_status_counts(
+                &lower_unknowns
+            ),
+            BTreeMap::from([("not_found_up_to_4".to_string(), 4)])
+        );
         assert_eq!(
             cygv_lower_seed_unknown_candidate_degree_counts(&lower_unknowns),
             BTreeMap::from([(1, 2)])
