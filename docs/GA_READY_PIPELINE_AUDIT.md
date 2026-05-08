@@ -1694,6 +1694,16 @@ to make the remaining GV layer more first-principles:
    `expanded_secondary_fan_height_certificate_status=strictly_inside_secondary_cone`,
    `strictly_inside=true`, `hyperplane_count=6390`, and min pairing
    `0.04219187862736362`, while preserving `missing_target_count=9`.
+   Cyrus now also ports the small CYTools `ntfe_hypers` chamber-choice
+   stacking primitive as
+   `expanded_secondary_chamber_hyperplanes_from_choice_index`: given a
+   per-two-face list of possible FRT inequality blocks, it decodes the
+   CYTools mixed-radix chamber index, selects one block per face, stacks the
+   rows, and deduplicates the resulting ambient hyperplanes. Focused tests pin
+   the CYTools index order (`[2,3]` choices decode with the last face changing
+   fastest), row deduplication, and invalid block rejection. This removes the
+   next mechanical NTFE support operation, but it still does not enumerate
+   face FRTs or certify the missing target-plus-star compact qN history.
    The Stage 0 no-replay policy tests also now pass again after two policy
    cleanups: generic first-principles runs log the computed flux-coordinate
    basis separately from explicit production-basis overrides, and the opt-in

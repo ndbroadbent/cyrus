@@ -301,6 +301,143 @@ pub fn expanded_secondary_fan_hyperplanes_on_polytope_2faces_4d(
     expanded_secondary_fan_hyperplanes_on_faces(points, &faces.twofaces)
 }
 
+/// Count expanded-secondary chamber choices from per-face inequality blocks.
+///
+/// This ports the mixed-radix counting core of CYTools `ntfe_hypers`: each
+/// two-face contributes a list of possible FRT inequality blocks, and an NTFE
+/// chamber chooses one block for every face.
+///
+/// # Errors
+///
+/// Returns an error if any face has no available inequality block or if the
+/// product of choice counts overflows `usize`.
+pub fn expanded_secondary_chamber_choice_count(
+    face_inequality_choices: &[Vec<Vec<Vec<i64>>>],
+) -> Result<usize> {
+    let mut count = 1usize;
+    for (face_idx, choices) in face_inequality_choices.iter().enumerate() {
+        if choices.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "expanded secondary chamber face {face_idx} has no inequality choices"
+            )));
+        }
+        count = count.checked_mul(choices.len()).ok_or_else(|| {
+            Error::InvalidInput("expanded secondary chamber choice count overflows usize".into())
+        })?;
+    }
+    Ok(count)
+}
+
+/// Decode a CYTools-style mixed-radix chamber choice index.
+///
+/// CYTools `matrix.LIL_stack` uses `from_base10`: the last face changes
+/// fastest. For choice counts `[2, 3]`, indices decode as
+/// `0 -> [0,0]`, `1 -> [0,1]`, `2 -> [0,2]`, `3 -> [1,0]`.
+///
+/// # Errors
+///
+/// Returns an error if any choice count is zero or if `choice_index` is outside
+/// the product of the supplied counts.
+pub fn expanded_secondary_chamber_choice_digits(
+    choice_index: usize,
+    choice_counts: &[usize],
+) -> Result<Vec<usize>> {
+    let total = expanded_secondary_choice_count_from_counts(choice_counts)?;
+    if choice_index >= total {
+        return Err(Error::InvalidInput(format!(
+            "expanded secondary chamber choice index {choice_index} exceeds total choice count {total}"
+        )));
+    }
+    let mut remaining = choice_index;
+    let mut digits_reversed = Vec::with_capacity(choice_counts.len());
+    for &base in choice_counts.iter().rev() {
+        digits_reversed.push(remaining % base);
+        remaining /= base;
+    }
+    digits_reversed.reverse();
+    Ok(digits_reversed)
+}
+
+/// Stack one inequality block per two-face and deduplicate rows.
+///
+/// This is the row-stacking core of CYTools `matrix.LIL_stack` as used by
+/// `Polytope.ntfe_hypers`: `choice_digits[i]` selects the block for face `i`,
+/// all selected rows are concatenated, and duplicate hyperplanes are removed.
+///
+/// # Errors
+///
+/// Returns an error if the choice vector has the wrong length, a face has no
+/// choices, a choice is out of range, or selected hyperplane rows do not have a
+/// consistent ambient width.
+pub fn expanded_secondary_chamber_hyperplanes_from_choice(
+    face_inequality_choices: &[Vec<Vec<Vec<i64>>>],
+    choice_digits: &[usize],
+) -> Result<Vec<Vec<i64>>> {
+    if face_inequality_choices.len() != choice_digits.len() {
+        return Err(Error::InvalidInput(format!(
+            "expanded secondary chamber choice has {} digits for {} faces",
+            choice_digits.len(),
+            face_inequality_choices.len()
+        )));
+    }
+
+    let mut width = None;
+    let mut hyperplanes = BTreeSet::new();
+    for (face_idx, (choices, &choice)) in face_inequality_choices
+        .iter()
+        .zip(choice_digits.iter())
+        .enumerate()
+    {
+        if choices.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "expanded secondary chamber face {face_idx} has no inequality choices"
+            )));
+        }
+        let Some(block) = choices.get(choice) else {
+            return Err(Error::InvalidInput(format!(
+                "expanded secondary chamber face {face_idx} choice {choice} exceeds choice count {}",
+                choices.len()
+            )));
+        };
+        for row in block {
+            match width {
+                Some(expected) if row.len() != expected => {
+                    return Err(Error::InvalidInput(format!(
+                        "expanded secondary chamber face {face_idx} row has width {}, expected {expected}",
+                        row.len()
+                    )));
+                }
+                Some(_) => {}
+                None => width = Some(row.len()),
+            }
+            hyperplanes.insert(row.clone());
+        }
+    }
+    Ok(hyperplanes.into_iter().collect())
+}
+
+/// Stack expanded-secondary chamber hyperplanes from a CYTools choice index.
+///
+/// This composes [`expanded_secondary_chamber_choice_digits`] and
+/// [`expanded_secondary_chamber_hyperplanes_from_choice`] for callers that use
+/// CYTools' integer encoding of NTFE choices.
+///
+/// # Errors
+///
+/// Returns an error for invalid choice counts, out-of-range choice indices, or
+/// invalid selected inequality blocks.
+pub fn expanded_secondary_chamber_hyperplanes_from_choice_index(
+    face_inequality_choices: &[Vec<Vec<Vec<i64>>>],
+    choice_index: usize,
+) -> Result<Vec<Vec<i64>>> {
+    let choice_counts = face_inequality_choices
+        .iter()
+        .map(Vec::len)
+        .collect::<Vec<_>>();
+    let choice_digits = expanded_secondary_chamber_choice_digits(choice_index, &choice_counts)?;
+    expanded_secondary_chamber_hyperplanes_from_choice(face_inequality_choices, &choice_digits)
+}
+
 /// Construct the circuit facets for one side of a bistellar flip.
 ///
 /// For a circuit `C = C_+ union C_-`, the two triangulations of the circuit are
@@ -916,6 +1053,21 @@ fn affine_rank_for_point_index_set(points: &[Point], indices: &BTreeSet<usize>) 
     Ok(matrix_rank(&rows))
 }
 
+fn expanded_secondary_choice_count_from_counts(choice_counts: &[usize]) -> Result<usize> {
+    let mut count = 1usize;
+    for (face_idx, &base) in choice_counts.iter().enumerate() {
+        if base == 0 {
+            return Err(Error::InvalidInput(format!(
+                "expanded secondary chamber face {face_idx} has zero choices"
+            )));
+        }
+        count = count.checked_mul(base).ok_or_else(|| {
+            Error::InvalidInput("expanded secondary chamber choice count overflows usize".into())
+        })?;
+    }
+    Ok(count)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct LocalFacePoint2D {
     point_index: usize,
@@ -1423,6 +1575,68 @@ mod tests {
             expanded_secondary_fan_hyperplanes_on_faces(&points, &[vec![0, 1, 2]]).unwrap_err();
 
         assert!(error.to_string().contains("has affine rank 1, expected 2"));
+    }
+
+    #[test]
+    fn expanded_secondary_chamber_choice_digits_match_cytools_mixed_radix_order() {
+        let counts = vec![2, 3];
+
+        let decoded = (0..6)
+            .map(|index| expanded_secondary_chamber_choice_digits(index, &counts).unwrap())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            decoded,
+            vec![
+                vec![0, 0],
+                vec![0, 1],
+                vec![0, 2],
+                vec![1, 0],
+                vec![1, 1],
+                vec![1, 2],
+            ]
+        );
+        assert_eq!(
+            expanded_secondary_chamber_choice_count(&vec![
+                vec![vec![vec![1, 0]], vec![vec![0, 1]]],
+                vec![vec![vec![0, 0]], vec![vec![1, 1]], vec![vec![-1, -1]]],
+            ])
+            .unwrap(),
+            6
+        );
+    }
+
+    #[test]
+    fn expanded_secondary_chamber_hyperplanes_stack_selected_blocks_and_deduplicate() {
+        let face_choices = vec![
+            vec![vec![vec![1, 0, 0]], vec![vec![0, 1, 0]]],
+            vec![vec![vec![0, 0, 1]], vec![vec![0, 1, 0], vec![1, 1, 1]]],
+        ];
+
+        let hyperplanes =
+            expanded_secondary_chamber_hyperplanes_from_choice(&face_choices, &[1, 1]).unwrap();
+
+        assert_eq!(hyperplanes, vec![vec![0, 1, 0], vec![1, 1, 1]]);
+        assert_eq!(
+            expanded_secondary_chamber_hyperplanes_from_choice_index(&face_choices, 3).unwrap(),
+            hyperplanes
+        );
+    }
+
+    #[test]
+    fn expanded_secondary_chamber_hyperplanes_reject_invalid_choice_blocks() {
+        let face_choices = vec![vec![vec![vec![1, 0]]], vec![vec![vec![0, 1, 0]]]];
+
+        let error =
+            expanded_secondary_chamber_hyperplanes_from_choice(&face_choices, &[0, 0]).unwrap_err();
+
+        assert!(error.to_string().contains("width 3, expected 2"));
+        assert!(
+            expanded_secondary_chamber_choice_digits(6, &[2, 3])
+                .unwrap_err()
+                .to_string()
+                .contains("exceeds total choice count 6")
+        );
     }
 
     #[test]

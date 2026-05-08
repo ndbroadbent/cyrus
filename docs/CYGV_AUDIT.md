@@ -3824,6 +3824,14 @@ schema-4 4-214-647 context patched with the dumped certificate reports
 and minimum pairing `0.04219187862736362`; the actual corrected-GV queue
 remains nine missing targets. Thus the new field is chamber-support evidence
 available to downstream diagnostics, not a promotion of any missing GV value.
+Cyrus now also exposes the small CYTools `ntfe_hypers` row-stacking core:
+`expanded_secondary_chamber_hyperplanes_from_choice_index` decodes the same
+mixed-radix chamber index used by CYTools, selects one FRT inequality block per
+two-face, stacks the selected rows, and deduplicates ambient hyperplanes. The
+secondary test suite pins the last-face-fastest index order, duplicate-row
+behavior, and invalid block rejection. This is the next mechanical expanded
+secondary-fan primitive needed before real NTFE/chamber enumeration; it is not
+a source-derived corrected-chamber semigroup or GV promotion rule.
 
 The star-union chamber semigroup probe now also lifts every current/flipped
 chamber generator back through the global curve-basis projection and reports
