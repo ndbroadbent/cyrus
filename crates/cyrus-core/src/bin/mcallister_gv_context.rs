@@ -22188,7 +22188,7 @@ fn chamber_semigroup_generator_context(
         lower_seed_sum_decomposition,
         bounded_lower_seed_decomposition,
         lower_seed_decomposition_error,
-    ) = star_union_lower_seed_diagnostics(&basis_dense, degree, context);
+    ) = star_union_lower_seed_diagnostics(&basis_dense, degree, context, true);
 
     LocalCygvChamberSemigroupGeneratorContext {
         generator_index,
@@ -23671,7 +23671,7 @@ fn local_cygv_star_union_global_basis_lookup(
         lower_seed_sum_decomposition,
         bounded_lower_seed_decomposition,
         lower_seed_decomposition_error,
-    ) = star_union_lower_seed_diagnostics(&basis_dense, degree.unwrap_or(0), context);
+    ) = star_union_lower_seed_diagnostics(&basis_dense, degree.unwrap_or(0), context, false);
     let (
         opposite_basis_nonzero,
         opposite_degree,
@@ -23729,6 +23729,7 @@ fn local_cygv_star_union_global_basis_lookup(
                             &opposite_dense,
                             opposite_degree,
                             context,
+                            false,
                         );
                         let opposite_global_secondary_height =
                             global_basis_secondary_height_pairing_hint(&opposite_dense, context);
@@ -24874,6 +24875,7 @@ fn star_union_lower_seed_diagnostics(
     target: &[i64],
     target_degree: i128,
     context: &ValidatedContext<'_>,
+    run_bounded_diamond: bool,
 ) -> (
     Option<CygvSeedSumDecomposition>,
     Option<CygvBoundedSeedDecompositionSummary>,
@@ -24926,7 +24928,7 @@ fn star_union_lower_seed_diagnostics(
         target,
         &seed_set,
         STAR_UNION_LOWER_SEED_DECOMPOSITION_MAX_TERMS,
-        None,
+        run_bounded_diamond.then_some(context),
     ) {
         Ok(summary) => Some(summary),
         Err(error) => return (first_generation_seed_sum, None, Some(error)),

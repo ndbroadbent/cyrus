@@ -1528,7 +1528,10 @@ to make the remaining GV layer more first-principles:
    generators also have two-term bounded decompositions. The remaining unknown
    degree-2 and degree-6 chamber generators report `not_found_up_to_4`, so the
    unresolved part is still a compact/source chamber history problem rather
-   than a scalar lookup problem.
+   than a scalar lookup problem. Enabling the actual-`cygv` qN trace on those
+   two-term bounded diamonds gives `GV=0` with no target qN polynomial, even
+   for the degree-4 generator whose source-derived GV is `1`. These diamonds
+   are therefore negative diagnostics rather than valid source histories.
    A follow-up compact-omission wall-side summary confirms this selected side
    is not one of the compact omission phases: both target rows have four
    compact omissions, but zero full-positive-side or full-negative-side

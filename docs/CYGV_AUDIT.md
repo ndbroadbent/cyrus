@@ -3805,6 +3805,11 @@ lower seeds, and several unknown degree-4 chamber generators do as well, but
 the unknown degree-2 and degree-6 generators in the target `7`/`8` chamber
 decompositions are still `not_found_up_to_4`. That keeps the missing object at
 the chamber/history level rather than at a single missing scalar source row.
+The bounded-diamond `cygv` trace is now enabled for these chamber-generator
+decompositions. All decomposed degree-4 generator diamonds return `GV=0` with
+no target qN polynomial, including the current-chamber wall row whose
+source-derived scalar GV is `1`, so the two-seed diamonds are not valid source
+semigroup histories.
 
 The no-replay boundary around the standalone GV binary is stricter now:
 `mcallister_gv` no longer reads `dual_curves.dat` or `dual_curves_gv.dat`.
