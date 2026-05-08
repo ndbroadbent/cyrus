@@ -18,6 +18,9 @@ use super::Polytope;
 pub struct PolytopeFaces4d {
     /// Facets as point-index sets.
     pub facets: Vec<Vec<usize>>,
+    /// Facet boundary point-index sets, excluding points interior to exactly
+    /// one 4D facet. CYTools uses `labels_bdry` for star-constraint circuits.
+    pub facet_boundaries: Vec<Vec<usize>>,
     /// Two-dimensional faces as point-index sets.
     pub twofaces: Vec<Vec<usize>>,
 }
@@ -131,8 +134,18 @@ impl Polytope {
         }
 
         let poly_vertices = self.vertices();
+        let point_saturation_counts = points
+            .iter()
+            .map(|point| {
+                dual_vertices
+                    .iter()
+                    .filter(|dual_vertex| lattice_dot(point.coords(), dual_vertex.coords()) == -1)
+                    .count()
+            })
+            .collect::<Vec<_>>();
         let mut facet_vertex_sets = Vec::with_capacity(dual_vertices.len());
         let mut facets = Vec::with_capacity(dual_vertices.len());
+        let mut facet_boundaries = Vec::with_capacity(dual_vertices.len());
         for dual_vertex in &dual_vertices {
             let mut vertex_set = HashSet::new();
             for (idx, vertex) in poly_vertices.iter().enumerate() {
@@ -149,7 +162,14 @@ impl Polytope {
                 }
             }
             facet_points.sort_unstable();
+            let mut facet_boundary = facet_points
+                .iter()
+                .copied()
+                .filter(|&point_idx| point_saturation_counts[point_idx] > 1)
+                .collect::<Vec<_>>();
+            facet_boundary.sort_unstable();
             facets.push(facet_points);
+            facet_boundaries.push(facet_boundary);
         }
 
         let mut twofaces = Vec::new();
@@ -177,7 +197,11 @@ impl Polytope {
             }
         }
 
-        Ok(PolytopeFaces4d { facets, twofaces })
+        Ok(PolytopeFaces4d {
+            facets,
+            facet_boundaries,
+            twofaces,
+        })
     }
 
     /// Debug version that also returns saturation histogram.

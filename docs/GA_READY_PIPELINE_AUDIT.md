@@ -1220,6 +1220,17 @@ to make the remaining GV layer more first-principles:
    targets `7`/`8`, one wall is the resolved-conifold star-side relation
    `[(0,-1),(55,-1),(195,1),(212,1)]`, so the obstruction is visible as
    degenerate wall circuitry rather than just an aggregate count.
+   The reusable secondary-cone layer now also ports CYTools'
+   `require_star=True` `_2d_s_cone_ineqs` branch for caller-supplied 4D
+   two-face triangulations: `PolytopeFaces4d` exposes CYTools-style facet
+   boundary labels, `expanded_secondary_star_hyperplanes_for_face_triangulation_4d`
+   builds the origin-plus-two-facet circuit rows with an exact barycentric
+   convex-hull guard, and
+   `expanded_secondary_cone_hyperplanes_from_face_triangulations_with_star_4d`
+   unions those rows with native two-face CPL inequalities. The regression
+   currently pins the `P^4` simplex star row `[-5,1,1,1,1,1]`. This is
+   reusable chamber-constraint infrastructure; it does not by itself supply
+   the corrected-chamber `q_N` history.
    The first-principles corrected-chamber context exporter now also carries the
    full corrected secondary-fan height vector as
    `secondary_cone_heights_for_missing`, and `mcallister_gv_context` validates

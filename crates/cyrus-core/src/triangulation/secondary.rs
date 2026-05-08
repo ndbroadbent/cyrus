@@ -13,7 +13,9 @@ use super::regular::compute_regular_triangulation;
 use crate::Point;
 use crate::cone::Cone;
 use crate::error::{Error, Result};
-use crate::integer_math::{hermite_normal_form, integer_kernel, matrix_rank};
+use crate::integer_math::{
+    hermite_normal_form, integer_kernel, matrix_rank, solve_linear_system_rational,
+};
 use crate::polytope::Polytope;
 use crate::types::f64::F64;
 use crate::types::tags::{Finite, Pos};
@@ -241,6 +243,120 @@ pub fn expanded_secondary_cone_hyperplanes_from_face_triangulations(
     let mut hyperplanes = BTreeSet::new();
     for triangulation in face_triangulations {
         for hyperplane in secondary_cone_hyperplanes_native(points, triangulation)? {
+            hyperplanes.insert(hyperplane);
+        }
+    }
+    Ok(hyperplanes.into_iter().collect())
+}
+
+/// Compute CYTools `_2d_s_cone_ineqs` star constraints for one 2-face triangulation.
+///
+/// This is the optional `require_star=True` branch used by CYTools'
+/// `triangface_ineqs`: for each 2-simplex in a selected two-face
+/// triangulation, build the 4D circuits `s + origin + p_1 + p_2` where
+/// `p_1` and `p_2` lie on the boundaries of two distinct facets containing
+/// `s`. A candidate is kept only when the five non-origin points contain no
+/// other non-origin triangulation point in their convex hull, matching the
+/// CYTools flipability guard.
+///
+/// The origin is expected to be point index `0`, matching the Cyrus/CYTools
+/// triangulation-point ordering for reflexive polytopes.
+///
+/// # Errors
+///
+/// Returns an error if the polytope is not a 4D reflexive polytope, if the
+/// supplied points are not 4D, if a simplex is not a valid 2-simplex, or if a
+/// candidate circuit has invalid linear algebra.
+pub fn expanded_secondary_star_hyperplanes_for_face_triangulation_4d(
+    points: &[Point],
+    face_triangulation: &Triangulation,
+    polytope: &Polytope,
+) -> Result<Vec<Vec<i64>>> {
+    validate_star_inequality_input(points, face_triangulation, polytope)?;
+    let faces = polytope.faces_4d_for_points(points)?;
+    let origin = 0usize;
+    let mut hyperplanes = BTreeSet::new();
+
+    for simplex in face_triangulation.simplices() {
+        let simplex_set = simplex.iter().copied().collect::<BTreeSet<_>>();
+        let containing_facets = faces
+            .facets
+            .iter()
+            .enumerate()
+            .filter(|(_, facet)| simplex.iter().all(|point| facet.contains(point)))
+            .map(|(facet_idx, _)| facet_idx)
+            .collect::<Vec<_>>();
+
+        for left_pos in 0..containing_facets.len() {
+            for right_pos in (left_pos + 1)..containing_facets.len() {
+                let left_boundary = faces.facet_boundaries[containing_facets[left_pos]]
+                    .iter()
+                    .copied()
+                    .collect::<BTreeSet<_>>();
+                let right_boundary = faces.facet_boundaries[containing_facets[right_pos]]
+                    .iter()
+                    .copied()
+                    .collect::<BTreeSet<_>>();
+                let left_only = left_boundary
+                    .difference(&right_boundary)
+                    .copied()
+                    .filter(|point| !simplex_set.contains(point))
+                    .collect::<Vec<_>>();
+                let right_only = right_boundary
+                    .difference(&left_boundary)
+                    .copied()
+                    .filter(|point| !simplex_set.contains(point))
+                    .collect::<Vec<_>>();
+
+                for first in &left_only {
+                    for second in &right_only {
+                        let mut support = vec![*first, *second];
+                        support.extend_from_slice(simplex);
+                        if candidate_non_origin_simplex_contains_other_point(
+                            points, &support, origin,
+                        )? {
+                            continue;
+                        }
+                        hyperplanes.insert(secondary_cone_circuit_relation(
+                            points,
+                            &[*first, *second],
+                            &[simplex[0], simplex[1], simplex[2], origin],
+                        )?);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(hyperplanes.into_iter().collect())
+}
+
+/// Union selected two-face FRT inequalities with optional star constraints.
+///
+/// This ports the `require_star=True` variant of CYTools'
+/// `cone_of_permissible_heights` for caller-supplied two-face triangulations:
+/// native two-face CPL inequalities are combined with the `_2d_s_cone_ineqs`
+/// star rows and deduplicated in ambient point-index order.
+///
+/// # Errors
+///
+/// Returns an error if either the native face inequalities or the star
+/// inequalities cannot be computed.
+pub fn expanded_secondary_cone_hyperplanes_from_face_triangulations_with_star_4d(
+    points: &[Point],
+    face_triangulations: &[Triangulation],
+    polytope: &Polytope,
+) -> Result<Vec<Vec<i64>>> {
+    let mut hyperplanes =
+        expanded_secondary_cone_hyperplanes_from_face_triangulations(points, face_triangulations)?
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+    for triangulation in face_triangulations {
+        for hyperplane in expanded_secondary_star_hyperplanes_for_face_triangulation_4d(
+            points,
+            triangulation,
+            polytope,
+        )? {
             hyperplanes.insert(hyperplane);
         }
     }
@@ -1039,6 +1155,145 @@ fn validate_secondary_cone_input(
     Ok(Some(simplex_dim))
 }
 
+fn validate_star_inequality_input(
+    points: &[Point],
+    face_triangulation: &Triangulation,
+    polytope: &Polytope,
+) -> Result<()> {
+    validate_point_dimensions(points, "expanded secondary star inequality points")?;
+    if polytope.dim() != 4 {
+        return Err(Error::InvalidInput(
+            "expanded secondary star inequalities are only defined for 4D polytopes".to_string(),
+        ));
+    }
+    if points.iter().any(|point| point.dim() != 4) {
+        return Err(Error::InvalidInput(
+            "expanded secondary star inequality points must be 4D".to_string(),
+        ));
+    }
+    let Some(origin) = points.first() else {
+        return Err(Error::InvalidInput(
+            "expanded secondary star inequalities require an origin point at index 0".to_string(),
+        ));
+    };
+    if !origin.is_origin() {
+        return Err(Error::InvalidInput(
+            "expanded secondary star inequalities require point index 0 to be the origin"
+                .to_string(),
+        ));
+    }
+
+    for (simplex_idx, simplex) in face_triangulation.simplices().iter().enumerate() {
+        if simplex.len() != 3 {
+            return Err(Error::InvalidInput(format!(
+                "expanded secondary star simplex {simplex_idx} has {} points, expected 3",
+                simplex.len()
+            )));
+        }
+        let mut simplex_set = BTreeSet::new();
+        for &point_idx in simplex {
+            if point_idx >= points.len() {
+                return Err(Error::InvalidInput(format!(
+                    "expanded secondary star simplex {simplex_idx} point index {point_idx} exceeds point count {}",
+                    points.len()
+                )));
+            }
+            if point_idx == 0 {
+                return Err(Error::InvalidInput(format!(
+                    "expanded secondary star simplex {simplex_idx} contains the origin"
+                )));
+            }
+            if !simplex_set.insert(point_idx) {
+                return Err(Error::InvalidInput(format!(
+                    "expanded secondary star simplex {simplex_idx} contains duplicate point index {point_idx}"
+                )));
+            }
+        }
+        let affine_rank = affine_rank_for_point_index_set(points, &simplex_set)?;
+        if affine_rank != 2 {
+            return Err(Error::InvalidInput(format!(
+                "expanded secondary star simplex {simplex_idx} affine rank {affine_rank}, expected 2"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn candidate_non_origin_simplex_contains_other_point(
+    points: &[Point],
+    support: &[usize],
+    origin: usize,
+) -> Result<bool> {
+    if support.len() != 5 {
+        return Err(Error::InvalidInput(format!(
+            "star inequality candidate has {} support points, expected 5",
+            support.len()
+        )));
+    }
+    let mut support_set = BTreeSet::new();
+    for &point_idx in support {
+        if point_idx >= points.len() {
+            return Err(Error::InvalidInput(format!(
+                "star inequality support point index {point_idx} exceeds point count {}",
+                points.len()
+            )));
+        }
+        if point_idx == origin {
+            return Err(Error::InvalidInput(
+                "star inequality non-origin support contains the origin".to_string(),
+            ));
+        }
+        if !support_set.insert(point_idx) {
+            return Err(Error::InvalidInput(format!(
+                "star inequality support contains duplicate point index {point_idx}"
+            )));
+        }
+    }
+
+    let dim = points
+        .first()
+        .map(Point::dim)
+        .ok_or_else(|| Error::InvalidInput("star inequality point set is empty".to_string()))?;
+    if dim != 4 {
+        return Err(Error::InvalidInput(
+            "star inequality convex-hull guard requires 4D points".to_string(),
+        ));
+    }
+
+    let mut matrix = vec![vec![Rational::from(0); support.len()]; dim + 1];
+    for (column, &point_idx) in support.iter().enumerate() {
+        for (row, &coord) in points[point_idx].coords().iter().enumerate() {
+            matrix[row][column] = Rational::from(coord);
+        }
+        matrix[dim][column] = Rational::from(1);
+    }
+
+    for (point_idx, point) in points.iter().enumerate() {
+        if point_idx == origin || support_set.contains(&point_idx) {
+            continue;
+        }
+        let mut rhs = point
+            .coords()
+            .iter()
+            .map(|&coord| Rational::from(coord))
+            .collect::<Vec<_>>();
+        rhs.push(Rational::from(1));
+        let Some(barycentric) = solve_linear_system_rational(&matrix, &rhs) else {
+            return Err(Error::LinearAlgebra(
+                "star inequality candidate support is affinely dependent".to_string(),
+            ));
+        };
+        if barycentric
+            .iter()
+            .all(|coefficient| coefficient >= &Rational::from(0))
+        {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
 fn validate_point_dimensions(points: &[Point], context: &str) -> Result<()> {
     let Some(first_point) = points.first() else {
         return Ok(());
@@ -1734,6 +1989,36 @@ mod tests {
                 vec![0, 0, 0, 0, -1, 1, -1, 1],
             ]
         );
+    }
+
+    #[test]
+    fn expanded_secondary_star_hyperplanes_include_p4_simplex_star_row() {
+        let points = vec![
+            Point::new(vec![0, 0, 0, 0]),
+            Point::new(vec![1, 0, 0, 0]),
+            Point::new(vec![0, 1, 0, 0]),
+            Point::new(vec![0, 0, 1, 0]),
+            Point::new(vec![0, 0, 0, 1]),
+            Point::new(vec![-1, -1, -1, -1]),
+        ];
+        let polytope = Polytope::from_vertices(points[1..].to_vec()).unwrap();
+        let face_triangulation = Triangulation::new(vec![vec![1, 2, 3]]);
+
+        let star_rows = expanded_secondary_star_hyperplanes_for_face_triangulation_4d(
+            &points,
+            &face_triangulation,
+            &polytope,
+        )
+        .unwrap();
+        let combined = expanded_secondary_cone_hyperplanes_from_face_triangulations_with_star_4d(
+            &points,
+            &[face_triangulation],
+            &polytope,
+        )
+        .unwrap();
+
+        assert_eq!(star_rows, vec![vec![-5, 1, 1, 1, 1, 1]]);
+        assert_eq!(combined, vec![vec![-5, 1, 1, 1, 1, 1]]);
     }
 
     #[test]

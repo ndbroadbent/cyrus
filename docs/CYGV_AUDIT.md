@@ -94,6 +94,17 @@ the origin entry or by applying the divisor basis. This is the exact source of
 the "toric curve" candidates used by the high-dimensional Kähler-side
 selection.
 
+The adjacent-chamber secondary-fan source is now partially reusable in Cyrus
+too. The core triangulation module ports CYTools' optional
+`require_star=True` `_2d_s_cone_ineqs` rows for supplied 4D two-face
+triangulations: facet-boundary labels are computed from exact facet saturation,
+candidate origin circuits are filtered by exact rational barycentric
+containment, and the resulting star rows can be unioned with the native
+two-face CPL inequalities. The pinned `P^4` simplex regression gives the
+expected star row `[-5,1,1,1,1,1]`. This is chamber-constraint infrastructure;
+it still has to be connected to a certified corrected-chamber semigroup before
+any McAllister missing-target GV can be promoted.
+
 CYTools' `Cone.find_lattice_points` is a separate operation. It first checks
 that the grading vector has only the origin at nonpositive degree, then uses
 CP-SAT to enumerate integer points in degree windows sorted by degree and
