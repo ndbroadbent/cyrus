@@ -1027,6 +1027,10 @@ to make the remaining GV layer more first-principles:
    degree-6 `target+star` row is `not_found_up_to_4` and is still not a
    degree-bounded source ray. This makes the next compact-history target the
    degree-6 chamber row, not the resolved-conifold side.
+   The report also exports the union charge-basis coordinates for the sum row:
+   target `7` has `target+star=[3,1,-1]`, target `8` has
+   `target+star=[1,1,-1]`; both have sorted point-coefficient signature
+   `[-3,-1,-1,1,1,1,2]`.
    The full union-support height profile is now serialized as well. For
    targets `3`/`6`, the off-hyperplane zero-shared ray carries zero target and
    star coefficient; for targets `7`/`8`, the height `-1` zero-shared ray and

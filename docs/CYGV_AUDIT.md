@@ -3245,6 +3245,13 @@ toric/source GV `1`:
 and `not_found_up_to_4` lower source seeds. Therefore the remaining
 degree-10 target decomposition is blocked on the degree-6 chamber row rather
 than on the known resolved-conifold side.
+The coordinate-enriched report,
+`/tmp/cyrus_gv_context_star_union_coordinates_report.json`, makes that
+degree-6 chamber row explicit in the local union charge basis: target `7` has
+`target+star=[3,1,-1]`, target `8` has `target+star=[1,1,-1]`, and both
+point-index rows have sorted coefficient signature
+`[-3,-1,-1,1,1,1,2]` with total charge zero. This is the next local
+chamber/semigroup object to certify.
 Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
 serializes a role-tagged height profile over the full union support. For
 targets `3`/`6`, the off-hyperplane zero-shared ray has height `-1` but zero

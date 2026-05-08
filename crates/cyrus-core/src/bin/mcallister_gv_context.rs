@@ -576,6 +576,8 @@ struct LocalCygvSourceResolutionHintSummary {
     shared_two_simplex_star_union_star_coordinates: Option<Vec<i64>>,
     shared_two_simplex_star_union_star_rational_coordinates: Option<Vec<String>>,
     shared_two_simplex_star_union_star_rational_denominators: Option<Vec<String>>,
+    shared_two_simplex_star_union_target_minus_star_coordinates: Option<Vec<i64>>,
+    shared_two_simplex_star_union_target_plus_star_coordinates: Option<Vec<i64>>,
     shared_two_simplex_star_union_global_basis_status: String,
     shared_two_simplex_star_union_target_basis_nonzero: Option<Vec<(usize, i64)>>,
     shared_two_simplex_star_union_star_basis_nonzero: Option<Vec<(usize, i64)>>,
@@ -9621,6 +9623,36 @@ fn integral_coordinates_from_optional_rational(
         .transpose()
 }
 
+fn local_charge_coordinate_difference(
+    left: Option<&Vec<i64>>,
+    right: Option<&Vec<i64>>,
+) -> Option<Vec<i64>> {
+    let (Some(left), Some(right)) = (left, right) else {
+        return None;
+    };
+    (left.len() == right.len()).then(|| {
+        left.iter()
+            .zip(right.iter())
+            .map(|(&left, &right)| left - right)
+            .collect()
+    })
+}
+
+fn local_charge_coordinate_sum(
+    left: Option<&Vec<i64>>,
+    right: Option<&Vec<i64>>,
+) -> Option<Vec<i64>> {
+    let (Some(left), Some(right)) = (left, right) else {
+        return None;
+    };
+    (left.len() == right.len()).then(|| {
+        left.iter()
+            .zip(right.iter())
+            .map(|(&left, &right)| left + right)
+            .collect()
+    })
+}
+
 fn solve_rectangular_linear_system_rational(
     matrix: &[Vec<MalachiteRational>],
     rhs: &[MalachiteRational],
@@ -14867,6 +14899,10 @@ fn local_cygv_source_resolution_hint_summaries(
                     .star_rational_coordinates,
                 shared_two_simplex_star_union_star_rational_denominators: star_union_relation_hint
                     .star_rational_denominators,
+                shared_two_simplex_star_union_target_minus_star_coordinates:
+                    star_union_relation_hint.target_minus_star_coordinates,
+                shared_two_simplex_star_union_target_plus_star_coordinates:
+                    star_union_relation_hint.target_plus_star_coordinates,
                 shared_two_simplex_star_union_global_basis_status: star_union_relation_hint
                     .global_basis_status,
                 shared_two_simplex_star_union_target_basis_nonzero: star_union_relation_hint
@@ -15466,6 +15502,8 @@ struct LocalCygvStarUnionRelationHint {
     star_coordinates: Option<Vec<i64>>,
     star_rational_coordinates: Option<Vec<String>>,
     star_rational_denominators: Option<Vec<String>>,
+    target_minus_star_coordinates: Option<Vec<i64>>,
+    target_plus_star_coordinates: Option<Vec<i64>>,
     global_basis_status: String,
     target_basis_nonzero: Option<Vec<(usize, i64)>>,
     star_basis_nonzero: Option<Vec<(usize, i64)>>,
@@ -16054,6 +16092,8 @@ fn local_cygv_star_union_relation_hint(
         star_coordinates: None,
         star_rational_coordinates: None,
         star_rational_denominators: None,
+        target_minus_star_coordinates: None,
+        target_plus_star_coordinates: None,
         global_basis_status: "star_union_global_basis_projection_not_run".to_string(),
         target_basis_nonzero: None,
         star_basis_nonzero: None,
@@ -16099,6 +16139,8 @@ fn local_cygv_star_union_relation_hint(
                 star_coordinates: None,
                 star_rational_coordinates: None,
                 star_rational_denominators: None,
+                target_minus_star_coordinates: None,
+                target_plus_star_coordinates: None,
                 global_basis_status: "star_union_global_basis_projection_not_run".to_string(),
                 target_basis_nonzero: None,
                 star_basis_nonzero: None,
@@ -16126,6 +16168,8 @@ fn local_cygv_star_union_relation_hint(
                 star_coordinates: None,
                 star_rational_coordinates: None,
                 star_rational_denominators: None,
+                target_minus_star_coordinates: None,
+                target_plus_star_coordinates: None,
                 global_basis_status: "star_union_global_basis_projection_not_run".to_string(),
                 target_basis_nonzero: None,
                 star_basis_nonzero: None,
@@ -16198,6 +16242,8 @@ fn local_cygv_star_union_relation_hint(
                     star_rational_denominators: optional_rational_denominators_to_strings(
                         &star_rational_coordinates,
                     ),
+                    target_minus_star_coordinates: None,
+                    target_plus_star_coordinates: None,
                     global_basis_status: "star_union_global_basis_projection_not_run".to_string(),
                     target_basis_nonzero: None,
                     star_basis_nonzero: None,
@@ -16235,6 +16281,8 @@ fn local_cygv_star_union_relation_hint(
                     star_coordinates: None,
                     star_rational_coordinates: None,
                     star_rational_denominators: None,
+                    target_minus_star_coordinates: None,
+                    target_plus_star_coordinates: None,
                     global_basis_status: "star_union_global_basis_projection_not_run".to_string(),
                     target_basis_nonzero: None,
                     star_basis_nonzero: None,
@@ -16284,6 +16332,8 @@ fn local_cygv_star_union_relation_hint(
                     star_rational_denominators: optional_rational_denominators_to_strings(
                         &star_rational_coordinates,
                     ),
+                    target_minus_star_coordinates: None,
+                    target_plus_star_coordinates: None,
                     global_basis_status: global_basis_projection.status,
                     target_basis_nonzero: global_basis_projection.target,
                     star_basis_nonzero: global_basis_projection.star,
@@ -16320,6 +16370,8 @@ fn local_cygv_star_union_relation_hint(
                     star_rational_denominators: optional_rational_denominators_to_strings(
                         &star_rational_coordinates,
                     ),
+                    target_minus_star_coordinates: None,
+                    target_plus_star_coordinates: None,
                     global_basis_status: "star_union_global_basis_projection_not_run".to_string(),
                     target_basis_nonzero: None,
                     star_basis_nonzero: None,
@@ -16336,6 +16388,10 @@ fn local_cygv_star_union_relation_hint(
         (None, Some(_)) => "star_union_target_not_in_union_charge_basis",
         (None, None) => "star_union_target_and_star_not_in_union_charge_basis",
     };
+    let target_minus_star_coordinates =
+        local_charge_coordinate_difference(target_coordinates.as_ref(), star_coordinates.as_ref());
+    let target_plus_star_coordinates =
+        local_charge_coordinate_sum(target_coordinates.as_ref(), star_coordinates.as_ref());
     let global_basis_projection = local_cygv_star_union_global_basis_projection(
         global_q_matrix,
         &point_indices,
@@ -16359,6 +16415,8 @@ fn local_cygv_star_union_relation_hint(
         star_rational_denominators: optional_rational_denominators_to_strings(
             &star_rational_coordinates,
         ),
+        target_minus_star_coordinates,
+        target_plus_star_coordinates,
         global_basis_status: global_basis_projection.status,
         target_basis_nonzero: global_basis_projection.target,
         star_basis_nonzero: global_basis_projection.star,
@@ -20452,6 +20510,14 @@ mod tests {
         assert_eq!(star_union_hint.affine_rank, Some(4));
         assert_eq!(star_union_hint.target_coordinates, Some(vec![1, 0, -1]));
         assert_eq!(star_union_hint.star_coordinates, Some(vec![0, 1, 0]));
+        assert_eq!(
+            star_union_hint.target_minus_star_coordinates,
+            Some(vec![1, -1, -1])
+        );
+        assert_eq!(
+            star_union_hint.target_plus_star_coordinates,
+            Some(vec![1, 1, -1])
+        );
         assert_eq!(
             star_union_hint.target_rational_coordinates,
             Some(vec!["1".to_string(), "0".to_string(), "-1".to_string()])

@@ -777,6 +777,10 @@ remaining degree-6 `target+star` row is not a degree-bounded source ray and has
 no decomposition into up to four lower-degree source seeds in the current
 finite context. So the unresolved compact-history object is the degree-6
 `target+star` chamber row, not the known `-star` side.
+The coordinate report now serializes that row directly in the union charge
+basis: target `7` has `target+star=[3,1,-1]`, target `8` has
+`target+star=[1,1,-1]`, and both point-row signatures sort to
+`[-3,-1,-1,1,1,1,2]` with zero total charge.
 The height-profile report now tags every union-support point by role and
 coefficient. Targets `3`/`6` have only a coefficient-zero zero-shared ray off
 the relation hyperplane, while targets `7`/`8` have a height `-1` star-side
