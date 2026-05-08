@@ -401,6 +401,10 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_decomposition_term_bounded_lower_seed_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_decomposition_term_relation_support_generator_count_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_decomposition_term_relation_support_face_certificate_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_flipped_chamber_cygv_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_flipped_chamber_cygv_gv_counts: BTreeMap<String, usize>,
@@ -433,6 +437,10 @@ struct ContextReport {
     local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_ckyz_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_bounded_lower_seed_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_relation_support_generator_count_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_relation_support_face_certificate_status_counts:
         BTreeMap<String, usize>,
     local_phase_chamber_membership_certificate_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_hint_sample: Vec<LocalCygvSourceResolutionHintSummary>,
@@ -16350,6 +16358,24 @@ fn build_report(
                 ChamberSide::Current,
             ),
         );
+    let current_chamber_decomposition_term_relation_support_probes =
+        chamber_decomposition_term_relation_support_probes(
+            chamber_decomposition_term_contexts(
+                &local_cygv_source_resolution_hint_sample,
+                ChamberSide::Current,
+            ),
+            validated,
+            origin_support_certificate_limit,
+            supporting_face_lp_options,
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_decomposition_term_relation_support_generator_count_counts =
+        chamber_decomposition_term_relation_support_generator_count_counts(
+            &current_chamber_decomposition_term_relation_support_probes,
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_decomposition_term_relation_support_face_certificate_status_counts =
+        chamber_decomposition_term_relation_support_face_certificate_status_counts(
+            &current_chamber_decomposition_term_relation_support_probes,
+        );
     let local_cygv_source_resolution_star_union_flipped_chamber_cygv_status_counts =
         provided_generator_cygv_probe_status_counts(
             local_cygv_source_resolution_hint_sample
@@ -16430,6 +16456,24 @@ fn build_report(
                 &local_cygv_source_resolution_hint_sample,
                 ChamberSide::Flipped,
             ),
+        );
+    let flipped_chamber_decomposition_term_relation_support_probes =
+        chamber_decomposition_term_relation_support_probes(
+            chamber_decomposition_term_contexts(
+                &local_cygv_source_resolution_hint_sample,
+                ChamberSide::Flipped,
+            ),
+            validated,
+            origin_support_certificate_limit,
+            supporting_face_lp_options,
+        );
+    let local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_relation_support_generator_count_counts =
+        chamber_decomposition_term_relation_support_generator_count_counts(
+            &flipped_chamber_decomposition_term_relation_support_probes,
+        );
+    let local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_relation_support_face_certificate_status_counts =
+        chamber_decomposition_term_relation_support_face_certificate_status_counts(
+            &flipped_chamber_decomposition_term_relation_support_probes,
         );
     let missing_local_cygv_missing_source_input_counts = local_cygv_missing_source_input_counts(
         targets
@@ -17428,6 +17472,8 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_decomposition_term_local_toric_kind_counts,
         local_cygv_source_resolution_star_union_current_chamber_decomposition_term_ckyz_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_decomposition_term_bounded_lower_seed_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_decomposition_term_relation_support_generator_count_counts,
+        local_cygv_source_resolution_star_union_current_chamber_decomposition_term_relation_support_face_certificate_status_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_cygv_status_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_cygv_gv_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_cygv_qn_status_counts,
@@ -17445,6 +17491,8 @@ fn build_report(
         local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_local_toric_kind_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_ckyz_status_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_bounded_lower_seed_status_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_relation_support_generator_count_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_relation_support_face_certificate_status_counts,
         local_phase_chamber_membership_certificate_status_counts,
         local_cygv_source_resolution_hint_sample,
         local_cygv_target_candidate_status_counts,
@@ -19031,6 +19079,192 @@ fn chamber_decomposition_term_bounded_lower_seed_status_counts<'a>(
             chamber_semigroup_generator_bounded_lower_seed_status,
         );
         *counts.entry(status).or_insert(0usize) += 1;
+    }
+    counts
+}
+
+#[derive(Clone, Debug)]
+struct ChamberDecompositionTermRelationSupportProbe {
+    generator_count: Option<usize>,
+    face_certificate_status: String,
+}
+
+fn chamber_decomposition_term_relation_support_probes<'a>(
+    contexts: impl IntoIterator<Item = Option<&'a LocalCygvChamberSemigroupGeneratorContext>>,
+    context: &ValidatedContext<'_>,
+    generator_limit: usize,
+    supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
+) -> Vec<ChamberDecompositionTermRelationSupportProbe> {
+    contexts
+        .into_iter()
+        .map(|term_context| {
+            chamber_decomposition_term_relation_support_probe(
+                term_context,
+                context,
+                generator_limit,
+                supporting_face_lp_options,
+            )
+        })
+        .collect()
+}
+
+fn chamber_decomposition_term_relation_support_probe(
+    term_context: Option<&LocalCygvChamberSemigroupGeneratorContext>,
+    context: &ValidatedContext<'_>,
+    generator_limit: usize,
+    supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
+) -> ChamberDecompositionTermRelationSupportProbe {
+    let Some(term_context) = term_context else {
+        return ChamberDecompositionTermRelationSupportProbe {
+            generator_count: None,
+            face_certificate_status: "missing_generator_context".to_string(),
+        };
+    };
+    let Some(point_relation_nonzero) = term_context.point_relation_nonzero.as_ref() else {
+        return ChamberDecompositionTermRelationSupportProbe {
+            generator_count: None,
+            face_certificate_status: "missing_point_relation".to_string(),
+        };
+    };
+    if point_relation_nonzero.is_empty() {
+        return ChamberDecompositionTermRelationSupportProbe {
+            generator_count: None,
+            face_certificate_status: "missing_point_relation_support".to_string(),
+        };
+    }
+    let Some(max_degree) = term_context.degree else {
+        return ChamberDecompositionTermRelationSupportProbe {
+            generator_count: None,
+            face_certificate_status: "missing_degree".to_string(),
+        };
+    };
+    if max_degree <= 0 {
+        return ChamberDecompositionTermRelationSupportProbe {
+            generator_count: None,
+            face_certificate_status: format!("nonpositive_degree_{max_degree}"),
+        };
+    }
+    let Some(ray_context) = context.degree_bounded_ray_context else {
+        return ChamberDecompositionTermRelationSupportProbe {
+            generator_count: None,
+            face_certificate_status: "missing_degree_bounded_mori_ray_context".to_string(),
+        };
+    };
+
+    let allowed_support = point_relation_nonzero
+        .iter()
+        .map(|&(point_index, _)| point_index)
+        .collect::<HashSet<_>>();
+    let generators = match degree_bounded_ray_context_support_generators(
+        ray_context,
+        max_degree,
+        &allowed_support,
+        context.dimension,
+    ) {
+        Ok(generators) => generators,
+        Err(error) => {
+            return ChamberDecompositionTermRelationSupportProbe {
+                generator_count: None,
+                face_certificate_status: format!(
+                    "chamber_term_support_generator_error_{}",
+                    status_error_fragment(&error)
+                ),
+            };
+        }
+    };
+    let generator_count = generators.len();
+    let face_certificate_status = chamber_term_support_face_certificate_status(
+        &generators,
+        context,
+        generator_limit,
+        supporting_face_lp_options,
+    );
+    ChamberDecompositionTermRelationSupportProbe {
+        generator_count: Some(generator_count),
+        face_certificate_status,
+    }
+}
+
+fn chamber_term_support_face_certificate_status(
+    generators: &[Vec<i64>],
+    context: &ValidatedContext<'_>,
+    generator_limit: usize,
+    supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
+) -> String {
+    if generators.is_empty() {
+        return "chamber_term_support_no_generators".to_string();
+    }
+    if generators.len() > generator_limit {
+        return format!(
+            "chamber_term_support_skipped_generator_limit_{generator_limit}_actual_{}",
+            generators.len()
+        );
+    }
+    let rank = match curve_row_span_rank(generators) {
+        Ok(rank) => rank,
+        Err(error) => {
+            return format!(
+                "chamber_term_support_certificate_error_{}",
+                status_error_fragment(&error.to_string())
+            );
+        }
+    };
+    let codimension = context.dimension.saturating_sub(rank);
+    if generators.len() == 1 && codimension > 1 {
+        return format!(
+            "chamber_term_support_skipped_single_generator_higher_codimension_rank_{rank}_dim_{}",
+            context.dimension
+        );
+    }
+    if rank != context.dimension.saturating_sub(1) {
+        return match certify_supporting_mori_face_by_lp_search(
+            generators,
+            context.degree_bounded_rays,
+            supporting_face_lp_options,
+        ) {
+            Ok(Some(certificate)) => format!(
+                "chamber_term_support_certified_lp_containing_face_rank_{rank}_dim_{}_zero_{}_positive_{}",
+                context.dimension,
+                certificate.zero_generator_count,
+                certificate.positive_generator_count
+            ),
+            Ok(None) => format!(
+                "chamber_term_support_lp_no_certificate_rank_{rank}_dim_{}",
+                context.dimension
+            ),
+            Err(error) => format!(
+                "chamber_term_support_certificate_error_{}",
+                status_error_fragment(&error.to_string())
+            ),
+        };
+    }
+    match certify_supporting_mori_face_by_exact_kernel(generators, context.degree_bounded_rays) {
+        Ok(Some(_)) => "chamber_term_support_certified_codimension_one_face".to_string(),
+        Ok(None) => "chamber_term_support_codimension_one_but_not_supporting".to_string(),
+        Err(error) => format!(
+            "chamber_term_support_certificate_error_{}",
+            status_error_fragment(&error.to_string())
+        ),
+    }
+}
+
+fn chamber_decomposition_term_relation_support_generator_count_counts(
+    probes: &[ChamberDecompositionTermRelationSupportProbe],
+) -> BTreeMap<String, usize> {
+    optional_usize_count_counts(
+        probes.iter().map(|probe| probe.generator_count),
+        "not_available",
+    )
+}
+
+fn chamber_decomposition_term_relation_support_face_certificate_status_counts(
+    probes: &[ChamberDecompositionTermRelationSupportProbe],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes {
+        *counts
+            .entry(probe.face_certificate_status.clone())
+            .or_insert(0usize) += 1;
     }
     counts
 }
@@ -30791,7 +31025,7 @@ mod tests {
             generator_index: 0,
             chamber_coordinate: vec![1, 0, 0],
             point_relation_status: "chamber_generator_point_relation_reconstructed".to_string(),
-            point_relation_nonzero: None,
+            point_relation_nonzero: Some(vec![(10, 1)]),
             global_basis_status: "chamber_generator_global_basis_projection_integral".to_string(),
             basis_nonzero: None,
             degree: Some(4),
@@ -30809,6 +31043,7 @@ mod tests {
         let unknown = LocalCygvChamberSemigroupGeneratorContext {
             generator_index: 1,
             chamber_coordinate: vec![0, 1, 0],
+            point_relation_nonzero: Some(vec![(20, 1)]),
             degree: Some(6),
             known_qn_history_status: "unknown_not_toric_covered".to_string(),
             source_derived_gv: None,
@@ -30874,6 +31109,58 @@ mod tests {
         let term_lower_seed_counts = chamber_decomposition_term_bounded_lower_seed_status_counts(
             term_contexts.iter().copied(),
         );
+        let stats = MissingGvTargetStats {
+            target_count: 0,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: Vec::new(),
+        };
+        let grading = vec![1, 1];
+        let q_matrix = vec![vec![1, 0], vec![0, 1]];
+        let degree_bounded_rays = vec![vec![1, 0], vec![0, 1], vec![1, 1]];
+        let ray_context = vec![
+            DegreeBoundedMoriRayContextSample {
+                degree: 1,
+                ambient_nonzero: vec![(10, 1)],
+                basis_nonzero: vec![(0, 1)],
+            },
+            DegreeBoundedMoriRayContextSample {
+                degree: 1,
+                ambient_nonzero: vec![(30, 1)],
+                basis_nonzero: vec![(1, 1)],
+            },
+        ];
+        let context = ValidatedContext {
+            dimension: 2,
+            degree_bound: 6,
+            q_cols: 2,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: Some(&ray_context),
+            covered_toric_gv_by_basis: HashMap::new(),
+            source_derived_gv_by_basis: HashMap::new(),
+            intersection: Intersection::new(2),
+            stats: &stats,
+            uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
+            secondary_cone_heights: None,
+        };
+        let term_support_probes = chamber_decomposition_term_relation_support_probes(
+            term_contexts.iter().copied(),
+            &context,
+            16,
+            &SupportingMoriFaceLpSearchOptions::default(),
+        );
+        let term_support_generator_counts =
+            chamber_decomposition_term_relation_support_generator_count_counts(
+                &term_support_probes,
+            );
+        let term_support_certificate_counts =
+            chamber_decomposition_term_relation_support_face_certificate_status_counts(
+                &term_support_probes,
+            );
 
         assert_eq!(
             history_counts.get("known_nonzero_source_gv").copied(),
@@ -30996,6 +31283,30 @@ mod tests {
         );
         assert_eq!(
             term_lower_seed_counts
+                .get("missing_generator_context")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(term_support_generator_counts.get("1").copied(), Some(1));
+        assert_eq!(term_support_generator_counts.get("0").copied(), Some(1));
+        assert_eq!(
+            term_support_generator_counts.get("not_available").copied(),
+            Some(1)
+        );
+        assert_eq!(
+            term_support_certificate_counts
+                .get("chamber_term_support_certified_codimension_one_face")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(
+            term_support_certificate_counts
+                .get("chamber_term_support_no_generators")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(
+            term_support_certificate_counts
                 .get("missing_generator_context")
                 .copied(),
             Some(1)

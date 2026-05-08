@@ -3873,6 +3873,17 @@ CKYZ statuses are `ckyz_no_source_match:2` and
 context-found terms with degrees `{-4:2, 2:2, 8:2}`; because it includes the
 negative degree terms and remains CKYZ/source-history uncertified, it stays a
 neighboring diagnostic rather than a compact HKTY history.
+A follow-up support-face certificate aggregate now tests whether the actual
+decomposition-term point-relation supports contain a degree-bounded Mori face
+already visible in the context export. In
+`/tmp/cyrus_star_union_all_chamber_decomposition_term_support.json`, all five
+current decomposition terms have generator count `0` and status
+`chamber_term_support_no_generators`. The flipped side splits as two empty
+supports, two nonpositive degree `-4` terms, and two single-generator
+higher-codimension supports. This is negative evidence: the term-local point
+relation supports are not certified compact HKTY domains, so the missing input
+remains a transported/source-derived chamber history rather than a scalar local
+formula.
 
 The no-replay boundary around the standalone GV binary is stricter now:
 `mcallister_gv` no longer reads `dual_curves.dat` or `dual_curves_gv.dat`.

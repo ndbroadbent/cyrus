@@ -1596,6 +1596,16 @@ to make the remaining GV layer more first-principles:
    `not_found_up_to_4:2`, and `not_run_or_not_applicable:1`. The flipped
    decomposition has six context-found terms, but two have negative degree
    `-4`, and all remain non-promotable diagnostics.
+   The follow-up support-face certificate aggregate
+   `/tmp/cyrus_star_union_all_chamber_decomposition_term_support.json` filters
+   the degree-bounded Mori-ray context by each decomposition term's
+   point-relation support. All five current decomposition terms have zero
+   matching degree-bounded support generators, so every current support status
+   is `chamber_term_support_no_generators`. The flipped side has two empty
+   supports, two nonpositive degree `-4` terms, and two single-generator
+   higher-codimension supports. This rules out using the term-local point
+   relation support as an already-certified Mori face; the remaining task is
+   still source/chamber transport for the missing compact qN history.
    A follow-up compact-omission wall-side summary confirms this selected side
    is not one of the compact omission phases: both target rows have four
    compact omissions, but zero full-positive-side or full-negative-side
