@@ -551,6 +551,16 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_positive_degree_transport_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_context_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_degree_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_known_qn_history_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_source_class_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_bounded_lower_seed_status_counts:
+        BTreeMap<String, usize>,
     local_phase_chamber_membership_certificate_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_hint_sample: Vec<LocalCygvSourceResolutionHintSummary>,
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
@@ -17170,6 +17180,40 @@ fn build_report(
         local_cygv_source_resolution_star_union_positive_degree_transport_status_counts(
             &local_cygv_source_resolution_hint_sample,
         );
+    let positive_degree_current_decomposition_term_contexts =
+        positive_degree_current_chamber_decomposition_term_contexts(
+            &local_cygv_source_resolution_hint_sample,
+        );
+    let local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_context_status_counts =
+        chamber_decomposition_term_context_status_counts(
+            positive_degree_current_decomposition_term_contexts
+                .iter()
+                .copied(),
+        );
+    let local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_degree_counts =
+        chamber_decomposition_term_degree_counts(
+            positive_degree_current_decomposition_term_contexts
+                .iter()
+                .copied(),
+        );
+    let local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_known_qn_history_status_counts =
+        chamber_decomposition_term_known_qn_history_status_counts(
+            positive_degree_current_decomposition_term_contexts
+                .iter()
+                .copied(),
+        );
+    let local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_source_class_status_counts =
+        chamber_decomposition_term_source_class_status_counts(
+            positive_degree_current_decomposition_term_contexts
+                .iter()
+                .copied(),
+        );
+    let local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_bounded_lower_seed_status_counts =
+        chamber_decomposition_term_bounded_lower_seed_status_counts(
+            positive_degree_current_decomposition_term_contexts
+                .iter()
+                .copied(),
+        );
     let mut missing_local_cygv_missing_source_input_counts = local_cygv_missing_source_input_counts(
         targets
             .iter()
@@ -18338,6 +18382,11 @@ fn build_report(
         local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_nearest_support_missing_count_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_nearest_support_extra_count_counts,
         local_cygv_source_resolution_star_union_positive_degree_transport_status_counts,
+        local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_context_status_counts,
+        local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_degree_counts,
+        local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_known_qn_history_status_counts,
+        local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_source_class_status_counts,
+        local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_bounded_lower_seed_status_counts,
         local_phase_chamber_membership_certificate_status_counts,
         local_cygv_source_resolution_hint_sample,
         local_cygv_target_candidate_status_counts,
@@ -19767,6 +19816,30 @@ fn chamber_decomposition_term_contexts(
     out
 }
 
+fn positive_degree_current_chamber_decomposition_term_contexts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> Vec<Option<&LocalCygvChamberSemigroupGeneratorContext>> {
+    let mut out = Vec::new();
+    for summary in summaries {
+        let transport = &summary.shared_two_simplex_star_union_chamber_semigroup_transport;
+        let Some(decomposition) = transport
+            .current_chamber_positive_degree_decomposition
+            .as_ref()
+        else {
+            continue;
+        };
+        for term in decomposition {
+            out.push(
+                transport
+                    .current_chamber_generator_context
+                    .iter()
+                    .find(|context| context.generator_index == term.generator_index),
+            );
+        }
+    }
+    out
+}
+
 fn provided_generator_cygv_probe_status_counts<'a>(
     probes: impl IntoIterator<Item = Option<&'a ProvidedGeneratorTargetGvProbe>>,
 ) -> BTreeMap<String, usize> {
@@ -19994,6 +20067,28 @@ fn chamber_decomposition_term_ckyz_status_counts<'a>(
             .into_iter()
             .map(|context| context.map(|c| c.local_toric_diagnostic.ckyz_status.as_str())),
         "missing_generator_context",
+    )
+}
+
+fn chamber_decomposition_term_known_qn_history_status_counts<'a>(
+    contexts: impl IntoIterator<Item = Option<&'a LocalCygvChamberSemigroupGeneratorContext>>,
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        contexts
+            .into_iter()
+            .map(|context| context.map(|context| context.known_qn_history_status.as_str())),
+        "missing_generator_context",
+    )
+}
+
+fn chamber_decomposition_term_source_class_status_counts<'a>(
+    contexts: impl IntoIterator<Item = Option<&'a LocalCygvChamberSemigroupGeneratorContext>>,
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        contexts
+            .into_iter()
+            .map(|context| context.and_then(|context| context.source_class_status.as_deref())),
+        "missing_source_class_or_context",
     )
 }
 

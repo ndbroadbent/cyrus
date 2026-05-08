@@ -209,7 +209,10 @@ and matrix-basis pipeline are no longer open.
    where the star-union relation is not integrally available. Target `1` now
    also records a known lower decomposition at degree `16`, but the bounded
    closure still misses target-plus-star and the compact current-chamber call
-   returns GV `0`.
+   returns GV `0`. The regenerated v3 aggregate classifies the current-only
+   positive-degree decomposition terms themselves: five terms, degree counts
+   `{16:1, 4:2, 2:2}`, all with context, but all still
+   `unknown_not_toric_covered` and `not_source_degree_bounded_ray`.
 2. **Exact corrected KKLT volume.** The no-replay path computes a corrected
    volume but still has a documented instanton/chamber residual.
 3. **Generic matrix-basis pipeline.** Matrix divisor-basis primitives now cover

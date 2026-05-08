@@ -3658,6 +3658,15 @@ relation is not available integrally. The three current-only rows are exactly
 the compact current-chamber provided-generator calls that compute GV `0`. This
 makes the positive-degree obstruction explicit without promoting any
 target-plus-star value or counting the zero class as a target curve.
+The regenerated report at `/tmp/cyrus_positive_degree_transport_all_v3.json`
+adds term-level context for those three current-only rows. Their
+positive-degree current-chamber decompositions contain five terms with degree
+counts `{16:1, 4:2, 2:2}`. Every term has generator context, but all five are
+`unknown_not_toric_covered` and `not_source_degree_bounded_ray`; bounded
+lower-seed status splits as two `found_lower_seed_decomposition`, two
+`not_found_up_to_4`, and one `not_run_or_not_applicable`. This keeps the
+remaining obstruction on source/chamber/GV construction rather than on report
+bookkeeping.
 A target-`1` rerun with `--lower-seed-pair-limit 2048` shows that this is not
 only the degree-ten weighted pair. Target `1` has target-plus-star degree `16`
 and a four-term lower decomposition into known history (`3` known toric terms

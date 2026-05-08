@@ -1464,6 +1464,12 @@ to make the remaining GV layer more first-principles:
    `positive_degree_transport_zero_target_plus_star:2`, and
    `positive_degree_transport_not_run:4`; the three current-only rows are the
    compact current-chamber GV `0` calls.
+   The regenerated v3 aggregate adds decomposition-term context for those
+   three rows: five current-chamber positive-degree terms, degree counts
+   `{16:1, 4:2, 2:2}`, all with context but all classified
+   `unknown_not_toric_covered` and `not_source_degree_bounded_ray`. Their
+   bounded lower-seed statuses are two `found_lower_seed_decomposition`, two
+   `not_found_up_to_4`, and one `not_run_or_not_applicable`.
    A target-`1` rerun with pair limit `2048` adds term-level lower-history
    counts for its degree-16 target-plus-star row: the lower decomposition uses
    three known toric terms and one known source-derived term, but the bounded
