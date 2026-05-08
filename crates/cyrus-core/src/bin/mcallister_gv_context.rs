@@ -292,6 +292,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_support_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_target_plus_star_support_face_certificate_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_local_cygv_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_local_cygv_readiness_counts:
@@ -693,6 +695,8 @@ struct LocalCygvSourceResolutionHintSummary {
         LocalCygvStarUnionTransportDecompositionSummary,
     shared_two_simplex_star_union_target_plus_star_support:
         LocalCygvStarUnionTargetPlusStarSupportHint,
+    shared_two_simplex_star_union_target_plus_star_support_generator_count: Option<usize>,
+    shared_two_simplex_star_union_target_plus_star_support_face_certificate_status: Option<String>,
     shared_two_simplex_star_union_target_plus_star_local_cygv_readiness:
         LocalCygvStarUnionTargetPlusStarLocalCygvReadiness,
     shared_two_simplex_star_union_chamber_coverage_status: String,
@@ -15175,6 +15179,7 @@ fn build_report(
         certify_target_extremal_rays,
         target_extremal_generator_limit,
         target_extremal_max_degree,
+        origin_support_certificate_limit,
         element_limit,
         lower_seed_pair_limit,
         closure_generation_limit,
@@ -15209,6 +15214,10 @@ fn build_report(
         );
     let local_cygv_source_resolution_star_union_target_plus_star_support_status_counts =
         local_cygv_source_resolution_star_union_target_plus_star_support_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
+    let local_cygv_source_resolution_star_union_target_plus_star_support_face_certificate_status_counts =
+        local_cygv_source_resolution_star_union_target_plus_star_support_face_certificate_status_counts(
             &local_cygv_source_resolution_hint_sample,
         );
     let local_cygv_source_resolution_star_union_target_plus_star_local_cygv_status_counts =
@@ -16184,6 +16193,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_target_plus_star_extremal_ray_certificate_status_counts,
         local_cygv_source_resolution_star_union_opposite_star_extremal_ray_certificate_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_support_status_counts,
+        local_cygv_source_resolution_star_union_target_plus_star_support_face_certificate_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_readiness_counts,
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_phase_status_counts,
@@ -16438,6 +16448,7 @@ fn local_cygv_source_resolution_hint_summaries(
     certify_star_union_extremal_rays: bool,
     star_union_extremal_generator_limit: usize,
     star_union_extremal_max_degree: Option<i128>,
+    target_plus_star_support_certificate_limit: usize,
     element_limit: usize,
     lower_seed_pair_limit: usize,
     closure_generation_limit: Option<usize>,
@@ -16515,6 +16526,15 @@ fn local_cygv_source_resolution_hint_summaries(
                     &star_support_hint,
                     &star_union_relation_hint.target_plus_star,
                 );
+            let (
+                target_plus_star_support_generator_count,
+                target_plus_star_support_face_certificate_status,
+            ) = local_cygv_star_union_target_plus_star_support_face_certificate(
+                &star_union_target_plus_star_support,
+                star_union_transport_decomposition.target_plus_star_degree,
+                context,
+                target_plus_star_support_certificate_limit,
+            );
             let star_union_target_plus_star_local_cygv_readiness =
                 local_cygv_star_union_target_plus_star_local_cygv_readiness(
                     &star_union_target_plus_star_support,
@@ -16646,6 +16666,10 @@ fn local_cygv_source_resolution_hint_summaries(
                     star_union_transport_decomposition,
                 shared_two_simplex_star_union_target_plus_star_support:
                     star_union_target_plus_star_support,
+                shared_two_simplex_star_union_target_plus_star_support_generator_count:
+                    target_plus_star_support_generator_count,
+                shared_two_simplex_star_union_target_plus_star_support_face_certificate_status:
+                    target_plus_star_support_face_certificate_status,
                 shared_two_simplex_star_union_target_plus_star_local_cygv_readiness:
                     star_union_target_plus_star_local_cygv_readiness,
                 shared_two_simplex_star_union_chamber_coverage_status: star_union_chamber_coverage
@@ -17099,6 +17123,19 @@ fn local_cygv_source_resolution_star_union_target_plus_star_support_status_count
             .or_insert(0usize) += 1;
     }
     counts
+}
+
+fn local_cygv_source_resolution_star_union_target_plus_star_support_face_certificate_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        summaries.iter().map(|summary| {
+            summary
+                .shared_two_simplex_star_union_target_plus_star_support_face_certificate_status
+                .as_deref()
+        }),
+        "not_run",
+    )
 }
 
 fn local_cygv_source_resolution_star_union_target_plus_star_local_cygv_status_counts(
@@ -20869,6 +20906,70 @@ fn local_cygv_star_union_target_plus_star_support_hint(
     )
 }
 
+fn local_cygv_star_union_target_plus_star_support_face_certificate(
+    support: &LocalCygvStarUnionTargetPlusStarSupportHint,
+    max_degree: Option<i128>,
+    context: &ValidatedContext<'_>,
+    generator_limit: usize,
+) -> (Option<usize>, Option<String>) {
+    let Some(ray_context) = context.degree_bounded_ray_context else {
+        return (
+            None,
+            Some("target_plus_star_support_face_missing_degree_bounded_ray_context".to_string()),
+        );
+    };
+    if support.point_indices.is_empty() {
+        return (
+            None,
+            Some("target_plus_star_support_face_missing_point_support".to_string()),
+        );
+    }
+    let Some(max_degree) = max_degree else {
+        return (
+            None,
+            Some("target_plus_star_support_face_missing_target_plus_star_degree".to_string()),
+        );
+    };
+    if max_degree <= 0 {
+        return (
+            None,
+            Some("target_plus_star_support_face_nonpositive_target_plus_star_degree".to_string()),
+        );
+    }
+
+    let allowed = support
+        .point_indices
+        .iter()
+        .copied()
+        .collect::<HashSet<_>>();
+    let generators = match degree_bounded_ray_context_support_generators(
+        ray_context,
+        max_degree,
+        &allowed,
+        context.dimension,
+    ) {
+        Ok(generators) => generators,
+        Err(error) => {
+            return (
+                None,
+                Some(format!(
+                    "target_plus_star_support_face_generator_error_{}",
+                    status_error_fragment(&error)
+                )),
+            );
+        }
+    };
+    let generator_count = generators.len();
+    let status = origin_circuit_ambient_support_face_certificate_status(
+        ray_context,
+        max_degree,
+        &allowed,
+        context,
+        generator_limit,
+    );
+    (Some(generator_count), Some(status))
+}
+
 fn local_cygv_star_union_target_plus_star_support_hint_for_samples(
     union_samples: &[OriginCircuitRelationPointSample],
     target_plus_star: &[(usize, i64)],
@@ -24298,6 +24399,8 @@ mod tests {
                     relation_rational_coordinates: None,
                     relation_rational_denominators: None,
                 },
+            shared_two_simplex_star_union_target_plus_star_support_generator_count: None,
+            shared_two_simplex_star_union_target_plus_star_support_face_certificate_status: None,
             shared_two_simplex_star_union_target_plus_star_local_cygv_readiness:
                 LocalCygvStarUnionTargetPlusStarLocalCygvReadiness {
                     status: "test".to_string(),
@@ -24703,6 +24806,30 @@ mod tests {
         assert_eq!(
             degree_bounded_mori_ray_context_status(&validated),
             "source_derived_ambient_and_basis_degree_bounded_mori_ray_context"
+        );
+
+        let support = LocalCygvStarUnionTargetPlusStarSupportHint {
+            status: "test".to_string(),
+            point_indices: vec![5],
+            point_samples: Vec::new(),
+            affine_rank: None,
+            charge_basis: None,
+            charge_row_sums: None,
+            relation_coordinates: None,
+            relation_rational_coordinates: None,
+            relation_rational_denominators: None,
+        };
+        let (support_generator_count, support_face_status) =
+            local_cygv_star_union_target_plus_star_support_face_certificate(
+                &support,
+                Some(1),
+                &validated,
+                8,
+            );
+        assert_eq!(support_generator_count, Some(1));
+        assert_eq!(
+            support_face_status.as_deref(),
+            Some("origin_support_certified_codimension_one_face")
         );
     }
 

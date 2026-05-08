@@ -3491,6 +3491,14 @@ has exactly one same ray but is skipped by the default separator-search guard
 (`skipped_generator_limit_256_actual_2963`). Thus the degree-6
 target-plus-star object should not be pursued as a finite-cone extremal Mori
 generator; the remaining task is still its chamber/semigroup transport history.
+The same smoke now counts degree-bounded Mori rays whose ambient support is
+contained in each target-plus-star point support and attempts the existing
+supporting-face certificate on that restricted set. For targets `7`/`8`, this
+finds `generator_count=0` and `origin_support_no_generators` up to the
+degree-6 target-plus-star bound. Thus the target-plus-star point support is not
+a hidden finite face semigroup available from the current degree-bounded Mori
+context either; it has to be reached through source-derived wall/chamber
+transport data.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

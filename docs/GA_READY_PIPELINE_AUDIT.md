@@ -1274,6 +1274,13 @@ to make the remaining GV layer more first-principles:
    default full-cone separator guard (`2963` generators versus limit `256`).
    This rules out another false path: the target-plus-star row is not an
    extremal finite-cone generator waiting for a scalar GV value.
+   The same report now checks whether the target-plus-star point support
+   contains a finite degree-bounded Mori generator set that could be certified
+   as a supporting face. For targets `7`/`8`, the support generator count is
+   `0` up to the degree-6 target-plus-star bound and the face status is
+   `origin_support_no_generators`. This also rules out treating the
+   seven-point target-plus-star support as an undiscovered finite face
+   semigroup in the exported degree-bounded context.
    `/tmp/cyrus_gv_context_target_plus_star_support_report.json` now reconstructs
    the point-support charge bases for that degree-6 component. Targets `7`/`8`
    are integral two-parameter relations on affine-rank-4 seven-point supports:
