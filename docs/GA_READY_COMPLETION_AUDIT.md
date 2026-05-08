@@ -905,12 +905,13 @@ target `7` and target `8` reports as
 `/tmp/cyrus_target7_refined_local_phase_report.json` and
 `/tmp/cyrus_target8_refined_local_phase_report.json` gives the top-level local
 phase bucket
-`local_phase_chamber_blocked_weighted_p2_resolved_shared_chamber:weighted_p2_resolved_shared_chamber_outside_or_on_wall`
+`local_phase_chamber_blocked_weighted_p2_resolved_shared_affine_wall_global_height_strict:weighted_p2_resolved_shared_chamber_outside_or_on_wall`
 for both targets. The same rows still record
 `star_union_global_regular_shared_face_matches_serialized_star_extras`, so the
-global corrected height selects the serialized star extras, but the
-exclusive-pair resolved local phase remains on a wall and cannot certify a
-promoted local semigroup or intersection tensor.
+corrected global height selects the serialized star extras in the full
+star-union support, while its restriction to the exclusive-pair resolved
+support is strictly inside that local secondary cone. This is chamber-map
+evidence, but not a promoted local semigroup or intersection tensor.
 The all-target refined report
 `/tmp/cyrus_all_phase_certificate_first_report.json` now splits the nine
 missing rows as five non-`P2`/origin-omitting phase blockers and four
@@ -925,11 +926,21 @@ shape-level actual-call readiness at `blocked_missing_source_derived_inputs:9`,
 but the promotion-readiness split is now five
 `blocked_local_phase_chamber_certificate:local_phase_chamber_blocked_local_chamber_certificate_blocked_not_including_origin_p2_bundle_phase`
 rows and four
-`blocked_local_phase_chamber_certificate:local_phase_chamber_blocked_weighted_p2_resolved_shared_chamber_weighted_p2_resolved_shared_chamber_outside_or_on_wall`
+`blocked_local_phase_chamber_certificate:local_phase_chamber_blocked_weighted_p2_resolved_shared_affine_wall_global_height_strict_weighted_p2_resolved_shared_chamber_outside_or_on_wall`
 rows. The promotion missing-input aggregate adds
 `local_phase_chamber_membership_certificate:9`, so no local support can be
 mistaken for a promotable `cygv` domain while the chamber certificate is
 absent.
+The resolved-support chamber diagnostic now also evaluates the actual
+corrected global height on the restricted exclusive-pair support. In
+`/tmp/cyrus_all_resolved_global_height_report.json`, the five non-`P2` rows are
+`resolved_shared_chamber_global_height_not_weighted_p2_split_bundle`, while all
+four weighted rows are
+`weighted_p2_resolved_shared_chamber_global_height_strictly_inside_exclusive_pair_secondary_cone`.
+The affine projection certificate for those weighted rows remains
+`weighted_p2_resolved_shared_chamber_outside_or_on_wall`, so the missing object
+is the full chamber map/transport that reconciles the strict restricted support
+with the full star-union chamber, not a scalar local GV value.
 A bounded supporting-face rerun for the two integral weighted rows (`target 7`
 and `target 8`) does not provide that missing certificate. With
 `--certify-origin-witness-domains`, two LP anchors, and the facet-union cap

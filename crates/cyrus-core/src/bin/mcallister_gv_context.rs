@@ -287,6 +287,8 @@ struct ContextReport {
     local_cygv_source_resolution_resolved_support_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_resolved_shared_chamber_certificate_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_resolved_shared_chamber_global_height_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_projection_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_reduction_status_counts: BTreeMap<String, usize>,
@@ -818,6 +820,12 @@ struct LocalCygvSourceResolutionHintSummary {
     resolved_shared_chamber_certificate_min_pairing: Option<String>,
     resolved_shared_chamber_certificate_max_pairing: Option<String>,
     resolved_shared_chamber_certificate_strictly_inside: Option<bool>,
+    resolved_shared_chamber_global_height_status: String,
+    resolved_shared_chamber_global_height_min_pairing: Option<String>,
+    resolved_shared_chamber_global_height_max_pairing: Option<String>,
+    resolved_shared_chamber_global_height_zero_pairing_count: Option<usize>,
+    resolved_shared_chamber_global_height_positive_pairing_count: Option<usize>,
+    resolved_shared_chamber_global_height_negative_pairing_count: Option<usize>,
     relation_support_point_indices: Vec<usize>,
     local_phase_q_matrix: Option<Vec<Vec<i64>>>,
     local_one_parameter_family_status: Option<String>,
@@ -15747,6 +15755,10 @@ fn build_report(
         lower_seed_pair_limit,
         closure_generation_limit,
     );
+    let local_cygv_source_resolution_resolved_shared_chamber_global_height_status_counts =
+        local_cygv_source_resolution_resolved_shared_chamber_global_height_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
     let local_cygv_source_resolution_star_union_global_secondary_height_status_counts =
         local_cygv_source_resolution_star_union_global_secondary_height_status_counts(
             &local_cygv_source_resolution_hint_sample,
@@ -16776,6 +16788,7 @@ fn build_report(
         local_cygv_source_resolution_hint_status_counts,
         local_cygv_source_resolution_resolved_support_status_counts,
         local_cygv_source_resolution_resolved_shared_chamber_certificate_status_counts,
+        local_cygv_source_resolution_resolved_shared_chamber_global_height_status_counts,
         local_cygv_source_resolution_projection_status_counts,
         local_cygv_source_resolution_star_status_counts,
         local_cygv_source_resolution_star_reduction_status_counts,
@@ -17073,6 +17086,12 @@ fn local_cygv_source_resolution_hint_summaries(
                 skeleton,
                 target.origin_circuit_first_witness.as_ref(),
             );
+            let resolved_chamber_global_height =
+                local_cygv_resolved_shared_chamber_global_height_hint(
+                    skeleton,
+                    target.origin_circuit_first_witness.as_ref(),
+                    context.secondary_cone_heights,
+                );
             let affine_projection_hint = local_cygv_zero_shared_affine_projection_hint(
                 skeleton,
                 target.origin_circuit_first_witness.as_ref(),
@@ -17400,6 +17419,17 @@ fn local_cygv_source_resolution_hint_summaries(
                     .max_pairing,
                 resolved_shared_chamber_certificate_strictly_inside: resolved_chamber_certificate
                     .strictly_inside,
+                resolved_shared_chamber_global_height_status: resolved_chamber_global_height.status,
+                resolved_shared_chamber_global_height_min_pairing: resolved_chamber_global_height
+                    .min_pairing,
+                resolved_shared_chamber_global_height_max_pairing: resolved_chamber_global_height
+                    .max_pairing,
+                resolved_shared_chamber_global_height_zero_pairing_count:
+                    resolved_chamber_global_height.zero_pairing_count,
+                resolved_shared_chamber_global_height_positive_pairing_count:
+                    resolved_chamber_global_height.positive_pairing_count,
+                resolved_shared_chamber_global_height_negative_pairing_count:
+                    resolved_chamber_global_height.negative_pairing_count,
                 relation_support_point_indices: target
                     .origin_circuit_first_witness
                     .as_ref()
@@ -18166,6 +18196,18 @@ fn local_cygv_source_resolution_resolved_shared_chamber_certificate_status_count
     counts
 }
 
+fn local_cygv_source_resolution_resolved_shared_chamber_global_height_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts
+            .entry(summary.resolved_shared_chamber_global_height_status.clone())
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
 fn local_cygv_source_resolution_hint_status_counts<'a>(
     targets: impl IntoIterator<Item = &'a TargetReport>,
 ) -> BTreeMap<String, usize> {
@@ -18382,6 +18424,15 @@ struct LocalCygvResolvedSharedChamberCertificateHint {
     min_pairing: Option<String>,
     max_pairing: Option<String>,
     strictly_inside: Option<bool>,
+}
+
+struct LocalCygvResolvedSharedChamberGlobalHeightHint {
+    status: String,
+    min_pairing: Option<String>,
+    max_pairing: Option<String>,
+    zero_pairing_count: Option<usize>,
+    positive_pairing_count: Option<usize>,
+    negative_pairing_count: Option<usize>,
 }
 
 fn local_cygv_resolved_shared_support_hint(
@@ -18663,6 +18714,211 @@ fn local_cygv_resolved_shared_chamber_certificate_hint(
     }
 }
 
+fn local_cygv_resolved_shared_chamber_global_height_hint(
+    skeleton: &LocalCygvInputSkeleton,
+    witness: Option<&OriginCircuitWitnessSample>,
+    global_secondary_heights: Option<&[f64]>,
+) -> LocalCygvResolvedSharedChamberGlobalHeightHint {
+    let empty = |status: &str| LocalCygvResolvedSharedChamberGlobalHeightHint {
+        status: status.to_string(),
+        min_pairing: None,
+        max_pairing: None,
+        zero_pairing_count: None,
+        positive_pairing_count: None,
+        negative_pairing_count: None,
+    };
+    let Some(global_secondary_heights) = global_secondary_heights else {
+        return empty("resolved_shared_chamber_global_height_missing_vector");
+    };
+    let Some(q_matrix) = skeleton.local_cygv_phase_q_matrix_candidate.as_ref() else {
+        return empty("resolved_shared_chamber_global_height_blocked_missing_phase_q_matrix");
+    };
+    if q_matrix.len() != 1 {
+        return empty("resolved_shared_chamber_global_height_not_one_parameter_local_q_matrix");
+    }
+    if one_parameter_weighted_p2_split_bundle_signature(&q_matrix[0]).is_none() {
+        return empty("resolved_shared_chamber_global_height_not_weighted_p2_split_bundle");
+    }
+    let Some(witness) = witness else {
+        return empty(
+            "weighted_p2_resolved_shared_chamber_global_height_missing_origin_circuit_witness",
+        );
+    };
+    let support = origin_circuit_resolved_shared_support_point_samples(witness);
+    if support.is_empty() {
+        return empty("weighted_p2_resolved_shared_chamber_global_height_missing_support_points");
+    }
+    let point_to_local = support
+        .iter()
+        .enumerate()
+        .map(|(local, point)| (point.point_index, local))
+        .collect::<BTreeMap<_, _>>();
+    let mut shared_face = Vec::with_capacity(witness.shared_two_simplex.len() + 1);
+    shared_face.push(0);
+    shared_face.extend(witness.shared_two_simplex.iter().copied());
+    let mut simplices = Vec::new();
+    for exclusive in [
+        witness.first_facet_exclusive_point,
+        witness.second_facet_exclusive_point,
+    ] {
+        let mut simplex = shared_face.clone();
+        simplex.push(exclusive);
+        let mapped = simplex
+            .iter()
+            .map(|point_index| {
+                point_to_local.get(point_index).copied().ok_or_else(|| {
+                    format!(
+                        "resolved shared global-height simplex point {point_index} missing support"
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>, _>>();
+        let mapped = match mapped {
+            Ok(mapped) => mapped,
+            Err(error) => {
+                return LocalCygvResolvedSharedChamberGlobalHeightHint {
+                    status: format!(
+                        "weighted_p2_resolved_shared_chamber_global_height_simplex_error:{}",
+                        status_error_fragment(&error)
+                    ),
+                    min_pairing: None,
+                    max_pairing: None,
+                    zero_pairing_count: None,
+                    positive_pairing_count: None,
+                    negative_pairing_count: None,
+                };
+            }
+        };
+        simplices.push(mapped);
+    }
+    let points = support
+        .iter()
+        .map(|point| Point::new(point.coordinates.clone()))
+        .collect::<Vec<_>>();
+    let heights = match support
+        .iter()
+        .map(|point| {
+            global_secondary_heights
+                .get(point.point_index)
+                .copied()
+                .ok_or_else(|| {
+                    format!(
+                        "point index {} maps to missing origin-included secondary height entry",
+                        point.point_index
+                    )
+                })
+                .and_then(|height| {
+                    F64::<Finite>::new(height).ok_or_else(|| {
+                        format!(
+                            "point index {} has non-finite secondary height",
+                            point.point_index
+                        )
+                    })
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()
+    {
+        Ok(heights) => heights,
+        Err(error) => {
+            return LocalCygvResolvedSharedChamberGlobalHeightHint {
+                status: format!(
+                    "weighted_p2_resolved_shared_chamber_global_height_error:{}",
+                    status_error_fragment(&error)
+                ),
+                min_pairing: None,
+                max_pairing: None,
+                zero_pairing_count: None,
+                positive_pairing_count: None,
+                negative_pairing_count: None,
+            };
+        }
+    };
+    let triangulation = Triangulation::new(simplices);
+    let secondary_hyperplanes = match secondary_cone_hyperplanes_native(&points, &triangulation) {
+        Ok(hyperplanes) => hyperplanes,
+        Err(error) => {
+            return LocalCygvResolvedSharedChamberGlobalHeightHint {
+                status: format!(
+                    "weighted_p2_resolved_shared_chamber_global_height_secondary_error:{}",
+                    status_error_fragment(&error.to_string())
+                ),
+                min_pairing: None,
+                max_pairing: None,
+                zero_pairing_count: None,
+                positive_pairing_count: None,
+                negative_pairing_count: None,
+            };
+        }
+    };
+    let pairings = match secondary_cone_height_pairings(&secondary_hyperplanes, &heights) {
+        Ok(pairings) => pairings,
+        Err(error) => {
+            return LocalCygvResolvedSharedChamberGlobalHeightHint {
+                status: format!(
+                    "weighted_p2_resolved_shared_chamber_global_height_pairing_error:{}",
+                    status_error_fragment(&error.to_string())
+                ),
+                min_pairing: None,
+                max_pairing: None,
+                zero_pairing_count: None,
+                positive_pairing_count: None,
+                negative_pairing_count: None,
+            };
+        }
+    };
+    let zero_pairing_count = pairings
+        .iter()
+        .filter(|pairing| pairing.get().abs() <= 1e-6)
+        .count();
+    let positive_pairing_count = pairings
+        .iter()
+        .filter(|pairing| pairing.get() > 1e-6)
+        .count();
+    let negative_pairing_count = pairings
+        .iter()
+        .filter(|pairing| pairing.get() < -1e-6)
+        .count();
+    let strictly_inside = secondary_cone_strictly_contains_height_vector(
+        &secondary_hyperplanes,
+        &heights,
+        F64::<Pos>::new(1e-6).expect("positive secondary cone epsilon"),
+    )
+    .unwrap_or(false);
+    let flipped_heights = heights
+        .iter()
+        .map(|height| F64::<Finite>::new(-height.get()).expect("negated finite height is finite"))
+        .collect::<Vec<_>>();
+    let flipped_strictly_inside = secondary_cone_strictly_contains_height_vector(
+        &secondary_hyperplanes,
+        &flipped_heights,
+        F64::<Pos>::new(1e-6).expect("positive secondary cone epsilon"),
+    )
+    .unwrap_or(false);
+    let status = if pairings.is_empty() {
+        "weighted_p2_resolved_shared_chamber_global_height_no_circuits"
+    } else if strictly_inside {
+        "weighted_p2_resolved_shared_chamber_global_height_strictly_inside_exclusive_pair_secondary_cone"
+    } else if flipped_strictly_inside {
+        "weighted_p2_resolved_shared_chamber_global_height_strictly_inside_after_height_sign_flip"
+    } else if zero_pairing_count == pairings.len() {
+        "weighted_p2_resolved_shared_chamber_global_height_on_all_walls"
+    } else if negative_pairing_count == 0 {
+        "weighted_p2_resolved_shared_chamber_global_height_on_wall_nonnegative"
+    } else if positive_pairing_count == 0 {
+        "weighted_p2_resolved_shared_chamber_global_height_on_wall_nonpositive"
+    } else {
+        "weighted_p2_resolved_shared_chamber_global_height_crosses_oriented_walls"
+    };
+    LocalCygvResolvedSharedChamberGlobalHeightHint {
+        status: status.to_string(),
+        min_pairing: pairing_min_string(&pairings),
+        max_pairing: pairing_max_string(&pairings),
+        zero_pairing_count: Some(zero_pairing_count),
+        positive_pairing_count: Some(positive_pairing_count),
+        negative_pairing_count: Some(negative_pairing_count),
+    }
+}
+
 fn pairing_min_string(pairings: &[F64<Finite>]) -> Option<String> {
     pairings
         .iter()
@@ -18771,6 +19027,19 @@ fn local_phase_chamber_membership_certificate_status_with_witness(
     if resolved_chamber.status
         != "weighted_p2_resolved_shared_chamber_strictly_inside_exclusive_pair_secondary_cone"
     {
+        let resolved_global_height = local_cygv_resolved_shared_chamber_global_height_hint(
+            skeleton,
+            witness,
+            context.secondary_cone_heights,
+        );
+        if resolved_global_height.status
+            == "weighted_p2_resolved_shared_chamber_global_height_strictly_inside_exclusive_pair_secondary_cone"
+        {
+            return format!(
+                "local_phase_chamber_blocked_weighted_p2_resolved_shared_affine_wall_global_height_strict:{}",
+                resolved_chamber.status
+            );
+        }
         return format!(
             "local_phase_chamber_blocked_weighted_p2_resolved_shared_chamber:{}",
             resolved_chamber.status
@@ -25935,6 +26204,12 @@ mod tests {
             resolved_shared_chamber_certificate_min_pairing: None,
             resolved_shared_chamber_certificate_max_pairing: None,
             resolved_shared_chamber_certificate_strictly_inside: None,
+            resolved_shared_chamber_global_height_status: "test".to_string(),
+            resolved_shared_chamber_global_height_min_pairing: None,
+            resolved_shared_chamber_global_height_max_pairing: None,
+            resolved_shared_chamber_global_height_zero_pairing_count: None,
+            resolved_shared_chamber_global_height_positive_pairing_count: None,
+            resolved_shared_chamber_global_height_negative_pairing_count: None,
             relation_support_point_indices: Vec::new(),
             local_phase_q_matrix: None,
             local_one_parameter_family_status: None,
@@ -28435,6 +28710,18 @@ mod tests {
         assert_eq!(global_regular.shared_face_extra_points, vec![195, 212]);
         assert!(global_regular.target_exclusive_selected_points.is_empty());
         assert_eq!(global_regular.star_extra_selected_points, vec![195, 212]);
+        let resolved_global_height = local_cygv_resolved_shared_chamber_global_height_hint(
+            &skeleton,
+            Some(&witness),
+            Some(&corrected_global_heights),
+        );
+        assert_eq!(
+            resolved_global_height.status,
+            "weighted_p2_resolved_shared_chamber_global_height_strictly_inside_exclusive_pair_secondary_cone"
+        );
+        assert_eq!(resolved_global_height.zero_pairing_count, Some(0));
+        assert_eq!(resolved_global_height.positive_pairing_count, Some(1));
+        assert_eq!(resolved_global_height.negative_pairing_count, Some(0));
         let off_height_lookup =
             local_cygv_star_union_off_height_lookup_sample(&star_union_height_profile, &validated);
         assert_eq!(off_height_lookup.len(), 4);

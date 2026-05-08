@@ -1389,12 +1389,14 @@ to make the remaining GV layer more first-principles:
    resolved-shared secondary-cone blocker for the integral weighted rows before
    falling back to the coarser star-union relation label. Fresh target `7` and
    target `8` context runs both produce
-   `local_phase_chamber_blocked_weighted_p2_resolved_shared_chamber:weighted_p2_resolved_shared_chamber_outside_or_on_wall`,
+   `local_phase_chamber_blocked_weighted_p2_resolved_shared_affine_wall_global_height_strict:weighted_p2_resolved_shared_chamber_outside_or_on_wall`,
    while their global-regular star-union hint remains
    `star_union_global_regular_shared_face_matches_serialized_star_extras`.
-   This means the corrected global height selects the serialized star extras,
-   but the exclusive-pair resolved local chamber is still on a wall and cannot
-   certify a local `cygv` handoff.
+   This means the corrected global height selects the serialized star extras
+   in the full star-union support, while its restriction to the exclusive-pair
+   resolved support is strictly inside that local secondary cone; the affine
+   projection certificate is still on a wall, so this is chamber-map evidence
+   rather than a local `cygv` handoff.
    The corresponding all-target refined report now splits the nine missing
    rows into five non-`P2`/origin-omitting phase blockers and four
    weighted-`P2` rows blocked by the resolved-shared chamber wall. Separate
@@ -1411,6 +1413,12 @@ to make the remaining GV layer more first-principles:
    weighted resolved-shared chamber-wall blockers. Thus a future source-derived
    nef partition or local tensor cannot be promoted unless the chamber gate is
    also certified.
+   The resolved-support global-height aggregate now makes the restricted
+   chamber evidence explicit: five rows are not weighted-`P2` split bundles,
+   and all four weighted rows are
+   `weighted_p2_resolved_shared_chamber_global_height_strictly_inside_exclusive_pair_secondary_cone`.
+   The unresolved step is reconciling that restricted support with the full
+   star-union chamber/transport data and a source-derived semigroup or tensor.
    After recomputing the affine charge basis, every single-column omission for
    targets `7`/`8` remains Calabi-Yau charged but has `q_rows=6`, `q_cols=1`,
    and hypersurface `cy_dim=4`, so the next fix is a source-derived CICY

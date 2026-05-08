@@ -3582,12 +3582,14 @@ The local phase-membership status now surfaces the resolved local
 secondary-cone obstruction directly. Regenerating target-specific reports as
 `/tmp/cyrus_target7_refined_local_phase_report.json` and
 `/tmp/cyrus_target8_refined_local_phase_report.json` gives
-`local_phase_chamber_blocked_weighted_p2_resolved_shared_chamber:weighted_p2_resolved_shared_chamber_outside_or_on_wall`
+`local_phase_chamber_blocked_weighted_p2_resolved_shared_affine_wall_global_height_strict:weighted_p2_resolved_shared_chamber_outside_or_on_wall`
 for both targets. The same summaries still have
 `star_union_global_regular_shared_face_matches_serialized_star_extras`, so the
-global corrected height picks the serialized star extras, but the
-exclusive-pair resolved support is on a secondary wall. That keeps this as a
-chamber-certificate blocker, not a promotable compact `cygv` domain.
+corrected global height picks the serialized star extras in the full
+star-union support. Restricted to the exclusive-pair resolved support, however,
+the corrected global height is strictly inside the local secondary cone, while
+the affine projection certificate is still on a wall. That keeps this as a
+chamber-map blocker, not a promotable compact `cygv` domain.
 The all-target refined report
 `/tmp/cyrus_all_phase_certificate_first_report.json` gives the aggregate
 phase-certificate split: five non-`P2`/origin-omitting phase blockers and four
@@ -3604,6 +3606,14 @@ aggregate. Its promotion-readiness buckets split into the same five
 non-`P2`/origin-omitting phase blockers and four weighted resolved-shared
 chamber-wall blockers, so neither a CICY-shaped support nor a scalar local
 tensor can bypass the chamber gate.
+The resolved-support global-height status is now top-level as well:
+`/tmp/cyrus_all_resolved_global_height_report.json` reports five
+`resolved_shared_chamber_global_height_not_weighted_p2_split_bundle` rows and
+four
+`weighted_p2_resolved_shared_chamber_global_height_strictly_inside_exclusive_pair_secondary_cone`
+rows. Thus the corrected global chamber is giving useful restricted-support
+evidence, but promotion still requires the full support/chamber transport and
+local intersection data.
 `/tmp/cyrus_star_union_wall_transport_readiness_smoke_all.json` now aggregates
 that implication directly. The readiness buckets are
 `wall_transport_blocked_missing_known_wall_circuit:6`,
