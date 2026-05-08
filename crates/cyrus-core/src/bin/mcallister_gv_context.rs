@@ -11400,6 +11400,7 @@ fn report_target(
     run_path_support_generators: bool,
     measure_cygv_degree_ladder: bool,
     cygv_degree_ladder_max_degree: Option<i128>,
+    cygv_degree_ladder_bounded_closure_limit: Option<usize>,
     semigroup_measure_max_target_degree: Option<i128>,
     semigroup_measure_max_seed_count: Option<usize>,
     semigroup_measurement_cache: &mut HashMap<i128, Result<CygvSemigroupDegreeMeasurement, String>>,
@@ -12048,7 +12049,7 @@ fn report_target(
                     context,
                     max_ladder_degree,
                     semigroup_measure_max_seed_count,
-                    Some(element_limit),
+                    cygv_degree_ladder_bounded_closure_limit,
                     semigroup_ladder_cache,
                 )),
                 None => Some(vec![CygvSemigroupDegreeLadderStep {
@@ -15179,6 +15180,7 @@ fn build_report(
     run_path_support_generators: bool,
     measure_cygv_degree_ladder: bool,
     cygv_degree_ladder_max_degree: Option<i128>,
+    cygv_degree_ladder_bounded_closure_limit: Option<usize>,
     semigroup_measure_max_target_degree: Option<i128>,
     semigroup_measure_max_seed_count: Option<usize>,
     scan_local_integer_tensors: bool,
@@ -15217,6 +15219,7 @@ fn build_report(
             run_path_support_generators,
             measure_cygv_degree_ladder,
             cygv_degree_ladder_max_degree,
+            cygv_degree_ladder_bounded_closure_limit,
             semigroup_measure_max_target_degree,
             semigroup_measure_max_seed_count,
             &mut semigroup_measurement_cache,
@@ -15425,6 +15428,7 @@ fn build_report(
                 false,
                 false,
                 false,
+                None,
                 None,
                 None,
                 None,
@@ -24369,7 +24373,7 @@ fn selected_target_indices(
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--trace-support-overlap-qn] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--certify-origin-witness-domains] [--origin-support-certificate-limit N] [--run-origin-witness-cygv] [--origin-witness-cygv-generator-limit N] [--scan-origin-witness-span-closure] [--origin-witness-span-closure-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--probe-star-union-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--supporting-face-lp-anchor-attempts N] [--supporting-face-lp-cutting-rounds N] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--scan-local-integer-tensors] [--local-tensor-scan-bound N] [--element-limit N] [--lower-seed-pair-limit N] [--closure-generation-limit N] [--out path | --per-target-out-dir path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
+            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--trace-support-overlap-qn] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--certify-origin-witness-domains] [--origin-support-certificate-limit N] [--run-origin-witness-cygv] [--origin-witness-cygv-generator-limit N] [--scan-origin-witness-span-closure] [--origin-witness-span-closure-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--probe-star-union-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--supporting-face-lp-anchor-attempts N] [--supporting-face-lp-cutting-rounds N] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--cygv-degree-ladder-bounded-closure-limit N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--scan-local-integer-tensors] [--local-tensor-scan-bound N] [--element-limit N] [--lower-seed-pair-limit N] [--closure-generation-limit N] [--out path | --per-target-out-dir path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree; use --cygv-degree-ladder-bounded-closure-limit 0 to disable skipped-step closure summaries"
         );
         std::process::exit(2);
     };
@@ -24410,6 +24414,14 @@ fn main() {
     };
     let measure_cygv_degree_ladder = parse_flag("--measure-cygv-degree-ladder");
     let cygv_degree_ladder_max_degree = parse_arg_value::<i128>("--cygv-degree-ladder-max-degree");
+    let cygv_degree_ladder_bounded_closure_limit = match parse_arg_value::<usize>(
+        "--cygv-degree-ladder-bounded-closure-limit",
+    )
+    .unwrap_or(1024)
+    {
+        0 => None,
+        limit => Some(limit),
+    };
     let semigroup_measure_max_target_degree =
         parse_arg_value::<i128>("--semigroup-measure-max-target-degree");
     let semigroup_measure_max_seed_count =
@@ -24475,6 +24487,7 @@ fn main() {
                 run_path_support_generators,
                 measure_cygv_degree_ladder,
                 cygv_degree_ladder_max_degree,
+                cygv_degree_ladder_bounded_closure_limit,
                 semigroup_measure_max_target_degree,
                 semigroup_measure_max_seed_count,
                 scan_local_integer_tensors,
@@ -24523,6 +24536,7 @@ fn main() {
         run_path_support_generators,
         measure_cygv_degree_ladder,
         cygv_degree_ladder_max_degree,
+        cygv_degree_ladder_bounded_closure_limit,
         semigroup_measure_max_target_degree,
         semigroup_measure_max_seed_count,
         scan_local_integer_tensors,
@@ -32706,6 +32720,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &mut semigroup_measurement_cache,
             &mut semigroup_ladder_cache,
             256,
@@ -32849,6 +32864,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &mut semigroup_measurement_cache,
             &mut semigroup_ladder_cache,
             256,
@@ -32883,6 +32899,7 @@ mod tests {
             false,
             false,
             false,
+            None,
             None,
             None,
             None,

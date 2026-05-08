@@ -2263,11 +2263,15 @@ The `mcallister_gv_context` degree-ladder report now keeps this failure mode
 observable without entering the expensive constructor. When a ladder step is
 skipped by `--semigroup-measure-max-seeds`, the report can attach a bounded
 streaming closure summary using Cyrus' mirror of cygv's seed-reduction and
-closure loop. On target `7`, a debug smoke with seed cap `64` and element cap
-`1024` records degree `2` as a completed `291`-element closure, while degrees
-`3..6` all exceed the `1024` cap during the first closure generation. This is
-not a GV computation, but it is a cheap guardrail against mistaking a skipped
-actual-cygv call for missing evidence.
+closure loop. The cap is controlled by
+`--cygv-degree-ladder-bounded-closure-limit` and defaults to `1024`, so raising
+the path-history `--element-limit` no longer makes ladder diagnostics
+unexpectedly expensive; passing `0` disables the skipped-step closure summary.
+On target `7`, a debug smoke with seed cap `64` and ladder closure cap `1024`
+records degree `2` as a completed `291`-element closure, while degrees `3..6`
+all exceed the `1024` cap during the first closure generation. This is not a GV
+computation, but it is a cheap guardrail against mistaking a skipped actual-cygv
+call for missing evidence.
 
 The support-overlap runner now accepts `--trace-support-overlap-qn`, which
 switches that provided-generator call to Cyrus' traced `cygv` boundary and

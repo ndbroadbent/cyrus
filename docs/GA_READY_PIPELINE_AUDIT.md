@@ -725,7 +725,8 @@ to make the remaining GV layer more first-principles:
    capped source-history diagnostic.
    The degree-ladder report now also annotates seed-count-skipped steps with a
    bounded streaming closure summary. A target-`7` debug smoke with
-   `--semigroup-measure-max-seeds 64 --element-limit 1024` records degree `2`
+   `--semigroup-measure-max-seeds 64
+   --cygv-degree-ladder-bounded-closure-limit 1024` records degree `2`
    as a completed bounded closure with `291` elements, while degrees `3..6`
    all exceed the `1024` element cap during the first closure generation. This
    gives an inexpensive machine-readable scale witness when the actual cygv
