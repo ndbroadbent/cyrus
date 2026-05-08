@@ -289,6 +289,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_resolved_shared_chamber_global_height_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_resolved_shared_chamber_full_union_compatibility_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_projection_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_reduction_status_counts: BTreeMap<String, usize>,
@@ -826,6 +828,7 @@ struct LocalCygvSourceResolutionHintSummary {
     resolved_shared_chamber_global_height_zero_pairing_count: Option<usize>,
     resolved_shared_chamber_global_height_positive_pairing_count: Option<usize>,
     resolved_shared_chamber_global_height_negative_pairing_count: Option<usize>,
+    resolved_shared_chamber_full_union_compatibility_status: String,
     relation_support_point_indices: Vec<usize>,
     local_phase_q_matrix: Option<Vec<Vec<i64>>>,
     local_one_parameter_family_status: Option<String>,
@@ -15759,6 +15762,10 @@ fn build_report(
         local_cygv_source_resolution_resolved_shared_chamber_global_height_status_counts(
             &local_cygv_source_resolution_hint_sample,
         );
+    let local_cygv_source_resolution_resolved_shared_chamber_full_union_compatibility_status_counts =
+        local_cygv_source_resolution_resolved_shared_chamber_full_union_compatibility_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
     let local_cygv_source_resolution_star_union_global_secondary_height_status_counts =
         local_cygv_source_resolution_star_union_global_secondary_height_status_counts(
             &local_cygv_source_resolution_hint_sample,
@@ -16789,6 +16796,7 @@ fn build_report(
         local_cygv_source_resolution_resolved_support_status_counts,
         local_cygv_source_resolution_resolved_shared_chamber_certificate_status_counts,
         local_cygv_source_resolution_resolved_shared_chamber_global_height_status_counts,
+        local_cygv_source_resolution_resolved_shared_chamber_full_union_compatibility_status_counts,
         local_cygv_source_resolution_projection_status_counts,
         local_cygv_source_resolution_star_status_counts,
         local_cygv_source_resolution_star_reduction_status_counts,
@@ -17212,6 +17220,11 @@ fn local_cygv_source_resolution_hint_summaries(
                     &star_support_hint,
                     context.secondary_cone_heights,
                 );
+            let resolved_full_union_compatibility =
+                local_cygv_resolved_shared_chamber_full_union_compatibility_status(
+                    &resolved_chamber_global_height,
+                    &star_union_global_regular_triangulation,
+                );
             let target_relation_global_secondary_height =
                 local_cygv_target_relation_global_secondary_height_hint(
                     target.origin_circuit_first_witness.as_ref(),
@@ -17430,6 +17443,8 @@ fn local_cygv_source_resolution_hint_summaries(
                     resolved_chamber_global_height.positive_pairing_count,
                 resolved_shared_chamber_global_height_negative_pairing_count:
                     resolved_chamber_global_height.negative_pairing_count,
+                resolved_shared_chamber_full_union_compatibility_status:
+                    resolved_full_union_compatibility,
                 relation_support_point_indices: target
                     .origin_circuit_first_witness
                     .as_ref()
@@ -18208,6 +18223,22 @@ fn local_cygv_source_resolution_resolved_shared_chamber_global_height_status_cou
     counts
 }
 
+fn local_cygv_source_resolution_resolved_shared_chamber_full_union_compatibility_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts
+            .entry(
+                summary
+                    .resolved_shared_chamber_full_union_compatibility_status
+                    .clone(),
+            )
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
 fn local_cygv_source_resolution_hint_status_counts<'a>(
     targets: impl IntoIterator<Item = &'a TargetReport>,
 ) -> BTreeMap<String, usize> {
@@ -18916,6 +18947,37 @@ fn local_cygv_resolved_shared_chamber_global_height_hint(
         zero_pairing_count: Some(zero_pairing_count),
         positive_pairing_count: Some(positive_pairing_count),
         negative_pairing_count: Some(negative_pairing_count),
+    }
+}
+
+fn local_cygv_resolved_shared_chamber_full_union_compatibility_status(
+    resolved_global_height: &LocalCygvResolvedSharedChamberGlobalHeightHint,
+    global_regular: &LocalCygvStarUnionGlobalRegularTriangulationHint,
+) -> String {
+    if resolved_global_height.status
+        != "weighted_p2_resolved_shared_chamber_global_height_strictly_inside_exclusive_pair_secondary_cone"
+    {
+        return format!(
+            "resolved_full_union_compatibility_skipped:{}",
+            resolved_global_height.status
+        );
+    }
+    match global_regular.status.as_str() {
+        "star_union_global_regular_shared_face_selects_target_exclusive_points" => {
+            "resolved_global_height_strict_and_full_union_selects_target_exclusive_points"
+                .to_string()
+        }
+        "star_union_global_regular_shared_face_matches_serialized_star_extras" => {
+            "resolved_global_height_strict_but_full_union_selects_star_extras_requires_chamber_transport"
+                .to_string()
+        }
+        "star_union_global_regular_shared_face_selects_star_extras_partial" => {
+            "resolved_global_height_strict_but_full_union_selects_partial_star_extras".to_string()
+        }
+        "star_union_global_regular_no_shared_face_simplices" => {
+            "resolved_global_height_strict_but_full_union_has_no_shared_face_simplices".to_string()
+        }
+        status => format!("resolved_global_height_strict_full_union_status:{status}"),
     }
 }
 
@@ -26210,6 +26272,7 @@ mod tests {
             resolved_shared_chamber_global_height_zero_pairing_count: None,
             resolved_shared_chamber_global_height_positive_pairing_count: None,
             resolved_shared_chamber_global_height_negative_pairing_count: None,
+            resolved_shared_chamber_full_union_compatibility_status: "test".to_string(),
             relation_support_point_indices: Vec::new(),
             local_phase_q_matrix: None,
             local_one_parameter_family_status: None,
@@ -28722,6 +28785,13 @@ mod tests {
         assert_eq!(resolved_global_height.zero_pairing_count, Some(0));
         assert_eq!(resolved_global_height.positive_pairing_count, Some(1));
         assert_eq!(resolved_global_height.negative_pairing_count, Some(0));
+        assert_eq!(
+            local_cygv_resolved_shared_chamber_full_union_compatibility_status(
+                &resolved_global_height,
+                &global_regular,
+            ),
+            "resolved_global_height_strict_but_full_union_selects_star_extras_requires_chamber_transport"
+        );
         let off_height_lookup =
             local_cygv_star_union_off_height_lookup_sample(&star_union_height_profile, &validated);
         assert_eq!(off_height_lookup.len(), 4);

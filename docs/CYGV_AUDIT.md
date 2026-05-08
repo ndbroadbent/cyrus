@@ -3614,6 +3614,18 @@ four
 rows. Thus the corrected global chamber is giving useful restricted-support
 evidence, but promotion still requires the full support/chamber transport and
 local intersection data.
+The full-union compatibility diagnostic makes that incompatibility explicit.
+Regenerating `/tmp/cyrus_all_full_union_compatibility_report.json` gives five
+`resolved_full_union_compatibility_skipped:resolved_shared_chamber_global_height_not_weighted_p2_split_bundle`
+rows and four
+`resolved_global_height_strict_but_full_union_selects_star_extras_requires_chamber_transport`
+rows. Targets `7` and `8` both have the restricted resolved-support height
+strictly inside the exclusive-pair secondary cone, while the full star-union
+global regular triangulation still has
+`star_union_global_regular_shared_face_matches_serialized_star_extras`. Thus
+the unresolved object is the chamber transport/full chamber map between the
+restricted resolved support and the actual full union, not a scalar local GV
+value or a direct compact `cygv` domain on the restricted support.
 `/tmp/cyrus_star_union_wall_transport_readiness_smoke_all.json` now aggregates
 that implication directly. The readiness buckets are
 `wall_transport_blocked_missing_known_wall_circuit:6`,

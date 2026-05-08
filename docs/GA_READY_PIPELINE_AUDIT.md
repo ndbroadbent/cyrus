@@ -1419,6 +1419,16 @@ to make the remaining GV layer more first-principles:
    `weighted_p2_resolved_shared_chamber_global_height_strictly_inside_exclusive_pair_secondary_cone`.
    The unresolved step is reconciling that restricted support with the full
    star-union chamber/transport data and a source-derived semigroup or tensor.
+   The full-union compatibility report now records that reconciliation gap
+   directly. `/tmp/cyrus_all_full_union_compatibility_report.json` has five
+   `resolved_full_union_compatibility_skipped:resolved_shared_chamber_global_height_not_weighted_p2_split_bundle`
+   rows and four
+   `resolved_global_height_strict_but_full_union_selects_star_extras_requires_chamber_transport`
+   rows. For targets `7`/`8`, the restricted resolved support is strict under
+   the corrected global height, but the full star-union global regular
+   triangulation still selects the serialized star extras. This keeps the next
+   production task at chamber transport/full chamber-map certification rather
+   than a direct local `cygv` call on the restricted support.
    After recomputing the affine charge basis, every single-column omission for
    targets `7`/`8` remains Calabi-Yau charged but has `q_rows=6`, `q_cols=1`,
    and hypersurface `cy_dim=4`, so the next fix is a source-derived CICY

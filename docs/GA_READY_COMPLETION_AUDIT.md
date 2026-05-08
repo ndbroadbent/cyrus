@@ -708,6 +708,17 @@ weighted rows as
 `weighted_p2_zero_shared_ray_has_primitive_unit_height_off_relation_hyperplane_requires_projection_or_chamber_map`;
 the zero-shared ray has signed height `-1` above the relation hyperplane in
 each case.
+The full-union compatibility report now separates restricted-support evidence
+from the actual full chamber:
+`/tmp/cyrus_all_full_union_compatibility_report.json` has five
+`resolved_full_union_compatibility_skipped:resolved_shared_chamber_global_height_not_weighted_p2_split_bundle`
+rows and four
+`resolved_global_height_strict_but_full_union_selects_star_extras_requires_chamber_transport`
+rows. For targets `7`/`8`, the corrected global height is strict on the
+exclusive-pair resolved support, but the full star-union global regular
+triangulation selects the serialized star extras. The next object is therefore
+chamber transport/full chamber-map history, not promotion of a scalar local GV
+value or a direct compact `cygv` domain on the restricted support.
 The fresh star export then checks the actual chamber neighbors of those shared
 two-simplices: all four weighted rows are
 `weighted_p2_zero_shared_star_uses_two_alternate_chamber_points`. Targets `3`
@@ -941,6 +952,12 @@ The affine projection certificate for those weighted rows remains
 `weighted_p2_resolved_shared_chamber_outside_or_on_wall`, so the missing object
 is the full chamber map/transport that reconciles the strict restricted support
 with the full star-union chamber, not a scalar local GV value.
+The full-union compatibility field now records this as a top-level aggregate:
+five rows are skipped as non-weighted-P2 split bundles, and four rows are
+`resolved_global_height_strict_but_full_union_selects_star_extras_requires_chamber_transport`.
+Targets `7` and `8` both pair that strict restricted-support status with
+`star_union_global_regular_shared_face_matches_serialized_star_extras`, making
+the chamber-transport gap explicit.
 A bounded supporting-face rerun for the two integral weighted rows (`target 7`
 and `target 8`) does not provide that missing certificate. With
 `--certify-origin-witness-domains`, two LP anchors, and the facet-union cap
