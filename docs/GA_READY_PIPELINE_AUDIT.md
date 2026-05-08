@@ -1532,6 +1532,13 @@ to make the remaining GV layer more first-principles:
    two-term bounded diamonds gives `GV=0` with no target qN polynomial, even
    for the degree-4 generator whose source-derived GV is `1`. These diamonds
    are therefore negative diagnostics rather than valid source histories.
+   A direct actual-`cygv` handoff using the five current-chamber generators as
+   a provided-generator domain also computes target-plus-star `GV=0` with no
+   target qN polynomial for both targets `7` and `8` (`1` lower qN polynomial
+   for target `7`, `0` for target `8`). The locally flipped chamber is not a
+   valid positive-degree `cygv` generator domain because it contains a degree
+   `-4` generator. Thus the visible chamber generator set is not the missing
+   compact HKTY history by itself.
    A follow-up compact-omission wall-side summary confirms this selected side
    is not one of the compact omission phases: both target rows have four
    compact omissions, but zero full-positive-side or full-negative-side

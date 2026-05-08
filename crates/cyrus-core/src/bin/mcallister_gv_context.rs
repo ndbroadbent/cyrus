@@ -962,12 +962,14 @@ struct LocalCygvStarUnionChamberSemigroupTransportProbe {
     current_chamber_generators: Vec<Vec<i64>>,
     current_chamber_generator_context: Vec<LocalCygvChamberSemigroupGeneratorContext>,
     current_chamber_generator_known_qn_history_status_counts: BTreeMap<String, usize>,
+    current_chamber_provided_generator_cygv_probe: Option<ProvidedGeneratorTargetGvProbe>,
     current_chamber_decomposition: Option<Vec<LocalCygvChamberSemigroupDecompositionTerm>>,
     flipped_chamber_status: Option<String>,
     flipped_chamber_generator_count: Option<usize>,
     flipped_chamber_generators: Vec<Vec<i64>>,
     flipped_chamber_generator_context: Vec<LocalCygvChamberSemigroupGeneratorContext>,
     flipped_chamber_generator_known_qn_history_status_counts: BTreeMap<String, usize>,
+    flipped_chamber_provided_generator_cygv_probe: Option<ProvidedGeneratorTargetGvProbe>,
     flipped_chamber_decomposition: Option<Vec<LocalCygvChamberSemigroupDecompositionTerm>>,
     error: Option<String>,
 }
@@ -1729,7 +1731,7 @@ struct CygvPathSupportQnTraceCurveSummary {
     first_term_sample: Vec<CygvPathSupportQnTraceTermSample>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 struct ProvidedGeneratorTargetGvProbe {
     generator_count: usize,
     status: String,
@@ -21798,12 +21800,14 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
             current_chamber_generators: Vec::new(),
             current_chamber_generator_context: Vec::new(),
             current_chamber_generator_known_qn_history_status_counts: BTreeMap::new(),
+            current_chamber_provided_generator_cygv_probe: None,
             current_chamber_decomposition: None,
             flipped_chamber_status: None,
             flipped_chamber_generator_count: None,
             flipped_chamber_generators: Vec::new(),
             flipped_chamber_generator_context: Vec::new(),
             flipped_chamber_generator_known_qn_history_status_counts: BTreeMap::new(),
+            flipped_chamber_provided_generator_cygv_probe: None,
             flipped_chamber_decomposition: None,
             error,
         };
@@ -21943,6 +21947,22 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
         chamber_semigroup_generator_known_qn_history_status_counts(
             &flipped_chamber_generator_context,
         );
+    let current_chamber_provided_generator_cygv_probe = context.map(|context| {
+        chamber_semigroup_provided_generator_cygv_probe(
+            star_union.target_plus_star_basis_nonzero.as_ref(),
+            &current_chamber_generator_context,
+            context,
+            "current_chamber_generators",
+        )
+    });
+    let flipped_chamber_provided_generator_cygv_probe = context.map(|context| {
+        chamber_semigroup_provided_generator_cygv_probe(
+            star_union.target_plus_star_basis_nonzero.as_ref(),
+            &flipped_chamber_generator_context,
+            context,
+            "flipped_chamber_generators",
+        )
+    });
 
     LocalCygvStarUnionChamberSemigroupTransportProbe {
         status: status.to_string(),
@@ -21951,6 +21971,7 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
         current_chamber_generators: current_generators,
         current_chamber_generator_context,
         current_chamber_generator_known_qn_history_status_counts,
+        current_chamber_provided_generator_cygv_probe,
         current_chamber_decomposition: current_decomposition,
         flipped_chamber_status: flipped_status,
         flipped_chamber_generator_count: (!flipped_generators.is_empty())
@@ -21958,6 +21979,7 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
         flipped_chamber_generators: flipped_generators,
         flipped_chamber_generator_context,
         flipped_chamber_generator_known_qn_history_status_counts,
+        flipped_chamber_provided_generator_cygv_probe,
         flipped_chamber_decomposition: flipped_decomposition,
         error: None,
     }
@@ -22258,6 +22280,99 @@ fn chamber_semigroup_generator_known_qn_history_status_counts(
             .or_insert(0) += 1;
     }
     counts
+}
+
+fn chamber_semigroup_provided_generator_cygv_probe(
+    target_basis_nonzero: Option<&Vec<(usize, i64)>>,
+    generator_contexts: &[LocalCygvChamberSemigroupGeneratorContext],
+    context: &ValidatedContext<'_>,
+    label: &str,
+) -> ProvidedGeneratorTargetGvProbe {
+    let empty = |status: &str, error: Option<String>| ProvidedGeneratorTargetGvProbe {
+        generator_count: generator_contexts.len(),
+        status: status.to_string(),
+        gv: None,
+        error,
+        qn_trace_polynomial_count: None,
+        target_qn_trace_status: None,
+        target_qn_trace_term_count: None,
+        qn_trace_sample: Vec::new(),
+    };
+
+    let Some(target_basis_nonzero) = target_basis_nonzero else {
+        return empty("skipped_missing_target_plus_star_global_basis", None);
+    };
+    let target = match dense_from_sparse(target_basis_nonzero, context.dimension) {
+        Ok(target) => target,
+        Err(error) => {
+            return empty("skipped_invalid_target_plus_star_global_basis", Some(error));
+        }
+    };
+    let target_degree = match curve_degree(&target, context.grading) {
+        Ok(degree) if degree > 0 => degree,
+        Ok(degree) => {
+            return empty(
+                "skipped_nonpositive_target_plus_star_degree",
+                Some(format!("target-plus-star degree is {degree}")),
+            );
+        }
+        Err(error) => {
+            return empty(
+                "skipped_invalid_target_plus_star_global_basis_degree",
+                Some(error),
+            );
+        }
+    };
+    let mut generators = Vec::new();
+    for generator in generator_contexts {
+        let Some(basis_nonzero) = generator.basis_nonzero.as_ref() else {
+            return empty(
+                "skipped_missing_chamber_generator_global_basis",
+                Some(format!(
+                    "generator {} has status {}",
+                    generator.generator_index, generator.global_basis_status
+                )),
+            );
+        };
+        let basis_dense = match dense_from_sparse(basis_nonzero, context.dimension) {
+            Ok(basis_dense) => basis_dense,
+            Err(error) => {
+                return empty(
+                    "skipped_invalid_chamber_generator_global_basis",
+                    Some(error),
+                );
+            }
+        };
+        let degree = match curve_degree(&basis_dense, context.grading) {
+            Ok(degree) => degree,
+            Err(error) => {
+                return empty("skipped_invalid_chamber_generator_degree", Some(error));
+            }
+        };
+        if degree <= 0 {
+            return empty(
+                "skipped_nonpositive_chamber_generator_degree",
+                Some(format!(
+                    "generator {} has degree {degree}",
+                    generator.generator_index
+                )),
+            );
+        }
+        generators.push(basis_dense);
+    }
+    generators.sort();
+    generators.dedup();
+    match run_provided_generator_target_gv(
+        &generators,
+        &target,
+        target_degree,
+        context,
+        label,
+        true,
+    ) {
+        Ok(probe) => probe,
+        Err(error) => empty("error", Some(error)),
+    }
 }
 
 fn local_cygv_star_union_flipped_link_simplices(
@@ -27936,12 +28051,14 @@ mod tests {
                     current_chamber_generators: Vec::new(),
                     current_chamber_generator_context: Vec::new(),
                     current_chamber_generator_known_qn_history_status_counts: BTreeMap::new(),
+                    current_chamber_provided_generator_cygv_probe: None,
                     current_chamber_decomposition: None,
                     flipped_chamber_status: None,
                     flipped_chamber_generator_count: None,
                     flipped_chamber_generators: Vec::new(),
                     flipped_chamber_generator_context: Vec::new(),
                     flipped_chamber_generator_known_qn_history_status_counts: BTreeMap::new(),
+                    flipped_chamber_provided_generator_cygv_probe: None,
                     flipped_chamber_decomposition: None,
                     error: None,
                 },

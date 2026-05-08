@@ -3810,6 +3810,13 @@ decompositions. All decomposed degree-4 generator diamonds return `GV=0` with
 no target qN polynomial, including the current-chamber wall row whose
 source-derived scalar GV is `1`, so the two-seed diamonds are not valid source
 semigroup histories.
+The next direct probe feeds the five current-chamber generators themselves to
+actual `cygv` as a provided-generator domain for target-plus-star. Targets `7`
+and `8` both return `GV=0` with no target qN polynomial; target `7` materializes
+one lower qN polynomial and target `8` materializes none. The locally flipped
+chambers are skipped as compact `cygv` domains because each contains a degree
+`-4` generator. This rules out the visible current/flipped chamber generator
+sets as standalone compact HKTY histories.
 
 The no-replay boundary around the standalone GV binary is stricter now:
 `mcallister_gv` no longer reads `dual_curves.dat` or `dual_curves_gv.dat`.
