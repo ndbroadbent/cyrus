@@ -43,7 +43,7 @@ const CYGV_PATH_SUPPORT_QN_TRACE_SAMPLE_LIMIT: usize = 16;
 const CYGV_PATH_SUPPORT_QN_TRACE_TERM_SAMPLE_LIMIT: usize = 16;
 const CYGV_PATH_SUPPORT_GV_COEFFICIENT_TRACE_SAMPLE_LIMIT: usize = 32;
 const CYGV_PATH_SUPPORT_TARGET_MONOMIAL_QN_SOURCE_SAMPLE_LIMIT: usize = 16;
-const CYGV_LOWER_SEED_DECOMPOSITION_SEED_LIMIT: usize = 1024;
+const DEFAULT_CYGV_LOWER_SEED_PAIR_LIMIT: usize = 1024;
 const CYGV_BOUNDED_DECOMPOSITION_DIAMOND_ELEMENT_LIMIT: usize = 64;
 const CYGV_BOUNDED_DIAMOND_PARENT_QN_DIFF_SAMPLE_LIMIT: usize = 16;
 const ORIGIN_CIRCUIT_WITNESS_DOMAIN_UNRESOLVED_SAMPLE_LIMIT: usize = 64;
@@ -2139,15 +2139,16 @@ fn lower_seed_decomposition_probe(
     target: &[i64],
     seeds: &[Vec<i64>],
     max_terms: usize,
+    seed_pair_limit: usize,
 ) -> LowerSeedDecompositionProbe {
-    if seeds.len() > CYGV_LOWER_SEED_DECOMPOSITION_SEED_LIMIT {
+    if seeds.len() > seed_pair_limit {
         return LowerSeedDecompositionProbe {
-            status: format!("skipped_seed_pair_limit_{CYGV_LOWER_SEED_DECOMPOSITION_SEED_LIMIT}"),
+            status: format!("skipped_seed_pair_limit_{seed_pair_limit}"),
             term_count: None,
             terms_nonzero: None,
             terms: None,
             error: Some(format!(
-                "seed count {} exceeds pair-sum limit {CYGV_LOWER_SEED_DECOMPOSITION_SEED_LIMIT}",
+                "seed count {} exceeds pair-sum limit {seed_pair_limit}",
                 seeds.len()
             )),
         };
@@ -10704,6 +10705,7 @@ fn report_target(
         Result<Vec<CygvSemigroupDegreeLadderStep>, String>,
     >,
     element_limit: usize,
+    lower_seed_pair_limit: usize,
     closure_generation_limit: Option<usize>,
     supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
 ) -> TargetReport {
@@ -11374,6 +11376,7 @@ fn report_target(
                 run_path_support_generators,
                 element_limit,
                 semigroup_measure_max_seed_count,
+                lower_seed_pair_limit,
                 closure_generation_limit,
                 supporting_face_lp_options,
             ))
@@ -11867,6 +11870,7 @@ fn cygv_path_history_probe(
     run_path_support_generators: bool,
     element_limit: usize,
     max_seed_count: Option<usize>,
+    lower_seed_pair_limit: usize,
     closure_generation_limit: Option<usize>,
     supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
 ) -> CygvPathHistoryProbe {
@@ -11878,6 +11882,7 @@ fn cygv_path_history_probe(
         run_path_support_generators,
         element_limit,
         max_seed_count,
+        lower_seed_pair_limit,
         closure_generation_limit,
         supporting_face_lp_options,
     ) {
@@ -11995,6 +12000,7 @@ fn cygv_path_history_probe_inner(
     run_path_support_generators: bool,
     element_limit: usize,
     max_seed_count: Option<usize>,
+    lower_seed_pair_limit: usize,
     closure_generation_limit: Option<usize>,
     supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
 ) -> Result<CygvPathHistoryProbe, String> {
@@ -12114,10 +12120,8 @@ fn cygv_path_history_probe_inner(
     }
     let seed_limit_status = if max_seed_count.is_some_and(|limit| seeds.len() > limit) {
         Some("skipped_seed_limit".to_string())
-    } else if seeds.len() > CYGV_LOWER_SEED_DECOMPOSITION_SEED_LIMIT {
-        Some(format!(
-            "skipped_seed_pair_limit_{CYGV_LOWER_SEED_DECOMPOSITION_SEED_LIMIT}"
-        ))
+    } else if seeds.len() > lower_seed_pair_limit {
+        Some(format!("skipped_seed_pair_limit_{lower_seed_pair_limit}"))
     } else {
         None
     };
@@ -12228,7 +12232,8 @@ fn cygv_path_history_probe_inner(
         .into_iter()
         .collect::<HashSet<_>>();
     let reduced_seed_count = reduced_seeds.len();
-    let lower_seed_decomposition = lower_seed_decomposition_probe(target, &seeds, 4);
+    let lower_seed_decomposition =
+        lower_seed_decomposition_probe(target, &seeds, 4, lower_seed_pair_limit);
     let lower_seed_diamond = lower_seed_diamond_probe(
         target,
         &lower_seed_decomposition,
@@ -14334,6 +14339,7 @@ fn build_report(
     local_tensor_scan_bound: i64,
     origin_witness_span_closure_scan_limit: Option<usize>,
     element_limit: usize,
+    lower_seed_pair_limit: usize,
     closure_generation_limit: Option<usize>,
     supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
 ) -> ContextReport {
@@ -14370,6 +14376,7 @@ fn build_report(
             &mut semigroup_measurement_cache,
             &mut semigroup_ladder_cache,
             element_limit,
+            lower_seed_pair_limit,
             closure_generation_limit,
             supporting_face_lp_options,
         ));
@@ -14486,6 +14493,7 @@ fn build_report(
                 &mut semigroup_measurement_cache,
                 &mut semigroup_ladder_cache,
                 element_limit,
+                lower_seed_pair_limit,
                 closure_generation_limit,
                 supporting_face_lp_options,
             ));
@@ -20693,7 +20701,7 @@ fn selected_target_indices(
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--trace-support-overlap-qn] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--certify-origin-witness-domains] [--origin-support-certificate-limit N] [--run-origin-witness-cygv] [--origin-witness-cygv-generator-limit N] [--scan-origin-witness-span-closure] [--origin-witness-span-closure-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--supporting-face-lp-anchor-attempts N] [--supporting-face-lp-cutting-rounds N] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--scan-local-integer-tensors] [--local-tensor-scan-bound N] [--element-limit N] [--closure-generation-limit N] [--out path | --per-target-out-dir path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
+            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--trace-support-overlap-qn] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--certify-origin-witness-domains] [--origin-support-certificate-limit N] [--run-origin-witness-cygv] [--origin-witness-cygv-generator-limit N] [--scan-origin-witness-span-closure] [--origin-witness-span-closure-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--supporting-face-lp-anchor-attempts N] [--supporting-face-lp-cutting-rounds N] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--scan-local-integer-tensors] [--local-tensor-scan-bound N] [--element-limit N] [--lower-seed-pair-limit N] [--closure-generation-limit N] [--out path | --per-target-out-dir path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree"
         );
         std::process::exit(2);
     };
@@ -20740,6 +20748,8 @@ fn main() {
     let scan_local_integer_tensors = parse_flag("--scan-local-integer-tensors");
     let local_tensor_scan_bound = parse_arg_value::<i64>("--local-tensor-scan-bound").unwrap_or(8);
     let element_limit = parse_arg_value::<usize>("--element-limit").unwrap_or(256);
+    let lower_seed_pair_limit = parse_arg_value::<usize>("--lower-seed-pair-limit")
+        .unwrap_or(DEFAULT_CYGV_LOWER_SEED_PAIR_LIMIT);
     let closure_generation_limit = parse_arg_value::<usize>("--closure-generation-limit");
     let out_path = parse_arg_value::<PathBuf>("--out");
     let per_target_out_dir = parse_arg_value::<PathBuf>("--per-target-out-dir");
@@ -20801,6 +20811,7 @@ fn main() {
                 local_tensor_scan_bound,
                 origin_witness_span_closure_scan_limit,
                 element_limit,
+                lower_seed_pair_limit,
                 closure_generation_limit,
                 &supporting_face_lp_options,
             );
@@ -20847,6 +20858,7 @@ fn main() {
         local_tensor_scan_bound,
         origin_witness_span_closure_scan_limit,
         element_limit,
+        lower_seed_pair_limit,
         closure_generation_limit,
         &supporting_face_lp_options,
     );
@@ -21741,11 +21753,12 @@ mod tests {
 
     #[test]
     fn lower_seed_decomposition_probe_skips_oversized_pair_sum_domains() {
-        let seeds = (0..=CYGV_LOWER_SEED_DECOMPOSITION_SEED_LIMIT)
+        let seeds = (0..=DEFAULT_CYGV_LOWER_SEED_PAIR_LIMIT)
             .map(|idx| vec![i64::try_from(idx).unwrap(), 0])
             .collect::<Vec<_>>();
 
-        let probe = lower_seed_decomposition_probe(&[1, 0], &seeds, 4);
+        let probe =
+            lower_seed_decomposition_probe(&[1, 0], &seeds, 4, DEFAULT_CYGV_LOWER_SEED_PAIR_LIMIT);
 
         assert_eq!(probe.status, "skipped_seed_pair_limit_1024".to_string());
         assert!(probe.terms.is_none());
@@ -26828,6 +26841,7 @@ mod tests {
             false,
             16,
             None,
+            DEFAULT_CYGV_LOWER_SEED_PAIR_LIMIT,
             None,
             &SupportingMoriFaceLpSearchOptions::default(),
         )
@@ -26995,6 +27009,7 @@ mod tests {
             false,
             2,
             None,
+            DEFAULT_CYGV_LOWER_SEED_PAIR_LIMIT,
             None,
             &SupportingMoriFaceLpSearchOptions::default(),
         )
@@ -27236,6 +27251,7 @@ mod tests {
             false,
             16,
             Some(2),
+            DEFAULT_CYGV_LOWER_SEED_PAIR_LIMIT,
             None,
             &SupportingMoriFaceLpSearchOptions::default(),
         )
@@ -27251,6 +27267,81 @@ mod tests {
         );
         assert_eq!(probe.closure_element_count, None);
         assert_eq!(probe.previous_window_element_count, None);
+    }
+
+    #[test]
+    fn path_history_probe_respects_lower_seed_pair_limit_before_closure() {
+        let stats = MissingGvTargetStats {
+            target_count: 1,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: vec![MissingGvTargetSample {
+                degree: 2,
+                generators_le_degree: 3,
+                is_mori_generator: false,
+                origin_circuit_pattern: None,
+                origin_circuit_witness_count: None,
+                origin_circuit_first_witness: None,
+                origin_circuit_witnesses: None,
+                origin_circuit_affine_support: None,
+                cms_general_divisor_shape_candidates: None,
+                cms_general_divisor_intersection_checks: None,
+                branch_diagnostic: None,
+                real_cone_decomposable_by_other_generators: false,
+                real_cone_decomposition_active_generators: None,
+                real_cone_decomposition_active_generator_basis_nonzero: None,
+                real_cone_decomposition_exact_coefficients: None,
+                real_cone_decomposition_exact_kind: None,
+                ambient_nonzero: vec![(0, 1), (1, 1)],
+                basis_nonzero: vec![(0, 1), (1, 1)],
+            }],
+        };
+        let grading = vec![1, 1];
+        let q_matrix = vec![vec![1, 0], vec![0, 1]];
+        let degree_bounded_rays = vec![vec![1, 0], vec![0, 1], vec![1, 1]];
+        let context = ValidatedContext {
+            dimension: 2,
+            degree_bound: 2,
+            q_cols: 2,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: None,
+            covered_toric_gv_by_basis: HashMap::new(),
+            source_derived_gv_by_basis: HashMap::new(),
+            intersection: Intersection::new(2),
+            stats: &stats,
+            uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
+        };
+
+        let target = vec![1, 1];
+        let probe = cygv_path_history_probe_inner(
+            &stats.sample[0],
+            &context,
+            &target,
+            false,
+            false,
+            16,
+            None,
+            2,
+            None,
+            &SupportingMoriFaceLpSearchOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(probe.status, "skipped_seed_pair_limit_2");
+        assert_eq!(probe.seed_count, Some(3));
+        assert_eq!(probe.reduced_seed_count, None);
+        assert_eq!(
+            probe.lower_seed_decomposition_status,
+            "skipped_seed_pair_limit_2"
+        );
+        assert_eq!(
+            probe.lower_seed_diamond_status.as_deref(),
+            Some("skipped_seed_pair_limit_2")
+        );
+        assert_eq!(probe.closure_element_count, None);
     }
 
     #[test]
@@ -27627,6 +27718,7 @@ mod tests {
             &mut semigroup_measurement_cache,
             &mut semigroup_ladder_cache,
             256,
+            DEFAULT_CYGV_LOWER_SEED_PAIR_LIMIT,
             None,
             &SupportingMoriFaceLpSearchOptions::default(),
         );
@@ -27768,6 +27860,7 @@ mod tests {
             &mut semigroup_measurement_cache,
             &mut semigroup_ladder_cache,
             256,
+            DEFAULT_CYGV_LOWER_SEED_PAIR_LIMIT,
             None,
             &SupportingMoriFaceLpSearchOptions::default(),
         );
@@ -27804,6 +27897,7 @@ mod tests {
             &mut semigroup_measurement_cache,
             &mut semigroup_ladder_cache,
             256,
+            DEFAULT_CYGV_LOWER_SEED_PAIR_LIMIT,
             None,
             &SupportingMoriFaceLpSearchOptions::default(),
         );

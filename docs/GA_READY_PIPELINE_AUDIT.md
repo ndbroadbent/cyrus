@@ -299,15 +299,17 @@ run pass. Any remaining mismatch must be explicit and localizable.
    the signed residual from pair-diamond-only evidence into the parent
    path-support diagnostic boundary.
    The path-history probe now also guards lower-seed pair operations before
-   pair reduction or pair-sum enumeration when the target has more than `1024`
-   degree-bounded seeds. This keeps oversized targets observable instead of
-   burning the whole timeout before JSON is written: target `0` timed out
-   under 240 seconds at `seed_count=1616` with the looser cap, while a guarded
-   target-`0` smoke and target-`2` generation-limited smoke now return
+   pair reduction or pair-sum enumeration when the target has more than
+   `--lower-seed-pair-limit` degree-bounded seeds. The default is `1024`, and
+   the flag can be raised deliberately for single-target high-budget probes.
+   This keeps oversized targets observable instead of burning the whole timeout
+   before JSON is written: target `0` timed out under 240 seconds at
+   `seed_count=1616` with a higher `2048` cap, while a guarded target-`0`
+   smoke and target-`2` generation-limited smoke now return
    `skipped_seed_pair_limit_1024` in about four seconds. A target-`8` control
-   with `seed_count=720` remains below the cap and still runs the lower-seed
-   decomposition path, so the existing target-`7`/`8` diagnostics are not
-   replaced by the guard. A guarded all-target batch with path-support
+   with `seed_count=720` remains below the default cap and still runs the
+   lower-seed decomposition path, so the existing target-`7`/`8` diagnostics
+   are not replaced by the guard. A guarded all-target batch with path-support
    generators and lower-seed diamonds now writes all nine per-target reports in
    229.70 seconds: targets `0..5` are explicit seed-pair-limit skips, target
    `6` preserves `hkty_error` with missing target coefficient, target `7`
