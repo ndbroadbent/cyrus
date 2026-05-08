@@ -1175,6 +1175,15 @@ qN history, while the other loses the positive-degree target-plus-star chamber.
 Thus the remaining work is not witness selection; it is still certified
 wall-crossing chamber transport plus source-derived semigroup/qN history.
 
+The local chamber-semigroup diagnostic now also refuses to treat the
+combinatorial local flip as a certified chamber unless its secondary cone has a
+strict interior point. In `/tmp/cyrus_local_chamber_secondary_v2.json`, targets
+`7` and `8` have strictly certified current chambers, but the locally flipped
+chambers report `chamber_secondary_certificate_no_strict_interior_point`.
+Flipped compact `cygv` probes are therefore skipped as uncertified instead of
+being allowed to masquerade as source-derived HKTY inputs. This rules out the
+visible local flip as the missing GA-ready chamber transport.
+
 ## Next Concrete Action
 
 The next implementation should be one of these, in order:

@@ -4208,3 +4208,19 @@ and the same wall-transport missing inputs
 `target_plus_star_wall_crossing_chamber_transport`,
 `target_plus_star_qn_history`, and
 `non_weyl_wall_crossing_transport_certificate`.
+
+The star-union chamber-semigroup probe now carries explicit local
+secondary-cone certificates for both the current chamber and the local
+circuit-flipped chamber. Regenerating
+`/tmp/cyrus_local_chamber_secondary_v2.json` shows five current chambers
+certified as `chamber_secondary_certificate_regular_strictly_inside_secondary_cone`
+and four rows skipped before that check because target-plus-star coordinates
+are missing. For targets `7` and `8`, including both serialized witnesses, the
+current chamber is strictly secondary-cone certified and the actual compact
+`cygv` provided-generator probe still returns diagnostic `GV=0`; the local
+flip is only combinatorial, with
+`chamber_secondary_certificate_no_strict_interior_point`. Cyrus now gates the
+flipped compact `cygv` probe as
+`skipped_uncertified_chamber_secondary_certificate:chamber_secondary_certificate_no_strict_interior_point`.
+Thus the local flip does not provide a certified adjacent chamber or a
+promotable semigroup history for the missing target-plus-star class.

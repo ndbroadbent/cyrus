@@ -26,6 +26,7 @@ use cyrus_core::triangulation::{
     expanded_secondary_face_inequality_choices_from_circuit_faces, flip_circuit_in_triangulation,
     flip_circuit_link_in_triangulation, secondary_cone_height_pairings,
     secondary_cone_hyperplanes_native, secondary_cone_strictly_contains_height_vector,
+    triangulation_heights_from_secondary_cone,
 };
 use cyrus_core::types::rational::Rational;
 use cyrus_core::types::{f64::F64, tags::Finite, tags::Pos};
@@ -450,6 +451,10 @@ struct ContextReport {
     local_cygv_source_resolution_star_union_target_plus_star_path_history_target_closure_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_path_history_lower_seed_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_secondary_certificate_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_secondary_certificate_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_cygv_status_counts:
         BTreeMap<String, usize>,
@@ -1097,6 +1102,8 @@ struct LocalCygvAllWitnessSourceResolutionSummary {
     shared_two_simplex_star_union_crossed_wall_regular_side_status: String,
     shared_two_simplex_star_union_local_circuit_flip_status: Option<String>,
     shared_two_simplex_star_union_local_circuit_flip_link: Option<Vec<usize>>,
+    shared_two_simplex_star_union_current_chamber_secondary_certificate_status: String,
+    shared_two_simplex_star_union_flipped_chamber_secondary_certificate_status: String,
     shared_two_simplex_star_union_positive_degree_transport_status: String,
     shared_two_simplex_star_union_current_chamber_positive_degree_status: String,
     shared_two_simplex_star_union_flipped_chamber_positive_degree_status: String,
@@ -1207,6 +1214,7 @@ struct LocalCygvStarUnionCrossedWallRegularSideHint {
 struct LocalCygvStarUnionChamberSemigroupTransportProbe {
     status: String,
     target_plus_star_coordinates: Option<Vec<i64>>,
+    current_chamber_secondary_certificate: LocalCygvStarUnionChamberSecondaryCertificate,
     current_chamber_generator_count: Option<usize>,
     current_chamber_generators: Vec<Vec<i64>>,
     current_chamber_generator_context: Vec<LocalCygvChamberSemigroupGeneratorContext>,
@@ -1216,6 +1224,7 @@ struct LocalCygvStarUnionChamberSemigroupTransportProbe {
     current_chamber_positive_degree_status: String,
     current_chamber_positive_degree_decomposition:
         Option<Vec<LocalCygvChamberSemigroupDecompositionTerm>>,
+    flipped_chamber_secondary_certificate: LocalCygvStarUnionChamberSecondaryCertificate,
     flipped_chamber_status: Option<String>,
     flipped_chamber_generator_count: Option<usize>,
     flipped_chamber_generators: Vec<Vec<i64>>,
@@ -1228,6 +1237,18 @@ struct LocalCygvStarUnionChamberSemigroupTransportProbe {
         Option<Vec<LocalCygvChamberSemigroupDecompositionTerm>>,
     positive_degree_transport_status: String,
     error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvStarUnionChamberSecondaryCertificate {
+    status: String,
+    simplex_count: Option<usize>,
+    hyperplane_count: Option<usize>,
+    height_count: Option<usize>,
+    min_pairing: Option<String>,
+    max_pairing: Option<String>,
+    zero_pairing_count: Option<usize>,
+    strictly_inside: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -17010,6 +17031,16 @@ fn build_report(
         local_cygv_source_resolution_star_union_target_plus_star_path_history_lower_seed_status_counts(
             &local_cygv_source_resolution_hint_sample,
         );
+    let local_cygv_source_resolution_star_union_current_chamber_secondary_certificate_status_counts =
+        chamber_secondary_certificate_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+            ChamberSide::Current,
+        );
+    let local_cygv_source_resolution_star_union_flipped_chamber_secondary_certificate_status_counts =
+        chamber_secondary_certificate_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+            ChamberSide::Flipped,
+        );
     let local_cygv_source_resolution_star_union_current_chamber_cygv_status_counts =
         provided_generator_cygv_probe_status_counts(
             local_cygv_source_resolution_hint_sample
@@ -18471,6 +18502,8 @@ fn build_report(
         local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_path_history_target_closure_counts,
         local_cygv_source_resolution_star_union_target_plus_star_path_history_lower_seed_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_secondary_certificate_status_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_secondary_certificate_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_cygv_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_cygv_gv_counts,
         local_cygv_source_resolution_star_union_current_chamber_cygv_qn_status_counts,
@@ -19446,6 +19479,16 @@ fn local_cygv_all_witness_source_resolution_summaries(
                     .local_circuit_flip_status,
                 shared_two_simplex_star_union_local_circuit_flip_link: crossed_wall_regular_side
                     .local_circuit_flip_link,
+                shared_two_simplex_star_union_current_chamber_secondary_certificate_status:
+                    chamber_semigroup_transport
+                        .current_chamber_secondary_certificate
+                        .status
+                        .clone(),
+                shared_two_simplex_star_union_flipped_chamber_secondary_certificate_status:
+                    chamber_semigroup_transport
+                        .flipped_chamber_secondary_certificate
+                        .status
+                        .clone(),
                 shared_two_simplex_star_union_positive_degree_transport_status:
                     chamber_semigroup_transport.positive_degree_transport_status,
                 shared_two_simplex_star_union_current_chamber_positive_degree_status:
@@ -20219,6 +20262,22 @@ fn flipped_chamber_generator_contexts(
 enum ChamberSide {
     Current,
     Flipped,
+}
+
+fn chamber_secondary_certificate_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+    side: ChamberSide,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        let transport = &summary.shared_two_simplex_star_union_chamber_semigroup_transport;
+        let status = match side {
+            ChamberSide::Current => &transport.current_chamber_secondary_certificate.status,
+            ChamberSide::Flipped => &transport.flipped_chamber_secondary_certificate.status,
+        };
+        *counts.entry(status.clone()).or_insert(0usize) += 1;
+    }
+    counts
 }
 
 fn chamber_decomposition_term_contexts(
@@ -24163,6 +24222,291 @@ fn local_cygv_star_union_crossed_wall_regular_side_hint(
     }
 }
 
+fn local_cygv_star_union_chamber_secondary_certificate_not_run(
+    reason: &str,
+) -> LocalCygvStarUnionChamberSecondaryCertificate {
+    LocalCygvStarUnionChamberSecondaryCertificate {
+        status: format!("chamber_secondary_certificate_not_run:{reason}"),
+        simplex_count: None,
+        hyperplane_count: None,
+        height_count: None,
+        min_pairing: None,
+        max_pairing: None,
+        zero_pairing_count: None,
+        strictly_inside: None,
+    }
+}
+
+fn local_cygv_star_union_chamber_secondary_certificate(
+    point_samples: &[OriginCircuitRelationPointSample],
+    point_indices: &[usize],
+    simplices: &[Vec<usize>],
+) -> LocalCygvStarUnionChamberSecondaryCertificate {
+    let blocked = |status: String,
+                   simplex_count: Option<usize>,
+                   hyperplane_count: Option<usize>,
+                   height_count: Option<usize>,
+                   min_pairing: Option<String>,
+                   max_pairing: Option<String>,
+                   zero_pairing_count: Option<usize>,
+                   strictly_inside: Option<bool>|
+     -> LocalCygvStarUnionChamberSecondaryCertificate {
+        LocalCygvStarUnionChamberSecondaryCertificate {
+            status,
+            simplex_count,
+            hyperplane_count,
+            height_count,
+            min_pairing,
+            max_pairing,
+            zero_pairing_count,
+            strictly_inside,
+        }
+    };
+    if point_indices.is_empty() {
+        return blocked(
+            "chamber_secondary_certificate_blocked_missing_point_indices".to_string(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+    }
+    if simplices.is_empty() {
+        return blocked(
+            "chamber_secondary_certificate_blocked_missing_simplices".to_string(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+    }
+    let by_point = point_samples
+        .iter()
+        .map(|sample| (sample.point_index, sample))
+        .collect::<BTreeMap<_, _>>();
+    let points = match point_indices
+        .iter()
+        .map(|point_index| {
+            by_point
+                .get(point_index)
+                .map(|sample| Point::new(sample.coordinates.clone()))
+                .ok_or_else(|| {
+                    format!("chamber secondary point {point_index} has no coordinate sample")
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()
+    {
+        Ok(points) => points,
+        Err(error) => {
+            return blocked(
+                format!(
+                    "chamber_secondary_certificate_point_error:{}",
+                    status_error_fragment(&error)
+                ),
+                Some(simplices.len()),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            );
+        }
+    };
+    let local_index_by_global = point_indices
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(local, global)| (global, local))
+        .collect::<BTreeMap<_, _>>();
+    let local_simplices = match simplices
+        .iter()
+        .map(|simplex| {
+            simplex
+                .iter()
+                .map(|point| {
+                    local_index_by_global.get(point).copied().ok_or_else(|| {
+                        format!("chamber secondary simplex contains point {point} outside support")
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .collect::<Result<Vec<_>, _>>()
+    {
+        Ok(local_simplices) => local_simplices,
+        Err(error) => {
+            return blocked(
+                format!(
+                    "chamber_secondary_certificate_simplex_error:{}",
+                    status_error_fragment(&error)
+                ),
+                Some(simplices.len()),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            );
+        }
+    };
+    let triangulation = Triangulation::new(local_simplices);
+    let hyperplanes = match secondary_cone_hyperplanes_native(&points, &triangulation) {
+        Ok(hyperplanes) => hyperplanes,
+        Err(error) => {
+            return blocked(
+                format!(
+                    "chamber_secondary_certificate_secondary_error:{}",
+                    status_error_fragment(&error.to_string())
+                ),
+                Some(simplices.len()),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            );
+        }
+    };
+    let heights = match triangulation_heights_from_secondary_cone(&points, &triangulation) {
+        Ok(Some(heights)) => heights,
+        Ok(None) => {
+            return blocked(
+                "chamber_secondary_certificate_no_strict_interior_point".to_string(),
+                Some(simplices.len()),
+                Some(hyperplanes.len()),
+                None,
+                None,
+                None,
+                None,
+                Some(false),
+            );
+        }
+        Err(error) => {
+            return blocked(
+                format!(
+                    "chamber_secondary_certificate_height_error:{}",
+                    status_error_fragment(&error.to_string())
+                ),
+                Some(simplices.len()),
+                Some(hyperplanes.len()),
+                None,
+                None,
+                None,
+                None,
+                None,
+            );
+        }
+    };
+    let typed_heights = match heights
+        .iter()
+        .map(|&height| {
+            F64::<Finite>::new(height).ok_or_else(|| "non-finite chamber height".to_string())
+        })
+        .collect::<Result<Vec<_>, _>>()
+    {
+        Ok(typed_heights) => typed_heights,
+        Err(error) => {
+            return blocked(
+                format!(
+                    "chamber_secondary_certificate_height_error:{}",
+                    status_error_fragment(&error)
+                ),
+                Some(simplices.len()),
+                Some(hyperplanes.len()),
+                Some(heights.len()),
+                None,
+                None,
+                None,
+                None,
+            );
+        }
+    };
+    let pairings = match secondary_cone_height_pairings(&hyperplanes, &typed_heights) {
+        Ok(pairings) => pairings,
+        Err(error) => {
+            return blocked(
+                format!(
+                    "chamber_secondary_certificate_pairing_error:{}",
+                    status_error_fragment(&error.to_string())
+                ),
+                Some(simplices.len()),
+                Some(hyperplanes.len()),
+                Some(heights.len()),
+                None,
+                None,
+                None,
+                None,
+            );
+        }
+    };
+    let strictly_inside = match secondary_cone_strictly_contains_height_vector(
+        &hyperplanes,
+        &typed_heights,
+        F64::<Pos>::new(1e-6).expect("positive secondary cone epsilon"),
+    ) {
+        Ok(strictly_inside) => strictly_inside,
+        Err(error) => {
+            return blocked(
+                format!(
+                    "chamber_secondary_certificate_strict_check_error:{}",
+                    status_error_fragment(&error.to_string())
+                ),
+                Some(simplices.len()),
+                Some(hyperplanes.len()),
+                Some(heights.len()),
+                pairing_min_string(&pairings),
+                pairing_max_string(&pairings),
+                Some(
+                    pairings
+                        .iter()
+                        .filter(|pairing| pairing.get().abs() <= 1e-6)
+                        .count(),
+                ),
+                None,
+            );
+        }
+    };
+    let zero_pairing_count = pairings
+        .iter()
+        .filter(|pairing| pairing.get().abs() <= 1e-6)
+        .count();
+    let status = if hyperplanes.is_empty() {
+        "chamber_secondary_certificate_regular_no_secondary_hyperplanes"
+    } else if strictly_inside {
+        "chamber_secondary_certificate_regular_strictly_inside_secondary_cone"
+    } else {
+        "chamber_secondary_certificate_height_not_strictly_inside_secondary_cone"
+    };
+    blocked(
+        status.to_string(),
+        Some(simplices.len()),
+        Some(hyperplanes.len()),
+        Some(heights.len()),
+        pairing_min_string(&pairings),
+        pairing_max_string(&pairings),
+        Some(zero_pairing_count),
+        Some(strictly_inside),
+    )
+}
+
+fn chamber_secondary_certificate_is_regular(
+    certificate: &LocalCygvStarUnionChamberSecondaryCertificate,
+) -> bool {
+    matches!(
+        certificate.status.as_str(),
+        "chamber_secondary_certificate_regular_strictly_inside_secondary_cone"
+            | "chamber_secondary_certificate_regular_no_secondary_hyperplanes"
+    )
+}
+
 fn local_cygv_star_union_chamber_semigroup_transport_probe(
     point_samples: &[OriginCircuitRelationPointSample],
     star_union: &LocalCygvStarUnionRelationHint,
@@ -24174,6 +24518,8 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
         |status: &str, error: Option<String>| LocalCygvStarUnionChamberSemigroupTransportProbe {
             status: status.to_string(),
             target_plus_star_coordinates: star_union.target_plus_star_coordinates.clone(),
+            current_chamber_secondary_certificate:
+                local_cygv_star_union_chamber_secondary_certificate_not_run(status),
             current_chamber_generator_count: None,
             current_chamber_generators: Vec::new(),
             current_chamber_generator_context: Vec::new(),
@@ -24182,6 +24528,8 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
             current_chamber_decomposition: None,
             current_chamber_positive_degree_status: "positive_degree_chamber_not_run".to_string(),
             current_chamber_positive_degree_decomposition: None,
+            flipped_chamber_secondary_certificate:
+                local_cygv_star_union_chamber_secondary_certificate_not_run(status),
             flipped_chamber_status: None,
             flipped_chamber_generator_count: None,
             flipped_chamber_generators: Vec::new(),
@@ -24214,6 +24562,11 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
         );
     }
 
+    let current_chamber_secondary_certificate = local_cygv_star_union_chamber_secondary_certificate(
+        point_samples,
+        &star_union.point_indices,
+        &global_regular.simplices,
+    );
     let current_generators = match local_cygv_star_union_chamber_generators_in_charge_basis(
         point_samples,
         &star_union.point_indices,
@@ -24240,8 +24593,19 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
         };
 
     let flipped = local_cygv_star_union_flipped_link_simplices(global_regular, regular_side);
-    let (flipped_status, flipped_generators, flipped_decomposition) = match flipped {
+    let (
+        flipped_status,
+        flipped_chamber_secondary_certificate,
+        flipped_generators,
+        flipped_decomposition,
+    ) = match flipped {
         Ok(Some(flipped_simplices)) => {
+            let flipped_chamber_secondary_certificate =
+                local_cygv_star_union_chamber_secondary_certificate(
+                    point_samples,
+                    &star_union.point_indices,
+                    &flipped_simplices,
+                );
             match local_cygv_star_union_chamber_generators_in_charge_basis(
                 point_samples,
                 &star_union.point_indices,
@@ -24252,6 +24616,7 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
                     match chamber_semigroup_decomposition_terms(target, &generators) {
                         Ok(decomposition) => (
                             Some("local_flip_chamber_semigroup_computed".to_string()),
+                            flipped_chamber_secondary_certificate,
                             generators,
                             decomposition,
                         ),
@@ -24260,6 +24625,7 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
                                 "local_flip_chamber_semigroup_decomposition_error:{}",
                                 status_error_fragment(&error)
                             )),
+                            flipped_chamber_secondary_certificate,
                             generators,
                             None,
                         ),
@@ -24270,6 +24636,7 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
                         "local_flip_chamber_semigroup_error:{}",
                         status_error_fragment(&error)
                     )),
+                    flipped_chamber_secondary_certificate,
                     Vec::new(),
                     None,
                 ),
@@ -24277,17 +24644,24 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
         }
         Ok(None) => (
             Some("local_flip_chamber_semigroup_not_available".to_string()),
+            local_cygv_star_union_chamber_secondary_certificate_not_run(
+                "local_flip_chamber_semigroup_not_available",
+            ),
             Vec::new(),
             None,
         ),
-        Err(error) => (
-            Some(format!(
+        Err(error) => {
+            let status = format!(
                 "local_flip_chamber_semigroup_error:{}",
                 status_error_fragment(&error)
-            )),
-            Vec::new(),
-            None,
-        ),
+            );
+            (
+                Some(status.clone()),
+                local_cygv_star_union_chamber_secondary_certificate_not_run(&status),
+                Vec::new(),
+                None,
+            )
+        }
     };
 
     let status = match (
@@ -24336,6 +24710,7 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
         chamber_semigroup_provided_generator_cygv_probe(
             star_union.target_plus_star_basis_nonzero.as_ref(),
             &current_chamber_generator_context,
+            Some(&current_chamber_secondary_certificate),
             context,
             "current_chamber_generators",
         )
@@ -24344,6 +24719,7 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
         chamber_semigroup_provided_generator_cygv_probe(
             star_union.target_plus_star_basis_nonzero.as_ref(),
             &flipped_chamber_generator_context,
+            Some(&flipped_chamber_secondary_certificate),
             context,
             "flipped_chamber_generators",
         )
@@ -24388,6 +24764,7 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
     LocalCygvStarUnionChamberSemigroupTransportProbe {
         status: status.to_string(),
         target_plus_star_coordinates: Some(target.to_vec()),
+        current_chamber_secondary_certificate,
         current_chamber_generator_count: Some(current_generators.len()),
         current_chamber_generators: current_generators,
         current_chamber_generator_context,
@@ -24396,6 +24773,7 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
         current_chamber_decomposition: current_decomposition,
         current_chamber_positive_degree_status,
         current_chamber_positive_degree_decomposition,
+        flipped_chamber_secondary_certificate,
         flipped_chamber_status: flipped_status,
         flipped_chamber_generator_count: (!flipped_generators.is_empty())
             .then_some(flipped_generators.len()),
@@ -25190,6 +25568,7 @@ fn chamber_semigroup_generator_known_qn_history_status_counts(
 fn chamber_semigroup_provided_generator_cygv_probe(
     target_basis_nonzero: Option<&Vec<(usize, i64)>>,
     generator_contexts: &[LocalCygvChamberSemigroupGeneratorContext],
+    secondary_certificate: Option<&LocalCygvStarUnionChamberSecondaryCertificate>,
     context: &ValidatedContext<'_>,
     label: &str,
 ) -> ProvidedGeneratorTargetGvProbe {
@@ -25204,6 +25583,17 @@ fn chamber_semigroup_provided_generator_cygv_probe(
         qn_trace_sample: Vec::new(),
     };
 
+    if let Some(certificate) = secondary_certificate {
+        if !chamber_secondary_certificate_is_regular(certificate) {
+            return empty(
+                &format!(
+                    "skipped_uncertified_chamber_secondary_certificate:{}",
+                    certificate.status
+                ),
+                None,
+            );
+        }
+    }
     let Some(target_basis_nonzero) = target_basis_nonzero else {
         return empty("skipped_missing_target_plus_star_global_basis", None);
     };
@@ -31248,6 +31638,8 @@ mod tests {
                 LocalCygvStarUnionChamberSemigroupTransportProbe {
                     status: "test".to_string(),
                     target_plus_star_coordinates: None,
+                    current_chamber_secondary_certificate:
+                        local_cygv_star_union_chamber_secondary_certificate_not_run("test"),
                     current_chamber_generator_count: None,
                     current_chamber_generators: Vec::new(),
                     current_chamber_generator_context: Vec::new(),
@@ -31257,6 +31649,8 @@ mod tests {
                     current_chamber_positive_degree_status: "positive_degree_chamber_not_run"
                         .to_string(),
                     current_chamber_positive_degree_decomposition: None,
+                    flipped_chamber_secondary_certificate:
+                        local_cygv_star_union_chamber_secondary_certificate_not_run("test"),
                     flipped_chamber_status: None,
                     flipped_chamber_generator_count: None,
                     flipped_chamber_generators: Vec::new(),
@@ -35702,6 +36096,31 @@ mod tests {
     }
 
     #[test]
+    fn star_union_chamber_secondary_certificate_certifies_regular_square() {
+        let point_samples = vec![
+            relation_point_sample(10, 0, &[0, 0], None),
+            relation_point_sample(11, 0, &[1, 0], None),
+            relation_point_sample(12, 0, &[0, 1], None),
+            relation_point_sample(13, 0, &[1, 1], None),
+        ];
+        let certificate = local_cygv_star_union_chamber_secondary_certificate(
+            &point_samples,
+            &[10, 11, 12, 13],
+            &[vec![10, 11, 12], vec![11, 12, 13]],
+        );
+
+        assert_eq!(
+            certificate.status,
+            "chamber_secondary_certificate_regular_strictly_inside_secondary_cone"
+        );
+        assert_eq!(certificate.simplex_count, Some(2));
+        assert_eq!(certificate.hyperplane_count, Some(1));
+        assert_eq!(certificate.height_count, Some(4));
+        assert_eq!(certificate.zero_pairing_count, Some(0));
+        assert_eq!(certificate.strictly_inside, Some(true));
+    }
+
+    #[test]
     fn star_union_chamber_semigroup_probe_tracks_local_flip_target_plus_star() {
         let point_samples = vec![
             relation_point_sample(0, -1, &[0, 0, 0, 0], Some(4)),
@@ -35802,6 +36221,22 @@ mod tests {
         );
         assert_eq!(probe.current_chamber_generator_count, Some(5));
         assert_eq!(
+            probe.current_chamber_secondary_certificate.simplex_count,
+            Some(7)
+        );
+        assert!(
+            probe
+                .current_chamber_secondary_certificate
+                .hyperplane_count
+                .is_some()
+        );
+        assert!(
+            !probe
+                .current_chamber_secondary_certificate
+                .status
+                .contains("not_run")
+        );
+        assert_eq!(
             probe.current_chamber_generators,
             vec![
                 vec![-1, -2, 1],
@@ -35823,6 +36258,22 @@ mod tests {
         assert_eq!(
             probe.flipped_chamber_status.as_deref(),
             Some("local_flip_chamber_semigroup_computed")
+        );
+        assert_eq!(
+            probe.flipped_chamber_secondary_certificate.simplex_count,
+            Some(7)
+        );
+        assert!(
+            probe
+                .flipped_chamber_secondary_certificate
+                .hyperplane_count
+                .is_some()
+        );
+        assert!(
+            !probe
+                .flipped_chamber_secondary_certificate
+                .status
+                .contains("not_run")
         );
         assert_eq!(
             probe.flipped_chamber_generators,
