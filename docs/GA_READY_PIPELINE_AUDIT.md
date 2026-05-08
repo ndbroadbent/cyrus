@@ -1318,8 +1318,9 @@ to make the remaining GV layer more first-principles:
    naive real-axis flop continuation of the known wall GV into the star-side
    chamber; the missing handoff still has to be a certified chamber/semigroup
    history or a source-level continuation that addresses the branch cut.
-   `/tmp/cyrus_target7_stable_weyl_rank_probe_report.json` now threads the crossed
-   wall through the stable-Weyl/flop-certificate gate. For target `7`, the
+   `/tmp/cyrus_target7_stable_weyl_rank_probe_report.json` and
+   `/tmp/cyrus_target8_stable_weyl_rank_probe_report.json` now thread the crossed
+   wall through the stable-Weyl/flop-certificate gate. For both targets, the
    report bucket is
    `stable_weyl_blocked_cms_general_divisor_no_rational_divisor_solution`:
    the crossed-wall source sample has shape candidate divisor `55`, but its
@@ -1364,6 +1365,10 @@ to make the remaining GV layer more first-principles:
    Thus the zero-degree split enumeration is not just ambiguous. On the local
    target-plus-star support currently visible to Cyrus, it does not define a
    CYTools nef partition.
+   A bounded CYTools/PALP diagnostic on the full 4-214-647 `points.dat` and
+   `dual_points.dat` polytopes also returns `nef_count=0` for codimension two
+   on both reflexive polytopes. The target-plus-star CICY-shaped obstruction is
+   therefore not a hidden global PALP nef partition of either saved polytope.
    The reusable CYTools-style CICY tensor-reduction step now exists in core as
    `compute_complete_intersection_cy3_intersection_numbers`, but targets `7`/`8`
    still lack the source-derived nef partition and ambient top intersections

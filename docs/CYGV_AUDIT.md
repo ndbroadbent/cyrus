@@ -3467,6 +3467,10 @@ for each target fail the certificate with
 `support_polytope_cytools_nef_certificate_failed:invalid_input_nef_partition_union_hull_does_not_equal_ambient_polytope_hull`.
 This rules out promoting the local zero-degree split enumeration as a nef
 partition source rule.
+A bounded CYTools/PALP diagnostic on the full 4-214-647 `points.dat` and
+`dual_points.dat` polytopes also returns `nef_count=0` for codimension two on
+both reflexive polytopes. The unresolved target-plus-star CICY-shaped object is
+therefore not a hidden global PALP nef partition of either saved polytope.
 The reusable CYTools-style ambient top-form step now exists in core as
 `compute_ambient_intersections_cytools`, and the CICY tensor-reduction step
 exists as `compute_complete_intersection_cy3_intersection_numbers`. The composed
@@ -3593,13 +3597,15 @@ source-derived wall GV is not a license to perform a naive real flop
 continuation across the negative star side. The remaining certificate must
 derive the valid chamber/semigroup history, or a source-level continuation
 that resolves this branch-cut obstruction.
-`/tmp/cyrus_target7_stable_weyl_rank_probe_report.json` now records the same handoff
-against the exact stable-Weyl/flop-certificate gate. The target-7 crossed wall
-has status `stable_weyl_blocked_cms_general_divisor_no_rational_divisor_solution`:
-the known GV `1` is present through the context-level source map, the matching
+`/tmp/cyrus_target7_stable_weyl_rank_probe_report.json` and
+`/tmp/cyrus_target8_stable_weyl_rank_probe_report.json` now record the same
+handoff against the exact stable-Weyl/flop-certificate gate. Both crossed-wall
+rows have status
+`stable_weyl_blocked_cms_general_divisor_no_rational_divisor_solution`: the
+known GV `1` is present through the context-level source map, the matching
 source sample has shape candidate divisor `55`, and the exported CMS divisor
 check says that candidate has no rational divisor solution. The refreshed
-diagnostic exposes the exact linear system behind that failure:
+diagnostics expose the exact linear system behind that failure:
 `row_count=219`, `column_count=214`, `rank=6`, and `augmented_rank=7`, so the
 ambient curve class is not in the rational column span of the tested
 divisor-intersection map. The same smoke has the opposite-wall extremal
