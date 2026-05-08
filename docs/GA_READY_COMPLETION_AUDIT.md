@@ -927,6 +927,14 @@ subcutoff curves to `399` with `toric_missing=0`. The final
 checkpoint by about `0.071843868`. Thus finite selected-set pruning removes
 the visible toric-missing rows but does not reproduce the corrected-target GV
 vector or the final volume.
+The corrected-chamber trace writer now records `small_curve_pruning`, generic
+`pruned_*` counts, and each selected toric curve's sparse KKLT target
+contribution vector. Regenerating
+`/tmp/cyrus_finite_semigroup_pruning_trace_with_contrib.json` with
+`CYRUS_CORRECTED_CHAMBER_GV_TRACE_JSON` produced a `2.7M` finite-semigroup
+trace over `400` pruned toric-covered curves. This makes the next comparison
+curve-local: test or replace the large-contribution toric rows and their
+compact qN histories directly, instead of fitting final aggregate weights.
 Because the full corrected-chamber GV context export still exceeded a `300s`
 debug timeout before writing JSON, the runner also has a narrow
 `--dump-corrected-chamber-secondary-certificate` flag. On the validation-only

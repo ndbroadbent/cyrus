@@ -981,6 +981,18 @@ The final summary is `V_string=4711.504343103075` and
 about `0.071843868`. Finite selected-set pruning therefore removes the visible
 toric-missing rows but does not explain the McAllister corrected-target vector.
 
+The corrected-chamber trace JSON now exports each selected toric curve's sparse
+contribution to the KKLT target vector as `target_correction_nonzero`, together
+with `target_correction_l2`. Regenerating
+`/tmp/cyrus_finite_semigroup_pruning_trace_with_contrib.json` with the command
+above plus
+`CYRUS_CORRECTED_CHAMBER_GV_TRACE_JSON=/tmp/cyrus_finite_semigroup_pruning_trace_with_contrib.json`
+produces a `2.7M` trace with `400` finite-pruned toric-covered curves and no
+pruned toric misses. The largest per-curve contribution norms are the same
+tiny-volume two-face offender families already visible in the top-delta logs,
+so this trace is a concrete input for the next per-curve compact-`cygv` or
+chamber-history comparison rather than another final-residual aggregate.
+
 ## Next Productive Step
 
 Stop expanding top-contributor local checks. The selected-small-curve

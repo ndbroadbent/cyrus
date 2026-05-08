@@ -8827,6 +8827,8 @@ fn write_corrected_chamber_gv_trace_json(
         gv: String,
         q_dot_t: f64,
         parity_mod2: i8,
+        target_correction_nonzero: Vec<(usize, f64)>,
+        target_correction_l2: f64,
     }
 
     #[derive(Serialize)]
@@ -8867,6 +8869,7 @@ fn write_corrected_chamber_gv_trace_json(
     fn trace_curves(
         curves: &[(Vec<i64>, malachite::Integer)],
         basis: &[usize],
+        kklt_basis: &[usize],
         t: &[F64<Finite>],
         gamma: &[I64<Finite>],
     ) -> Result<Vec<TraceCurve>, String> {
@@ -8880,11 +8883,41 @@ fn write_corrected_chamber_gv_trace_json(
                     .sum::<f64>();
                 let parity = ambient_curve_b_field_parity_diagnostic(class, basis, gamma)
                     .ok_or_else(|| "failed to compute trace curve B-field parity".to_string())?;
+                let single = [(class.clone(), gv.clone())];
+                let contribution =
+                    cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+                        &single,
+                        basis,
+                        kklt_basis,
+                        t,
+                        Some(gamma),
+                    )
+                    .ok_or_else(|| {
+                        format!(
+                            "failed to compute trace target correction for q_dot_t={q_dot_t} parity_mod2={}",
+                            parity.rem_euclid(2)
+                        )
+                    })?;
+                let target_correction_nonzero = contribution
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(idx, value)| {
+                        let raw = value.get();
+                        (raw != 0.0).then_some((idx, raw))
+                    })
+                    .collect::<Vec<_>>();
+                let target_correction_l2 = contribution
+                    .iter()
+                    .map(|value| value.get() * value.get())
+                    .sum::<f64>()
+                    .sqrt();
                 Ok(TraceCurve {
                     class: class.clone(),
                     gv: gv.to_string(),
                     q_dot_t,
                     parity_mod2: i8::try_from(parity.rem_euclid(2)).expect("mod-2 parity fits i8"),
+                    target_correction_nonzero,
+                    target_correction_l2,
                 })
             })
             .collect()
@@ -8942,10 +8975,17 @@ fn write_corrected_chamber_gv_trace_json(
         subcutoff_toric_curves: trace_curves(
             &selection.subcutoff_curve_gvs,
             basis,
+            kklt_basis,
             checkpoint_t,
             gamma,
         )?,
-        pruned_toric_curves: trace_curves(&selection.small_curve_gvs, basis, checkpoint_t, gamma)?,
+        pruned_toric_curves: trace_curves(
+            &selection.small_curve_gvs,
+            basis,
+            kklt_basis,
+            checkpoint_t,
+            gamma,
+        )?,
         subcutoff_toric_missing_curves: trace_missing_curves(
             &selection.subcutoff_missing_gv_classes,
             basis,
@@ -12013,7 +12053,17 @@ mod tests {
         assert_eq!(value["pruned_toric_covered_count"], 1);
         assert_eq!(value["pruned_toric_missing_count"], 0);
         assert!(value.get("pair_pruned_count").is_none());
-        assert!(value["pruned_toric_curves"].is_array());
+        let pruned_curves = value["pruned_toric_curves"]
+            .as_array()
+            .expect("pruned toric curves should be exported");
+        assert_eq!(pruned_curves.len(), 1);
+        assert_eq!(pruned_curves[0]["target_correction_nonzero"][0][0], 0);
+        assert!(
+            pruned_curves[0]["target_correction_l2"]
+                .as_f64()
+                .expect("l2 is finite")
+                > 0.0
+        );
         assert!(value["pruned_toric_missing_curves"].is_array());
 
         let _ = std::fs::remove_file(path);
