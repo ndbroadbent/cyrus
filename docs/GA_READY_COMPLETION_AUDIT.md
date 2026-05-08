@@ -1163,6 +1163,18 @@ union-hull equality check, and targets `7`/`8` have no zero-degree candidates
 after origin enlargement. The remaining path is still source-derived chamber
 transport/qN history, not a local support split.
 
+The all-origin-witness pass narrows this further. The report
+`/tmp/cyrus_all_witness_source_resolution_v1.json` evaluates 14 serialized
+origin-circuit witnesses rather than only each target's first witness. It finds
+six non-weighted-P2 hints and eight weighted-P2 hints with a single
+zero relation-shared resolution ray; none produce a promotable
+target-plus-star compact `cygv` domain. For targets `7` and `8`, the alternate
+witness does not repair the blocker: one witness still has a diagnostic
+current-chamber compact `cygv` value `0` but lacks wall-crossing transport and
+qN history, while the other loses the positive-degree target-plus-star chamber.
+Thus the remaining work is not witness selection; it is still certified
+wall-crossing chamber transport plus source-derived semigroup/qN history.
+
 ## Next Concrete Action
 
 The next implementation should be one of these, in order:

@@ -4191,3 +4191,20 @@ Targets `2` and `4` are zero target-plus-star relations, while targets `3` and
 and `8`, the origin-enlarged run also leaves zero zero-degree candidates, so
 the missing input is not "add the origin back"; it is still a source-derived
 nef partition/chamber-semigroup history for the transported support.
+
+The origin-circuit witness triage now evaluates every serialized witness, not
+just `origin_circuit_first_witness`. Regenerating
+`/tmp/cyrus_all_witness_source_resolution_v1.json` gives 14 source-witness
+rows: six non-weighted-P2 local hints and eight weighted-P2 rows with a single
+zero relation-shared resolution ray. This closes a possible false-negative in
+the earlier reports: the first-witness choice was not hiding a promotable
+target-plus-star domain. For targets `7` and `8`, witness `0` still reaches the
+current chamber generator probe with actual compact `cygv` value `0`, but
+remains blocked by missing wall-crossing transport/qN history; witness `1`
+loses the target-plus-star positive-degree chamber entirely. All weighted-P2
+rows keep the same promotion blocker,
+`blocked_local_phase_chamber_certificate:local_phase_chamber_blocked_weighted_p2_resolved_shared_affine_wall_global_height_strict_weighted_p2_resolved_shared_chamber_outside_or_on_wall`,
+and the same wall-transport missing inputs
+`target_plus_star_wall_crossing_chamber_transport`,
+`target_plus_star_qn_history`, and
+`non_weyl_wall_crossing_transport_certificate`.

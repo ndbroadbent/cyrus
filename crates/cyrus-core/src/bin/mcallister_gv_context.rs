@@ -569,6 +569,12 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_phase_chamber_membership_certificate_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_hint_sample: Vec<LocalCygvSourceResolutionHintSummary>,
+    local_cygv_all_witness_source_resolution_status_counts: BTreeMap<String, usize>,
+    local_cygv_all_witness_target_plus_star_promotion_readiness_counts: BTreeMap<String, usize>,
+    local_cygv_all_witness_wall_transport_readiness_status_counts: BTreeMap<String, usize>,
+    local_cygv_all_witness_positive_degree_transport_status_counts: BTreeMap<String, usize>,
+    local_cygv_all_witness_source_resolution_sample:
+        Vec<LocalCygvAllWitnessSourceResolutionSummary>,
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
     local_cygv_actual_call_readiness_counts: BTreeMap<String, usize>,
     local_cygv_missing_source_input_counts: BTreeMap<String, usize>,
@@ -1066,6 +1072,39 @@ struct LocalCygvSourceResolutionHintSummary {
     relation_support_point_indices: Vec<usize>,
     local_phase_q_matrix: Option<Vec<Vec<i64>>>,
     local_one_parameter_family_status: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvAllWitnessSourceResolutionSummary {
+    target_index: usize,
+    witness_index: usize,
+    degree: i128,
+    status: String,
+    zero_relation_shared_two_simplex_points: Vec<usize>,
+    shared_two_simplex_star_status: String,
+    shared_two_simplex_star_union_status: String,
+    shared_two_simplex_star_union_target_plus_star_support_status: String,
+    shared_two_simplex_star_union_target_plus_star_origin_enlarged_support_status: String,
+    shared_two_simplex_star_union_target_plus_star_local_cygv_status: String,
+    shared_two_simplex_star_union_target_plus_star_promotion_readiness: String,
+    shared_two_simplex_star_union_target_plus_star_promotion_missing_inputs: Vec<String>,
+    shared_two_simplex_star_union_shared_face_secondary_status: String,
+    shared_two_simplex_star_union_opposite_star_wall_circuit_status: String,
+    shared_two_simplex_star_union_wall_transport_readiness_status: String,
+    shared_two_simplex_star_union_wall_transport_missing_inputs: Vec<String>,
+    shared_two_simplex_star_union_crossed_wall_stable_weyl_status: Option<String>,
+    shared_two_simplex_star_union_global_regular_triangulation_status: String,
+    shared_two_simplex_star_union_crossed_wall_regular_side_status: String,
+    shared_two_simplex_star_union_local_circuit_flip_status: Option<String>,
+    shared_two_simplex_star_union_local_circuit_flip_link: Option<Vec<usize>>,
+    shared_two_simplex_star_union_positive_degree_transport_status: String,
+    shared_two_simplex_star_union_current_chamber_positive_degree_status: String,
+    shared_two_simplex_star_union_flipped_chamber_positive_degree_status: String,
+    shared_two_simplex_star_union_current_chamber_cygv_status: Option<String>,
+    shared_two_simplex_star_union_current_chamber_cygv_gv: Option<String>,
+    shared_two_simplex_star_union_flipped_chamber_cygv_status: Option<String>,
+    shared_two_simplex_star_union_flipped_chamber_cygv_gv: Option<String>,
+    shared_two_simplex_star_union_compact_omission_wall_side_status: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -16826,6 +16865,31 @@ fn build_report(
         lower_seed_pair_limit,
         closure_generation_limit,
     );
+    let local_cygv_all_witness_source_resolution_sample =
+        local_cygv_all_witness_source_resolution_summaries(
+            &targets,
+            validated,
+            certify_target_extremal_rays,
+            target_extremal_generator_limit,
+            target_extremal_max_degree,
+            origin_support_certificate_limit,
+        );
+    let local_cygv_all_witness_source_resolution_status_counts =
+        local_cygv_all_witness_source_resolution_status_counts(
+            &local_cygv_all_witness_source_resolution_sample,
+        );
+    let local_cygv_all_witness_target_plus_star_promotion_readiness_counts =
+        local_cygv_all_witness_target_plus_star_promotion_readiness_counts(
+            &local_cygv_all_witness_source_resolution_sample,
+        );
+    let local_cygv_all_witness_wall_transport_readiness_status_counts =
+        local_cygv_all_witness_wall_transport_readiness_status_counts(
+            &local_cygv_all_witness_source_resolution_sample,
+        );
+    let local_cygv_all_witness_positive_degree_transport_status_counts =
+        local_cygv_all_witness_positive_degree_transport_status_counts(
+            &local_cygv_all_witness_source_resolution_sample,
+        );
     let local_cygv_source_resolution_resolved_shared_chamber_global_height_status_counts =
         local_cygv_source_resolution_resolved_shared_chamber_global_height_status_counts(
             &local_cygv_source_resolution_hint_sample,
@@ -18468,6 +18532,11 @@ fn build_report(
         local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_bounded_lower_seed_status_counts,
         local_phase_chamber_membership_certificate_status_counts,
         local_cygv_source_resolution_hint_sample,
+        local_cygv_all_witness_source_resolution_status_counts,
+        local_cygv_all_witness_target_plus_star_promotion_readiness_counts,
+        local_cygv_all_witness_wall_transport_readiness_status_counts,
+        local_cygv_all_witness_positive_degree_transport_status_counts,
+        local_cygv_all_witness_source_resolution_sample,
         local_cygv_target_candidate_status_counts,
         local_cygv_actual_call_readiness_counts: missing_local_cygv_actual_call_readiness_counts,
         local_cygv_missing_source_input_counts: missing_local_cygv_missing_source_input_counts,
@@ -19190,6 +19259,281 @@ fn local_cygv_source_resolution_hint_summaries(
             })
         })
         .collect()
+}
+
+fn local_cygv_all_witness_source_resolution_summaries(
+    targets: &[TargetReport],
+    context: &ValidatedContext<'_>,
+    certify_star_union_extremal_rays: bool,
+    star_union_extremal_generator_limit: usize,
+    star_union_extremal_max_degree: Option<i128>,
+    target_plus_star_support_certificate_limit: usize,
+) -> Vec<LocalCygvAllWitnessSourceResolutionSummary> {
+    let mut summaries = Vec::new();
+    for target in targets {
+        let Some(skeleton) = target.local_cygv_input_skeleton.as_ref() else {
+            continue;
+        };
+        let witnesses = target
+            .origin_circuit_witnesses
+            .as_deref()
+            .filter(|witnesses| !witnesses.is_empty());
+        let fallback;
+        let witnesses = if let Some(witnesses) = witnesses {
+            witnesses
+        } else if let Some(witness) = target.origin_circuit_first_witness.as_ref() {
+            fallback = [witness.clone()];
+            &fallback
+        } else {
+            continue;
+        };
+
+        for (witness_index, witness) in witnesses.iter().enumerate() {
+            let status = local_cygv_source_resolution_hint_status(skeleton, Some(witness));
+            let star_status = local_cygv_zero_shared_star_status(skeleton, Some(witness));
+            let star_support_hint = local_cygv_shared_two_simplex_star_support_hint(Some(witness));
+            let star_union_relation_hint = local_cygv_star_union_relation_hint(
+                Some(witness),
+                &star_support_hint,
+                Some(context.q_matrix),
+            );
+            let star_union_point_samples =
+                origin_circuit_star_union_point_samples(witness, &star_support_hint);
+            let star_union_target_plus_star_support =
+                local_cygv_star_union_target_plus_star_support_hint(
+                    Some(witness),
+                    &star_support_hint,
+                    &star_union_relation_hint.target_plus_star,
+                );
+            let star_union_target_plus_star_origin_enlarged_support =
+                local_cygv_star_union_target_plus_star_origin_enlarged_support_hint_for_samples(
+                    &star_union_point_samples,
+                    &star_union_relation_hint.target_plus_star,
+                );
+            let star_union_global_basis_lookup = local_cygv_star_union_global_basis_lookup_sample(
+                &star_union_relation_hint,
+                context,
+                certify_star_union_extremal_rays,
+                star_union_extremal_generator_limit,
+                star_union_extremal_max_degree,
+            );
+            let star_union_transport_decomposition =
+                local_cygv_star_union_transport_decomposition_summary(
+                    &star_union_global_basis_lookup,
+                    context.dimension,
+                );
+            let (
+                target_plus_star_support_generator_count,
+                target_plus_star_support_face_certificate_status,
+            ) = local_cygv_star_union_target_plus_star_support_face_certificate(
+                &star_union_target_plus_star_support,
+                star_union_transport_decomposition.target_plus_star_degree,
+                context,
+                target_plus_star_support_certificate_limit,
+            );
+            let local_phase_chamber_membership_certificate_status =
+                local_phase_chamber_membership_certificate_status_with_witness(
+                    skeleton,
+                    Some(witness),
+                    context,
+                );
+            let star_union_target_plus_star_local_cygv_readiness =
+                local_cygv_star_union_target_plus_star_local_cygv_readiness(
+                    &star_union_target_plus_star_support,
+                );
+            let star_union_target_plus_star_local_cygv_readiness =
+                attach_local_phase_chamber_to_target_plus_star_readiness(
+                    star_union_target_plus_star_local_cygv_readiness,
+                    &local_phase_chamber_membership_certificate_status,
+                );
+            let affine_projection_hint =
+                local_cygv_zero_shared_affine_projection_hint(skeleton, Some(witness));
+            let star_union_shared_face_secondary = local_cygv_star_union_shared_face_secondary_hint(
+                Some(witness),
+                &star_support_hint,
+                affine_projection_hint.hyperplane.as_deref(),
+                context.secondary_cone_heights,
+            );
+            let opposite_star_wall_circuit = local_cygv_star_union_opposite_star_wall_circuit_hint(
+                &star_union_shared_face_secondary,
+                &star_union_global_basis_lookup,
+            );
+            let crossed_wall_stable_weyl_certificate =
+                local_cygv_star_union_crossed_wall_stable_weyl_probe(
+                    &opposite_star_wall_circuit,
+                    &star_union_global_basis_lookup,
+                    context,
+                );
+            let wall_transport_readiness = local_cygv_star_union_wall_transport_readiness(
+                &star_union_transport_decomposition,
+                &opposite_star_wall_circuit,
+                &star_union_shared_face_secondary,
+                &star_union_global_basis_lookup,
+                target_plus_star_support_generator_count,
+                target_plus_star_support_face_certificate_status.as_deref(),
+                Some(crossed_wall_stable_weyl_certificate),
+            );
+            let star_union_target_plus_star_local_cygv_readiness =
+                attach_wall_transport_to_target_plus_star_readiness(
+                    star_union_target_plus_star_local_cygv_readiness,
+                    &wall_transport_readiness,
+                );
+            let star_union_global_regular_triangulation =
+                local_cygv_star_union_global_regular_triangulation_hint(
+                    Some(witness),
+                    &star_support_hint,
+                    context.secondary_cone_heights,
+                );
+            let crossed_wall_regular_side = local_cygv_star_union_crossed_wall_regular_side_hint(
+                &opposite_star_wall_circuit,
+                &star_union_global_regular_triangulation,
+            );
+            let chamber_semigroup_transport =
+                local_cygv_star_union_chamber_semigroup_transport_probe(
+                    &star_union_point_samples,
+                    &star_union_relation_hint,
+                    &star_union_global_regular_triangulation,
+                    &crossed_wall_regular_side,
+                    Some(context),
+                );
+            let compact_omission_wall_side = local_cygv_compact_omission_wall_side_summary(
+                &star_union_target_plus_star_local_cygv_readiness,
+                &crossed_wall_regular_side,
+            );
+            summaries.push(LocalCygvAllWitnessSourceResolutionSummary {
+                target_index: target.index,
+                witness_index,
+                degree: target.degree,
+                status,
+                zero_relation_shared_two_simplex_points:
+                    origin_circuit_zero_relation_shared_two_simplex_points(Some(witness)),
+                shared_two_simplex_star_status: star_status,
+                shared_two_simplex_star_union_status: star_union_relation_hint.status,
+                shared_two_simplex_star_union_target_plus_star_support_status:
+                    star_union_target_plus_star_support.status,
+                shared_two_simplex_star_union_target_plus_star_origin_enlarged_support_status:
+                    star_union_target_plus_star_origin_enlarged_support.status,
+                shared_two_simplex_star_union_target_plus_star_local_cygv_status:
+                    star_union_target_plus_star_local_cygv_readiness
+                        .status
+                        .clone(),
+                shared_two_simplex_star_union_target_plus_star_promotion_readiness:
+                    star_union_target_plus_star_local_cygv_readiness
+                        .promotion_readiness
+                        .clone(),
+                shared_two_simplex_star_union_target_plus_star_promotion_missing_inputs:
+                    star_union_target_plus_star_local_cygv_readiness
+                        .promotion_missing_inputs
+                        .clone(),
+                shared_two_simplex_star_union_shared_face_secondary_status:
+                    star_union_shared_face_secondary.status,
+                shared_two_simplex_star_union_opposite_star_wall_circuit_status:
+                    opposite_star_wall_circuit.status,
+                shared_two_simplex_star_union_wall_transport_readiness_status:
+                    wall_transport_readiness.status.clone(),
+                shared_two_simplex_star_union_wall_transport_missing_inputs:
+                    wall_transport_readiness.missing_inputs.clone(),
+                shared_two_simplex_star_union_crossed_wall_stable_weyl_status:
+                    wall_transport_readiness
+                        .crossed_wall_stable_weyl_certificate
+                        .as_ref()
+                        .map(|probe| probe.status.clone()),
+                shared_two_simplex_star_union_global_regular_triangulation_status:
+                    star_union_global_regular_triangulation.status,
+                shared_two_simplex_star_union_crossed_wall_regular_side_status:
+                    crossed_wall_regular_side.status,
+                shared_two_simplex_star_union_local_circuit_flip_status: crossed_wall_regular_side
+                    .local_circuit_flip_status,
+                shared_two_simplex_star_union_local_circuit_flip_link: crossed_wall_regular_side
+                    .local_circuit_flip_link,
+                shared_two_simplex_star_union_positive_degree_transport_status:
+                    chamber_semigroup_transport.positive_degree_transport_status,
+                shared_two_simplex_star_union_current_chamber_positive_degree_status:
+                    chamber_semigroup_transport.current_chamber_positive_degree_status,
+                shared_two_simplex_star_union_flipped_chamber_positive_degree_status:
+                    chamber_semigroup_transport.flipped_chamber_positive_degree_status,
+                shared_two_simplex_star_union_current_chamber_cygv_status:
+                    chamber_semigroup_transport
+                        .current_chamber_provided_generator_cygv_probe
+                        .as_ref()
+                        .map(|probe| probe.status.clone()),
+                shared_two_simplex_star_union_current_chamber_cygv_gv: chamber_semigroup_transport
+                    .current_chamber_provided_generator_cygv_probe
+                    .as_ref()
+                    .and_then(|probe| probe.gv.clone()),
+                shared_two_simplex_star_union_flipped_chamber_cygv_status:
+                    chamber_semigroup_transport
+                        .flipped_chamber_provided_generator_cygv_probe
+                        .as_ref()
+                        .map(|probe| probe.status.clone()),
+                shared_two_simplex_star_union_flipped_chamber_cygv_gv: chamber_semigroup_transport
+                    .flipped_chamber_provided_generator_cygv_probe
+                    .as_ref()
+                    .and_then(|probe| probe.gv.clone()),
+                shared_two_simplex_star_union_compact_omission_wall_side_status:
+                    compact_omission_wall_side.status,
+            });
+        }
+    }
+    summaries
+}
+
+fn local_cygv_all_witness_source_resolution_status_counts(
+    summaries: &[LocalCygvAllWitnessSourceResolutionSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts.entry(summary.status.clone()).or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_all_witness_target_plus_star_promotion_readiness_counts(
+    summaries: &[LocalCygvAllWitnessSourceResolutionSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts
+            .entry(
+                summary
+                    .shared_two_simplex_star_union_target_plus_star_promotion_readiness
+                    .clone(),
+            )
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_all_witness_wall_transport_readiness_status_counts(
+    summaries: &[LocalCygvAllWitnessSourceResolutionSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts
+            .entry(
+                summary
+                    .shared_two_simplex_star_union_wall_transport_readiness_status
+                    .clone(),
+            )
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_all_witness_positive_degree_transport_status_counts(
+    summaries: &[LocalCygvAllWitnessSourceResolutionSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts
+            .entry(
+                summary
+                    .shared_two_simplex_star_union_positive_degree_transport_status
+                    .clone(),
+            )
+            .or_insert(0usize) += 1;
+    }
+    counts
 }
 
 fn local_cygv_source_resolution_resolved_support_status_counts<'a>(
