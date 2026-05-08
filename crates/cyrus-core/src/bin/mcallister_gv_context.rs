@@ -808,6 +808,8 @@ struct CygvPathHistoryProbe {
     lower_seed_decomposition_term_count: Option<usize>,
     lower_seed_decomposition_terms_nonzero: Option<Vec<Vec<(usize, i64)>>>,
     lower_seed_decomposition_error: Option<String>,
+    lower_seed_predecessor_candidate_count: Option<usize>,
+    lower_seed_predecessor_candidate_sample: Vec<CygvPathPredecessorCandidate>,
     lower_seed_diamond_status: Option<String>,
     lower_seed_diamond_element_count: Option<usize>,
     lower_seed_diamond_gv: Option<String>,
@@ -11656,6 +11658,8 @@ fn cygv_path_history_probe(
             lower_seed_decomposition_error: Some(
                 "path-history probe failed before seed decomposition".to_string(),
             ),
+            lower_seed_predecessor_candidate_count: None,
+            lower_seed_predecessor_candidate_sample: Vec::new(),
             lower_seed_diamond_status: None,
             lower_seed_diamond_element_count: None,
             lower_seed_diamond_gv: None,
@@ -11776,6 +11780,8 @@ fn cygv_path_history_probe_inner(
             lower_seed_decomposition_term_count: None,
             lower_seed_decomposition_terms_nonzero: None,
             lower_seed_decomposition_error: None,
+            lower_seed_predecessor_candidate_count: None,
+            lower_seed_predecessor_candidate_sample: Vec::new(),
             lower_seed_diamond_status: None,
             lower_seed_diamond_element_count: None,
             lower_seed_diamond_gv: None,
@@ -11871,6 +11877,8 @@ fn cygv_path_history_probe_inner(
             lower_seed_decomposition_term_count: None,
             lower_seed_decomposition_terms_nonzero: None,
             lower_seed_decomposition_error: None,
+            lower_seed_predecessor_candidate_count: None,
+            lower_seed_predecessor_candidate_sample: Vec::new(),
             lower_seed_diamond_status: Some("skipped_seed_limit".to_string()),
             lower_seed_diamond_element_count: None,
             lower_seed_diamond_gv: None,
@@ -11955,6 +11963,15 @@ fn cygv_path_history_probe_inner(
         run_lower_seed_diamonds,
         element_limit,
     );
+    let lower_seed_predecessor_candidate_sample = lower_seed_predecessor_candidates(
+        target,
+        &lower_seed_decomposition,
+        context,
+        &seen,
+        &reduced_seeds,
+        CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
+    )?;
+    let lower_seed_predecessor_candidate_count = lower_seed_predecessor_candidate_sample.len();
 
     let closure = bounded_cygv_semigroup_closure(
         &seeds,
@@ -12094,6 +12111,8 @@ fn cygv_path_history_probe_inner(
             lower_seed_decomposition_term_count: lower_seed_decomposition.term_count,
             lower_seed_decomposition_terms_nonzero: lower_seed_decomposition.terms_nonzero,
             lower_seed_decomposition_error: lower_seed_decomposition.error,
+            lower_seed_predecessor_candidate_count: Some(lower_seed_predecessor_candidate_count),
+            lower_seed_predecessor_candidate_sample,
             lower_seed_diamond_status: lower_seed_diamond.status,
             lower_seed_diamond_element_count: lower_seed_diamond.element_count,
             lower_seed_diamond_gv: lower_seed_diamond.gv,
@@ -12230,6 +12249,8 @@ fn cygv_path_history_probe_inner(
         lower_seed_decomposition_term_count: lower_seed_decomposition.term_count,
         lower_seed_decomposition_terms_nonzero: lower_seed_decomposition.terms_nonzero,
         lower_seed_decomposition_error: lower_seed_decomposition.error,
+        lower_seed_predecessor_candidate_count: Some(lower_seed_predecessor_candidate_count),
+        lower_seed_predecessor_candidate_sample,
         lower_seed_diamond_status: lower_seed_diamond.status,
         lower_seed_diamond_element_count: lower_seed_diamond.element_count,
         lower_seed_diamond_gv: lower_seed_diamond.gv,
@@ -12953,6 +12974,140 @@ fn cygv_closest_known_qn_predecessor(
     Ok(closest.map(|(_, predecessor)| predecessor))
 }
 
+fn cygv_path_predecessor_candidate(
+    predecessor: &[i64],
+    difference: &[i64],
+    grading: &[i64],
+    covered_toric_gv_by_basis: &HashMap<Vec<i64>, String>,
+    source_derived_gv_by_basis: &HashMap<Vec<i64>, String>,
+    seed_set: &HashSet<Vec<i64>>,
+    reduced_seed_set: &HashSet<Vec<i64>>,
+) -> Result<CygvPathPredecessorCandidate, String> {
+    let predecessor_toric_gv = covered_toric_gv_by_basis.get(predecessor).cloned();
+    let difference_toric_gv = covered_toric_gv_by_basis.get(difference).cloned();
+    let predecessor_source_derived_gv = source_derived_gv_by_basis.get(predecessor).cloned();
+    let difference_source_derived_gv = source_derived_gv_by_basis.get(difference).cloned();
+    let predecessor_known_qn_history_status = known_qn_history_status(
+        predecessor_toric_gv.as_deref(),
+        predecessor_source_derived_gv.as_deref(),
+    )?;
+    let difference_known_qn_history_status = known_qn_history_status(
+        difference_toric_gv.as_deref(),
+        difference_source_derived_gv.as_deref(),
+    )?;
+    let known_qn_history_pair_status = known_qn_history_pair_status(
+        predecessor_known_qn_history_status,
+        difference_known_qn_history_status,
+    );
+    let compact_qn_polynomial_pair_status = compact_qn_polynomial_pair_status(
+        predecessor_known_qn_history_status,
+        difference_known_qn_history_status,
+    );
+    let distance = cygv_series_distance(difference);
+    Ok(CygvPathPredecessorCandidate {
+        predecessor_degree: curve_degree(predecessor, grading)?,
+        difference_degree: curve_degree(difference, grading)?,
+        series_distance: format!("{distance:.6}"),
+        predecessor_toric_gv,
+        difference_toric_gv,
+        predecessor_source_derived_gv,
+        difference_source_derived_gv,
+        predecessor_known_qn_history_status: predecessor_known_qn_history_status.to_string(),
+        difference_known_qn_history_status: difference_known_qn_history_status.to_string(),
+        known_qn_history_pair_status,
+        compact_qn_polynomial_pair_status,
+        predecessor_is_seed: seed_set.contains(predecessor),
+        difference_is_seed: seed_set.contains(difference),
+        predecessor_is_reduced_seed: reduced_seed_set.contains(predecessor),
+        difference_is_reduced_seed: reduced_seed_set.contains(difference),
+        predecessor_first_generation_seed_sum: first_generation_seed_sum_decomposition(
+            predecessor,
+            grading,
+            seed_set,
+            reduced_seed_set,
+            covered_toric_gv_by_basis,
+            source_derived_gv_by_basis,
+        )?,
+        difference_first_generation_seed_sum: first_generation_seed_sum_decomposition(
+            difference,
+            grading,
+            seed_set,
+            reduced_seed_set,
+            covered_toric_gv_by_basis,
+            source_derived_gv_by_basis,
+        )?,
+        predecessor_nonzero: sparse_from_dense(predecessor),
+        difference_nonzero: sparse_from_dense(difference),
+    })
+}
+
+fn lower_seed_predecessor_candidates(
+    target: &[i64],
+    lower_seed_decomposition: &LowerSeedDecompositionProbe,
+    context: &ValidatedContext<'_>,
+    seed_set: &HashSet<Vec<i64>>,
+    reduced_seed_set: &HashSet<Vec<i64>>,
+    sample_limit: usize,
+) -> Result<Vec<CygvPathPredecessorCandidate>, String> {
+    let Some(terms) = lower_seed_decomposition.terms.as_deref() else {
+        return Ok(Vec::new());
+    };
+    if terms.len() < 2 {
+        return Ok(Vec::new());
+    }
+    if terms.len() >= usize::BITS as usize {
+        return Err(format!(
+            "lower-seed decomposition has too many terms for subset enumeration: {}",
+            terms.len()
+        ));
+    }
+    let dimension = target.len();
+    if terms.iter().any(|term| term.len() != dimension) {
+        return Err("lower-seed decomposition term dimension does not match target".to_string());
+    }
+    let full_mask = (1usize << terms.len()) - 1;
+    let mut seen = HashSet::new();
+    let mut candidates = Vec::new();
+    for mask in 1..full_mask {
+        let mut predecessor = vec![0i64; dimension];
+        for (term_index, term) in terms.iter().enumerate() {
+            if mask & (1usize << term_index) != 0 {
+                predecessor = checked_vector_sum(&predecessor, term)?;
+            }
+        }
+        let difference = checked_vector_difference(target, &predecessor)?;
+        if predecessor.iter().all(|value| *value == 0) || difference.iter().all(|value| *value == 0)
+        {
+            continue;
+        }
+        if !seen.insert((predecessor.clone(), difference.clone())) {
+            continue;
+        }
+        let distance = cygv_series_distance(&difference);
+        let candidate = cygv_path_predecessor_candidate(
+            &predecessor,
+            &difference,
+            context.grading,
+            &context.covered_toric_gv_by_basis,
+            &context.source_derived_gv_by_basis,
+            seed_set,
+            reduced_seed_set,
+        )?;
+        candidates.push((distance, candidate));
+    }
+    candidates.sort_by(|(lhs_distance, lhs), (rhs_distance, rhs)| {
+        lhs_distance
+            .total_cmp(rhs_distance)
+            .then_with(|| lhs.predecessor_nonzero.cmp(&rhs.predecessor_nonzero))
+            .then_with(|| lhs.difference_nonzero.cmp(&rhs.difference_nonzero))
+    });
+    candidates.truncate(sample_limit);
+    Ok(candidates
+        .into_iter()
+        .map(|(_, candidate)| candidate)
+        .collect())
+}
+
 fn cygv_path_predecessor_stats(
     elements: &HashSet<Vec<i64>>,
     grading: &[i64],
@@ -13027,46 +13182,17 @@ fn cygv_path_predecessor_stats(
         let difference_degree = curve_degree(&difference, grading)?;
         let distance = cygv_series_distance(&difference);
         if candidate_sample.len() < CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT {
-            candidate_sample.push((
-                distance,
-                CygvPathPredecessorCandidate {
-                    predecessor_degree: degree,
-                    difference_degree,
-                    series_distance: format!("{distance:.6}"),
-                    predecessor_toric_gv: predecessor_toric_gv.cloned(),
-                    difference_toric_gv: difference_toric_gv.cloned(),
-                    predecessor_source_derived_gv: predecessor_source_derived_gv.cloned(),
-                    difference_source_derived_gv: difference_source_derived_gv.cloned(),
-                    predecessor_known_qn_history_status: predecessor_known_qn_history_status
-                        .to_string(),
-                    difference_known_qn_history_status: difference_known_qn_history_status
-                        .to_string(),
-                    known_qn_history_pair_status: known_qn_history_pair_status.clone(),
-                    compact_qn_polynomial_pair_status: compact_qn_polynomial_pair_status.clone(),
-                    predecessor_is_seed: seed_set.contains(element),
-                    difference_is_seed: seed_set.contains(&difference),
-                    predecessor_is_reduced_seed: reduced_seed_set.contains(element),
-                    difference_is_reduced_seed: reduced_seed_set.contains(&difference),
-                    predecessor_first_generation_seed_sum: first_generation_seed_sum_decomposition(
-                        element,
-                        grading,
-                        seed_set,
-                        reduced_seed_set,
-                        covered_toric_gv_by_basis,
-                        source_derived_gv_by_basis,
-                    )?,
-                    difference_first_generation_seed_sum: first_generation_seed_sum_decomposition(
-                        &difference,
-                        grading,
-                        seed_set,
-                        reduced_seed_set,
-                        covered_toric_gv_by_basis,
-                        source_derived_gv_by_basis,
-                    )?,
-                    predecessor_nonzero: sparse_from_dense(element),
-                    difference_nonzero: sparse_from_dense(&difference),
-                },
-            ));
+            let candidate = cygv_path_predecessor_candidate(
+                element,
+                &difference,
+                grading,
+                covered_toric_gv_by_basis,
+                source_derived_gv_by_basis,
+                seed_set,
+                reduced_seed_set,
+            )?;
+            debug_assert_eq!(candidate.difference_degree, difference_degree);
+            candidate_sample.push((distance, candidate));
             candidate_sample.sort_by(|(lhs_distance, lhs), (rhs_distance, rhs)| {
                 lhs_distance
                     .total_cmp(rhs_distance)
@@ -13078,46 +13204,17 @@ fn cygv_path_predecessor_stats(
             .is_some_and(|(worst_distance, _)| distance < *worst_distance)
         {
             candidate_sample.pop();
-            candidate_sample.push((
-                distance,
-                CygvPathPredecessorCandidate {
-                    predecessor_degree: degree,
-                    difference_degree,
-                    series_distance: format!("{distance:.6}"),
-                    predecessor_toric_gv: predecessor_toric_gv.cloned(),
-                    difference_toric_gv: difference_toric_gv.cloned(),
-                    predecessor_source_derived_gv: predecessor_source_derived_gv.cloned(),
-                    difference_source_derived_gv: difference_source_derived_gv.cloned(),
-                    predecessor_known_qn_history_status: predecessor_known_qn_history_status
-                        .to_string(),
-                    difference_known_qn_history_status: difference_known_qn_history_status
-                        .to_string(),
-                    known_qn_history_pair_status: known_qn_history_pair_status.clone(),
-                    compact_qn_polynomial_pair_status: compact_qn_polynomial_pair_status.clone(),
-                    predecessor_is_seed: seed_set.contains(element),
-                    difference_is_seed: seed_set.contains(&difference),
-                    predecessor_is_reduced_seed: reduced_seed_set.contains(element),
-                    difference_is_reduced_seed: reduced_seed_set.contains(&difference),
-                    predecessor_first_generation_seed_sum: first_generation_seed_sum_decomposition(
-                        element,
-                        grading,
-                        seed_set,
-                        reduced_seed_set,
-                        covered_toric_gv_by_basis,
-                        source_derived_gv_by_basis,
-                    )?,
-                    difference_first_generation_seed_sum: first_generation_seed_sum_decomposition(
-                        &difference,
-                        grading,
-                        seed_set,
-                        reduced_seed_set,
-                        covered_toric_gv_by_basis,
-                        source_derived_gv_by_basis,
-                    )?,
-                    predecessor_nonzero: sparse_from_dense(element),
-                    difference_nonzero: sparse_from_dense(&difference),
-                },
-            ));
+            let candidate = cygv_path_predecessor_candidate(
+                element,
+                &difference,
+                grading,
+                covered_toric_gv_by_basis,
+                source_derived_gv_by_basis,
+                seed_set,
+                reduced_seed_set,
+            )?;
+            debug_assert_eq!(candidate.difference_degree, difference_degree);
+            candidate_sample.push((distance, candidate));
             candidate_sample.sort_by(|(lhs_distance, lhs), (rhs_distance, rhs)| {
                 lhs_distance
                     .total_cmp(rhs_distance)
@@ -25453,6 +25550,24 @@ mod tests {
         assert!(!probe.predecessor_counts_complete);
         assert_eq!(probe.predecessor_difference_count, Some(2));
         assert_eq!(probe.closest_series_distance.as_deref(), Some("1.000000"));
+        assert_eq!(
+            probe.lower_seed_decomposition_status,
+            "found_lower_seed_decomposition"
+        );
+        assert_eq!(probe.lower_seed_predecessor_candidate_count, Some(2));
+        assert_eq!(probe.lower_seed_predecessor_candidate_sample.len(), 2);
+        assert_eq!(
+            probe.lower_seed_predecessor_candidate_sample[0].predecessor_nonzero,
+            vec![(0, 1)]
+        );
+        assert_eq!(
+            probe.lower_seed_predecessor_candidate_sample[0].difference_nonzero,
+            vec![(1, 1)]
+        );
+        assert_eq!(
+            probe.lower_seed_predecessor_candidate_sample[0].known_qn_history_pair_status,
+            "predecessor_unknown_not_toric_covered__difference_unknown_not_toric_covered"
+        );
         assert_eq!(
             cygv_closest_known_qn_residual_qn_domain_status(Some(&probe)),
             "unavailable_exceeded_element_limit_initial_2__target_not_in_closure__predecessor_differences_2"

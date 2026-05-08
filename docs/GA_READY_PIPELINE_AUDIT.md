@@ -217,9 +217,13 @@ run pass. Any remaining mismatch must be explicit and localizable.
    schema-4 smoke report records
    `unavailable_exceeded_element_limit_10000__target_in_closure__no_predecessor_differences`,
    not `not_run`, for the rational-cone residual comparison. That report also
-   shows the lower-seed decomposition `A+B+B` is present, so the immediate
-   missing object is a predecessor-pair construction from the lower-seed path,
-   not simple target reachability in the truncated closure.
+   shows the lower-seed decomposition `A+B+B` is present. The path-history
+   report now materializes the bounded subset predecessor pairs from that
+   decomposition directly; a target-7 schema-4 smoke report exposes four
+   candidate splits with degrees `8+2`, `2+8`, `4+6`, and `6+4`. These rows
+   preserve the toric/source-known status and seed-sum evidence for each side,
+   but remain diagnostic evidence for the missing compact parent history rather
+   than promotable GV inputs.
    The parent-only classifications now include parent-path-support runtime
    lookups from the same `cygv` run. On the regenerated target 7 report, the
    generated degree-10 side term is a real parent-domain nonzero object
