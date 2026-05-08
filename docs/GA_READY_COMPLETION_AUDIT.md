@@ -866,6 +866,11 @@ samples, the weighted rows stop at an explicit missing-star-simplices blocker;
 when star samples are present, the same status path follows the actual
 star-union relation and records whether the target/star relation is integral
 in the union chamber lattice or fails at rational-coordinate integrality.
+The report now also aggregates star-union off-height component statuses by
+role. This makes the wall-crossing obstruction visible at top level: zero
+off-height components are harmless, while nonzero components that are not
+integral global curve-basis classes remain local chamber-map data rather than
+promotable compact GV history.
 Because the full corrected-chamber GV context export still exceeded a `300s`
 debug timeout before writing JSON, the runner also has a narrow
 `--dump-corrected-chamber-secondary-certificate` flag. On the validation-only

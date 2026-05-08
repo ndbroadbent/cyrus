@@ -267,6 +267,7 @@ struct ContextReport {
     local_cygv_source_resolution_star_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_reduction_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_status_counts: BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_off_height_status_counts: BTreeMap<String, usize>,
     local_phase_chamber_membership_certificate_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_hint_sample: Vec<LocalCygvSourceResolutionHintSummary>,
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
@@ -13890,6 +13891,8 @@ fn build_report(
         local_cygv_source_resolution_star_reduction_status_counts(&targets);
     let local_cygv_source_resolution_star_union_status_counts =
         local_cygv_source_resolution_star_union_status_counts(&targets);
+    let local_cygv_source_resolution_star_union_off_height_status_counts =
+        local_cygv_source_resolution_star_union_off_height_status_counts(&targets, validated);
     let local_phase_chamber_membership_certificate_status_counts =
         local_phase_chamber_membership_certificate_status_counts(&targets, validated);
     let local_cygv_source_resolution_hint_sample =
@@ -14647,6 +14650,7 @@ fn build_report(
         local_cygv_source_resolution_star_status_counts,
         local_cygv_source_resolution_star_reduction_status_counts,
         local_cygv_source_resolution_star_union_status_counts,
+        local_cygv_source_resolution_star_union_off_height_status_counts,
         local_phase_chamber_membership_certificate_status_counts,
         local_cygv_source_resolution_hint_sample,
         local_cygv_target_candidate_status_counts,
@@ -15145,6 +15149,59 @@ fn local_cygv_source_resolution_star_union_status_counts<'a>(
             None,
         );
         *counts.entry(union.status).or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_star_union_off_height_status_counts<'a>(
+    targets: impl IntoIterator<Item = &'a TargetReport>,
+    context: &ValidatedContext<'_>,
+) -> BTreeMap<String, usize> {
+    local_cygv_source_resolution_star_union_off_height_status_counts_for_parts(
+        targets.into_iter().filter_map(|target| {
+            target
+                .local_cygv_input_skeleton
+                .as_ref()
+                .map(|skeleton| (skeleton, target.origin_circuit_first_witness.as_ref()))
+        }),
+        context,
+    )
+}
+
+fn local_cygv_source_resolution_star_union_off_height_status_counts_for_parts<'a>(
+    parts: impl IntoIterator<
+        Item = (
+            &'a LocalCygvInputSkeleton,
+            Option<&'a OriginCircuitWitnessSample>,
+        ),
+    >,
+    context: &ValidatedContext<'_>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for (skeleton, witness) in parts {
+        let star_status = local_cygv_zero_shared_star_status(skeleton, witness);
+        if star_status != "weighted_p2_zero_shared_star_uses_two_alternate_chamber_points" {
+            *counts
+                .entry(format!("skipped:{star_status}"))
+                .or_insert(0usize) += 1;
+            continue;
+        }
+        let affine_projection_hint =
+            local_cygv_zero_shared_affine_projection_hint(skeleton, witness);
+        let star_support_hint = local_cygv_shared_two_simplex_star_support_hint(witness);
+        let height_profile = local_cygv_star_union_affine_height_profile(
+            witness,
+            &star_support_hint,
+            affine_projection_hint.hyperplane.as_deref(),
+        );
+        for lookup in local_cygv_star_union_off_height_lookup_sample(&height_profile, context) {
+            *counts
+                .entry(format!(
+                    "{}:{}",
+                    lookup.role, lookup.known_qn_history_status
+                ))
+                .or_insert(0usize) += 1;
+        }
     }
     counts
 }
@@ -21083,6 +21140,27 @@ mod tests {
         assert_eq!(
             off_height_lookup[1].known_qn_history_status,
             "unknown_not_toric_covered"
+        );
+        let off_height_counts =
+            local_cygv_source_resolution_star_union_off_height_status_counts_for_parts(
+                [(&skeleton, Some(&witness))],
+                &validated,
+            );
+        assert_eq!(
+            off_height_counts.get("target:zero_off_height_component"),
+            Some(&1)
+        );
+        assert_eq!(
+            off_height_counts.get("star:unknown_not_toric_covered"),
+            Some(&1)
+        );
+        assert_eq!(
+            off_height_counts.get("target_minus_star:unknown_not_toric_covered"),
+            Some(&1)
+        );
+        assert_eq!(
+            off_height_counts.get("target_plus_star:unknown_not_toric_covered"),
+            Some(&1)
         );
         assert_eq!(
             local_phase_chamber_membership_certificate_status_with_witness(
