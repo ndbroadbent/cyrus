@@ -1280,6 +1280,13 @@ the positive side; the shared target `7`/`8` row has pairing
 `0.04240825693838701`. Any source-derived chamber rule for this family must
 respect that side information.
 
+`/tmp/cyrus_six_point_overlap_annotations_v1.json` also annotates the nearest
+degree-bounded support-overlap samples. For the shared target `7`/`8`
+six-point row, all five sampled nearest degree-`2` neighbors are known toric
+GV `1` rows on the positive height side, but the closest still misses three
+target support points and adds point `56`. They are wall-neighborhood
+evidence, not source-domain replacements.
+
 ## Next Concrete Action
 
 The next implementation should be one of these, in order:

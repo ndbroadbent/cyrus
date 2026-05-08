@@ -1371,6 +1371,12 @@ struct LocalCygvChamberGeneratorSupportOverlapSample {
     extra_points: Vec<usize>,
     ambient_nonzero: Vec<(usize, i64)>,
     basis_nonzero: Vec<(usize, i64)>,
+    known_qn_history_status: String,
+    toric_gv: Option<String>,
+    source_derived_gv: Option<String>,
+    source_class_status: Option<String>,
+    global_secondary_height_status: String,
+    global_secondary_height_pairing: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -25670,6 +25676,42 @@ fn chamber_generator_degree_bounded_support_overlap_diagnostic(
             .difference(&support)
             .copied()
             .collect::<Vec<_>>();
+        let (
+            known_qn_history_status,
+            toric_gv,
+            source_derived_gv,
+            source_class_status,
+            global_secondary_height_status,
+            global_secondary_height_pairing,
+        ) = match dense_from_sparse(&ray.basis_nonzero, context.dimension) {
+            Ok(basis_dense) => {
+                let (known_qn_history_status, toric_gv, source_derived_gv, history_error) =
+                    global_basis_known_qn_history(&basis_dense, context);
+                let (source_class_status, _) =
+                    global_basis_source_class_lookup(&basis_dense, context);
+                let global_secondary_height =
+                    global_basis_secondary_height_pairing_hint(&basis_dense, context);
+                (
+                    known_qn_history_status,
+                    toric_gv,
+                    source_derived_gv,
+                    source_class_status.or(history_error),
+                    global_secondary_height.status,
+                    global_secondary_height.pairing,
+                )
+            }
+            Err(error) => (
+                "invalid_support_overlap_basis".to_string(),
+                None,
+                None,
+                Some(format!(
+                    "support_overlap_basis_error_{}",
+                    status_error_fragment(&error)
+                )),
+                "global_basis_secondary_height_not_run_invalid_basis".to_string(),
+                None,
+            ),
+        };
         candidates.push(LocalCygvChamberGeneratorSupportOverlapSample {
             degree: ray.degree,
             overlap_count,
@@ -25680,6 +25722,12 @@ fn chamber_generator_degree_bounded_support_overlap_diagnostic(
             extra_points,
             ambient_nonzero: ray.ambient_nonzero.clone(),
             basis_nonzero: ray.basis_nonzero.clone(),
+            known_qn_history_status,
+            toric_gv,
+            source_derived_gv,
+            source_class_status,
+            global_secondary_height_status,
+            global_secondary_height_pairing,
         });
     }
     if candidates.is_empty() {
@@ -34264,6 +34312,16 @@ mod tests {
         assert_eq!(diagnostic.sample.len(), 2);
         assert_eq!(diagnostic.sample[0].missing_points, Vec::<usize>::new());
         assert_eq!(diagnostic.sample[0].extra_points, Vec::<usize>::new());
+        assert_eq!(
+            diagnostic.sample[0].known_qn_history_status,
+            "unknown_not_toric_covered"
+        );
+        assert_eq!(diagnostic.sample[0].toric_gv, None);
+        assert_eq!(diagnostic.sample[0].source_derived_gv, None);
+        assert_eq!(
+            diagnostic.sample[0].global_secondary_height_status,
+            "global_basis_secondary_height_missing_vector"
+        );
         assert_eq!(diagnostic.sample[1].overlap_count, 2);
         assert_eq!(diagnostic.sample[1].missing_points, vec![195, 208]);
         assert_eq!(diagnostic.sample[1].extra_points, vec![56]);

@@ -4357,3 +4357,12 @@ row has
 pairing `0.04240825693838701`. This gives the next chamber-rule search an
 explicit side constraint instead of relying on the larger target-plus-star
 diagnostics.
+
+`/tmp/cyrus_six_point_overlap_annotations_v1.json` annotates the nearest
+degree-bounded support-overlap samples with qN-history, source class, and
+global secondary-height side. For the shared target `7`/`8` six-point row, all
+five sampled nearest degree-`2` neighbors are already `known_nonzero_toric_gv`
+with toric/source GV `1` and are also on the positive height side. The closest
+candidate still misses three six-point support points and adds point `56`, so
+these known toric rows are useful wall-neighborhood evidence but not an exact
+source-domain replacement.
