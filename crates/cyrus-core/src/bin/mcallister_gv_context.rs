@@ -73,6 +73,8 @@ struct CorrectedChamberGvContext {
     #[serde(default)]
     secondary_cone_height_certificate: Option<SecondaryConeHeightCertificate>,
     #[serde(default)]
+    secondary_cone_2face_height_certificate: Option<SecondaryConeHeightCertificate>,
+    #[serde(default)]
     secondary_cone_heights_for_missing: Option<Vec<f64>>,
     uncovered_source_ray_stats_for_missing: Option<MissingGvTargetStats>,
     #[serde(default)]
@@ -265,6 +267,10 @@ struct ContextReport {
     secondary_cone_height_certificate_strictly_inside: Option<bool>,
     secondary_cone_height_certificate_hyperplane_count: Option<usize>,
     secondary_cone_height_certificate_min_pairing: Option<f64>,
+    secondary_cone_2face_height_certificate_status: Option<String>,
+    secondary_cone_2face_height_certificate_strictly_inside: Option<bool>,
+    secondary_cone_2face_height_certificate_hyperplane_count: Option<usize>,
+    secondary_cone_2face_height_certificate_min_pairing: Option<f64>,
     secondary_cone_height_vector_count: Option<usize>,
     q_rows: usize,
     q_cols: usize,
@@ -717,6 +723,7 @@ struct LocalCygvSourceResolutionHintSummary {
     degree: i128,
     status: String,
     global_secondary_cone_height_certificate_status: Option<String>,
+    global_secondary_cone_2face_height_certificate_status: Option<String>,
     local_phase_chamber_membership_certificate_status: String,
     zero_shared_affine_projection_status: String,
     relation_support_affine_hyperplane: Option<Vec<i64>>,
@@ -11406,36 +11413,16 @@ fn validate_context<'a>(
         }
     }
     if let Some(certificate) = context.secondary_cone_height_certificate.as_ref() {
-        if !certificate.epsilon.is_finite() || certificate.epsilon <= 0.0 {
-            return Err(
-                "secondary-cone height certificate epsilon is not positive finite".to_string(),
-            );
-        }
-        if certificate.hyperplane_count != certificate.pairing_count {
-            return Err(format!(
-                "secondary-cone height certificate hyperplane count {} does not match pairing count {}",
-                certificate.hyperplane_count, certificate.pairing_count
-            ));
-        }
-        if let (Some(min_pairing), Some(max_pairing)) =
-            (certificate.min_pairing, certificate.max_pairing)
-            && min_pairing > max_pairing
-        {
-            return Err(format!(
-                "secondary-cone height certificate min pairing {min_pairing} exceeds max pairing {max_pairing}"
-            ));
-        }
-        if certificate.strictly_inside
-            && !matches!(
-                certificate.status.as_str(),
-                "strictly_inside_secondary_cone" | "no_secondary_cone_hyperplanes"
-            )
-        {
-            return Err(format!(
-                "secondary-cone height certificate is strict but has status {}",
-                certificate.status
-            ));
-        }
+        validate_secondary_cone_height_certificate(
+            certificate,
+            "secondary-cone height certificate",
+        )?;
+    }
+    if let Some(certificate) = context.secondary_cone_2face_height_certificate.as_ref() {
+        validate_secondary_cone_height_certificate(
+            certificate,
+            "secondary-cone 2-face height certificate",
+        )?;
     }
     if let Some(heights) = context.secondary_cone_heights_for_missing.as_ref() {
         let expected_height_count = q_cols
@@ -11560,8 +11547,46 @@ fn validate_context<'a>(
             .shared_facet_unresolved_source_ray_stats_for_missing
             .as_ref(),
         secondary_cone_height_certificate: context.secondary_cone_height_certificate.as_ref(),
+        secondary_cone_2face_height_certificate: context
+            .secondary_cone_2face_height_certificate
+            .as_ref(),
         secondary_cone_heights: context.secondary_cone_heights_for_missing.as_deref(),
     })
+}
+
+fn validate_secondary_cone_height_certificate(
+    certificate: &SecondaryConeHeightCertificate,
+    label: &str,
+) -> Result<(), String> {
+    if !certificate.epsilon.is_finite() || certificate.epsilon <= 0.0 {
+        return Err(format!("{label} epsilon is not positive finite"));
+    }
+    if certificate.hyperplane_count != certificate.pairing_count {
+        return Err(format!(
+            "{label} hyperplane count {} does not match pairing count {}",
+            certificate.hyperplane_count, certificate.pairing_count
+        ));
+    }
+    if let (Some(min_pairing), Some(max_pairing)) =
+        (certificate.min_pairing, certificate.max_pairing)
+        && min_pairing > max_pairing
+    {
+        return Err(format!(
+            "{label} min pairing {min_pairing} exceeds max pairing {max_pairing}"
+        ));
+    }
+    if certificate.strictly_inside
+        && !matches!(
+            certificate.status.as_str(),
+            "strictly_inside_secondary_cone" | "no_secondary_cone_hyperplanes"
+        )
+    {
+        return Err(format!(
+            "{label} is strict but has status {}",
+            certificate.status
+        ));
+    }
+    Ok(())
 }
 
 fn source_derived_gv_by_basis(
@@ -11851,6 +11876,7 @@ struct ValidatedContext<'a> {
     uncovered_source_ray_stats: Option<&'a MissingGvTargetStats>,
     shared_facet_unresolved_source_ray_stats: Option<&'a MissingGvTargetStats>,
     secondary_cone_height_certificate: Option<&'a SecondaryConeHeightCertificate>,
+    secondary_cone_2face_height_certificate: Option<&'a SecondaryConeHeightCertificate>,
     secondary_cone_heights: Option<&'a [f64]>,
 }
 
@@ -16777,6 +16803,22 @@ fn build_report(
             .secondary_cone_height_certificate
             .as_ref()
             .and_then(|certificate| certificate.min_pairing),
+        secondary_cone_2face_height_certificate_status: context
+            .secondary_cone_2face_height_certificate
+            .as_ref()
+            .map(|certificate| certificate.status.clone()),
+        secondary_cone_2face_height_certificate_strictly_inside: context
+            .secondary_cone_2face_height_certificate
+            .as_ref()
+            .map(|certificate| certificate.strictly_inside),
+        secondary_cone_2face_height_certificate_hyperplane_count: context
+            .secondary_cone_2face_height_certificate
+            .as_ref()
+            .map(|certificate| certificate.hyperplane_count),
+        secondary_cone_2face_height_certificate_min_pairing: context
+            .secondary_cone_2face_height_certificate
+            .as_ref()
+            .and_then(|certificate| certificate.min_pairing),
         secondary_cone_height_vector_count: context
             .secondary_cone_heights_for_missing
             .as_ref()
@@ -17256,6 +17298,9 @@ fn local_cygv_source_resolution_hint_summaries(
                 status,
                 global_secondary_cone_height_certificate_status: context
                     .secondary_cone_height_certificate
+                    .map(|certificate| certificate.status.clone()),
+                global_secondary_cone_2face_height_certificate_status: context
+                    .secondary_cone_2face_height_certificate
                     .map(|certificate| certificate.status.clone()),
                 local_phase_chamber_membership_certificate_status:
                     local_phase_chamber_membership_certificate_status,
@@ -26125,6 +26170,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
         let target_plus_star = vec![(0, 1), (1, 1)];
@@ -26168,6 +26214,7 @@ mod tests {
             degree: 2,
             status: "test".to_string(),
             global_secondary_cone_height_certificate_status: None,
+            global_secondary_cone_2face_height_certificate_status: None,
             local_phase_chamber_membership_certificate_status: "test".to_string(),
             zero_shared_affine_projection_status: "test".to_string(),
             relation_support_affine_hyperplane: None,
@@ -26409,6 +26456,7 @@ mod tests {
             uncovered_source_ray_toric_diagnostic_sample: None,
             degree_bounded_toric_gv_diagnostic_context_for_missing: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights_for_missing: None,
             uncovered_source_ray_stats_for_missing: None,
             shared_facet_unresolved_source_ray_stats_for_missing: None,
@@ -26758,6 +26806,15 @@ mod tests {
             max_pairing: Some(4.0),
             strictly_inside: true,
         });
+        context.secondary_cone_2face_height_certificate = Some(SecondaryConeHeightCertificate {
+            status: "strictly_inside_secondary_cone".to_string(),
+            epsilon: 1e-6,
+            hyperplane_count: 2,
+            pairing_count: 2,
+            min_pairing: Some(0.5),
+            max_pairing: Some(2.0),
+            strictly_inside: true,
+        });
         context.secondary_cone_heights_for_missing = Some(vec![0.0, 0.0, 1.5]);
 
         let validated = validate_context(&context).unwrap();
@@ -26769,6 +26826,12 @@ mod tests {
                 .as_ref()
                 .map(|certificate| certificate.status.as_str()),
             Some("strictly_inside_secondary_cone")
+        );
+        assert_eq!(
+            validated
+                .secondary_cone_2face_height_certificate
+                .map(|certificate| certificate.hyperplane_count),
+            Some(2)
         );
     }
 
@@ -27016,6 +27079,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
         let sample = MissingGvTargetSample {
@@ -27218,6 +27282,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
         let allowed_support = [4usize].into_iter().collect::<HashSet<_>>();
@@ -30032,6 +30097,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
         let decomposition = LowerSeedDecompositionProbe {
@@ -30099,6 +30165,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
         let mut cache = HashMap::new();
@@ -30248,6 +30315,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
 
@@ -30304,6 +30372,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
 
@@ -30367,6 +30436,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
 
@@ -30715,6 +30785,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
         let trace = vec![CygvGvCoefficientTrace {
@@ -31170,6 +31241,7 @@ mod tests {
             uncovered_source_ray_stats: Some(&source_stats),
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
         let residual = CygvClosestKnownQnPredecessor {
@@ -31601,6 +31673,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
 
@@ -31761,6 +31834,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
 
@@ -32082,6 +32156,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
 
@@ -32295,6 +32370,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
         let term_context = qn_term_signature_context_sample(
@@ -32538,6 +32614,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
 
@@ -32726,6 +32803,7 @@ mod tests {
             uncovered_source_ray_stats: Some(&uncovered_stats),
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
 
@@ -33074,6 +33152,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
         let check = CmsGeneralDivisorIntersectionCheck {
@@ -33572,6 +33651,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
 
@@ -33741,6 +33821,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
 
@@ -33984,6 +34065,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
 
@@ -34058,6 +34140,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
 
@@ -34435,6 +34518,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
 
@@ -34579,6 +34663,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
             secondary_cone_heights: None,
         };
         let mut semigroup_measurement_cache = HashMap::new();

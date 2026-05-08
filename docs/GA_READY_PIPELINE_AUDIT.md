@@ -1478,8 +1478,10 @@ to make the remaining GV layer more first-principles:
    `mcallister_first_principles` now exposes this as
    `--dump-corrected-chamber-2face-secondary-certificate` and adds
    `secondary_cone_2face_height_certificate` to corrected-chamber GV context
-   JSON. A 4-214-647 validation-only run with `--stop-after volume` writes
-   `589` two-face hyperplanes, min/max pairings
+   JSON; `mcallister_gv_context` now parses, validates, and reports the same
+   two-face certificate separately from the full secondary-cone certificate.
+   A 4-214-647 validation-only run with `--stop-after volume` writes `589`
+   two-face hyperplanes, min/max pairings
    `0.0002917945770377628`/`11.485862078225125`, and
    `strictly_inside=true`.
    The Stage 0 no-replay policy tests also now pass again after two policy
