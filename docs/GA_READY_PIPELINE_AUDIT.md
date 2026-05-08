@@ -1203,6 +1203,13 @@ to make the remaining GV layer more first-principles:
    targets `7`/`8`, one wall is the resolved-conifold star-side relation
    `[(0,-1),(55,-1),(195,1),(212,1)]`, so the obstruction is visible as
    degenerate wall circuitry rather than just an aggregate count.
+   The first-principles corrected-chamber context exporter now also carries the
+   full corrected secondary-fan height vector as
+   `secondary_cone_heights_for_missing`, and `mcallister_gv_context` validates
+   its length and finiteness against the no-origin q-matrix width. That gives
+   the next pass the actual chamber height data needed to compare these local
+   wall circuits against the corrected global chamber, rather than only against
+   the relation-support affine height.
    The full union-support height profile is now serialized as well. For
    targets `3`/`6`, the off-hyperplane zero-shared ray carries zero target and
    star coefficient; for targets `7`/`8`, the height `-1` zero-shared ray and

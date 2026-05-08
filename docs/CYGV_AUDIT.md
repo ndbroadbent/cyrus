@@ -3325,6 +3325,13 @@ fan. The same report now serializes the exact wall-circuit supports and
 pairings; for targets `7`/`8`, the shared resolved-conifold star-side circuit
 `[(0,-1),(55,-1),(195,1),(212,1)]` is one of the zero-pairing walls, making
 the degeneracy inspectable directly in point-index coordinates.
+The corrected-chamber context schema now also exports
+`secondary_cone_heights_for_missing`, the full no-origin secondary-fan height
+vector induced by the current Kähler point, and the GV context validator rejects
+missing-width or non-finite height vectors. This is plumbing for the next
+certificate step: comparing the serialized local wall circuits against the
+actual corrected global chamber height, not just against the local affine
+relation hyperplane.
 Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
 serializes a role-tagged height profile over the full union support. For
 targets `3`/`6`, the off-hyperplane zero-shared ray has height `-1` but zero

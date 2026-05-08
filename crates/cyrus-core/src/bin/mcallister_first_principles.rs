@@ -744,6 +744,7 @@ struct ChamberGvDiagnostic {
     degree_bounded_toric_gv_diagnostic_context_for_missing:
         Option<Vec<ToricGvDiagnosticContextSample>>,
     secondary_cone_height_certificate: Option<SecondaryConeHeightCertificate>,
+    secondary_cone_heights_for_missing: Option<Vec<f64>>,
     basis_mori_rays_for_missing_degree_bound: Option<i128>,
     basis_mori_rays_for_missing_degree_bounded: Option<Vec<Vec<i64>>>,
     degree_bounded_mori_ray_context_for_missing: Option<Vec<DegreeBoundedMoriRayContextSample>>,
@@ -827,6 +828,7 @@ struct CorrectedChamberGvContextExport<'a> {
     degree_bounded_toric_gv_diagnostic_context_for_missing:
         Option<&'a Vec<ToricGvDiagnosticContextSample>>,
     secondary_cone_height_certificate: Option<&'a SecondaryConeHeightCertificate>,
+    secondary_cone_heights_for_missing: Option<&'a Vec<f64>>,
     gv_q_matrix_for_missing: Option<&'a Vec<Vec<i64>>>,
     gv_curve_basis_matrix_for_missing: Option<&'a Vec<Vec<String>>>,
     grading_for_missing: Option<&'a Vec<i64>>,
@@ -7193,21 +7195,7 @@ fn secondary_cone_height_certificate_for_kahler(
     basis: &[usize],
     kahler: &[F64<Finite>],
 ) -> Result<SecondaryConeHeightCertificate, String> {
-    let basis_non_origin = basis
-        .iter()
-        .map(|&idx| {
-            idx.checked_sub(1).ok_or_else(|| {
-                "secondary-cone Kähler basis unexpectedly contains origin".to_string()
-            })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    let non_origin_count = geom
-        .triangulation_points
-        .len()
-        .checked_sub(1)
-        .ok_or_else(|| "secondary-cone point set is empty".to_string())?;
-    let heights = kahler_to_heights(kahler, &basis_non_origin, non_origin_count)
-        .ok_or_else(|| "failed to embed Kähler point into secondary-cone heights".to_string())?;
+    let heights = secondary_cone_typed_heights_for_kahler(geom, basis, kahler)?;
     let hyperplanes = secondary_cone_hyperplanes_native(&geom.triangulation_points, tri)
         .map_err(|e| format!("failed to compute secondary-cone hyperplanes: {e}"))?;
     let pairings = secondary_cone_height_pairings(&hyperplanes, &heights)
@@ -7239,6 +7227,42 @@ fn secondary_cone_height_certificate_for_kahler(
         max_pairing,
         strictly_inside,
     })
+}
+
+fn secondary_cone_heights_for_kahler(
+    geom: &PrimalGeom,
+    basis: &[usize],
+    kahler: &[F64<Finite>],
+) -> Result<Vec<f64>, String> {
+    Ok(
+        secondary_cone_typed_heights_for_kahler(geom, basis, kahler)?
+            .iter()
+            .map(|height| height.get())
+            .collect(),
+    )
+}
+
+fn secondary_cone_typed_heights_for_kahler(
+    geom: &PrimalGeom,
+    basis: &[usize],
+    kahler: &[F64<Finite>],
+) -> Result<Vec<F64<Finite>>, String> {
+    let basis_non_origin = basis
+        .iter()
+        .map(|&idx| {
+            idx.checked_sub(1).ok_or_else(|| {
+                "secondary-cone Kähler basis unexpectedly contains origin".to_string()
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let non_origin_count = geom
+        .triangulation_points
+        .len()
+        .checked_sub(1)
+        .ok_or_else(|| "secondary-cone point set is empty".to_string())?;
+    let heights = kahler_to_heights(kahler, &basis_non_origin, non_origin_count)
+        .ok_or_else(|| "failed to embed Kähler point into secondary-cone heights".to_string())?;
+    Ok(heights)
 }
 
 fn chamber_intersection_in_basis(
@@ -7343,6 +7367,11 @@ fn diagnose_chamber_gv_volume_correction(
     let toric_missing_gv_classes = missing_gv_classes.clone();
     let secondary_cone_height_certificate = Some(secondary_cone_height_certificate_for_kahler(
         tri,
+        geom,
+        &intersection.basis,
+        kahler,
+    )?);
+    let secondary_cone_heights_for_missing = Some(secondary_cone_heights_for_kahler(
         geom,
         &intersection.basis,
         kahler,
@@ -8162,6 +8191,7 @@ fn diagnose_chamber_gv_volume_correction(
         covered_toric_gv_context_for_missing,
         degree_bounded_toric_gv_diagnostic_context_for_missing,
         secondary_cone_height_certificate,
+        secondary_cone_heights_for_missing,
         gv_q_matrix_for_missing: gv_basis_data_for_missing
             .as_ref()
             .map(|data| data.q_matrix.clone()),
@@ -9048,6 +9078,7 @@ fn write_corrected_chamber_gv_context_export(
             .degree_bounded_toric_gv_diagnostic_context_for_missing
             .as_ref(),
         secondary_cone_height_certificate: diag.secondary_cone_height_certificate.as_ref(),
+        secondary_cone_heights_for_missing: diag.secondary_cone_heights_for_missing.as_ref(),
         gv_q_matrix_for_missing: diag.gv_q_matrix_for_missing.as_ref(),
         gv_curve_basis_matrix_for_missing: diag.gv_curve_basis_matrix_for_missing.as_ref(),
         grading_for_missing: diag.grading_for_missing.as_ref(),
@@ -12150,6 +12181,7 @@ mod tests {
                 max_pairing: Some(1.0),
                 strictly_inside: true,
             }),
+            secondary_cone_heights_for_missing: Some(vec![0.0, 1.5]),
             basis_mori_rays_for_missing_degree_bound: None,
             basis_mori_rays_for_missing_degree_bounded: None,
             degree_bounded_mori_ray_context_for_missing: None,
@@ -12196,6 +12228,15 @@ mod tests {
         );
         assert_eq!(chamber_certificate["hyperplane_count"], 1);
         assert_eq!(chamber_certificate["strictly_inside"], true);
+        assert_eq!(
+            value["secondary_cone_heights_for_missing"]
+                .as_array()
+                .expect("secondary-cone heights should be exported")
+                .iter()
+                .map(|entry| entry.as_f64().expect("height should be numeric"))
+                .collect::<Vec<_>>(),
+            vec![0.0, 1.5]
+        );
 
         let _ = std::fs::remove_file(path);
     }

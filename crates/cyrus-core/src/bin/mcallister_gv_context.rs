@@ -68,6 +68,8 @@ struct CorrectedChamberGvContext {
         Option<Vec<ToricGvDiagnosticContextSample>>,
     #[serde(default)]
     secondary_cone_height_certificate: Option<SecondaryConeHeightCertificate>,
+    #[serde(default)]
+    secondary_cone_heights_for_missing: Option<Vec<f64>>,
     uncovered_source_ray_stats_for_missing: Option<MissingGvTargetStats>,
     #[serde(default)]
     shared_facet_unresolved_source_ray_stats_for_missing: Option<MissingGvTargetStats>,
@@ -249,6 +251,7 @@ struct ContextReport {
     secondary_cone_height_certificate_strictly_inside: Option<bool>,
     secondary_cone_height_certificate_hyperplane_count: Option<usize>,
     secondary_cone_height_certificate_min_pairing: Option<f64>,
+    secondary_cone_height_vector_count: Option<usize>,
     q_rows: usize,
     q_cols: usize,
     kappa_nonzero_entries: usize,
@@ -10627,6 +10630,17 @@ fn validate_context<'a>(
             ));
         }
     }
+    if let Some(heights) = context.secondary_cone_heights_for_missing.as_ref() {
+        if heights.len() != q_cols {
+            return Err(format!(
+                "secondary-cone height vector length {} does not match no-origin q-matrix width {q_cols}",
+                heights.len()
+            ));
+        }
+        if heights.iter().any(|height| !height.is_finite()) {
+            return Err("secondary-cone height vector contains non-finite value".to_string());
+        }
+    }
     let mut covered_toric_gv_by_basis = HashMap::new();
     if let Some(covered_context) = context.covered_toric_gv_context_for_missing.as_ref() {
         for (idx, sample) in covered_context.iter().enumerate() {
@@ -15771,6 +15785,10 @@ fn build_report(
             .secondary_cone_height_certificate
             .as_ref()
             .and_then(|certificate| certificate.min_pairing),
+        secondary_cone_height_vector_count: context
+            .secondary_cone_heights_for_missing
+            .as_ref()
+            .map(Vec::len),
         q_rows: validated.q_matrix.len(),
         q_cols: validated.q_cols,
         kappa_nonzero_entries: validated.intersection.num_nonzero(),
@@ -22204,6 +22222,7 @@ mod tests {
             uncovered_source_ray_toric_diagnostic_sample: None,
             degree_bounded_toric_gv_diagnostic_context_for_missing: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_heights_for_missing: None,
             uncovered_source_ray_stats_for_missing: None,
             shared_facet_unresolved_source_ray_stats_for_missing: None,
             gv_q_matrix_for_missing: Some(vec![vec![1, 0], vec![0, 1]]),
@@ -22486,6 +22505,7 @@ mod tests {
             max_pairing: Some(4.0),
             strictly_inside: true,
         });
+        context.secondary_cone_heights_for_missing = Some(vec![0.0, 1.5]);
 
         let validated = validate_context(&context).unwrap();
 
@@ -22525,6 +22545,34 @@ mod tests {
         };
 
         assert!(err.contains("hyperplane count 2 does not match pairing count 1"));
+    }
+
+    #[test]
+    fn validate_context_rejects_invalid_secondary_cone_height_vector() {
+        let mut context = minimal_corrected_context(
+            4,
+            Some(vec![DegreeBoundedMoriRayContextSample {
+                degree: 1,
+                ambient_nonzero: vec![(5, 1)],
+                basis_nonzero: vec![(0, 1)],
+            }]),
+        );
+        context.secondary_cone_heights_for_missing = Some(vec![0.0]);
+
+        let err = match validate_context(&context) {
+            Ok(_) => panic!("invalid secondary-cone height vector should fail validation"),
+            Err(err) => err,
+        };
+
+        assert!(err.contains("height vector length 1 does not match no-origin q-matrix width 2"));
+
+        context.secondary_cone_heights_for_missing = Some(vec![0.0, f64::NAN]);
+        let err = match validate_context(&context) {
+            Ok(_) => panic!("non-finite secondary-cone height vector should fail validation"),
+            Err(err) => err,
+        };
+
+        assert!(err.contains("secondary-cone height vector contains non-finite value"));
     }
 
     #[test]
