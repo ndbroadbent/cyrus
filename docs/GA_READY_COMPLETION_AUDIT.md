@@ -1010,6 +1010,27 @@ debug timeout before writing JSON, the runner also has a narrow
 `strictly_inside=true`. This remains a chamber-certificate validation check,
 not a production no-replay completion proof.
 
+Cyrus now ports the next native CYTools secondary-cone restriction primitive in
+core. `secondary_cone_hyperplanes_native` supports embedded lower-dimensional
+simplices, and `secondary_cone_hyperplanes_native_on_faces` mirrors
+`Triangulation.secondary_cone(on_faces_dim=N)` by restricting an ambient
+triangulation to supplied faces, computing each induced face circuit cone, and
+deduplicating the ambient hyperplanes. The focused secondary tests cover the
+original square diagonal, an embedded 2-face, an ambient triangulation
+restricted to a square face, wall/outside height checks, mismatched height
+lengths, and degenerate simplex rejection; the McAllister GV context tests
+still pass. This removes a reusable chamber-map porting gap, but it does not
+complete the unresolved target `7`/`8` degree-6 `target+star` qN history or the
+required semigroup/flop certificate.
+
+The Stage 0 no-replay policy gate is green for the touched paths:
+`cargo test -p cyrus-core --test mcallister_e2e stage0_data_integrity -- --nocapture`
+passes. The first-principles runner now keeps generic computed-basis flux
+coordinate selection explicit, while still distinguishing explicit production
+basis overrides. The opt-in `mcallister_gv` binary no longer reads
+`dual_curves.dat` or `dual_curves_gv.dat`; it computes GV invariants and leaves
+checkpoint comparison to validation tests.
+
 ## Next Concrete Action
 
 The next implementation should be one of these, in order:

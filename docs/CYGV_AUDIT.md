@@ -3685,3 +3685,20 @@ for `origin=-1;neg={-2: 1};pos={1: 3}`,
 without an origin pattern was the degree-4 class with ambient support
 `[(6,1),(200,1),(210,-2)]`; it is now source-derived from an exported two-face
 toric diagnostic with `GV=-2`.
+
+Core secondary-cone support now includes the CYTools face-skeleton restriction
+needed for chamber-map work. `secondary_cone_hyperplanes_native` no longer
+assumes the simplex dimension equals the ambient coordinate dimension, and
+`secondary_cone_hyperplanes_native_on_faces` ports the native
+`Triangulation.secondary_cone(on_faces_dim=N)` restriction using ambient point
+indices. This gives the GV diagnostics a reusable way to ask for 2-face or
+other skeleton chamber inequalities without ad hoc local reconstruction. It
+does not yet certify the target `7`/`8` transported degree-6 `target+star`
+history; that still needs source-derived semigroup or flop/chamber transport
+data before a `cygv` value can be promoted.
+
+The no-replay boundary around the standalone GV binary is stricter now:
+`mcallister_gv` no longer reads `dual_curves.dat` or `dual_curves_gv.dat`.
+Those files remain validation checkpoints for tests and audits only; the
+binary computes its GV table from the upstream polytope, FRST, GLSM, Mori-cap
+rays, grading, and `cygv` handoff.

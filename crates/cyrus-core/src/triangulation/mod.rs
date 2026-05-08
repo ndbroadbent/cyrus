@@ -19,7 +19,7 @@ pub use heights::{compute_delaunay_heights, compute_frst_heights};
 pub use regular::compute_regular_triangulation;
 pub use secondary::{
     secondary_cone_height_pairings, secondary_cone_hyperplanes_native,
-    secondary_cone_strictly_contains_height_vector,
+    secondary_cone_hyperplanes_native_on_faces, secondary_cone_strictly_contains_height_vector,
 };
 
 /// A triangulation of a point set.

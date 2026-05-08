@@ -1832,8 +1832,11 @@ fn stage_flat_direction(
             if use_mcallister_flux_basis_default {
                 eprintln!("[INFO] using McAllister flux source basis [3, 4, 5, 8]");
                 OwnedDivisorBasis::Indices(vec![3, 4, 5, 8])
-            } else {
+            } else if production_dual_basis_override.is_some() {
                 eprintln!("[INFO] using production dual basis as flux coordinate basis");
+                dual_divisor_basis.clone()
+            } else {
+                eprintln!("[INFO] using computed dual basis as flux coordinate basis");
                 dual_divisor_basis.clone()
             }
         },

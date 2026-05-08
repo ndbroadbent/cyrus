@@ -1,38 +1,42 @@
 //! Secondary-cone hyperplanes for regular triangulations.
 //!
 //! This ports the native CYTools `Triangulation.secondary_cone` circuit step:
-//! every pair of adjacent full-dimensional simplices gives one circuit
-//! relation, which is a hyperplane normal of the secondary cone.
+//! every pair of adjacent simplices in the triangulation's affine span gives
+//! one circuit relation, which is a hyperplane normal of the secondary cone.
 
 use std::collections::{BTreeSet, HashSet};
 
-use malachite::Integer;
+use malachite::{Integer, Rational};
 
 use super::Triangulation;
 use crate::Point;
 use crate::error::{Error, Result};
-use crate::integer_math::integer_kernel;
+use crate::integer_math::{integer_kernel, matrix_rank};
 use crate::types::f64::F64;
 use crate::types::tags::{Finite, Pos};
 
 /// Compute native secondary-cone hyperplane normals from adjacent simplices.
 ///
 /// The output is in point-index order. For each pair of full-dimensional
-/// simplices sharing a codimension-one face, this builds the homogenized
-/// circuit matrix `[p_i; 1]` and extracts its primitive integer kernel vector,
-/// matching the native CYTools sign convention that the first differing point
-/// has positive coefficient.
+/// simplices in the triangulation's own affine span sharing a codimension-one
+/// face, this builds the homogenized circuit matrix `[p_i; 1]` and extracts
+/// its primitive integer kernel vector, matching the native CYTools sign
+/// convention that the first differing point has positive coefficient.
+///
+/// The point coordinates may live in a higher-dimensional ambient lattice than
+/// the simplex dimension. This is needed for CYTools' face-restriction path,
+/// where a 2-face triangulation is still expressed using ambient point labels.
 ///
 /// # Errors
 ///
-/// Returns an error if points have inconsistent dimensions, simplices are not
-/// full-dimensional index sets, or an adjacent circuit does not have a unique
-/// integer relation.
+/// Returns an error if points have inconsistent dimensions, simplices are
+/// degenerate in their affine span, or an adjacent circuit does not have a
+/// unique integer relation.
 pub fn secondary_cone_hyperplanes_native(
     points: &[Point],
     triangulation: &Triangulation,
 ) -> Result<Vec<Vec<i64>>> {
-    let Some(dim) = validate_secondary_cone_input(points, triangulation)? else {
+    let Some(simplex_dim) = validate_secondary_cone_input(points, triangulation)? else {
         return Ok(Vec::new());
     };
 
@@ -45,7 +49,7 @@ pub fn secondary_cone_hyperplanes_native(
     for (left_idx, left) in simplices.iter().enumerate() {
         for right in simplices.iter().skip(left_idx + 1) {
             let common = left.intersection(right).copied().collect::<Vec<_>>();
-            if common.len() != dim {
+            if common.len() != simplex_dim {
                 continue;
             }
             let diff = left
@@ -66,25 +70,81 @@ pub fn secondary_cone_hyperplanes_native(
     Ok(hyperplanes.into_iter().collect())
 }
 
+/// Compute the native secondary cone of a face skeleton.
+///
+/// This ports the CYTools `Triangulation.secondary_cone(on_faces_dim=N)` native
+/// path: restrict the triangulation to each supplied face, compute that face
+/// triangulation's adjacent-simplex circuit inequalities, then deduplicate the
+/// ambient point-index hyperplanes. Each face is supplied as ambient point
+/// indices; its dimension is inferred from its exact affine rank.
+///
+/// # Errors
+///
+/// Returns an error if a face has invalid point indices, the triangulation does
+/// not induce any full-dimensional simplex on a supplied positive-dimensional
+/// face, or any induced face secondary-cone computation is invalid.
+pub fn secondary_cone_hyperplanes_native_on_faces(
+    points: &[Point],
+    triangulation: &Triangulation,
+    faces: &[Vec<usize>],
+) -> Result<Vec<Vec<i64>>> {
+    validate_point_dimensions(points, "secondary cone face restriction points")?;
+
+    let mut hyperplanes = BTreeSet::new();
+    for (face_idx, face) in faces.iter().enumerate() {
+        let face_set = validate_face_indices(points, face, face_idx)?;
+        let face_dim = affine_rank_for_point_index_set(points, &face_set)?;
+        if face_dim == 0 {
+            continue;
+        }
+
+        let mut restricted_simplices = BTreeSet::new();
+        for simplex in triangulation.simplices() {
+            let restricted = simplex
+                .iter()
+                .copied()
+                .filter(|point_index| face_set.contains(point_index))
+                .collect::<BTreeSet<_>>();
+            if restricted.len() == face_dim + 1 {
+                restricted_simplices.insert(restricted.into_iter().collect::<Vec<_>>());
+            }
+        }
+        if restricted_simplices.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "secondary cone face {face_idx} has no induced {face_dim}-simplices"
+            )));
+        }
+
+        let restricted = Triangulation::new(restricted_simplices.into_iter().collect());
+        for hyperplane in secondary_cone_hyperplanes_native(points, &restricted)? {
+            hyperplanes.insert(hyperplane);
+        }
+    }
+
+    Ok(hyperplanes.into_iter().collect())
+}
+
 fn validate_secondary_cone_input(
     points: &[Point],
     triangulation: &Triangulation,
 ) -> Result<Option<usize>> {
-    let Some(first_point) = points.first() else {
+    validate_point_dimensions(points, "secondary cone points")?;
+    if points.is_empty() || triangulation.simplices().is_empty() {
         return Ok(None);
-    };
-    let dim = first_point.dim();
-    if points.iter().any(|point| point.dim() != dim) {
+    }
+    let simplex_len = triangulation.simplices()[0].len();
+    if simplex_len == 0 {
         return Err(Error::InvalidInput(
-            "secondary cone points have inconsistent dimensions".to_string(),
+            "secondary cone simplex is empty".to_string(),
         ));
     }
+    let simplex_dim = simplex_len - 1;
     for simplex in triangulation.simplices() {
-        if simplex.len() != dim + 1 {
+        if simplex.len() != simplex_len {
             return Err(Error::InvalidInput(format!(
                 "secondary cone simplex has {} vertices, expected {}",
                 simplex.len(),
-                dim + 1
+                simplex_len
             )));
         }
         let mut seen = HashSet::new();
@@ -101,8 +161,85 @@ fn validate_secondary_cone_input(
                 )));
             }
         }
+        let simplex_set = simplex.iter().copied().collect::<BTreeSet<_>>();
+        let affine_rank = affine_rank_for_point_index_set(points, &simplex_set)?;
+        if affine_rank != simplex_dim {
+            return Err(Error::InvalidInput(format!(
+                "secondary cone simplex affine rank {affine_rank}, expected {simplex_dim}"
+            )));
+        }
     }
-    Ok(Some(dim))
+    Ok(Some(simplex_dim))
+}
+
+fn validate_point_dimensions(points: &[Point], context: &str) -> Result<()> {
+    let Some(first_point) = points.first() else {
+        return Ok(());
+    };
+    let dim = first_point.dim();
+    if points.iter().any(|point| point.dim() != dim) {
+        return Err(Error::InvalidInput(format!(
+            "{context} have inconsistent dimensions"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_face_indices(
+    points: &[Point],
+    face: &[usize],
+    face_idx: usize,
+) -> Result<BTreeSet<usize>> {
+    if face.is_empty() {
+        return Err(Error::InvalidInput(format!(
+            "secondary cone face {face_idx} is empty"
+        )));
+    }
+    let mut face_set = BTreeSet::new();
+    for &point_index in face {
+        if point_index >= points.len() {
+            return Err(Error::InvalidInput(format!(
+                "secondary cone face {face_idx} point index {point_index} exceeds point count {}",
+                points.len()
+            )));
+        }
+        if !face_set.insert(point_index) {
+            return Err(Error::InvalidInput(format!(
+                "secondary cone face {face_idx} contains duplicate point index {point_index}"
+            )));
+        }
+    }
+    Ok(face_set)
+}
+
+fn affine_rank_for_point_index_set(points: &[Point], indices: &BTreeSet<usize>) -> Result<usize> {
+    let Some(&base_idx) = indices.iter().next() else {
+        return Ok(0);
+    };
+    let base = points
+        .get(base_idx)
+        .ok_or_else(|| Error::InvalidInput("affine rank base index out of bounds".into()))?;
+    let rows = indices
+        .iter()
+        .skip(1)
+        .map(|&point_idx| {
+            let point = points.get(point_idx).ok_or_else(|| {
+                Error::InvalidInput(format!("affine rank point index {point_idx} out of bounds"))
+            })?;
+            if point.dim() != base.dim() {
+                return Err(Error::InvalidInput(
+                    "affine rank points have inconsistent dimensions".into(),
+                ));
+            }
+            Ok(point
+                .coords()
+                .iter()
+                .zip(base.coords().iter())
+                .map(|(&coord, &base_coord)| Rational::from(coord - base_coord))
+                .collect::<Vec<_>>())
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(matrix_rank(&rows))
 }
 
 /// Pair secondary-cone hyperplanes with a height vector.
@@ -235,6 +372,42 @@ mod tests {
     }
 
     #[test]
+    fn embedded_square_face_secondary_cone_uses_ambient_point_indices() {
+        let points = vec![
+            Point::new(vec![0, 0, 0]),
+            Point::new(vec![1, 0, 0]),
+            Point::new(vec![1, 1, 0]),
+            Point::new(vec![0, 1, 0]),
+        ];
+        let triangulation = Triangulation::new(vec![vec![0, 1, 2], vec![0, 2, 3]]);
+
+        let hyperplanes = secondary_cone_hyperplanes_native(&points, &triangulation).unwrap();
+
+        assert_eq!(hyperplanes, vec![vec![-1, 1, -1, 1]]);
+    }
+
+    #[test]
+    fn face_skeleton_secondary_cone_restricts_ambient_triangulation() {
+        let points = vec![
+            Point::new(vec![0, 0, 0]),
+            Point::new(vec![1, 0, 0]),
+            Point::new(vec![1, 1, 0]),
+            Point::new(vec![0, 1, 0]),
+            Point::new(vec![0, 0, 1]),
+        ];
+        let triangulation = Triangulation::new(vec![vec![0, 1, 2, 4], vec![0, 2, 3, 4]]);
+
+        let hyperplanes = secondary_cone_hyperplanes_native_on_faces(
+            &points,
+            &triangulation,
+            &[vec![0, 1, 2, 3]],
+        )
+        .unwrap();
+
+        assert_eq!(hyperplanes, vec![vec![-1, 1, -1, 1, 0]]);
+    }
+
+    #[test]
     fn secondary_cone_height_pairings_detect_interior_and_wall() {
         let hyperplanes = vec![vec![-1, 1, -1, 1]];
         let interior_heights = vec![finite(0.0), finite(0.0), finite(0.0), finite(1.0)];
@@ -283,16 +456,16 @@ mod tests {
     }
 
     #[test]
-    fn secondary_cone_rejects_non_full_dimensional_simplices() {
+    fn secondary_cone_rejects_degenerate_simplices() {
         let points = vec![
             Point::new(vec![0, 0]),
             Point::new(vec![1, 0]),
-            Point::new(vec![0, 1]),
+            Point::new(vec![2, 0]),
         ];
-        let triangulation = Triangulation::new(vec![vec![0, 1]]);
+        let triangulation = Triangulation::new(vec![vec![0, 1, 2]]);
 
         let error = secondary_cone_hyperplanes_native(&points, &triangulation).unwrap_err();
 
-        assert!(error.to_string().contains("expected 3"));
+        assert!(error.to_string().contains("affine rank 1, expected 2"));
     }
 }

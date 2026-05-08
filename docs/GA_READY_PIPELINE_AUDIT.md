@@ -1453,3 +1453,24 @@ to make the remaining GV layer more first-principles:
    integral global curve-basis class, and targets `3`/`6` have no nonzero
    off-height component. The off-height data is local wall data, not a hidden
    scalar GV row.
+   The reusable secondary-cone primitive now covers the next CYTools chamber
+   operation directly: `secondary_cone_hyperplanes_native` accepts embedded
+   lower-dimensional simplices in their ambient point-index space, and
+   `secondary_cone_hyperplanes_native_on_faces` ports the native
+   `Triangulation.secondary_cone(on_faces_dim=N)` restriction by inducing
+   face triangulations and deduplicating their ambient circuit hyperplanes.
+   The focused test
+   `cargo test -p cyrus-core triangulation::secondary -- --nocapture` covers
+   the original square circuit, an embedded square face in 3D, a 3D ambient
+   triangulation restricted to its square face, height wall/outside rejection,
+   dimension mismatch, and degenerate simplex rejection. The McAllister context
+   suite still passes (`cargo test -p cyrus-core --bin mcallister_gv_context
+   -- --nocapture`). This is a chamber-map building block, not yet the missing
+   `target+star` semigroup or flop certificate.
+   The Stage 0 no-replay policy tests also now pass again after two policy
+   cleanups: generic first-principles runs log the computed flux-coordinate
+   basis separately from explicit production-basis overrides, and the opt-in
+   `mcallister_gv` binary no longer reads `dual_curves.dat` or
+   `dual_curves_gv.dat` as checkpoint validation artifacts. GV checkpoint
+   comparison belongs in validation tests, not in a production computation
+   binary.

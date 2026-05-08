@@ -6,17 +6,14 @@
 //! Use `--allow-fixtures` to permit JSON fixture fallback when no data dir is set.
 
 use serde::Deserialize;
-use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Instant;
-
-use malachite::Integer;
 
 use cyrus_core::{
     DivisorBasis, Point, Polytope, Triangulation, compute_frst_heights, compute_glsm_and_linrels,
     compute_grading_vector, compute_gv_invariants, compute_intersection_cytools,
     compute_linear_relations_no_origin, compute_mori_cone_cap_rays, gv_divisor_basis_data,
-    intersection_in_divisor_basis, map_basis_gv_invariants_to_ambient,
+    intersection_in_divisor_basis,
 };
 
 const DEFAULT_MCALLISTER_GV_MIN_POINTS: u32 = 20_000;
@@ -83,22 +80,6 @@ fn read_simplices(path: &PathBuf) -> Vec<Vec<usize>> {
         .collect()
 }
 
-fn read_integer_vector(path: &PathBuf) -> Vec<Integer> {
-    let content = std::fs::read_to_string(path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
-    content
-        .replace('\n', ",")
-        .split(',')
-        .filter(|entry| !entry.trim().is_empty())
-        .map(|entry| {
-            entry
-                .trim()
-                .parse::<Integer>()
-                .unwrap_or_else(|()| panic!("Invalid integer entry {entry} in {}", path.display()))
-        })
-        .collect()
-}
-
 fn sorted_point_coords(points: &[Point]) -> Vec<Vec<i64>> {
     let mut coords: Vec<Vec<i64>> = points.iter().map(|point| point.coords().to_vec()).collect();
     coords.sort();
@@ -139,89 +120,6 @@ fn validate_dual_checkpoint(
     eprintln!(
         "[INFO] computed dual polytope/FRST match dual_points.dat and dual_simplices.dat checkpoints"
     );
-}
-
-fn validate_dual_gv_checkpoint(
-    computed_basis_gv: &[(Vec<i32>, Integer)],
-    curve_basis_matrix: &[Vec<Integer>],
-    data_dir: &str,
-) {
-    let dir = PathBuf::from(data_dir);
-    let expected_curves = read_points(&dir.join("dual_curves.dat"));
-    let expected_gvs = read_integer_vector(&dir.join("dual_curves_gv.dat"));
-    if expected_curves.len() != expected_gvs.len() {
-        eprintln!(
-            "[ERROR] dual_curves.dat row count {} differs from dual_curves_gv.dat count {}",
-            expected_curves.len(),
-            expected_gvs.len()
-        );
-        std::process::exit(2);
-    }
-
-    let computed_ambient =
-        map_basis_gv_invariants_to_ambient(computed_basis_gv, curve_basis_matrix)
-            .unwrap_or_else(|e| panic!("Failed to map GV invariants to ambient basis: {e}"));
-    let mut computed = BTreeMap::new();
-    for (curve, gv) in computed_ambient {
-        if let Some(previous) = computed.insert(curve.clone(), gv.clone()) {
-            if previous != gv {
-                eprintln!(
-                    "[ERROR] computed GV conflict for ambient curve {curve:?}: {previous} vs {gv}"
-                );
-                std::process::exit(2);
-            }
-        }
-    }
-
-    let mut expected = BTreeMap::new();
-    for (curve, gv) in expected_curves.into_iter().zip(expected_gvs) {
-        if let Some(previous) = expected.insert(curve.clone(), gv.clone()) {
-            if previous != gv {
-                eprintln!(
-                    "[ERROR] checkpoint GV conflict for ambient curve {curve:?}: {previous} vs {gv}"
-                );
-                std::process::exit(2);
-            }
-        }
-    }
-
-    let mut matches = 0usize;
-    let mut missing = Vec::new();
-    let mut mismatches = Vec::new();
-    for (curve, expected_gv) in &expected {
-        match computed.get(curve) {
-            Some(computed_gv) if computed_gv == expected_gv => matches += 1,
-            Some(computed_gv) => {
-                mismatches.push((curve.clone(), expected_gv.clone(), computed_gv.clone()))
-            }
-            None => missing.push((curve.clone(), expected_gv.clone())),
-        }
-    }
-
-    eprintln!(
-        "[INFO] dual GV checkpoint: matches={}/{} computed_ambient={}",
-        matches,
-        expected.len(),
-        computed.len()
-    );
-    if !missing.is_empty() || !mismatches.is_empty() {
-        eprintln!(
-            "[ERROR] dual GV checkpoint mismatch: missing={} mismatches={}",
-            missing.len(),
-            mismatches.len()
-        );
-        if let Some((curve, expected_gv)) = missing.first() {
-            eprintln!(
-                "[ERROR] first missing checkpoint GV curve {curve:?}: expected {expected_gv}"
-            );
-        }
-        if let Some((curve, expected_gv, computed_gv)) = mismatches.first() {
-            eprintln!(
-                "[ERROR] first mismatched checkpoint GV curve {curve:?}: expected {expected_gv}, computed {computed_gv}"
-            );
-        }
-        std::process::exit(2);
-    }
 }
 
 fn main() {
@@ -353,7 +251,4 @@ fn main() {
     .expect("GV computation failed");
     eprintln!("[TIME] gv_invariants: {:.2?}", t0.elapsed());
     eprintln!("[INFO] gv invariants count: {}", invariants.len());
-    if let Some(dir) = &data_dir {
-        validate_dual_gv_checkpoint(&invariants, &gv_basis.curve_basis_matrix, dir);
-    }
 }
