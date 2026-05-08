@@ -298,6 +298,15 @@ run pass. Any remaining mismatch must be explicit and localizable.
    `path_support_gw_formula_instanton_target_coefficient_missing`. This moves
    the signed residual from pair-diamond-only evidence into the parent
    path-support diagnostic boundary.
+   The path-history probe now also guards lower-seed pair operations before
+   pair reduction or pair-sum enumeration when the target has more than `2048`
+   degree-bounded seeds. This keeps oversized targets observable instead of
+   burning the whole timeout before JSON is written: a target-`2`
+   generation-limited smoke now returns `skipped_seed_pair_limit_2048` with
+   `seed_count=2560` in about four seconds. A target-`8` control with
+   `seed_count=720` remains below the cap and still runs the lower-seed
+   decomposition path, so the existing target-`7`/`8` diagnostics are not
+   replaced by the guard.
    The parent-only classifications now include parent-path-support runtime
    lookups from the same `cygv` run. On the regenerated target 7 report, the
    generated degree-10 side term is a real parent-domain nonzero object

@@ -43,6 +43,7 @@ const CYGV_PATH_SUPPORT_QN_TRACE_SAMPLE_LIMIT: usize = 16;
 const CYGV_PATH_SUPPORT_QN_TRACE_TERM_SAMPLE_LIMIT: usize = 16;
 const CYGV_PATH_SUPPORT_GV_COEFFICIENT_TRACE_SAMPLE_LIMIT: usize = 32;
 const CYGV_PATH_SUPPORT_TARGET_MONOMIAL_QN_SOURCE_SAMPLE_LIMIT: usize = 16;
+const CYGV_LOWER_SEED_DECOMPOSITION_SEED_LIMIT: usize = 2048;
 const CYGV_BOUNDED_DECOMPOSITION_DIAMOND_ELEMENT_LIMIT: usize = 64;
 const CYGV_BOUNDED_DIAMOND_PARENT_QN_DIFF_SAMPLE_LIMIT: usize = 16;
 const ORIGIN_CIRCUIT_WITNESS_DOMAIN_UNRESOLVED_SAMPLE_LIMIT: usize = 64;
@@ -2139,6 +2140,18 @@ fn lower_seed_decomposition_probe(
     seeds: &[Vec<i64>],
     max_terms: usize,
 ) -> LowerSeedDecompositionProbe {
+    if seeds.len() > CYGV_LOWER_SEED_DECOMPOSITION_SEED_LIMIT {
+        return LowerSeedDecompositionProbe {
+            status: format!("skipped_seed_pair_limit_{CYGV_LOWER_SEED_DECOMPOSITION_SEED_LIMIT}"),
+            term_count: None,
+            terms_nonzero: None,
+            terms: None,
+            error: Some(format!(
+                "seed count {} exceeds pair-sum limit {CYGV_LOWER_SEED_DECOMPOSITION_SEED_LIMIT}",
+                seeds.len()
+            )),
+        };
+    }
     match bounded_seed_decomposition(target, seeds, max_terms) {
         Ok(Some(terms)) => LowerSeedDecompositionProbe {
             status: "found_lower_seed_decomposition".to_string(),
@@ -12099,9 +12112,18 @@ fn cygv_path_history_probe_inner(
             path_support_lookup_sample: Vec::new(),
         });
     }
-    if max_seed_count.is_some_and(|limit| seeds.len() > limit) {
+    let seed_limit_status = if max_seed_count.is_some_and(|limit| seeds.len() > limit) {
+        Some("skipped_seed_limit".to_string())
+    } else if seeds.len() > CYGV_LOWER_SEED_DECOMPOSITION_SEED_LIMIT {
+        Some(format!(
+            "skipped_seed_pair_limit_{CYGV_LOWER_SEED_DECOMPOSITION_SEED_LIMIT}"
+        ))
+    } else {
+        None
+    };
+    if let Some(seed_limit_status) = seed_limit_status {
         return Ok(CygvPathHistoryProbe {
-            status: "skipped_seed_limit".to_string(),
+            status: seed_limit_status.clone(),
             seed_count: Some(seeds.len()),
             reduced_seed_count: None,
             closure_element_count: None,
@@ -12128,13 +12150,13 @@ fn cygv_path_history_probe_inner(
             predecessor_candidate_sample_limit: CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
             predecessor_candidate_sample: Vec::new(),
             lower_seed_decomposition_max_terms: 4,
-            lower_seed_decomposition_status: "skipped_seed_limit".to_string(),
+            lower_seed_decomposition_status: seed_limit_status.clone(),
             lower_seed_decomposition_term_count: None,
             lower_seed_decomposition_terms_nonzero: None,
             lower_seed_decomposition_error: None,
             lower_seed_predecessor_candidate_count: None,
             lower_seed_predecessor_candidate_sample: Vec::new(),
-            lower_seed_diamond_status: Some("skipped_seed_limit".to_string()),
+            lower_seed_diamond_status: Some(seed_limit_status),
             lower_seed_diamond_element_count: None,
             lower_seed_diamond_gv: None,
             lower_seed_diamond_error: None,
@@ -21715,6 +21737,19 @@ mod tests {
             bounded_seed_decomposition(&[5, 1], &seeds, 4).unwrap(),
             Some(vec![vec![0, 1], vec![1, 0], vec![2, 0], vec![2, 0]])
         );
+    }
+
+    #[test]
+    fn lower_seed_decomposition_probe_skips_oversized_pair_sum_domains() {
+        let seeds = (0..=CYGV_LOWER_SEED_DECOMPOSITION_SEED_LIMIT)
+            .map(|idx| vec![i64::try_from(idx).unwrap(), 0])
+            .collect::<Vec<_>>();
+
+        let probe = lower_seed_decomposition_probe(&[1, 0], &seeds, 4);
+
+        assert_eq!(probe.status, "skipped_seed_pair_limit_2048".to_string());
+        assert!(probe.terms.is_none());
+        assert!(probe.error.as_deref().unwrap().contains("exceeds"));
     }
 
     #[test]
