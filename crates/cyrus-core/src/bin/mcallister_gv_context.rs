@@ -19,8 +19,12 @@ use cyrus_core::gv::{
     cygv_pair_reduced_seed_generators, diagnose_supporting_mori_face_by_lp_search,
     find_extremal_mori_ray_separator,
 };
+use cyrus_core::triangulation::{
+    Triangulation, secondary_cone_height_pairings, secondary_cone_hyperplanes_native,
+    secondary_cone_strictly_contains_height_vector,
+};
 use cyrus_core::types::rational::Rational;
-use cyrus_core::types::tags::Finite;
+use cyrus_core::types::{f64::F64, tags::Finite, tags::Pos};
 use cyrus_core::{
     CygvQnTracePolynomial, Intersection, Point, compute_gv_invariants_with_explicit_semigroup,
     compute_gv_invariants_with_explicit_semigroup_qn_trace,
@@ -263,6 +267,8 @@ struct ContextReport {
     local_cygv_one_parameter_family_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_hint_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_resolved_support_status_counts: BTreeMap<String, usize>,
+    local_cygv_source_resolution_resolved_shared_chamber_certificate_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_projection_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_reduction_status_counts: BTreeMap<String, usize>,
@@ -624,6 +630,11 @@ struct LocalCygvSourceResolutionHintSummary {
     resolved_shared_support_point_indices: Vec<usize>,
     resolved_shared_support_charge_basis: Option<Vec<Vec<i64>>>,
     resolved_shared_support_charge_row_sums: Option<Vec<i64>>,
+    resolved_shared_chamber_certificate_status: String,
+    resolved_shared_chamber_certificate_hyperplane_count: Option<usize>,
+    resolved_shared_chamber_certificate_min_pairing: Option<String>,
+    resolved_shared_chamber_certificate_max_pairing: Option<String>,
+    resolved_shared_chamber_certificate_strictly_inside: Option<bool>,
     relation_support_point_indices: Vec<usize>,
     local_phase_q_matrix: Option<Vec<Vec<i64>>>,
     local_one_parameter_family_status: Option<String>,
@@ -13890,6 +13901,8 @@ fn build_report(
         local_cygv_source_resolution_hint_status_counts(&targets);
     let local_cygv_source_resolution_resolved_support_status_counts =
         local_cygv_source_resolution_resolved_support_status_counts(&targets);
+    let local_cygv_source_resolution_resolved_shared_chamber_certificate_status_counts =
+        local_cygv_source_resolution_resolved_shared_chamber_certificate_status_counts(&targets);
     let local_cygv_source_resolution_projection_status_counts =
         local_cygv_source_resolution_projection_status_counts(&targets);
     let local_cygv_source_resolution_star_status_counts =
@@ -14661,6 +14674,7 @@ fn build_report(
             missing_local_cygv_one_parameter_family_status_counts,
         local_cygv_source_resolution_hint_status_counts,
         local_cygv_source_resolution_resolved_support_status_counts,
+        local_cygv_source_resolution_resolved_shared_chamber_certificate_status_counts,
         local_cygv_source_resolution_projection_status_counts,
         local_cygv_source_resolution_star_status_counts,
         local_cygv_source_resolution_star_reduction_status_counts,
@@ -14892,6 +14906,10 @@ fn local_cygv_source_resolution_hint_summaries(
                 skeleton,
                 target.origin_circuit_first_witness.as_ref(),
             );
+            let resolved_chamber_certificate = local_cygv_resolved_shared_chamber_certificate_hint(
+                skeleton,
+                target.origin_circuit_first_witness.as_ref(),
+            );
             let affine_projection_hint = local_cygv_zero_shared_affine_projection_hint(
                 skeleton,
                 target.origin_circuit_first_witness.as_ref(),
@@ -15058,6 +15076,15 @@ fn local_cygv_source_resolution_hint_summaries(
                 resolved_shared_support_point_indices: resolved_hint.point_indices,
                 resolved_shared_support_charge_basis: resolved_hint.charge_basis,
                 resolved_shared_support_charge_row_sums: resolved_hint.charge_row_sums,
+                resolved_shared_chamber_certificate_status: resolved_chamber_certificate.status,
+                resolved_shared_chamber_certificate_hyperplane_count: resolved_chamber_certificate
+                    .hyperplane_count,
+                resolved_shared_chamber_certificate_min_pairing: resolved_chamber_certificate
+                    .min_pairing,
+                resolved_shared_chamber_certificate_max_pairing: resolved_chamber_certificate
+                    .max_pairing,
+                resolved_shared_chamber_certificate_strictly_inside: resolved_chamber_certificate
+                    .strictly_inside,
                 relation_support_point_indices: target
                     .origin_circuit_first_witness
                     .as_ref()
@@ -15340,6 +15367,23 @@ fn local_cygv_source_resolution_star_union_chamber_coverage_status_counts<'a>(
     counts
 }
 
+fn local_cygv_source_resolution_resolved_shared_chamber_certificate_status_counts<'a>(
+    targets: impl IntoIterator<Item = &'a TargetReport>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        let Some(skeleton) = target.local_cygv_input_skeleton.as_ref() else {
+            continue;
+        };
+        let certificate = local_cygv_resolved_shared_chamber_certificate_hint(
+            skeleton,
+            target.origin_circuit_first_witness.as_ref(),
+        );
+        *counts.entry(certificate.status).or_insert(0usize) += 1;
+    }
+    counts
+}
+
 fn local_cygv_source_resolution_hint_status_counts<'a>(
     targets: impl IntoIterator<Item = &'a TargetReport>,
 ) -> BTreeMap<String, usize> {
@@ -15550,6 +15594,14 @@ struct LocalCygvResolvedSharedSupportHint {
     charge_row_sums: Option<Vec<i64>>,
 }
 
+struct LocalCygvResolvedSharedChamberCertificateHint {
+    status: String,
+    hyperplane_count: Option<usize>,
+    min_pairing: Option<String>,
+    max_pairing: Option<String>,
+    strictly_inside: Option<bool>,
+}
+
 fn local_cygv_resolved_shared_support_hint(
     skeleton: &LocalCygvInputSkeleton,
     witness: Option<&OriginCircuitWitnessSample>,
@@ -15659,6 +15711,196 @@ fn local_cygv_resolved_shared_support_hint(
         charge_basis: Some(charge_basis),
         charge_row_sums: Some(charge_row_sums),
     }
+}
+
+fn local_cygv_resolved_shared_chamber_certificate_hint(
+    skeleton: &LocalCygvInputSkeleton,
+    witness: Option<&OriginCircuitWitnessSample>,
+) -> LocalCygvResolvedSharedChamberCertificateHint {
+    let empty = |status: &str| LocalCygvResolvedSharedChamberCertificateHint {
+        status: status.to_string(),
+        hyperplane_count: None,
+        min_pairing: None,
+        max_pairing: None,
+        strictly_inside: None,
+    };
+    let Some(q_matrix) = skeleton.local_cygv_phase_q_matrix_candidate.as_ref() else {
+        return empty("resolved_shared_chamber_blocked_missing_phase_q_matrix");
+    };
+    if q_matrix.len() != 1 {
+        return empty("resolved_shared_chamber_not_one_parameter_local_q_matrix");
+    }
+    if one_parameter_weighted_p2_split_bundle_signature(&q_matrix[0]).is_none() {
+        return empty("resolved_shared_chamber_not_weighted_p2_split_bundle");
+    }
+    let Some(witness) = witness else {
+        return empty("weighted_p2_resolved_shared_chamber_missing_origin_circuit_witness");
+    };
+    let projection_hint = local_cygv_zero_shared_affine_projection_hint(skeleton, Some(witness));
+    let Some(hyperplane) = projection_hint.hyperplane.as_ref() else {
+        return LocalCygvResolvedSharedChamberCertificateHint {
+            status: format!(
+                "weighted_p2_resolved_shared_chamber_blocked_projection_status:{}",
+                projection_hint.status
+            ),
+            hyperplane_count: None,
+            min_pairing: None,
+            max_pairing: None,
+            strictly_inside: None,
+        };
+    };
+    let support = origin_circuit_resolved_shared_support_point_samples(witness);
+    if support.is_empty() {
+        return empty("weighted_p2_resolved_shared_chamber_missing_support_points");
+    }
+    let point_to_local = support
+        .iter()
+        .enumerate()
+        .map(|(local, point)| (point.point_index, local))
+        .collect::<BTreeMap<_, _>>();
+    let mut shared_face = Vec::with_capacity(witness.shared_two_simplex.len() + 1);
+    shared_face.push(0);
+    shared_face.extend(witness.shared_two_simplex.iter().copied());
+    let mut simplices = Vec::new();
+    for exclusive in [
+        witness.first_facet_exclusive_point,
+        witness.second_facet_exclusive_point,
+    ] {
+        let mut simplex = shared_face.clone();
+        simplex.push(exclusive);
+        let mapped = simplex
+            .iter()
+            .map(|point_index| {
+                point_to_local.get(point_index).copied().ok_or_else(|| {
+                    format!("resolved shared chamber simplex point {point_index} missing support")
+                })
+            })
+            .collect::<Result<Vec<_>, _>>();
+        let mapped = match mapped {
+            Ok(mapped) => mapped,
+            Err(error) => {
+                return LocalCygvResolvedSharedChamberCertificateHint {
+                    status: format!(
+                        "weighted_p2_resolved_shared_chamber_simplex_error:{}",
+                        status_error_fragment(&error)
+                    ),
+                    hyperplane_count: None,
+                    min_pairing: None,
+                    max_pairing: None,
+                    strictly_inside: None,
+                };
+            }
+        };
+        simplices.push(mapped);
+    }
+    let points = support
+        .iter()
+        .map(|point| Point::new(point.coordinates.clone()))
+        .collect::<Vec<_>>();
+    let heights = support
+        .iter()
+        .map(|point| {
+            F64::<Finite>::new(affine_hyperplane_height(hyperplane, &point.coordinates) as f64)
+                .expect("integer affine height is finite")
+        })
+        .collect::<Vec<_>>();
+    let triangulation = Triangulation::new(simplices);
+    let secondary_hyperplanes = match secondary_cone_hyperplanes_native(&points, &triangulation) {
+        Ok(hyperplanes) => hyperplanes,
+        Err(error) => {
+            return LocalCygvResolvedSharedChamberCertificateHint {
+                status: format!(
+                    "weighted_p2_resolved_shared_chamber_secondary_error:{}",
+                    status_error_fragment(&error.to_string())
+                ),
+                hyperplane_count: None,
+                min_pairing: None,
+                max_pairing: None,
+                strictly_inside: None,
+            };
+        }
+    };
+    let pairings = match secondary_cone_height_pairings(&secondary_hyperplanes, &heights) {
+        Ok(pairings) => pairings,
+        Err(error) => {
+            return LocalCygvResolvedSharedChamberCertificateHint {
+                status: format!(
+                    "weighted_p2_resolved_shared_chamber_pairing_error:{}",
+                    status_error_fragment(&error.to_string())
+                ),
+                hyperplane_count: Some(secondary_hyperplanes.len()),
+                min_pairing: None,
+                max_pairing: None,
+                strictly_inside: None,
+            };
+        }
+    };
+    let epsilon = F64::<Pos>::new(1e-6).expect("positive secondary cone epsilon");
+    let strictly_inside = match secondary_cone_strictly_contains_height_vector(
+        &secondary_hyperplanes,
+        &heights,
+        epsilon,
+    ) {
+        Ok(strictly_inside) => strictly_inside,
+        Err(error) => {
+            return LocalCygvResolvedSharedChamberCertificateHint {
+                status: format!(
+                    "weighted_p2_resolved_shared_chamber_strict_check_error:{}",
+                    status_error_fragment(&error.to_string())
+                ),
+                hyperplane_count: Some(secondary_hyperplanes.len()),
+                min_pairing: pairing_min_string(&pairings),
+                max_pairing: pairing_max_string(&pairings),
+                strictly_inside: None,
+            };
+        }
+    };
+    let flipped_heights = heights
+        .iter()
+        .map(|height| F64::<Finite>::new(-height.get()).expect("negated finite height is finite"))
+        .collect::<Vec<_>>();
+    let flipped_strictly_inside = secondary_cone_strictly_contains_height_vector(
+        &secondary_hyperplanes,
+        &flipped_heights,
+        F64::<Pos>::new(1e-6).expect("positive secondary cone epsilon"),
+    )
+    .unwrap_or(false);
+    let status = if strictly_inside {
+        "weighted_p2_resolved_shared_chamber_strictly_inside_exclusive_pair_secondary_cone"
+    } else if flipped_strictly_inside {
+        "weighted_p2_resolved_shared_chamber_strictly_inside_after_height_sign_flip"
+    } else {
+        "weighted_p2_resolved_shared_chamber_outside_or_on_wall"
+    };
+    LocalCygvResolvedSharedChamberCertificateHint {
+        status: status.to_string(),
+        hyperplane_count: Some(secondary_hyperplanes.len()),
+        min_pairing: pairing_min_string(&pairings),
+        max_pairing: pairing_max_string(&pairings),
+        strictly_inside: Some(strictly_inside),
+    }
+}
+
+fn pairing_min_string(pairings: &[F64<Finite>]) -> Option<String> {
+    pairings
+        .iter()
+        .map(|pairing| pairing.get())
+        .min_by(|left, right| {
+            left.partial_cmp(right)
+                .expect("finite secondary-cone pairing")
+        })
+        .map(|value| value.to_string())
+}
+
+fn pairing_max_string(pairings: &[F64<Finite>]) -> Option<String> {
+    pairings
+        .iter()
+        .map(|pairing| pairing.get())
+        .max_by(|left, right| {
+            left.partial_cmp(right)
+                .expect("finite secondary-cone pairing")
+        })
+        .map(|value| value.to_string())
 }
 
 fn local_cygv_source_resolution_hint_status(
@@ -21392,6 +21634,16 @@ mod tests {
             Some(vec![vec![1, -2, 0, 3, -1, -1]])
         );
         assert_eq!(resolved_hint.charge_row_sums, Some(vec![0]));
+        let resolved_chamber =
+            local_cygv_resolved_shared_chamber_certificate_hint(&skeleton, Some(&witness));
+        assert_eq!(
+            resolved_chamber.status,
+            "weighted_p2_resolved_shared_chamber_outside_or_on_wall"
+        );
+        assert_eq!(resolved_chamber.hyperplane_count, Some(1));
+        assert_eq!(resolved_chamber.min_pairing.as_deref(), Some("0"));
+        assert_eq!(resolved_chamber.max_pairing.as_deref(), Some("0"));
+        assert_eq!(resolved_chamber.strictly_inside, Some(false));
     }
 
     #[test]

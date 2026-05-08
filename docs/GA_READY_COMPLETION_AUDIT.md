@@ -893,6 +893,12 @@ origin-circuit exclusive target-relation points (`[208,211]`, `[49,52]`,
 integral global-basis projection is not enough to promote the local value; a
 source-derived chamber covering those target-relation points, or a different
 certified support semigroup, is still required.
+A local secondary-cone diagnostic for the exclusive-pair resolved support
+(origin + shared two-simplex + the two target-relation exclusive points) also
+does not supply that chamber. For all four weighted rows the candidate has one
+secondary hyperplane, but the affine-height pairing is exactly `0`, so the
+exclusive-pair support lies on the wall rather than strictly inside either the
+candidate chamber or its sign-flipped neighbor.
 A bounded supporting-face rerun for the two integral weighted rows (`target 7`
 and `target 8`) does not provide that missing certificate. With
 `--certify-origin-witness-domains`, two LP anchors, and the facet-union cap
