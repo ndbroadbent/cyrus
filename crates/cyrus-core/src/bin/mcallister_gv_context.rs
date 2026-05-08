@@ -43,7 +43,7 @@ const CYGV_PATH_SUPPORT_QN_TRACE_SAMPLE_LIMIT: usize = 16;
 const CYGV_PATH_SUPPORT_QN_TRACE_TERM_SAMPLE_LIMIT: usize = 16;
 const CYGV_PATH_SUPPORT_GV_COEFFICIENT_TRACE_SAMPLE_LIMIT: usize = 32;
 const CYGV_PATH_SUPPORT_TARGET_MONOMIAL_QN_SOURCE_SAMPLE_LIMIT: usize = 16;
-const CYGV_LOWER_SEED_DECOMPOSITION_SEED_LIMIT: usize = 2048;
+const CYGV_LOWER_SEED_DECOMPOSITION_SEED_LIMIT: usize = 1024;
 const CYGV_BOUNDED_DECOMPOSITION_DIAMOND_ELEMENT_LIMIT: usize = 64;
 const CYGV_BOUNDED_DIAMOND_PARENT_QN_DIFF_SAMPLE_LIMIT: usize = 16;
 const ORIGIN_CIRCUIT_WITNESS_DOMAIN_UNRESOLVED_SAMPLE_LIMIT: usize = 64;
@@ -21747,7 +21747,7 @@ mod tests {
 
         let probe = lower_seed_decomposition_probe(&[1, 0], &seeds, 4);
 
-        assert_eq!(probe.status, "skipped_seed_pair_limit_2048".to_string());
+        assert_eq!(probe.status, "skipped_seed_pair_limit_1024".to_string());
         assert!(probe.terms.is_none());
         assert!(probe.error.as_deref().unwrap().contains("exceeds"));
     }

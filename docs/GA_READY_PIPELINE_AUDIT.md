@@ -299,14 +299,20 @@ run pass. Any remaining mismatch must be explicit and localizable.
    the signed residual from pair-diamond-only evidence into the parent
    path-support diagnostic boundary.
    The path-history probe now also guards lower-seed pair operations before
-   pair reduction or pair-sum enumeration when the target has more than `2048`
+   pair reduction or pair-sum enumeration when the target has more than `1024`
    degree-bounded seeds. This keeps oversized targets observable instead of
-   burning the whole timeout before JSON is written: a target-`2`
-   generation-limited smoke now returns `skipped_seed_pair_limit_2048` with
-   `seed_count=2560` in about four seconds. A target-`8` control with
-   `seed_count=720` remains below the cap and still runs the lower-seed
+   burning the whole timeout before JSON is written: target `0` timed out
+   under 240 seconds at `seed_count=1616` with the looser cap, while a guarded
+   target-`0` smoke and target-`2` generation-limited smoke now return
+   `skipped_seed_pair_limit_1024` in about four seconds. A target-`8` control
+   with `seed_count=720` remains below the cap and still runs the lower-seed
    decomposition path, so the existing target-`7`/`8` diagnostics are not
-   replaced by the guard.
+   replaced by the guard. A guarded all-target batch with path-support
+   generators and lower-seed diamonds now writes all nine per-target reports in
+   229.70 seconds: targets `0..5` are explicit seed-pair-limit skips, target
+   `6` preserves `hkty_error` with missing target coefficient, target `7`
+   preserves `hkty_error` with missing formula coefficient `3`, and target `8`
+   preserves the computed path-support mismatch with missing coefficient `-3`.
    The parent-only classifications now include parent-path-support runtime
    lookups from the same `cygv` run. On the regenerated target 7 report, the
    generated degree-10 side term is a real parent-domain nonzero object
