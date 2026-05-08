@@ -278,7 +278,15 @@ run pass. Any remaining mismatch must be explicit and localizable.
    formula sum using exact rationals. Target `8`'s four `GV=2` pair domains all
    mismatch expected sum `3`, and target `6`'s zero/absent or HKTY-error pair
    domains also mismatch expected sum `3`, so these candidate-pair diamonds are
-   explicitly nonpromotable rather than near-misses.
+   explicitly nonpromotable rather than near-misses. The same report now
+   records the signed target GW instanton-coefficient gap needed to reach the
+   independent formula sum: target `8` uses pivot `203` with component `-3` and
+   is short by `-3` or `-5` toward required coefficient `-9`; target `7` uses
+   pivot `44` with component `2` and is short by `3` or `16` toward required
+   coefficient `6`; target `6` uses pivot `47` with component `1` and is short
+   by `6` on the HKTY-error branch toward required coefficient `3`. This keeps
+   the next task on parent-domain subtraction history rather than scalar
+   candidate-pair values.
    The parent-only classifications now include parent-path-support runtime
    lookups from the same `cygv` run. On the regenerated target 7 report, the
    generated degree-10 side term is a real parent-domain nonzero object

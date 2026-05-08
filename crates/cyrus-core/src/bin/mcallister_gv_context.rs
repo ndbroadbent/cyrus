@@ -377,6 +377,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     cygv_lower_seed_predecessor_candidate_pair_diamond_gw_candidate_formula_sum_status_counts:
         BTreeMap<String, usize>,
+    cygv_lower_seed_predecessor_candidate_pair_diamond_gw_instanton_balance_status_counts:
+        BTreeMap<String, usize>,
     cygv_lower_seed_unknown_candidate_unique_count: usize,
     cygv_lower_seed_unknown_candidate_occurrence_count: usize,
     cygv_lower_seed_unknown_candidate_degree_counts: BTreeMap<i128, usize>,
@@ -944,12 +946,17 @@ struct CygvCandidatePairDiamondSummary {
     target_gw_coefficient_status: Option<String>,
     target_gw_instanton_coefficient: Option<String>,
     target_gw_candidate: Option<String>,
+    target_gw_pivot_coordinate: Option<usize>,
+    target_gw_pivot_component: Option<i32>,
     candidate_status: String,
     expected_toric_gv1_formula_value_sum: Option<String>,
     gv_formula_sum_status: String,
     gv_formula_sum_delta: Option<String>,
     target_gw_candidate_formula_sum_status: String,
     target_gw_candidate_formula_sum_delta: Option<String>,
+    target_gw_formula_required_instanton_coefficient: Option<String>,
+    target_gw_formula_missing_instanton_coefficient: Option<String>,
+    target_gw_formula_instanton_balance_status: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1227,6 +1234,12 @@ struct CygvPathSupportFormulaBalance {
     required_pivot_li2_subtraction_sum: Option<String>,
     missing_pivot_li2_subtraction_sum: Option<String>,
     gv_candidate_delta: Option<String>,
+    status: String,
+}
+
+struct CygvCandidatePairFormulaInstantonBalance {
+    required_instanton_coefficient: Option<String>,
+    missing_instanton_coefficient: Option<String>,
     status: String,
 }
 
@@ -1677,6 +1690,8 @@ struct CygvBoundedDecompositionDiamondProbe {
     target_gw_coefficient_status: Option<String>,
     target_gw_instanton_coefficient: Option<String>,
     target_gw_candidate: Option<String>,
+    target_gw_pivot_coordinate: Option<usize>,
+    target_gw_pivot_component: Option<i32>,
 }
 
 struct PathSupportSourceClassContext {
@@ -2767,6 +2782,8 @@ struct PathSupportGwCoefficientDiagnostic {
     target_status: Option<String>,
     target_instanton_coefficient: Option<String>,
     target_gw_candidate: Option<String>,
+    target_pivot_coordinate: Option<usize>,
+    target_pivot_component: Option<i32>,
 }
 
 fn gw_noninteger_classification_counts(
@@ -2827,6 +2844,8 @@ fn path_support_gw_coefficient_diagnostic(
                 target_instanton_coefficient: target_trace
                     .and_then(|entry| entry.instanton_coefficient.clone()),
                 target_gw_candidate: target_trace.and_then(|entry| entry.gv_candidate.clone()),
+                target_pivot_coordinate: target_trace.map(|entry| entry.insertion_index),
+                target_pivot_component: target_trace.map(|entry| entry.pivot_component),
             }
         }
         Err(error) => PathSupportGwCoefficientDiagnostic {
@@ -2839,6 +2858,8 @@ fn path_support_gw_coefficient_diagnostic(
             target_status: None,
             target_instanton_coefficient: None,
             target_gw_candidate: None,
+            target_pivot_coordinate: None,
+            target_pivot_component: None,
         },
     }
 }
@@ -2876,6 +2897,8 @@ fn explicit_semigroup_gw_coefficient_diagnostic(
                 target_instanton_coefficient: target_trace
                     .and_then(|entry| entry.instanton_coefficient.clone()),
                 target_gw_candidate: target_trace.and_then(|entry| entry.gv_candidate.clone()),
+                target_pivot_coordinate: target_trace.map(|entry| entry.insertion_index),
+                target_pivot_component: target_trace.map(|entry| entry.pivot_component),
             }
         }
         Err(error) => PathSupportGwCoefficientDiagnostic {
@@ -2888,6 +2911,8 @@ fn explicit_semigroup_gw_coefficient_diagnostic(
             target_status: None,
             target_instanton_coefficient: None,
             target_gw_candidate: None,
+            target_pivot_coordinate: None,
+            target_pivot_component: None,
         },
     }
 }
@@ -5083,6 +5108,8 @@ fn bounded_decomposition_diamond_qn_trace(
             target_gw_coefficient_status: None,
             target_gw_instanton_coefficient: None,
             target_gw_candidate: None,
+            target_gw_pivot_coordinate: None,
+            target_gw_pivot_component: None,
         });
     }
     if context.q_matrix.is_empty() || context.q_cols == 0 {
@@ -5104,6 +5131,8 @@ fn bounded_decomposition_diamond_qn_trace(
             target_gw_coefficient_status: None,
             target_gw_instanton_coefficient: None,
             target_gw_candidate: None,
+            target_gw_pivot_coordinate: None,
+            target_gw_pivot_component: None,
         });
     }
     if cfg!(panic = "abort") {
@@ -5128,6 +5157,8 @@ fn bounded_decomposition_diamond_qn_trace(
             target_gw_coefficient_status: None,
             target_gw_instanton_coefficient: None,
             target_gw_candidate: None,
+            target_gw_pivot_coordinate: None,
+            target_gw_pivot_component: None,
         });
     }
     let target_i32 = curve_i64_to_i32(target, "bounded-decomposition target")?;
@@ -5170,6 +5201,8 @@ fn bounded_decomposition_diamond_qn_trace(
                 target_gw_coefficient_status: gw_diagnostic.target_status,
                 target_gw_instanton_coefficient: gw_diagnostic.target_instanton_coefficient,
                 target_gw_candidate: gw_diagnostic.target_gw_candidate,
+                target_gw_pivot_coordinate: gw_diagnostic.target_pivot_coordinate,
+                target_gw_pivot_component: gw_diagnostic.target_pivot_component,
             });
         }
         Err(payload) => {
@@ -5196,6 +5229,8 @@ fn bounded_decomposition_diamond_qn_trace(
                 target_gw_coefficient_status: gw_diagnostic.target_status,
                 target_gw_instanton_coefficient: gw_diagnostic.target_instanton_coefficient,
                 target_gw_candidate: gw_diagnostic.target_gw_candidate,
+                target_gw_pivot_coordinate: gw_diagnostic.target_pivot_coordinate,
+                target_gw_pivot_component: gw_diagnostic.target_pivot_component,
             });
         }
     };
@@ -5231,6 +5266,8 @@ fn bounded_decomposition_diamond_qn_trace(
         target_gw_coefficient_status: gw_diagnostic.target_status,
         target_gw_instanton_coefficient: gw_diagnostic.target_instanton_coefficient,
         target_gw_candidate: gw_diagnostic.target_gw_candidate,
+        target_gw_pivot_coordinate: gw_diagnostic.target_pivot_coordinate,
+        target_gw_pivot_component: gw_diagnostic.target_pivot_component,
     })
 }
 
@@ -13284,6 +13321,11 @@ fn lower_seed_predecessor_candidate_pair_diamond(
             expected_formula_sum,
             "candidate_pair_diamond_gw_candidate",
         )?;
+    let target_gw_formula_instanton_balance = candidate_pair_target_gw_formula_instanton_balance(
+        probe.target_gw_instanton_coefficient.as_ref(),
+        probe.target_gw_pivot_component,
+        expected_formula_sum,
+    )?;
     Ok(Some(CygvCandidatePairDiamondSummary {
         candidate_status: bounded_diamond_candidate_status(
             probe.status.as_deref(),
@@ -13303,11 +13345,18 @@ fn lower_seed_predecessor_candidate_pair_diamond(
         target_gw_coefficient_status: probe.target_gw_coefficient_status,
         target_gw_instanton_coefficient: probe.target_gw_instanton_coefficient,
         target_gw_candidate: probe.target_gw_candidate,
+        target_gw_pivot_coordinate: probe.target_gw_pivot_coordinate,
+        target_gw_pivot_component: probe.target_gw_pivot_component,
         expected_toric_gv1_formula_value_sum: expected_formula_sum.cloned(),
         gv_formula_sum_status,
         gv_formula_sum_delta,
         target_gw_candidate_formula_sum_status,
         target_gw_candidate_formula_sum_delta,
+        target_gw_formula_required_instanton_coefficient: target_gw_formula_instanton_balance
+            .required_instanton_coefficient,
+        target_gw_formula_missing_instanton_coefficient: target_gw_formula_instanton_balance
+            .missing_instanton_coefficient,
+        target_gw_formula_instanton_balance_status: target_gw_formula_instanton_balance.status,
     }))
 }
 
@@ -14700,6 +14749,12 @@ fn build_report(
                 .iter()
                 .map(|target| target.cygv_path_history_probe.as_ref()),
         );
+    let cygv_lower_seed_predecessor_candidate_pair_diamond_gw_instanton_balance_status_counts =
+        cygv_lower_seed_predecessor_candidate_pair_diamond_gw_instanton_balance_status_counts(
+            targets
+                .iter()
+                .map(|target| target.cygv_path_history_probe.as_ref()),
+        );
     let cygv_lower_seed_diamond_status_counts = optional_status_counts(
         targets.iter().map(|target| {
             target
@@ -15171,6 +15226,7 @@ fn build_report(
         cygv_lower_seed_predecessor_candidate_pair_diamond_target_gw_coefficient_status_counts,
         cygv_lower_seed_predecessor_candidate_pair_diamond_gv_formula_sum_status_counts,
         cygv_lower_seed_predecessor_candidate_pair_diamond_gw_candidate_formula_sum_status_counts,
+        cygv_lower_seed_predecessor_candidate_pair_diamond_gw_instanton_balance_status_counts,
         cygv_lower_seed_unknown_candidate_unique_count,
         cygv_lower_seed_unknown_candidate_occurrence_count,
         cygv_lower_seed_unknown_candidate_degree_counts,
@@ -18755,6 +18811,24 @@ fn cygv_lower_seed_predecessor_candidate_pair_diamond_gw_candidate_formula_sum_s
     counts
 }
 
+fn cygv_lower_seed_predecessor_candidate_pair_diamond_gw_instanton_balance_status_counts<'a>(
+    probes: impl IntoIterator<Item = Option<&'a CygvPathHistoryProbe>>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes.into_iter().flatten() {
+        for candidate in &probe.lower_seed_predecessor_candidate_sample {
+            let status = candidate
+                .candidate_pair_diamond
+                .as_ref()
+                .map_or("not_run", |diamond| {
+                    diamond.target_gw_formula_instanton_balance_status.as_str()
+                });
+            *counts.entry(status.to_string()).or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
 fn lower_seed_predecessor_bounded_candidate_side_status(
     known_qn_history_status: &str,
     curve_nonzero: &[(usize, i64)],
@@ -20057,6 +20131,58 @@ fn candidate_pair_formula_sum_status(
         format!("{label}_mismatches_expected_formula_sum")
     };
     Ok((status, Some(delta.to_string())))
+}
+
+fn candidate_pair_target_gw_formula_instanton_balance(
+    target_instanton_coefficient: Option<&String>,
+    target_pivot_component: Option<i32>,
+    expected_sum: Option<&String>,
+) -> Result<CygvCandidatePairFormulaInstantonBalance, String> {
+    let Some(expected_sum) = expected_sum else {
+        return Ok(CygvCandidatePairFormulaInstantonBalance {
+            required_instanton_coefficient: None,
+            missing_instanton_coefficient: None,
+            status: "candidate_pair_diamond_gw_formula_instanton_expected_formula_sum_missing"
+                .to_string(),
+        });
+    };
+    let Some(target_instanton_coefficient) = target_instanton_coefficient else {
+        return Ok(CygvCandidatePairFormulaInstantonBalance {
+            required_instanton_coefficient: None,
+            missing_instanton_coefficient: None,
+            status: "candidate_pair_diamond_gw_formula_instanton_target_coefficient_missing"
+                .to_string(),
+        });
+    };
+    let Some(target_pivot_component) = target_pivot_component else {
+        return Ok(CygvCandidatePairFormulaInstantonBalance {
+            required_instanton_coefficient: None,
+            missing_instanton_coefficient: None,
+            status: "candidate_pair_diamond_gw_formula_instanton_target_pivot_missing".to_string(),
+        });
+    };
+    if target_pivot_component == 0 {
+        return Ok(CygvCandidatePairFormulaInstantonBalance {
+            required_instanton_coefficient: None,
+            missing_instanton_coefficient: None,
+            status: "candidate_pair_diamond_gw_formula_instanton_zero_target_pivot".to_string(),
+        });
+    }
+
+    let expected_sum = parse_rational(expected_sum)?;
+    let target_instanton_coefficient = parse_rational(target_instanton_coefficient)?;
+    let required = expected_sum * MalachiteRational::from(Integer::from(target_pivot_component));
+    let missing = required.clone() - target_instanton_coefficient;
+    let status = if missing == 0 {
+        "candidate_pair_diamond_gw_formula_instanton_balanced"
+    } else {
+        "candidate_pair_diamond_gw_formula_instanton_mismatch"
+    };
+    Ok(CygvCandidatePairFormulaInstantonBalance {
+        required_instanton_coefficient: Some(required.to_string()),
+        missing_instanton_coefficient: Some(missing.to_string()),
+        status: status.to_string(),
+    })
 }
 
 fn expected_toric_gv1_formula_values(
@@ -23064,6 +23190,38 @@ mod tests {
     }
 
     #[test]
+    fn candidate_pair_formula_instanton_balance_reports_missing_coefficient() {
+        let balance = candidate_pair_target_gw_formula_instanton_balance(
+            Some(&"-6".to_string()),
+            Some(-3),
+            Some(&"3".to_string()),
+        )
+        .unwrap();
+
+        assert_eq!(
+            balance.status,
+            "candidate_pair_diamond_gw_formula_instanton_mismatch"
+        );
+        assert_eq!(
+            balance.required_instanton_coefficient.as_deref(),
+            Some("-9")
+        );
+        assert_eq!(balance.missing_instanton_coefficient.as_deref(), Some("-3"));
+
+        let balanced = candidate_pair_target_gw_formula_instanton_balance(
+            Some(&"-9".to_string()),
+            Some(-3),
+            Some(&"3".to_string()),
+        )
+        .unwrap();
+        assert_eq!(
+            balanced.status,
+            "candidate_pair_diamond_gw_formula_instanton_balanced"
+        );
+        assert_eq!(balanced.missing_instanton_coefficient.as_deref(), Some("0"));
+    }
+
+    #[test]
     fn local_cygv_integer_tensor_scan_status_counts_are_opt_in() {
         let scans = vec![
             LocalCygvIntegerTensorScanSummary {
@@ -23776,6 +23934,8 @@ mod tests {
             target_status: Some("nonzero_gw".to_string()),
             target_instanton_coefficient: Some("-6".to_string()),
             target_gw_candidate: Some("2".to_string()),
+            target_pivot_coordinate: Some(0),
+            target_pivot_component: Some(-3),
         };
 
         let out = origin_circuit_witness_domain_cygv_probe_from_run(probe, gw_diagnostic);
@@ -26767,6 +26927,12 @@ mod tests {
         );
         assert_eq!(
             cygv_lower_seed_predecessor_candidate_pair_diamond_gw_candidate_formula_sum_status_counts(
+                [Some(&probe)]
+            ),
+            BTreeMap::from([("not_run".to_string(), 2)])
+        );
+        assert_eq!(
+            cygv_lower_seed_predecessor_candidate_pair_diamond_gw_instanton_balance_status_counts(
                 [Some(&probe)]
             ),
             BTreeMap::from([("not_run".to_string(), 2)])
