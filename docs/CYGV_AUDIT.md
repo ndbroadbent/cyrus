@@ -3457,6 +3457,10 @@ the codimension-2 bipartitions at the local charge-matrix boundary. Both
 targets have `63` nontrivial bipartitions and `6` zero-degree split candidates,
 so the status is
 `complete_intersection_cy3_shape_ambiguous_zero_degree_nef_partition_candidates_requires_source_rule`.
+The target relation has now been threaded through these candidates as a
+non-promoting diagnostic. For targets `7` and `8`, every zero-degree split has
+`target_relation_balanced_inside_each_part`, so target-relation balance also
+leaves all six candidates ambiguous.
 The reusable CYTools-style ambient top-form step now exists in core as
 `compute_ambient_intersections_cytools`, and the CICY tensor-reduction step
 exists as `compute_complete_intersection_cy3_intersection_numbers`. The composed

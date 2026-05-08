@@ -1353,6 +1353,10 @@ to make the remaining GV layer more first-principles:
    local bipartitions: both targets have `63` possible nontrivial splits and
    `6` zero-degree split candidates, so the CICY status is
    `complete_intersection_cy3_shape_ambiguous_zero_degree_nef_partition_candidates_requires_source_rule`.
+   The report now also carries target-relation balance data for these
+   candidates. For both targets, all six zero-degree candidates have
+   `target_relation_balanced_inside_each_part`, so the integral target relation
+   does not pick a unique nef split either.
    The reusable CYTools-style CICY tensor-reduction step now exists in core as
    `compute_complete_intersection_cy3_intersection_numbers`, but targets `7`/`8`
    still lack the source-derived nef partition and ambient top intersections
