@@ -1746,6 +1746,10 @@ to make the remaining GV layer more first-principles:
    verifies both diagonals and the two opposite secondary-cone rows. This is
    not a replacement for arbitrary face-FRT enumeration, but it is the exact
    local primitive needed for rank-two quadrilateral chamber rows.
+   `mcallister_gv_context` now serializes those two circuit triangulation
+   choices on reconstructed local-toric chamber-generator diagnostics,
+   preserving the ambient point labels. This is chamber-choice evidence for
+   downstream transport diagnostics, not a promotion of any GV value.
    The Stage 0 no-replay policy tests also now pass again after two policy
    cleanups: generic first-principles runs log the computed flux-coordinate
    basis separately from explicit production-basis overrides, and the opt-in

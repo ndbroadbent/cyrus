@@ -21,10 +21,11 @@ use cyrus_core::gv::{
     diagnose_supporting_mori_face_by_lp_search, find_extremal_mori_ray_separator,
 };
 use cyrus_core::triangulation::{
-    CircuitOmissionSide, Triangulation, classify_circuit_omission_side,
-    complete_circuit_flip_links, compute_regular_triangulation, flip_circuit_in_triangulation,
-    flip_circuit_link_in_triangulation, secondary_cone_height_pairings,
-    secondary_cone_hyperplanes_native, secondary_cone_strictly_contains_height_vector,
+    CircuitOmissionSide, Triangulation, circuit_triangulation_choices,
+    classify_circuit_omission_side, complete_circuit_flip_links, compute_regular_triangulation,
+    flip_circuit_in_triangulation, flip_circuit_link_in_triangulation,
+    secondary_cone_height_pairings, secondary_cone_hyperplanes_native,
+    secondary_cone_strictly_contains_height_vector,
 };
 use cyrus_core::types::rational::Rational;
 use cyrus_core::types::{f64::F64, tags::Finite, tags::Pos};
@@ -1136,6 +1137,9 @@ struct LocalCygvChamberGeneratorLocalToricDiagnostic {
     local_charge_basis: Option<Vec<Vec<i64>>>,
     local_coordinates: Option<Vec<LocalCygvChamberGeneratorLocalCoordinate>>,
     local_toric_kind: Option<String>,
+    circuit_triangulation_choice_count: Option<usize>,
+    circuit_triangulation_choices: Option<Vec<Vec<Vec<usize>>>>,
+    circuit_triangulation_error: Option<String>,
     ckyz_status: String,
     ckyz_kind: Option<String>,
     ckyz_source_target_direction: Option<Vec<i64>>,
@@ -23314,6 +23318,9 @@ fn chamber_generator_local_toric_diagnostic_not_run(
         local_charge_basis: None,
         local_coordinates: None,
         local_toric_kind: None,
+        circuit_triangulation_choice_count: None,
+        circuit_triangulation_choices: None,
+        circuit_triangulation_error: None,
         ckyz_status: "ckyz_not_run".to_string(),
         ckyz_kind: None,
         ckyz_source_target_direction: None,
@@ -23449,6 +23456,9 @@ fn chamber_generator_local_toric_diagnostic(
             local_charge_basis: None,
             local_coordinates: None,
             local_toric_kind: None,
+            circuit_triangulation_choice_count: None,
+            circuit_triangulation_choices: None,
+            circuit_triangulation_error: None,
             ckyz_status: "ckyz_not_run".to_string(),
             ckyz_kind: None,
             ckyz_source_target_direction: None,
@@ -23513,6 +23523,20 @@ fn chamber_generator_local_toric_diagnostic(
     let local_toric_kind = diagnostic.kind.as_ref().map(local_toric_circuit_kind_label);
     let (ckyz_status, ckyz_kind, ckyz_source_target_direction, ckyz_first_degree, ckyz_gv) =
         chamber_generator_ckyz_diagnostic(&diagnostic);
+    let (
+        circuit_triangulation_choice_count,
+        circuit_triangulation_choices,
+        circuit_triangulation_error,
+    ) = match circuit_triangulation_choices(point_relation_nonzero) {
+        Ok(choices) => {
+            let simplices = choices
+                .iter()
+                .map(|triangulation| triangulation.simplices().to_vec())
+                .collect::<Vec<_>>();
+            (Some(simplices.len()), Some(simplices), None)
+        }
+        Err(error) => (None, None, Some(error.to_string())),
+    };
 
     LocalCygvChamberGeneratorLocalToricDiagnostic {
         status: "local_toric_affine_circuit_reconstructed".to_string(),
@@ -23522,6 +23546,9 @@ fn chamber_generator_local_toric_diagnostic(
         local_charge_basis: Some(diagnostic.local_charge_basis),
         local_coordinates: Some(local_coordinates),
         local_toric_kind,
+        circuit_triangulation_choice_count,
+        circuit_triangulation_choices,
+        circuit_triangulation_error,
         ckyz_status,
         ckyz_kind,
         ckyz_source_target_direction,
@@ -29102,6 +29129,38 @@ mod tests {
             project_star_union_relation_to_global_basis(&point_indices, &coefficients, &q_matrix)
                 .unwrap(),
             Some(vec![2, 3])
+        );
+    }
+
+    #[test]
+    fn local_toric_diagnostic_reports_circuit_triangulation_choices() {
+        let point_relation_nonzero = vec![(10, -1), (11, 1), (12, -1), (13, 1)];
+        let point_samples = vec![
+            relation_point_sample(10, -1, &[0, 0], None),
+            relation_point_sample(11, 1, &[1, 0], None),
+            relation_point_sample(12, -1, &[1, 1], None),
+            relation_point_sample(13, 1, &[0, 1], None),
+        ];
+
+        let diagnostic =
+            chamber_generator_local_toric_diagnostic(&point_relation_nonzero, &point_samples);
+
+        assert_eq!(
+            diagnostic.status,
+            "local_toric_affine_circuit_reconstructed"
+        );
+        assert_eq!(
+            diagnostic.local_toric_kind.as_deref(),
+            Some("rank_two_quadrilateral")
+        );
+        assert_eq!(diagnostic.circuit_triangulation_choice_count, Some(2));
+        assert_eq!(diagnostic.circuit_triangulation_error, None);
+        assert_eq!(
+            diagnostic.circuit_triangulation_choices,
+            Some(vec![
+                vec![vec![10, 11, 12], vec![10, 12, 13]],
+                vec![vec![10, 11, 13], vec![11, 12, 13]],
+            ])
         );
     }
 

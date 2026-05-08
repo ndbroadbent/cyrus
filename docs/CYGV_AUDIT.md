@@ -3871,6 +3871,10 @@ two choices into ambient secondary inequalities. The square-circuit regression
 pins both diagonals and their opposite CPL rows. This directly supports the
 rank-two quadrilateral chamber rows seen in the current diagnostics, while
 still not claiming to enumerate arbitrary two-face FRTs.
+`mcallister_gv_context` also writes those circuit triangulation choices into
+the reconstructed local-toric chamber-generator diagnostics, preserving the
+original ambient point labels. This keeps the chamber-choice evidence available
+to the next transport step without treating it as a compact GV computation.
 
 The star-union chamber semigroup probe now also lifts every current/flipped
 chamber generator back through the global curve-basis projection and reports
