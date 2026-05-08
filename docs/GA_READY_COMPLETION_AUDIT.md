@@ -1249,9 +1249,9 @@ star-union chamber certificate is regular. These rows produce
 `source_derived_gv=-2`, materialize a local `q_N` term, and become
 `known_nonzero_source_gv`. The finite current-chamber unresolved queue is now
 `4` unique / `5` occurrences. For targets `7`/`8`, the remaining shared
-current-chamber blocker is the unclassified six-point one-parameter charge
-family `-2,-1,-1,1,1,2`; the local-`P2` bundle degree-`6` and degree-`4` rows
-are no longer future work.
+current-chamber blocker is the six-point weighted-`P2` rank-three split-bundle
+family with signature `base=1,1,2;bundle=1,1,2`; the local-`P2` bundle
+degree-`6` and degree-`4` rows are no longer future work.
 
 `/tmp/cyrus_six_point_cicy_shape_v1.json` adds the compact-shape evidence for
 that remaining family. Every six-point unresolved row has hypersurface
@@ -1307,6 +1307,14 @@ choice index `0`. This sharpens the remaining blocker from "which side of the
 six-point wall?" to "derive the source local model/tensor for the selected
 side."
 
+The local charge-family classifier now identifies the six-point blocker as
+`local_toric_weighted_p2_rank_three_split_bundle_charge_family:base=1,1,2;bundle=1,1,2;base_hyperplane_square=1/2`.
+That is only a shape classification, not a GV source import: the selected
+side still needs a source-derived codimension-2 local model, intersection
+tensor, and chamber certificate before any value can be promoted. The
+target-filtered report `/tmp/cyrus_six_point_weighted_p2_rank3_target7_v1.json`
+checks the classifier and selected side together.
+
 `/tmp/cyrus_six_point_overlap_annotations_v1.json` also annotates the nearest
 degree-bounded support-overlap samples. For the shared target `7`/`8`
 six-point row, all five sampled nearest degree-`2` neighbors are known toric
@@ -1318,8 +1326,9 @@ evidence, not source-domain replacements.
 
 The next implementation should be one of these, in order:
 
-1. For the remaining corrected-chamber missing GV classes, classify and certify
-   the six-point one-parameter local charge family `-2,-1,-1,1,1,2`. The
+1. For the remaining corrected-chamber missing GV classes, certify
+   the six-point weighted-`P2` rank-three split-bundle local family
+   `base=1,1,2;bundle=1,1,2`. The
    current evidence rules out the compact hypersurface wrapper and the existing
    CYTools-style zero-degree codimension-2 partition scan, so the next concrete
    path is a source-derived phase/nef-partition rule or a different certified

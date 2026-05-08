@@ -4313,8 +4313,7 @@ occurrences, with history counts
 `unknown_not_toric_covered=5`. For targets `7`/`8`, the shared degree-`6`
 local-`P2` bundle row and both target-specific degree-`4` local-`P2` bundle rows
 are now closed. Their remaining shared current-chamber blocker is the
-degree-`2` six-point family
-`local_toric_one_parameter_charge_family_unclassified:-2,-1,-1,1,1,2`, whose
+degree-`2` six-point weighted-`P2` rank-three split-bundle family, whose
 bounded lower seed is still `not_found_up_to_4`.
 
 `/tmp/cyrus_six_point_cicy_shape_v1.json` now carries compact-shape diagnostics
@@ -4389,6 +4388,16 @@ height vector. The target `7` degree-`2` row has
 index `0`. Thus the corrected chamber side is now explicit at the local
 circuit-choice level; the remaining missing input is a source-derived local
 model/tensor on that selected side.
+
+The six-point charge classifier now names this remaining family as
+`local_toric_weighted_p2_rank_three_split_bundle_charge_family:base=1,1,2;bundle=1,1,2;base_hyperplane_square=1/2`
+rather than leaving it as an anonymous one-parameter charge vector. This is
+still non-promoting: it identifies the visible local ambient shape as a
+rank-three split bundle over weighted `P(1,1,2)`, but Cyrus still lacks the
+source-derived codimension-2 local model, tensor, and chamber certificate
+needed to call `cygv`. The target-filtered report
+`/tmp/cyrus_six_point_weighted_p2_rank3_target7_v1.json` verifies this
+classifier together with the selected local circuit side.
 
 `/tmp/cyrus_six_point_overlap_annotations_v1.json` annotates the nearest
 degree-bounded support-overlap samples with qN-history, source class, and

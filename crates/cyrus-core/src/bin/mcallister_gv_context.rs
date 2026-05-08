@@ -26449,6 +26449,17 @@ fn local_toric_charge_family_status(
             "local_toric_weighted_p2_split_bundle_charge_family_after_sign_flip:{signature}"
         );
     }
+    if let Some(signature) = one_parameter_weighted_p2_rank_three_split_bundle_signature(charge_row)
+    {
+        return format!(
+            "local_toric_weighted_p2_rank_three_split_bundle_charge_family:{signature}"
+        );
+    }
+    if let Some(signature) = one_parameter_weighted_p2_rank_three_split_bundle_signature(&flipped) {
+        return format!(
+            "local_toric_weighted_p2_rank_three_split_bundle_charge_family_after_sign_flip:{signature}"
+        );
+    }
 
     format!(
         "local_toric_one_parameter_charge_family_unclassified:{}",
@@ -30043,6 +30054,17 @@ fn local_cygv_one_parameter_family_status(skeleton: &LocalCygvInputSkeleton) -> 
 }
 
 fn one_parameter_weighted_p2_split_bundle_signature(charges: &[i64]) -> Option<String> {
+    one_parameter_weighted_p2_cy_bundle_signature(charges, 2)
+}
+
+fn one_parameter_weighted_p2_rank_three_split_bundle_signature(charges: &[i64]) -> Option<String> {
+    one_parameter_weighted_p2_cy_bundle_signature(charges, 3)
+}
+
+fn one_parameter_weighted_p2_cy_bundle_signature(
+    charges: &[i64],
+    bundle_direction_count: usize,
+) -> Option<String> {
     let mut base_weights = charges
         .iter()
         .copied()
@@ -30054,7 +30076,7 @@ fn one_parameter_weighted_p2_split_bundle_signature(charges: &[i64]) -> Option<S
         .filter(|&charge| charge < 0)
         .map(i64::checked_abs)
         .collect::<Option<Vec<_>>>()?;
-    if base_weights.len() != 3 || bundle_degrees.len() != 2 {
+    if base_weights.len() != 3 || bundle_degrees.len() != bundle_direction_count {
         return None;
     }
     base_weights.sort_unstable();
@@ -32614,7 +32636,7 @@ mod tests {
 
         assert_eq!(
             diagnostic.local_toric_charge_family_status,
-            "local_toric_one_parameter_charge_family_unclassified:-2,-1,-1,1,1,2"
+            "local_toric_weighted_p2_rank_three_split_bundle_charge_family:base=1,1,2;bundle=1,1,2;base_hyperplane_square=1/2"
         );
         assert_eq!(diagnostic.local_toric_hypersurface_cy_dim, Some(4));
         assert_eq!(
@@ -36429,6 +36451,11 @@ mod tests {
         assert_eq!(
             one_parameter_weighted_p2_split_bundle_signature(&[-1, -2, 1, 2, 2]),
             None
+        );
+        assert_eq!(
+            one_parameter_weighted_p2_rank_three_split_bundle_signature(&[-1, -1, -2, 1, 1, 2])
+                .as_deref(),
+            Some("base=1,1,2;bundle=1,1,2;base_hyperplane_square=1/2")
         );
     }
 
