@@ -112,6 +112,11 @@ before accepting face triangulations: `triangulation_is_regular_from_secondary_c
 and `triangulation_heights_from_secondary_cone` test for a strict secondary-cone
 height vector and return one when it exists. This is the next mechanical
 prerequisite for automatic 2-face FRT enumeration; it is not a GV computation.
+The first exact small-face enumerator,
+`fine_regular_triangulations_of_face_2d`, now uses that gate after enumerating
+compatible unimodular triangle covers in the local rank-two lattice. It is
+validated on the square face and remains an exact small-face path, not a
+replacement for CYTools' broader `grow2d` sampling.
 
 CYTools' `Cone.find_lattice_points` is a separate operation. It first checks
 that the grading vector has only the origin at nonpositive degree, then uses

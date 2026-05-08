@@ -1753,6 +1753,14 @@ to make the remaining GV layer more first-principles:
    height vector pairs strictly positively with its secondary-cone circuit.
    This is the regularity gate needed before automatic face-FRT enumeration can
    be promoted.
+   The first small exact face-FRT enumerator is now available as
+   `fine_regular_triangulations_of_face_2d`: it reconstructs the integral
+   rank-two face coordinates, enumerates compatible unimodular triangle covers
+   of the convex hull, and filters them through the secondary-cone regularity
+   gate. Square-face regressions pin the two diagonals and show the enumerated
+   FRTs feed directly into the existing face-inequality choice blocks. This is
+   exact but exponential; broader CYTools `grow2d`-style sampling is still
+   unported.
    The top-level `ntfe_hypers` materialization logic for already-known
    face-inequality data is now exposed through
    `expanded_secondary_chamber_count_from_face_inequality_choices`,

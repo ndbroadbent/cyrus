@@ -450,6 +450,55 @@ pub fn triangulation_heights_from_secondary_cone(
     Ok(cone.find_interior_point())
 }
 
+/// Enumerate exact fine regular triangulations of one two-dimensional face.
+///
+/// This is the small-face, exact counterpart of CYTools
+/// `Polytope.face_triangs(dim=2, only_regular=True)`: candidate triangles are
+/// the unimodular lattice triangles in the reconstructed local face lattice,
+/// compatible triangle sets are required to cover the convex-hull area, and
+/// every output is certified regular by its secondary cone. This helper is
+/// exponential and intended for small two-faces; callers that need broad
+/// sampling still need a separate `grow2d`-style sampler.
+///
+/// # Errors
+///
+/// Returns an error if the face is not affine rank two, local coordinates are
+/// not integral, or a candidate triangulation fails secondary-cone validation.
+pub fn fine_regular_triangulations_of_face_2d(
+    points: &[Point],
+    face: &[usize],
+) -> Result<Vec<Triangulation>> {
+    validate_point_dimensions(points, "fine regular face triangulation points")?;
+    let face_set = validate_face_indices(points, face, 0)?;
+    let local_points = local_rank_two_face_coordinates(points, &face_set, 0)?;
+    let target_triangle_count =
+        usize::try_from(convex_hull_area_2x(&local_points)?).map_err(|_| {
+            Error::InvalidInput("2D face normalized area does not fit in usize".to_string())
+        })?;
+    let candidates = fine_candidate_triangles_2d(&local_points);
+    let compatibility = triangle_compatibility_matrix_2d(&candidates);
+    let mut raw_triangulations = BTreeSet::new();
+    let mut chosen = Vec::new();
+    enumerate_fine_triangle_covers_2d(
+        &candidates,
+        &compatibility,
+        &face_set,
+        target_triangle_count,
+        0,
+        &mut chosen,
+        &mut raw_triangulations,
+    );
+
+    let mut triangulations = Vec::new();
+    for simplices in raw_triangulations {
+        let triangulation = Triangulation::new(simplices);
+        if triangulation_is_regular_from_secondary_cone(points, &triangulation)? {
+            triangulations.push(triangulation);
+        }
+    }
+    Ok(triangulations)
+}
+
 /// Compute per-face expanded-secondary inequality choices.
 ///
 /// This ports the provided-`face_triangs`, `require_star=False` branch of
@@ -1661,6 +1710,12 @@ struct LocalFacePoint2D {
     coordinates: [i64; 2],
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct FineCandidateTriangle2D {
+    simplex: Vec<usize>,
+    vertices: [[i64; 2]; 3],
+}
+
 fn expanded_secondary_fan_hyperplanes_for_face(
     points: &[Point],
     face: &[usize],
@@ -1820,6 +1875,147 @@ fn local_rank_two_face_coordinates(
     Ok(local_points)
 }
 
+fn fine_candidate_triangles_2d(local_points: &[LocalFacePoint2D]) -> Vec<FineCandidateTriangle2D> {
+    let mut candidates = Vec::new();
+    for first in 0..local_points.len() {
+        for second in (first + 1)..local_points.len() {
+            for third in (second + 1)..local_points.len() {
+                let triangle = [
+                    local_points[first],
+                    local_points[second],
+                    local_points[third],
+                ];
+                if triangle_area_2x(triangle) == 1 {
+                    let mut simplex = triangle
+                        .iter()
+                        .map(|point| point.point_index)
+                        .collect::<Vec<_>>();
+                    simplex.sort_unstable();
+                    candidates.push(FineCandidateTriangle2D {
+                        simplex,
+                        vertices: triangle.map(|point| point.coordinates),
+                    });
+                }
+            }
+        }
+    }
+    candidates.sort_by(|left, right| left.simplex.cmp(&right.simplex));
+    candidates
+}
+
+fn triangle_compatibility_matrix_2d(candidates: &[FineCandidateTriangle2D]) -> Vec<Vec<bool>> {
+    let mut compatibility = vec![vec![true; candidates.len()]; candidates.len()];
+    for left in 0..candidates.len() {
+        compatibility[left][left] = false;
+        for right in (left + 1)..candidates.len() {
+            let compatible = triangles_are_compatible_2d(&candidates[left], &candidates[right]);
+            compatibility[left][right] = compatible;
+            compatibility[right][left] = compatible;
+        }
+    }
+    compatibility
+}
+
+fn enumerate_fine_triangle_covers_2d(
+    candidates: &[FineCandidateTriangle2D],
+    compatibility: &[Vec<bool>],
+    face_set: &BTreeSet<usize>,
+    target_triangle_count: usize,
+    start: usize,
+    chosen: &mut Vec<usize>,
+    triangulations: &mut BTreeSet<Vec<Vec<usize>>>,
+) {
+    if chosen.len() == target_triangle_count {
+        let used_points = chosen
+            .iter()
+            .flat_map(|&candidate_idx| candidates[candidate_idx].simplex.iter().copied())
+            .collect::<BTreeSet<_>>();
+        if &used_points == face_set {
+            let simplices = chosen
+                .iter()
+                .map(|&candidate_idx| candidates[candidate_idx].simplex.clone())
+                .collect::<Vec<_>>();
+            triangulations.insert(simplices);
+        }
+        return;
+    }
+    if start >= candidates.len()
+        || chosen.len() + candidates.len().saturating_sub(start) < target_triangle_count
+    {
+        return;
+    }
+
+    for candidate_idx in start..candidates.len() {
+        if chosen
+            .iter()
+            .all(|&chosen_idx| compatibility[chosen_idx][candidate_idx])
+        {
+            chosen.push(candidate_idx);
+            enumerate_fine_triangle_covers_2d(
+                candidates,
+                compatibility,
+                face_set,
+                target_triangle_count,
+                candidate_idx + 1,
+                chosen,
+                triangulations,
+            );
+            chosen.pop();
+        }
+    }
+}
+
+fn convex_hull_area_2x(local_points: &[LocalFacePoint2D]) -> Result<i64> {
+    let mut points = local_points
+        .iter()
+        .map(|point| point.coordinates)
+        .collect::<Vec<_>>();
+    points.sort_unstable();
+    points.dedup();
+    if points.len() < 3 {
+        return Err(Error::InvalidInput(
+            "2D face needs at least three distinct points".to_string(),
+        ));
+    }
+
+    let mut lower = Vec::<[i64; 2]>::new();
+    for point in &points {
+        while lower.len() >= 2
+            && orient_2d(lower[lower.len() - 2], lower[lower.len() - 1], *point) <= 0
+        {
+            lower.pop();
+        }
+        lower.push(*point);
+    }
+    let mut upper = Vec::<[i64; 2]>::new();
+    for point in points.iter().rev() {
+        while upper.len() >= 2
+            && orient_2d(upper[upper.len() - 2], upper[upper.len() - 1], *point) <= 0
+        {
+            upper.pop();
+        }
+        upper.push(*point);
+    }
+    lower.pop();
+    upper.pop();
+    let hull = lower.into_iter().chain(upper).collect::<Vec<_>>();
+    if hull.len() < 3 {
+        return Err(Error::InvalidInput(
+            "2D face convex hull is degenerate".to_string(),
+        ));
+    }
+    let area = hull
+        .iter()
+        .zip(hull.iter().cycle().skip(1))
+        .map(|(&left, &right)| {
+            i128::from(left[0]) * i128::from(right[1]) - i128::from(left[1]) * i128::from(right[0])
+        })
+        .sum::<i128>()
+        .abs();
+    i64::try_from(area)
+        .map_err(|_| Error::InvalidInput("2D face area does not fit in i64".to_string()))
+}
+
 fn solve_in_two_vector_basis(
     first_basis: &[i64],
     second_basis: &[i64],
@@ -1867,6 +2063,105 @@ fn triangle_area_2x(points: [LocalFacePoint2D; 3]) -> i64 {
         + second[0] * (third[1] - first[1])
         + third[0] * (first[1] - second[1]);
     area.abs()
+}
+
+fn triangles_are_compatible_2d(
+    left: &FineCandidateTriangle2D,
+    right: &FineCandidateTriangle2D,
+) -> bool {
+    for left_edge in triangle_edges_2d(left.vertices) {
+        for right_edge in triangle_edges_2d(right.vertices) {
+            if segments_cross_incompatibly_2d(left_edge, right_edge) {
+                return false;
+            }
+        }
+    }
+    for &point in &left.vertices {
+        if !right.vertices.contains(&point) && point_strictly_inside_triangle_2d(point, right) {
+            return false;
+        }
+    }
+    for &point in &right.vertices {
+        if !left.vertices.contains(&point) && point_strictly_inside_triangle_2d(point, left) {
+            return false;
+        }
+    }
+    true
+}
+
+fn triangle_edges_2d(vertices: [[i64; 2]; 3]) -> [([i64; 2], [i64; 2]); 3] {
+    [
+        (vertices[0], vertices[1]),
+        (vertices[1], vertices[2]),
+        (vertices[2], vertices[0]),
+    ]
+}
+
+fn segments_cross_incompatibly_2d(left: ([i64; 2], [i64; 2]), right: ([i64; 2], [i64; 2])) -> bool {
+    let shared_endpoint_count = [left.0, left.1]
+        .iter()
+        .filter(|point| **point == right.0 || **point == right.1)
+        .count();
+    if !segments_intersect_2d(left.0, left.1, right.0, right.1) {
+        return false;
+    }
+    if shared_endpoint_count == 0 {
+        return true;
+    }
+    if orient_2d(left.0, left.1, right.0) == 0 && orient_2d(left.0, left.1, right.1) == 0 {
+        return nonshared_endpoint_lies_on_other_segment_2d(left, right);
+    }
+    false
+}
+
+fn nonshared_endpoint_lies_on_other_segment_2d(
+    left: ([i64; 2], [i64; 2]),
+    right: ([i64; 2], [i64; 2]),
+) -> bool {
+    [left.0, left.1].iter().any(|point| {
+        *point != right.0 && *point != right.1 && on_segment_2d(right.0, *point, right.1)
+    }) || [right.0, right.1]
+        .iter()
+        .any(|point| *point != left.0 && *point != left.1 && on_segment_2d(left.0, *point, left.1))
+}
+
+fn segments_intersect_2d(
+    first_start: [i64; 2],
+    first_end: [i64; 2],
+    second_start: [i64; 2],
+    second_end: [i64; 2],
+) -> bool {
+    let o1 = orient_2d(first_start, first_end, second_start);
+    let o2 = orient_2d(first_start, first_end, second_end);
+    let o3 = orient_2d(second_start, second_end, first_start);
+    let o4 = orient_2d(second_start, second_end, first_end);
+
+    if ((o1 > 0 && o2 < 0) || (o1 < 0 && o2 > 0)) && ((o3 > 0 && o4 < 0) || (o3 < 0 && o4 > 0)) {
+        return true;
+    }
+    (o1 == 0 && on_segment_2d(first_start, second_start, first_end))
+        || (o2 == 0 && on_segment_2d(first_start, second_end, first_end))
+        || (o3 == 0 && on_segment_2d(second_start, first_start, second_end))
+        || (o4 == 0 && on_segment_2d(second_start, first_end, second_end))
+}
+
+fn point_strictly_inside_triangle_2d(point: [i64; 2], triangle: &FineCandidateTriangle2D) -> bool {
+    let orientations =
+        triangle_edges_2d(triangle.vertices).map(|(start, end)| orient_2d(start, end, point));
+    orientations.iter().all(|orientation| *orientation > 0)
+        || orientations.iter().all(|orientation| *orientation < 0)
+}
+
+fn on_segment_2d(start: [i64; 2], point: [i64; 2], end: [i64; 2]) -> bool {
+    point[0] >= start[0].min(end[0])
+        && point[0] <= start[0].max(end[0])
+        && point[1] >= start[1].min(end[1])
+        && point[1] <= start[1].max(end[1])
+}
+
+fn orient_2d(first: [i64; 2], second: [i64; 2], third: [i64; 2]) -> i128 {
+    i128::from(second[0] - first[0]) * i128::from(third[1] - first[1])
+        - i128::from(second[1] - first[1]) * i128::from(third[0] - first[0])
 }
 
 fn consecutive_collinear_site_ordering(points: [[i64; 2]; 3]) -> Option<[usize; 3]> {
@@ -2275,6 +2570,53 @@ mod tests {
                 positive(1e-10),
             )
             .unwrap()
+        );
+    }
+
+    #[test]
+    fn fine_regular_face_triangulations_enumerate_square_diagonals() {
+        let points = vec![
+            Point::new(vec![0, 0]),
+            Point::new(vec![1, 0]),
+            Point::new(vec![1, 1]),
+            Point::new(vec![0, 1]),
+        ];
+
+        let triangulations = fine_regular_triangulations_of_face_2d(&points, &[0, 1, 2, 3])
+            .unwrap()
+            .into_iter()
+            .map(|triangulation| triangulation.simplices().to_vec())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            triangulations,
+            vec![
+                vec![vec![0, 1, 2], vec![0, 2, 3]],
+                vec![vec![0, 1, 3], vec![1, 2, 3]],
+            ]
+        );
+    }
+
+    #[test]
+    fn fine_regular_face_triangulations_feed_inequality_choices() {
+        let points = vec![
+            Point::new(vec![0, 0]),
+            Point::new(vec![1, 0]),
+            Point::new(vec![1, 1]),
+            Point::new(vec![0, 1]),
+        ];
+        let triangulations =
+            vec![fine_regular_triangulations_of_face_2d(&points, &[0, 1, 2, 3]).unwrap()];
+
+        let choices = expanded_secondary_face_inequality_choices_from_triangulations(
+            &points,
+            &triangulations,
+        )
+        .unwrap();
+
+        assert_eq!(
+            choices,
+            vec![vec![vec![vec![-1, 1, -1, 1]], vec![vec![1, -1, 1, -1]]]]
         );
     }
 
