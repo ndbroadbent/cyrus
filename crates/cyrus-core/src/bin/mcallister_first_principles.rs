@@ -8370,11 +8370,12 @@ fn diagnose_chamber_updated_kklt_toric_only(
         };
         let classical_volume = classical_volume_from_t(&kappa_basis, &next.t);
         eprintln!(
-            "[INFO] chamber-updated KKLT diagnostic iteration {iter}: changed_from_input={} ambient_rays={} subcutoff={} pair_pruned={} toric_covered={} toric_missing={} max_relative_step={} rel_err={} V_classical={} GV_volume_correction={}",
+            "[INFO] chamber-updated KKLT diagnostic iteration {iter}: changed_from_input={} ambient_rays={} subcutoff={} pruned={} pruning={} toric_covered={} toric_missing={} max_relative_step={} rel_err={} V_classical={} GV_volume_correction={}",
             chamber_changed_from_input,
             selection.ambient_rays,
             selection.subcutoff_count,
             selection.filtered_count,
+            small_curve_pruning.as_str(),
             selection.toric_gv_covered_count,
             selection.toric_gv_missing_count,
             max_relative_step,
@@ -8818,6 +8819,7 @@ fn write_corrected_chamber_gv_trace_json(
     checkpoint_implied_gv: &[F64<Finite>],
     covered_gv_target: &[F64<Finite>],
     selection: &ChamberToricGvSelection,
+    small_curve_pruning: CurvePruningStrategy,
 ) -> Result<(), String> {
     #[derive(Serialize)]
     struct TraceCurve {
@@ -8850,15 +8852,16 @@ fn write_corrected_chamber_gv_trace_json(
         toric_covered_gv_target: Vec<f64>,
         ambient_rays: usize,
         subcutoff_count: usize,
-        pair_pruned_count: usize,
+        small_curve_pruning: &'static str,
+        pruned_count: usize,
         subcutoff_toric_covered_count: usize,
         subcutoff_toric_missing_count: usize,
-        pair_pruned_toric_covered_count: usize,
-        pair_pruned_toric_missing_count: usize,
+        pruned_toric_covered_count: usize,
+        pruned_toric_missing_count: usize,
         subcutoff_toric_curves: Vec<TraceCurve>,
-        pair_pruned_toric_curves: Vec<TraceCurve>,
+        pruned_toric_curves: Vec<TraceCurve>,
         subcutoff_toric_missing_curves: Vec<TraceMissingCurve>,
-        pair_pruned_toric_missing_curves: Vec<TraceMissingCurve>,
+        pruned_toric_missing_curves: Vec<TraceMissingCurve>,
     }
 
     fn trace_curves(
@@ -8930,30 +8933,26 @@ fn write_corrected_chamber_gv_trace_json(
         toric_covered_gv_target: finite_values(covered_gv_target),
         ambient_rays: selection.ambient_rays,
         subcutoff_count: selection.subcutoff_count,
-        pair_pruned_count: selection.filtered_count,
+        small_curve_pruning: small_curve_pruning.as_str(),
+        pruned_count: selection.filtered_count,
         subcutoff_toric_covered_count: selection.subcutoff_toric_gv_covered_count,
         subcutoff_toric_missing_count: selection.subcutoff_toric_gv_missing_count,
-        pair_pruned_toric_covered_count: selection.toric_gv_covered_count,
-        pair_pruned_toric_missing_count: selection.toric_gv_missing_count,
+        pruned_toric_covered_count: selection.toric_gv_covered_count,
+        pruned_toric_missing_count: selection.toric_gv_missing_count,
         subcutoff_toric_curves: trace_curves(
             &selection.subcutoff_curve_gvs,
             basis,
             checkpoint_t,
             gamma,
         )?,
-        pair_pruned_toric_curves: trace_curves(
-            &selection.small_curve_gvs,
-            basis,
-            checkpoint_t,
-            gamma,
-        )?,
+        pruned_toric_curves: trace_curves(&selection.small_curve_gvs, basis, checkpoint_t, gamma)?,
         subcutoff_toric_missing_curves: trace_missing_curves(
             &selection.subcutoff_missing_gv_classes,
             basis,
             checkpoint_t,
             gamma,
         )?,
-        pair_pruned_toric_missing_curves: trace_missing_curves(
+        pruned_toric_missing_curves: trace_missing_curves(
             &selection.missing_gv_classes,
             basis,
             checkpoint_t,
@@ -9322,6 +9321,7 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
             &checkpoint_chamber_implied_gv,
             &covered_gv_target,
             &selection,
+            small_curve_pruning,
         )
         .unwrap_or_else(|e| {
             eprintln!("[ERROR] {e}");
@@ -9606,12 +9606,13 @@ fn compare_checkpoint_t_corrected_chamber_gv_target(
                 std::process::exit(2);
             });
             eprintln!(
-                "[COMPARE] corrected_heights.dat GV target correction delta: max_abs={} relative_l2={} ambient_rays={} subcutoff={} pair_pruned={} toric_covered={} toric_missing={}",
+                "[COMPARE] corrected_heights.dat GV target correction delta: max_abs={} relative_l2={} ambient_rays={} subcutoff={} pruned={} pruning={} toric_covered={} toric_missing={}",
                 height_summary.max_abs_delta,
                 height_summary.relative_l2_delta,
                 height_selection.ambient_rays,
                 height_selection.subcutoff_count,
                 height_selection.filtered_count,
+                small_curve_pruning.as_str(),
                 height_selection.toric_gv_covered_count,
                 height_selection.toric_gv_missing_count
             );
@@ -10976,10 +10977,11 @@ fn stage_volume(
             );
         }
         eprintln!(
-            "[INFO] corrected-chamber small toric curves: ambient_rays={} subcutoff={} pair_pruned={} toric_covered={} toric_missing={} cutoff={}",
+            "[INFO] corrected-chamber small toric curves: ambient_rays={} subcutoff={} pruned={} pruning={} toric_covered={} toric_missing={} cutoff={}",
             diag.ambient_rays,
             diag.subcutoff_count,
             diag.filtered_count,
+            small_curve_pruning.as_str(),
             diag.toric_gv_covered_count,
             diag.toric_gv_missing_count,
             small_curve_cutoff.get()
@@ -11950,6 +11952,69 @@ mod tests {
         assert_eq!(rows[1]["type"], "positive_branch");
         assert_eq!(rows[1]["small_curve_pruning"], "finite-semigroup");
         assert_eq!(rows[1]["small_curve_filtered_count"], 4);
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn corrected_chamber_trace_records_curve_pruning_strategy() {
+        use cyrus_core::{f64_finite, f64_pos, i64_pos};
+
+        let cache_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/cyrus-test-cache");
+        std::fs::create_dir_all(&cache_dir).expect("create cache dir");
+        let path = cache_dir.join(format!(
+            "corrected-chamber-trace-{}-{}.json",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time after epoch")
+                .as_nanos()
+        ));
+        let selection = ChamberToricGvSelection {
+            ambient_rays: 3,
+            subcutoff_count: 2,
+            filtered_count: 1,
+            subcutoff_toric_gv_covered_count: 1,
+            subcutoff_toric_gv_missing_count: 1,
+            toric_gv_covered_count: 1,
+            toric_gv_missing_count: 0,
+            first_missing_class: None,
+            subcutoff_missing_gv_classes: vec![vec![2]],
+            missing_gv_classes: Vec::new(),
+            small_curve_candidates: Vec::new(),
+            small_curves: Vec::new(),
+            subcutoff_curve_gvs: vec![(vec![1], malachite::Integer::from(1))],
+            small_curve_gvs: vec![(vec![1], malachite::Integer::from(1))],
+        };
+
+        write_corrected_chamber_gv_trace_json(
+            &path,
+            &[0],
+            &[0],
+            &[f64_finite!(0.5)],
+            &[I64::<Finite>::new(1)],
+            &[i64_pos!(2)],
+            f64_pos!(3.0),
+            &[f64_finite!(4.0)],
+            &[f64_finite!(5.0)],
+            &[I64::<Finite>::new(6)],
+            &[f64_finite!(7.0)],
+            &[f64_finite!(8.0)],
+            &[f64_finite!(9.0)],
+            &selection,
+            CurvePruningStrategy::FiniteSemigroup,
+        )
+        .expect("write corrected chamber trace");
+
+        let content = std::fs::read_to_string(&path).expect("read corrected chamber trace");
+        let value = serde_json::from_str::<serde_json::Value>(&content).expect("valid trace JSON");
+        assert_eq!(value["small_curve_pruning"], "finite-semigroup");
+        assert_eq!(value["pruned_count"], 1);
+        assert_eq!(value["pruned_toric_covered_count"], 1);
+        assert_eq!(value["pruned_toric_missing_count"], 0);
+        assert!(value.get("pair_pruned_count").is_none());
+        assert!(value["pruned_toric_curves"].is_array());
+        assert!(value["pruned_toric_missing_curves"].is_array());
 
         let _ = std::fs::remove_file(path);
     }

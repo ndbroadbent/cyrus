@@ -51,7 +51,7 @@ The objective breaks down into these success criteria:
 | Replay-only volumes are not production inputs | `compare_against_dat` reads `corrected_cy_vol.dat` only after computing `V_string`; `docs/MCALLISTER_DATA_POLICY.md` | Mostly implemented. Comparison is post-computation, but the runner still tolerates a residual up to `0.1`, so this is a diagnostic gate, not proof of exact reproduction. |
 | Geometry, basis, intersections, Mori/Kahler data are computed from upstream inputs | `docs/GA_READY_PIPELINE_AUDIT.md`; `mcallister_first_principles`; stage 2/3/5 tests referenced there | Largely implemented, but not a final completion certificate. Generic matrix-basis GV inputs now include Mori projection, q-matrix construction, curve-basis construction, and in-basis intersection tensor pullback. `mcallister_first_principles --dual-basis` accepts index or matrix source bases for K/M flux-coordinate transforms, and `--production-dual-basis` now carries an index or matrix internal dual divisor basis through flat-direction intersections and compact GV inputs. Core KKLT has generic divisor-basis volume, Jacobian, path-following, branch-candidate, and initialization-scaling APIs for matrix Kähler coordinates. `mcallister_first_principles --production-primal-basis` now carries an index or matrix internal primal divisor basis through KKLT path following, branch initialization, branch search, and branch GV coverage by transforming solved Kähler points back to the computed CYTools index basis for existing chamber/GV diagnostics. Remaining matrix-basis work is diagnostic/export cleanup, not the main corrected-GV blocker. |
 | CYTools/cygv compact GV wrapper contract is understood and mirrored | `docs/CYGV_AUDIT.md`; direct source read of `reference/cytools/src/cytools/calabiyau.py::_compute_gvs_gws`; downloaded `cygv-0.1.2` source; `mcallister_gv --min-points 20000`; `stage5_mirror_gv_checkpoint_matches_cygv_min_points` | Implemented for the generic compact handoff boundary. CYTools builds inputs, then delegates to `cygv.compute_gv`; no hidden Python GV algorithm remains. The 4-214-647 mirror-side min-points run computes 10556 ambient invariants and matches all 5177 `dual_curves.dat` / `dual_curves_gv.dat` checkpoint rows without loading those rows as inputs, and the command is now covered by an opt-in heavy e2e regression. |
-| High-dimensional small toric curve selection is computed, not read | `docs/GA_READY_PIPELINE_AUDIT.md`; stage 5 small-curve tests | Implemented for the checkpoint rule. Pair pruning matches `small_curves.dat`; finite-semigroup pruning would remove five additional curves, so both policies remain explicit. |
+| High-dimensional small toric curve selection is computed, not read | `docs/GA_READY_PIPELINE_AUDIT.md`; stage 5 small-curve tests | Implemented for the checkpoint rule. Pair pruning matches `small_curves.dat`; finite-semigroup pruning removes five additional input-chamber curves, so both policies remain explicit. A fresh no-replay finite-semigroup run shows this is not the corrected-volume fix: the checkpoint-t corrected chamber prunes `556` subcutoff curves to `400` with zero toric-missing rows, and the solved-t corrected chamber prunes `561` to `399` with zero toric-missing rows, but `V_string=4711.504343103075` still has a corrected-volume residual of about `0.071843868`. |
 | High-dimensional small toric GV values are computed, not read | `docs/CYGV_AUDIT.md`; `docs/LOCAL_TORIC_GV_SOURCE_MAP.md`; stage 5 small-toric GV tests | Partially implemented. Covered toric two-face/origin-circuit formulas match the checkpoint, including the source-derived resolved-conifold `(-1,-1,1,1)` pattern. Remaining corrected-chamber misses are unresolved higher-rank origin circuits. |
 | Potent-ray GV rows are computed from local source data | `docs/POTENT_RAY_SOURCE_READ.md`; `docs/CKYZ_SERIES_DOMAIN_AUDIT.md`; `potent_ray_affine_circuits` tests | Diagnostic only. Cyrus reconstructs rank/volume/slope diagnostics and first-four GV entries for 395 rank-two CKYZ rows. It also has all-ten checks for selected F0/F1 families and ignored release all-ten regressions for both polygon-5 source directions `[4,3,2]` and `[3,2,2]`. These rank-two CKYZ rows should not drive compact GV implementation work; they are local noncompact validation checks. |
 | Local CKYZ diagnostics stay separate from compact `cygv` | `docs/CYGV_AUDIT.md`; `docs/CKYZ_SERIES_DOMAIN_AUDIT.md`; direct source read of `cygv-0.1.2/src/{semigroup,fundamental_period,instanton,series_inversion}.rs` | Implemented as a bounded diagnostic path. Compact GV uses `compute_gv_invariants*` wrappers around `cygv`. The local CKYZ code exists because compact `cygv` rejects naive local surface charge matrices with effective CY dimension below three; it is not a replacement for the crate. |
@@ -907,6 +907,26 @@ codimension-`213` domains, shared-facet domains return `lp_no_certificate`,
 and the full facet-union domains also return `lp_no_certificate` at ranks
 `194` and `177` respectively. The cheap face-certification path is therefore
 closed for these rows.
+
+A no-replay finite-semigroup pruning run also closes the hypothesis that the
+live residual is primarily a pair-pruning artifact. The command
+
+```text
+/usr/bin/time -p timeout 360 ./target/release/mcallister_first_principles \
+  --data-dir /Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647 \
+  --small-curve-pruning finite-semigroup \
+  --diagnose-corrected-chamber-gv \
+  --out /tmp/cyrus_finite_semigroup_pruning_summary.json
+```
+
+completed in `real 115.77`. It pruned the input-chamber `419` subcutoff
+curves to `339`, the checkpoint-t corrected chamber `556` subcutoff curves to
+`400` with `toric_missing=0`, and the solved-t corrected chamber `561`
+subcutoff curves to `399` with `toric_missing=0`. The final
+`V_string=4711.504343103075` still differs from the corrected-volume
+checkpoint by about `0.071843868`. Thus finite selected-set pruning removes
+the visible toric-missing rows but does not reproduce the corrected-target GV
+vector or the final volume.
 Because the full corrected-chamber GV context export still exceeded a `300s`
 debug timeout before writing JSON, the runner also has a narrow
 `--dump-corrected-chamber-secondary-certificate` flag. On the validation-only
