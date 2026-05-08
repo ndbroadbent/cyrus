@@ -21,7 +21,8 @@ use cyrus_core::gv::{
     diagnose_supporting_mori_face_by_lp_search, find_extremal_mori_ray_separator,
 };
 use cyrus_core::triangulation::{
-    Triangulation, compute_regular_triangulation, secondary_cone_height_pairings,
+    CircuitOmissionSide, Triangulation, classify_circuit_omission_side,
+    compute_regular_triangulation, secondary_cone_height_pairings,
     secondary_cone_hyperplanes_native, secondary_cone_strictly_contains_height_vector,
 };
 use cyrus_core::types::rational::Rational;
@@ -931,10 +932,13 @@ struct LocalCygvStarUnionWallTransportReadiness {
 #[derive(Clone, Debug, Serialize)]
 struct LocalCygvStarUnionCrossedWallRegularSideHint {
     status: String,
+    selected_omission_side: Option<String>,
     positive_coefficient_points: Vec<usize>,
     negative_coefficient_points: Vec<usize>,
     positive_coefficient_omission_hits: Vec<usize>,
     negative_coefficient_omission_hits: Vec<usize>,
+    selected_side_circuit_facets: Vec<Vec<usize>>,
+    opposite_side_circuit_facets: Vec<Vec<usize>>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -21546,10 +21550,13 @@ fn local_cygv_star_union_crossed_wall_regular_side_hint(
 ) -> LocalCygvStarUnionCrossedWallRegularSideHint {
     let empty = |status: &str| LocalCygvStarUnionCrossedWallRegularSideHint {
         status: status.to_string(),
+        selected_omission_side: None,
         positive_coefficient_points: Vec::new(),
         negative_coefficient_points: Vec::new(),
         positive_coefficient_omission_hits: Vec::new(),
         negative_coefficient_omission_hits: Vec::new(),
+        selected_side_circuit_facets: Vec::new(),
+        opposite_side_circuit_facets: Vec::new(),
     };
     let Some(circuit) = wall.circuit_nonzero.as_ref() else {
         return empty("crossed_wall_regular_side_missing_wall_circuit");
@@ -21557,56 +21564,46 @@ fn local_cygv_star_union_crossed_wall_regular_side_hint(
     if global_regular.simplices.is_empty() {
         return empty("crossed_wall_regular_side_missing_global_regular_triangulation");
     }
-
-    let circuit_points = circuit
-        .iter()
-        .map(|(point, _)| *point)
-        .collect::<BTreeSet<_>>();
-    let positive_points = circuit
-        .iter()
-        .filter_map(|(point, coefficient)| (*coefficient > 0).then_some(*point))
-        .collect::<Vec<_>>();
-    let negative_points = circuit
-        .iter()
-        .filter_map(|(point, coefficient)| (*coefficient < 0).then_some(*point))
-        .collect::<Vec<_>>();
-    let omission_hits = |points: &[usize]| {
-        points
-            .iter()
-            .copied()
-            .filter(|omitted| {
-                let required = circuit_points
-                    .iter()
-                    .copied()
-                    .filter(|point| point != omitted)
-                    .collect::<BTreeSet<_>>();
-                global_regular.simplices.iter().any(|simplex| {
-                    let simplex = simplex.iter().copied().collect::<BTreeSet<_>>();
-                    required.iter().all(|point| simplex.contains(point))
-                })
-            })
-            .collect::<Vec<_>>()
+    let classification = match classify_circuit_omission_side(&global_regular.simplices, circuit) {
+        Ok(classification) => classification,
+        Err(error) => {
+            return LocalCygvStarUnionCrossedWallRegularSideHint {
+                status: format!(
+                    "crossed_wall_regular_side_circuit_error:{}",
+                    status_error_fragment(&error.to_string())
+                ),
+                selected_omission_side: None,
+                positive_coefficient_points: Vec::new(),
+                negative_coefficient_points: Vec::new(),
+                positive_coefficient_omission_hits: Vec::new(),
+                negative_coefficient_omission_hits: Vec::new(),
+                selected_side_circuit_facets: Vec::new(),
+                opposite_side_circuit_facets: Vec::new(),
+            };
+        }
     };
-    let positive_hits = omission_hits(&positive_points);
-    let negative_hits = omission_hits(&negative_points);
-    let status = if positive_points.is_empty() || negative_points.is_empty() {
-        "crossed_wall_regular_side_missing_signed_circuit_parts"
-    } else if positive_hits.len() == positive_points.len() && negative_hits.is_empty() {
-        "crossed_wall_regular_selects_positive_coefficient_omission_side"
-    } else if negative_hits.len() == negative_points.len() && positive_hits.is_empty() {
-        "crossed_wall_regular_selects_negative_coefficient_omission_side"
-    } else if positive_hits.is_empty() && negative_hits.is_empty() {
-        "crossed_wall_regular_side_no_circuit_omission_facets_seen"
-    } else {
-        "crossed_wall_regular_side_mixed_or_partial_omission_facets"
+    let status = match classification.side {
+        CircuitOmissionSide::PositiveCoefficient => {
+            "crossed_wall_regular_selects_positive_coefficient_omission_side"
+        }
+        CircuitOmissionSide::NegativeCoefficient => {
+            "crossed_wall_regular_selects_negative_coefficient_omission_side"
+        }
+        CircuitOmissionSide::None => "crossed_wall_regular_side_no_circuit_omission_facets_seen",
+        CircuitOmissionSide::MixedOrPartial => {
+            "crossed_wall_regular_side_mixed_or_partial_omission_facets"
+        }
     };
 
     LocalCygvStarUnionCrossedWallRegularSideHint {
         status: status.to_string(),
-        positive_coefficient_points: positive_points,
-        negative_coefficient_points: negative_points,
-        positive_coefficient_omission_hits: positive_hits,
-        negative_coefficient_omission_hits: negative_hits,
+        selected_omission_side: Some(classification.side.as_str().to_string()),
+        positive_coefficient_points: classification.positive_coefficient_points,
+        negative_coefficient_points: classification.negative_coefficient_points,
+        positive_coefficient_omission_hits: classification.positive_coefficient_omission_hits,
+        negative_coefficient_omission_hits: classification.negative_coefficient_omission_hits,
+        selected_side_circuit_facets: classification.selected_side_facets,
+        opposite_side_circuit_facets: classification.opposite_side_facets,
     }
 }
 
@@ -27074,10 +27071,13 @@ mod tests {
             shared_two_simplex_star_union_crossed_wall_regular_side:
                 LocalCygvStarUnionCrossedWallRegularSideHint {
                     status: "test".to_string(),
+                    selected_omission_side: None,
                     positive_coefficient_points: Vec::new(),
                     negative_coefficient_points: Vec::new(),
                     positive_coefficient_omission_hits: Vec::new(),
                     negative_coefficient_omission_hits: Vec::new(),
+                    selected_side_circuit_facets: Vec::new(),
+                    opposite_side_circuit_facets: Vec::new(),
                 },
             shared_two_simplex_star_union_compact_omission_wall_side:
                 LocalCygvCompactOmissionWallSideSummary {
@@ -30256,12 +30256,24 @@ mod tests {
             "crossed_wall_regular_selects_positive_coefficient_omission_side"
         );
         assert_eq!(regular_side.positive_coefficient_points, vec![195, 212]);
-        assert_eq!(regular_side.negative_coefficient_points, vec![55, 0]);
+        assert_eq!(regular_side.negative_coefficient_points, vec![0, 55]);
+        assert_eq!(
+            regular_side.selected_omission_side.as_deref(),
+            Some("positive_coefficient_omission_side")
+        );
         assert_eq!(
             regular_side.positive_coefficient_omission_hits,
             vec![195, 212]
         );
         assert!(regular_side.negative_coefficient_omission_hits.is_empty());
+        assert_eq!(
+            regular_side.selected_side_circuit_facets,
+            vec![vec![0, 55, 195], vec![0, 55, 212]]
+        );
+        assert_eq!(
+            regular_side.opposite_side_circuit_facets,
+            vec![vec![0, 195, 212], vec![55, 195, 212]]
+        );
         let compact_candidate =
             |omitted_point_indices: Vec<usize>, target_relation_omitted_coefficients: Vec<i64>| {
                 LocalCygvMultiColumnOmissionCandidate {

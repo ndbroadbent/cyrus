@@ -1490,6 +1490,12 @@ to make the remaining GV layer more first-principles:
    negative points `[0,55]` have no omission hits. This pins the chamber side
    that needs transport instead of leaving the wall side implicit in the
    simplex list.
+   That hint now comes from the shared GKZ circuit-side primitive in
+   `triangulation::secondary`, which exports both circuit omission facet sets.
+   For the crossed wall, the selected facets are
+   `[[0,55,195],[0,55,212]]` and the opposite facets are
+   `[[0,195,212],[55,195,212]]`. This is still transport input, not a
+   promoted GV value.
    A follow-up compact-omission wall-side summary confirms this selected side
    is not one of the compact omission phases: both target rows have four
    compact omissions, but zero full-positive-side or full-negative-side

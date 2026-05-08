@@ -3722,6 +3722,13 @@ Thus the current global chamber is the star-extra side of the local
 resolved-conifold wall; the unresolved task is transporting the
 target-plus-star qN/semigroup history across that identified wall, not finding
 which local side the corrected chamber occupies.
+This side classification now uses the shared GKZ circuit primitive in
+`triangulation::secondary`: for a circuit `C = C_+ union C_-`, it constructs
+the two omission facet sets `{C \ {p}: p in C_+}` and `{C \ {p}: p in C_-}`.
+The readiness JSON therefore carries both the selected facets
+`[[0,55,195],[0,55,212]]` and the opposite facets
+`[[0,195,212],[55,195,212]]` for the crossed wall, making the next transport
+step explicit instead of implicit in raw simplex membership.
 Comparing the compact two-column omission phases against this wall side rules
 out another shortcut. For both targets `7`/`8`, the selected positive side has
 no compact threefold omission candidate: each row has four compact omissions,
