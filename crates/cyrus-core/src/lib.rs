@@ -216,8 +216,10 @@ pub use triangulation::{
     expanded_secondary_face_inequality_choices_from_triangulations,
     expanded_secondary_fan_hyperplanes_on_faces,
     expanded_secondary_fan_hyperplanes_on_polytope_2faces_4d,
-    expanded_secondary_group_boring_chamber_choices, secondary_cone_height_pairings,
-    secondary_cone_hyperplanes_native, secondary_cone_hyperplanes_native_on_faces,
+    expanded_secondary_group_boring_chamber_choices,
+    expanded_secondary_regular_triangulation_from_face_triangulations,
+    secondary_cone_height_pairings, secondary_cone_hyperplanes_native,
+    secondary_cone_hyperplanes_native_on_faces,
     secondary_cone_hyperplanes_native_on_polytope_2faces_4d,
     secondary_cone_strictly_contains_height_vector,
 };

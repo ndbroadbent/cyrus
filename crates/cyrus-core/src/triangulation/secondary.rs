@@ -9,7 +9,9 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use malachite::{Integer, Rational};
 
 use super::Triangulation;
+use super::regular::compute_regular_triangulation;
 use crate::Point;
+use crate::cone::Cone;
 use crate::error::{Error, Result};
 use crate::integer_math::{hermite_normal_form, integer_kernel, matrix_rank};
 use crate::polytope::Polytope;
@@ -243,6 +245,40 @@ pub fn expanded_secondary_cone_hyperplanes_from_face_triangulations(
         }
     }
     Ok(hyperplanes.into_iter().collect())
+}
+
+/// Build a regular triangulation from selected two-face triangulations.
+///
+/// This ports the `require_star=False` core of CYTools `triangfaces_to_frt`:
+/// construct the cone of permissible heights from selected face FRTs, find an
+/// interior height vector, and compute the resulting regular triangulation.
+/// The supplied triangulations may cover any subset of two-faces.
+///
+/// # Errors
+///
+/// Returns an error if the face constraints are invalid or if regular
+/// triangulation from the computed height vector fails. Returns `Ok(None)` if
+/// the permissible-height cone has no interior point.
+pub fn expanded_secondary_regular_triangulation_from_face_triangulations(
+    points: &[Point],
+    face_triangulations: &[Triangulation],
+) -> Result<Option<(Vec<f64>, Triangulation)>> {
+    let hyperplanes =
+        expanded_secondary_cone_hyperplanes_from_face_triangulations(points, face_triangulations)?;
+    let hyperplanes_i128 = hyperplanes
+        .iter()
+        .map(|row| row.iter().map(|&entry| i128::from(entry)).collect())
+        .collect::<Vec<Vec<i128>>>();
+    let mut cone = if hyperplanes_i128.is_empty() {
+        Cone::full_space(points.len())
+    } else {
+        Cone::from_hyperplanes(hyperplanes_i128)
+    };
+    let Some(heights) = cone.find_interior_point() else {
+        return Ok(None);
+    };
+    let triangulation = compute_regular_triangulation(points, &heights)?;
+    Ok(Some((heights, triangulation)))
 }
 
 /// Compute per-face expanded-secondary inequality choices.
@@ -1576,6 +1612,52 @@ mod tests {
                 vec![-1, 1, -1, 1, 0, 0, 0, 0],
                 vec![0, 0, 0, 0, -1, 1, -1, 1],
             ]
+        );
+    }
+
+    #[test]
+    fn expanded_secondary_regular_triangulation_realizes_selected_face_cone() {
+        let points = vec![
+            Point::new(vec![0, 0]),
+            Point::new(vec![1, 0]),
+            Point::new(vec![1, 1]),
+            Point::new(vec![0, 1]),
+        ];
+        let selected_face = Triangulation::new(vec![vec![0, 1, 2], vec![0, 2, 3]]);
+
+        let (heights, triangulation) =
+            expanded_secondary_regular_triangulation_from_face_triangulations(
+                &points,
+                &[selected_face],
+            )
+            .unwrap()
+            .expect("square selected face cone should have an interior point");
+
+        let hyperplanes = secondary_cone_hyperplanes_native(&points, &triangulation).unwrap();
+        let typed_heights = heights
+            .iter()
+            .map(|&height| finite(height))
+            .collect::<Vec<_>>();
+        assert!(
+            secondary_cone_strictly_contains_height_vector(
+                &vec![vec![-1, 1, -1, 1]],
+                &typed_heights,
+                positive(1e-10),
+            )
+            .unwrap()
+        );
+        assert_eq!(hyperplanes, vec![vec![-1, 1, -1, 1]]);
+        assert_eq!(
+            triangulation
+                .simplices()
+                .iter()
+                .map(|simplex| {
+                    let mut simplex = simplex.clone();
+                    simplex.sort_unstable();
+                    simplex
+                })
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([vec![0, 1, 2], vec![0, 2, 3]])
         );
     }
 

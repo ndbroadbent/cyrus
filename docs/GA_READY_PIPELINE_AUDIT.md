@@ -1718,6 +1718,15 @@ to make the remaining GV layer more first-principles:
    choice stack. The focused regression uses two square-face FRT choices and a
    one-choice second face to verify face order, choice order, boring-face
    grouping, and final chamber materialization.
+   Cyrus now also exposes
+   `expanded_secondary_regular_triangulation_from_face_triangulations`, the
+   `require_star=False` core of CYTools `triangfaces_to_frt`: selected
+   two-face triangulations are converted to permissible-height inequalities,
+   `Cone::find_interior_point` finds a strict height vector, and
+   `compute_regular_triangulation` realizes the resulting regular
+   triangulation. A square-face regression verifies that the computed height
+   lands strictly inside the selected secondary cone and reproduces the
+   selected diagonal.
    The Stage 0 no-replay policy tests also now pass again after two policy
    cleanups: generic first-principles runs log the computed flux-coordinate
    basis separately from explicit production-basis overrides, and the opt-in

@@ -3846,6 +3846,16 @@ CPL inequalities in ambient point-index coordinates and returns the exact
 `face -> choice -> rows` object consumed by the NTFE chamber stack. This still
 does not enumerate face FRTs and does not include optional star-ness
 inequalities.
+The selected-face wrapper corresponding to CYTools `triangfaces_to_frt` is now
+available as
+`expanded_secondary_regular_triangulation_from_face_triangulations`. It
+constructs permissible-height inequalities from supplied two-face FRTs, uses
+the existing `Cone::find_interior_point` LP path for a strict height vector,
+and feeds that vector to `compute_regular_triangulation`. The initial
+regression realizes a selected square diagonal and checks strict
+secondary-cone membership. This still depends on caller-supplied face FRTs;
+enumerating those FRTs and applying star-ness constraints remain separate
+steps.
 
 The star-union chamber semigroup probe now also lifts every current/flipped
 chamber generator back through the global curve-basis projection and reports
