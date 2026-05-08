@@ -159,7 +159,10 @@ and matrix-basis pipeline are no longer open.
    semigroup transport, wall-crossing chamber transport, and a non-Weyl
    transport certificate. The matched opposite-star wall hint and wall
    readiness output now expose this same orientation and signed role profile
-   directly for subsequent transport checks.
+   directly for subsequent transport checks. The crossed-wall regular-side
+   hint also shows that the corrected global regular triangulation selects the
+   positive-coefficient/star-extra omission side for targets `7`/`8`:
+   `[195,212]` are omission hits and `[0,55]` are not.
 2. **Exact corrected KKLT volume.** The no-replay path computes a corrected
    volume but still has a documented instanton/chamber residual.
 3. **Generic matrix-basis pipeline.** Matrix divisor-basis primitives now cover

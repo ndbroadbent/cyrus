@@ -3705,6 +3705,15 @@ transport certificate. The matched opposite-star wall hint and wall-readiness
 object now carry that orientation and signed role profile directly, so later
 transport code no longer has to rediscover the crossed wall from the raw
 circuit list.
+The same report now classifies which side of that circuit the corrected
+global regular triangulation selects. For both targets `7` and `8`, the
+crossed-wall regular-side hint is
+`crossed_wall_regular_selects_positive_coefficient_omission_side`, with
+positive coefficient points `[195,212]` and no negative-side omission hits.
+Thus the current global chamber is the star-extra side of the local
+resolved-conifold wall; the unresolved task is transporting the
+target-plus-star qN/semigroup history across that identified wall, not finding
+which local side the corrected chamber occupies.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

@@ -1477,6 +1477,12 @@ to make the remaining GV layer more first-principles:
    and missing target-plus-star qN/chamber transport inputs. The matched
    opposite-star wall hint and wall-readiness object now carry this orientation
    and role signature directly for later transport checks.
+   The crossed-wall regular-side hint now confirms the corrected global
+   regular triangulation selects the positive-coefficient omission side for
+   targets `7`/`8`: positive points `[195,212]` are both omission hits and the
+   negative points `[0,55]` have no omission hits. This pins the chamber side
+   that needs transport instead of leaving the wall side implicit in the
+   simplex list.
    A direct off-height global projection lookup now rules out another shortcut:
    the target `7`/`8` star-side off-height pair `[(55,1),(212,-1)]` is not an
    integral global curve-basis class, and targets `3`/`6` have no nonzero

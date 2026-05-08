@@ -797,6 +797,8 @@ struct LocalCygvSourceResolutionHintSummary {
         LocalCygvStarUnionOppositeStarWallCircuitHint,
     shared_two_simplex_star_union_wall_transport_readiness:
         LocalCygvStarUnionWallTransportReadiness,
+    shared_two_simplex_star_union_crossed_wall_regular_side:
+        LocalCygvStarUnionCrossedWallRegularSideHint,
     shared_two_simplex_star_union_global_secondary_height_status: String,
     shared_two_simplex_star_union_global_secondary_height_min_pairing: Option<String>,
     shared_two_simplex_star_union_global_secondary_height_max_pairing: Option<String>,
@@ -920,6 +922,15 @@ struct LocalCygvStarUnionWallTransportReadiness {
     target_plus_star_support_generator_count: Option<usize>,
     target_plus_star_support_face_certificate_status: Option<String>,
     crossed_wall_stable_weyl_certificate: Option<LocalCygvStarUnionCrossedWallStableWeylProbe>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvStarUnionCrossedWallRegularSideHint {
+    status: String,
+    positive_coefficient_points: Vec<usize>,
+    negative_coefficient_points: Vec<usize>,
+    positive_coefficient_omission_hits: Vec<usize>,
+    negative_coefficient_omission_hits: Vec<usize>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -17426,6 +17437,10 @@ fn local_cygv_source_resolution_hint_summaries(
                     &star_support_hint,
                     context.secondary_cone_heights,
                 );
+            let crossed_wall_regular_side = local_cygv_star_union_crossed_wall_regular_side_hint(
+                &opposite_star_wall_circuit,
+                &star_union_global_regular_triangulation,
+            );
             let resolved_full_union_compatibility =
                 local_cygv_resolved_shared_chamber_full_union_compatibility_status(
                     &resolved_chamber_global_height,
@@ -17569,6 +17584,7 @@ fn local_cygv_source_resolution_hint_summaries(
                 shared_two_simplex_star_union_opposite_star_wall_circuit:
                     opposite_star_wall_circuit,
                 shared_two_simplex_star_union_wall_transport_readiness: wall_transport_readiness,
+                shared_two_simplex_star_union_crossed_wall_regular_side: crossed_wall_regular_side,
                 shared_two_simplex_star_union_global_secondary_height_status:
                     star_union_shared_face_secondary.global_height_status,
                 shared_two_simplex_star_union_global_secondary_height_min_pairing:
@@ -21452,6 +21468,76 @@ fn local_cygv_star_union_global_regular_triangulation_hint(
         shared_face_extra_points,
         target_exclusive_selected_points,
         star_extra_selected_points,
+    }
+}
+
+fn local_cygv_star_union_crossed_wall_regular_side_hint(
+    wall: &LocalCygvStarUnionOppositeStarWallCircuitHint,
+    global_regular: &LocalCygvStarUnionGlobalRegularTriangulationHint,
+) -> LocalCygvStarUnionCrossedWallRegularSideHint {
+    let empty = |status: &str| LocalCygvStarUnionCrossedWallRegularSideHint {
+        status: status.to_string(),
+        positive_coefficient_points: Vec::new(),
+        negative_coefficient_points: Vec::new(),
+        positive_coefficient_omission_hits: Vec::new(),
+        negative_coefficient_omission_hits: Vec::new(),
+    };
+    let Some(circuit) = wall.circuit_nonzero.as_ref() else {
+        return empty("crossed_wall_regular_side_missing_wall_circuit");
+    };
+    if global_regular.simplices.is_empty() {
+        return empty("crossed_wall_regular_side_missing_global_regular_triangulation");
+    }
+
+    let circuit_points = circuit
+        .iter()
+        .map(|(point, _)| *point)
+        .collect::<BTreeSet<_>>();
+    let positive_points = circuit
+        .iter()
+        .filter_map(|(point, coefficient)| (*coefficient > 0).then_some(*point))
+        .collect::<Vec<_>>();
+    let negative_points = circuit
+        .iter()
+        .filter_map(|(point, coefficient)| (*coefficient < 0).then_some(*point))
+        .collect::<Vec<_>>();
+    let omission_hits = |points: &[usize]| {
+        points
+            .iter()
+            .copied()
+            .filter(|omitted| {
+                let required = circuit_points
+                    .iter()
+                    .copied()
+                    .filter(|point| point != omitted)
+                    .collect::<BTreeSet<_>>();
+                global_regular.simplices.iter().any(|simplex| {
+                    let simplex = simplex.iter().copied().collect::<BTreeSet<_>>();
+                    required.iter().all(|point| simplex.contains(point))
+                })
+            })
+            .collect::<Vec<_>>()
+    };
+    let positive_hits = omission_hits(&positive_points);
+    let negative_hits = omission_hits(&negative_points);
+    let status = if positive_points.is_empty() || negative_points.is_empty() {
+        "crossed_wall_regular_side_missing_signed_circuit_parts"
+    } else if positive_hits.len() == positive_points.len() && negative_hits.is_empty() {
+        "crossed_wall_regular_selects_positive_coefficient_omission_side"
+    } else if negative_hits.len() == negative_points.len() && positive_hits.is_empty() {
+        "crossed_wall_regular_selects_negative_coefficient_omission_side"
+    } else if positive_hits.is_empty() && negative_hits.is_empty() {
+        "crossed_wall_regular_side_no_circuit_omission_facets_seen"
+    } else {
+        "crossed_wall_regular_side_mixed_or_partial_omission_facets"
+    };
+
+    LocalCygvStarUnionCrossedWallRegularSideHint {
+        status: status.to_string(),
+        positive_coefficient_points: positive_points,
+        negative_coefficient_points: negative_points,
+        positive_coefficient_omission_hits: positive_hits,
+        negative_coefficient_omission_hits: negative_hits,
     }
 }
 
@@ -26751,6 +26837,14 @@ mod tests {
                     target_plus_star_support_face_certificate_status: None,
                     crossed_wall_stable_weyl_certificate: None,
                 },
+            shared_two_simplex_star_union_crossed_wall_regular_side:
+                LocalCygvStarUnionCrossedWallRegularSideHint {
+                    status: "test".to_string(),
+                    positive_coefficient_points: Vec::new(),
+                    negative_coefficient_points: Vec::new(),
+                    positive_coefficient_omission_hits: Vec::new(),
+                    negative_coefficient_omission_hits: Vec::new(),
+                },
             shared_two_simplex_star_union_global_secondary_height_status: "test".to_string(),
             shared_two_simplex_star_union_global_secondary_height_min_pairing: None,
             shared_two_simplex_star_union_global_secondary_height_max_pairing: None,
@@ -29871,6 +29965,29 @@ mod tests {
             wall_hint.opposite_star_source_derived_gv.as_deref(),
             Some("1")
         );
+        let regular_side = local_cygv_star_union_crossed_wall_regular_side_hint(
+            &wall_hint,
+            &LocalCygvStarUnionGlobalRegularTriangulationHint {
+                status: "test".to_string(),
+                simplex_count: Some(2),
+                simplices: vec![vec![0, 55, 195], vec![0, 55, 212]],
+                shared_face_simplex_count: Some(2),
+                shared_face_extra_points: vec![195, 212],
+                target_exclusive_selected_points: Vec::new(),
+                star_extra_selected_points: vec![195, 212],
+            },
+        );
+        assert_eq!(
+            regular_side.status,
+            "crossed_wall_regular_selects_positive_coefficient_omission_side"
+        );
+        assert_eq!(regular_side.positive_coefficient_points, vec![195, 212]);
+        assert_eq!(regular_side.negative_coefficient_points, vec![55, 0]);
+        assert_eq!(
+            regular_side.positive_coefficient_omission_hits,
+            vec![195, 212]
+        );
+        assert!(regular_side.negative_coefficient_omission_hits.is_empty());
 
         let readiness = local_cygv_star_union_wall_transport_readiness(
             &summary,
