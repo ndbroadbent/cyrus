@@ -1288,11 +1288,13 @@ CY3 omission candidates, so the remaining six-point blocker is not repaired by
 dropping columns from the visible circuit.
 
 `/tmp/cyrus_six_point_zero_enlargement_v2.json` checks the next natural
-support enlargement: reintroducing zero-coefficient star-union points. For the
-shared target `7`/`8` row, adding point `46`, point `195`, or both still gives
-zero zero-degree nef candidates. The one-point enlargements have compact CY3
-omissions, but none preserve the target relation, so they remain
-non-promotable diagnostics.
+support enlargement: reintroducing zero-coefficient star-union points. The
+refreshed target `7`/`8` reports show three enlargements per row: target `7`
+adds point `46`, point `195`, or both, while target `8` adds point `2`, point
+`195`, or both. All still give zero zero-degree nef candidates and keep
+`support_polytope_not_reflexive_origin_is_hull_vertex`. The one-point
+enlargements have compact CY3 omissions, but none preserve the target relation,
+so they remain non-promotable diagnostics.
 
 `/tmp/cyrus_six_point_height_side_v1.json` adds the global secondary-height
 side for those unresolved chamber generators. All four six-point rows are on

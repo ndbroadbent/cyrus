@@ -1557,6 +1557,9 @@ struct LocalCygvChamberGeneratorLocalCoordinate {
 struct LocalToricZeroCoefficientEnlargementCandidate {
     added_point_indices: Vec<usize>,
     support_point_count: usize,
+    support_polytope_reflexivity_precondition_status: String,
+    support_polytope_origin_is_hull_vertex: Option<bool>,
+    support_polytope_hull_vertex_point_indices: Vec<usize>,
     charge_basis_status: String,
     charge_row_count: Option<usize>,
     hypersurface_cy_dim: Option<i64>,
@@ -26957,12 +26960,20 @@ fn local_toric_zero_coefficient_enlargement_candidate(
         .map(|sample| sample.point_index)
         .collect::<Vec<_>>();
     let added_point_indices = selected_extra_points.iter().copied().collect::<Vec<_>>();
+    let support_reflexivity_precondition =
+        local_cygv_support_polytope_reflexivity_precondition(&support_point_samples);
     let charge_basis = match affine_charge_basis_for_point_samples(&support_point_samples) {
         Ok(charge_basis) => charge_basis,
         Err(error) => {
             return LocalToricZeroCoefficientEnlargementCandidate {
                 added_point_indices,
                 support_point_count: support_point_samples.len(),
+                support_polytope_reflexivity_precondition_status: support_reflexivity_precondition
+                    .status,
+                support_polytope_origin_is_hull_vertex: support_reflexivity_precondition
+                    .origin_is_hull_vertex,
+                support_polytope_hull_vertex_point_indices: support_reflexivity_precondition
+                    .hull_vertex_point_indices,
                 charge_basis_status: format!(
                     "zero_coefficient_enlargement_charge_basis_error:{}",
                     status_error_fragment(&error)
@@ -26999,6 +27010,11 @@ fn local_toric_zero_coefficient_enlargement_candidate(
     LocalToricZeroCoefficientEnlargementCandidate {
         added_point_indices,
         support_point_count: support_point_samples.len(),
+        support_polytope_reflexivity_precondition_status: support_reflexivity_precondition.status,
+        support_polytope_origin_is_hull_vertex: support_reflexivity_precondition
+            .origin_is_hull_vertex,
+        support_polytope_hull_vertex_point_indices: support_reflexivity_precondition
+            .hull_vertex_point_indices,
         charge_basis_status: "zero_coefficient_enlargement_charge_basis_reconstructed".to_string(),
         charge_row_count: Some(charge_basis.len()),
         hypersurface_cy_dim: shape.as_ref().map(|shape| shape.cy_dim),
@@ -33527,6 +33543,20 @@ mod tests {
         );
         let sample = &diagnostic.local_toric_zero_coefficient_enlargement_sample;
         assert_eq!(sample.len(), 3);
+        assert!(sample.iter().all(|candidate| {
+            candidate.support_polytope_reflexivity_precondition_status
+                == "support_polytope_not_reflexive_origin_is_hull_vertex"
+        }));
+        assert!(
+            sample
+                .iter()
+                .all(|candidate| candidate.support_polytope_origin_is_hull_vertex == Some(true))
+        );
+        assert!(sample.iter().all(|candidate| {
+            candidate
+                .support_polytope_hull_vertex_point_indices
+                .contains(&0)
+        }));
         assert_eq!(sample[0].added_point_indices, vec![46]);
         assert_eq!(sample[0].zero_degree_nef_partition_candidate_count, Some(0));
         assert_eq!(
