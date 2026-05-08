@@ -361,6 +361,12 @@ struct ContextReport {
     cygv_path_support_target_pre_subtraction_formula_status_counts: BTreeMap<String, usize>,
     cygv_path_support_target_gw_formula_instanton_balance_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_decomposition_status_counts: BTreeMap<String, usize>,
+    cygv_lower_seed_decomposition_direct_pair_seed_scan_count_counts: BTreeMap<String, usize>,
+    cygv_lower_seed_decomposition_pair_sum_degree_bound_counts: BTreeMap<String, usize>,
+    cygv_lower_seed_decomposition_pair_sum_candidate_count_counts: BTreeMap<String, usize>,
+    cygv_lower_seed_decomposition_pair_sum_unique_count_counts: BTreeMap<String, usize>,
+    cygv_lower_seed_decomposition_pair_sum_duplicate_count_counts: BTreeMap<String, usize>,
+    cygv_lower_seed_decomposition_pair_sum_overdegree_skipped_count_counts: BTreeMap<String, usize>,
     cygv_lower_seed_predecessor_candidate_count_counts: BTreeMap<String, usize>,
     cygv_lower_seed_predecessor_degree_split_counts: BTreeMap<String, usize>,
     cygv_lower_seed_predecessor_known_qn_history_pair_status_counts: BTreeMap<String, usize>,
@@ -15118,6 +15124,68 @@ fn build_report(
         }),
         "not_run",
     );
+    let cygv_lower_seed_decomposition_direct_pair_seed_scan_count_counts =
+        optional_usize_count_counts(
+            targets.iter().map(|target| {
+                target
+                    .cygv_path_history_probe
+                    .as_ref()
+                    .and_then(|probe| probe.lower_seed_decomposition_search_stats.as_ref())
+                    .map(|stats| stats.direct_pair_seed_scan_count)
+            }),
+            "not_run",
+        );
+    let cygv_lower_seed_decomposition_pair_sum_degree_bound_counts = optional_i128_count_counts(
+        targets.iter().map(|target| {
+            target
+                .cygv_path_history_probe
+                .as_ref()
+                .and_then(|probe| probe.lower_seed_decomposition_search_stats.as_ref())
+                .and_then(|stats| stats.pair_sum_degree_bound)
+        }),
+        "not_run",
+    );
+    let cygv_lower_seed_decomposition_pair_sum_candidate_count_counts = optional_usize_count_counts(
+        targets.iter().map(|target| {
+            target
+                .cygv_path_history_probe
+                .as_ref()
+                .and_then(|probe| probe.lower_seed_decomposition_search_stats.as_ref())
+                .and_then(|stats| stats.pair_sum_candidate_count)
+        }),
+        "not_run",
+    );
+    let cygv_lower_seed_decomposition_pair_sum_unique_count_counts = optional_usize_count_counts(
+        targets.iter().map(|target| {
+            target
+                .cygv_path_history_probe
+                .as_ref()
+                .and_then(|probe| probe.lower_seed_decomposition_search_stats.as_ref())
+                .and_then(|stats| stats.pair_sum_unique_count)
+        }),
+        "not_run",
+    );
+    let cygv_lower_seed_decomposition_pair_sum_duplicate_count_counts = optional_usize_count_counts(
+        targets.iter().map(|target| {
+            target
+                .cygv_path_history_probe
+                .as_ref()
+                .and_then(|probe| probe.lower_seed_decomposition_search_stats.as_ref())
+                .and_then(|stats| stats.pair_sum_duplicate_count)
+        }),
+        "not_run",
+    );
+    let cygv_lower_seed_decomposition_pair_sum_overdegree_skipped_count_counts =
+        optional_usize_count_counts(
+            targets.iter().map(|target| {
+                target
+                    .cygv_path_history_probe
+                    .as_ref()
+                    .and_then(|probe| probe.lower_seed_decomposition_search_stats.as_ref())
+                    .and_then(|stats| stats.pair_sum_overdegree_skipped_count)
+            }),
+            "not_run",
+        );
     let cygv_lower_seed_predecessor_candidate_count_counts =
         cygv_lower_seed_predecessor_candidate_count_counts(
             targets
@@ -15684,6 +15752,12 @@ fn build_report(
         cygv_path_support_target_pre_subtraction_formula_status_counts,
         cygv_path_support_target_gw_formula_instanton_balance_status_counts,
         cygv_lower_seed_decomposition_status_counts,
+        cygv_lower_seed_decomposition_direct_pair_seed_scan_count_counts,
+        cygv_lower_seed_decomposition_pair_sum_degree_bound_counts,
+        cygv_lower_seed_decomposition_pair_sum_candidate_count_counts,
+        cygv_lower_seed_decomposition_pair_sum_unique_count_counts,
+        cygv_lower_seed_decomposition_pair_sum_duplicate_count_counts,
+        cygv_lower_seed_decomposition_pair_sum_overdegree_skipped_count_counts,
         cygv_lower_seed_predecessor_candidate_count_counts,
         cygv_lower_seed_predecessor_degree_split_counts,
         cygv_lower_seed_predecessor_known_qn_history_pair_status_counts,
@@ -19058,6 +19132,18 @@ fn optional_status_counts<'a>(
 
 fn optional_usize_count_counts(
     values: impl IntoIterator<Item = Option<usize>>,
+    missing_status: &str,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for value in values {
+        let key = value.map_or_else(|| missing_status.to_string(), |value| value.to_string());
+        *counts.entry(key).or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn optional_i128_count_counts(
+    values: impl IntoIterator<Item = Option<i128>>,
     missing_status: &str,
 ) -> BTreeMap<String, usize> {
     let mut counts = BTreeMap::new();
@@ -22809,6 +22895,15 @@ mod tests {
         let counts = optional_usize_count_counts([Some(9), None, Some(0), Some(9)], "not_run");
 
         assert_eq!(counts.get("9").copied(), Some(2));
+        assert_eq!(counts.get("0").copied(), Some(1));
+        assert_eq!(counts.get("not_run").copied(), Some(1));
+    }
+
+    #[test]
+    fn optional_i128_count_counts_aggregates_missing_and_signed_values() {
+        let counts = optional_i128_count_counts([Some(-2), None, Some(0), Some(-2)], "not_run");
+
+        assert_eq!(counts.get("-2").copied(), Some(2));
         assert_eq!(counts.get("0").copied(), Some(1));
         assert_eq!(counts.get("not_run").copied(), Some(1));
     }

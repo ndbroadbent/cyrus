@@ -342,11 +342,12 @@ run pass. Any remaining mismatch must be explicit and localizable.
    target-`5` zero-generation smoke this preserved the exact decomposition and
    predecessor sample while reducing runtime from 210.63 seconds to 128.75
    seconds. The path-history report now serializes these lower-seed search
-   statistics directly. A target-`1` zero-generation smoke preserved the prior
-   decomposition/predecessor sample, completed in 25.09 seconds, and reported
-   `direct_pair_seed_scan_count=1616`, `pair_sum_degree_bound=17`,
-   `pair_sum_candidate_count=388643`, `pair_sum_unique_count=386251`,
-   `pair_sum_duplicate_count=2392`, and
+   statistics per target and aggregates each statistic at top level. A
+   target-`1` zero-generation smoke preserved the prior decomposition/
+   predecessor sample, completed in 25.09 seconds, and reported matching
+   per-target and top-level buckets for `direct_pair_seed_scan_count=1616`,
+   `pair_sum_degree_bound=17`, `pair_sum_candidate_count=388643`,
+   `pair_sum_unique_count=386251`, `pair_sum_duplicate_count=2392`, and
    `pair_sum_overdegree_skipped_count=917893`.
    The parent-only classifications now include parent-path-support runtime
    lookups from the same `cygv` run. On the regenerated target 7 report, the
