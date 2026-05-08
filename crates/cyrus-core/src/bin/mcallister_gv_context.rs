@@ -917,6 +917,9 @@ struct LocalCygvCompleteIntersectionShapeCandidate {
     cy_codim: usize,
     ambient_dim: i64,
     cy_dim: i64,
+    support_polytope_reflexivity_precondition_status: String,
+    support_polytope_origin_is_hull_vertex: Option<bool>,
+    support_polytope_hull_vertex_point_indices: Vec<usize>,
     nef_partition_part_count: usize,
     nef_partition_candidate_count: Option<usize>,
     nef_partition_degree_status_counts: Option<BTreeMap<String, usize>>,
@@ -958,6 +961,12 @@ struct LocalCygvNefPartitionCandidate {
     cytools_nef_minkowski_sum_vertex_count: Option<usize>,
     cytools_nef_origin_is_missing_ambient_vertex: Option<bool>,
     cytools_nef_missing_ambient_vertex_point_indices: Option<Vec<usize>>,
+}
+
+struct LocalCygvSupportReflexivityPrecondition {
+    status: String,
+    origin_is_hull_vertex: Option<bool>,
+    hull_vertex_point_indices: Vec<usize>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1327,6 +1336,10 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
     local_toric_hypersurface_cy_dim: Option<i64>,
     local_toric_hypersurface_cygv_compact_input_status: Option<String>,
     local_toric_complete_intersection_status: Option<String>,
+    local_toric_complete_intersection_support_polytope_reflexivity_precondition_status:
+        Option<String>,
+    local_toric_complete_intersection_support_polytope_origin_is_hull_vertex: Option<bool>,
+    local_toric_complete_intersection_support_polytope_hull_vertex_point_indices: Vec<usize>,
     local_toric_complete_intersection_nef_partition_candidate_count: Option<usize>,
     local_toric_complete_intersection_nef_partition_degree_status_counts:
         Option<BTreeMap<String, usize>>,
@@ -1448,6 +1461,10 @@ struct LocalCygvChamberGeneratorLocalToricDiagnostic {
     local_toric_hypersurface_cy_dim: Option<i64>,
     local_toric_hypersurface_cygv_compact_input_status: Option<String>,
     local_toric_complete_intersection_status: Option<String>,
+    local_toric_complete_intersection_support_polytope_reflexivity_precondition_status:
+        Option<String>,
+    local_toric_complete_intersection_support_polytope_origin_is_hull_vertex: Option<bool>,
+    local_toric_complete_intersection_support_polytope_hull_vertex_point_indices: Vec<usize>,
     local_toric_complete_intersection_nef_partition_candidate_count: Option<usize>,
     local_toric_complete_intersection_nef_partition_degree_status_counts:
         Option<BTreeMap<String, usize>>,
@@ -10771,6 +10788,8 @@ fn local_cygv_complete_intersection_shape_candidate(
     if cy_codim > hypersurface_shape.q_rows {
         return None;
     }
+    let support_reflexivity_precondition =
+        local_cygv_support_polytope_reflexivity_precondition(support_point_samples);
     let nef_partition_candidates = if cy_codim == 2 {
         local_cygv_codim_two_nef_partition_candidates(
             support_point_indices,
@@ -10967,6 +10986,11 @@ fn local_cygv_complete_intersection_shape_candidate(
         cy_codim,
         ambient_dim: hypersurface_shape.ambient_dim,
         cy_dim: 3,
+        support_polytope_reflexivity_precondition_status: support_reflexivity_precondition.status,
+        support_polytope_origin_is_hull_vertex: support_reflexivity_precondition
+            .origin_is_hull_vertex,
+        support_polytope_hull_vertex_point_indices: support_reflexivity_precondition
+            .hull_vertex_point_indices,
         nef_partition_part_count: cy_codim,
         nef_partition_candidate_count,
         nef_partition_degree_status_counts,
@@ -11127,6 +11151,67 @@ fn local_cygv_codim_two_nef_partition_candidates(
             })
     });
     Ok(candidates)
+}
+
+fn local_cygv_support_polytope_reflexivity_precondition(
+    support_point_samples: &[OriginCircuitRelationPointSample],
+) -> LocalCygvSupportReflexivityPrecondition {
+    let Some(first_sample) = support_point_samples.first() else {
+        return LocalCygvSupportReflexivityPrecondition {
+            status: "support_polytope_reflexivity_precondition_blocked_empty_support".to_string(),
+            origin_is_hull_vertex: None,
+            hull_vertex_point_indices: Vec::new(),
+        };
+    };
+    let dim = first_sample.coordinates.len();
+    if support_point_samples
+        .iter()
+        .any(|sample| sample.coordinates.len() != dim)
+    {
+        return LocalCygvSupportReflexivityPrecondition {
+            status: "support_polytope_reflexivity_precondition_blocked_inconsistent_dimensions"
+                .to_string(),
+            origin_is_hull_vertex: None,
+            hull_vertex_point_indices: Vec::new(),
+        };
+    }
+    let coords = support_point_samples
+        .iter()
+        .map(|sample| sample.coordinates.clone())
+        .collect::<Vec<_>>();
+    let Some(hull) = ConvexHull::compute(&coords) else {
+        return LocalCygvSupportReflexivityPrecondition {
+            status: "support_polytope_reflexivity_precondition_blocked_not_full_dimensional"
+                .to_string(),
+            origin_is_hull_vertex: None,
+            hull_vertex_point_indices: Vec::new(),
+        };
+    };
+    let mut hull_vertex_point_indices = hull
+        .vertex_indices
+        .into_iter()
+        .filter_map(|idx| {
+            support_point_samples
+                .get(idx)
+                .map(|sample| sample.point_index)
+        })
+        .collect::<Vec<_>>();
+    hull_vertex_point_indices.sort_unstable();
+    hull_vertex_point_indices.dedup();
+    let origin_is_hull_vertex = support_point_samples.iter().any(|sample| {
+        sample.coordinates.iter().all(|&coord| coord == 0)
+            && hull_vertex_point_indices.contains(&sample.point_index)
+    });
+    let status = if origin_is_hull_vertex {
+        "support_polytope_not_reflexive_origin_is_hull_vertex"
+    } else {
+        "support_polytope_reflexivity_not_ruled_out_by_origin_hull_vertex"
+    };
+    LocalCygvSupportReflexivityPrecondition {
+        status: status.to_string(),
+        origin_is_hull_vertex: Some(origin_is_hull_vertex),
+        hull_vertex_point_indices,
+    }
 }
 
 struct LocalCygvSupportNefCertificateProbe {
@@ -20740,6 +20825,20 @@ fn unresolved_chamber_generator_summaries(
                         .local_toric_diagnostic
                         .local_toric_complete_intersection_status
                         .clone(),
+                    local_toric_complete_intersection_support_polytope_reflexivity_precondition_status:
+                        context
+                            .local_toric_diagnostic
+                            .local_toric_complete_intersection_support_polytope_reflexivity_precondition_status
+                            .clone(),
+                    local_toric_complete_intersection_support_polytope_origin_is_hull_vertex:
+                        context
+                            .local_toric_diagnostic
+                            .local_toric_complete_intersection_support_polytope_origin_is_hull_vertex,
+                    local_toric_complete_intersection_support_polytope_hull_vertex_point_indices:
+                        context
+                            .local_toric_diagnostic
+                            .local_toric_complete_intersection_support_polytope_hull_vertex_point_indices
+                            .clone(),
                     local_toric_complete_intersection_nef_partition_candidate_count: context
                         .local_toric_diagnostic
                         .local_toric_complete_intersection_nef_partition_candidate_count,
@@ -26215,6 +26314,9 @@ fn chamber_generator_local_toric_diagnostic_not_run(
         local_toric_hypersurface_cy_dim: None,
         local_toric_hypersurface_cygv_compact_input_status: None,
         local_toric_complete_intersection_status: None,
+        local_toric_complete_intersection_support_polytope_reflexivity_precondition_status: None,
+        local_toric_complete_intersection_support_polytope_origin_is_hull_vertex: None,
+        local_toric_complete_intersection_support_polytope_hull_vertex_point_indices: Vec::new(),
         local_toric_complete_intersection_nef_partition_candidate_count: None,
         local_toric_complete_intersection_nef_partition_degree_status_counts: None,
         local_toric_complete_intersection_cytools_nef_partition_candidate_count: None,
@@ -26434,6 +26536,11 @@ fn chamber_generator_local_toric_diagnostic(
             local_toric_hypersurface_cy_dim: None,
             local_toric_hypersurface_cygv_compact_input_status: None,
             local_toric_complete_intersection_status: None,
+            local_toric_complete_intersection_support_polytope_reflexivity_precondition_status:
+                None,
+            local_toric_complete_intersection_support_polytope_origin_is_hull_vertex: None,
+            local_toric_complete_intersection_support_polytope_hull_vertex_point_indices:
+                Vec::new(),
             local_toric_complete_intersection_nef_partition_candidate_count: None,
             local_toric_complete_intersection_nef_partition_degree_status_counts: None,
             local_toric_complete_intersection_cytools_nef_partition_candidate_count: None,
@@ -26620,6 +26727,24 @@ fn chamber_generator_local_toric_diagnostic(
         local_toric_complete_intersection_status: complete_intersection_shape_candidate
             .as_ref()
             .map(|candidate| candidate.status.clone()),
+        local_toric_complete_intersection_support_polytope_reflexivity_precondition_status:
+            complete_intersection_shape_candidate.as_ref().map(|candidate| {
+                candidate
+                    .support_polytope_reflexivity_precondition_status
+                    .clone()
+            }),
+        local_toric_complete_intersection_support_polytope_origin_is_hull_vertex:
+            complete_intersection_shape_candidate
+                .as_ref()
+                .and_then(|candidate| candidate.support_polytope_origin_is_hull_vertex),
+        local_toric_complete_intersection_support_polytope_hull_vertex_point_indices:
+            complete_intersection_shape_candidate
+                .as_ref()
+                .map_or_else(Vec::new, |candidate| {
+                    candidate
+                        .support_polytope_hull_vertex_point_indices
+                        .clone()
+                }),
         local_toric_complete_intersection_nef_partition_candidate_count:
             complete_intersection_shape_candidate
                 .as_ref()
@@ -33206,6 +33331,20 @@ mod tests {
             Some(
                 "complete_intersection_cy3_shape_no_zero_degree_nef_partition_candidate_requires_source_rule"
             )
+        );
+        assert_eq!(
+            diagnostic
+                .local_toric_complete_intersection_support_polytope_reflexivity_precondition_status
+                .as_deref(),
+            Some("support_polytope_not_reflexive_origin_is_hull_vertex")
+        );
+        assert_eq!(
+            diagnostic.local_toric_complete_intersection_support_polytope_origin_is_hull_vertex,
+            Some(true)
+        );
+        assert_eq!(
+            diagnostic.local_toric_complete_intersection_support_polytope_hull_vertex_point_indices,
+            vec![0, 55, 208, 211, 212, 214]
         );
         assert_eq!(
             diagnostic.local_toric_complete_intersection_nef_partition_candidate_count,

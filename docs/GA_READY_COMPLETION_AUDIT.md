@@ -228,7 +228,9 @@ and matrix-basis pipeline are no longer open.
    nef-partition contract.
    A direct CYTools/PALP check of the same six support coordinates also reports
    `is_reflexive=False`, so `nef_partitions(codim=2)` is not available on the
-   visible support itself.
+   visible support itself. Cyrus now exports the same native precondition as
+   `support_polytope_not_reflexive_origin_is_hull_vertex`, with hull vertices
+   `[0,55,208,211,212,214]`.
 2. **Exact corrected KKLT volume.** The no-replay path computes a corrected
    volume but still has a documented instanton/chamber residual.
 3. **Generic matrix-basis pipeline.** Matrix divisor-basis primitives now cover
@@ -1363,6 +1365,9 @@ origin-containing partition candidates fail the CYTools-style certificate with
 The direct CYTools/PALP probe is negative as well: the visible six-point
 support is not reflexive, so PALP refuses codimension-2 nef partitions on that
 polytope.
+Cyrus now reports the local precondition as
+`support_polytope_not_reflexive_origin_is_hull_vertex` for both target `7` and
+target `8`, with hull vertices `[0,55,208,211,212,214]`.
 
 `/tmp/cyrus_six_point_overlap_annotations_v1.json` also annotates the nearest
 degree-bounded support-overlap samples. For the shared target `7`/`8`

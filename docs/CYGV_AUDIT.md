@@ -4456,6 +4456,12 @@ too: `Polytope(pts)` is four-dimensional with six points but
 `ValueError: The polytope must be reflexive`. Therefore the visible six-point
 support cannot be the PALP nef-partition source without source enlargement,
 stack/twisted data, or a different certified chamber history.
+The regenerated native reports
+`/tmp/cyrus_six_point_rank3_reflexivity_precondition_target7_v1.json` and
+`/tmp/cyrus_six_point_rank3_reflexivity_precondition_target8_v1.json` expose
+the same obstruction as
+`support_polytope_not_reflexive_origin_is_hull_vertex`, with hull vertices
+`[0,55,208,211,212,214]`.
 
 `/tmp/cyrus_six_point_overlap_annotations_v1.json` annotates the nearest
 degree-bounded support-overlap samples with qN-history, source class, and

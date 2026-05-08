@@ -51,6 +51,8 @@ The current report artifacts are:
 /tmp/cyrus_six_point_rank3_partition_samples_target8_v1.json
 /tmp/cyrus_six_point_rank3_origin_included_partitions_target7_v1.json
 /tmp/cyrus_six_point_rank3_origin_included_partitions_target8_v1.json
+/tmp/cyrus_six_point_rank3_reflexivity_precondition_target7_v1.json
+/tmp/cyrus_six_point_rank3_reflexivity_precondition_target8_v1.json
 ```
 
 The v2 artifacts record the same source-model obstruction plus the source
@@ -101,6 +103,10 @@ dimension `4`, point count `6`, and `is_reflexive=False`; calling
 So the visible six-point support is not itself a PALP nef-partition source. A
 valid source must enlarge/change the source polytope, provide a stacky/twisted
 model, or supply the missing chamber/qN history by another sourced route.
+Cyrus now exports the native precondition behind this result as
+`support_polytope_not_reflexive_origin_is_hull_vertex`: for both target reports,
+the local support hull vertices are `[0,55,208,211,212,214]`, so the lattice
+origin is on the hull boundary rather than in the interior.
 
 ## Sources Read
 
