@@ -3347,6 +3347,17 @@ star-side circuit `[(0,-1),(55,-1),(195,1),(212,1)]` has global corrected
 height pairing `0.42571113815644424`, not `0`. This rules out the visible
 shared-face wall fan as a chamber-compatible global certificate; the corrected
 height crosses those local oriented walls rather than lying on them.
+The next report, `/tmp/cyrus_gv_context_global_regular_report.json`, computes
+the actual regular triangulation induced by the corrected global height on each
+local star-union point set. It shows four non-weighted rows whose shared-face
+stars select target-exclusive points, one non-weighted row with no shared-face
+simplex, and all four weighted rows matching the serialized star extras over
+the shared face. Targets `3`/`6` select star extras `[2,46]`; targets `7`/`8`
+select `[195,212]`; none of the weighted rows selects the target-exclusive
+relation points over that shared face. This confirms that the serialized star
+simplices are the actual local chamber chosen by the corrected global height,
+not missing chamber data that can be swapped for the target relation without a
+wall-crossing/transport computation.
 Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
 serializes a role-tagged height profile over the full union support. For
 targets `3`/`6`, the off-hyperplane zero-shared ray has height `-1` but zero

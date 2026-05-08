@@ -1222,6 +1222,15 @@ to make the remaining GV layer more first-principles:
    star-side circuit `[(0,-1),(55,-1),(195,1),(212,1)]` has global pairing
    `0.42571113815644424`, so the visible shared-face wall fan is not compatible
    with the corrected global chamber height.
+   The follow-up `/tmp/cyrus_gv_context_global_regular_report.json` computes
+   the local regular triangulation induced by that same corrected height on the
+   star-union support. All four weighted rows match the serialized star extras
+   over the shared face (`[2,46]` for targets `3`/`6`, `[195,212]` for targets
+   `7`/`8`) and none selects the target-exclusive relation points over that
+   face. Thus the serialized star simplices are the actual local chamber chosen
+   by the corrected global height, and the missing target relation requires a
+   chamber-transport or wall-crossing computation rather than a hidden local
+   triangulation swap.
    The full union-support height profile is now serialized as well. For
    targets `3`/`6`, the off-hyperplane zero-shared ray carries zero target and
    star coefficient; for targets `7`/`8`, the height `-1` zero-shared ray and

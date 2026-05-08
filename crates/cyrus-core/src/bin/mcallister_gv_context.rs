@@ -20,8 +20,8 @@ use cyrus_core::gv::{
     find_extremal_mori_ray_separator,
 };
 use cyrus_core::triangulation::{
-    Triangulation, secondary_cone_height_pairings, secondary_cone_hyperplanes_native,
-    secondary_cone_strictly_contains_height_vector,
+    Triangulation, compute_regular_triangulation, secondary_cone_height_pairings,
+    secondary_cone_hyperplanes_native, secondary_cone_strictly_contains_height_vector,
 };
 use cyrus_core::types::rational::Rational;
 use cyrus_core::types::{f64::F64, tags::Finite, tags::Pos};
@@ -285,6 +285,8 @@ struct ContextReport {
     local_cygv_source_resolution_star_union_shared_face_secondary_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_global_secondary_height_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_global_regular_triangulation_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts:
         BTreeMap<String, usize>,
@@ -679,6 +681,13 @@ struct LocalCygvSourceResolutionHintSummary {
     shared_two_simplex_star_union_global_secondary_height_zero_pairing_count: Option<usize>,
     shared_two_simplex_star_union_global_secondary_height_positive_pairing_count: Option<usize>,
     shared_two_simplex_star_union_global_secondary_height_negative_pairing_count: Option<usize>,
+    shared_two_simplex_star_union_global_regular_triangulation_status: String,
+    shared_two_simplex_star_union_global_regular_triangulation_simplex_count: Option<usize>,
+    shared_two_simplex_star_union_global_regular_triangulation_simplices: Vec<Vec<usize>>,
+    shared_two_simplex_star_union_global_regular_shared_face_simplex_count: Option<usize>,
+    shared_two_simplex_star_union_global_regular_shared_face_extra_points: Vec<usize>,
+    shared_two_simplex_star_union_global_regular_target_exclusive_selected_points: Vec<usize>,
+    shared_two_simplex_star_union_global_regular_star_extra_selected_points: Vec<usize>,
     shared_two_simplex_star_union_shared_face_secondary_circuit_sample:
         Vec<LocalCygvStarUnionSecondaryCircuitSample>,
     shared_two_simplex_star_union_target_minus_star: Vec<(usize, i64)>,
@@ -14909,6 +14918,10 @@ fn build_report(
         local_cygv_source_resolution_star_union_global_secondary_height_status_counts(
             &local_cygv_source_resolution_hint_sample,
         );
+    let local_cygv_source_resolution_star_union_global_regular_triangulation_status_counts =
+        local_cygv_source_resolution_star_union_global_regular_triangulation_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
     let local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts =
         local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts(
             &local_cygv_source_resolution_hint_sample,
@@ -15847,6 +15860,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_chamber_coverage_status_counts,
         local_cygv_source_resolution_star_union_shared_face_secondary_status_counts,
         local_cygv_source_resolution_star_union_global_secondary_height_status_counts,
+        local_cygv_source_resolution_star_union_global_regular_triangulation_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts,
         local_phase_chamber_membership_certificate_status_counts,
         local_cygv_source_resolution_hint_sample,
@@ -16164,6 +16178,12 @@ fn local_cygv_source_resolution_hint_summaries(
                 affine_projection_hint.hyperplane.as_deref(),
                 context.secondary_cone_heights,
             );
+            let star_union_global_regular_triangulation =
+                local_cygv_star_union_global_regular_triangulation_hint(
+                    target.origin_circuit_first_witness.as_ref(),
+                    &star_support_hint,
+                    context.secondary_cone_heights,
+                );
             let star_union_off_height_lookup = local_cygv_star_union_off_height_lookup_sample(
                 &star_union_affine_height_profile,
                 context,
@@ -16296,6 +16316,20 @@ fn local_cygv_source_resolution_hint_summaries(
                     star_union_shared_face_secondary.global_height_positive_pairing_count,
                 shared_two_simplex_star_union_global_secondary_height_negative_pairing_count:
                     star_union_shared_face_secondary.global_height_negative_pairing_count,
+                shared_two_simplex_star_union_global_regular_triangulation_status:
+                    star_union_global_regular_triangulation.status,
+                shared_two_simplex_star_union_global_regular_triangulation_simplex_count:
+                    star_union_global_regular_triangulation.simplex_count,
+                shared_two_simplex_star_union_global_regular_triangulation_simplices:
+                    star_union_global_regular_triangulation.simplices,
+                shared_two_simplex_star_union_global_regular_shared_face_simplex_count:
+                    star_union_global_regular_triangulation.shared_face_simplex_count,
+                shared_two_simplex_star_union_global_regular_shared_face_extra_points:
+                    star_union_global_regular_triangulation.shared_face_extra_points,
+                shared_two_simplex_star_union_global_regular_target_exclusive_selected_points:
+                    star_union_global_regular_triangulation.target_exclusive_selected_points,
+                shared_two_simplex_star_union_global_regular_star_extra_selected_points:
+                    star_union_global_regular_triangulation.star_extra_selected_points,
                 shared_two_simplex_star_union_shared_face_secondary_circuit_sample:
                     star_union_shared_face_secondary.circuit_sample,
                 shared_two_simplex_star_union_target_minus_star: star_union_relation_hint
@@ -16673,6 +16707,22 @@ fn local_cygv_source_resolution_star_union_global_secondary_height_status_counts
             .entry(
                 summary
                     .shared_two_simplex_star_union_global_secondary_height_status
+                    .clone(),
+            )
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_star_union_global_regular_triangulation_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts
+            .entry(
+                summary
+                    .shared_two_simplex_star_union_global_regular_triangulation_status
                     .clone(),
             )
             .or_insert(0usize) += 1;
@@ -18520,6 +18570,157 @@ struct LocalCygvStarUnionGlobalSecondaryHeightSummary {
     positive_pairing_count: Option<usize>,
     negative_pairing_count: Option<usize>,
     circuit_pairings: Vec<Option<String>>,
+}
+
+struct LocalCygvStarUnionGlobalRegularTriangulationHint {
+    status: String,
+    simplex_count: Option<usize>,
+    simplices: Vec<Vec<usize>>,
+    shared_face_simplex_count: Option<usize>,
+    shared_face_extra_points: Vec<usize>,
+    target_exclusive_selected_points: Vec<usize>,
+    star_extra_selected_points: Vec<usize>,
+}
+
+fn local_cygv_star_union_global_regular_triangulation_hint(
+    witness: Option<&OriginCircuitWitnessSample>,
+    star_support: &LocalCygvStarSupportHint,
+    global_secondary_heights: Option<&[f64]>,
+) -> LocalCygvStarUnionGlobalRegularTriangulationHint {
+    let empty = |status: &str| LocalCygvStarUnionGlobalRegularTriangulationHint {
+        status: status.to_string(),
+        simplex_count: None,
+        simplices: Vec::new(),
+        shared_face_simplex_count: None,
+        shared_face_extra_points: Vec::new(),
+        target_exclusive_selected_points: Vec::new(),
+        star_extra_selected_points: Vec::new(),
+    };
+    let Some(witness) = witness else {
+        return empty("star_union_global_regular_missing_origin_circuit_witness");
+    };
+    if star_support.point_indices.is_empty() {
+        return empty("star_union_global_regular_missing_star_support");
+    }
+    let Some(global_secondary_heights) = global_secondary_heights else {
+        return empty("star_union_global_regular_missing_global_height_vector");
+    };
+    let support = origin_circuit_star_union_point_samples(witness, star_support);
+    if support.is_empty() {
+        return empty("star_union_global_regular_missing_union_points");
+    }
+    let local_points = support
+        .iter()
+        .map(|point| Point::new(point.coordinates.clone()))
+        .collect::<Vec<_>>();
+    let local_heights = match support
+        .iter()
+        .map(|point| {
+            global_secondary_heights
+                .get(point.point_index)
+                .copied()
+                .ok_or_else(|| {
+                    format!(
+                        "point index {} maps to missing origin-included secondary height entry",
+                        point.point_index
+                    )
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()
+    {
+        Ok(heights) => heights,
+        Err(error) => {
+            return LocalCygvStarUnionGlobalRegularTriangulationHint {
+                status: format!(
+                    "star_union_global_regular_height_error:{}",
+                    status_error_fragment(&error)
+                ),
+                ..empty("star_union_global_regular_height_error")
+            };
+        }
+    };
+    let triangulation = match compute_regular_triangulation(&local_points, &local_heights) {
+        Ok(triangulation) => triangulation,
+        Err(error) => {
+            return LocalCygvStarUnionGlobalRegularTriangulationHint {
+                status: format!(
+                    "star_union_global_regular_triangulation_error:{}",
+                    status_error_fragment(&error.to_string())
+                ),
+                ..empty("star_union_global_regular_triangulation_error")
+            };
+        }
+    };
+    let simplices = triangulation
+        .simplices()
+        .iter()
+        .map(|simplex| {
+            let mut point_indices = simplex
+                .iter()
+                .filter_map(|&local| support.get(local).map(|point| point.point_index))
+                .collect::<Vec<_>>();
+            point_indices.sort_unstable();
+            point_indices
+        })
+        .collect::<Vec<_>>();
+    let mut shared_face = BTreeSet::from([0]);
+    shared_face.extend(witness.shared_two_simplex.iter().copied());
+    let target_exclusive = BTreeSet::from([
+        witness.first_facet_exclusive_point,
+        witness.second_facet_exclusive_point,
+    ]);
+    let star_extra = origin_circuit_shared_two_simplex_star_extra_points(Some(witness))
+        .into_iter()
+        .flatten()
+        .collect::<BTreeSet<_>>();
+    let mut shared_face_extra_points = BTreeSet::new();
+    for simplex in &simplices {
+        let simplex_set = simplex.iter().copied().collect::<BTreeSet<_>>();
+        if shared_face.iter().all(|point| simplex_set.contains(point)) {
+            for point in simplex_set.difference(&shared_face) {
+                shared_face_extra_points.insert(*point);
+            }
+        }
+    }
+    let shared_face_extra_points = shared_face_extra_points.into_iter().collect::<Vec<_>>();
+    let target_exclusive_selected_points = shared_face_extra_points
+        .iter()
+        .copied()
+        .filter(|point| target_exclusive.contains(point))
+        .collect::<Vec<_>>();
+    let star_extra_selected_points = shared_face_extra_points
+        .iter()
+        .copied()
+        .filter(|point| star_extra.contains(point))
+        .collect::<Vec<_>>();
+    let other_selected_count = shared_face_extra_points
+        .iter()
+        .filter(|point| !target_exclusive.contains(point) && !star_extra.contains(point))
+        .count();
+    let shared_face_simplex_count = simplices
+        .iter()
+        .filter(|simplex| shared_face.iter().all(|point| simplex.contains(point)))
+        .count();
+    let status = if shared_face_simplex_count == 0 {
+        "star_union_global_regular_no_shared_face_simplices"
+    } else if !target_exclusive_selected_points.is_empty() {
+        "star_union_global_regular_shared_face_selects_target_exclusive_points"
+    } else if other_selected_count > 0 {
+        "star_union_global_regular_shared_face_selects_other_points"
+    } else if star_extra_selected_points.len() == star_extra.len() {
+        "star_union_global_regular_shared_face_matches_serialized_star_extras"
+    } else {
+        "star_union_global_regular_shared_face_selects_star_extras_partial"
+    };
+    LocalCygvStarUnionGlobalRegularTriangulationHint {
+        status: status.to_string(),
+        simplex_count: Some(simplices.len()),
+        simplices,
+        shared_face_simplex_count: Some(shared_face_simplex_count),
+        shared_face_extra_points,
+        target_exclusive_selected_points,
+        star_extra_selected_points,
+    }
 }
 
 fn local_cygv_star_union_global_secondary_height_summary(
@@ -22422,6 +22623,14 @@ mod tests {
             shared_two_simplex_star_union_global_secondary_height_zero_pairing_count: None,
             shared_two_simplex_star_union_global_secondary_height_positive_pairing_count: None,
             shared_two_simplex_star_union_global_secondary_height_negative_pairing_count: None,
+            shared_two_simplex_star_union_global_regular_triangulation_status: "test".to_string(),
+            shared_two_simplex_star_union_global_regular_triangulation_simplex_count: None,
+            shared_two_simplex_star_union_global_regular_triangulation_simplices: Vec::new(),
+            shared_two_simplex_star_union_global_regular_shared_face_simplex_count: None,
+            shared_two_simplex_star_union_global_regular_shared_face_extra_points: Vec::new(),
+            shared_two_simplex_star_union_global_regular_target_exclusive_selected_points: Vec::new(
+            ),
+            shared_two_simplex_star_union_global_regular_star_extra_selected_points: Vec::new(),
             shared_two_simplex_star_union_shared_face_secondary_circuit_sample: Vec::new(),
             shared_two_simplex_star_union_target_minus_star: Vec::new(),
             shared_two_simplex_star_union_target_plus_star: Vec::new(),
@@ -24843,6 +25052,27 @@ mod tests {
                 .iter()
                 .all(|circuit| circuit.global_height_pairing.as_deref() == Some("0"))
         );
+        let mut corrected_global_heights = vec![0.0; 215];
+        corrected_global_heights[46] = -36.235_325_629_200_96;
+        corrected_global_heights[55] = -95.693_037_865_253_63;
+        corrected_global_heights[195] = -18.143_005_580_668_596;
+        corrected_global_heights[208] = -46.731_334_903_928_804;
+        corrected_global_heights[211] = -64.848_928_851_829_84;
+        corrected_global_heights[212] = -77.124_321_146_428_6;
+        corrected_global_heights[214] = -74.485_238_575_046_94;
+        let global_regular = local_cygv_star_union_global_regular_triangulation_hint(
+            Some(&witness),
+            &star_support_hint,
+            Some(&corrected_global_heights),
+        );
+        assert_eq!(
+            global_regular.status,
+            "star_union_global_regular_shared_face_matches_serialized_star_extras"
+        );
+        assert_eq!(global_regular.shared_face_simplex_count, Some(2));
+        assert_eq!(global_regular.shared_face_extra_points, vec![195, 212]);
+        assert!(global_regular.target_exclusive_selected_points.is_empty());
+        assert_eq!(global_regular.star_extra_selected_points, vec![195, 212]);
         let off_height_lookup =
             local_cygv_star_union_off_height_lookup_sample(&star_union_height_profile, &validated);
         assert_eq!(off_height_lookup.len(), 4);
