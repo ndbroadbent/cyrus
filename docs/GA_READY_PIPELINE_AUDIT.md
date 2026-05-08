@@ -1289,6 +1289,19 @@ to make the remaining GV layer more first-principles:
    `0.42571113815644424`. Thus the known degree-4 component is certified as
    visible wall-circuit data in the star-union support, while the unresolved
    degree-6 component remains a chamber/semigroup transport problem.
+   `/tmp/cyrus_star_union_wall_transport_readiness_smoke_all.json` now makes
+   that handoff machine-readable at report level. It reports two rows in
+   `wall_transport_known_wall_remainder_requires_chamber_semigroup`, six rows
+   still blocked by missing known wall-circuit history, and one row blocked
+   before the transport identity. The two ready-but-unresolved rows are targets
+   `7`/`8`: both have the crossed wall curve
+   `[(0,-1),(55,-1),(195,1),(212,1)]`, crossed-wall GV `1`,
+   target-plus-star support generator count `0`, support-face status
+   `origin_support_no_generators`, and missing inputs
+   `target_plus_star_qn_history`,
+   `target_plus_star_chamber_semigroup_transport`, and
+   `shrinking_divisor_or_flop_certificate`. This is a blocker certificate, not
+   a GV computation shortcut.
    `/tmp/cyrus_gv_context_target_plus_star_support_report.json` now reconstructs
    the point-support charge bases for that degree-6 component. Targets `7`/`8`
    are integral two-parameter relations on affine-rank-4 seven-point supports:

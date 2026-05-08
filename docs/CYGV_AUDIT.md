@@ -3509,6 +3509,19 @@ secondary pairing is `0` and the corrected global-height pairing is
 piece is a crossed wall circuit in the local star-union geometry, while the
 degree-6 target-plus-star remainder is not a finite Mori generator or support
 face in the exported context.
+`/tmp/cyrus_star_union_wall_transport_readiness_smoke_all.json` now aggregates
+that implication directly. The readiness buckets are
+`wall_transport_blocked_missing_known_wall_circuit:6`,
+`wall_transport_blocked_transport_identity:1`, and
+`wall_transport_known_wall_remainder_requires_chamber_semigroup:2`. The two
+ready-but-unresolved rows are exactly targets `7`/`8`: both carry crossed wall
+curve `[(0,-1),(55,-1),(195,1),(212,1)]`, crossed-wall GV `1`, no
+target-plus-star finite generator or support-face certificate, and the missing
+inputs `target_plus_star_qn_history`,
+`target_plus_star_chamber_semigroup_transport`, and
+`shrinking_divisor_or_flop_certificate`. This keeps the known wall component
+as certified input evidence without promoting it to a corrected-chamber GV
+value.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:
