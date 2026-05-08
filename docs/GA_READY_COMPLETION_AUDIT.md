@@ -1344,6 +1344,10 @@ The regenerated v2 reports also expose that `sum(base weights)=4` equals
 `sum(bundle degrees)=4`, so the local fivefold phase is Calabi-Yau at the
 first-Chern level, and that the weighted base has `H^2=1/2`, so a fractional
 stack/source tensor normalization remains part of the missing input.
+The partition-sample target `7`/`8` reports now also export raw failed
+codimension-2 partition candidates; the first sample has degrees `[2]` and
+`[-3]`, target relation sums `-2` and `3`, and a CYTools-style nef certificate
+failure from missing ambient vertex `0`.
 
 `/tmp/cyrus_six_point_overlap_annotations_v1.json` also annotates the nearest
 degree-bounded support-overlap samples. For the shared target `7`/`8`

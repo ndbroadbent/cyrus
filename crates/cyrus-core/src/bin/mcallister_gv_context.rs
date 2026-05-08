@@ -925,6 +925,7 @@ struct LocalCygvCompleteIntersectionShapeCandidate {
     zero_degree_nef_partition_candidate_count: Option<usize>,
     zero_degree_target_relation_balance_status_counts: Option<BTreeMap<String, usize>>,
     zero_degree_cytools_nef_certificate_status_counts: Option<BTreeMap<String, usize>>,
+    nef_partition_candidate_sample: Vec<LocalCygvNefPartitionCandidate>,
     cytools_nef_partition_candidate_sample: Vec<LocalCygvNefPartitionCandidate>,
     zero_degree_nef_partition_candidate_sample: Vec<LocalCygvNefPartitionCandidate>,
     status: String,
@@ -1323,6 +1324,8 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
     local_toric_complete_intersection_cytools_nef_partition_candidate_count: Option<usize>,
     local_toric_complete_intersection_nef_partition_cytools_nef_certificate_status_counts:
         Option<BTreeMap<String, usize>>,
+    local_toric_complete_intersection_nef_partition_candidate_sample:
+        Vec<LocalCygvNefPartitionCandidate>,
     local_toric_complete_intersection_zero_degree_nef_partition_candidate_count: Option<usize>,
     local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts:
         Option<BTreeMap<String, usize>>,
@@ -1429,6 +1432,8 @@ struct LocalCygvChamberGeneratorLocalToricDiagnostic {
     local_toric_complete_intersection_cytools_nef_partition_candidate_count: Option<usize>,
     local_toric_complete_intersection_nef_partition_cytools_nef_certificate_status_counts:
         Option<BTreeMap<String, usize>>,
+    local_toric_complete_intersection_nef_partition_candidate_sample:
+        Vec<LocalCygvNefPartitionCandidate>,
     local_toric_complete_intersection_zero_degree_nef_partition_candidate_count: Option<usize>,
     local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts:
         Option<BTreeMap<String, usize>>,
@@ -10767,6 +10772,10 @@ fn local_cygv_complete_intersection_shape_candidate(
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
+    let nef_partition_candidate_sample = nef_partition_candidates
+        .as_ref()
+        .map(|candidates| candidates.iter().take(8).cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
     let nef_partition_degree_status_counts = nef_partition_candidates.as_ref().map(|candidates| {
         let mut counts = BTreeMap::new();
         for candidate in candidates {
@@ -10853,6 +10862,7 @@ fn local_cygv_complete_intersection_shape_candidate(
         zero_degree_nef_partition_candidate_count,
         zero_degree_target_relation_balance_status_counts,
         zero_degree_cytools_nef_certificate_status_counts,
+        nef_partition_candidate_sample,
         cytools_nef_partition_candidate_sample,
         zero_degree_nef_partition_candidate_sample,
         status: status.to_string(),
@@ -20625,6 +20635,10 @@ fn unresolved_chamber_generator_summaries(
                             .local_toric_diagnostic
                             .local_toric_complete_intersection_nef_partition_cytools_nef_certificate_status_counts
                             .clone(),
+                    local_toric_complete_intersection_nef_partition_candidate_sample: context
+                        .local_toric_diagnostic
+                        .local_toric_complete_intersection_nef_partition_candidate_sample
+                        .clone(),
                     local_toric_complete_intersection_zero_degree_nef_partition_candidate_count:
                         context
                             .local_toric_diagnostic
@@ -26052,6 +26066,7 @@ fn chamber_generator_local_toric_diagnostic_not_run(
         local_toric_complete_intersection_nef_partition_degree_status_counts: None,
         local_toric_complete_intersection_cytools_nef_partition_candidate_count: None,
         local_toric_complete_intersection_nef_partition_cytools_nef_certificate_status_counts: None,
+        local_toric_complete_intersection_nef_partition_candidate_sample: Vec::new(),
         local_toric_complete_intersection_zero_degree_nef_partition_candidate_count: None,
         local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts: None,
         local_toric_compact_threefold_omission_candidate_count: 0,
@@ -26259,6 +26274,7 @@ fn chamber_generator_local_toric_diagnostic(
             local_toric_complete_intersection_cytools_nef_partition_candidate_count: None,
             local_toric_complete_intersection_nef_partition_cytools_nef_certificate_status_counts:
                 None,
+            local_toric_complete_intersection_nef_partition_candidate_sample: Vec::new(),
             local_toric_complete_intersection_zero_degree_nef_partition_candidate_count: None,
             local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts:
                 None,
@@ -26445,6 +26461,12 @@ fn chamber_generator_local_toric_diagnostic(
                     candidate
                         .nef_partition_cytools_nef_certificate_status_counts
                         .clone()
+                }),
+        local_toric_complete_intersection_nef_partition_candidate_sample:
+            complete_intersection_shape_candidate
+                .as_ref()
+                .map_or_else(Vec::new, |candidate| {
+                    candidate.nef_partition_candidate_sample.clone()
                 }),
         local_toric_complete_intersection_zero_degree_nef_partition_candidate_count:
             complete_intersection_shape_candidate
@@ -32982,6 +33004,21 @@ mod tests {
             diagnostic.local_toric_complete_intersection_cytools_nef_partition_candidate_count,
             Some(0)
         );
+        assert_eq!(
+            diagnostic
+                .local_toric_complete_intersection_nef_partition_candidate_sample
+                .len(),
+            8
+        );
+        assert!(diagnostic
+            .local_toric_complete_intersection_nef_partition_candidate_sample
+            .iter()
+            .all(|candidate| candidate
+                .cytools_nef_certificate_status
+                .as_deref()
+                == Some(
+                    "support_polytope_cytools_nef_certificate_failed:invalid_input_nef_partition_union_hull_does_not_equal_ambient_polytope_hull"
+                )));
         assert_eq!(
             diagnostic
                 .local_toric_complete_intersection_nef_partition_cytools_nef_certificate_status_counts,

@@ -4433,6 +4433,13 @@ degree `0`, and base hyperplane square `1/2`. Thus the visible total space is
 Calabi-Yau in the local fivefold sense, while the fractional base tensor still
 requires stack/source normalization before any threefold `cygv` input can be
 certified.
+The partition-sample reports
+`/tmp/cyrus_six_point_rank3_partition_samples_target7_v1.json` and
+`/tmp/cyrus_six_point_rank3_partition_samples_target8_v1.json` now serialize
+bounded raw codimension-2 partition candidates. Their first sampled partition
+has parts `[55]` and `[208,211,212,214]`, degrees `[2]` and `[-3]`, target
+relation sums `-2` and `3`, and fails because the CYTools-style nef partition
+union hull misses ambient vertex `0`.
 
 `/tmp/cyrus_six_point_overlap_annotations_v1.json` annotates the nearest
 degree-bounded support-overlap samples with qN-history, source class, and

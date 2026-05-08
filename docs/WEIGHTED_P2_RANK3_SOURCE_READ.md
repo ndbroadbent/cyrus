@@ -47,6 +47,8 @@ The current report artifacts are:
 /tmp/cyrus_six_point_rank3_source_model_target8_v1.json
 /tmp/cyrus_six_point_rank3_source_model_target7_v2.json
 /tmp/cyrus_six_point_rank3_source_model_target8_v2.json
+/tmp/cyrus_six_point_rank3_partition_samples_target7_v1.json
+/tmp/cyrus_six_point_rank3_partition_samples_target8_v1.json
 ```
 
 The v2 artifacts record the same source-model obstruction plus the source
@@ -63,6 +65,22 @@ total_first_chern_degree = 0
 base_hyperplane_square = 1/2
 base_tensor_status = weighted_p2_rank_three_base_hyperplane_square_fractional_requires_stack_or_source_tensor_normalization
 ```
+
+The partition-sample artifacts add a bounded raw sample of the 15 codimension-2
+partition candidates. The first sampled partition is
+
+```text
+first part  = [55], degree [2]
+second part = [208,211,212,214], degree [-3]
+target relation part sums = -2 and 3
+```
+
+and it fails the CYTools-style nef certificate because the partition union hull
+does not equal the ambient support-polytope hull, with ambient vertex `0`
+missing. The target `8` report has the same sampled obstruction. This makes the
+current source gap concrete: the obvious codimension-2 partition enumeration is
+not merely missing a zero-degree candidate; its raw candidates also fail the
+support-hull certificate.
 
 ## Sources Read
 
