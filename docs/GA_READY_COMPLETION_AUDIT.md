@@ -1299,6 +1299,14 @@ its negative. This gives the next source-rule pass the local wall alternatives
 without digging through the full target sample, but it is still not a source
 certificate.
 
+`/tmp/cyrus_six_point_circuit_height_choice_target7_v1.json` now evaluates
+those two alternatives against the saved global secondary-height vector. Target
+`7` has a unique strictly positive local choice: pairings
+`0.04240825693838701` and `-0.04240825693838701`, selecting triangulation
+choice index `0`. This sharpens the remaining blocker from "which side of the
+six-point wall?" to "derive the source local model/tensor for the selected
+side."
+
 `/tmp/cyrus_six_point_overlap_annotations_v1.json` also annotates the nearest
 degree-bounded support-overlap samples. For the shared target `7`/`8`
 six-point row, all five sampled nearest degree-`2` neighbors are known toric

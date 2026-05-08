@@ -4381,6 +4381,15 @@ phase-choice evidence only: it identifies the local wall alternatives that any
 source-derived chamber rule must choose between, but it does not supply a
 nef partition, intersection tensor, or promotable GV value.
 
+`/tmp/cyrus_six_point_circuit_height_choice_target7_v1.json` evaluates those
+two local circuit choices against the saved origin-included global secondary
+height vector. The target `7` degree-`2` row has
+`circuit_global_height_choice_unique_strictly_positive_choice`, pairings
+`[0.04240825693838701]` and `[-0.04240825693838701]`, and selected choice
+index `0`. Thus the corrected chamber side is now explicit at the local
+circuit-choice level; the remaining missing input is a source-derived local
+model/tensor on that selected side.
+
 `/tmp/cyrus_six_point_overlap_annotations_v1.json` annotates the nearest
 degree-bounded support-overlap samples with qN-history, source class, and
 global secondary-height side. For the shared target `7`/`8` six-point row, all

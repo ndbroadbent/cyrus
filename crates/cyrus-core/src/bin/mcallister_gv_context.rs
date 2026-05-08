@@ -1292,6 +1292,7 @@ struct LocalCygvChamberSemigroupGeneratorContext {
     source_class_status: Option<String>,
     source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
     local_toric_diagnostic: LocalCygvChamberGeneratorLocalToricDiagnostic,
+    circuit_global_height_choice_summary: LocalCygvCircuitGlobalHeightChoiceSummary,
     degree_bounded_support_overlap_diagnostic: LocalCygvChamberGeneratorSupportOverlapDiagnostic,
     lower_seed_sum_decomposition: Option<CygvSeedSumDecomposition>,
     bounded_lower_seed_decomposition: Option<CygvBoundedSeedDecompositionSummary>,
@@ -1339,6 +1340,10 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
     local_toric_circuit_triangulation_choices: Option<Vec<Vec<Vec<usize>>>>,
     local_toric_circuit_secondary_inequality_choices: Option<Vec<Vec<Vec<(usize, i64)>>>>,
     local_toric_circuit_secondary_inequality_error: Option<String>,
+    local_toric_circuit_global_height_choice_status: String,
+    local_toric_circuit_global_height_choice_pairings: Option<Vec<Vec<String>>>,
+    local_toric_circuit_global_height_compatible_choice_indices: Option<Vec<usize>>,
+    local_toric_circuit_global_height_selected_choice_index: Option<usize>,
     ckyz_status: String,
     bounded_lower_seed_status: String,
     bounded_lower_seed_term_count: Option<usize>,
@@ -1435,6 +1440,14 @@ struct LocalCygvChamberGeneratorLocalToricDiagnostic {
     ckyz_first_multiple_target_degree: Option<Vec<usize>>,
     ckyz_first_multiple_gv_candidate: Option<String>,
     error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvCircuitGlobalHeightChoiceSummary {
+    status: String,
+    choice_pairings: Option<Vec<Vec<String>>>,
+    compatible_choice_indices: Option<Vec<usize>>,
+    selected_choice_index: Option<usize>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -20612,6 +20625,21 @@ fn unresolved_chamber_generator_summaries(
                         .local_toric_diagnostic
                         .circuit_secondary_inequality_error
                         .clone(),
+                    local_toric_circuit_global_height_choice_status: context
+                        .circuit_global_height_choice_summary
+                        .status
+                        .clone(),
+                    local_toric_circuit_global_height_choice_pairings: context
+                        .circuit_global_height_choice_summary
+                        .choice_pairings
+                        .clone(),
+                    local_toric_circuit_global_height_compatible_choice_indices: context
+                        .circuit_global_height_choice_summary
+                        .compatible_choice_indices
+                        .clone(),
+                    local_toric_circuit_global_height_selected_choice_index: context
+                        .circuit_global_height_choice_summary
+                        .selected_choice_index,
                     ckyz_status: context.local_toric_diagnostic.ckyz_status.clone(),
                     bounded_lower_seed_status:
                         chamber_semigroup_generator_bounded_lower_seed_status(context),
@@ -25331,6 +25359,86 @@ fn chamber_semigroup_generator_contexts(
         .collect()
 }
 
+fn circuit_global_height_choice_summary_not_run(
+    reason: &str,
+) -> LocalCygvCircuitGlobalHeightChoiceSummary {
+    LocalCygvCircuitGlobalHeightChoiceSummary {
+        status: format!("circuit_global_height_choice_not_run_{reason}"),
+        choice_pairings: None,
+        compatible_choice_indices: None,
+        selected_choice_index: None,
+    }
+}
+
+fn chamber_generator_circuit_global_height_choice_summary(
+    circuit_secondary_inequality_choices: Option<&[Vec<Vec<(usize, i64)>>]>,
+    global_secondary_heights: Option<&[f64]>,
+) -> LocalCygvCircuitGlobalHeightChoiceSummary {
+    let Some(choices) = circuit_secondary_inequality_choices else {
+        return circuit_global_height_choice_summary_not_run("no_circuit_inequality_choices");
+    };
+    let Some(global_secondary_heights) = global_secondary_heights else {
+        return circuit_global_height_choice_summary_not_run("missing_global_height_vector");
+    };
+    if choices.is_empty() {
+        return LocalCygvCircuitGlobalHeightChoiceSummary {
+            status: "circuit_global_height_choice_no_choices".to_string(),
+            choice_pairings: Some(Vec::new()),
+            compatible_choice_indices: Some(Vec::new()),
+            selected_choice_index: None,
+        };
+    }
+
+    let mut choice_pairings = Vec::with_capacity(choices.len());
+    let mut compatible_choice_indices = Vec::new();
+    for (choice_index, choice) in choices.iter().enumerate() {
+        let mut pairings = Vec::with_capacity(choice.len());
+        let mut strictly_positive = true;
+        for inequality in choice {
+            let pairing = match origin_circuit_relation_global_secondary_height_pairing(
+                inequality,
+                global_secondary_heights,
+            ) {
+                Ok(pairing) => pairing,
+                Err(error) => {
+                    return LocalCygvCircuitGlobalHeightChoiceSummary {
+                        status: format!(
+                            "circuit_global_height_choice_error:{}",
+                            status_error_fragment(&error)
+                        ),
+                        choice_pairings: None,
+                        compatible_choice_indices: None,
+                        selected_choice_index: None,
+                    };
+                }
+            };
+            strictly_positive &= pairing.get() > 1e-6;
+            pairings.push(pairing.get().to_string());
+        }
+        if strictly_positive {
+            compatible_choice_indices.push(choice_index);
+        }
+        choice_pairings.push(pairings);
+    }
+
+    let selected_choice_index = match compatible_choice_indices.as_slice() {
+        [choice_index] => Some(*choice_index),
+        _ => None,
+    };
+    let status = match compatible_choice_indices.len() {
+        0 => "circuit_global_height_choice_no_strictly_positive_choice",
+        1 => "circuit_global_height_choice_unique_strictly_positive_choice",
+        _ => "circuit_global_height_choice_multiple_strictly_positive_choices",
+    };
+
+    LocalCygvCircuitGlobalHeightChoiceSummary {
+        status: status.to_string(),
+        choice_pairings: Some(choice_pairings),
+        compatible_choice_indices: Some(compatible_choice_indices),
+        selected_choice_index,
+    }
+}
+
 fn chamber_semigroup_generator_context(
     generator_index: usize,
     generator: &[i64],
@@ -25381,6 +25489,9 @@ fn chamber_semigroup_generator_context(
             local_toric_diagnostic: chamber_generator_local_toric_diagnostic_not_run(
                 "point_relation_unavailable",
             ),
+            circuit_global_height_choice_summary: circuit_global_height_choice_summary_not_run(
+                "point_relation_unavailable",
+            ),
             degree_bounded_support_overlap_diagnostic,
             lower_seed_sum_decomposition: None,
             bounded_lower_seed_decomposition: None,
@@ -25427,6 +25538,9 @@ fn chamber_semigroup_generator_context(
             local_toric_diagnostic: chamber_generator_local_toric_diagnostic_not_run(
                 "zero_point_relation",
             ),
+            circuit_global_height_choice_summary: circuit_global_height_choice_summary_not_run(
+                "zero_point_relation",
+            ),
             degree_bounded_support_overlap_diagnostic:
                 chamber_generator_support_overlap_diagnostic_not_run("zero_point_relation"),
             lower_seed_sum_decomposition: None,
@@ -25468,6 +25582,13 @@ fn chamber_semigroup_generator_context(
         Err(error) => {
             let local_toric_diagnostic =
                 chamber_generator_local_toric_diagnostic(&point_relation_nonzero, point_samples);
+            let circuit_global_height_choice_summary =
+                chamber_generator_circuit_global_height_choice_summary(
+                    local_toric_diagnostic
+                        .circuit_secondary_inequality_choices
+                        .as_deref(),
+                    context.secondary_cone_heights,
+                );
             let degree_bounded_support_overlap_diagnostic =
                 chamber_generator_degree_bounded_support_overlap_diagnostic(
                     &point_relation_nonzero,
@@ -25493,6 +25614,7 @@ fn chamber_semigroup_generator_context(
                 source_class_status: None,
                 source_ray_ambient_nonzero: None,
                 local_toric_diagnostic,
+                circuit_global_height_choice_summary,
                 degree_bounded_support_overlap_diagnostic,
                 lower_seed_sum_decomposition: None,
                 bounded_lower_seed_decomposition: None,
@@ -25512,6 +25634,13 @@ fn chamber_semigroup_generator_context(
     ) = star_union_lower_seed_diagnostics(&basis_dense, degree, context, true);
     let local_toric_diagnostic =
         chamber_generator_local_toric_diagnostic(&point_relation_nonzero, point_samples);
+    let circuit_global_height_choice_summary =
+        chamber_generator_circuit_global_height_choice_summary(
+            local_toric_diagnostic
+                .circuit_secondary_inequality_choices
+                .as_deref(),
+            context.secondary_cone_heights,
+        );
     if let Some((local_gv, local_status)) = chamber_generator_local_source_formula_gv(
         &local_toric_diagnostic,
         chamber_secondary_certificate,
@@ -25567,6 +25696,7 @@ fn chamber_semigroup_generator_context(
         source_class_status,
         source_ray_ambient_nonzero,
         local_toric_diagnostic,
+        circuit_global_height_choice_summary,
         degree_bounded_support_overlap_diagnostic,
         lower_seed_sum_decomposition,
         bounded_lower_seed_decomposition,
@@ -35516,6 +35646,9 @@ mod tests {
             source_class_status: None,
             source_ray_ambient_nonzero: None,
             local_toric_diagnostic: known_local_toric,
+            circuit_global_height_choice_summary: circuit_global_height_choice_summary_not_run(
+                "test",
+            ),
             degree_bounded_support_overlap_diagnostic:
                 chamber_generator_support_overlap_diagnostic_not_run("test"),
             lower_seed_sum_decomposition: None,
@@ -36943,6 +37076,30 @@ mod tests {
         .unwrap();
 
         assert_eq!(pairing.get(), 33.0);
+    }
+
+    #[test]
+    fn circuit_global_height_choice_selects_unique_positive_inequality_block() {
+        let choices = vec![
+            vec![vec![(0, -1), (2, 1), (3, 1)]],
+            vec![vec![(0, 1), (2, -1), (3, -1)]],
+        ];
+
+        let summary = chamber_generator_circuit_global_height_choice_summary(
+            Some(&choices),
+            Some(&[0.0, 11.0, 0.25, 0.25]),
+        );
+
+        assert_eq!(
+            summary.status,
+            "circuit_global_height_choice_unique_strictly_positive_choice"
+        );
+        assert_eq!(
+            summary.choice_pairings,
+            Some(vec![vec!["0.5".to_string()], vec!["-0.5".to_string()]])
+        );
+        assert_eq!(summary.compatible_choice_indices, Some(vec![0]));
+        assert_eq!(summary.selected_choice_index, Some(0));
     }
 
     #[test]
