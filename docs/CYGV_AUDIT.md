@@ -4261,3 +4261,15 @@ histories that can be promoted. The remaining actionable target `7`/`8`
 classes are still the shared degree-`2`/degree-`6` non-rank-two rows and the
 two target-specific degree-`2` rank-two quadrilateral rows with no CKYZ source
 match.
+
+`/tmp/cyrus_unresolved_chamber_generator_queue_v3.json` adds a local
+one-parameter charge-family classifier to those unresolved generator rows. The
+two target-specific degree-`2` rank-two quadrilateral rows are now identified
+as `local_toric_resolved_conifold_charge_family`, so their `ckyz_no_source_match`
+status means "not in the CKYZ compact surface table", not "unrecognized local
+toric geometry." The shared degree-`6` row and both degree-`4` rows are
+`local_toric_weighted_p2_split_bundle_charge_family:base=1,1,1;bundle=1,2;base_hyperplane_square=1`.
+The remaining shared degree-`2` row is still
+`local_toric_one_parameter_charge_family_unclassified:-2,-1,-1,1,1,2`.
+This partitions the missing chamber-generator history into resolved-conifold,
+weighted-`P2` split-bundle, and still-unclassified one-parameter local models.

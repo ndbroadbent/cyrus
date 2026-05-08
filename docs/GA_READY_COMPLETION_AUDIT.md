@@ -1213,14 +1213,24 @@ path; the chamber-history implementation has to close the degree-`2`/degree-`6`
 unresolved generator classes or derive a certified source semigroup for the
 target-plus-star chamber directly.
 
+`/tmp/cyrus_unresolved_chamber_generator_queue_v3.json` further classifies the
+same rows by local one-parameter charge family. The target-specific degree-`2`
+quadrilateral rows are resolved-conifold charge families, the shared degree-`6`
+row and the two degree-`4` rows are weighted-`P2` split-bundle charge families
+with signature `base=1,1,1;bundle=1,2;base_hyperplane_square=1`, and the shared
+degree-`2` row remains an unclassified six-point charge family
+`-2,-1,-1,1,1,2`. The next implementation can now attack these as three local
+model families instead of as a flat list of unknown chamber generators.
+
 ## Next Concrete Action
 
 The next implementation should be one of these, in order:
 
 1. For corrected-chamber missing GV classes, construct a source-derived compact
-   semigroup or certified supporting-face semigroup and hand it to the existing
-   `cygv` wrappers. If the semigroup cannot be certified, keep the result
-   diagnostic-only.
+   semigroup or certified supporting-face semigroup for the resolved-conifold,
+   weighted-`P2` split-bundle, and unclassified six-point local charge families,
+   then hand it to the existing `cygv` wrappers. If the semigroup cannot be
+   certified, keep the result diagnostic-only.
 2. Extend any new local phase or supporting-face semigroup with an explicit
    secondary-cone/chamber-membership certificate before promotion.
 3. Clean up the remaining matrix-basis diagnostic/export edges in

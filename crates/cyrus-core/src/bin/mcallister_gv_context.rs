@@ -1307,6 +1307,7 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
     known_qn_history_status: String,
     source_class_status: Option<String>,
     local_toric_kind: Option<String>,
+    local_toric_charge_family_status: String,
     ckyz_status: String,
     bounded_lower_seed_status: String,
     bounded_lower_seed_term_count: Option<usize>,
@@ -1360,6 +1361,7 @@ struct LocalCygvChamberGeneratorLocalToricDiagnostic {
     local_charge_basis: Option<Vec<Vec<i64>>>,
     local_coordinates: Option<Vec<LocalCygvChamberGeneratorLocalCoordinate>>,
     local_toric_kind: Option<String>,
+    local_toric_charge_family_status: String,
     circuit_triangulation_choice_count: Option<usize>,
     circuit_triangulation_choices: Option<Vec<Vec<Vec<usize>>>>,
     circuit_triangulation_error: Option<String>,
@@ -20433,6 +20435,10 @@ fn unresolved_chamber_generator_summaries(
                     known_qn_history_status: context.known_qn_history_status.clone(),
                     source_class_status: context.source_class_status.clone(),
                     local_toric_kind: context.local_toric_diagnostic.local_toric_kind.clone(),
+                    local_toric_charge_family_status: context
+                        .local_toric_diagnostic
+                        .local_toric_charge_family_status
+                        .clone(),
                     ckyz_status: context.local_toric_diagnostic.ckyz_status.clone(),
                     bounded_lower_seed_status:
                         chamber_semigroup_generator_bounded_lower_seed_status(context),
@@ -25399,6 +25405,7 @@ fn chamber_generator_local_toric_diagnostic_not_run(
         local_charge_basis: None,
         local_coordinates: None,
         local_toric_kind: None,
+        local_toric_charge_family_status: "local_toric_charge_family_not_run".to_string(),
         circuit_triangulation_choice_count: None,
         circuit_triangulation_choices: None,
         circuit_triangulation_error: None,
@@ -25539,6 +25546,7 @@ fn chamber_generator_local_toric_diagnostic(
             local_charge_basis: None,
             local_coordinates: None,
             local_toric_kind: None,
+            local_toric_charge_family_status: "local_toric_charge_family_not_run".to_string(),
             circuit_triangulation_choice_count: None,
             circuit_triangulation_choices: None,
             circuit_triangulation_error: None,
@@ -25606,6 +25614,7 @@ fn chamber_generator_local_toric_diagnostic(
         })
         .collect::<Vec<_>>();
     let local_toric_kind = diagnostic.kind.as_ref().map(local_toric_circuit_kind_label);
+    let local_toric_charge_family_status = local_toric_charge_family_status(&diagnostic);
     let (ckyz_status, ckyz_kind, ckyz_source_target_direction, ckyz_first_degree, ckyz_gv) =
         chamber_generator_ckyz_diagnostic(&diagnostic);
     let (
@@ -25639,6 +25648,7 @@ fn chamber_generator_local_toric_diagnostic(
         local_charge_basis: Some(diagnostic.local_charge_basis),
         local_coordinates: Some(local_coordinates),
         local_toric_kind,
+        local_toric_charge_family_status,
         circuit_triangulation_choice_count,
         circuit_triangulation_choices,
         circuit_triangulation_error,
@@ -25701,6 +25711,52 @@ fn circuit_secondary_inequality_choices_for_relation(
                 .collect::<Vec<_>>()
         })
         .collect())
+}
+
+fn local_toric_charge_family_status(
+    diagnostic: &cyrus_core::AffineToricCircuitDiagnostic,
+) -> String {
+    if diagnostic.local_charge_basis.is_empty() {
+        return "local_toric_charge_family_no_charge_rows".to_string();
+    }
+    if diagnostic.local_charge_basis.len() != 1 {
+        return format!(
+            "local_toric_charge_family_not_one_parameter_charge_rows_{}",
+            diagnostic.local_charge_basis.len()
+        );
+    }
+
+    let charge_row = &diagnostic.local_charge_basis[0];
+    if charge_row.iter().sum::<i64>() != 0 {
+        return "local_toric_charge_family_non_calabi_yau_charge".to_string();
+    }
+
+    let mut sorted = charge_row.clone();
+    sorted.sort_unstable();
+    if sorted == [-1, -1, 1, 1] {
+        return "local_toric_resolved_conifold_charge_family".to_string();
+    }
+    if sorted == [-3, 1, 1, 1] {
+        return "local_toric_local_p2_charge_family".to_string();
+    }
+    if let Some(signature) = one_parameter_weighted_p2_split_bundle_signature(charge_row) {
+        return format!("local_toric_weighted_p2_split_bundle_charge_family:{signature}");
+    }
+    let flipped = charge_row.iter().map(|&value| -value).collect::<Vec<_>>();
+    if let Some(signature) = one_parameter_weighted_p2_split_bundle_signature(&flipped) {
+        return format!(
+            "local_toric_weighted_p2_split_bundle_charge_family_after_sign_flip:{signature}"
+        );
+    }
+
+    format!(
+        "local_toric_one_parameter_charge_family_unclassified:{}",
+        sorted
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
+    )
 }
 
 fn chamber_generator_ckyz_diagnostic(
@@ -31587,6 +31643,10 @@ mod tests {
         assert_eq!(
             diagnostic.local_toric_kind.as_deref(),
             Some("rank_two_quadrilateral")
+        );
+        assert_eq!(
+            diagnostic.local_toric_charge_family_status,
+            "local_toric_resolved_conifold_charge_family"
         );
         assert_eq!(diagnostic.circuit_triangulation_choice_count, Some(2));
         assert_eq!(diagnostic.circuit_triangulation_error, None);
