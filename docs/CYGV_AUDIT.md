@@ -3499,6 +3499,16 @@ degree-6 target-plus-star bound. Thus the target-plus-star point support is not
 a hidden finite face semigroup available from the current degree-bounded Mori
 context either; it has to be reached through source-derived wall/chamber
 transport data.
+`/tmp/cyrus_star_union_wall_circuit_smoke_all.json` now connects that transport
+data to the local secondary-wall circuits. It matches the positive
+opposite-star source ray against the serialized shared-face circuit list. For
+targets `7`/`8`, the known source-derived opposite-star class with GV `1`
+matches the wall circuit `[(0,-1),(55,-1),(195,1),(212,1)]`; the local
+secondary pairing is `0` and the corrected global-height pairing is
+`0.42571113815644424`. This is now explicit evidence that the known degree-4
+piece is a crossed wall circuit in the local star-union geometry, while the
+degree-6 target-plus-star remainder is not a finite Mori generator or support
+face in the exported context.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

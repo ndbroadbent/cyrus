@@ -1281,6 +1281,14 @@ to make the remaining GV layer more first-principles:
    `origin_support_no_generators`. This also rules out treating the
    seven-point target-plus-star support as an undiscovered finite face
    semigroup in the exported degree-bounded context.
+   `/tmp/cyrus_star_union_wall_circuit_smoke_all.json` now links the known
+   opposite-star component to the local wall geometry directly. For targets
+   `7`/`8`, the opposite-star source-derived GV `1` class exactly matches the
+   shared-face wall circuit `[(0,-1),(55,-1),(195,1),(212,1)]`; its local
+   secondary pairing is `0` and its corrected global-height pairing is
+   `0.42571113815644424`. Thus the known degree-4 component is certified as
+   visible wall-circuit data in the star-union support, while the unresolved
+   degree-6 component remains a chamber/semigroup transport problem.
    `/tmp/cyrus_gv_context_target_plus_star_support_report.json` now reconstructs
    the point-support charge bases for that degree-6 component. Targets `7`/`8`
    are integral two-parameter relations on affine-rank-4 seven-point supports:

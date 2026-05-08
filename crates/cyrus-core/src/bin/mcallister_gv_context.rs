@@ -309,6 +309,8 @@ struct ContextReport {
     local_cygv_source_resolution_star_union_chamber_coverage_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_shared_face_secondary_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_opposite_star_wall_circuit_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_global_secondary_height_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_global_regular_triangulation_status_counts:
@@ -711,6 +713,8 @@ struct LocalCygvSourceResolutionHintSummary {
     shared_two_simplex_star_union_shared_face_secondary_negative_pairing_count: Option<usize>,
     shared_two_simplex_star_union_shared_face_secondary_strictly_inside: Option<bool>,
     shared_two_simplex_star_union_shared_face_secondary_flipped_strictly_inside: Option<bool>,
+    shared_two_simplex_star_union_opposite_star_wall_circuit:
+        LocalCygvStarUnionOppositeStarWallCircuitHint,
     shared_two_simplex_star_union_global_secondary_height_status: String,
     shared_two_simplex_star_union_global_secondary_height_min_pairing: Option<String>,
     shared_two_simplex_star_union_global_secondary_height_max_pairing: Option<String>,
@@ -789,6 +793,17 @@ struct LocalCygvStarUnionOffHeightLookup {
     toric_gv: Option<String>,
     source_derived_gv: Option<String>,
     error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvStarUnionOppositeStarWallCircuitHint {
+    status: String,
+    circuit_nonzero: Option<Vec<(usize, i64)>>,
+    circuit_pairing: Option<String>,
+    circuit_global_height_pairing: Option<String>,
+    opposite_star_known_qn_history_status: Option<String>,
+    opposite_star_source_derived_gv: Option<String>,
+    opposite_star_source_class_status: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -15188,6 +15203,10 @@ fn build_report(
         local_cygv_source_resolution_star_union_global_secondary_height_status_counts(
             &local_cygv_source_resolution_hint_sample,
         );
+    let local_cygv_source_resolution_star_union_opposite_star_wall_circuit_status_counts =
+        local_cygv_source_resolution_star_union_opposite_star_wall_circuit_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
     let local_cygv_source_resolution_star_union_global_regular_triangulation_status_counts =
         local_cygv_source_resolution_star_union_global_regular_triangulation_status_counts(
             &local_cygv_source_resolution_hint_sample,
@@ -16202,6 +16221,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts,
         local_cygv_source_resolution_star_union_chamber_coverage_status_counts,
         local_cygv_source_resolution_star_union_shared_face_secondary_status_counts,
+        local_cygv_source_resolution_star_union_opposite_star_wall_circuit_status_counts,
         local_cygv_source_resolution_star_union_global_secondary_height_status_counts,
         local_cygv_source_resolution_star_union_global_regular_triangulation_status_counts,
         local_cygv_target_relation_global_secondary_height_status_counts,
@@ -16554,6 +16574,10 @@ fn local_cygv_source_resolution_hint_summaries(
                 affine_projection_hint.hyperplane.as_deref(),
                 context.secondary_cone_heights,
             );
+            let opposite_star_wall_circuit = local_cygv_star_union_opposite_star_wall_circuit_hint(
+                &star_union_shared_face_secondary,
+                &star_union_global_basis_lookup,
+            );
             let star_union_global_regular_triangulation =
                 local_cygv_star_union_global_regular_triangulation_hint(
                     target.origin_circuit_first_witness.as_ref(),
@@ -16696,6 +16720,8 @@ fn local_cygv_source_resolution_hint_summaries(
                     star_union_shared_face_secondary.strictly_inside,
                 shared_two_simplex_star_union_shared_face_secondary_flipped_strictly_inside:
                     star_union_shared_face_secondary.flipped_strictly_inside,
+                shared_two_simplex_star_union_opposite_star_wall_circuit:
+                    opposite_star_wall_circuit,
                 shared_two_simplex_star_union_global_secondary_height_status:
                     star_union_shared_face_secondary.global_height_status,
                 shared_two_simplex_star_union_global_secondary_height_min_pairing:
@@ -17316,6 +17342,23 @@ fn local_cygv_source_resolution_star_union_target_plus_star_path_history_status_
         }),
         "not_run",
     )
+}
+
+fn local_cygv_source_resolution_star_union_opposite_star_wall_circuit_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts
+            .entry(
+                summary
+                    .shared_two_simplex_star_union_opposite_star_wall_circuit
+                    .status
+                    .clone(),
+            )
+            .or_insert(0usize) += 1;
+    }
+    counts
 }
 
 fn local_cygv_source_resolution_star_union_global_secondary_height_status_counts(
@@ -19212,6 +19255,81 @@ fn local_cygv_star_union_shared_face_secondary_hint(
         global_height_negative_pairing_count: global_height_summary.negative_pairing_count,
         circuit_sample,
     }
+}
+
+fn local_cygv_star_union_opposite_star_wall_circuit_hint(
+    secondary: &LocalCygvStarUnionSharedFaceSecondaryHint,
+    lookups: &[LocalCygvStarUnionGlobalBasisLookup],
+) -> LocalCygvStarUnionOppositeStarWallCircuitHint {
+    let empty = |status: &str| LocalCygvStarUnionOppositeStarWallCircuitHint {
+        status: status.to_string(),
+        circuit_nonzero: None,
+        circuit_pairing: None,
+        circuit_global_height_pairing: None,
+        opposite_star_known_qn_history_status: None,
+        opposite_star_source_derived_gv: None,
+        opposite_star_source_class_status: None,
+    };
+    let Some(star) = star_union_lookup_by_role(lookups, "star") else {
+        return empty("opposite_star_wall_circuit_missing_star_lookup");
+    };
+    let Some(source_ray) = star.opposite_source_ray_ambient_nonzero.as_ref() else {
+        return LocalCygvStarUnionOppositeStarWallCircuitHint {
+            status: "opposite_star_wall_circuit_missing_opposite_source_ray".to_string(),
+            circuit_nonzero: None,
+            circuit_pairing: None,
+            circuit_global_height_pairing: None,
+            opposite_star_known_qn_history_status: star.opposite_known_qn_history_status.clone(),
+            opposite_star_source_derived_gv: star.opposite_source_derived_gv.clone(),
+            opposite_star_source_class_status: star.opposite_source_class_status.clone(),
+        };
+    };
+    let Some(circuit) = secondary
+        .circuit_sample
+        .iter()
+        .find(|circuit| sparse_entries_match(&circuit.nonzero, source_ray))
+    else {
+        return LocalCygvStarUnionOppositeStarWallCircuitHint {
+            status: "opposite_star_wall_circuit_no_matching_shared_face_circuit".to_string(),
+            circuit_nonzero: None,
+            circuit_pairing: None,
+            circuit_global_height_pairing: None,
+            opposite_star_known_qn_history_status: star.opposite_known_qn_history_status.clone(),
+            opposite_star_source_derived_gv: star.opposite_source_derived_gv.clone(),
+            opposite_star_source_class_status: star.opposite_source_class_status.clone(),
+        };
+    };
+    let history = star
+        .opposite_known_qn_history_status
+        .as_deref()
+        .unwrap_or("missing_opposite_star_known_qn_history");
+    let status = if history.starts_with("known_nonzero") {
+        "opposite_star_wall_circuit_matches_known_nonzero_history"
+    } else if history.starts_with("known_zero") {
+        "opposite_star_wall_circuit_matches_known_zero_history"
+    } else {
+        "opposite_star_wall_circuit_matches_unknown_history"
+    };
+    LocalCygvStarUnionOppositeStarWallCircuitHint {
+        status: status.to_string(),
+        circuit_nonzero: Some(circuit.nonzero.clone()),
+        circuit_pairing: Some(circuit.pairing.clone()),
+        circuit_global_height_pairing: circuit.global_height_pairing.clone(),
+        opposite_star_known_qn_history_status: star.opposite_known_qn_history_status.clone(),
+        opposite_star_source_derived_gv: star.opposite_source_derived_gv.clone(),
+        opposite_star_source_class_status: star.opposite_source_class_status.clone(),
+    }
+}
+
+fn sparse_entries_match(lhs: &[(usize, i64)], rhs: &[(usize, i64)]) -> bool {
+    if lhs.len() != rhs.len() {
+        return false;
+    }
+    let mut lhs = lhs.to_vec();
+    let mut rhs = rhs.to_vec();
+    lhs.sort_unstable();
+    rhs.sort_unstable();
+    lhs == rhs
 }
 
 struct LocalCygvStarUnionGlobalSecondaryHeightSummary {
@@ -24434,6 +24552,16 @@ mod tests {
             shared_two_simplex_star_union_shared_face_secondary_negative_pairing_count: None,
             shared_two_simplex_star_union_shared_face_secondary_strictly_inside: None,
             shared_two_simplex_star_union_shared_face_secondary_flipped_strictly_inside: None,
+            shared_two_simplex_star_union_opposite_star_wall_circuit:
+                LocalCygvStarUnionOppositeStarWallCircuitHint {
+                    status: "test".to_string(),
+                    circuit_nonzero: None,
+                    circuit_pairing: None,
+                    circuit_global_height_pairing: None,
+                    opposite_star_known_qn_history_status: None,
+                    opposite_star_source_derived_gv: None,
+                    opposite_star_source_class_status: None,
+                },
             shared_two_simplex_star_union_global_secondary_height_status: "test".to_string(),
             shared_two_simplex_star_union_global_secondary_height_min_pairing: None,
             shared_two_simplex_star_union_global_secondary_height_max_pairing: None,
@@ -27275,6 +27403,9 @@ mod tests {
             decomposition_active_generators_nonzero: None,
         };
         lookups[1].opposite_extremal_ray_certificate = Some(opposite_star_certificate);
+        lookups[1].opposite_source_ray_ambient_nonzero =
+            Some(vec![(0, -1), (55, -1), (195, 1), (212, 1)]);
+        lookups[1].opposite_source_class_status = Some("source_ray_known_source_derived_gv".into());
         lookups[2].extremal_ray_certificate = Some(target_plus_star_certificate);
 
         let summary = local_cygv_star_union_transport_decomposition_summary(&lookups, 2);
@@ -27320,6 +27451,44 @@ mod tests {
                 .as_ref()
                 .map(|probe| probe.status.as_str()),
             Some("certified_exact_extremal_ray")
+        );
+
+        let secondary = LocalCygvStarUnionSharedFaceSecondaryHint {
+            status: "star_union_shared_face_secondary_on_wall".to_string(),
+            simplex_count: Some(2),
+            hyperplane_count: Some(1),
+            min_pairing: Some("0".to_string()),
+            max_pairing: Some("0".to_string()),
+            zero_pairing_count: Some(1),
+            negative_pairing_count: Some(0),
+            strictly_inside: Some(false),
+            flipped_strictly_inside: Some(false),
+            global_height_status: "star_union_shared_face_secondary_global_height_crosses_wall"
+                .to_string(),
+            global_height_min_pairing: Some("1/2".to_string()),
+            global_height_max_pairing: Some("1/2".to_string()),
+            global_height_zero_pairing_count: Some(0),
+            global_height_positive_pairing_count: Some(1),
+            global_height_negative_pairing_count: Some(0),
+            circuit_sample: vec![LocalCygvStarUnionSecondaryCircuitSample {
+                nonzero: vec![(195, 1), (55, -1), (212, 1), (0, -1)],
+                pairing: "0".to_string(),
+                global_height_pairing: Some("1/2".to_string()),
+            }],
+        };
+        let wall_hint = local_cygv_star_union_opposite_star_wall_circuit_hint(&secondary, &lookups);
+
+        assert_eq!(
+            wall_hint.status,
+            "opposite_star_wall_circuit_matches_known_nonzero_history"
+        );
+        assert_eq!(
+            wall_hint.circuit_global_height_pairing.as_deref(),
+            Some("1/2")
+        );
+        assert_eq!(
+            wall_hint.opposite_star_source_derived_gv.as_deref(),
+            Some("1")
         );
     }
 
