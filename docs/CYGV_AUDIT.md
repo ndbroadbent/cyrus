@@ -159,18 +159,24 @@ hyperplanes and records the corrected height vector's pairing certificate for
 that selected block. The runner-side `P^4` simplex regression forces the
 sampled branch and verifies that the artifact reports the ten triangular
 two-faces with one compatible choice each and chamber index `0`. The
-corrected-chamber GV context export can carry this same face-choice summary
-when
+corrected-chamber GV context export always carries a cheaper
+`induced_face_triangulation_chamber_certificate` derived directly from the
+solved regular triangulation: it records the computed two-face count, per-face
+point counts, induced triangle counts, total induced face triangles, and the
+two-face secondary height-pairing certificate. This gives routine no-replay
+exports chamber evidence without enumerating every alternate face choice.
+The same context export can also carry the full face-choice summary when
 `--include-corrected-chamber-face-triangulation-choice-summary-in-gv-context`
 is set, and `mcallister_gv_context` rejects internally inconsistent summaries
-and selected-chamber certificates before surfacing the chamber-choice counts,
-selected mixed-radix index, and selected-chamber certificate fields in its
-report. The context export keeps this behind an explicit flag because
+and selected-chamber certificates before surfacing the induced-face chamber
+fields, chamber-choice counts, selected mixed-radix index, and selected-chamber
+certificate fields in its report. The full face-choice summary stays behind an
+explicit flag because
 enumerating/sampling all face choices is expensive on 4-214-647: a no-replay
-context export without the flag completed and validated with the face-choice
-summary absent, while the sampled face-choice include path remains a bounded
-diagnostic rather than a routine export. This is still chamber-search input
-evidence; it does not compute or promote any corrected-chamber GV value.
+context export without the flag completed and validated with the expensive
+face-choice summary absent, while the sampled face-choice include path remains
+a bounded diagnostic rather than a routine export. This is still chamber-search
+input evidence; it does not compute or promote any corrected-chamber GV value.
 
 CYTools' `Cone.find_lattice_points` is a separate operation. It first checks
 that the grading vector has only the origin at nonpositive degree, then uses

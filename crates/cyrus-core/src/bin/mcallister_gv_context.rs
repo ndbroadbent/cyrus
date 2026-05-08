@@ -88,6 +88,9 @@ struct CorrectedChamberGvContext {
     secondary_cone_heights_for_missing: Option<Vec<f64>>,
     #[serde(default)]
     corrected_chamber_face_triangulation_choice_summary: Option<FaceTriangulationChoiceSummary>,
+    #[serde(default)]
+    induced_face_triangulation_chamber_certificate:
+        Option<InducedFaceTriangulationChamberCertificate>,
     uncovered_source_ray_stats_for_missing: Option<MissingGvTargetStats>,
     #[serde(default)]
     shared_facet_unresolved_source_ray_stats_for_missing: Option<MissingGvTargetStats>,
@@ -138,6 +141,20 @@ struct FaceTriangulationChoiceSummary {
     height_unique_choice_index: Option<String>,
     #[serde(default)]
     height_unique_selected_chamber_certificate: Option<SecondaryConeHeightCertificate>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct InducedFaceTriangulationChamberCertificate {
+    status: String,
+    face_count: usize,
+    min_face_point_count: Option<usize>,
+    max_face_point_count: Option<usize>,
+    min_face_simplex_count: Option<usize>,
+    max_face_simplex_count: Option<usize>,
+    total_face_simplex_count: usize,
+    face_point_counts: Vec<usize>,
+    face_simplex_counts: Vec<usize>,
+    height_certificate: SecondaryConeHeightCertificate,
 }
 
 #[derive(Debug, Deserialize)]
@@ -332,6 +349,14 @@ struct ContextReport {
     corrected_chamber_face_choice_selected_chamber_certificate_strictly_inside: Option<bool>,
     corrected_chamber_face_choice_selected_chamber_certificate_hyperplane_count: Option<usize>,
     corrected_chamber_face_choice_selected_chamber_certificate_min_pairing: Option<f64>,
+    induced_face_triangulation_chamber_status: Option<String>,
+    induced_face_triangulation_chamber_face_count: Option<usize>,
+    induced_face_triangulation_chamber_min_face_simplex_count: Option<usize>,
+    induced_face_triangulation_chamber_max_face_simplex_count: Option<usize>,
+    induced_face_triangulation_chamber_total_face_simplex_count: Option<usize>,
+    induced_face_triangulation_chamber_certificate_status: Option<String>,
+    induced_face_triangulation_chamber_certificate_strictly_inside: Option<bool>,
+    induced_face_triangulation_chamber_certificate_hyperplane_count: Option<usize>,
     q_rows: usize,
     q_cols: usize,
     kappa_nonzero_entries: usize,
@@ -11934,6 +11959,12 @@ fn validate_context<'a>(
     {
         validate_face_triangulation_choice_summary(summary)?;
     }
+    if let Some(certificate) = context
+        .induced_face_triangulation_chamber_certificate
+        .as_ref()
+    {
+        validate_induced_face_triangulation_chamber_certificate(certificate)?;
+    }
     let mut covered_toric_gv_by_basis = HashMap::new();
     if let Some(covered_context) = context.covered_toric_gv_context_for_missing.as_ref() {
         for (idx, sample) in covered_context.iter().enumerate() {
@@ -12075,6 +12106,68 @@ fn validate_secondary_cone_height_certificate(
         ));
     }
     Ok(())
+}
+
+fn validate_induced_face_triangulation_chamber_certificate(
+    certificate: &InducedFaceTriangulationChamberCertificate,
+) -> Result<(), String> {
+    if certificate.face_count != certificate.face_point_counts.len() {
+        return Err(format!(
+            "induced face chamber certificate face_count {} does not match face_point_counts length {}",
+            certificate.face_count,
+            certificate.face_point_counts.len()
+        ));
+    }
+    if certificate.face_count != certificate.face_simplex_counts.len() {
+        return Err(format!(
+            "induced face chamber certificate face_count {} does not match face_simplex_counts length {}",
+            certificate.face_count,
+            certificate.face_simplex_counts.len()
+        ));
+    }
+    if certificate.min_face_point_count != certificate.face_point_counts.iter().copied().min() {
+        return Err("induced face chamber certificate min_face_point_count mismatch".into());
+    }
+    if certificate.max_face_point_count != certificate.face_point_counts.iter().copied().max() {
+        return Err("induced face chamber certificate max_face_point_count mismatch".into());
+    }
+    if certificate.min_face_simplex_count != certificate.face_simplex_counts.iter().copied().min() {
+        return Err("induced face chamber certificate min_face_simplex_count mismatch".into());
+    }
+    if certificate.max_face_simplex_count != certificate.face_simplex_counts.iter().copied().max() {
+        return Err("induced face chamber certificate max_face_simplex_count mismatch".into());
+    }
+    if certificate
+        .face_simplex_counts
+        .iter()
+        .any(|&simplex_count| simplex_count == 0)
+    {
+        return Err("induced face chamber certificate contains an empty face triangulation".into());
+    }
+    let total_face_simplex_count = certificate.face_simplex_counts.iter().sum::<usize>();
+    if certificate.total_face_simplex_count != total_face_simplex_count {
+        return Err(format!(
+            "induced face chamber certificate total_face_simplex_count {} does not match computed {total_face_simplex_count}",
+            certificate.total_face_simplex_count
+        ));
+    }
+    let expected_status = if certificate.face_count == 0 {
+        "no_induced_face_triangulations"
+    } else if certificate.height_certificate.strictly_inside {
+        "induced_face_triangulation_chamber_certified"
+    } else {
+        "induced_face_triangulation_chamber_height_not_strict"
+    };
+    if certificate.status != expected_status {
+        return Err(format!(
+            "induced face chamber certificate status {} does not match computed {expected_status}",
+            certificate.status
+        ));
+    }
+    validate_secondary_cone_height_certificate(
+        &certificate.height_certificate,
+        "induced face chamber height certificate",
+    )
 }
 
 fn validate_face_triangulation_choice_summary(
@@ -17957,6 +18050,38 @@ fn build_report(
                     .as_ref()
                     .and_then(|certificate| certificate.min_pairing)
             }),
+        induced_face_triangulation_chamber_status: context
+            .induced_face_triangulation_chamber_certificate
+            .as_ref()
+            .map(|certificate| certificate.status.clone()),
+        induced_face_triangulation_chamber_face_count: context
+            .induced_face_triangulation_chamber_certificate
+            .as_ref()
+            .map(|certificate| certificate.face_count),
+        induced_face_triangulation_chamber_min_face_simplex_count: context
+            .induced_face_triangulation_chamber_certificate
+            .as_ref()
+            .and_then(|certificate| certificate.min_face_simplex_count),
+        induced_face_triangulation_chamber_max_face_simplex_count: context
+            .induced_face_triangulation_chamber_certificate
+            .as_ref()
+            .and_then(|certificate| certificate.max_face_simplex_count),
+        induced_face_triangulation_chamber_total_face_simplex_count: context
+            .induced_face_triangulation_chamber_certificate
+            .as_ref()
+            .map(|certificate| certificate.total_face_simplex_count),
+        induced_face_triangulation_chamber_certificate_status: context
+            .induced_face_triangulation_chamber_certificate
+            .as_ref()
+            .map(|certificate| certificate.height_certificate.status.clone()),
+        induced_face_triangulation_chamber_certificate_strictly_inside: context
+            .induced_face_triangulation_chamber_certificate
+            .as_ref()
+            .map(|certificate| certificate.height_certificate.strictly_inside),
+        induced_face_triangulation_chamber_certificate_hyperplane_count: context
+            .induced_face_triangulation_chamber_certificate
+            .as_ref()
+            .map(|certificate| certificate.height_certificate.hyperplane_count),
         q_rows: validated.q_matrix.len(),
         q_cols: validated.q_cols,
         kappa_nonzero_entries: validated.intersection.num_nonzero(),
@@ -30153,6 +30278,7 @@ mod tests {
             expanded_secondary_fan_height_certificate: None,
             secondary_cone_heights_for_missing: None,
             corrected_chamber_face_triangulation_choice_summary: None,
+            induced_face_triangulation_chamber_certificate: None,
             uncovered_source_ray_stats_for_missing: None,
             shared_facet_unresolved_source_ray_stats_for_missing: None,
             gv_q_matrix_for_missing: Some(vec![vec![1, 0], vec![0, 1]]),
@@ -30203,6 +30329,29 @@ mod tests {
                 max_pairing: Some(2.0),
                 strictly_inside: true,
             }),
+        }
+    }
+
+    fn minimal_induced_face_chamber_certificate() -> InducedFaceTriangulationChamberCertificate {
+        InducedFaceTriangulationChamberCertificate {
+            status: "induced_face_triangulation_chamber_certified".to_string(),
+            face_count: 2,
+            min_face_point_count: Some(3),
+            max_face_point_count: Some(4),
+            min_face_simplex_count: Some(1),
+            max_face_simplex_count: Some(2),
+            total_face_simplex_count: 3,
+            face_point_counts: vec![3, 4],
+            face_simplex_counts: vec![1, 2],
+            height_certificate: SecondaryConeHeightCertificate {
+                status: "strictly_inside_secondary_cone".to_string(),
+                epsilon: 1e-6,
+                hyperplane_count: 2,
+                pairing_count: 2,
+                min_pairing: Some(0.5),
+                max_pairing: Some(2.0),
+                strictly_inside: true,
+            },
         }
     }
 
@@ -30675,6 +30824,93 @@ mod tests {
     }
 
     #[test]
+    fn validate_context_reports_induced_face_chamber_certificate() {
+        let mut context = minimal_corrected_context(
+            4,
+            Some(vec![DegreeBoundedMoriRayContextSample {
+                degree: 1,
+                ambient_nonzero: vec![(5, 1)],
+                basis_nonzero: vec![(0, 1)],
+            }]),
+        );
+        context.induced_face_triangulation_chamber_certificate =
+            Some(minimal_induced_face_chamber_certificate());
+
+        let validated = validate_context(&context).unwrap();
+        let report = build_report(
+            &context,
+            &validated,
+            None,
+            false,
+            false,
+            None,
+            None,
+            false,
+            false,
+            false,
+            false,
+            64,
+            false,
+            64,
+            false,
+            64,
+            None,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            None,
+            None,
+            None,
+            None,
+            false,
+            2,
+            None,
+            64,
+            DEFAULT_CYGV_LOWER_SEED_PAIR_LIMIT,
+            None,
+            &SupportingMoriFaceLpSearchOptions::default(),
+        );
+
+        assert_eq!(
+            report.induced_face_triangulation_chamber_status.as_deref(),
+            Some("induced_face_triangulation_chamber_certified")
+        );
+        assert_eq!(
+            report.induced_face_triangulation_chamber_face_count,
+            Some(2)
+        );
+        assert_eq!(
+            report.induced_face_triangulation_chamber_min_face_simplex_count,
+            Some(1)
+        );
+        assert_eq!(
+            report.induced_face_triangulation_chamber_max_face_simplex_count,
+            Some(2)
+        );
+        assert_eq!(
+            report.induced_face_triangulation_chamber_total_face_simplex_count,
+            Some(3)
+        );
+        assert_eq!(
+            report
+                .induced_face_triangulation_chamber_certificate_status
+                .as_deref(),
+            Some("strictly_inside_secondary_cone")
+        );
+        assert_eq!(
+            report.induced_face_triangulation_chamber_certificate_strictly_inside,
+            Some(true)
+        );
+        assert_eq!(
+            report.induced_face_triangulation_chamber_certificate_hyperplane_count,
+            Some(2)
+        );
+    }
+
+    #[test]
     fn validate_context_rejects_invalid_face_triangulation_choice_summary() {
         let mut context = minimal_corrected_context(
             4,
@@ -30717,6 +30953,28 @@ mod tests {
         };
 
         assert!(err.contains("selected chamber certificate without unique digits"));
+    }
+
+    #[test]
+    fn validate_context_rejects_invalid_induced_face_chamber_certificate() {
+        let mut context = minimal_corrected_context(
+            4,
+            Some(vec![DegreeBoundedMoriRayContextSample {
+                degree: 1,
+                ambient_nonzero: vec![(5, 1)],
+                basis_nonzero: vec![(0, 1)],
+            }]),
+        );
+        let mut certificate = minimal_induced_face_chamber_certificate();
+        certificate.total_face_simplex_count = 4;
+        context.induced_face_triangulation_chamber_certificate = Some(certificate);
+
+        let err = match validate_context(&context) {
+            Ok(_) => panic!("invalid induced face chamber certificate should fail validation"),
+            Err(err) => err,
+        };
+
+        assert!(err.contains("total_face_simplex_count 4 does not match computed 3"));
     }
 
     #[test]

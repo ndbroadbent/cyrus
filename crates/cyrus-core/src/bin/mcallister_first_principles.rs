@@ -75,7 +75,7 @@
 //!   checkpoints; `finite-semigroup` is stricter for GA/search diagnostics.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -769,6 +769,8 @@ struct ChamberGvDiagnostic {
     degree_bounded_toric_gv_diagnostic_context_for_missing:
         Option<Vec<ToricGvDiagnosticContextSample>>,
     corrected_chamber_face_triangulation_choice_summary: Option<FaceTriangulationChoiceSummary>,
+    induced_face_triangulation_chamber_certificate:
+        Option<InducedFaceTriangulationChamberCertificate>,
     secondary_cone_height_certificate: Option<SecondaryConeHeightCertificate>,
     secondary_cone_2face_height_certificate: Option<SecondaryConeHeightCertificate>,
     expanded_secondary_fan_height_certificate: Option<SecondaryConeHeightCertificate>,
@@ -830,6 +832,20 @@ struct FaceTriangulationChoiceSummary {
     height_unique_selected_chamber_certificate: Option<SecondaryConeHeightCertificate>,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct InducedFaceTriangulationChamberCertificate {
+    status: String,
+    face_count: usize,
+    min_face_point_count: Option<usize>,
+    max_face_point_count: Option<usize>,
+    min_face_simplex_count: Option<usize>,
+    max_face_simplex_count: Option<usize>,
+    total_face_simplex_count: usize,
+    face_point_counts: Vec<usize>,
+    face_simplex_counts: Vec<usize>,
+    height_certificate: SecondaryConeHeightCertificate,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 struct SparseIntersectionEntry {
     indices: [usize; 3],
@@ -887,6 +903,8 @@ struct CorrectedChamberGvContextExport<'a> {
     degree_bounded_toric_gv_diagnostic_context_for_missing:
         Option<&'a Vec<ToricGvDiagnosticContextSample>>,
     corrected_chamber_face_triangulation_choice_summary: Option<&'a FaceTriangulationChoiceSummary>,
+    induced_face_triangulation_chamber_certificate:
+        Option<&'a InducedFaceTriangulationChamberCertificate>,
     secondary_cone_height_certificate: Option<&'a SecondaryConeHeightCertificate>,
     secondary_cone_2face_height_certificate: Option<&'a SecondaryConeHeightCertificate>,
     expanded_secondary_fan_height_certificate: Option<&'a SecondaryConeHeightCertificate>,
@@ -7392,6 +7410,69 @@ fn secondary_cone_2face_height_certificate_for_kahler(
     secondary_cone_height_certificate_from_hyperplanes(&hyperplanes, &heights)
 }
 
+fn induced_face_triangulation_chamber_certificate(
+    tri: &Triangulation,
+    geom: &PrimalGeom,
+    heights: &[F64<Finite>],
+) -> Result<InducedFaceTriangulationChamberCertificate, String> {
+    let faces = geom
+        .polytope
+        .faces_4d_for_points(&geom.triangulation_points)
+        .map_err(|e| format!("failed to compute 4D two-faces for induced face chamber: {e}"))?;
+    let mut face_point_counts = Vec::with_capacity(faces.twofaces.len());
+    let mut face_simplex_counts = Vec::with_capacity(faces.twofaces.len());
+    for (face_idx, face) in faces.twofaces.iter().enumerate() {
+        let face_set = face.iter().copied().collect::<BTreeSet<_>>();
+        let mut restricted_simplices = BTreeSet::new();
+        for simplex in tri.simplices() {
+            let mut restricted = simplex
+                .iter()
+                .copied()
+                .filter(|idx| face_set.contains(idx))
+                .collect::<Vec<_>>();
+            restricted.sort_unstable();
+            if restricted.len() == 3 {
+                restricted_simplices.insert(restricted);
+            }
+        }
+        if restricted_simplices.is_empty() {
+            return Err(format!(
+                "induced two-face triangulation {face_idx} has no triangles"
+            ));
+        }
+        face_point_counts.push(face.len());
+        face_simplex_counts.push(restricted_simplices.len());
+    }
+    let hyperplanes = secondary_cone_hyperplanes_native_on_polytope_2faces_4d(
+        &geom.triangulation_points,
+        tri,
+        &geom.polytope,
+    )
+    .map_err(|e| format!("failed to compute induced two-face chamber hyperplanes: {e}"))?;
+    let height_certificate =
+        secondary_cone_height_certificate_from_hyperplanes(&hyperplanes, heights)?;
+    let status = if face_point_counts.is_empty() {
+        "no_induced_face_triangulations"
+    } else if height_certificate.strictly_inside {
+        "induced_face_triangulation_chamber_certified"
+    } else {
+        "induced_face_triangulation_chamber_height_not_strict"
+    };
+
+    Ok(InducedFaceTriangulationChamberCertificate {
+        status: status.to_string(),
+        face_count: face_point_counts.len(),
+        min_face_point_count: face_point_counts.iter().copied().min(),
+        max_face_point_count: face_point_counts.iter().copied().max(),
+        min_face_simplex_count: face_simplex_counts.iter().copied().min(),
+        max_face_simplex_count: face_simplex_counts.iter().copied().max(),
+        total_face_simplex_count: face_simplex_counts.iter().sum(),
+        face_point_counts,
+        face_simplex_counts,
+        height_certificate,
+    })
+}
+
 fn expanded_secondary_fan_height_certificate_for_kahler(
     geom: &PrimalGeom,
     basis: &[usize],
@@ -7770,6 +7851,9 @@ fn diagnose_chamber_gv_volume_correction(
             .iter()
             .map(|height| height.get())
             .collect::<Vec<_>>(),
+    );
+    let induced_face_triangulation_chamber_certificate = Some(
+        induced_face_triangulation_chamber_certificate(tri, geom, &secondary_cone_typed_heights)?,
     );
     let corrected_chamber_face_triangulation_choice_summary =
         if include_face_triangulation_choice_summary {
@@ -8594,6 +8678,7 @@ fn diagnose_chamber_gv_volume_correction(
         shared_facet_unresolved_source_ray_stats_for_missing,
         uncovered_source_ray_toric_diagnostic_sample,
         corrected_chamber_face_triangulation_choice_summary,
+        induced_face_triangulation_chamber_certificate,
         basis_mori_rays_for_missing_degree_bound: basis_rays_for_missing_degree_bound,
         basis_mori_rays_for_missing_degree_bounded: basis_rays_for_missing_degree_bounded,
         degree_bounded_mori_ray_context_for_missing,
@@ -9490,6 +9575,9 @@ fn write_corrected_chamber_gv_context_export(
             .as_ref(),
         corrected_chamber_face_triangulation_choice_summary: diag
             .corrected_chamber_face_triangulation_choice_summary
+            .as_ref(),
+        induced_face_triangulation_chamber_certificate: diag
+            .induced_face_triangulation_chamber_certificate
             .as_ref(),
         secondary_cone_height_certificate: diag.secondary_cone_height_certificate.as_ref(),
         secondary_cone_2face_height_certificate: diag
@@ -12803,6 +12891,28 @@ mod tests {
                 max_pairing: Some(1.5),
                 strictly_inside: true,
             }),
+            induced_face_triangulation_chamber_certificate: Some(
+                InducedFaceTriangulationChamberCertificate {
+                    status: "induced_face_triangulation_chamber_certified".to_string(),
+                    face_count: 1,
+                    min_face_point_count: Some(4),
+                    max_face_point_count: Some(4),
+                    min_face_simplex_count: Some(2),
+                    max_face_simplex_count: Some(2),
+                    total_face_simplex_count: 2,
+                    face_point_counts: vec![4],
+                    face_simplex_counts: vec![2],
+                    height_certificate: SecondaryConeHeightCertificate {
+                        status: "strictly_inside_secondary_cone".to_string(),
+                        epsilon: 1e-6,
+                        hyperplane_count: 2,
+                        pairing_count: 2,
+                        min_pairing: Some(0.5),
+                        max_pairing: Some(1.5),
+                        strictly_inside: true,
+                    },
+                },
+            ),
             expanded_secondary_fan_height_certificate: None,
             secondary_cone_heights_for_missing: Some(vec![0.0, 0.0, 1.5]),
             basis_mori_rays_for_missing_degree_bound: None,
@@ -12878,6 +12988,17 @@ mod tests {
         let twoface_chamber_certificate = &value["secondary_cone_2face_height_certificate"];
         assert_eq!(twoface_chamber_certificate["hyperplane_count"], 2);
         assert_eq!(twoface_chamber_certificate["strictly_inside"], true);
+        let induced_face_chamber_certificate =
+            &value["induced_face_triangulation_chamber_certificate"];
+        assert_eq!(
+            induced_face_chamber_certificate["status"],
+            "induced_face_triangulation_chamber_certified"
+        );
+        assert_eq!(induced_face_chamber_certificate["face_count"], 1);
+        assert_eq!(
+            induced_face_chamber_certificate["height_certificate"]["hyperplane_count"],
+            2
+        );
         assert_eq!(
             value["secondary_cone_heights_for_missing"]
                 .as_array()
@@ -12924,6 +13045,59 @@ mod tests {
         assert_eq!(value["strictly_inside"], true);
 
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn induced_face_triangulation_chamber_certificate_tracks_face_triangles() {
+        use cyrus_core::f64_finite;
+
+        let points = vec![
+            Point::new(vec![1, 0, 0, 0]),
+            Point::new(vec![0, 1, 0, 0]),
+            Point::new(vec![0, 0, 1, 0]),
+            Point::new(vec![0, 0, 0, 1]),
+            Point::new(vec![-1, -1, -1, -1]),
+        ];
+        let polytope = Polytope::from_vertices(points.clone()).expect("P4 polytope");
+        let geom = PrimalGeom {
+            polytope,
+            heights: Vec::new(),
+            triangulation_points: points,
+            triangulation: Triangulation::new(vec![vec![0, 1, 2, 3, 4]]),
+        };
+        let heights = vec![
+            f64_finite!(0.0),
+            f64_finite!(0.0),
+            f64_finite!(0.0),
+            f64_finite!(0.0),
+            f64_finite!(0.0),
+        ];
+
+        let certificate =
+            induced_face_triangulation_chamber_certificate(&geom.triangulation, &geom, &heights)
+                .expect("induced face chamber certificate");
+
+        assert_eq!(
+            certificate.status,
+            "induced_face_triangulation_chamber_certified"
+        );
+        assert_eq!(certificate.face_count, 10);
+        assert_eq!(certificate.min_face_point_count, Some(3));
+        assert_eq!(certificate.max_face_point_count, Some(3));
+        assert_eq!(certificate.min_face_simplex_count, Some(1));
+        assert_eq!(certificate.max_face_simplex_count, Some(1));
+        assert_eq!(certificate.total_face_simplex_count, 10);
+        assert!(
+            certificate
+                .face_simplex_counts
+                .iter()
+                .all(|&count| count == 1)
+        );
+        assert_eq!(
+            certificate.height_certificate.status,
+            "no_secondary_cone_hyperplanes"
+        );
+        assert!(certificate.height_certificate.strictly_inside);
     }
 
     #[test]
