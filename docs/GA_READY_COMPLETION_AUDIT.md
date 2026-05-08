@@ -1222,6 +1222,15 @@ degree-`2` row remains an unclassified six-point charge family
 `-2,-1,-1,1,1,2`. The next implementation can now attack these as three local
 model families instead of as a flat list of unknown chamber generators.
 
+`/tmp/cyrus_unresolved_chamber_generator_queue_v4.json` also tests the tempting
+shortcut for the resolved-conifold rows: feed the one-parameter charge row to
+the existing `cygv` unit-tensor wrapper. Both rows fail with
+`local_toric_unit_tensor_probe_hkty_error` because that wrapper treats the input
+as a compact hypersurface and `cygv` reports the CY dimension is below three.
+So the resolved-conifold family still needs a source-derived noncompact local
+model or a separately certified formula import; the current wrapper result is
+not promotable.
+
 ## Next Concrete Action
 
 The next implementation should be one of these, in order:

@@ -1308,6 +1308,9 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
     source_class_status: Option<String>,
     local_toric_kind: Option<String>,
     local_toric_charge_family_status: String,
+    local_toric_unit_tensor_candidate_gv: Option<String>,
+    local_toric_unit_tensor_probe_status: String,
+    local_toric_unit_tensor_target_qn_trace_status: Option<String>,
     ckyz_status: String,
     bounded_lower_seed_status: String,
     bounded_lower_seed_term_count: Option<usize>,
@@ -1362,6 +1365,12 @@ struct LocalCygvChamberGeneratorLocalToricDiagnostic {
     local_coordinates: Option<Vec<LocalCygvChamberGeneratorLocalCoordinate>>,
     local_toric_kind: Option<String>,
     local_toric_charge_family_status: String,
+    local_toric_unit_tensor_candidate_gv: Option<String>,
+    local_toric_unit_tensor_probe_status: String,
+    local_toric_unit_tensor_probe_error: Option<String>,
+    local_toric_unit_tensor_qn_trace_polynomial_count: Option<usize>,
+    local_toric_unit_tensor_target_qn_trace_status: Option<String>,
+    local_toric_unit_tensor_target_qn_trace_term_count: Option<usize>,
     circuit_triangulation_choice_count: Option<usize>,
     circuit_triangulation_choices: Option<Vec<Vec<Vec<usize>>>>,
     circuit_triangulation_error: Option<String>,
@@ -1379,6 +1388,15 @@ struct LocalCygvChamberGeneratorLocalToricDiagnostic {
 struct LocalCygvChamberGeneratorLocalCoordinate {
     point_index: usize,
     coordinates: Vec<i64>,
+}
+
+struct LocalToricUnitTensorProbe {
+    candidate_gv: Option<String>,
+    status: String,
+    error: Option<String>,
+    qn_trace_polynomial_count: Option<usize>,
+    target_qn_trace_status: Option<String>,
+    target_qn_trace_term_count: Option<usize>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -20439,6 +20457,18 @@ fn unresolved_chamber_generator_summaries(
                         .local_toric_diagnostic
                         .local_toric_charge_family_status
                         .clone(),
+                    local_toric_unit_tensor_candidate_gv: context
+                        .local_toric_diagnostic
+                        .local_toric_unit_tensor_candidate_gv
+                        .clone(),
+                    local_toric_unit_tensor_probe_status: context
+                        .local_toric_diagnostic
+                        .local_toric_unit_tensor_probe_status
+                        .clone(),
+                    local_toric_unit_tensor_target_qn_trace_status: context
+                        .local_toric_diagnostic
+                        .local_toric_unit_tensor_target_qn_trace_status
+                        .clone(),
                     ckyz_status: context.local_toric_diagnostic.ckyz_status.clone(),
                     bounded_lower_seed_status:
                         chamber_semigroup_generator_bounded_lower_seed_status(context),
@@ -25406,6 +25436,12 @@ fn chamber_generator_local_toric_diagnostic_not_run(
         local_coordinates: None,
         local_toric_kind: None,
         local_toric_charge_family_status: "local_toric_charge_family_not_run".to_string(),
+        local_toric_unit_tensor_candidate_gv: None,
+        local_toric_unit_tensor_probe_status: "local_toric_unit_tensor_probe_not_run".to_string(),
+        local_toric_unit_tensor_probe_error: None,
+        local_toric_unit_tensor_qn_trace_polynomial_count: None,
+        local_toric_unit_tensor_target_qn_trace_status: None,
+        local_toric_unit_tensor_target_qn_trace_term_count: None,
         circuit_triangulation_choice_count: None,
         circuit_triangulation_choices: None,
         circuit_triangulation_error: None,
@@ -25547,6 +25583,13 @@ fn chamber_generator_local_toric_diagnostic(
             local_coordinates: None,
             local_toric_kind: None,
             local_toric_charge_family_status: "local_toric_charge_family_not_run".to_string(),
+            local_toric_unit_tensor_candidate_gv: None,
+            local_toric_unit_tensor_probe_status: "local_toric_unit_tensor_probe_not_run"
+                .to_string(),
+            local_toric_unit_tensor_probe_error: None,
+            local_toric_unit_tensor_qn_trace_polynomial_count: None,
+            local_toric_unit_tensor_target_qn_trace_status: None,
+            local_toric_unit_tensor_target_qn_trace_term_count: None,
             circuit_triangulation_choice_count: None,
             circuit_triangulation_choices: None,
             circuit_triangulation_error: None,
@@ -25615,6 +25658,10 @@ fn chamber_generator_local_toric_diagnostic(
         .collect::<Vec<_>>();
     let local_toric_kind = diagnostic.kind.as_ref().map(local_toric_circuit_kind_label);
     let local_toric_charge_family_status = local_toric_charge_family_status(&diagnostic);
+    let local_toric_unit_tensor_probe = local_toric_unit_tensor_probe(
+        &diagnostic.local_charge_basis,
+        &local_toric_charge_family_status,
+    );
     let (ckyz_status, ckyz_kind, ckyz_source_target_direction, ckyz_first_degree, ckyz_gv) =
         chamber_generator_ckyz_diagnostic(&diagnostic);
     let (
@@ -25649,6 +25696,15 @@ fn chamber_generator_local_toric_diagnostic(
         local_coordinates: Some(local_coordinates),
         local_toric_kind,
         local_toric_charge_family_status,
+        local_toric_unit_tensor_candidate_gv: local_toric_unit_tensor_probe.candidate_gv,
+        local_toric_unit_tensor_probe_status: local_toric_unit_tensor_probe.status,
+        local_toric_unit_tensor_probe_error: local_toric_unit_tensor_probe.error,
+        local_toric_unit_tensor_qn_trace_polynomial_count: local_toric_unit_tensor_probe
+            .qn_trace_polynomial_count,
+        local_toric_unit_tensor_target_qn_trace_status: local_toric_unit_tensor_probe
+            .target_qn_trace_status,
+        local_toric_unit_tensor_target_qn_trace_term_count: local_toric_unit_tensor_probe
+            .target_qn_trace_term_count,
         circuit_triangulation_choice_count,
         circuit_triangulation_choices,
         circuit_triangulation_error,
@@ -25757,6 +25813,63 @@ fn local_toric_charge_family_status(
             .collect::<Vec<_>>()
             .join(",")
     )
+}
+
+fn local_toric_unit_tensor_probe(
+    charge_basis: &[Vec<i64>],
+    charge_family_status: &str,
+) -> LocalToricUnitTensorProbe {
+    let empty = |status: &str, error: Option<String>| LocalToricUnitTensorProbe {
+        candidate_gv: None,
+        status: status.to_string(),
+        error,
+        qn_trace_polynomial_count: None,
+        target_qn_trace_status: None,
+        target_qn_trace_term_count: None,
+    };
+
+    if charge_family_status != "local_toric_resolved_conifold_charge_family" {
+        return empty(
+            "local_toric_unit_tensor_probe_not_run_not_resolved_conifold_charge_family",
+            None,
+        );
+    }
+    let [charge_row] = charge_basis else {
+        return empty(
+            "local_toric_unit_tensor_probe_not_run_not_one_parameter_charge_basis",
+            None,
+        );
+    };
+    if charge_row.iter().sum::<i64>() != 0 {
+        return empty(
+            "local_toric_unit_tensor_probe_not_run_non_calabi_yau_charge",
+            None,
+        );
+    }
+
+    match one_parameter_primitive_cygv_qn_trace(
+        &[charge_row.clone()],
+        &[1],
+        &[vec![0], vec![1]],
+        MalachiteRational::from(1),
+    ) {
+        Ok(trace) => {
+            let status = if trace.gv == "1" {
+                "local_toric_unit_tensor_probe_resolved_conifold_gv1_uncertified"
+            } else {
+                "local_toric_unit_tensor_probe_resolved_conifold_unexpected_gv_uncertified"
+            };
+            LocalToricUnitTensorProbe {
+                candidate_gv: Some(trace.gv),
+                status: status.to_string(),
+                error: None,
+                qn_trace_polynomial_count: Some(trace.qn_trace_polynomial_count),
+                target_qn_trace_status: Some(trace.target_qn_trace_status),
+                target_qn_trace_term_count: trace.target_qn_trace_term_count,
+            }
+        }
+        Err(error) => empty("local_toric_unit_tensor_probe_hkty_error", Some(error)),
+    }
 }
 
 fn chamber_generator_ckyz_diagnostic(
@@ -31647,6 +31760,17 @@ mod tests {
         assert_eq!(
             diagnostic.local_toric_charge_family_status,
             "local_toric_resolved_conifold_charge_family"
+        );
+        assert_eq!(diagnostic.local_toric_unit_tensor_candidate_gv, None);
+        assert_eq!(
+            diagnostic.local_toric_unit_tensor_probe_status,
+            "local_toric_unit_tensor_probe_hkty_error"
+        );
+        assert!(
+            diagnostic
+                .local_toric_unit_tensor_probe_error
+                .as_deref()
+                .is_some_and(|error| error.contains("dimension of the CY must be at least three"))
         );
         assert_eq!(diagnostic.circuit_triangulation_choice_count, Some(2));
         assert_eq!(diagnostic.circuit_triangulation_error, None);

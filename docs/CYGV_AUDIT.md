@@ -4273,3 +4273,12 @@ The remaining shared degree-`2` row is still
 `local_toric_one_parameter_charge_family_unclassified:-2,-1,-1,1,1,2`.
 This partitions the missing chamber-generator history into resolved-conifold,
 weighted-`P2` split-bundle, and still-unclassified one-parameter local models.
+
+`/tmp/cyrus_unresolved_chamber_generator_queue_v4.json` probes the
+resolved-conifold charge-family rows with the existing one-parameter `cygv`
+unit-tensor wrapper, but keeps the result diagnostic-only. Both target-specific
+degree-`2` rows return `local_toric_unit_tensor_probe_hkty_error` with
+`cygv` reporting that the hypersurface CY dimension is below three. This rules
+out the naive "just call the default hypersurface wrapper on `[-1,-1,1,1]`"
+promotion path: a GA-ready resolved-conifold source import needs the correct
+local noncompact threefold input model, not the compact hypersurface wrapper.
