@@ -3546,6 +3546,13 @@ source-derived wall GV is not a license to perform a naive real flop
 continuation across the negative star side. The remaining certificate must
 derive the valid chamber/semigroup history, or a source-level continuation
 that resolves this branch-cut obstruction.
+`/tmp/cyrus_target7_stable_weyl_probe_report.json` now records the same handoff
+against the exact stable-Weyl/flop-certificate gate. The target-7 crossed wall
+has status `stable_weyl_blocked_no_integral_shrinking_divisor_candidate`: the
+known GV `1` is present through the context-level source map, but the matching
+source sample does not supply an integral CMS shrinking divisor. This keeps the
+stable-Weyl path blocked at a concrete missing source certificate rather than
+at the earlier vague `shrinking_divisor_or_flop_certificate` label.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

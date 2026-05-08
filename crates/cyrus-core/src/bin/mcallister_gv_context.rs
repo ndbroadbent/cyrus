@@ -27,15 +27,17 @@ use cyrus_core::types::rational::Rational;
 use cyrus_core::types::{f64::F64, tags::Finite, tags::Pos};
 use cyrus_core::{
     CygvQnTracePolynomial, GvDilogFailure, Intersection, Point,
-    compute_gv_invariants_with_explicit_semigroup,
+    check_stable_weyl_candidate_certificate, compute_gv_invariants_with_explicit_semigroup,
     compute_gv_invariants_with_explicit_semigroup_qn_trace,
     compute_gv_invariants_with_provided_generators,
     compute_gv_invariants_with_provided_generators_qn_trace,
     compute_gw_coefficient_trace_with_explicit_semigroup,
     compute_gw_coefficient_trace_with_provided_generators, curve_row_span_rank,
-    diagnose_affine_toric_circuit, gv_dilog_from_curve_volume_checked,
+    diagnose_affine_toric_circuit, divisor_quadratic_vanishes_on_curve_facet,
+    gv_dilog_from_curve_volume_checked,
     integer_math::{integer_kernel, solve_linear_system_rational},
     utils::gcd_list_int,
+    weyl_reflection_matches_flop_transform,
 };
 
 const CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT: usize = 32;
@@ -313,6 +315,8 @@ struct ContextReport {
     local_cygv_source_resolution_star_union_opposite_star_wall_circuit_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_wall_transport_readiness_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_crossed_wall_stable_weyl_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_global_secondary_height_status_counts:
         BTreeMap<String, usize>,
@@ -826,6 +830,22 @@ struct LocalCygvStarUnionWallTransportReadiness {
     target_plus_star_extremal_status: Option<String>,
     target_plus_star_support_generator_count: Option<usize>,
     target_plus_star_support_face_certificate_status: Option<String>,
+    crossed_wall_stable_weyl_certificate: Option<LocalCygvStarUnionCrossedWallStableWeylProbe>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvStarUnionCrossedWallStableWeylProbe {
+    status: String,
+    source_sample_status: String,
+    matching_candidate_count: Option<usize>,
+    shrinking_divisor_index: Option<usize>,
+    shrinking_divisor_basis_nonzero: Option<Vec<(usize, String)>>,
+    shrinking_divisor_ambient_basis_nonzero: Option<Vec<(usize, String)>>,
+    divisor_quadratic_vanishes_on_curve_facet: Option<bool>,
+    weyl_reflection_matches_flop_transform: Option<bool>,
+    extremal_ray_certificate_status: Option<String>,
+    separator_normal_nonzero: Option<Vec<(usize, i64)>>,
+    error: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -2309,6 +2329,36 @@ fn parse_rational(value: &str) -> Result<MalachiteRational, String> {
     value
         .parse::<MalachiteRational>()
         .map_err(|_| format!("failed to parse rational coefficient {value}"))
+}
+
+fn parse_integral_rational(value: &str, label: &str) -> Result<Integer, String> {
+    let rational = parse_rational(value)?;
+    let text = rational.to_string();
+    if text.contains('/') {
+        return Err(format!("{label} is not integral: {value}"));
+    }
+    text.parse::<Integer>()
+        .map_err(|_| format!("failed to parse integral {label}: {value}"))
+}
+
+fn dense_integer_from_rational_sparse(
+    entries: &[(usize, String)],
+    dimension: usize,
+    label: &str,
+) -> Result<Vec<Integer>, String> {
+    let mut out = vec![Integer::from(0); dimension];
+    for (idx, value) in entries {
+        let Some(slot) = out.get_mut(*idx) else {
+            return Err(format!(
+                "{label} sparse coordinate {idx} is out of bounds for dimension {dimension}"
+            ));
+        };
+        if *slot != 0 {
+            return Err(format!("{label} has duplicate sparse coordinate {idx}"));
+        }
+        *slot = parse_integral_rational(value, label)?;
+    }
+    Ok(out)
 }
 
 fn rational_to_nonnegative_integer(value: &MalachiteRational) -> Result<Option<usize>, String> {
@@ -15300,6 +15350,10 @@ fn build_report(
         local_cygv_source_resolution_star_union_wall_transport_readiness_status_counts(
             &local_cygv_source_resolution_hint_sample,
         );
+    let local_cygv_source_resolution_star_union_crossed_wall_stable_weyl_status_counts =
+        local_cygv_source_resolution_star_union_crossed_wall_stable_weyl_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
     let local_cygv_source_resolution_star_union_global_regular_triangulation_status_counts =
         local_cygv_source_resolution_star_union_global_regular_triangulation_status_counts(
             &local_cygv_source_resolution_hint_sample,
@@ -16317,6 +16371,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_shared_face_secondary_status_counts,
         local_cygv_source_resolution_star_union_opposite_star_wall_circuit_status_counts,
         local_cygv_source_resolution_star_union_wall_transport_readiness_status_counts,
+        local_cygv_source_resolution_star_union_crossed_wall_stable_weyl_status_counts,
         local_cygv_source_resolution_star_union_global_secondary_height_status_counts,
         local_cygv_source_resolution_star_union_global_regular_triangulation_status_counts,
         local_cygv_target_relation_global_secondary_height_status_counts,
@@ -16673,12 +16728,19 @@ fn local_cygv_source_resolution_hint_summaries(
                 &star_union_shared_face_secondary,
                 &star_union_global_basis_lookup,
             );
+            let crossed_wall_stable_weyl_certificate =
+                local_cygv_star_union_crossed_wall_stable_weyl_probe(
+                    &opposite_star_wall_circuit,
+                    &star_union_global_basis_lookup,
+                    context,
+                );
             let wall_transport_readiness = local_cygv_star_union_wall_transport_readiness(
                 &star_union_transport_decomposition,
                 &opposite_star_wall_circuit,
                 &star_union_global_basis_lookup,
                 target_plus_star_support_generator_count,
                 target_plus_star_support_face_certificate_status.as_deref(),
+                Some(crossed_wall_stable_weyl_certificate),
             );
             let star_union_global_regular_triangulation =
                 local_cygv_star_union_global_regular_triangulation_hint(
@@ -17479,6 +17541,21 @@ fn local_cygv_source_resolution_star_union_wall_transport_readiness_status_count
             .or_insert(0usize) += 1;
     }
     counts
+}
+
+fn local_cygv_source_resolution_star_union_crossed_wall_stable_weyl_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        summaries.iter().map(|summary| {
+            summary
+                .shared_two_simplex_star_union_wall_transport_readiness
+                .crossed_wall_stable_weyl_certificate
+                .as_ref()
+                .map(|probe| probe.status.as_str())
+        }),
+        "not_run",
+    )
 }
 
 fn local_cygv_source_resolution_star_union_global_secondary_height_status_counts(
@@ -19441,6 +19518,311 @@ fn local_cygv_star_union_opposite_star_wall_circuit_hint(
     }
 }
 
+fn local_cygv_star_union_crossed_wall_stable_weyl_probe(
+    wall: &LocalCygvStarUnionOppositeStarWallCircuitHint,
+    lookups: &[LocalCygvStarUnionGlobalBasisLookup],
+    context: &ValidatedContext<'_>,
+) -> LocalCygvStarUnionCrossedWallStableWeylProbe {
+    let empty =
+        |status: &str, source_sample_status: &str| LocalCygvStarUnionCrossedWallStableWeylProbe {
+            status: status.to_string(),
+            source_sample_status: source_sample_status.to_string(),
+            matching_candidate_count: None,
+            shrinking_divisor_index: None,
+            shrinking_divisor_basis_nonzero: None,
+            shrinking_divisor_ambient_basis_nonzero: None,
+            divisor_quadratic_vanishes_on_curve_facet: None,
+            weyl_reflection_matches_flop_transform: None,
+            extremal_ray_certificate_status: None,
+            separator_normal_nonzero: None,
+            error: None,
+        };
+
+    if wall.status != "opposite_star_wall_circuit_matches_known_nonzero_history" {
+        return empty(
+            "stable_weyl_not_checked_wall_circuit_not_known_nonzero",
+            "source_sample_not_checked",
+        );
+    }
+    let Some(star) = star_union_lookup_by_role(lookups, "star") else {
+        return empty(
+            "stable_weyl_not_checked_missing_star_lookup",
+            "source_sample_not_checked",
+        );
+    };
+    let Some(curve_sparse) = star.opposite_basis_nonzero.as_ref() else {
+        return empty(
+            "stable_weyl_not_checked_missing_crossed_wall_curve",
+            "source_sample_not_checked",
+        );
+    };
+    let curve = match dense_from_sparse(curve_sparse, context.dimension) {
+        Ok(curve) => curve,
+        Err(error) => {
+            let mut probe = empty(
+                "stable_weyl_error_invalid_crossed_wall_curve",
+                "source_sample_not_checked",
+            );
+            probe.error = Some(error);
+            return probe;
+        }
+    };
+    let Some(gv) = wall.opposite_star_source_derived_gv.as_deref() else {
+        return empty(
+            "stable_weyl_not_checked_missing_crossed_wall_gv",
+            "source_sample_not_checked",
+        );
+    };
+    let gv_invariant = match parse_integral_rational(gv, "crossed wall GV") {
+        Ok(value) => value,
+        Err(error) => {
+            let mut probe = empty(
+                "stable_weyl_error_nonintegral_crossed_wall_gv",
+                "source_sample_not_checked",
+            );
+            probe.error = Some(error);
+            return probe;
+        }
+    };
+    let (source_sample, source_sample_status) =
+        match source_sample_for_crossed_wall_curve(context, &curve) {
+            Ok(Some(found)) => found,
+            Ok(None) => {
+                return empty(
+                    "stable_weyl_blocked_missing_source_sample_for_crossed_wall_curve",
+                    "source_sample_missing",
+                );
+            }
+            Err(error) => {
+                let mut probe = empty(
+                    "stable_weyl_error_source_sample_lookup_failed",
+                    "source_sample_error",
+                );
+                probe.error = Some(error);
+                return probe;
+            }
+        };
+    let mut source_sample_status = source_sample_status.to_string();
+    let (source_gv, import_status) =
+        match source_derived_gv_value_and_status_for_sample(source_sample) {
+            Ok(value) => value,
+            Err(error) => {
+                let mut probe = empty(
+                    "stable_weyl_error_source_gv_import_failed",
+                    &source_sample_status,
+                );
+                probe.error = Some(error);
+                return probe;
+            }
+        };
+    if source_gv.as_deref() != Some(gv) {
+        let context_known_gv_matches = context
+            .source_derived_gv_by_basis
+            .get(&curve)
+            .is_some_and(|context_gv| context_gv == gv);
+        if source_gv.is_none() && context_known_gv_matches {
+            source_sample_status =
+                format!("{source_sample_status}_context_known_gv_without_sample_import");
+        } else {
+            let mut probe = empty(
+                "stable_weyl_blocked_source_sample_gv_mismatch",
+                &source_sample_status,
+            );
+            probe.error = Some(format!(
+                "source sample import status {import_status} gives GV {:?}, wall gives {gv}",
+                source_gv
+            ));
+            return probe;
+        }
+    }
+    let source_sample_status = source_sample_status.as_str();
+    let Some(checks) = source_sample
+        .cms_general_divisor_intersection_checks
+        .as_deref()
+    else {
+        return empty(
+            "stable_weyl_blocked_missing_cms_divisor_checks",
+            source_sample_status,
+        );
+    };
+    let matching_checks = checks
+        .iter()
+        .filter(|check| {
+            cms_general_divisor_intersection_check_status(check)
+                == "cms_general_divisor_integral_solution_matches_inferred_degree"
+        })
+        .collect::<Vec<_>>();
+    if matching_checks.is_empty() {
+        return empty(
+            "stable_weyl_blocked_no_integral_shrinking_divisor_candidate",
+            source_sample_status,
+        );
+    }
+
+    let mut first_probe = None;
+    let matching_candidate_count = matching_checks.len();
+    for check in matching_checks {
+        let probe = local_cygv_star_union_crossed_wall_stable_weyl_candidate_probe(
+            check,
+            matching_candidate_count,
+            &curve,
+            &gv_invariant,
+            star.opposite_extremal_ray_certificate.as_ref(),
+            context,
+            source_sample_status,
+        );
+        if probe.status == "stable_weyl_certified_exact_checks" {
+            return probe;
+        }
+        if first_probe.is_none() {
+            first_probe = Some(probe);
+        }
+    }
+    first_probe.unwrap_or_else(|| {
+        empty(
+            "stable_weyl_blocked_no_integral_shrinking_divisor_candidate",
+            source_sample_status,
+        )
+    })
+}
+
+fn source_sample_for_crossed_wall_curve<'a>(
+    context: &'a ValidatedContext<'_>,
+    curve: &[i64],
+) -> Result<Option<(&'a MissingGvTargetSample, &'static str)>, String> {
+    let search = |stats: Option<&'a MissingGvTargetStats>,
+                  status: &'static str|
+     -> Result<Option<(&'a MissingGvTargetSample, &'static str)>, String> {
+        let Some(stats) = stats else {
+            return Ok(None);
+        };
+        for sample in &stats.sample {
+            if dense_from_sparse(&sample.basis_nonzero, context.dimension)? == curve {
+                return Ok(Some((sample, status)));
+            }
+        }
+        Ok(None)
+    };
+    if let Some(found) = search(
+        context.uncovered_source_ray_stats,
+        "source_sample_uncovered_source_ray_stats",
+    )? {
+        return Ok(Some(found));
+    }
+    if let Some(found) = search(
+        context.shared_facet_unresolved_source_ray_stats,
+        "source_sample_shared_facet_unresolved_source_ray_stats",
+    )? {
+        return Ok(Some(found));
+    }
+    search(
+        Some(context.stats),
+        "source_sample_missing_target_stats_self_match",
+    )
+}
+
+fn local_cygv_star_union_crossed_wall_stable_weyl_candidate_probe(
+    check: &CmsGeneralDivisorIntersectionCheck,
+    matching_candidate_count: usize,
+    curve: &[i64],
+    gv_invariant: &Integer,
+    extremal_probe: Option<&TargetExtremalRayCertificateProbe>,
+    context: &ValidatedContext<'_>,
+    source_sample_status: &str,
+) -> LocalCygvStarUnionCrossedWallStableWeylProbe {
+    let mut probe = LocalCygvStarUnionCrossedWallStableWeylProbe {
+        status: "stable_weyl_candidate_not_evaluated".to_string(),
+        source_sample_status: source_sample_status.to_string(),
+        matching_candidate_count: Some(matching_candidate_count),
+        shrinking_divisor_index: Some(check.shrinking_divisor_index),
+        shrinking_divisor_basis_nonzero: check.solution_basis_nonzero.clone(),
+        shrinking_divisor_ambient_basis_nonzero: check.solution_ambient_basis_nonzero.clone(),
+        divisor_quadratic_vanishes_on_curve_facet: None,
+        weyl_reflection_matches_flop_transform: None,
+        extremal_ray_certificate_status: extremal_probe.map(|probe| probe.status.clone()),
+        separator_normal_nonzero: extremal_probe
+            .and_then(|probe| probe.separator_normal_nonzero.clone()),
+        error: None,
+    };
+    let Some(divisor_sparse) = check.solution_basis_nonzero.as_ref() else {
+        probe.status = "stable_weyl_blocked_missing_basis_shrinking_divisor".to_string();
+        return probe;
+    };
+    let divisor = match dense_integer_from_rational_sparse(
+        divisor_sparse,
+        context.dimension,
+        "shrinking divisor",
+    ) {
+        Ok(divisor) => divisor,
+        Err(error) => {
+            probe.status = "stable_weyl_error_invalid_shrinking_divisor".to_string();
+            probe.error = Some(error);
+            return probe;
+        }
+    };
+    let quadratic =
+        divisor_quadratic_vanishes_on_curve_facet(&context.intersection, &divisor, curve);
+    probe.divisor_quadratic_vanishes_on_curve_facet = quadratic;
+    if quadratic != Some(true) {
+        probe.status = "stable_weyl_blocked_divisor_quadratic_check_failed".to_string();
+        return probe;
+    }
+    let tensor = weyl_reflection_matches_flop_transform(
+        &context.intersection,
+        &divisor,
+        curve,
+        gv_invariant,
+    );
+    probe.weyl_reflection_matches_flop_transform = tensor;
+    if tensor != Some(true) {
+        probe.status = "stable_weyl_blocked_weyl_tensor_check_failed".to_string();
+        return probe;
+    }
+    let Some(extremal_probe) = extremal_probe else {
+        probe.status = "stable_weyl_blocked_extremal_certificate_not_run".to_string();
+        return probe;
+    };
+    if extremal_probe.status != "certified_exact_extremal_ray" {
+        probe.status = format!(
+            "stable_weyl_blocked_extremal_certificate_{}",
+            status_error_fragment(&extremal_probe.status)
+        );
+        return probe;
+    }
+    let Some(separator_sparse) = extremal_probe.separator_normal_nonzero.as_ref() else {
+        probe.status = "stable_weyl_error_certified_extremal_missing_separator".to_string();
+        return probe;
+    };
+    let separator = match dense_from_sparse(separator_sparse, context.dimension) {
+        Ok(separator) => separator,
+        Err(error) => {
+            probe.status = "stable_weyl_error_invalid_extremal_separator".to_string();
+            probe.error = Some(error);
+            return probe;
+        }
+    };
+    match check_stable_weyl_candidate_certificate(
+        &context.intersection,
+        &separator,
+        context.degree_bounded_rays,
+        &divisor,
+        curve,
+        gv_invariant,
+    ) {
+        Ok(Some(_certificate)) => {
+            probe.status = "stable_weyl_certified_exact_checks".to_string();
+        }
+        Ok(None) => {
+            probe.status = "stable_weyl_blocked_combined_certificate_rejected".to_string();
+        }
+        Err(error) => {
+            probe.status = "stable_weyl_error_combined_certificate_failed".to_string();
+            probe.error = Some(error.to_string());
+        }
+    }
+    probe
+}
+
 fn sparse_entries_match(lhs: &[(usize, i64)], rhs: &[(usize, i64)]) -> bool {
     if lhs.len() != rhs.len() {
         return false;
@@ -19458,6 +19840,7 @@ fn local_cygv_star_union_wall_transport_readiness(
     lookups: &[LocalCygvStarUnionGlobalBasisLookup],
     target_plus_star_support_generator_count: Option<usize>,
     target_plus_star_support_face_certificate_status: Option<&str>,
+    crossed_wall_stable_weyl_certificate: Option<LocalCygvStarUnionCrossedWallStableWeylProbe>,
 ) -> LocalCygvStarUnionWallTransportReadiness {
     let target_plus_star = star_union_lookup_by_role(lookups, "target_plus_star");
     let star = star_union_lookup_by_role(lookups, "star");
@@ -19539,6 +19922,7 @@ fn local_cygv_star_union_wall_transport_readiness(
         target_plus_star_support_generator_count,
         target_plus_star_support_face_certificate_status:
             target_plus_star_support_face_certificate_status.map(str::to_string),
+        crossed_wall_stable_weyl_certificate,
     }
 }
 
@@ -24856,6 +25240,7 @@ mod tests {
                     target_plus_star_extremal_status: None,
                     target_plus_star_support_generator_count: None,
                     target_plus_star_support_face_certificate_status: None,
+                    crossed_wall_stable_weyl_certificate: None,
                 },
             shared_two_simplex_star_union_global_secondary_height_status: "test".to_string(),
             shared_two_simplex_star_union_global_secondary_height_min_pairing: None,
@@ -27801,6 +28186,7 @@ mod tests {
             &lookups,
             Some(0),
             Some("origin_support_no_generators"),
+            None,
         );
         assert_eq!(
             readiness.status,
@@ -31375,6 +31761,73 @@ mod tests {
             cms_general_divisor_intersection_check_status(&matching_solution),
             "cms_general_divisor_integral_solution_matches_inferred_degree"
         );
+    }
+
+    #[test]
+    fn crossed_wall_stable_weyl_probe_requires_exact_subchecks() {
+        let grading = vec![1, 1];
+        let q_matrix = vec![vec![1, 0], vec![0, 1]];
+        let degree_bounded_rays = vec![vec![1, 0], vec![0, 1], vec![1, 1]];
+        let stats = MissingGvTargetStats {
+            target_count: 0,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: Vec::new(),
+        };
+        let mut intersection = Intersection::new(2);
+        intersection.set(0, 0, 0, Rational::<Finite>::new(MalachiteRational::from(1)));
+        let context = ValidatedContext {
+            dimension: 2,
+            degree_bound: 2,
+            q_cols: 2,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: None,
+            covered_toric_gv_by_basis: HashMap::new(),
+            source_derived_gv_by_basis: HashMap::new(),
+            intersection,
+            stats: &stats,
+            uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
+        };
+        let check = CmsGeneralDivisorIntersectionCheck {
+            shrinking_divisor_index: 3,
+            has_rational_divisor_solution: true,
+            solution_basis_support_len: Some(1),
+            solution_basis_nonzero: Some(vec![(0, "1".to_string())]),
+            solution_ambient_basis_nonzero: Some(vec![(7, "1".to_string())]),
+            solution_is_integral: Some(true),
+            computed_other_normal_degree: Some("1".to_string()),
+            matches_inferred_other_normal_degree: Some(true),
+        };
+        let extremal = TargetExtremalRayCertificateProbe {
+            status: "certified_exact_extremal_ray".to_string(),
+            same_ray_generator_count: Some(1),
+            zero_other_generator_count: Some(1),
+            positive_other_generator_count: Some(2),
+            separator_normal_nonzero: Some(vec![(0, -1), (1, 1)]),
+            decomposition_kind: None,
+            decomposition_active_generator_count: None,
+            decomposition_exact_coefficients: None,
+            decomposition_active_generators_nonzero: None,
+        };
+
+        let probe = local_cygv_star_union_crossed_wall_stable_weyl_candidate_probe(
+            &check,
+            1,
+            &[1, 0],
+            &Integer::from(2),
+            Some(&extremal),
+            &context,
+            "source_sample_test",
+        );
+
+        assert_eq!(probe.status, "stable_weyl_certified_exact_checks");
+        assert_eq!(probe.divisor_quadratic_vanishes_on_curve_facet, Some(true));
+        assert_eq!(probe.weyl_reflection_matches_flop_transform, Some(true));
+        assert_eq!(probe.shrinking_divisor_index, Some(3));
     }
 
     #[test]

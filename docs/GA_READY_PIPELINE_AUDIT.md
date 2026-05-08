@@ -1318,6 +1318,14 @@ to make the remaining GV layer more first-principles:
    naive real-axis flop continuation of the known wall GV into the star-side
    chamber; the missing handoff still has to be a certified chamber/semigroup
    history or a source-level continuation that addresses the branch cut.
+   `/tmp/cyrus_target7_stable_weyl_probe_report.json` now threads the crossed
+   wall through the stable-Weyl/flop-certificate gate. For target `7`, the
+   report bucket is
+   `stable_weyl_blocked_no_integral_shrinking_divisor_candidate`: the wall GV
+   is known in the context map, but the matching source sample does not import
+   an integral CMS shrinking-divisor certificate. Thus the existing exact
+   stable-Weyl algebra is wired into the blocker, but it still has no
+   source-derived shrinking divisor to check or promote.
    `/tmp/cyrus_gv_context_target_plus_star_support_report.json` now reconstructs
    the point-support charge bases for that degree-6 component. Targets `7`/`8`
    are integral two-parameter relations on affine-rank-4 seven-point supports:
