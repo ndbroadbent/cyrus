@@ -18711,6 +18711,16 @@ fn local_phase_chamber_membership_certificate_status_with_witness(
         );
     }
 
+    let resolved_chamber = local_cygv_resolved_shared_chamber_certificate_hint(skeleton, witness);
+    if resolved_chamber.status
+        != "weighted_p2_resolved_shared_chamber_strictly_inside_exclusive_pair_secondary_cone"
+    {
+        return format!(
+            "local_phase_chamber_blocked_weighted_p2_resolved_shared_chamber:{}",
+            resolved_chamber.status
+        );
+    }
+
     let star_support_hint = local_cygv_shared_two_simplex_star_support_hint(witness);
     let star_union_relation_hint =
         local_cygv_star_union_relation_hint(witness, &star_support_hint, Some(context.q_matrix));
@@ -18722,16 +18732,6 @@ fn local_phase_chamber_membership_certificate_status_with_witness(
         != "star_union_target_and_star_integral_in_union_charge_basis"
     {
         return star_union_status;
-    }
-
-    let resolved_chamber = local_cygv_resolved_shared_chamber_certificate_hint(skeleton, witness);
-    if resolved_chamber.status
-        != "weighted_p2_resolved_shared_chamber_strictly_inside_exclusive_pair_secondary_cone"
-    {
-        return format!(
-            "local_phase_chamber_blocked_weighted_p2_resolved_shared_chamber:{}",
-            resolved_chamber.status
-        );
     }
 
     let global_regular = local_cygv_star_union_global_regular_triangulation_hint(

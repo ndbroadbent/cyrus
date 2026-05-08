@@ -1395,10 +1395,12 @@ to make the remaining GV layer more first-principles:
    This means the corrected global height selects the serialized star extras,
    but the exclusive-pair resolved local chamber is still on a wall and cannot
    certify a local `cygv` handoff.
-   The corresponding all-target refined report splits the nine missing rows
-   into five non-`P2`/origin-omitting phase blockers, two weighted rows blocked
-   by nonintegral target coordinates in the star-union charge basis, and the
-   two target `7`/`8` resolved-shared chamber-wall blockers.
+   The corresponding all-target refined report now splits the nine missing
+   rows into five non-`P2`/origin-omitting phase blockers and four
+   weighted-`P2` rows blocked by the resolved-shared chamber wall. Separate
+   star-union relation buckets still preserve the lower-level distinction:
+   two weighted rows have integral target/star union coordinates and two have
+   nonintegral target coordinates in the star-union charge basis.
    After recomputing the affine charge basis, every single-column omission for
    targets `7`/`8` remains Calabi-Yau charged but has `q_rows=6`, `q_cols=1`,
    and hypersurface `cy_dim=4`, so the next fix is a source-derived CICY

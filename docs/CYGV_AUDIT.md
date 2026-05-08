@@ -3589,10 +3589,12 @@ global corrected height picks the serialized star extras, but the
 exclusive-pair resolved support is on a secondary wall. That keeps this as a
 chamber-certificate blocker, not a promotable compact `cygv` domain.
 The all-target refined report
-`/tmp/cyrus_all_refined_local_phase_report.json` gives the aggregate split:
-five non-`P2`/origin-omitting phase blockers, two weighted rows with
-nonintegral target coordinates in the star-union charge basis, and the two
-target `7`/`8` resolved-shared chamber-wall blockers.
+`/tmp/cyrus_all_phase_certificate_first_report.json` gives the aggregate
+phase-certificate split: five non-`P2`/origin-omitting phase blockers and four
+weighted-`P2` rows blocked by the resolved-shared chamber wall. The separate
+star-union relation buckets still distinguish the two integral target/star
+union-coordinate rows from the two rows with nonintegral target coordinates in
+the star-union charge basis.
 `/tmp/cyrus_star_union_wall_transport_readiness_smoke_all.json` now aggregates
 that implication directly. The readiness buckets are
 `wall_transport_blocked_missing_known_wall_circuit:6`,
