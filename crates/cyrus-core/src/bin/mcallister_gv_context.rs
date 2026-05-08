@@ -62,6 +62,7 @@ const ORIGIN_CIRCUIT_WITNESS_DOMAIN_UNRESOLVED_SAMPLE_LIMIT: usize = 64;
 const ORIGIN_CIRCUIT_WITNESS_DOMAIN_OCCURRENCE_SAMPLE_LIMIT: usize = 8;
 const ORIGIN_CIRCUIT_WITNESS_DOMAIN_SPAN_CLOSURE_SAMPLE_LIMIT: usize = 16;
 const CHAMBER_GENERATOR_SUPPORT_OVERLAP_SAMPLE_LIMIT: usize = 5;
+const LOCAL_TORIC_ZERO_ENLARGEMENT_SAMPLE_LIMIT: usize = 8;
 
 #[derive(Debug, Deserialize)]
 struct CorrectedChamberGvContext {
@@ -1317,6 +1318,10 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
     local_toric_compact_threefold_omission_candidate_count: usize,
     local_toric_compact_threefold_omission_preserving_relation_count: usize,
     local_toric_compact_threefold_omission_relation_status: String,
+    local_toric_zero_coefficient_enlargement_status: String,
+    local_toric_zero_coefficient_enlargement_candidate_count: Option<usize>,
+    local_toric_zero_coefficient_enlargement_sample:
+        Vec<LocalToricZeroCoefficientEnlargementCandidate>,
     local_toric_unit_tensor_candidate_gv: Option<String>,
     local_toric_unit_tensor_probe_status: String,
     local_toric_unit_tensor_target_qn_trace_status: Option<String>,
@@ -1383,6 +1388,10 @@ struct LocalCygvChamberGeneratorLocalToricDiagnostic {
     local_toric_compact_threefold_omission_candidate_count: usize,
     local_toric_compact_threefold_omission_preserving_relation_count: usize,
     local_toric_compact_threefold_omission_relation_status: String,
+    local_toric_zero_coefficient_enlargement_status: String,
+    local_toric_zero_coefficient_enlargement_candidate_count: Option<usize>,
+    local_toric_zero_coefficient_enlargement_sample:
+        Vec<LocalToricZeroCoefficientEnlargementCandidate>,
     local_toric_unit_tensor_candidate_gv: Option<String>,
     local_toric_unit_tensor_probe_status: String,
     local_toric_unit_tensor_probe_error: Option<String>,
@@ -1406,6 +1415,22 @@ struct LocalCygvChamberGeneratorLocalToricDiagnostic {
 struct LocalCygvChamberGeneratorLocalCoordinate {
     point_index: usize,
     coordinates: Vec<i64>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalToricZeroCoefficientEnlargementCandidate {
+    added_point_indices: Vec<usize>,
+    support_point_count: usize,
+    charge_basis_status: String,
+    charge_row_count: Option<usize>,
+    hypersurface_cy_dim: Option<i64>,
+    hypersurface_cygv_compact_input_status: Option<String>,
+    complete_intersection_status: Option<String>,
+    zero_degree_nef_partition_candidate_count: Option<usize>,
+    zero_degree_cytools_nef_certificate_status_counts: Option<BTreeMap<String, usize>>,
+    compact_threefold_omission_candidate_count: Option<usize>,
+    compact_threefold_omission_preserving_relation_count: Option<usize>,
+    compact_threefold_omission_relation_status: Option<String>,
 }
 
 struct LocalToricUnitTensorProbe {
@@ -20505,6 +20530,17 @@ fn unresolved_chamber_generator_summaries(
                         .local_toric_diagnostic
                         .local_toric_compact_threefold_omission_relation_status
                         .clone(),
+                    local_toric_zero_coefficient_enlargement_status: context
+                        .local_toric_diagnostic
+                        .local_toric_zero_coefficient_enlargement_status
+                        .clone(),
+                    local_toric_zero_coefficient_enlargement_candidate_count: context
+                        .local_toric_diagnostic
+                        .local_toric_zero_coefficient_enlargement_candidate_count,
+                    local_toric_zero_coefficient_enlargement_sample: context
+                        .local_toric_diagnostic
+                        .local_toric_zero_coefficient_enlargement_sample
+                        .clone(),
                     local_toric_unit_tensor_candidate_gv: context
                         .local_toric_diagnostic
                         .local_toric_unit_tensor_candidate_gv
@@ -25529,6 +25565,10 @@ fn chamber_generator_local_toric_diagnostic_not_run(
         local_toric_compact_threefold_omission_preserving_relation_count: 0,
         local_toric_compact_threefold_omission_relation_status:
             "compact_threefold_omissions_not_evaluated".to_string(),
+        local_toric_zero_coefficient_enlargement_status:
+            "zero_coefficient_enlargement_not_evaluated".to_string(),
+        local_toric_zero_coefficient_enlargement_candidate_count: None,
+        local_toric_zero_coefficient_enlargement_sample: Vec::new(),
         local_toric_unit_tensor_candidate_gv: None,
         local_toric_unit_tensor_probe_status: "local_toric_unit_tensor_probe_not_run".to_string(),
         local_toric_unit_tensor_probe_error: None,
@@ -25686,6 +25726,10 @@ fn chamber_generator_local_toric_diagnostic(
             local_toric_compact_threefold_omission_preserving_relation_count: 0,
             local_toric_compact_threefold_omission_relation_status:
                 "compact_threefold_omissions_not_evaluated".to_string(),
+            local_toric_zero_coefficient_enlargement_status:
+                "zero_coefficient_enlargement_not_evaluated".to_string(),
+            local_toric_zero_coefficient_enlargement_candidate_count: None,
+            local_toric_zero_coefficient_enlargement_sample: Vec::new(),
             local_toric_unit_tensor_candidate_gv: None,
             local_toric_unit_tensor_probe_status: "local_toric_unit_tensor_probe_not_run"
                 .to_string(),
@@ -25775,6 +25819,15 @@ fn chamber_generator_local_toric_diagnostic(
     );
     let compact_omission_relation =
         local_cygv_compact_threefold_omission_relation_summary(&two_column_omission_candidates);
+    let (
+        zero_coefficient_enlargement_status,
+        zero_coefficient_enlargement_candidate_count,
+        zero_coefficient_enlargement_sample,
+    ) = local_toric_zero_coefficient_enlargement_diagnostic(
+        point_relation_nonzero,
+        point_samples,
+        LOCAL_TORIC_ZERO_ENLARGEMENT_SAMPLE_LIMIT,
+    );
     let local_coordinates = diagnostic
         .local_coordinates
         .iter()
@@ -25849,6 +25902,10 @@ fn chamber_generator_local_toric_diagnostic(
         local_toric_compact_threefold_omission_preserving_relation_count: compact_omission_relation
             .1,
         local_toric_compact_threefold_omission_relation_status: compact_omission_relation.2,
+        local_toric_zero_coefficient_enlargement_status: zero_coefficient_enlargement_status,
+        local_toric_zero_coefficient_enlargement_candidate_count:
+            zero_coefficient_enlargement_candidate_count,
+        local_toric_zero_coefficient_enlargement_sample: zero_coefficient_enlargement_sample,
         local_toric_unit_tensor_candidate_gv: local_toric_unit_tensor_probe.candidate_gv,
         local_toric_unit_tensor_probe_status: local_toric_unit_tensor_probe.status,
         local_toric_unit_tensor_probe_error: local_toric_unit_tensor_probe.error,
@@ -25869,6 +25926,168 @@ fn chamber_generator_local_toric_diagnostic(
         ckyz_first_multiple_target_degree: ckyz_first_degree,
         ckyz_first_multiple_gv_candidate: ckyz_gv,
         error: None,
+    }
+}
+
+fn local_toric_zero_coefficient_enlargement_diagnostic(
+    point_relation_nonzero: &[(usize, i64)],
+    point_samples: &[OriginCircuitRelationPointSample],
+    sample_limit: usize,
+) -> (
+    String,
+    Option<usize>,
+    Vec<LocalToricZeroCoefficientEnlargementCandidate>,
+) {
+    let relation_by_point = point_relation_nonzero
+        .iter()
+        .copied()
+        .collect::<BTreeMap<_, _>>();
+    let relation_support = relation_by_point.keys().copied().collect::<BTreeSet<_>>();
+    let extra_samples = point_samples
+        .iter()
+        .filter(|sample| !relation_support.contains(&sample.point_index))
+        .collect::<Vec<_>>();
+    if extra_samples.is_empty() {
+        return (
+            "zero_coefficient_enlargement_no_zero_coefficient_points".to_string(),
+            Some(0),
+            Vec::new(),
+        );
+    }
+    let Some(subset_count) = 1usize.checked_shl(extra_samples.len() as u32) else {
+        return (
+            "zero_coefficient_enlargement_skipped_too_many_zero_coefficient_points".to_string(),
+            None,
+            Vec::new(),
+        );
+    };
+    let candidate_count = subset_count.saturating_sub(1);
+    let mut candidates = Vec::new();
+    for mask in 1..subset_count {
+        if candidates.len() >= sample_limit {
+            break;
+        }
+        let selected_extra_points = extra_samples
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, sample)| (((mask >> idx) & 1) == 1).then_some(sample.point_index))
+            .collect::<BTreeSet<_>>();
+        candidates.push(local_toric_zero_coefficient_enlargement_candidate(
+            &relation_by_point,
+            point_samples,
+            &selected_extra_points,
+        ));
+    }
+    let has_relation_preserving_candidate_shape = candidates.iter().any(|candidate| {
+        candidate.hypersurface_cygv_compact_input_status.as_deref()
+            == Some("shape_only_missing_source_derived_cygv_inputs")
+            || candidate
+                .zero_degree_nef_partition_candidate_count
+                .is_some_and(|count| count > 0)
+            || candidate
+                .compact_threefold_omission_preserving_relation_count
+                .is_some_and(|count| count > 0)
+    });
+    let has_non_preserving_compact_omission = candidates.iter().any(|candidate| {
+        candidate
+            .compact_threefold_omission_candidate_count
+            .is_some_and(|count| count > 0)
+    });
+    let status = if has_relation_preserving_candidate_shape {
+        "zero_coefficient_enlargements_sampled_with_relation_preserving_cygv_shape_candidates"
+    } else if has_non_preserving_compact_omission {
+        "zero_coefficient_enlargements_sampled_compact_omissions_delete_target_relation_terms"
+    } else {
+        "zero_coefficient_enlargements_sampled_no_cygv_shape_candidates"
+    };
+    (status.to_string(), Some(candidate_count), candidates)
+}
+
+fn local_toric_zero_coefficient_enlargement_candidate(
+    relation_by_point: &BTreeMap<usize, i64>,
+    point_samples: &[OriginCircuitRelationPointSample],
+    selected_extra_points: &BTreeSet<usize>,
+) -> LocalToricZeroCoefficientEnlargementCandidate {
+    let mut support_point_samples = Vec::new();
+    let mut relation_coefficients = Vec::new();
+    for sample in point_samples {
+        if let Some(&coefficient) = relation_by_point.get(&sample.point_index) {
+            support_point_samples.push(sample.clone());
+            relation_coefficients.push(coefficient);
+        } else if selected_extra_points.contains(&sample.point_index) {
+            support_point_samples.push(sample.clone());
+            relation_coefficients.push(0);
+        }
+    }
+    let support_point_indices = support_point_samples
+        .iter()
+        .map(|sample| sample.point_index)
+        .collect::<Vec<_>>();
+    let added_point_indices = selected_extra_points.iter().copied().collect::<Vec<_>>();
+    let charge_basis = match affine_charge_basis_for_point_samples(&support_point_samples) {
+        Ok(charge_basis) => charge_basis,
+        Err(error) => {
+            return LocalToricZeroCoefficientEnlargementCandidate {
+                added_point_indices,
+                support_point_count: support_point_samples.len(),
+                charge_basis_status: format!(
+                    "zero_coefficient_enlargement_charge_basis_error:{}",
+                    status_error_fragment(&error)
+                ),
+                charge_row_count: None,
+                hypersurface_cy_dim: None,
+                hypersurface_cygv_compact_input_status: None,
+                complete_intersection_status: None,
+                zero_degree_nef_partition_candidate_count: None,
+                zero_degree_cytools_nef_certificate_status_counts: None,
+                compact_threefold_omission_candidate_count: None,
+                compact_threefold_omission_preserving_relation_count: None,
+                compact_threefold_omission_relation_status: None,
+            };
+        }
+    };
+    let shape = local_cygv_hypersurface_shape_from_charge_basis(&charge_basis).ok();
+    let complete_intersection_shape_candidate = shape.as_ref().and_then(|shape| {
+        local_cygv_complete_intersection_shape_candidate(
+            shape,
+            &support_point_indices,
+            &support_point_samples,
+            &charge_basis,
+            Some(&relation_coefficients),
+        )
+    });
+    let two_column_omission_candidates = local_cygv_two_column_omission_candidates(
+        &support_point_samples,
+        &charge_basis,
+        Some(&relation_coefficients),
+    );
+    let compact_omission_relation =
+        local_cygv_compact_threefold_omission_relation_summary(&two_column_omission_candidates);
+    LocalToricZeroCoefficientEnlargementCandidate {
+        added_point_indices,
+        support_point_count: support_point_samples.len(),
+        charge_basis_status: "zero_coefficient_enlargement_charge_basis_reconstructed".to_string(),
+        charge_row_count: Some(charge_basis.len()),
+        hypersurface_cy_dim: shape.as_ref().map(|shape| shape.cy_dim),
+        hypersurface_cygv_compact_input_status: shape
+            .as_ref()
+            .map(|shape| shape.cygv_compact_input_status.clone()),
+        complete_intersection_status: complete_intersection_shape_candidate
+            .as_ref()
+            .map(|candidate| candidate.status.clone()),
+        zero_degree_nef_partition_candidate_count: complete_intersection_shape_candidate
+            .as_ref()
+            .and_then(|candidate| candidate.zero_degree_nef_partition_candidate_count),
+        zero_degree_cytools_nef_certificate_status_counts: complete_intersection_shape_candidate
+            .as_ref()
+            .and_then(|candidate| {
+                candidate
+                    .zero_degree_cytools_nef_certificate_status_counts
+                    .clone()
+            }),
+        compact_threefold_omission_candidate_count: Some(compact_omission_relation.0),
+        compact_threefold_omission_preserving_relation_count: Some(compact_omission_relation.1),
+        compact_threefold_omission_relation_status: Some(compact_omission_relation.2),
     }
 }
 
@@ -32161,6 +32380,70 @@ mod tests {
         assert_eq!(
             diagnostic.local_toric_unit_tensor_probe_status,
             "local_toric_unit_tensor_probe_not_run_not_supported_one_parameter_charge_family"
+        );
+        assert_eq!(
+            diagnostic.local_toric_zero_coefficient_enlargement_status,
+            "zero_coefficient_enlargement_no_zero_coefficient_points"
+        );
+    }
+
+    #[test]
+    fn local_toric_diagnostic_checks_zero_coefficient_enlargements_for_six_point_family() {
+        let point_relation_nonzero =
+            vec![(0, -1), (55, -2), (208, 1), (211, 1), (212, 2), (214, -1)];
+        let point_samples = vec![
+            relation_point_sample(0, -1, &[0, 0, 0, 0], None),
+            relation_point_sample(46, 0, &[1, 2, 0, 2], None),
+            relation_point_sample(55, -2, &[3, 4, 1, 5], None),
+            relation_point_sample(195, 0, &[1, 1, 0, 1], None),
+            relation_point_sample(208, 1, &[2, 2, 1, 2], None),
+            relation_point_sample(211, 1, &[2, 3, 1, 3], None),
+            relation_point_sample(212, 2, &[2, 3, 1, 4], None),
+            relation_point_sample(214, -1, &[2, 3, 2, 3], None),
+        ];
+
+        let diagnostic =
+            chamber_generator_local_toric_diagnostic(&point_relation_nonzero, &point_samples);
+
+        assert_eq!(
+            diagnostic.local_toric_zero_coefficient_enlargement_status,
+            "zero_coefficient_enlargements_sampled_compact_omissions_delete_target_relation_terms"
+        );
+        assert_eq!(
+            diagnostic.local_toric_zero_coefficient_enlargement_candidate_count,
+            Some(3)
+        );
+        let sample = &diagnostic.local_toric_zero_coefficient_enlargement_sample;
+        assert_eq!(sample.len(), 3);
+        assert_eq!(sample[0].added_point_indices, vec![46]);
+        assert_eq!(sample[0].zero_degree_nef_partition_candidate_count, Some(0));
+        assert_eq!(
+            sample[0].compact_threefold_omission_candidate_count,
+            Some(2)
+        );
+        assert_eq!(
+            sample[0].compact_threefold_omission_preserving_relation_count,
+            Some(0)
+        );
+        assert_eq!(
+            sample[0]
+                .compact_threefold_omission_relation_status
+                .as_deref(),
+            Some("compact_threefold_omissions_delete_target_relation_terms")
+        );
+        assert_eq!(sample[1].added_point_indices, vec![195]);
+        assert_eq!(
+            sample[1].compact_threefold_omission_candidate_count,
+            Some(4)
+        );
+        assert_eq!(
+            sample[1].compact_threefold_omission_preserving_relation_count,
+            Some(0)
+        );
+        assert_eq!(sample[2].added_point_indices, vec![46, 195]);
+        assert_eq!(
+            sample[2].compact_threefold_omission_candidate_count,
+            Some(0)
         );
     }
 

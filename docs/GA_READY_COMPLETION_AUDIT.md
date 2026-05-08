@@ -1267,6 +1267,13 @@ threefold column-omission alternative for the same rows. It finds zero compact
 CY3 omission candidates, so the remaining six-point blocker is not repaired by
 dropping columns from the visible circuit.
 
+`/tmp/cyrus_six_point_zero_enlargement_v2.json` checks the next natural
+support enlargement: reintroducing zero-coefficient star-union points. For the
+shared target `7`/`8` row, adding point `46`, point `195`, or both still gives
+zero zero-degree nef candidates. The one-point enlargements have compact CY3
+omissions, but none preserve the target relation, so they remain
+non-promotable diagnostics.
+
 ## Next Concrete Action
 
 The next implementation should be one of these, in order:

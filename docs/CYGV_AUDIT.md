@@ -4337,3 +4337,13 @@ negative: all four remaining six-point rows have
 `local_toric_compact_threefold_omission_relation_status=no_compact_threefold_omission_candidates`.
 So the missing model is not a smaller compact CY3 hypersurface obtained by
 deleting two columns from the visible six-point circuit.
+
+`/tmp/cyrus_six_point_zero_enlargement_v2.json` then allows zero-coefficient
+star-union points back into the six-point chamber-generator support. For the
+shared target `7`/`8` row there are three source-derived enlargements, adding
+point `46`, point `195`, or both. All still have hypersurface `cy_dim=4` and
+zero zero-degree nef candidates. The one-point enlargements do expose compact
+threefold omissions (`2` for point `46`, `4` for point `195`), but every such
+omission deletes terms from the actual target relation:
+`zero_coefficient_enlargements_sampled_compact_omissions_delete_target_relation_terms`.
+Thus the obvious support-enlargement repair is also non-promotable.
