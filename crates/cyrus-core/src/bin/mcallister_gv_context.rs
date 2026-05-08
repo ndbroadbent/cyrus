@@ -920,6 +920,8 @@ struct LocalCygvStarUnionTargetPlusStarLocalCygvReadiness {
 struct LocalCygvSingleColumnOmissionCandidate {
     omitted_point_index: usize,
     omitted_charge_column: Vec<i64>,
+    target_relation_omitted_coefficient: Option<i64>,
+    preserves_target_relation_support: Option<bool>,
     q_rows: usize,
     q_cols: usize,
     cy_dim: i64,
@@ -932,6 +934,8 @@ struct LocalCygvSingleColumnOmissionCandidate {
 struct LocalCygvMultiColumnOmissionCandidate {
     omitted_point_indices: Vec<usize>,
     omitted_charge_columns: Vec<Vec<i64>>,
+    target_relation_omitted_coefficients: Option<Vec<i64>>,
+    preserves_target_relation_support: Option<bool>,
     q_rows: usize,
     q_cols: usize,
     cy_dim: i64,
@@ -20843,10 +20847,20 @@ fn local_cygv_star_union_target_plus_star_local_cygv_readiness(
         );
     let (local_grading_vector_candidate, local_grading_vector_status) =
         local_cygv_grading_vector_candidate(&orientation_candidates);
-    let single_column_omission_candidates =
-        local_cygv_single_column_omission_candidates(&support.point_samples, charge_basis);
-    let two_column_omission_candidates =
-        local_cygv_two_column_omission_candidates(&support.point_samples, charge_basis);
+    let target_relation_coefficients = target_relation_coefficients_in_charge_basis(
+        charge_basis,
+        support.relation_coordinates.as_deref(),
+    );
+    let single_column_omission_candidates = local_cygv_single_column_omission_candidates(
+        &support.point_samples,
+        charge_basis,
+        target_relation_coefficients.as_deref(),
+    );
+    let two_column_omission_candidates = local_cygv_two_column_omission_candidates(
+        &support.point_samples,
+        charge_basis,
+        target_relation_coefficients.as_deref(),
+    );
     let (
         local_intersection_tensor_candidate,
         local_intersection_tensor_status,
@@ -20938,9 +20952,31 @@ struct RecomputedOmissionShape {
     phase_status: String,
 }
 
+fn target_relation_coefficients_in_charge_basis(
+    charge_basis: &[Vec<i64>],
+    relation_coordinates: Option<&[i64]>,
+) -> Option<Vec<i64>> {
+    let coordinates = relation_coordinates?;
+    if coordinates.len() != charge_basis.len() {
+        return None;
+    }
+    let width = charge_basis.first().map(Vec::len)?;
+    if charge_basis.iter().any(|row| row.len() != width) {
+        return None;
+    }
+    let mut coefficients = vec![0i64; width];
+    for (coordinate, row) in coordinates.iter().zip(charge_basis) {
+        for (coefficient, row_entry) in coefficients.iter_mut().zip(row) {
+            *coefficient += coordinate * row_entry;
+        }
+    }
+    Some(coefficients)
+}
+
 fn local_cygv_single_column_omission_candidates(
     point_samples: &[OriginCircuitRelationPointSample],
     charge_basis: &[Vec<i64>],
+    target_relation_coefficients: Option<&[i64]>,
 ) -> Vec<LocalCygvSingleColumnOmissionCandidate> {
     let Some(width) = charge_basis.first().map(Vec::len) else {
         return Vec::new();
@@ -20964,10 +21000,16 @@ fn local_cygv_single_column_omission_candidates(
             .iter()
             .map(|row| row[omitted_position])
             .collect::<Vec<_>>();
+        let target_relation_omitted_coefficient =
+            target_relation_coefficients.map(|coefficients| coefficients[omitted_position]);
+        let preserves_target_relation_support =
+            target_relation_omitted_coefficient.map(|coefficient| coefficient == 0);
         let recomputed = recomputed_omission_shape(&reduced_samples);
         candidates.push(LocalCygvSingleColumnOmissionCandidate {
             omitted_point_index: point_samples[omitted_position].point_index,
             omitted_charge_column,
+            target_relation_omitted_coefficient,
+            preserves_target_relation_support,
             q_rows: recomputed.q_rows,
             q_cols: recomputed.q_cols,
             cy_dim: recomputed.cy_dim,
@@ -20982,6 +21024,7 @@ fn local_cygv_single_column_omission_candidates(
 fn local_cygv_two_column_omission_candidates(
     point_samples: &[OriginCircuitRelationPointSample],
     charge_basis: &[Vec<i64>],
+    target_relation_coefficients: Option<&[i64]>,
 ) -> Vec<LocalCygvMultiColumnOmissionCandidate> {
     let Some(width) = charge_basis.first().map(Vec::len) else {
         return Vec::new();
@@ -21016,10 +21059,17 @@ fn local_cygv_two_column_omission_candidates(
                     .map(|row| row[second])
                     .collect::<Vec<_>>(),
             ];
+            let target_relation_omitted_coefficients = target_relation_coefficients
+                .map(|coefficients| vec![coefficients[first], coefficients[second]]);
+            let preserves_target_relation_support = target_relation_omitted_coefficients
+                .as_ref()
+                .map(|coefficients| coefficients.iter().all(|coefficient| *coefficient == 0));
             let recomputed = recomputed_omission_shape(&reduced_samples);
             candidates.push(LocalCygvMultiColumnOmissionCandidate {
                 omitted_point_indices,
                 omitted_charge_columns,
+                target_relation_omitted_coefficients,
+                preserves_target_relation_support,
                 q_rows: recomputed.q_rows,
                 q_cols: recomputed.q_cols,
                 cy_dim: recomputed.cy_dim,
@@ -26958,6 +27008,7 @@ mod tests {
         assert!(readiness.single_column_omission_candidates.iter().all(
             |candidate| candidate.cy_dim == 4
                 && candidate.is_calabi_yau_charge
+                && candidate.preserves_target_relation_support == Some(false)
                 && candidate.phase_status
                     == "local_q_matrix_phase_blocked_no_dimension_three_phase"
         ));
@@ -26973,11 +27024,32 @@ mod tests {
                     && candidate.phase_status
                         == "source_derived_unique_compact_threefold_phase_including_origin"
             })
-            .map(|candidate| candidate.omitted_point_indices.clone())
-            .collect::<BTreeSet<_>>();
+            .map(|candidate| {
+                (
+                    candidate.omitted_point_indices.clone(),
+                    candidate
+                        .target_relation_omitted_coefficients
+                        .clone()
+                        .expect("target relation coefficients should be available"),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
         assert_eq!(
             compact_two_omissions,
-            BTreeSet::from([vec![55, 212], vec![55, 214], vec![195, 208], vec![212, 214],])
+            BTreeMap::from([
+                (vec![55, 212], vec![1, -1]),
+                (vec![55, 214], vec![1, 1]),
+                (vec![195, 208], vec![-1, 1]),
+                (vec![212, 214], vec![-1, 1]),
+            ])
+        );
+        assert!(
+            readiness
+                .two_column_omission_candidates
+                .iter()
+                .filter(|candidate| compact_two_omissions
+                    .contains_key(&candidate.omitted_point_indices))
+                .all(|candidate| candidate.preserves_target_relation_support == Some(false))
         );
     }
 
@@ -27044,6 +27116,7 @@ mod tests {
         assert!(readiness.single_column_omission_candidates.iter().all(
             |candidate| candidate.cy_dim == 4
                 && candidate.is_calabi_yau_charge
+                && candidate.preserves_target_relation_support == Some(false)
                 && candidate.phase_status
                     == "local_q_matrix_phase_blocked_no_dimension_three_phase"
         ));
@@ -27059,11 +27132,32 @@ mod tests {
                     && candidate.phase_status
                         == "source_derived_unique_compact_threefold_phase_including_origin"
             })
-            .map(|candidate| candidate.omitted_point_indices.clone())
-            .collect::<BTreeSet<_>>();
+            .map(|candidate| {
+                (
+                    candidate.omitted_point_indices.clone(),
+                    candidate
+                        .target_relation_omitted_coefficients
+                        .clone()
+                        .expect("target relation coefficients should be available"),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
         assert_eq!(
             compact_two_omissions,
-            BTreeSet::from([vec![55, 212], vec![55, 214], vec![195, 211], vec![212, 214],])
+            BTreeMap::from([
+                (vec![55, 212], vec![1, -1]),
+                (vec![55, 214], vec![1, 1]),
+                (vec![195, 211], vec![-1, 1]),
+                (vec![212, 214], vec![-1, 1]),
+            ])
+        );
+        assert!(
+            readiness
+                .two_column_omission_candidates
+                .iter()
+                .filter(|candidate| compact_two_omissions
+                    .contains_key(&candidate.omitted_point_indices))
+                .all(|candidate| candidate.preserves_target_relation_support == Some(false))
         );
     }
 

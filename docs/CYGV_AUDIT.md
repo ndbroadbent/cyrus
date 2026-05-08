@@ -3445,9 +3445,12 @@ Calabi-Yau threefold-shaped one-parameter supports with `q_rows=5`,
 `q_cols=1`, and `cy_dim=3`; the target `7` compact pairs are `[55,212]`,
 `[55,214]`, `[195,208]`, and `[212,214]`, while target `8` uses `[55,212]`,
 `[55,214]`, `[195,211]`, and `[212,214]`. These are diagnostic sub-supports
-only: deleting two points changes the degree-6 target-plus-star object, so the
-result identifies possible lower compact domains but still does not certify a
-GV value for the original two-parameter chamber row.
+only: the report now serializes the original target-relation coefficients on
+the omitted points, and every compact target `7`/`8` pair drops nonzero
+coefficients (`[1,-1]`, `[1,1]`, or `[-1,1]`). Deleting two points therefore
+changes the degree-6 target-plus-star object, so the result identifies possible
+lower compact domains but still does not certify a GV value for the original
+two-parameter chamber row.
 Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
 serializes a role-tagged height profile over the full union support. For
 targets `3`/`6`, the off-hyperplane zero-shared ray has height `-1` but zero
