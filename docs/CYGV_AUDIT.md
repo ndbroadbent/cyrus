@@ -3434,6 +3434,20 @@ specifically, every single-column omission recomputes to one charge row with
 handing the two-parameter target-plus-star row directly to compact `cygv` or
 fixing targets `7`/`8` by dropping one support point; the next object must be a
 source-derived chamber/reduction history, not a raw local `cygv` call.
+The same readiness report now recomputes every two-column omission from the
+remaining point coordinates rather than deleting columns from the original
+charge basis. Across all target-plus-star rows it finds `9` compact
+threefold Calabi-Yau phases including the origin, `4` compact threefold
+Calabi-Yau phases omitting the origin, `16` dimension-three non-Calabi-Yau
+phases omitting the origin, and `96` cases with no dimension-three phase. For
+targets `7`/`8`, exactly four omitted point pairs each become compact
+Calabi-Yau threefold-shaped one-parameter supports with `q_rows=5`,
+`q_cols=1`, and `cy_dim=3`; the target `7` compact pairs are `[55,212]`,
+`[55,214]`, `[195,208]`, and `[212,214]`, while target `8` uses `[55,212]`,
+`[55,214]`, `[195,211]`, and `[212,214]`. These are diagnostic sub-supports
+only: deleting two points changes the degree-6 target-plus-star object, so the
+result identifies possible lower compact domains but still does not certify a
+GV value for the original two-parameter chamber row.
 Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
 serializes a role-tagged height profile over the full union support. For
 targets `3`/`6`, the off-hyperplane zero-shared ray has height `-1` but zero

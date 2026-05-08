@@ -296,6 +296,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_single_column_omission_phase_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_target_plus_star_two_column_omission_phase_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_chamber_coverage_status_counts: BTreeMap<String, usize>,
@@ -909,6 +911,7 @@ struct LocalCygvStarUnionTargetPlusStarLocalCygvReadiness {
     local_intersection_tensor_status: String,
     local_chamber_certificate_status: String,
     single_column_omission_candidates: Vec<LocalCygvSingleColumnOmissionCandidate>,
+    two_column_omission_candidates: Vec<LocalCygvMultiColumnOmissionCandidate>,
     actual_call_readiness: String,
     missing_inputs: Vec<String>,
 }
@@ -917,6 +920,18 @@ struct LocalCygvStarUnionTargetPlusStarLocalCygvReadiness {
 struct LocalCygvSingleColumnOmissionCandidate {
     omitted_point_index: usize,
     omitted_charge_column: Vec<i64>,
+    q_rows: usize,
+    q_cols: usize,
+    cy_dim: i64,
+    charge_sums_after_omission: Vec<i64>,
+    is_calabi_yau_charge: bool,
+    phase_status: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvMultiColumnOmissionCandidate {
+    omitted_point_indices: Vec<usize>,
+    omitted_charge_columns: Vec<Vec<i64>>,
     q_rows: usize,
     q_cols: usize,
     cy_dim: i64,
@@ -15071,6 +15086,10 @@ fn build_report(
         local_cygv_source_resolution_star_union_target_plus_star_single_column_omission_phase_status_counts(
             &local_cygv_source_resolution_hint_sample,
         );
+    let local_cygv_source_resolution_star_union_target_plus_star_two_column_omission_phase_status_counts =
+        local_cygv_source_resolution_star_union_target_plus_star_two_column_omission_phase_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
     let local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts =
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts(
             &local_cygv_source_resolution_hint_sample,
@@ -16026,6 +16045,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_readiness_counts,
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_phase_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_single_column_omission_phase_status_counts,
+        local_cygv_source_resolution_star_union_target_plus_star_two_column_omission_phase_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts,
         local_cygv_source_resolution_star_union_chamber_coverage_status_counts,
         local_cygv_source_resolution_star_union_shared_face_secondary_status_counts,
@@ -16959,6 +16979,23 @@ fn local_cygv_source_resolution_star_union_target_plus_star_single_column_omissi
         for candidate in &summary
             .shared_two_simplex_star_union_target_plus_star_local_cygv_readiness
             .single_column_omission_candidates
+        {
+            *counts
+                .entry(candidate.phase_status.clone())
+                .or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_star_union_target_plus_star_two_column_omission_phase_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        for candidate in &summary
+            .shared_two_simplex_star_union_target_plus_star_local_cygv_readiness
+            .two_column_omission_candidates
         {
             *counts
                 .entry(candidate.phase_status.clone())
@@ -20808,6 +20845,8 @@ fn local_cygv_star_union_target_plus_star_local_cygv_readiness(
         local_cygv_grading_vector_candidate(&orientation_candidates);
     let single_column_omission_candidates =
         local_cygv_single_column_omission_candidates(&support.point_samples, charge_basis);
+    let two_column_omission_candidates =
+        local_cygv_two_column_omission_candidates(&support.point_samples, charge_basis);
     let (
         local_intersection_tensor_candidate,
         local_intersection_tensor_status,
@@ -20884,9 +20923,19 @@ fn local_cygv_star_union_target_plus_star_local_cygv_readiness(
         local_intersection_tensor_status,
         local_chamber_certificate_status,
         single_column_omission_candidates,
+        two_column_omission_candidates,
         actual_call_readiness,
         missing_inputs,
     }
+}
+
+struct RecomputedOmissionShape {
+    q_rows: usize,
+    q_cols: usize,
+    cy_dim: i64,
+    charge_sums_after_omission: Vec<i64>,
+    is_calabi_yau_charge: bool,
+    phase_status: String,
 }
 
 fn local_cygv_single_column_omission_candidates(
@@ -20915,70 +20964,121 @@ fn local_cygv_single_column_omission_candidates(
             .iter()
             .map(|row| row[omitted_position])
             .collect::<Vec<_>>();
-        let recomputed_charge_basis = match affine_charge_basis_for_point_samples(&reduced_samples)
-        {
-            Ok(charge_basis) => charge_basis,
-            Err(error) => {
-                candidates.push(LocalCygvSingleColumnOmissionCandidate {
-                    omitted_point_index: point_samples[omitted_position].point_index,
-                    omitted_charge_column,
-                    q_rows: reduced_samples.len(),
-                    q_cols: 0,
-                    cy_dim: i64::MIN,
-                    charge_sums_after_omission: Vec::new(),
-                    is_calabi_yau_charge: false,
-                    phase_status: format!(
-                        "single_column_omission_charge_basis_error:{}",
-                        status_error_fragment(&error)
-                    ),
-                });
-                continue;
-            }
-        };
-        let shape = local_cygv_hypersurface_shape_from_charge_basis(&recomputed_charge_basis).ok();
-        let reduced_point_indices = reduced_samples
-            .iter()
-            .map(|sample| sample.point_index)
-            .collect::<Vec<_>>();
-        let (_phase_q_matrix, phase_status) = local_cygv_q_matrix_phase_candidate(
-            &reduced_point_indices,
-            Some(&recomputed_charge_basis),
-        );
-        let (q_rows, q_cols, cy_dim, charge_sums_after_omission, is_calabi_yau_charge) = shape
-            .as_ref()
-            .map(|shape| {
-                (
-                    shape.q_rows,
-                    shape.q_cols,
-                    shape.cy_dim,
-                    shape.charge_sums.clone(),
-                    shape.is_calabi_yau_charge,
-                )
-            })
-            .unwrap_or_else(|| {
-                (
-                    reduced_samples.len(),
-                    recomputed_charge_basis.len(),
-                    i64::MIN,
-                    recomputed_charge_basis
-                        .iter()
-                        .map(|row| row.iter().sum())
-                        .collect(),
-                    false,
-                )
-            });
+        let recomputed = recomputed_omission_shape(&reduced_samples);
         candidates.push(LocalCygvSingleColumnOmissionCandidate {
             omitted_point_index: point_samples[omitted_position].point_index,
             omitted_charge_column,
-            q_rows,
-            q_cols,
-            cy_dim,
-            charge_sums_after_omission,
-            is_calabi_yau_charge,
-            phase_status,
+            q_rows: recomputed.q_rows,
+            q_cols: recomputed.q_cols,
+            cy_dim: recomputed.cy_dim,
+            charge_sums_after_omission: recomputed.charge_sums_after_omission,
+            is_calabi_yau_charge: recomputed.is_calabi_yau_charge,
+            phase_status: recomputed.phase_status,
         });
     }
     candidates
+}
+
+fn local_cygv_two_column_omission_candidates(
+    point_samples: &[OriginCircuitRelationPointSample],
+    charge_basis: &[Vec<i64>],
+) -> Vec<LocalCygvMultiColumnOmissionCandidate> {
+    let Some(width) = charge_basis.first().map(Vec::len) else {
+        return Vec::new();
+    };
+    if width < 2
+        || width != point_samples.len()
+        || charge_basis.iter().any(|row| row.len() != width)
+    {
+        return Vec::new();
+    }
+    let mut candidates = Vec::new();
+    for first in 0..width {
+        for second in (first + 1)..width {
+            let reduced_samples = point_samples
+                .iter()
+                .enumerate()
+                .filter_map(|(position, sample)| {
+                    (position != first && position != second).then_some(sample.clone())
+                })
+                .collect::<Vec<_>>();
+            let omitted_point_indices = vec![
+                point_samples[first].point_index,
+                point_samples[second].point_index,
+            ];
+            let omitted_charge_columns = vec![
+                charge_basis
+                    .iter()
+                    .map(|row| row[first])
+                    .collect::<Vec<_>>(),
+                charge_basis
+                    .iter()
+                    .map(|row| row[second])
+                    .collect::<Vec<_>>(),
+            ];
+            let recomputed = recomputed_omission_shape(&reduced_samples);
+            candidates.push(LocalCygvMultiColumnOmissionCandidate {
+                omitted_point_indices,
+                omitted_charge_columns,
+                q_rows: recomputed.q_rows,
+                q_cols: recomputed.q_cols,
+                cy_dim: recomputed.cy_dim,
+                charge_sums_after_omission: recomputed.charge_sums_after_omission,
+                is_calabi_yau_charge: recomputed.is_calabi_yau_charge,
+                phase_status: recomputed.phase_status,
+            });
+        }
+    }
+    candidates
+}
+
+fn recomputed_omission_shape(
+    reduced_samples: &[OriginCircuitRelationPointSample],
+) -> RecomputedOmissionShape {
+    let recomputed_charge_basis = match affine_charge_basis_for_point_samples(reduced_samples) {
+        Ok(charge_basis) => charge_basis,
+        Err(error) => {
+            return RecomputedOmissionShape {
+                q_rows: reduced_samples.len(),
+                q_cols: 0,
+                cy_dim: i64::MIN,
+                charge_sums_after_omission: Vec::new(),
+                is_calabi_yau_charge: false,
+                phase_status: format!(
+                    "column_omission_charge_basis_error:{}",
+                    status_error_fragment(&error)
+                ),
+            };
+        }
+    };
+    let shape = local_cygv_hypersurface_shape_from_charge_basis(&recomputed_charge_basis).ok();
+    let reduced_point_indices = reduced_samples
+        .iter()
+        .map(|sample| sample.point_index)
+        .collect::<Vec<_>>();
+    let (_phase_q_matrix, phase_status) =
+        local_cygv_q_matrix_phase_candidate(&reduced_point_indices, Some(&recomputed_charge_basis));
+    shape
+        .as_ref()
+        .map(|shape| RecomputedOmissionShape {
+            q_rows: shape.q_rows,
+            q_cols: shape.q_cols,
+            cy_dim: shape.cy_dim,
+            charge_sums_after_omission: shape.charge_sums.clone(),
+            is_calabi_yau_charge: shape.is_calabi_yau_charge,
+            phase_status: phase_status.clone(),
+        })
+        .unwrap_or_else(|| RecomputedOmissionShape {
+            q_rows: reduced_samples.len(),
+            q_cols: recomputed_charge_basis.len(),
+            cy_dim: i64::MIN,
+            charge_sums_after_omission: recomputed_charge_basis
+                .iter()
+                .map(|row| row.iter().sum())
+                .collect(),
+            is_calabi_yau_charge: false,
+            phase_status,
+        })
 }
 
 fn blocked_target_plus_star_local_cygv_readiness(
@@ -21001,6 +21101,7 @@ fn blocked_target_plus_star_local_cygv_readiness(
         local_intersection_tensor_status: "local_intersection_tensor_not_evaluated".to_string(),
         local_chamber_certificate_status: "local_chamber_certificate_not_evaluated".to_string(),
         single_column_omission_candidates: Vec::new(),
+        two_column_omission_candidates: Vec::new(),
         actual_call_readiness: "blocked_missing_source_derived_inputs".to_string(),
         missing_inputs,
     }
@@ -23937,6 +24038,7 @@ mod tests {
                     local_intersection_tensor_status: "test".to_string(),
                     local_chamber_certificate_status: "test".to_string(),
                     single_column_omission_candidates: Vec::new(),
+                    two_column_omission_candidates: Vec::new(),
                     actual_call_readiness: "test".to_string(),
                     missing_inputs: Vec::new(),
                 },
@@ -26859,6 +26961,24 @@ mod tests {
                 && candidate.phase_status
                     == "local_q_matrix_phase_blocked_no_dimension_three_phase"
         ));
+        assert_eq!(readiness.two_column_omission_candidates.len(), 21);
+        let compact_two_omissions = readiness
+            .two_column_omission_candidates
+            .iter()
+            .filter(|candidate| {
+                candidate.q_rows == 5
+                    && candidate.q_cols == 1
+                    && candidate.cy_dim == 3
+                    && candidate.is_calabi_yau_charge
+                    && candidate.phase_status
+                        == "source_derived_unique_compact_threefold_phase_including_origin"
+            })
+            .map(|candidate| candidate.omitted_point_indices.clone())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            compact_two_omissions,
+            BTreeSet::from([vec![55, 212], vec![55, 214], vec![195, 208], vec![212, 214],])
+        );
     }
 
     #[test]
@@ -26927,6 +27047,24 @@ mod tests {
                 && candidate.phase_status
                     == "local_q_matrix_phase_blocked_no_dimension_three_phase"
         ));
+        assert_eq!(readiness.two_column_omission_candidates.len(), 21);
+        let compact_two_omissions = readiness
+            .two_column_omission_candidates
+            .iter()
+            .filter(|candidate| {
+                candidate.q_rows == 5
+                    && candidate.q_cols == 1
+                    && candidate.cy_dim == 3
+                    && candidate.is_calabi_yau_charge
+                    && candidate.phase_status
+                        == "source_derived_unique_compact_threefold_phase_including_origin"
+            })
+            .map(|candidate| candidate.omitted_point_indices.clone())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            compact_two_omissions,
+            BTreeSet::from([vec![55, 212], vec![55, 214], vec![195, 211], vec![212, 214],])
+        );
     }
 
     #[test]
