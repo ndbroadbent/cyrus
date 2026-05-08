@@ -723,6 +723,13 @@ to make the remaining GV layer more first-principles:
    directly with `mcallister_gv_context --probe-cygv-path-history`, which avoids
    accidentally calling cygv's unbounded semigroup constructor before the
    capped source-history diagnostic.
+   The degree-ladder report now also annotates seed-count-skipped steps with a
+   bounded streaming closure summary. A target-`7` debug smoke with
+   `--semigroup-measure-max-seeds 64 --element-limit 1024` records degree `2`
+   as a completed bounded closure with `291` elements, while degrees `3..6`
+   all exceed the `1024` element cap during the first closure generation. This
+   gives an inexpensive machine-readable scale witness when the actual cygv
+   constructor is deliberately skipped.
    Running the visible lower-seed diamonds does not provide a fallback. On the
    actual-local-cygv lower-diamond report, the raw lower-seed domains split into
    six computed `GV=0` diamonds and three non-integral HKTY errors, while the

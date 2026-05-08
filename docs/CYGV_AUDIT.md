@@ -2259,6 +2259,16 @@ report file was produced. This reinforces that the next productive step is a
 source-derived finite semigroup/chamber certificate for the relevant composite
 history, not just increasing the supplied generator set.
 
+The `mcallister_gv_context` degree-ladder report now keeps this failure mode
+observable without entering the expensive constructor. When a ladder step is
+skipped by `--semigroup-measure-max-seeds`, the report can attach a bounded
+streaming closure summary using Cyrus' mirror of cygv's seed-reduction and
+closure loop. On target `7`, a debug smoke with seed cap `64` and element cap
+`1024` records degree `2` as a completed `291`-element closure, while degrees
+`3..6` all exceed the `1024` cap during the first closure generation. This is
+not a GV computation, but it is a cheap guardrail against mistaking a skipped
+actual-cygv call for missing evidence.
+
 The support-overlap runner now accepts `--trace-support-overlap-qn`, which
 switches that provided-generator call to Cyrus' traced `cygv` boundary and
 serializes the qN polynomial count, target qN materialization status, target

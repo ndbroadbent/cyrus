@@ -2093,6 +2093,16 @@ struct CygvSemigroupDegreeLadderStep {
     element_count: Option<usize>,
     elapsed_ms: Option<u128>,
     error: Option<String>,
+    bounded_closure: Option<CygvSemigroupDegreeLadderBoundedClosure>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CygvSemigroupDegreeLadderBoundedClosure {
+    status: String,
+    element_count: Option<usize>,
+    completed: Option<bool>,
+    generation_count: Option<usize>,
+    error: Option<String>,
 }
 
 struct CygvSemigroupDegreeMeasurement {
@@ -11394,7 +11404,7 @@ fn report_target(
     semigroup_measure_max_seed_count: Option<usize>,
     semigroup_measurement_cache: &mut HashMap<i128, Result<CygvSemigroupDegreeMeasurement, String>>,
     semigroup_ladder_cache: &mut HashMap<
-        (i128, i128, Option<usize>),
+        (i128, i128, Option<usize>, Option<usize>),
         Result<Vec<CygvSemigroupDegreeLadderStep>, String>,
     >,
     element_limit: usize,
@@ -12029,6 +12039,7 @@ fn report_target(
                 element_count: None,
                 elapsed_ms: None,
                 error: None,
+                bounded_closure: None,
             }])
         } else {
             match cygv_degree_ladder_max_degree {
@@ -12037,6 +12048,7 @@ fn report_target(
                     context,
                     max_ladder_degree,
                     semigroup_measure_max_seed_count,
+                    Some(element_limit),
                     semigroup_ladder_cache,
                 )),
                 None => Some(vec![CygvSemigroupDegreeLadderStep {
@@ -12050,6 +12062,7 @@ fn report_target(
                         "--measure-cygv-degree-ladder requires --cygv-degree-ladder-max-degree"
                             .to_string(),
                     ),
+                    bounded_closure: None,
                 }]),
             }
         }
@@ -12308,8 +12321,9 @@ fn measure_cygv_semigroup_degree_ladder(
     context: &ValidatedContext<'_>,
     max_ladder_degree: i128,
     max_seed_count: Option<usize>,
+    bounded_closure_element_limit: Option<usize>,
     cache: &mut HashMap<
-        (i128, i128, Option<usize>),
+        (i128, i128, Option<usize>, Option<usize>),
         Result<Vec<CygvSemigroupDegreeLadderStep>, String>,
     >,
 ) -> Vec<CygvSemigroupDegreeLadderStep> {
@@ -12322,16 +12336,23 @@ fn measure_cygv_semigroup_degree_ladder(
             element_count: None,
             elapsed_ms: None,
             error: Some("cygv degree ladder max degree must be positive".to_string()),
+            bounded_closure: None,
         }];
     }
     let effective_max = sample.degree.min(max_ladder_degree);
-    let key = (sample.degree, effective_max, max_seed_count);
+    let key = (
+        sample.degree,
+        effective_max,
+        max_seed_count,
+        bounded_closure_element_limit,
+    );
     if !cache.contains_key(&key) {
         let measurement = measure_cygv_semigroup_degree_ladder_uncached(
             sample.degree,
             effective_max,
             context,
             max_seed_count,
+            bounded_closure_element_limit,
         );
         cache.insert(key, measurement);
     }
@@ -12348,6 +12369,7 @@ fn measure_cygv_semigroup_degree_ladder(
                 element_count: None,
                 elapsed_ms: None,
                 error: Some(error),
+                bounded_closure: None,
             }]
         })
 }
@@ -12357,6 +12379,7 @@ fn measure_cygv_semigroup_degree_ladder_uncached(
     max_ladder_degree: i128,
     context: &ValidatedContext<'_>,
     max_seed_count: Option<usize>,
+    bounded_closure_element_limit: Option<usize>,
 ) -> Result<Vec<CygvSemigroupDegreeLadderStep>, String> {
     let mut all_seeds = Vec::new();
     let mut seen = HashSet::new();
@@ -12386,6 +12409,7 @@ fn measure_cygv_semigroup_degree_ladder_uncached(
                 element_count: None,
                 elapsed_ms: None,
                 error: None,
+                bounded_closure: None,
             });
             continue;
         }
@@ -12400,11 +12424,15 @@ fn measure_cygv_semigroup_degree_ladder_uncached(
                     element_count: None,
                     elapsed_ms: None,
                     error: Some(format!("cygv seed reduction failed: {error}")),
+                    bounded_closure: None,
                 });
                 continue;
             }
         };
         if max_seed_count.is_some_and(|limit| effective_seed_count > limit) {
+            let bounded_closure = bounded_closure_element_limit.map(|element_limit| {
+                cygv_ladder_bounded_closure_summary(&seeds, context.grading, degree, element_limit)
+            });
             steps.push(CygvSemigroupDegreeLadderStep {
                 degree,
                 effective_seed_count,
@@ -12413,6 +12441,7 @@ fn measure_cygv_semigroup_degree_ladder_uncached(
                 element_count: None,
                 elapsed_ms: None,
                 error: None,
+                bounded_closure,
             });
             continue;
         }
@@ -12427,6 +12456,7 @@ fn measure_cygv_semigroup_degree_ladder_uncached(
                     element_count: None,
                     elapsed_ms: None,
                     error: Some(format!("degree {degree} does not fit in u32")),
+                    bounded_closure: None,
                 });
                 continue;
             }
@@ -12441,6 +12471,7 @@ fn measure_cygv_semigroup_degree_ladder_uncached(
                 element_count: Some(element_count),
                 elapsed_ms: Some(started.elapsed().as_millis()),
                 error: None,
+                bounded_closure: None,
             }),
             Err(error) => steps.push(CygvSemigroupDegreeLadderStep {
                 degree,
@@ -12450,10 +12481,41 @@ fn measure_cygv_semigroup_degree_ladder_uncached(
                 element_count: None,
                 elapsed_ms: Some(started.elapsed().as_millis()),
                 error: Some(error),
+                bounded_closure: None,
             }),
         }
     }
     Ok(steps)
+}
+
+fn cygv_ladder_bounded_closure_summary(
+    seeds: &[Vec<i64>],
+    grading_vector: &[i64],
+    degree: i128,
+    element_limit: usize,
+) -> CygvSemigroupDegreeLadderBoundedClosure {
+    match streaming_bounded_cygv_semigroup_closure(
+        seeds,
+        grading_vector,
+        degree,
+        element_limit,
+        None,
+    ) {
+        Ok(closure) => CygvSemigroupDegreeLadderBoundedClosure {
+            status: closure.status,
+            element_count: Some(closure.elements.len()),
+            completed: Some(closure.completed),
+            generation_count: Some(closure.generation_counts.len()),
+            error: None,
+        },
+        Err(error) => CygvSemigroupDegreeLadderBoundedClosure {
+            status: "error".to_string(),
+            element_count: None,
+            completed: None,
+            generation_count: None,
+            error: Some(error),
+        },
+    }
 }
 
 fn measure_cygv_semigroup_degree(
@@ -28362,8 +28424,14 @@ mod tests {
         };
         let mut cache = HashMap::new();
 
-        let steps =
-            measure_cygv_semigroup_degree_ladder(&stats.sample[0], &context, 2, None, &mut cache);
+        let steps = measure_cygv_semigroup_degree_ladder(
+            &stats.sample[0],
+            &context,
+            2,
+            None,
+            None,
+            &mut cache,
+        );
 
         assert_eq!(steps.len(), 2);
         assert_eq!(steps[0].degree, 1);
@@ -28376,6 +28444,25 @@ mod tests {
         assert_eq!(steps[1].reduced_seed_count, Some(2));
         assert_eq!(steps[1].status, "measured_cygv_semigroup");
         assert_eq!(steps[1].element_count, Some(6));
+
+        let mut cache = HashMap::new();
+        let bounded_steps = measure_cygv_semigroup_degree_ladder(
+            &stats.sample[0],
+            &context,
+            2,
+            Some(2),
+            Some(4),
+            &mut cache,
+        );
+        assert_eq!(bounded_steps[1].status, "skipped_seed_limit");
+        let bounded = bounded_steps[1]
+            .bounded_closure
+            .as_ref()
+            .expect("skipped ladder step should include bounded closure summary");
+        assert!(bounded.element_count.is_some_and(|count| count >= 4));
+        assert_eq!(bounded.completed, Some(false));
+        assert_eq!(bounded.generation_count, Some(1));
+        assert!(bounded.status.starts_with("exceeded_element_limit_4"));
     }
 
     #[test]
