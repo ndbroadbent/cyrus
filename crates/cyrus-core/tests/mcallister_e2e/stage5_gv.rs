@@ -1140,8 +1140,10 @@ fn stage5_gv_computation_roadmap() {
     // wiring from basis-coordinate cygv output to ambient curve classes (64),
     // potent-ray convergence checks over supplied samples (128), and reusable
     // one-dimensional ray GV series computation (256), plus opt-in mirror-side
-    // GV checkpoint validation through the mcallister_gv binary (512).
-    let completed = 1u16 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 512;
+    // GV checkpoint validation through the mcallister_gv binary (512), plus
+    // CYTools-style complete-intersection reduction from ambient intersections
+    // to CY3 triple intersections (1024).
+    let completed = 1u16 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 512 | 1024;
 
     let roadmap = GvComputationRoadmap {
         status: "In Progress - Cyrus computes GV inputs, McAllister-sized validation is expensive",
@@ -1163,6 +1165,7 @@ fn stage5_gv_computation_roadmap() {
             "DDM preserves ray orientation when normalizing primitive integer rays; sign-flipping was a correctness bug and is now unit-tested",
             "compute_gv_invariants runs the upstream cygv HKTY modules and maps cygv construction/inversion failures and remaining unwind panics into Result errors",
             "Cyrus' direct cygv HKTY call chain is regression-tested against cygv::compute_gv_rat_threefold on the quintic degree-one GV 2875 case",
+            "compute_complete_intersection_cy3_intersection_numbers ports the CYTools complete-intersection reduction from ambient top intersections and nef-partition divisor classes to a CY3 triple-intersection tensor",
             "The opt-in stage5_mirror_gv_checkpoint_matches_cygv_min_points test runs mcallister_gv --min-points 20000 and verifies the computed 4-214-647 mirror-side GV table matches all 5177 dual_curves.dat / dual_curves_gv.dat checkpoint rows",
             "McAllister 4-214-647 small toric curve classes are computed from Cyrus Mori-cap rays and verified pair-decomposable pruning",
             "McAllister 4-214-647 small toric curve GV values are computed from toric two-face/origin-circuit formulas and match small_curves_gv.dat as a checkpoint",

@@ -171,7 +171,8 @@ pub use height_kahler::{
 pub use integer_math::{compute_glsm_and_linear_relations, compute_linear_relations_no_origin};
 pub use intersection::compute_intersection_cytools;
 pub use intersection::{
-    Intersection, compute_intersection_numbers, compute_intersection_numbers_with_linear_relations,
+    Intersection, compute_complete_intersection_cy3_intersection_numbers,
+    compute_intersection_numbers, compute_intersection_numbers_with_linear_relations,
     compute_intersection_numbers_with_offset,
 };
 pub mod kklt;

@@ -34,6 +34,17 @@ the quintic degree-one case: it still returns GV `2875` and exports the actual
 degree-one `q_N` polynomial plus the exact instanton coefficient/GV candidate
 that produces it.
 
+The direct complete-intersection boundary is intentionally narrower than a GV
+solution. Cyrus now exposes
+`compute_complete_intersection_cy3_intersection_numbers`, a faithful port of
+CYTools' complete-intersection reduction that intersects ambient top-form
+entries with each nef-partition divisor class until a CY3 triple-intersection
+tensor remains. This removes one mechanical missing piece, but it does not
+certify any McAllister target-plus-star split: a source-derived nef partition,
+ambient top intersections, chamber data, semigroup, and grading are still
+required before any codimension-two `cygv` call is a physics computation rather
+than a shape probe.
+
 ## CYTools Contract
 
 The authoritative CYTools wrapper is
@@ -3446,6 +3457,10 @@ the codimension-2 bipartitions at the local charge-matrix boundary. Both
 targets have `63` nontrivial bipartitions and `6` zero-degree split candidates,
 so the status is
 `complete_intersection_cy3_shape_ambiguous_zero_degree_nef_partition_candidates_requires_source_rule`.
+The reusable CYTools-style CICY tensor-reduction step now exists in core as
+`compute_complete_intersection_cy3_intersection_numbers`, but these reports
+still do not have the source-derived nef partition or ambient top intersections
+needed to use it.
 This is useful but still not a source rule: it proves that Cyrus must derive
 which split, if any, comes from the star-union/CICY geometry instead of choosing
 one by scalar GV agreement. Target `7` also has no nonnegative primitive

@@ -10,6 +10,7 @@
 //!
 //! Reference: [[project_docs/CYTOOLS_ALGORITHMS_CLEAN_ROOM.md]] Section 1.2
 
+mod complete_intersection;
 mod compute;
 pub mod cytools_algorithm;
 mod four_form;
@@ -26,6 +27,7 @@ use crate::types::tags::{Finite, IsFinite, Pos};
 use malachite::Rational;
 use std::collections::HashMap;
 
+pub use complete_intersection::compute_complete_intersection_cy3_intersection_numbers;
 pub use compute::{
     compute_intersection_numbers, compute_intersection_numbers_with_linear_relations,
     compute_intersection_numbers_with_offset,
