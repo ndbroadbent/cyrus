@@ -243,7 +243,12 @@ run pass. Any remaining mismatch must be explicit and localizable.
    reduced-seed split was absent there. Fresh target-7 and target-8 smokes show
    the same status for every queued lower-seed unknown composite, so the current
    blocker has moved from primitive source discovery to composite-history
-   propagation through the parent chamber.
+   propagation through the parent chamber. The queued rows now also classify
+   the bounded-decomposition terms by degree and known qN history: target 6's
+   degree-8 composites are built entirely from degree-4 known source-derived
+   leaves, while target 7/8 degree-4 composites are built from known toric
+   degree-2 leaves and degree-8 composites are built from known source
+   degree-6 plus known toric degree-2 leaves.
    The parent-only classifications now include parent-path-support runtime
    lookups from the same `cygv` run. On the regenerated target 7 report, the
    generated degree-10 side term is a real parent-domain nonzero object

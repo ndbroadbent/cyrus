@@ -921,6 +921,8 @@ struct CygvLowerSeedUnknownCandidateSummary {
     counterpart_known_qn_history_status_counts: BTreeMap<String, usize>,
     first_generation_seed_sum_status_counts: BTreeMap<String, usize>,
     bounded_seed_decomposition_status_counts: BTreeMap<String, usize>,
+    bounded_seed_decomposition_term_degree_counts: BTreeMap<i128, usize>,
+    bounded_seed_decomposition_term_known_qn_history_status_counts: BTreeMap<String, usize>,
     source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
     matching_missing_target_index: Option<usize>,
     matching_missing_target_degree: Option<i128>,
@@ -952,6 +954,17 @@ struct CygvLowerSeedUnknownCandidateOccurrence {
     first_generation_seed_sum: Option<CygvSeedSumDecomposition>,
     bounded_seed_decomposition: Option<CygvBoundedSeedDecompositionSummary>,
     bounded_seed_decomposition_error: Option<String>,
+    bounded_seed_decomposition_terms: Vec<CygvBoundedSeedDecompositionTermSummary>,
+    bounded_seed_decomposition_term_error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CygvBoundedSeedDecompositionTermSummary {
+    degree: i128,
+    toric_gv: Option<String>,
+    source_derived_gv: Option<String>,
+    known_qn_history_status: String,
+    curve_nonzero: Vec<(usize, i64)>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1438,6 +1451,8 @@ struct CygvLowerSeedUnknownCandidateSummaryBuilder {
     counterpart_known_qn_history_status_counts: BTreeMap<String, usize>,
     first_generation_seed_sum_status_counts: BTreeMap<String, usize>,
     bounded_seed_decomposition_status_counts: BTreeMap<String, usize>,
+    bounded_seed_decomposition_term_degree_counts: BTreeMap<i128, usize>,
+    bounded_seed_decomposition_term_known_qn_history_status_counts: BTreeMap<String, usize>,
     source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
     matching_missing_target_index: Option<usize>,
     matching_missing_target_degree: Option<i128>,
@@ -18445,6 +18460,10 @@ fn cygv_lower_seed_unknown_candidate_summaries<'a>(
                 .first_generation_seed_sum_status_counts,
             bounded_seed_decomposition_status_counts: builder
                 .bounded_seed_decomposition_status_counts,
+            bounded_seed_decomposition_term_degree_counts: builder
+                .bounded_seed_decomposition_term_degree_counts,
+            bounded_seed_decomposition_term_known_qn_history_status_counts: builder
+                .bounded_seed_decomposition_term_known_qn_history_status_counts,
             source_ray_ambient_nonzero: builder.source_ray_ambient_nonzero,
             matching_missing_target_index: builder.matching_missing_target_index,
             matching_missing_target_degree: builder.matching_missing_target_degree,
@@ -18534,6 +18553,8 @@ fn add_lower_seed_unknown_candidate_side(
             counterpart_known_qn_history_status_counts: BTreeMap::new(),
             first_generation_seed_sum_status_counts: BTreeMap::new(),
             bounded_seed_decomposition_status_counts: BTreeMap::new(),
+            bounded_seed_decomposition_term_degree_counts: BTreeMap::new(),
+            bounded_seed_decomposition_term_known_qn_history_status_counts: BTreeMap::new(),
             source_ray_ambient_nonzero: source_context
                 .as_ref()
                 .and_then(|source_context| source_context.source_ray_ambient_nonzero.clone()),
@@ -18639,6 +18660,27 @@ fn add_lower_seed_unknown_candidate_side(
             bounded_seed_decomposition_error.as_deref(),
         ))
         .or_insert(0) += 1;
+    let (bounded_seed_decomposition_terms, bounded_seed_decomposition_term_error) =
+        lower_seed_unknown_bounded_seed_decomposition_terms(
+            bounded_seed_decomposition.as_ref(),
+            context,
+        );
+    if let Some(error) = bounded_seed_decomposition_term_error.as_deref() {
+        *entry
+            .bounded_seed_decomposition_term_known_qn_history_status_counts
+            .entry(format!("error_{}", status_error_fragment(error)))
+            .or_insert(0) += 1;
+    }
+    for term in &bounded_seed_decomposition_terms {
+        *entry
+            .bounded_seed_decomposition_term_degree_counts
+            .entry(term.degree)
+            .or_insert(0) += 1;
+        *entry
+            .bounded_seed_decomposition_term_known_qn_history_status_counts
+            .entry(term.known_qn_history_status.clone())
+            .or_insert(0) += 1;
+    }
     if let Some(source_context) = source_context.as_ref() {
         if let Some(readiness) = &source_context.matching_uncovered_source_ray_local_cygv_readiness
         {
@@ -18674,6 +18716,8 @@ fn add_lower_seed_unknown_candidate_side(
             first_generation_seed_sum,
             bounded_seed_decomposition,
             bounded_seed_decomposition_error,
+            bounded_seed_decomposition_terms,
+            bounded_seed_decomposition_term_error,
         });
 }
 
@@ -18705,6 +18749,43 @@ fn lower_seed_unknown_bounded_seed_decomposition_status(
         },
         |decomposition| decomposition.status.clone(),
     )
+}
+
+fn lower_seed_unknown_bounded_seed_decomposition_terms(
+    decomposition: Option<&CygvBoundedSeedDecompositionSummary>,
+    context: &ValidatedContext<'_>,
+) -> (Vec<CygvBoundedSeedDecompositionTermSummary>, Option<String>) {
+    let Some(terms_nonzero) = decomposition
+        .and_then(|decomposition| decomposition.terms_nonzero.as_ref().map(Vec::as_slice))
+    else {
+        return (Vec::new(), None);
+    };
+    let mut out = Vec::with_capacity(terms_nonzero.len());
+    for term_nonzero in terms_nonzero {
+        let curve = match dense_from_sparse(term_nonzero, context.dimension) {
+            Ok(curve) => curve,
+            Err(error) => return (Vec::new(), Some(error)),
+        };
+        let degree = match curve_degree(&curve, context.grading) {
+            Ok(degree) => degree,
+            Err(error) => return (Vec::new(), Some(error)),
+        };
+        let toric_gv = context.covered_toric_gv_by_basis.get(&curve).cloned();
+        let source_derived_gv = context.source_derived_gv_by_basis.get(&curve).cloned();
+        let known_qn_history_status =
+            match known_qn_history_status(toric_gv.as_deref(), source_derived_gv.as_deref()) {
+                Ok(status) => status.to_string(),
+                Err(error) => return (Vec::new(), Some(error)),
+            };
+        out.push(CygvBoundedSeedDecompositionTermSummary {
+            degree,
+            toric_gv,
+            source_derived_gv,
+            known_qn_history_status,
+            curve_nonzero: term_nonzero.clone(),
+        });
+    }
+    (out, None)
 }
 
 fn cygv_lower_seed_unknown_candidate_degree_counts(
@@ -26111,11 +26192,25 @@ mod tests {
                 lower_unknown.bounded_seed_decomposition_status_counts,
                 BTreeMap::from([("not_found_up_to_4".to_string(), 2)])
             );
+            assert!(
+                lower_unknown
+                    .bounded_seed_decomposition_term_degree_counts
+                    .is_empty()
+            );
+            assert!(
+                lower_unknown
+                    .bounded_seed_decomposition_term_known_qn_history_status_counts
+                    .is_empty()
+            );
             assert!(lower_unknown.occurrences.iter().all(|occurrence| {
                 occurrence
                     .bounded_seed_decomposition
                     .as_ref()
                     .is_some_and(|decomposition| decomposition.status == "not_found_up_to_4")
+            }));
+            assert!(lower_unknown.occurrences.iter().all(|occurrence| {
+                occurrence.bounded_seed_decomposition_terms.is_empty()
+                    && occurrence.bounded_seed_decomposition_term_error.is_none()
             }));
         }
         assert_eq!(
