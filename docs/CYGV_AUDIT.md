@@ -3234,6 +3234,17 @@ the resolved-conifold origin relation `[(0,-1),(55,-1),(195,1),(212,1)]` in
 ambient coordinates. Target `6`'s opposite star is a degree-bounded source ray
 with ambient relation `[(0,-2),(2,1),(46,1),(200,2),(210,-2)]` but no known GV
 value, while target `3`'s opposite star is not a source degree-bounded ray.
+The bounded lower-seed follow-up,
+`/tmp/cyrus_gv_context_star_union_seed_decomposition_report.json`, is capped at
+degree `6` so it does not repeat the broad semigroup timeout. It decomposes the
+target `7`/`8` opposite-star row into two known degree-2 rows, both carrying
+toric/source GV `1`:
+`[(4,-1),(47,1),(50,1),(53,-1),(207,1)]` and
+`[(4,1),(47,-1),(50,-1),(190,1)]`. The degree-6 `target+star` row for targets
+`7`/`8` remains `unknown_not_toric_covered`, `not_source_degree_bounded_ray`,
+and `not_found_up_to_4` lower source seeds. Therefore the remaining
+degree-10 target decomposition is blocked on the degree-6 chamber row rather
+than on the known resolved-conifold side.
 Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
 serializes a role-tagged height profile over the full union support. For
 targets `3`/`6`, the off-hyperplane zero-shared ray has height `-1` but zero

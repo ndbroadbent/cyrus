@@ -1021,6 +1021,12 @@ to make the remaining GV layer more first-principles:
    `[(0,-1),(55,-1),(195,1),(212,1)]`; target `6`'s opposite star is a
    degree-bounded source ray without known GV, and target `3`'s opposite star is
    not a degree-bounded source ray.
+   A bounded lower-seed check now runs only for star-union rows of degree at
+   most `6`, keeping the diagnostic cheap. It decomposes the target `7`/`8`
+   opposite-star row into two known degree-2 toric/source rows, but the
+   degree-6 `target+star` row is `not_found_up_to_4` and is still not a
+   degree-bounded source ray. This makes the next compact-history target the
+   degree-6 chamber row, not the resolved-conifold side.
    The full union-support height profile is now serialized as well. For
    targets `3`/`6`, the off-hyperplane zero-shared ray carries zero target and
    star coefficient; for targets `7`/`8`, the height `-1` zero-shared ray and

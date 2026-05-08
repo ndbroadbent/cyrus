@@ -671,6 +671,9 @@ struct LocalCygvStarUnionGlobalBasisLookup {
     source_derived_gv: Option<String>,
     source_class_status: Option<String>,
     source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
+    lower_seed_sum_decomposition: Option<CygvSeedSumDecomposition>,
+    bounded_lower_seed_decomposition: Option<CygvBoundedSeedDecompositionSummary>,
+    lower_seed_decomposition_error: Option<String>,
     opposite_basis_nonzero: Option<Vec<(usize, i64)>>,
     opposite_degree: Option<i128>,
     opposite_known_qn_history_status: Option<String>,
@@ -678,6 +681,9 @@ struct LocalCygvStarUnionGlobalBasisLookup {
     opposite_source_derived_gv: Option<String>,
     opposite_source_class_status: Option<String>,
     opposite_source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
+    opposite_lower_seed_sum_decomposition: Option<CygvSeedSumDecomposition>,
+    opposite_bounded_lower_seed_decomposition: Option<CygvBoundedSeedDecompositionSummary>,
+    opposite_lower_seed_decomposition_error: Option<String>,
     opposite_error: Option<String>,
     error: Option<String>,
 }
@@ -16567,6 +16573,9 @@ fn local_cygv_star_union_global_basis_lookup(
             source_derived_gv: None,
             source_class_status: None,
             source_ray_ambient_nonzero: None,
+            lower_seed_sum_decomposition: None,
+            bounded_lower_seed_decomposition: None,
+            lower_seed_decomposition_error: None,
             opposite_basis_nonzero: None,
             opposite_degree: None,
             opposite_known_qn_history_status: None,
@@ -16574,6 +16583,9 @@ fn local_cygv_star_union_global_basis_lookup(
             opposite_source_derived_gv: None,
             opposite_source_class_status: None,
             opposite_source_ray_ambient_nonzero: None,
+            opposite_lower_seed_sum_decomposition: None,
+            opposite_bounded_lower_seed_decomposition: None,
+            opposite_lower_seed_decomposition_error: None,
             opposite_error: None,
             error: None,
         };
@@ -16590,6 +16602,9 @@ fn local_cygv_star_union_global_basis_lookup(
                 source_derived_gv: None,
                 source_class_status: None,
                 source_ray_ambient_nonzero: None,
+                lower_seed_sum_decomposition: None,
+                bounded_lower_seed_decomposition: None,
+                lower_seed_decomposition_error: None,
                 opposite_basis_nonzero: None,
                 opposite_degree: None,
                 opposite_known_qn_history_status: None,
@@ -16597,6 +16612,9 @@ fn local_cygv_star_union_global_basis_lookup(
                 opposite_source_derived_gv: None,
                 opposite_source_class_status: None,
                 opposite_source_ray_ambient_nonzero: None,
+                opposite_lower_seed_sum_decomposition: None,
+                opposite_bounded_lower_seed_decomposition: None,
+                opposite_lower_seed_decomposition_error: None,
                 opposite_error: None,
                 error: Some(error),
             };
@@ -16614,6 +16632,9 @@ fn local_cygv_star_union_global_basis_lookup(
                 source_derived_gv: None,
                 source_class_status: None,
                 source_ray_ambient_nonzero: None,
+                lower_seed_sum_decomposition: None,
+                bounded_lower_seed_decomposition: None,
+                lower_seed_decomposition_error: None,
                 opposite_basis_nonzero: None,
                 opposite_degree: None,
                 opposite_known_qn_history_status: None,
@@ -16621,6 +16642,9 @@ fn local_cygv_star_union_global_basis_lookup(
                 opposite_source_derived_gv: None,
                 opposite_source_class_status: None,
                 opposite_source_ray_ambient_nonzero: None,
+                opposite_lower_seed_sum_decomposition: None,
+                opposite_bounded_lower_seed_decomposition: None,
+                opposite_lower_seed_decomposition_error: None,
                 opposite_error: None,
                 error: Some(error),
             };
@@ -16631,6 +16655,11 @@ fn local_cygv_star_union_global_basis_lookup(
     let (source_class_status, source_ray_ambient_nonzero) =
         global_basis_source_class_lookup(&basis_dense, context);
     let (
+        lower_seed_sum_decomposition,
+        bounded_lower_seed_decomposition,
+        lower_seed_decomposition_error,
+    ) = star_union_lower_seed_diagnostics(&basis_dense, degree.unwrap_or(0), context);
+    let (
         opposite_basis_nonzero,
         opposite_degree,
         opposite_known_qn_history_status,
@@ -16638,6 +16667,9 @@ fn local_cygv_star_union_global_basis_lookup(
         opposite_source_derived_gv,
         opposite_source_class_status,
         opposite_source_ray_ambient_nonzero,
+        opposite_lower_seed_sum_decomposition,
+        opposite_bounded_lower_seed_decomposition,
+        opposite_lower_seed_decomposition_error,
         opposite_error,
     ) = if degree.is_some_and(|degree| degree < 0) {
         match basis_dense
@@ -16661,6 +16693,15 @@ fn local_cygv_star_union_global_basis_lookup(
                         ) = global_basis_known_qn_history(&opposite_dense, context);
                         let (opposite_source_class_status, opposite_source_ray_ambient_nonzero) =
                             global_basis_source_class_lookup(&opposite_dense, context);
+                        let (
+                            opposite_lower_seed_sum_decomposition,
+                            opposite_bounded_lower_seed_decomposition,
+                            opposite_lower_seed_decomposition_error,
+                        ) = star_union_lower_seed_diagnostics(
+                            &opposite_dense,
+                            opposite_degree,
+                            context,
+                        );
                         (
                             opposite_basis_nonzero,
                             Some(opposite_degree),
@@ -16669,6 +16710,9 @@ fn local_cygv_star_union_global_basis_lookup(
                             opposite_source_derived_gv,
                             opposite_source_class_status,
                             opposite_source_ray_ambient_nonzero,
+                            opposite_lower_seed_sum_decomposition,
+                            opposite_bounded_lower_seed_decomposition,
+                            opposite_lower_seed_decomposition_error,
                             opposite_error,
                         )
                     }
@@ -16680,14 +16724,31 @@ fn local_cygv_star_union_global_basis_lookup(
                         None,
                         None,
                         None,
+                        None,
+                        None,
+                        None,
                         Some(error),
                     ),
                 }
             }
-            Err(error) => (None, None, None, None, None, None, None, Some(error)),
+            Err(error) => (
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(error),
+            ),
         }
     } else {
-        (None, None, None, None, None, None, None, None)
+        (
+            None, None, None, None, None, None, None, None, None, None, None,
+        )
     };
     LocalCygvStarUnionGlobalBasisLookup {
         role: role.to_string(),
@@ -16698,6 +16759,9 @@ fn local_cygv_star_union_global_basis_lookup(
         source_derived_gv,
         source_class_status,
         source_ray_ambient_nonzero,
+        lower_seed_sum_decomposition,
+        bounded_lower_seed_decomposition,
+        lower_seed_decomposition_error,
         opposite_basis_nonzero,
         opposite_degree,
         opposite_known_qn_history_status,
@@ -16705,6 +16769,9 @@ fn local_cygv_star_union_global_basis_lookup(
         opposite_source_derived_gv,
         opposite_source_class_status,
         opposite_source_ray_ambient_nonzero,
+        opposite_lower_seed_sum_decomposition,
+        opposite_bounded_lower_seed_decomposition,
+        opposite_lower_seed_decomposition_error,
         opposite_error,
         error,
     }
@@ -16741,6 +16808,74 @@ fn global_basis_source_class_lookup(
             None,
         ),
     }
+}
+
+const STAR_UNION_LOWER_SEED_DECOMPOSITION_MAX_DEGREE: i128 = 6;
+const STAR_UNION_LOWER_SEED_DECOMPOSITION_MAX_TERMS: usize = 4;
+
+fn star_union_lower_seed_diagnostics(
+    target: &[i64],
+    target_degree: i128,
+    context: &ValidatedContext<'_>,
+) -> (
+    Option<CygvSeedSumDecomposition>,
+    Option<CygvBoundedSeedDecompositionSummary>,
+    Option<String>,
+) {
+    if target_degree <= 1 || target_degree > STAR_UNION_LOWER_SEED_DECOMPOSITION_MAX_DEGREE {
+        return (None, None, None);
+    }
+
+    let mut seeds = Vec::new();
+    let mut seed_set = HashSet::new();
+    for ray in context.degree_bounded_rays {
+        let degree = match curve_degree(ray, context.grading) {
+            Ok(degree) => degree,
+            Err(error) => return (None, None, Some(error)),
+        };
+        if degree <= 0 || degree >= target_degree {
+            continue;
+        }
+        if seed_set.insert(ray.clone()) {
+            seeds.push(ray.clone());
+        }
+    }
+    if seeds.is_empty() {
+        return (None, None, None);
+    }
+
+    let reduced_seed_set = match cygv_pair_reduced_seed_generators(&seeds) {
+        Ok(reduced_seeds) => reduced_seeds.into_iter().collect::<HashSet<_>>(),
+        Err(error) => {
+            return (
+                None,
+                None,
+                Some(format!("cygv seed reduction failed: {error}")),
+            );
+        }
+    };
+    let first_generation_seed_sum = match first_generation_seed_sum_decomposition(
+        target,
+        context.grading,
+        &seed_set,
+        &reduced_seed_set,
+        &context.covered_toric_gv_by_basis,
+        &context.source_derived_gv_by_basis,
+    ) {
+        Ok(decomposition) => decomposition,
+        Err(error) => return (None, None, Some(error)),
+    };
+    let bounded_seed_decomposition = match bounded_seed_decomposition_summary(
+        target,
+        &seed_set,
+        STAR_UNION_LOWER_SEED_DECOMPOSITION_MAX_TERMS,
+        None,
+    ) {
+        Ok(summary) => Some(summary),
+        Err(error) => return (first_generation_seed_sum, None, Some(error)),
+    };
+
+    (first_generation_seed_sum, bounded_seed_decomposition, None)
 }
 
 fn origin_circuit_star_union_point_samples(
@@ -18647,6 +18782,20 @@ mod tests {
         assert_eq!(
             source_lookup.source_class_status.as_deref(),
             Some("source_ray_known_source_derived_gv")
+        );
+        assert_eq!(
+            source_lookup
+                .lower_seed_sum_decomposition
+                .as_ref()
+                .map(|decomposition| decomposition.reduced_seed_degree),
+            Some(1)
+        );
+        assert_eq!(
+            source_lookup
+                .bounded_lower_seed_decomposition
+                .as_ref()
+                .map(|decomposition| decomposition.status.as_str()),
+            Some("found_lower_seed_decomposition")
         );
         let negative_toric_basis = vec![(0, -1)];
         let negative_toric_lookup = local_cygv_star_union_global_basis_lookup(

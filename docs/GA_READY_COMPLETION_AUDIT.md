@@ -769,6 +769,14 @@ target `7`/`8` opposite-star row:
 target `6` opposite-star row is at least a degree-bounded source ray, but has no
 known toric/source-derived GV value; target `3`'s opposite star is not in the
 degree-bounded source-ray context.
+The bounded lower-seed diagnostic in
+`/tmp/cyrus_gv_context_star_union_seed_decomposition_report.json` keeps that
+resolved-conifold side from being a new blocker: the target `7`/`8`
+opposite-star row decomposes into two known degree-2 toric/source rows. The
+remaining degree-6 `target+star` row is not a degree-bounded source ray and has
+no decomposition into up to four lower-degree source seeds in the current
+finite context. So the unresolved compact-history object is the degree-6
+`target+star` chamber row, not the known `-star` side.
 The height-profile report now tags every union-support point by role and
 coefficient. Targets `3`/`6` have only a coefficient-zero zero-shared ray off
 the relation hyperplane, while targets `7`/`8` have a height `-1` star-side
