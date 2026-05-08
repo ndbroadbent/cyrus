@@ -1385,6 +1385,13 @@ to make the remaining GV layer more first-principles:
    Thus the zero-degree split enumeration is not just ambiguous. On the local
    target-plus-star support currently visible to Cyrus, it does not define a
    CYTools nef partition.
+   The origin-spectator variant is now explicit too. If Cyrus adds the origin
+   back to the full star-union support with zero target-plus-star coefficient,
+   the nef partition enumerator excludes that origin from the parts as CYTools
+   requires. For targets `7`/`8`, the full-union support has `q_rows=8`,
+   `q_cols=3`, and `ambient_dim=5`, but it has zero zero-degree codimension-2
+   nef partition candidates. So adding the origin back fixes the previous hull
+   diagnostic shape but does not produce a valid nef source rule.
    A bounded CYTools/PALP diagnostic on the full 4-214-647 `points.dat` and
    `dual_points.dat` polytopes also returns `nef_count=0` for codimension two
    on both reflexive polytopes. The target-plus-star CICY-shaped obstruction is

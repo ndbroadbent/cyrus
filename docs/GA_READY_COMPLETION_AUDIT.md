@@ -165,7 +165,11 @@ and matrix-basis pipeline are no longer open.
    `[195,212]` are omission hits and `[0,55]` are not. The compact-omission
    wall-side summary then rules out using the nearby compact omissions as this
    selected chamber reduction: both rows have four compact omissions, zero full
-   positive-side matches, and zero full negative-side matches.
+   positive-side matches, and zero full negative-side matches. The
+   origin-spectator CICY check also rules out the simple "add origin back"
+   repair: after excluding origin from nef parts as CYTools requires, the
+   full-union support has zero zero-degree codimension-2 nef partition
+   candidates for both target rows.
 2. **Exact corrected KKLT volume.** The no-replay path computes a corrected
    volume but still has a documented instanton/chamber residual.
 3. **Generic matrix-basis pipeline.** Matrix divisor-basis primitives now cover

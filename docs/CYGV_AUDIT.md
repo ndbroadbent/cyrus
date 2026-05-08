@@ -3475,6 +3475,14 @@ vertex of the local support polytope. The candidate part union is therefore not
 the same ambient polytope seen by the CYTools-style nef check.
 This rules out promoting the local zero-degree split enumeration as a nef
 partition source rule.
+The origin-spectator variant is now checked explicitly as well. Adding the
+origin back to the full star-union support with zero target-plus-star
+coefficient removes the missing-origin hull obstruction, and the nef
+enumerator now correctly excludes the origin from candidate parts. For targets
+`7`/`8`, this changes the full-union shape to `q_rows=8`, `q_cols=3`,
+`ambient_dim=5`, but it leaves **zero** zero-degree codimension-2 nef
+partition candidates. Thus the naive "add the origin back as a spectator"
+repair is also not a source rule.
 A bounded CYTools/PALP diagnostic on the full 4-214-647 `points.dat` and
 `dual_points.dat` polytopes also returns `nef_count=0` for codimension two on
 both reflexive polytopes. The unresolved target-plus-star CICY-shaped object is

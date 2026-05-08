@@ -767,6 +767,8 @@ struct LocalCygvSourceResolutionHintSummary {
     shared_two_simplex_star_union_star_rational_denominators: Option<Vec<String>>,
     shared_two_simplex_star_union_target_minus_star_coordinates: Option<Vec<i64>>,
     shared_two_simplex_star_union_target_plus_star_coordinates: Option<Vec<i64>>,
+    shared_two_simplex_star_union_target_plus_star_origin_spectator_cicy:
+        LocalCygvOriginSpectatorCicyHint,
     shared_two_simplex_star_union_global_basis_status: String,
     shared_two_simplex_star_union_target_basis_nonzero: Option<Vec<(usize, i64)>>,
     shared_two_simplex_star_union_star_basis_nonzero: Option<Vec<(usize, i64)>>,
@@ -1087,6 +1089,14 @@ struct LocalCygvStarUnionTargetPlusStarSupportHint {
     relation_coordinates: Option<Vec<i64>>,
     relation_rational_coordinates: Option<Vec<String>>,
     relation_rational_denominators: Option<Vec<String>>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvOriginSpectatorCicyHint {
+    status: String,
+    hypersurface_shape: Option<LocalCygvHypersurfaceShape>,
+    complete_intersection_shape_candidate: Option<LocalCygvCompleteIntersectionShapeCandidate>,
+    target_relation_zero_coefficient_points: Vec<usize>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -10236,10 +10246,15 @@ fn local_cygv_codim_two_nef_partition_candidates(
             "target relation coefficient count does not match support point count".to_string(),
         );
     }
-    if support_point_indices.len() >= usize::BITS as usize {
+    let partition_positions = support_point_indices
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, &point_index)| (point_index != 0).then_some(idx))
+        .collect::<Vec<_>>();
+    if partition_positions.len() >= usize::BITS as usize {
         return Err("support too large for codimension-two partition enumeration".to_string());
     }
-    let support_len = support_point_indices.len();
+    let support_len = partition_positions.len();
     let mut candidates = Vec::new();
     for mask in 1usize..((1usize << support_len) - 1) {
         if (mask & 1) == 0 {
@@ -10253,23 +10268,24 @@ fn local_cygv_codim_two_nef_partition_candidates(
         let mut second_part_target_relation_sum = 0i64;
         let mut first_part_target_relation_nonzero_count = 0usize;
         let mut second_part_target_relation_nonzero_count = 0usize;
-        for (idx, point_index) in support_point_indices.iter().copied().enumerate() {
-            let (points, degree, relation_sum, relation_nonzero_count) = if ((mask >> idx) & 1) == 1
-            {
-                (
-                    &mut first_part_point_indices,
-                    &mut first_part_degree,
-                    &mut first_part_target_relation_sum,
-                    &mut first_part_target_relation_nonzero_count,
-                )
-            } else {
-                (
-                    &mut second_part_point_indices,
-                    &mut second_part_degree,
-                    &mut second_part_target_relation_sum,
-                    &mut second_part_target_relation_nonzero_count,
-                )
-            };
+        for (mask_idx, idx) in partition_positions.iter().copied().enumerate() {
+            let point_index = support_point_indices[idx];
+            let (points, degree, relation_sum, relation_nonzero_count) =
+                if ((mask >> mask_idx) & 1) == 1 {
+                    (
+                        &mut first_part_point_indices,
+                        &mut first_part_degree,
+                        &mut first_part_target_relation_sum,
+                        &mut first_part_target_relation_nonzero_count,
+                    )
+                } else {
+                    (
+                        &mut second_part_point_indices,
+                        &mut second_part_degree,
+                        &mut second_part_target_relation_sum,
+                        &mut second_part_target_relation_nonzero_count,
+                    )
+                };
             if let Some(coefficients) = target_relation_coefficients {
                 let coefficient = coefficients[idx];
                 *relation_sum += coefficient;
@@ -10394,8 +10410,14 @@ fn local_cygv_support_polytope_nef_certificate_inner(
         return Err("support point samples have inconsistent dimensions".to_string());
     }
 
-    let mut points = Vec::with_capacity(support_point_samples.len() + 1);
-    points.push(Point::new(vec![0; dim]));
+    let support_contains_origin = support_point_samples
+        .iter()
+        .any(|sample| sample.point_index == 0 && sample.coordinates.iter().all(|&x| x == 0));
+    let mut points =
+        Vec::with_capacity(support_point_samples.len() + usize::from(!support_contains_origin));
+    if !support_contains_origin {
+        points.push(Point::new(vec![0; dim]));
+    }
     let mut local_index_by_global = HashMap::new();
     for sample in support_point_samples {
         if local_index_by_global
@@ -10409,7 +10431,11 @@ fn local_cygv_support_polytope_nef_certificate_inner(
         }
         points.push(Point::new(sample.coordinates.clone()));
     }
-    let mut global_indices_by_local = vec![0usize];
+    let mut global_indices_by_local = if support_contains_origin {
+        Vec::with_capacity(support_point_samples.len())
+    } else {
+        vec![0usize]
+    };
     global_indices_by_local.extend(
         support_point_samples
             .iter()
@@ -17468,6 +17494,18 @@ fn local_cygv_source_resolution_hint_summaries(
                 &star_union_target_plus_star_local_cygv_readiness,
                 &crossed_wall_regular_side,
             );
+            let star_union_point_samples = target
+                .origin_circuit_first_witness
+                .as_ref()
+                .map(|witness| origin_circuit_star_union_point_samples(witness, &star_support_hint))
+                .unwrap_or_default();
+            let target_plus_star_origin_spectator_cicy =
+                local_cygv_target_plus_star_origin_spectator_cicy_hint(
+                    &star_union_relation_hint.point_indices,
+                    &star_union_point_samples,
+                    star_union_relation_hint.charge_basis.as_deref(),
+                    &star_union_relation_hint.target_plus_star,
+                );
             let resolved_full_union_compatibility =
                 local_cygv_resolved_shared_chamber_full_union_compatibility_status(
                     &resolved_chamber_global_height,
@@ -17563,6 +17601,8 @@ fn local_cygv_source_resolution_hint_summaries(
                     star_union_relation_hint.target_minus_star_coordinates,
                 shared_two_simplex_star_union_target_plus_star_coordinates:
                     star_union_relation_hint.target_plus_star_coordinates,
+                shared_two_simplex_star_union_target_plus_star_origin_spectator_cicy:
+                    target_plus_star_origin_spectator_cicy,
                 shared_two_simplex_star_union_global_basis_status: star_union_relation_hint
                     .global_basis_status,
                 shared_two_simplex_star_union_target_basis_nonzero: star_union_relation_hint
@@ -23278,6 +23318,69 @@ fn local_cygv_star_union_target_plus_star_support_face_certificate(
     (Some(generator_count), Some(status))
 }
 
+fn local_cygv_target_plus_star_origin_spectator_cicy_hint(
+    point_indices: &[usize],
+    point_samples: &[OriginCircuitRelationPointSample],
+    charge_basis: Option<&[Vec<i64>]>,
+    target_plus_star: &[(usize, i64)],
+) -> LocalCygvOriginSpectatorCicyHint {
+    let empty = |status: &str| LocalCygvOriginSpectatorCicyHint {
+        status: status.to_string(),
+        hypersurface_shape: None,
+        complete_intersection_shape_candidate: None,
+        target_relation_zero_coefficient_points: Vec::new(),
+    };
+    let Some(charge_basis) = charge_basis else {
+        return empty("origin_spectator_cicy_missing_full_union_charge_basis");
+    };
+    if point_indices.len() != point_samples.len() {
+        return empty("origin_spectator_cicy_point_index_sample_mismatch");
+    }
+    let target_by_point = target_plus_star.iter().copied().collect::<BTreeMap<_, _>>();
+    let target_relation_coefficients = point_indices
+        .iter()
+        .map(|point| target_by_point.get(point).copied().unwrap_or(0))
+        .collect::<Vec<_>>();
+    let target_relation_zero_coefficient_points = point_indices
+        .iter()
+        .copied()
+        .zip(target_relation_coefficients.iter().copied())
+        .filter_map(|(point, coefficient)| (coefficient == 0).then_some(point))
+        .collect::<Vec<_>>();
+    let shape = match local_cygv_hypersurface_shape_from_charge_basis(charge_basis) {
+        Ok(shape) => shape,
+        Err(error) => {
+            return LocalCygvOriginSpectatorCicyHint {
+                status: format!(
+                    "origin_spectator_cicy_shape_error:{}",
+                    status_error_fragment(&error)
+                ),
+                hypersurface_shape: None,
+                complete_intersection_shape_candidate: None,
+                target_relation_zero_coefficient_points,
+            };
+        }
+    };
+    let complete_intersection_shape_candidate = local_cygv_complete_intersection_shape_candidate(
+        &shape,
+        point_indices,
+        point_samples,
+        charge_basis,
+        Some(&target_relation_coefficients),
+    );
+    let status = if let Some(candidate) = complete_intersection_shape_candidate.as_ref() {
+        format!("origin_spectator_cicy_{}", candidate.status)
+    } else {
+        "origin_spectator_cicy_no_complete_intersection_cy3_shape".to_string()
+    };
+    LocalCygvOriginSpectatorCicyHint {
+        status,
+        hypersurface_shape: Some(shape),
+        complete_intersection_shape_candidate,
+        target_relation_zero_coefficient_points,
+    }
+}
+
 fn local_cygv_star_union_target_plus_star_support_hint_for_samples(
     union_samples: &[OriginCircuitRelationPointSample],
     target_plus_star: &[(usize, i64)],
@@ -26841,6 +26944,13 @@ mod tests {
             shared_two_simplex_star_union_star_rational_denominators: None,
             shared_two_simplex_star_union_target_minus_star_coordinates: None,
             shared_two_simplex_star_union_target_plus_star_coordinates: None,
+            shared_two_simplex_star_union_target_plus_star_origin_spectator_cicy:
+                LocalCygvOriginSpectatorCicyHint {
+                    status: "test".to_string(),
+                    hypersurface_shape: None,
+                    complete_intersection_shape_candidate: None,
+                    target_relation_zero_coefficient_points: Vec::new(),
+                },
             shared_two_simplex_star_union_global_basis_status: "test".to_string(),
             shared_two_simplex_star_union_target_basis_nonzero: None,
             shared_two_simplex_star_union_star_basis_nonzero: None,
@@ -29413,6 +29523,34 @@ mod tests {
                 (212, -1),
                 (214, 1)
             ]
+        );
+        let origin_spectator_cicy = local_cygv_target_plus_star_origin_spectator_cicy_hint(
+            &star_union_hint.point_indices,
+            &origin_circuit_star_union_point_samples(&witness, &star_support_hint),
+            star_union_hint.charge_basis.as_deref(),
+            &star_union_hint.target_plus_star,
+        );
+        assert_eq!(
+            origin_spectator_cicy.status,
+            "origin_spectator_cicy_complete_intersection_cy3_shape_no_zero_degree_nef_partition_candidate_requires_source_rule"
+        );
+        assert_eq!(
+            origin_spectator_cicy.target_relation_zero_coefficient_points,
+            vec![0]
+        );
+        assert_eq!(
+            origin_spectator_cicy
+                .hypersurface_shape
+                .as_ref()
+                .map(|shape| (shape.q_rows, shape.q_cols, shape.ambient_dim)),
+            Some((8, 3, 5))
+        );
+        assert_eq!(
+            origin_spectator_cicy
+                .complete_intersection_shape_candidate
+                .as_ref()
+                .and_then(|candidate| candidate.zero_degree_nef_partition_candidate_count),
+            Some(0)
         );
         let star_union_coverage =
             local_cygv_star_union_chamber_coverage_hint(Some(&witness), &star_support_hint);
