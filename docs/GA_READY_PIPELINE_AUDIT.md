@@ -1745,6 +1745,14 @@ to make the remaining GV layer more first-principles:
    triangulation. A square-face regression verifies that the computed height
    lands strictly inside the selected secondary cone and reproduces the
    selected diagonal.
+   The secondary module also now exposes the CYTools
+   `Triangulation.is_regular()` / `Triangulation.heights()` native-cone
+   primitive as `triangulation_is_regular_from_secondary_cone` and
+   `triangulation_heights_from_secondary_cone`. The focused regressions cover
+   the single-simplex zero-height case and a square diagonal whose computed
+   height vector pairs strictly positively with its secondary-cone circuit.
+   This is the regularity gate needed before automatic face-FRT enumeration can
+   be promoted.
    The top-level `ntfe_hypers` materialization logic for already-known
    face-inequality data is now exposed through
    `expanded_secondary_chamber_count_from_face_inequality_choices`,

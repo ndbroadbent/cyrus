@@ -107,6 +107,12 @@ selected chamber block. This is chamber-constraint infrastructure; it still has
 to be connected to a certified corrected-chamber semigroup before any
 McAllister missing-target GV can be promoted.
 
+The same secondary-cone layer now exposes the regularity gate used by CYTools
+before accepting face triangulations: `triangulation_is_regular_from_secondary_cone`
+and `triangulation_heights_from_secondary_cone` test for a strict secondary-cone
+height vector and return one when it exists. This is the next mechanical
+prerequisite for automatic 2-face FRT enumeration; it is not a GV computation.
+
 CYTools' `Cone.find_lattice_points` is a separate operation. It first checks
 that the grading vector has only the origin at nonpositive degree, then uses
 CP-SAT to enumerate integer points in degree windows sorted by degree and

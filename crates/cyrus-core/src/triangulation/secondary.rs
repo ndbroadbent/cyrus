@@ -397,6 +397,59 @@ pub fn expanded_secondary_regular_triangulation_from_face_triangulations(
     Ok(Some((heights, triangulation)))
 }
 
+/// Check whether a triangulation is regular by testing its secondary cone.
+///
+/// This ports the core CYTools `Triangulation.is_regular()` criterion: a
+/// triangulation with one simplex is regular immediately; otherwise its
+/// secondary cone must have a strict interior point. The point labels are
+/// interpreted in the same ambient point-index space used by
+/// [`secondary_cone_hyperplanes_native`].
+///
+/// # Errors
+///
+/// Returns an error if the secondary-cone circuit rows cannot be computed.
+pub fn triangulation_is_regular_from_secondary_cone(
+    points: &[Point],
+    triangulation: &Triangulation,
+) -> Result<bool> {
+    if triangulation.simplices().len() <= 1 {
+        validate_secondary_cone_input(points, triangulation)?;
+        return Ok(true);
+    }
+    Ok(triangulation_heights_from_secondary_cone(points, triangulation)?.is_some())
+}
+
+/// Find a height vector in the secondary cone of a regular triangulation.
+///
+/// This is the reusable Cyrus counterpart of CYTools `Triangulation.heights()`
+/// for the native secondary-cone path. It returns `Ok(None)` when no strict
+/// interior point is found, which means the supplied triangulation is not
+/// certified regular by this cone.
+///
+/// # Errors
+///
+/// Returns an error if the secondary-cone circuit rows cannot be computed.
+pub fn triangulation_heights_from_secondary_cone(
+    points: &[Point],
+    triangulation: &Triangulation,
+) -> Result<Option<Vec<f64>>> {
+    validate_secondary_cone_input(points, triangulation)?;
+    if triangulation.simplices().len() == 1 {
+        return Ok(Some(vec![0.0; points.len()]));
+    }
+    let hyperplanes = secondary_cone_hyperplanes_native(points, triangulation)?;
+    let hyperplanes_i128 = hyperplanes
+        .iter()
+        .map(|row| row.iter().map(|&entry| i128::from(entry)).collect())
+        .collect::<Vec<Vec<i128>>>();
+    let mut cone = if hyperplanes_i128.is_empty() {
+        Cone::full_space(points.len())
+    } else {
+        Cone::from_hyperplanes(hyperplanes_i128)
+    };
+    Ok(cone.find_interior_point())
+}
+
 /// Compute per-face expanded-secondary inequality choices.
 ///
 /// This ports the provided-`face_triangs`, `require_star=False` branch of
@@ -2177,6 +2230,51 @@ mod tests {
                 })
                 .collect::<BTreeSet<_>>(),
             BTreeSet::from([vec![0, 1, 2], vec![0, 2, 3]])
+        );
+    }
+
+    #[test]
+    fn triangulation_regular_from_secondary_cone_accepts_single_simplex() {
+        let points = vec![
+            Point::new(vec![0, 0]),
+            Point::new(vec![1, 0]),
+            Point::new(vec![0, 1]),
+        ];
+        let triangulation = Triangulation::new(vec![vec![0, 1, 2]]);
+
+        assert!(triangulation_is_regular_from_secondary_cone(&points, &triangulation).unwrap());
+        assert_eq!(
+            triangulation_heights_from_secondary_cone(&points, &triangulation).unwrap(),
+            Some(vec![0.0, 0.0, 0.0])
+        );
+    }
+
+    #[test]
+    fn triangulation_regular_from_secondary_cone_finds_square_heights() {
+        let points = vec![
+            Point::new(vec![0, 0]),
+            Point::new(vec![1, 0]),
+            Point::new(vec![1, 1]),
+            Point::new(vec![0, 1]),
+        ];
+        let triangulation = Triangulation::new(vec![vec![0, 1, 2], vec![0, 2, 3]]);
+
+        assert!(triangulation_is_regular_from_secondary_cone(&points, &triangulation).unwrap());
+        let heights = triangulation_heights_from_secondary_cone(&points, &triangulation)
+            .unwrap()
+            .unwrap();
+        let typed_heights = heights
+            .iter()
+            .map(|&height| finite(height))
+            .collect::<Vec<_>>();
+
+        assert!(
+            secondary_cone_strictly_contains_height_vector(
+                &vec![vec![-1, 1, -1, 1]],
+                &typed_heights,
+                positive(1e-10),
+            )
+            .unwrap()
         );
     }
 
