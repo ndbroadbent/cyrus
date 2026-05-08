@@ -212,7 +212,11 @@ and matrix-basis pipeline are no longer open.
    returns GV `0`. The regenerated v3 aggregate classifies the current-only
    positive-degree decomposition terms themselves: five terms, degree counts
    `{16:1, 4:2, 2:2}`, all with context, but all still
-   `unknown_not_toric_covered` and `not_source_degree_bounded_ray`.
+   `unknown_not_toric_covered` and `not_source_degree_bounded_ray`. The v4
+   aggregate adds that two of those five are rank-two quadrilateral supports
+   with `ckyz_no_source_match`, while the other three are non-rank-two for CKYZ,
+   so the remaining work is still source/chamber construction rather than local
+   CKYZ matching.
 2. **Exact corrected KKLT volume.** The no-replay path computes a corrected
    volume but still has a documented instanton/chamber residual.
 3. **Generic matrix-basis pipeline.** Matrix divisor-basis primitives now cover

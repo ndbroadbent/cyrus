@@ -3667,6 +3667,11 @@ lower-seed status splits as two `found_lower_seed_decomposition`, two
 `not_found_up_to_4`, and one `not_run_or_not_applicable`. This keeps the
 remaining obstruction on source/chamber/GV construction rather than on report
 bookkeeping.
+The follow-up v4 aggregate adds local-toric/CKYZ classification for the same
+five terms: two are `rank_two_quadrilateral` supports, but both report
+`ckyz_no_source_match`; the remaining three are
+`ckyz_not_run_non_rank_two_support`. Thus the current-only obstruction is not
+another missed rank-two CKYZ source-family assignment.
 A target-`1` rerun with `--lower-seed-pair-limit 2048` shows that this is not
 only the degree-ten weighted pair. Target `1` has target-plus-star degree `16`
 and a four-term lower decomposition into known history (`3` known toric terms

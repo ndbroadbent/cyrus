@@ -1470,6 +1470,10 @@ to make the remaining GV layer more first-principles:
    `unknown_not_toric_covered` and `not_source_degree_bounded_ray`. Their
    bounded lower-seed statuses are two `found_lower_seed_decomposition`, two
    `not_found_up_to_4`, and one `not_run_or_not_applicable`.
+   The v4 aggregate classifies the same five terms by local toric/CKYZ status:
+   two are `rank_two_quadrilateral` supports but both are `ckyz_no_source_match`,
+   while the other three are `ckyz_not_run_non_rank_two_support`. This rules out
+   a simple rank-two CKYZ promotion for the current-only obstruction.
    A target-`1` rerun with pair limit `2048` adds term-level lower-history
    counts for its degree-16 target-plus-star row: the lower decomposition uses
    three known toric terms and one known source-derived term, but the bounded
