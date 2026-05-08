@@ -267,6 +267,7 @@ struct ContextReport {
     local_cygv_source_resolution_star_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_reduction_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_status_counts: BTreeMap<String, usize>,
+    local_phase_chamber_membership_certificate_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_hint_sample: Vec<LocalCygvSourceResolutionHintSummary>,
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
     local_cygv_actual_call_readiness_counts: BTreeMap<String, usize>,
@@ -13889,6 +13890,8 @@ fn build_report(
         local_cygv_source_resolution_star_reduction_status_counts(&targets);
     let local_cygv_source_resolution_star_union_status_counts =
         local_cygv_source_resolution_star_union_status_counts(&targets);
+    let local_phase_chamber_membership_certificate_status_counts =
+        local_phase_chamber_membership_certificate_status_counts(&targets, validated);
     let local_cygv_source_resolution_hint_sample =
         local_cygv_source_resolution_hint_summaries(&targets, validated);
     let missing_local_cygv_missing_source_input_counts = local_cygv_missing_source_input_counts(
@@ -14644,6 +14647,7 @@ fn build_report(
         local_cygv_source_resolution_star_status_counts,
         local_cygv_source_resolution_star_reduction_status_counts,
         local_cygv_source_resolution_star_union_status_counts,
+        local_phase_chamber_membership_certificate_status_counts,
         local_cygv_source_resolution_hint_sample,
         local_cygv_target_candidate_status_counts,
         local_cygv_actual_call_readiness_counts: missing_local_cygv_actual_call_readiness_counts,
@@ -15153,6 +15157,33 @@ fn local_cygv_source_resolution_hint_status_counts<'a>(
             .entry(local_cygv_source_resolution_hint_status(
                 skeleton,
                 target.origin_circuit_first_witness.as_ref(),
+            ))
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_phase_chamber_membership_certificate_status_counts<'a>(
+    targets: impl IntoIterator<Item = &'a TargetReport>,
+    context: &ValidatedContext<'_>,
+) -> BTreeMap<String, usize> {
+    local_phase_chamber_membership_certificate_status_counts_for_skeletons(
+        targets
+            .into_iter()
+            .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
+        context,
+    )
+}
+
+fn local_phase_chamber_membership_certificate_status_counts_for_skeletons<'a>(
+    skeletons: impl IntoIterator<Item = &'a LocalCygvInputSkeleton>,
+    context: &ValidatedContext<'_>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for skeleton in skeletons {
+        *counts
+            .entry(local_phase_chamber_membership_certificate_status(
+                skeleton, context,
             ))
             .or_insert(0usize) += 1;
     }
@@ -19219,6 +19250,21 @@ mod tests {
                 &strict_global
             ),
             "local_phase_chamber_blocked_missing_phase_q_matrix"
+        );
+
+        let counts = local_phase_chamber_membership_certificate_status_counts_for_skeletons(
+            [&skeleton, &missing_phase_skeleton],
+            &strict_global,
+        );
+        assert_eq!(
+            counts.get(
+                "source_derived_local_phase_chamber_certificate_with_global_secondary_cone_checkpoint"
+            ),
+            Some(&1)
+        );
+        assert_eq!(
+            counts.get("local_phase_chamber_blocked_missing_phase_q_matrix"),
+            Some(&1)
         );
     }
 

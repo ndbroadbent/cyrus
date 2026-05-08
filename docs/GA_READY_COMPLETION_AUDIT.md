@@ -856,7 +856,9 @@ secondary-cone certificate status and a separate local phase chamber-membership
 status. A local source hint can therefore say "global corrected chamber is
 strictly inside" without pretending the candidate local phase has been
 certified; promotion is still blocked until the local phase supplies its own
-phase `q` matrix and chamber certificate.
+phase `q` matrix and chamber certificate. The report also aggregates those
+local chamber-membership statuses, so this blocker is visible as a top-level
+count rather than only in sampled target rows.
 Because the full corrected-chamber GV context export still exceeded a `300s`
 debug timeout before writing JSON, the runner also has a narrow
 `--dump-corrected-chamber-secondary-certificate` flag. On the validation-only
