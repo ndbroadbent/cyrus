@@ -359,6 +359,9 @@ struct ContextReport {
     cygv_path_support_gw_coefficient_trace_error_counts: BTreeMap<String, usize>,
     cygv_path_support_target_pre_subtraction_formula_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_decomposition_status_counts: BTreeMap<String, usize>,
+    cygv_lower_seed_predecessor_candidate_count_counts: BTreeMap<String, usize>,
+    cygv_lower_seed_predecessor_degree_split_counts: BTreeMap<String, usize>,
+    cygv_lower_seed_predecessor_known_qn_history_pair_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_diamond_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_diamond_gv_counts: BTreeMap<String, usize>,
     cygv_pair_expanded_lower_seed_diamond_status_counts: BTreeMap<String, usize>,
@@ -14395,6 +14398,24 @@ fn build_report(
         }),
         "not_run",
     );
+    let cygv_lower_seed_predecessor_candidate_count_counts =
+        cygv_lower_seed_predecessor_candidate_count_counts(
+            targets
+                .iter()
+                .map(|target| target.cygv_path_history_probe.as_ref()),
+        );
+    let cygv_lower_seed_predecessor_degree_split_counts =
+        cygv_lower_seed_predecessor_degree_split_counts(
+            targets
+                .iter()
+                .map(|target| target.cygv_path_history_probe.as_ref()),
+        );
+    let cygv_lower_seed_predecessor_known_qn_history_pair_status_counts =
+        cygv_lower_seed_predecessor_known_qn_history_pair_status_counts(
+            targets
+                .iter()
+                .map(|target| target.cygv_path_history_probe.as_ref()),
+        );
     let cygv_lower_seed_diamond_status_counts = optional_status_counts(
         targets.iter().map(|target| {
             target
@@ -14854,6 +14875,9 @@ fn build_report(
         cygv_path_support_gw_coefficient_trace_error_counts,
         cygv_path_support_target_pre_subtraction_formula_status_counts,
         cygv_lower_seed_decomposition_status_counts,
+        cygv_lower_seed_predecessor_candidate_count_counts,
+        cygv_lower_seed_predecessor_degree_split_counts,
+        cygv_lower_seed_predecessor_known_qn_history_pair_status_counts,
         cygv_lower_seed_diamond_status_counts,
         cygv_lower_seed_diamond_gv_counts,
         cygv_pair_expanded_lower_seed_diamond_status_counts,
@@ -18215,6 +18239,47 @@ fn optional_usize_count_counts(
     for value in values {
         let key = value.map_or_else(|| missing_status.to_string(), |value| value.to_string());
         *counts.entry(key).or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn cygv_lower_seed_predecessor_candidate_count_counts<'a>(
+    probes: impl IntoIterator<Item = Option<&'a CygvPathHistoryProbe>>,
+) -> BTreeMap<String, usize> {
+    optional_usize_count_counts(
+        probes
+            .into_iter()
+            .map(|probe| probe.and_then(|probe| probe.lower_seed_predecessor_candidate_count)),
+        "not_run",
+    )
+}
+
+fn cygv_lower_seed_predecessor_degree_split_counts<'a>(
+    probes: impl IntoIterator<Item = Option<&'a CygvPathHistoryProbe>>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes.into_iter().flatten() {
+        for candidate in &probe.lower_seed_predecessor_candidate_sample {
+            let key = format!(
+                "{}+{}",
+                candidate.predecessor_degree, candidate.difference_degree
+            );
+            *counts.entry(key).or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn cygv_lower_seed_predecessor_known_qn_history_pair_status_counts<'a>(
+    probes: impl IntoIterator<Item = Option<&'a CygvPathHistoryProbe>>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes.into_iter().flatten() {
+        for candidate in &probe.lower_seed_predecessor_candidate_sample {
+            *counts
+                .entry(candidate.known_qn_history_pair_status.clone())
+                .or_insert(0usize) += 1;
+        }
     }
     counts
 }
@@ -25567,6 +25632,22 @@ mod tests {
         assert_eq!(
             probe.lower_seed_predecessor_candidate_sample[0].known_qn_history_pair_status,
             "predecessor_unknown_not_toric_covered__difference_unknown_not_toric_covered"
+        );
+        assert_eq!(
+            cygv_lower_seed_predecessor_candidate_count_counts([Some(&probe)]),
+            BTreeMap::from([("2".to_string(), 1)])
+        );
+        assert_eq!(
+            cygv_lower_seed_predecessor_degree_split_counts([Some(&probe)]),
+            BTreeMap::from([("1+1".to_string(), 2)])
+        );
+        assert_eq!(
+            cygv_lower_seed_predecessor_known_qn_history_pair_status_counts([Some(&probe)]),
+            BTreeMap::from([(
+                "predecessor_unknown_not_toric_covered__difference_unknown_not_toric_covered"
+                    .to_string(),
+                2
+            )])
         );
         assert_eq!(
             cygv_closest_known_qn_residual_qn_domain_status(Some(&probe)),

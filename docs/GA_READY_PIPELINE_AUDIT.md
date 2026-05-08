@@ -222,8 +222,10 @@ run pass. Any remaining mismatch must be explicit and localizable.
    decomposition directly; a target-7 schema-4 smoke report exposes four
    candidate splits with degrees `8+2`, `2+8`, `4+6`, and `6+4`. These rows
    preserve the toric/source-known status and seed-sum evidence for each side,
-   but remain diagnostic evidence for the missing compact parent history rather
-   than promotable GV inputs.
+   and the report now aggregates their candidate-count, degree-split, and
+   known-history pair-status buckets at top level. They remain diagnostic
+   evidence for the missing compact parent history rather than promotable GV
+   inputs.
    The parent-only classifications now include parent-path-support runtime
    lookups from the same `cygv` run. On the regenerated target 7 report, the
    generated degree-10 side term is a real parent-domain nonzero object
