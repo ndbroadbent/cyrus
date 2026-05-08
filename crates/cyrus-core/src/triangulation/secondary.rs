@@ -1287,6 +1287,45 @@ pub fn expanded_secondary_chamber_hyperplanes_from_face_inequality_choice_index(
     }
 }
 
+/// Find per-face inequality choices that contain a height vector.
+///
+/// This is the selection predicate underlying CYTools-style NTFE chamber
+/// reconstruction: a two-face FRT choice is compatible with the supplied
+/// height vector when every hyperplane in that choice pairs strictly above the
+/// supplied tolerance. Empty one-simplex face choices are compatible by
+/// convention because they impose no CPL wall.
+///
+/// The returned shape is `face -> compatible choice indices` in the original
+/// ungrouped face order. Callers that need CYTools `separate_boring=True`
+/// ordering should group after choosing one block per face.
+///
+/// # Errors
+///
+/// Returns an error if any face has no available choices or if any hyperplane
+/// row width differs from the height-vector length.
+pub fn expanded_secondary_face_choice_indices_containing_height_vector(
+    face_inequality_choices: &[Vec<Vec<Vec<i64>>>],
+    heights: &[F64<Finite>],
+    epsilon: F64<Pos>,
+) -> Result<Vec<Vec<usize>>> {
+    let mut compatible = Vec::with_capacity(face_inequality_choices.len());
+    for (face_idx, choices) in face_inequality_choices.iter().enumerate() {
+        if choices.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "expanded secondary chamber face {face_idx} has no inequality choices"
+            )));
+        }
+        let mut face_compatible = Vec::new();
+        for (choice_idx, hyperplanes) in choices.iter().enumerate() {
+            if secondary_cone_strictly_contains_height_vector(hyperplanes, heights, epsilon)? {
+                face_compatible.push(choice_idx);
+            }
+        }
+        compatible.push(face_compatible);
+    }
+    Ok(compatible)
+}
+
 /// Count expanded-secondary chamber choices from per-face inequality blocks.
 ///
 /// This ports the mixed-radix counting core of CYTools `ntfe_hypers`: each
@@ -3218,6 +3257,29 @@ mod tests {
             choices,
             vec![vec![vec![vec![-1, 1, -1, 1]], vec![vec![1, -1, 1, -1]]]]
         );
+    }
+
+    #[test]
+    fn expanded_secondary_face_choice_selection_uses_height_pairings() {
+        let choices = vec![vec![vec![vec![-1, 1, -1, 1]], vec![vec![1, -1, 1, -1]]]];
+        let first_diagonal_heights = vec![finite(0.0), finite(1.0), finite(0.0), finite(1.0)];
+        let second_diagonal_heights = vec![finite(1.0), finite(0.0), finite(1.0), finite(0.0)];
+
+        let first = expanded_secondary_face_choice_indices_containing_height_vector(
+            &choices,
+            &first_diagonal_heights,
+            positive(1e-10),
+        )
+        .unwrap();
+        let second = expanded_secondary_face_choice_indices_containing_height_vector(
+            &choices,
+            &second_diagonal_heights,
+            positive(1e-10),
+        )
+        .unwrap();
+
+        assert_eq!(first, vec![vec![0]]);
+        assert_eq!(second, vec![vec![1]]);
     }
 
     #[test]

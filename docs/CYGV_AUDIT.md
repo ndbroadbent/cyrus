@@ -143,14 +143,20 @@ The same exact-or-sampled source now feeds reusable native and star-constrained
 expanded-secondary inequality builders and mixed-radix chamber materializers,
 so callers no longer have to manually convert sampled face choices before
 testing a chamber.
+`expanded_secondary_face_choice_indices_containing_height_vector` now applies
+the strict secondary-cone pairing test to each per-face inequality block and
+returns the compatible original face-choice indices. The square-diagonal
+regression checks that opposite height vectors select opposite FRT choices.
 `mcallister_first_principles` now exposes the same policy through the
 validation-only
 `--dump-corrected-chamber-face-triangulation-choice-summary` artifact, recording
 per-face point counts, exact-vs-sampled face counts, choice counts, total mixed
-choice count, sampling limits, and seed. The runner-side `P^4` simplex
+choice count, height-compatible choice indices/counts for the solved corrected
+height vector, sampling limits, and seed. The runner-side `P^4` simplex
 regression forces the sampled branch and verifies that the artifact reports the
-ten triangular two-faces with one choice each. This is still chamber-search
-input evidence; it does not compute or promote any corrected-chamber GV value.
+ten triangular two-faces with one compatible choice each. This is still
+chamber-search input evidence; it does not compute or promote any
+corrected-chamber GV value.
 
 CYTools' `Cone.find_lattice_points` is a separate operation. It first checks
 that the grading vector has only the origin at nonpositive degree, then uses

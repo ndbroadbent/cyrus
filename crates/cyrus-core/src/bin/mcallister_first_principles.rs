@@ -100,6 +100,8 @@ use cyrus_core::{
     compute_origin_circuit_curve_diagnostics, compute_regular_triangulation,
     compute_toric_curve_gv_diagnostics, compute_toric_two_face_curve_gv_invariants,
     compute_w0_from_terms, divisor_basis_change_matrix, effective_prime_divisors_from_curve_basis,
+    expanded_secondary_face_choice_indices_containing_height_vector,
+    expanded_secondary_face_inequality_choices_from_triangulations,
     expanded_secondary_fan_hyperplanes_on_polytope_2faces_4d,
     fine_regular_triangulation_choices_on_polytope_2faces_4d_with_sampling,
     generate_scaled_divisor_basis_branch_initializations, gv_divisor_basis_data, heights_to_kahler,
@@ -812,6 +814,12 @@ struct FaceTriangulationChoiceSummary {
     choice_counts: Vec<usize>,
     sampled_face_indices: Vec<usize>,
     sampled_face_point_counts: Vec<usize>,
+    height_compatible_choice_indices: Option<Vec<Vec<usize>>>,
+    height_compatible_choice_counts: Option<Vec<usize>>,
+    height_unique_compatible_face_count: Option<usize>,
+    height_no_compatible_face_count: Option<usize>,
+    height_multi_compatible_face_count: Option<usize>,
+    height_first_no_compatible_face_index: Option<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -7387,6 +7395,7 @@ fn expanded_secondary_fan_height_certificate_for_kahler(
 
 fn corrected_chamber_face_triangulation_choice_summary(
     geom: &PrimalGeom,
+    heights: Option<&[F64<Finite>]>,
     max_exact_face_points: usize,
     samples_per_large_face: usize,
     max_sampling_attempts_per_face: usize,
@@ -7444,6 +7453,56 @@ fn corrected_chamber_face_triangulation_choice_summary(
     } else {
         "face_triangulation_choices_exact_and_sampled"
     };
+    let (
+        height_compatible_choice_indices,
+        height_compatible_choice_counts,
+        height_unique_compatible_face_count,
+        height_no_compatible_face_count,
+        height_multi_compatible_face_count,
+        height_first_no_compatible_face_index,
+    ) = if let Some(heights) = heights {
+        let face_inequality_choices =
+            expanded_secondary_face_inequality_choices_from_triangulations(
+                &geom.triangulation_points,
+                &choices,
+            )
+            .map_err(|e| {
+                format!("failed to convert face triangulation choices to inequalities: {e}")
+            })?;
+        let epsilon = F64::<Pos>::new(1e-6).expect("CYTools secondary-cone epsilon is positive");
+        let compatible = expanded_secondary_face_choice_indices_containing_height_vector(
+            &face_inequality_choices,
+            heights,
+            epsilon,
+        )
+        .map_err(|e| format!("failed to select height-compatible face choices: {e}"))?;
+        let compatible_counts = compatible.iter().map(Vec::len).collect::<Vec<_>>();
+        let unique_count = compatible_counts
+            .iter()
+            .filter(|&&choice_count| choice_count == 1)
+            .count();
+        let no_choice_count = compatible_counts
+            .iter()
+            .filter(|&&choice_count| choice_count == 0)
+            .count();
+        let multi_choice_count = compatible_counts
+            .iter()
+            .filter(|&&choice_count| choice_count > 1)
+            .count();
+        let first_no_choice = compatible_counts
+            .iter()
+            .position(|&choice_count| choice_count == 0);
+        (
+            Some(compatible),
+            Some(compatible_counts),
+            Some(unique_count),
+            Some(no_choice_count),
+            Some(multi_choice_count),
+            first_no_choice,
+        )
+    } else {
+        (None, None, None, None, None, None)
+    };
 
     Ok(FaceTriangulationChoiceSummary {
         status: status.to_string(),
@@ -7464,6 +7523,12 @@ fn corrected_chamber_face_triangulation_choice_summary(
         choice_counts,
         sampled_face_indices,
         sampled_face_point_counts,
+        height_compatible_choice_indices,
+        height_compatible_choice_counts,
+        height_unique_compatible_face_count,
+        height_no_compatible_face_count,
+        height_multi_compatible_face_count,
+        height_first_no_compatible_face_index,
     })
 }
 
@@ -9430,6 +9495,7 @@ fn write_secondary_cone_height_certificate(
 fn write_corrected_chamber_face_triangulation_choice_summary(
     path: &Path,
     geom: &PrimalGeom,
+    heights: Option<&[F64<Finite>]>,
     max_exact_face_points: usize,
     samples_per_large_face: usize,
     max_sampling_attempts_per_face: usize,
@@ -9437,6 +9503,7 @@ fn write_corrected_chamber_face_triangulation_choice_summary(
 ) -> Result<FaceTriangulationChoiceSummary, String> {
     let summary = corrected_chamber_face_triangulation_choice_summary(
         geom,
+        heights,
         max_exact_face_points,
         samples_per_large_face,
         max_sampling_attempts_per_face,
@@ -11315,9 +11382,21 @@ fn stage_volume(
     }
     if let Some(path) = dump_corrected_chamber_face_triangulation_choice_summary_path {
         let path = PathBuf::from(path);
+        let face_choice_heights = secondary_cone_typed_heights_for_kahler(
+            geom,
+            &intersection.basis,
+            &t,
+        )
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "[ERROR] failed to compute corrected-chamber heights for face choice summary: {e}"
+            );
+            std::process::exit(2);
+        });
         let summary = write_corrected_chamber_face_triangulation_choice_summary(
             &path,
             geom,
+            Some(&face_choice_heights),
             face_triangulation_max_exact_points,
             face_triangulation_samples_per_large_face,
             face_triangulation_max_sampling_attempts_per_face,
@@ -11330,12 +11409,14 @@ fn stage_volume(
             std::process::exit(2);
         });
         eprintln!(
-            "[INFO] corrected-chamber face triangulation choice summary JSON written: {} status={} faces={} sampled_faces={} empty_choice_faces={} total_choices={}",
+            "[INFO] corrected-chamber face triangulation choice summary JSON written: {} status={} faces={} sampled_faces={} empty_choice_faces={} height_no_compatible_faces={:?} height_multi_compatible_faces={:?} total_choices={}",
             path.display(),
             summary.status,
             summary.face_count,
             summary.sampled_face_count,
             summary.empty_choice_face_count,
+            summary.height_no_compatible_face_count,
+            summary.height_multi_compatible_face_count,
             summary.total_choice_count
         );
     }
@@ -12725,8 +12806,15 @@ mod tests {
             triangulation: Triangulation::new(vec![vec![1, 2, 3, 4, 5]]),
         };
 
-        let summary = corrected_chamber_face_triangulation_choice_summary(&geom, 2, 1, 16, 0)
-            .expect("summarize sampled simplex face choices");
+        let summary = corrected_chamber_face_triangulation_choice_summary(
+            &geom,
+            Some(&geom.heights),
+            2,
+            1,
+            16,
+            0,
+        )
+        .expect("summarize sampled simplex face choices");
 
         assert_eq!(
             summary.status,
@@ -12741,6 +12829,11 @@ mod tests {
         assert_eq!(summary.choice_counts, vec![1; 10]);
         assert_eq!(summary.total_choice_count, "1");
         assert_eq!(summary.sampled_face_point_counts, vec![3; 10]);
+        assert_eq!(summary.height_compatible_choice_counts, Some(vec![1; 10]));
+        assert_eq!(summary.height_unique_compatible_face_count, Some(10));
+        assert_eq!(summary.height_no_compatible_face_count, Some(0));
+        assert_eq!(summary.height_multi_compatible_face_count, Some(0));
+        assert_eq!(summary.height_first_no_compatible_face_index, None);
     }
 
     #[test]
