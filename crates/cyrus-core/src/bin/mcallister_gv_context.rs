@@ -385,6 +385,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_support_point_count_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_kind_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_generator_ckyz_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_generator_ckyz_kind_counts:
@@ -405,6 +407,8 @@ struct ContextReport {
     local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_affine_rank_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_support_point_count_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_kind_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_flipped_chamber_generator_ckyz_status_counts:
         BTreeMap<String, usize>,
@@ -16287,6 +16291,10 @@ fn build_report(
         chamber_semigroup_generator_local_toric_support_point_count_counts(
             current_chamber_generator_contexts(&local_cygv_source_resolution_hint_sample),
         );
+    let local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_kind_counts =
+        chamber_semigroup_generator_local_toric_kind_counts(current_chamber_generator_contexts(
+            &local_cygv_source_resolution_hint_sample,
+        ));
     let local_cygv_source_resolution_star_union_current_chamber_generator_ckyz_status_counts =
         chamber_semigroup_generator_ckyz_status_counts(current_chamber_generator_contexts(
             &local_cygv_source_resolution_hint_sample,
@@ -16337,6 +16345,10 @@ fn build_report(
         chamber_semigroup_generator_local_toric_support_point_count_counts(
             flipped_chamber_generator_contexts(&local_cygv_source_resolution_hint_sample),
         );
+    let local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_kind_counts =
+        chamber_semigroup_generator_local_toric_kind_counts(flipped_chamber_generator_contexts(
+            &local_cygv_source_resolution_hint_sample,
+        ));
     let local_cygv_source_resolution_star_union_flipped_chamber_generator_ckyz_status_counts =
         chamber_semigroup_generator_ckyz_status_counts(flipped_chamber_generator_contexts(
             &local_cygv_source_resolution_hint_sample,
@@ -17334,6 +17346,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_affine_rank_counts,
         local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_support_point_count_counts,
+        local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_kind_counts,
         local_cygv_source_resolution_star_union_current_chamber_generator_ckyz_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_generator_ckyz_kind_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_cygv_status_counts,
@@ -17345,6 +17358,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_status_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_affine_rank_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_support_point_count_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_kind_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_generator_ckyz_status_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_generator_ckyz_kind_counts,
         local_phase_chamber_membership_certificate_status_counts,
@@ -18805,6 +18819,17 @@ fn chamber_semigroup_generator_local_toric_support_point_count_counts<'a>(
             .into_iter()
             .map(|context| Some(context.local_toric_diagnostic.support_point_count)),
         "missing_support_point_count",
+    )
+}
+
+fn chamber_semigroup_generator_local_toric_kind_counts<'a>(
+    contexts: impl IntoIterator<Item = &'a LocalCygvChamberSemigroupGeneratorContext>,
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        contexts
+            .into_iter()
+            .map(|context| context.local_toric_diagnostic.local_toric_kind.as_deref()),
+        "not_identified",
     )
 }
 
@@ -22877,6 +22902,7 @@ fn chamber_generator_ckyz_diagnostic(
 fn local_toric_circuit_kind_label(kind: &LocalToricCircuitKind) -> String {
     match kind {
         LocalToricCircuitKind::LocalP2Triangle { .. } => "local_p2_triangle".to_string(),
+        LocalToricCircuitKind::RankTwoQuadrilateral { .. } => "rank_two_quadrilateral".to_string(),
     }
 }
 
@@ -30574,6 +30600,7 @@ mod tests {
         known_local_toric.status = "local_toric_affine_circuit_reconstructed".to_string();
         known_local_toric.support_point_count = 4;
         known_local_toric.affine_rank = Some(2);
+        known_local_toric.local_toric_kind = Some("rank_two_quadrilateral".to_string());
         known_local_toric.ckyz_status = "ckyz_no_source_match".to_string();
         let mut unknown_local_toric = chamber_generator_local_toric_diagnostic_not_run("test");
         unknown_local_toric.status = "local_toric_affine_circuit_reconstructed".to_string();
@@ -30649,6 +30676,9 @@ mod tests {
             chamber_semigroup_generator_local_toric_support_point_count_counts([
                 &known, &unknown, &invalid, &not_run,
             ]);
+        let local_toric_kind_counts = chamber_semigroup_generator_local_toric_kind_counts([
+            &known, &unknown, &invalid, &not_run,
+        ]);
         let ckyz_status_counts =
             chamber_semigroup_generator_ckyz_status_counts([&known, &unknown, &invalid, &not_run]);
         let ckyz_kind_counts =
@@ -30699,6 +30729,16 @@ mod tests {
         assert_eq!(local_toric_rank_counts.get("3").copied(), Some(1));
         assert_eq!(local_toric_support_counts.get("4").copied(), Some(3));
         assert_eq!(local_toric_support_counts.get("5").copied(), Some(1));
+        assert_eq!(
+            local_toric_kind_counts
+                .get("rank_two_quadrilateral")
+                .copied(),
+            Some(3)
+        );
+        assert_eq!(
+            local_toric_kind_counts.get("not_identified").copied(),
+            Some(1)
+        );
         assert_eq!(
             ckyz_status_counts.get("ckyz_no_source_match").copied(),
             Some(3)

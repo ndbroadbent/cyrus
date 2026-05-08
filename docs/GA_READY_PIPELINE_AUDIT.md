@@ -1567,21 +1567,24 @@ to make the remaining GV layer more first-principles:
    The local-toric diagnostic now reconstructs the point-coordinate affine
    circuit for every chamber generator and aggregates the result at report top
    level. The regenerated all-target report
-   `/tmp/cyrus_star_union_all_chamber_generator_local_toric_aggregate.json`
+   `/tmp/cyrus_star_union_all_chamber_generator_local_toric_kind.json`
    has current local-toric statuses
    `local_toric_affine_circuit_reconstructed:15`, current affine ranks
    `{2:5, 3:5, 4:5}`, and current support sizes `{4:5, 5:5, 6:5}`; flipped
    generators have `local_toric_affine_circuit_reconstructed:10`, affine ranks
-   `{2:2, 3:6, 4:2}`, and support sizes `{4:2, 5:6, 6:2}`. Existing CKYZ
-   source matching remains negative for these chamber rows: current CKYZ
-   statuses are `ckyz_no_source_match:5` and
-   `ckyz_not_run_non_rank_two_support:10`, while flipped statuses are
-   `ckyz_no_source_match:2` and `ckyz_not_run_non_rank_two_support:8`. The
-   actual decomposition terms for targets `1`, `7`, and `8` inherit that same
-   conclusion: the rank-two terms do not match the current CKYZ source library,
-   and the rank-three/rank-four terms are outside the rank-two extractor. This
-   keeps the next step at certified chamber/source construction rather than
-   promoting a local CKYZ value.
+   `{2:2, 3:6, 4:2}`, and support sizes `{4:2, 5:6, 6:2}`. The rank-two rows
+   are now shape-classified separately as `rank_two_quadrilateral` rather than
+   left as unidentified (`current:5`, `flipped:2`), but this classification is
+   deliberately not a GV formula. Existing CKYZ source matching remains
+   negative for these chamber rows: current CKYZ statuses are
+   `ckyz_no_source_match:5` and `ckyz_not_run_non_rank_two_support:10`, while
+   flipped statuses are `ckyz_no_source_match:2` and
+   `ckyz_not_run_non_rank_two_support:8`. The actual decomposition terms for
+   targets `1`, `7`, and `8` inherit that same conclusion: the rank-two terms
+   are recognized quadrilateral/conifold-like local circuits but still lack a
+   source-certified compact qN history, and the rank-three/rank-four terms are
+   outside the rank-two extractor. This keeps the next step at certified
+   chamber/source construction rather than promoting a local CKYZ value.
    A follow-up compact-omission wall-side summary confirms this selected side
    is not one of the compact omission phases: both target rows have four
    compact omissions, but zero full-positive-side or full-negative-side

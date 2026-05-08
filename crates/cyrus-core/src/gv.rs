@@ -1220,6 +1220,20 @@ pub enum LocalToricCircuitKind {
         /// Local rank-two coordinates for the triangle support.
         local_coordinates: Vec<LocalToricCoordinate2D>,
     },
+    /// Rank-two four-point circuit with two positive and two negative unit
+    /// coefficients.
+    ///
+    /// This is a source-geometry classification only. It records the local
+    /// parallelogram/conifold-like shape but deliberately does not assign a GV
+    /// sequence.
+    RankTwoQuadrilateral {
+        /// Points with coefficient `+1` in the supplied relation orientation.
+        positive_points: Vec<usize>,
+        /// Points with coefficient `-1` in the supplied relation orientation.
+        negative_points: Vec<usize>,
+        /// Local rank-two coordinates for the quadrilateral support.
+        local_coordinates: Vec<LocalToricCoordinate2D>,
+    },
 }
 
 /// Diagnostic for an ambient curve row that is an affine toric circuit.
@@ -6908,6 +6922,47 @@ fn classify_local_toric_circuit(
         return None;
     }
 
+    if let Some(kind) = classify_rank_two_quadrilateral(relation_points, affine_rank) {
+        return Some(kind);
+    }
+
+    classify_local_p2_triangle(relation_points)
+}
+
+fn classify_rank_two_quadrilateral(
+    relation_points: &[AffineCircuitRelationPoint],
+    affine_rank: usize,
+) -> Option<LocalToricCircuitKind> {
+    let mut positive_unit_points = relation_points
+        .iter()
+        .filter_map(|point| (point.coefficient == 1).then_some(point.point_index))
+        .collect::<Vec<_>>();
+    let mut negative_unit_points = relation_points
+        .iter()
+        .filter_map(|point| (point.coefficient == -1).then_some(point.point_index))
+        .collect::<Vec<_>>();
+    if positive_unit_points.len() == 2
+        && negative_unit_points.len() == 2
+        && positive_unit_points.len() + negative_unit_points.len() == relation_points.len()
+    {
+        positive_unit_points.sort_unstable();
+        negative_unit_points.sort_unstable();
+        let local_coordinates = local_rank_two_coordinates(relation_points, affine_rank)
+            .ok()
+            .flatten()?;
+        return Some(LocalToricCircuitKind::RankTwoQuadrilateral {
+            positive_points: positive_unit_points,
+            negative_points: negative_unit_points,
+            local_coordinates,
+        });
+    }
+
+    None
+}
+
+fn classify_local_p2_triangle(
+    relation_points: &[AffineCircuitRelationPoint],
+) -> Option<LocalToricCircuitKind> {
     for vertex_coefficient in [1, -1] {
         let interior_coefficient = -3 * vertex_coefficient;
         let mut vertices: Vec<&AffineCircuitRelationPoint> = relation_points
@@ -9702,9 +9757,10 @@ pub fn compute_local_p2_genus_zero_gv_series(max_degree: usize) -> Result<Vec<In
 
 /// Compute genus-zero GV invariants for a recognized affine toric circuit.
 ///
-/// Currently the only supported local model is the rank-two local `P^2`
-/// triangle. Other circuit shapes return `Ok(None)` so callers cannot silently
-/// promote an unsupported local model to a zero or fitted GV sequence.
+/// Currently the only supported local model with a GV sequence is the rank-two
+/// local `P^2` triangle. Other recognized circuit shapes return `Ok(None)` so
+/// callers cannot silently promote an unsupported local model to a zero or
+/// fitted GV sequence.
 pub fn compute_local_toric_circuit_gv_series(
     kind: &LocalToricCircuitKind,
     max_degree: usize,
@@ -9713,6 +9769,7 @@ pub fn compute_local_toric_circuit_gv_series(
         LocalToricCircuitKind::LocalP2Triangle { .. } => {
             compute_local_p2_genus_zero_gv_series(max_degree).map(Some)
         }
+        LocalToricCircuitKind::RankTwoQuadrilateral { .. } => Ok(None),
     }
 }
 
@@ -15374,6 +15431,51 @@ mod tests {
                     },
                 ],
             })
+        );
+    }
+
+    #[test]
+    fn affine_toric_circuit_classifies_rank_two_quadrilateral_without_gv_series() {
+        let points = vec![
+            Point::new(vec![0, 0]),
+            Point::new(vec![0, 1]),
+            Point::new(vec![1, 0]),
+            Point::new(vec![1, 1]),
+        ];
+
+        let diagnostic = diagnose_affine_toric_circuit(&[-1, 1, 1, -1], &points)
+            .unwrap()
+            .expect("parallelogram relation should be an affine circuit");
+
+        assert_eq!(diagnostic.affine_rank, 2);
+        assert_eq!(
+            diagnostic.kind,
+            Some(LocalToricCircuitKind::RankTwoQuadrilateral {
+                positive_points: vec![1, 2],
+                negative_points: vec![0, 3],
+                local_coordinates: vec![
+                    LocalToricCoordinate2D {
+                        point_index: 0,
+                        coordinates: [0, 0],
+                    },
+                    LocalToricCoordinate2D {
+                        point_index: 1,
+                        coordinates: [0, 1],
+                    },
+                    LocalToricCoordinate2D {
+                        point_index: 2,
+                        coordinates: [1, 0],
+                    },
+                    LocalToricCoordinate2D {
+                        point_index: 3,
+                        coordinates: [1, 1],
+                    },
+                ],
+            })
+        );
+        assert_eq!(
+            compute_local_toric_circuit_gv_series(diagnostic.kind.as_ref().unwrap(), 3).unwrap(),
+            None
         );
     }
 
