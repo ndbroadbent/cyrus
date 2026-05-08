@@ -1711,6 +1711,13 @@ to make the remaining GV layer more first-principles:
    The focused regression preserves duplicate rows through this grouping step
    and verifies that the subsequent chamber stack still deduplicates only when
    materializing the selected hyperplanes.
+   The provided-`face_triangs` / `require_star=False` branch of CYTools
+   `triangface_ineqs` is now available as
+   `expanded_secondary_face_inequality_choices_from_triangulations`, producing
+   the `face -> FRT choice -> inequality rows` object consumed by the chamber
+   choice stack. The focused regression uses two square-face FRT choices and a
+   one-choice second face to verify face order, choice order, boring-face
+   grouping, and final chamber materialization.
    The Stage 0 no-replay policy tests also now pass again after two policy
    cleanups: generic first-principles runs log the computed flux-coordinate
    basis separately from explicit production-basis overrides, and the opt-in

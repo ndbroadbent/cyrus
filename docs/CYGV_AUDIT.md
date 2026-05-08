@@ -3839,6 +3839,13 @@ one-choice block, while multi-choice faces retain their relative order. The
 test keeps duplicate rows through grouping and relies on the later chamber
 materialization step for deduplication, matching the `LIL_stack.dense()`
 boundary.
+The supplied-face-triangulation branch of CYTools `triangface_ineqs` is now
+ported as `expanded_secondary_face_inequality_choices_from_triangulations`.
+For each face and each caller-supplied FRT candidate it computes the native
+CPL inequalities in ambient point-index coordinates and returns the exact
+`face -> choice -> rows` object consumed by the NTFE chamber stack. This still
+does not enumerate face FRTs and does not include optional star-ness
+inequalities.
 
 The star-union chamber semigroup probe now also lifts every current/flipped
 chamber generator back through the global curve-basis projection and reports

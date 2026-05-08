@@ -24,6 +24,7 @@ pub use secondary::{
     expanded_secondary_chamber_hyperplanes_from_choice,
     expanded_secondary_chamber_hyperplanes_from_choice_index,
     expanded_secondary_cone_hyperplanes_from_face_triangulations,
+    expanded_secondary_face_inequality_choices_from_triangulations,
     expanded_secondary_fan_hyperplanes_on_faces,
     expanded_secondary_fan_hyperplanes_on_polytope_2faces_4d,
     expanded_secondary_group_boring_chamber_choices, flip_circuit_in_triangulation,

@@ -245,6 +245,39 @@ pub fn expanded_secondary_cone_hyperplanes_from_face_triangulations(
     Ok(hyperplanes.into_iter().collect())
 }
 
+/// Compute per-face expanded-secondary inequality choices.
+///
+/// This ports the provided-`face_triangs`, `require_star=False` branch of
+/// CYTools `Polytope.triangface_ineqs`: for every two-face, and every supplied
+/// FRT candidate of that face, compute the native CPL cone inequalities in the
+/// ambient point-index space. The output shape is
+/// `face -> triangulation choice -> hyperplane rows`.
+///
+/// The supplied triangulations are assumed to already be the face FRT choices;
+/// this helper does not enumerate FRTs and does not add the optional CYTools
+/// star-ness inequalities.
+///
+/// # Errors
+///
+/// Returns an error if any supplied face triangulation has invalid point
+/// indices, degenerate simplices, or a non-unique adjacent circuit relation.
+pub fn expanded_secondary_face_inequality_choices_from_triangulations(
+    points: &[Point],
+    face_triangulation_choices: &[Vec<Triangulation>],
+) -> Result<Vec<Vec<Vec<Vec<i64>>>>> {
+    validate_point_dimensions(points, "expanded secondary face inequality points")?;
+
+    let mut face_inequality_choices = Vec::with_capacity(face_triangulation_choices.len());
+    for face_triangulations in face_triangulation_choices {
+        let mut choices = Vec::with_capacity(face_triangulations.len());
+        for triangulation in face_triangulations {
+            choices.push(secondary_cone_hyperplanes_native(points, triangulation)?);
+        }
+        face_inequality_choices.push(choices);
+    }
+    Ok(face_inequality_choices)
+}
+
 /// Compute the expanded-secondary subfan support on supplied two-faces.
 ///
 /// This ports CYTools' `Polytope.expanded_secondary_fan` support computation:
@@ -1542,6 +1575,57 @@ mod tests {
             vec![
                 vec![-1, 1, -1, 1, 0, 0, 0, 0],
                 vec![0, 0, 0, 0, -1, 1, -1, 1],
+            ]
+        );
+    }
+
+    #[test]
+    fn expanded_secondary_face_inequality_choices_preserve_face_choice_blocks() {
+        let points = vec![
+            Point::new(vec![0, 0, 0]),
+            Point::new(vec![1, 0, 0]),
+            Point::new(vec![1, 1, 0]),
+            Point::new(vec![0, 1, 0]),
+            Point::new(vec![0, 0, 1]),
+            Point::new(vec![1, 0, 1]),
+            Point::new(vec![1, 1, 1]),
+            Point::new(vec![0, 1, 1]),
+        ];
+        let face_triangulation_choices = vec![
+            vec![
+                Triangulation::new(vec![vec![0, 1, 2], vec![0, 2, 3]]),
+                Triangulation::new(vec![vec![0, 1, 3], vec![1, 2, 3]]),
+            ],
+            vec![Triangulation::new(vec![vec![4, 5, 6], vec![4, 6, 7]])],
+        ];
+
+        let choices = expanded_secondary_face_inequality_choices_from_triangulations(
+            &points,
+            &face_triangulation_choices,
+        )
+        .unwrap();
+
+        assert_eq!(
+            choices,
+            vec![
+                vec![
+                    vec![vec![-1, 1, -1, 1, 0, 0, 0, 0]],
+                    vec![vec![1, -1, 1, -1, 0, 0, 0, 0]],
+                ],
+                vec![vec![vec![0, 0, 0, 0, -1, 1, -1, 1]]],
+            ]
+        );
+
+        let grouped = expanded_secondary_group_boring_chamber_choices(&choices);
+        assert_eq!(
+            expanded_secondary_chamber_choice_count(&grouped).unwrap(),
+            2
+        );
+        assert_eq!(
+            expanded_secondary_chamber_hyperplanes_from_choice_index(&grouped, 1).unwrap(),
+            vec![
+                vec![0, 0, 0, 0, -1, 1, -1, 1],
+                vec![1, -1, 1, -1, 0, 0, 0, 0],
             ]
         );
     }
