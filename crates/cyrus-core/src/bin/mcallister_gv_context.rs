@@ -805,6 +805,16 @@ struct CygvCoordinateKappaSupport {
 }
 
 #[derive(Clone, Debug, Serialize)]
+struct LowerSeedDecompositionSearchStats {
+    direct_pair_seed_scan_count: usize,
+    pair_sum_degree_bound: Option<i128>,
+    pair_sum_candidate_count: Option<usize>,
+    pair_sum_unique_count: Option<usize>,
+    pair_sum_duplicate_count: Option<usize>,
+    pair_sum_overdegree_skipped_count: Option<usize>,
+}
+
+#[derive(Clone, Debug, Serialize)]
 struct CygvPathHistoryProbe {
     status: String,
     seed_count: Option<usize>,
@@ -836,6 +846,7 @@ struct CygvPathHistoryProbe {
     lower_seed_decomposition_status: String,
     lower_seed_decomposition_term_count: Option<usize>,
     lower_seed_decomposition_terms_nonzero: Option<Vec<Vec<(usize, i64)>>>,
+    lower_seed_decomposition_search_stats: Option<LowerSeedDecompositionSearchStats>,
     lower_seed_decomposition_error: Option<String>,
     lower_seed_predecessor_candidate_count: Option<usize>,
     lower_seed_predecessor_candidate_sample: Vec<CygvPathPredecessorCandidate>,
@@ -1753,6 +1764,7 @@ struct LowerSeedDecompositionProbe {
     term_count: Option<usize>,
     terms_nonzero: Option<Vec<Vec<(usize, i64)>>>,
     terms: Option<Vec<Vec<i64>>>,
+    search_stats: Option<LowerSeedDecompositionSearchStats>,
     error: Option<String>,
 }
 
@@ -2148,6 +2160,7 @@ fn lower_seed_decomposition_probe(
             term_count: None,
             terms_nonzero: None,
             terms: None,
+            search_stats: None,
             error: Some(format!(
                 "seed count {} exceeds pair-sum limit {seed_pair_limit}",
                 seeds.len()
@@ -2155,28 +2168,35 @@ fn lower_seed_decomposition_probe(
         };
     }
     let decomposition = if let Some(grading) = positive_grading {
-        bounded_seed_decomposition_with_positive_grading(target, seeds, max_terms, grading)
+        bounded_seed_decomposition_with_positive_grading_and_stats(
+            target, seeds, max_terms, grading,
+        )
     } else {
-        bounded_seed_decomposition(target, seeds, max_terms)
+        bounded_seed_decomposition_with_stats(target, seeds, max_terms)
     };
     match decomposition {
-        Ok(Some(terms)) => LowerSeedDecompositionProbe {
-            status: "found_lower_seed_decomposition".to_string(),
-            term_count: Some(terms.len()),
-            terms_nonzero: Some(
-                terms
-                    .iter()
-                    .map(|term| sparse_from_dense(term))
-                    .collect::<Vec<_>>(),
-            ),
-            terms: Some(terms),
-            error: None,
-        },
-        Ok(None) => LowerSeedDecompositionProbe {
+        Ok((Some(terms), stats)) => {
+            let term_count = terms.len();
+            LowerSeedDecompositionProbe {
+                status: "found_lower_seed_decomposition".to_string(),
+                term_count: Some(term_count),
+                terms_nonzero: Some(
+                    terms
+                        .iter()
+                        .map(|term| sparse_from_dense(term))
+                        .collect::<Vec<_>>(),
+                ),
+                terms: Some(terms),
+                search_stats: Some(stats),
+                error: None,
+            }
+        }
+        Ok((None, stats)) => LowerSeedDecompositionProbe {
             status: format!("not_found_up_to_{max_terms}"),
             term_count: None,
             terms_nonzero: None,
             terms: None,
+            search_stats: Some(stats),
             error: None,
         },
         Err(error) => LowerSeedDecompositionProbe {
@@ -2184,6 +2204,7 @@ fn lower_seed_decomposition_probe(
             term_count: None,
             terms_nonzero: None,
             terms: None,
+            search_stats: None,
             error: Some(error),
         },
     }
@@ -7329,15 +7350,34 @@ fn bounded_seed_decomposition(
     seeds: &[Vec<i64>],
     max_terms: usize,
 ) -> Result<Option<Vec<Vec<i64>>>, String> {
-    bounded_seed_decomposition_impl(target, seeds, max_terms, None)
+    bounded_seed_decomposition_with_stats(target, seeds, max_terms).map(|(terms, _stats)| terms)
 }
 
+#[cfg(test)]
 fn bounded_seed_decomposition_with_positive_grading(
     target: &[i64],
     seeds: &[Vec<i64>],
     max_terms: usize,
     grading: &[i64],
 ) -> Result<Option<Vec<Vec<i64>>>, String> {
+    bounded_seed_decomposition_with_positive_grading_and_stats(target, seeds, max_terms, grading)
+        .map(|(terms, _stats)| terms)
+}
+
+fn bounded_seed_decomposition_with_stats(
+    target: &[i64],
+    seeds: &[Vec<i64>],
+    max_terms: usize,
+) -> Result<(Option<Vec<Vec<i64>>>, LowerSeedDecompositionSearchStats), String> {
+    bounded_seed_decomposition_impl(target, seeds, max_terms, None)
+}
+
+fn bounded_seed_decomposition_with_positive_grading_and_stats(
+    target: &[i64],
+    seeds: &[Vec<i64>],
+    max_terms: usize,
+    grading: &[i64],
+) -> Result<(Option<Vec<Vec<i64>>>, LowerSeedDecompositionSearchStats), String> {
     bounded_seed_decomposition_impl(target, seeds, max_terms, Some(grading))
 }
 
@@ -7346,9 +7386,19 @@ fn bounded_seed_decomposition_impl(
     seeds: &[Vec<i64>],
     max_terms: usize,
     positive_grading: Option<&[i64]>,
-) -> Result<Option<Vec<Vec<i64>>>, String> {
+) -> Result<(Option<Vec<Vec<i64>>>, LowerSeedDecompositionSearchStats), String> {
     if max_terms < 2 || seeds.is_empty() {
-        return Ok(None);
+        return Ok((
+            None,
+            LowerSeedDecompositionSearchStats {
+                direct_pair_seed_scan_count: 0,
+                pair_sum_degree_bound: None,
+                pair_sum_candidate_count: None,
+                pair_sum_unique_count: None,
+                pair_sum_duplicate_count: None,
+                pair_sum_overdegree_skipped_count: None,
+            },
+        ));
     }
     if max_terms > 4 {
         return Err("bounded seed decomposition currently supports max_terms <= 4".to_string());
@@ -7394,36 +7444,57 @@ fn bounded_seed_decomposition_impl(
     } else {
         (None, None, None)
     };
+    let mut stats = LowerSeedDecompositionSearchStats {
+        direct_pair_seed_scan_count: 0,
+        pair_sum_degree_bound: pair_sum_max_degree,
+        pair_sum_candidate_count: None,
+        pair_sum_unique_count: None,
+        pair_sum_duplicate_count: None,
+        pair_sum_overdegree_skipped_count: None,
+    };
 
     let target_sparse = sparse_from_dense(target);
     let seed_sparse = seeds
         .iter()
         .map(|seed| sparse_from_dense(seed))
         .collect::<Vec<_>>();
-    if let Some((i, j)) = first_sparse_seed_pair_for_sum(&target_sparse, &seed_sparse)? {
-        return Ok(Some(sorted_decomposition(vec![
-            seeds[i].clone(),
-            seeds[j].clone(),
-        ])));
+    let direct_pair = first_sparse_seed_pair_for_sum(&target_sparse, &seed_sparse)?;
+    stats.direct_pair_seed_scan_count = direct_pair.seed_scan_count;
+    if let Some((i, j)) = direct_pair.pair {
+        return Ok((
+            Some(sorted_decomposition(vec![
+                seeds[i].clone(),
+                seeds[j].clone(),
+            ])),
+            stats,
+        ));
     }
     if max_terms < 3 {
-        return Ok(None);
+        return Ok((None, stats));
     }
 
-    let pair_sums =
+    let pair_sums_result =
         sparse_seed_pair_sums(&seed_sparse, seed_degrees.as_deref(), pair_sum_max_degree)?;
+    stats.pair_sum_candidate_count = Some(pair_sums_result.candidate_pair_count);
+    stats.pair_sum_unique_count = Some(pair_sums_result.sums.len());
+    stats.pair_sum_duplicate_count = Some(pair_sums_result.duplicate_sum_count);
+    stats.pair_sum_overdegree_skipped_count = Some(pair_sums_result.overdegree_skipped_count);
+    let pair_sums = pair_sums_result.sums;
     for (seed_index, seed) in seed_sparse.iter().enumerate() {
         let remainder = checked_sparse_difference(&target_sparse, seed)?;
         if let Some(&(i, j)) = pair_sums.get(&remainder) {
-            return Ok(Some(sorted_decomposition(vec![
-                seeds[seed_index].clone(),
-                seeds[i].clone(),
-                seeds[j].clone(),
-            ])));
+            return Ok((
+                Some(sorted_decomposition(vec![
+                    seeds[seed_index].clone(),
+                    seeds[i].clone(),
+                    seeds[j].clone(),
+                ])),
+                stats,
+            ));
         }
     }
     if max_terms < 4 {
-        return Ok(None);
+        return Ok((None, stats));
     }
 
     let mut pair_sums_sorted = pair_sums.keys().collect::<Vec<_>>();
@@ -7436,21 +7507,29 @@ fn bounded_seed_decomposition_impl(
         let &(i, j) = pair_sums
             .get(first_sum)
             .expect("first sum came from pair-sum keys");
-        return Ok(Some(sorted_decomposition(vec![
-            seeds[i].clone(),
-            seeds[j].clone(),
-            seeds[k].clone(),
-            seeds[l].clone(),
-        ])));
+        return Ok((
+            Some(sorted_decomposition(vec![
+                seeds[i].clone(),
+                seeds[j].clone(),
+                seeds[k].clone(),
+                seeds[l].clone(),
+            ])),
+            stats,
+        ));
     }
 
-    Ok(None)
+    Ok((None, stats))
+}
+
+struct FirstSparseSeedPairForSum {
+    pair: Option<(usize, usize)>,
+    seed_scan_count: usize,
 }
 
 fn first_sparse_seed_pair_for_sum(
     target: &[(usize, i64)],
     seeds: &[Vec<(usize, i64)>],
-) -> Result<Option<(usize, usize)>, String> {
+) -> Result<FirstSparseSeedPairForSum, String> {
     let mut seed_indices_by_sparse = HashMap::<Vec<(usize, i64)>, Vec<usize>>::new();
     for (index, seed) in seeds.iter().enumerate() {
         seed_indices_by_sparse
@@ -7465,17 +7544,30 @@ fn first_sparse_seed_pair_for_sum(
         };
         let candidate_index = indices.partition_point(|&index| index < i);
         if let Some(&j) = indices.get(candidate_index) {
-            return Ok(Some((i, j)));
+            return Ok(FirstSparseSeedPairForSum {
+                pair: Some((i, j)),
+                seed_scan_count: i + 1,
+            });
         }
     }
-    Ok(None)
+    Ok(FirstSparseSeedPairForSum {
+        pair: None,
+        seed_scan_count: seeds.len(),
+    })
+}
+
+struct SparseSeedPairSums {
+    sums: HashMap<Vec<(usize, i64)>, (usize, usize)>,
+    candidate_pair_count: usize,
+    duplicate_sum_count: usize,
+    overdegree_skipped_count: usize,
 }
 
 fn sparse_seed_pair_sums(
     seeds: &[Vec<(usize, i64)>],
     seed_degrees: Option<&[i128]>,
     max_pair_degree: Option<i128>,
-) -> Result<HashMap<Vec<(usize, i64)>, (usize, usize)>, String> {
+) -> Result<SparseSeedPairSums, String> {
     if seed_degrees.is_some() != max_pair_degree.is_some() {
         return Err("sparse seed pair degree filter is incomplete".to_string());
     }
@@ -7485,6 +7577,9 @@ fn sparse_seed_pair_sums(
         return Err("sparse seed pair degree filter length mismatch".to_string());
     }
     let mut pair_sums = HashMap::new();
+    let mut candidate_pair_count = 0usize;
+    let mut duplicate_sum_count = 0usize;
+    let mut overdegree_skipped_count = 0usize;
     for i in 0..seeds.len() {
         for j in i..seeds.len() {
             if let (Some(degrees), Some(max_degree)) = (seed_degrees, max_pair_degree) {
@@ -7492,14 +7587,25 @@ fn sparse_seed_pair_sums(
                     .checked_add(degrees[j])
                     .ok_or_else(|| "sparse seed pair degree overflowed".to_string())?;
                 if pair_degree > max_degree {
+                    overdegree_skipped_count += 1;
                     continue;
                 }
             }
+            candidate_pair_count += 1;
             let sum = checked_sparse_sum(&seeds[i], &seeds[j])?;
-            pair_sums.entry(sum).or_insert((i, j));
+            if let std::collections::hash_map::Entry::Vacant(entry) = pair_sums.entry(sum) {
+                entry.insert((i, j));
+            } else {
+                duplicate_sum_count += 1;
+            }
         }
     }
-    Ok(pair_sums)
+    Ok(SparseSeedPairSums {
+        sums: pair_sums,
+        candidate_pair_count,
+        duplicate_sum_count,
+        overdegree_skipped_count,
+    })
 }
 
 fn checked_sparse_sum(
@@ -12116,6 +12222,7 @@ fn cygv_path_history_probe(
             lower_seed_decomposition_status: "not_run".to_string(),
             lower_seed_decomposition_term_count: None,
             lower_seed_decomposition_terms_nonzero: None,
+            lower_seed_decomposition_search_stats: None,
             lower_seed_decomposition_error: Some(
                 "path-history probe failed before seed decomposition".to_string(),
             ),
@@ -12246,6 +12353,7 @@ fn cygv_path_history_probe_inner(
             lower_seed_decomposition_status: "skipped_empty_seed_set".to_string(),
             lower_seed_decomposition_term_count: None,
             lower_seed_decomposition_terms_nonzero: None,
+            lower_seed_decomposition_search_stats: None,
             lower_seed_decomposition_error: None,
             lower_seed_predecessor_candidate_count: None,
             lower_seed_predecessor_candidate_sample: Vec::new(),
@@ -12355,6 +12463,7 @@ fn cygv_path_history_probe_inner(
             lower_seed_decomposition_status: seed_limit_status.clone(),
             lower_seed_decomposition_term_count: None,
             lower_seed_decomposition_terms_nonzero: None,
+            lower_seed_decomposition_search_stats: None,
             lower_seed_decomposition_error: None,
             lower_seed_predecessor_candidate_count: None,
             lower_seed_predecessor_candidate_sample: Vec::new(),
@@ -12603,6 +12712,7 @@ fn cygv_path_history_probe_inner(
             lower_seed_decomposition_status: lower_seed_decomposition.status,
             lower_seed_decomposition_term_count: lower_seed_decomposition.term_count,
             lower_seed_decomposition_terms_nonzero: lower_seed_decomposition.terms_nonzero,
+            lower_seed_decomposition_search_stats: lower_seed_decomposition.search_stats,
             lower_seed_decomposition_error: lower_seed_decomposition.error,
             lower_seed_predecessor_candidate_count: Some(lower_seed_predecessor_candidate_count),
             lower_seed_predecessor_candidate_sample,
@@ -12751,6 +12861,7 @@ fn cygv_path_history_probe_inner(
         lower_seed_decomposition_status: lower_seed_decomposition.status,
         lower_seed_decomposition_term_count: lower_seed_decomposition.term_count,
         lower_seed_decomposition_terms_nonzero: lower_seed_decomposition.terms_nonzero,
+        lower_seed_decomposition_search_stats: lower_seed_decomposition.search_stats,
         lower_seed_decomposition_error: lower_seed_decomposition.error,
         lower_seed_predecessor_candidate_count: Some(lower_seed_predecessor_candidate_count),
         lower_seed_predecessor_candidate_sample,
@@ -21978,6 +22089,16 @@ mod tests {
             bounded_seed_decomposition(&[3, 1], &seeds, 3).unwrap(),
             bounded_seed_decomposition_with_positive_grading(&[3, 1], &seeds, 3, &[1, 1]).unwrap()
         );
+
+        let (_terms, stats) =
+            bounded_seed_decomposition_with_positive_grading_and_stats(&[3, 1], &seeds, 3, &[1, 1])
+                .unwrap();
+        assert_eq!(stats.direct_pair_seed_scan_count, 5);
+        assert_eq!(stats.pair_sum_degree_bound, Some(3));
+        assert_eq!(stats.pair_sum_candidate_count, Some(5));
+        assert_eq!(stats.pair_sum_unique_count, Some(5));
+        assert_eq!(stats.pair_sum_duplicate_count, Some(0));
+        assert_eq!(stats.pair_sum_overdegree_skipped_count, Some(10));
     }
 
     #[test]
@@ -21989,9 +22110,15 @@ mod tests {
             .collect::<Vec<_>>();
         let pair_sums = sparse_seed_pair_sums(&sparse, None, None).unwrap();
 
-        assert_eq!(pair_sums.get(&sparse_from_dense(&[0, 0, 0])), Some(&(0, 2)));
+        assert_eq!(
+            pair_sums.sums.get(&sparse_from_dense(&[0, 0, 0])),
+            Some(&(0, 2))
+        );
+        assert_eq!(pair_sums.candidate_pair_count, 6);
+        assert_eq!(pair_sums.duplicate_sum_count, 0);
+        assert_eq!(pair_sums.overdegree_skipped_count, 0);
 
-        let mut sparse_keys = pair_sums.keys().cloned().collect::<Vec<_>>();
+        let mut sparse_keys = pair_sums.sums.keys().cloned().collect::<Vec<_>>();
         sparse_keys.sort_by(|left, right| compare_sparse_as_dense(left, right, 3));
         let sparse_as_dense = sparse_keys
             .iter()
@@ -22021,11 +22148,15 @@ mod tests {
         ];
 
         assert_eq!(
-            first_sparse_seed_pair_for_sum(&sparse_from_dense(&[1, 1]), &sparse).unwrap(),
+            first_sparse_seed_pair_for_sum(&sparse_from_dense(&[1, 1]), &sparse)
+                .unwrap()
+                .pair,
             Some((0, 1))
         );
         assert_eq!(
-            first_sparse_seed_pair_for_sum(&sparse_from_dense(&[2, 0]), &sparse).unwrap(),
+            first_sparse_seed_pair_for_sum(&sparse_from_dense(&[2, 0]), &sparse)
+                .unwrap()
+                .pair,
             Some((0, 0))
         );
     }
@@ -23774,6 +23905,7 @@ mod tests {
             term_count: Some(2),
             terms_nonzero: Some(vec![vec![(0, 1)], vec![(1, 1)]]),
             terms: Some(vec![vec![1, 0], vec![0, 1]]),
+            search_stats: None,
             error: None,
         };
 
