@@ -125,6 +125,11 @@ directly into reusable native and star-constrained expanded-secondary
 inequality builders:
 `expanded_secondary_face_inequality_choices_on_polytope_2faces_4d` and
 `expanded_secondary_face_inequality_choices_on_polytope_2faces_with_star_4d`.
+The corresponding choice-index materializers
+`expanded_secondary_chamber_hyperplanes_on_polytope_2faces_choice_index_4d`
+and
+`expanded_secondary_chamber_hyperplanes_on_polytope_2faces_choice_index_with_star_4d`
+complete the exact small-face chamber path.
 
 CYTools' `Cone.find_lattice_points` is a separate operation. It first checks
 that the grading vector has only the origin at nonpositive degree, then uses

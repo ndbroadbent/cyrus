@@ -218,6 +218,8 @@ pub use triangulation::{
     expanded_secondary_chamber_hyperplanes_from_face_inequality_choice_index,
     expanded_secondary_chamber_hyperplanes_from_face_triangulation_choice_index,
     expanded_secondary_chamber_hyperplanes_from_face_triangulation_choice_index_with_star_4d,
+    expanded_secondary_chamber_hyperplanes_on_polytope_2faces_choice_index_4d,
+    expanded_secondary_chamber_hyperplanes_on_polytope_2faces_choice_index_with_star_4d,
     expanded_secondary_cone_hyperplanes_from_face_triangulations_with_star_4d,
     expanded_secondary_face_inequality_choices_from_circuit_faces,
     expanded_secondary_face_inequality_choices_from_triangulations,

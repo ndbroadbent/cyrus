@@ -1769,7 +1769,12 @@ to make the remaining GV layer more first-principles:
    can now be converted directly into reusable native or star-constrained
    expanded-secondary face blocks through
    `expanded_secondary_face_inequality_choices_on_polytope_2faces_4d` and
-   `expanded_secondary_face_inequality_choices_on_polytope_2faces_with_star_4d`.
+   `expanded_secondary_face_inequality_choices_on_polytope_2faces_with_star_4d`;
+   the matching choice-index materializers
+   `expanded_secondary_chamber_hyperplanes_on_polytope_2faces_choice_index_4d`
+   and
+   `expanded_secondary_chamber_hyperplanes_on_polytope_2faces_choice_index_with_star_4d`
+   complete the exact small-face chamber path.
    The top-level `ntfe_hypers` materialization logic for already-known
    face-inequality data is now exposed through
    `expanded_secondary_chamber_count_from_face_inequality_choices`,
