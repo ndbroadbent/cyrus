@@ -4,7 +4,7 @@
 //! every pair of adjacent simplices in the triangulation's affine span gives
 //! one circuit relation, which is a hyperplane normal of the secondary cone.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use malachite::{Integer, Rational};
 
@@ -61,6 +61,30 @@ pub struct CircuitOmissionSideClassification {
     pub selected_side_facets: Vec<Vec<usize>>,
     /// The circuit facets on the opposite side, if a full side is selected.
     pub opposite_side_facets: Vec<Vec<usize>>,
+}
+
+/// Result of crossing one GKZ wall by flipping an affine circuit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CircuitFlip {
+    /// The circuit side selected by the input triangulation.
+    pub selected_side: CircuitOmissionSide,
+    /// The circuit side selected by the output triangulation.
+    pub flipped_side: CircuitOmissionSide,
+    /// Full simplices removed from the input triangulation.
+    pub removed_simplices: Vec<Vec<usize>>,
+    /// Full simplices added in the adjacent chamber.
+    pub added_simplices: Vec<Vec<usize>>,
+    /// The resulting triangulation simplices.
+    pub simplices: Vec<Vec<usize>>,
+}
+
+struct CircuitFlipContext {
+    classification: CircuitOmissionSideClassification,
+    flipped_side: CircuitOmissionSide,
+    selected_facets: BTreeSet<Vec<usize>>,
+    circuit_points: BTreeSet<usize>,
+    existing: BTreeSet<Vec<usize>>,
+    link_hits: BTreeMap<Vec<usize>, BTreeSet<Vec<usize>>>,
 }
 
 /// Compute native secondary-cone hyperplane normals from adjacent simplices.
@@ -294,6 +318,244 @@ pub fn classify_circuit_omission_side(
     })
 }
 
+/// List links where the selected circuit side is complete.
+///
+/// A link is complete when every selected-side circuit facet appears as a full
+/// simplex over that same link. Other partial links are reported by omission so
+/// callers can decide whether they need a strict global flip or a local
+/// link-scoped move.
+///
+/// # Errors
+///
+/// Returns an error if the circuit is malformed, the input does not select a
+/// unique circuit side, or a simplex contains an invalid circuit/link pattern.
+pub fn complete_circuit_flip_links(
+    simplices: &[Vec<usize>],
+    circuit: &[(usize, i64)],
+) -> Result<Vec<Vec<usize>>> {
+    let (all_points, _, _) = validate_sparse_circuit(circuit)?;
+    validate_simplices_for_circuit_side(simplices)?;
+    let classification = classify_circuit_omission_side(simplices, circuit)?;
+    if !matches!(
+        classification.side,
+        CircuitOmissionSide::PositiveCoefficient | CircuitOmissionSide::NegativeCoefficient
+    ) {
+        return Err(Error::InvalidInput(format!(
+            "circuit flip links require a unique selected side, found {}",
+            classification.side.as_str()
+        )));
+    }
+    validate_uniform_circuit_flip_simplices(simplices)?;
+    let selected_facets = classification
+        .selected_side_facets
+        .iter()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let circuit_points = all_points.into_iter().collect::<BTreeSet<_>>();
+    let link_hits = selected_circuit_flip_link_hits(simplices, &classification, &circuit_points)?;
+    Ok(link_hits
+        .into_iter()
+        .filter_map(|(link, hits)| (hits == selected_facets).then_some(link))
+        .collect())
+}
+
+/// Flip a triangulation across the wall associated with an affine circuit.
+///
+/// For each complete link of the selected circuit triangulation, this removes
+/// `link union (C \ {p})` for every omitted point `p` on the selected side and
+/// adds the corresponding opposite-side simplices. Partial links are rejected:
+/// they indicate that the supplied circuit is not a valid local bistellar move
+/// for the supplied triangulation.
+///
+/// # Errors
+///
+/// Returns an error if the circuit is malformed, the input does not select a
+/// unique circuit side, simplices are malformed, or a selected-side link is
+/// incomplete.
+pub fn flip_circuit_in_triangulation(
+    simplices: &[Vec<usize>],
+    circuit: &[(usize, i64)],
+) -> Result<CircuitFlip> {
+    flip_circuit_links_in_triangulation(simplices, circuit, None, true)
+}
+
+/// Flip a triangulation across one selected circuit link.
+///
+/// This is the local bistellar move used when a circuit facet also appears in
+/// unrelated surrounding simplices. The requested link must contain every
+/// selected-side circuit facet, but partial occurrences over other links are
+/// left untouched.
+///
+/// # Errors
+///
+/// Returns an error if the requested link is not a complete selected-side link
+/// for the supplied circuit and triangulation.
+pub fn flip_circuit_link_in_triangulation(
+    simplices: &[Vec<usize>],
+    circuit: &[(usize, i64)],
+    link: &[usize],
+) -> Result<CircuitFlip> {
+    let mut links = BTreeSet::new();
+    links.insert(normalize_circuit_flip_link(link)?);
+    flip_circuit_links_in_triangulation(simplices, circuit, Some(links), false)
+}
+
+fn flip_circuit_links_in_triangulation(
+    simplices: &[Vec<usize>],
+    circuit: &[(usize, i64)],
+    requested_links: Option<BTreeSet<Vec<usize>>>,
+    reject_partial_links: bool,
+) -> Result<CircuitFlip> {
+    let context = circuit_flip_context(simplices, circuit)?;
+    let links_to_flip =
+        resolve_circuit_flip_links(requested_links, reject_partial_links, &context)?;
+    let removed = circuit_flip_removed_simplices(&links_to_flip, &context)?;
+    let added = circuit_flip_added_simplices(&links_to_flip, &context)?;
+    let mut flipped = context
+        .existing
+        .difference(&removed)
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    flipped.extend(added.iter().cloned());
+
+    Ok(CircuitFlip {
+        selected_side: context.classification.side,
+        flipped_side: context.flipped_side,
+        removed_simplices: removed.into_iter().collect(),
+        added_simplices: added.into_iter().collect(),
+        simplices: flipped.into_iter().collect(),
+    })
+}
+
+fn circuit_flip_context(
+    simplices: &[Vec<usize>],
+    circuit: &[(usize, i64)],
+) -> Result<CircuitFlipContext> {
+    let (all_points, _, _) = validate_sparse_circuit(circuit)?;
+    validate_simplices_for_circuit_side(simplices)?;
+    let classification = classify_circuit_omission_side(simplices, circuit)?;
+    let flipped_side = match classification.side {
+        CircuitOmissionSide::PositiveCoefficient => CircuitOmissionSide::NegativeCoefficient,
+        CircuitOmissionSide::NegativeCoefficient => CircuitOmissionSide::PositiveCoefficient,
+        CircuitOmissionSide::None | CircuitOmissionSide::MixedOrPartial => {
+            return Err(Error::InvalidInput(format!(
+                "circuit flip requires a unique selected side, found {}",
+                classification.side.as_str()
+            )));
+        }
+    };
+
+    validate_uniform_circuit_flip_simplices(simplices)?;
+    let selected_facets = classification
+        .selected_side_facets
+        .iter()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let circuit_points = all_points.into_iter().collect::<BTreeSet<_>>();
+    let existing = normalized_simplex_set(simplices)?;
+    let link_hits = selected_circuit_flip_link_hits(simplices, &classification, &circuit_points)?;
+
+    if link_hits.is_empty() {
+        return Err(Error::InvalidInput(
+            "circuit flip found no selected-side simplices to replace".to_string(),
+        ));
+    }
+    Ok(CircuitFlipContext {
+        classification,
+        flipped_side,
+        selected_facets,
+        circuit_points,
+        existing,
+        link_hits,
+    })
+}
+
+fn resolve_circuit_flip_links(
+    requested_links: Option<BTreeSet<Vec<usize>>>,
+    reject_partial_links: bool,
+    context: &CircuitFlipContext,
+) -> Result<BTreeSet<Vec<usize>>> {
+    let links_to_flip =
+        requested_links.unwrap_or_else(|| context.link_hits.keys().cloned().collect());
+    if links_to_flip.is_empty() {
+        return Err(Error::InvalidInput(
+            "circuit flip requested no links".to_string(),
+        ));
+    }
+    for link in &links_to_flip {
+        if link
+            .iter()
+            .any(|point| context.circuit_points.contains(point))
+        {
+            return Err(Error::InvalidInput(format!(
+                "circuit flip link {link:?} intersects the circuit"
+            )));
+        }
+        match context.link_hits.get(link) {
+            Some(hits) if hits == &context.selected_facets => {}
+            Some(_) => {
+                return Err(Error::InvalidInput(format!(
+                    "circuit flip link {link:?} has partial selected side"
+                )));
+            }
+            None => {
+                return Err(Error::InvalidInput(format!(
+                    "circuit flip link {link:?} has no selected-side simplices"
+                )));
+            }
+        }
+    }
+    if reject_partial_links {
+        for (link, hits) in &context.link_hits {
+            if hits != &context.selected_facets {
+                return Err(Error::InvalidInput(format!(
+                    "circuit flip link {link:?} has partial selected side"
+                )));
+            }
+        }
+    }
+    Ok(links_to_flip)
+}
+
+fn circuit_flip_removed_simplices(
+    links_to_flip: &BTreeSet<Vec<usize>>,
+    context: &CircuitFlipContext,
+) -> Result<BTreeSet<Vec<usize>>> {
+    let mut removed = BTreeSet::<Vec<usize>>::new();
+    for link in links_to_flip {
+        for facet in &context.classification.selected_side_facets {
+            let simplex = sorted_union(link, facet);
+            if !context.existing.contains(&simplex) {
+                return Err(Error::InvalidInput(format!(
+                    "circuit flip selected-side simplex {simplex:?} is missing"
+                )));
+            }
+            removed.insert(simplex);
+        }
+    }
+    Ok(removed)
+}
+
+fn circuit_flip_added_simplices(
+    links_to_flip: &BTreeSet<Vec<usize>>,
+    context: &CircuitFlipContext,
+) -> Result<BTreeSet<Vec<usize>>> {
+    let mut added = BTreeSet::<Vec<usize>>::new();
+    for link in links_to_flip {
+        for facet in &context.classification.opposite_side_facets {
+            let simplex = sorted_union(link, facet);
+            if context.existing.contains(&simplex) {
+                return Err(Error::InvalidInput(
+                    "circuit flip opposite-side simplex already exists in triangulation"
+                        .to_string(),
+                ));
+            }
+            added.insert(simplex);
+        }
+    }
+    Ok(added)
+}
+
 fn validate_secondary_cone_input(
     points: &[Point],
     triangulation: &Triangulation,
@@ -433,6 +695,111 @@ fn validate_simplices_for_circuit_side(simplices: &[Vec<usize>]) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn selected_circuit_flip_link_hits(
+    simplices: &[Vec<usize>],
+    classification: &CircuitOmissionSideClassification,
+    circuit_points: &BTreeSet<usize>,
+) -> Result<BTreeMap<Vec<usize>, BTreeSet<Vec<usize>>>> {
+    let mut link_hits = BTreeMap::<Vec<usize>, BTreeSet<Vec<usize>>>::new();
+    for simplex in simplices {
+        let simplex_set = simplex.iter().copied().collect::<BTreeSet<_>>();
+        let hits = classification
+            .selected_side_facets
+            .iter()
+            .filter(|facet| facet.iter().all(|point| simplex_set.contains(point)))
+            .cloned()
+            .collect::<Vec<_>>();
+        if hits.is_empty() {
+            continue;
+        }
+        if hits.len() != 1 {
+            return Err(Error::InvalidInput(
+                "circuit flip simplex contains multiple selected circuit facets".to_string(),
+            ));
+        }
+        let link = simplex_set
+            .difference(circuit_points)
+            .copied()
+            .collect::<Vec<_>>();
+        let expected_simplex = sorted_union(&link, &hits[0]);
+        if expected_simplex != sorted_simplex(simplex) {
+            return Err(Error::InvalidInput(
+                "circuit flip simplex contains extra circuit points outside the selected facet"
+                    .to_string(),
+            ));
+        }
+        link_hits
+            .entry(link)
+            .or_default()
+            .insert(hits.into_iter().next().expect("checked one hit"));
+    }
+    Ok(link_hits)
+}
+
+fn validate_uniform_circuit_flip_simplices(simplices: &[Vec<usize>]) -> Result<()> {
+    let Some(first) = simplices.first() else {
+        return Err(Error::InvalidInput(
+            "circuit flip triangulation has no simplices".to_string(),
+        ));
+    };
+    let simplex_len = first.len();
+    if simplex_len == 0 {
+        return Err(Error::InvalidInput(
+            "circuit flip simplex is empty".to_string(),
+        ));
+    }
+    for (simplex_idx, simplex) in simplices.iter().enumerate() {
+        if simplex.len() != simplex_len {
+            return Err(Error::InvalidInput(format!(
+                "circuit flip simplex {simplex_idx} has {} vertices, expected {simplex_len}",
+                simplex.len()
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn normalized_simplex_set(simplices: &[Vec<usize>]) -> Result<BTreeSet<Vec<usize>>> {
+    let mut normalized = BTreeSet::new();
+    for simplex in simplices {
+        let sorted = sorted_simplex(simplex);
+        if !normalized.insert(sorted.clone()) {
+            return Err(Error::InvalidInput(format!(
+                "circuit flip triangulation contains duplicate simplex {sorted:?}"
+            )));
+        }
+    }
+    Ok(normalized)
+}
+
+fn normalize_circuit_flip_link(link: &[usize]) -> Result<Vec<usize>> {
+    let mut normalized = link.to_vec();
+    normalized.sort_unstable();
+    for window in normalized.windows(2) {
+        if window[0] == window[1] {
+            return Err(Error::InvalidInput(format!(
+                "circuit flip link contains duplicate point index {}",
+                window[0]
+            )));
+        }
+    }
+    Ok(normalized)
+}
+
+fn sorted_simplex(simplex: &[usize]) -> Vec<usize> {
+    let mut sorted = simplex.to_vec();
+    sorted.sort_unstable();
+    sorted
+}
+
+fn sorted_union(left: &[usize], right: &[usize]) -> Vec<usize> {
+    let mut union = left.to_vec();
+    union.extend_from_slice(right);
+    union.sort_unstable();
+    union.dedup();
+    union
 }
 
 fn affine_rank_for_point_index_set(points: &[Point], indices: &BTreeSet<usize>) -> Result<usize> {
@@ -730,6 +1097,108 @@ mod tests {
             circuit_omission_facets(&circuit, CircuitOmissionSide::NegativeCoefficient).unwrap(),
             vec![vec![0, 1, 3], vec![1, 2, 3]]
         );
+    }
+
+    #[test]
+    fn circuit_flip_replaces_square_diagonal() {
+        let simplices = vec![vec![0, 1, 2], vec![0, 2, 3]];
+        let circuit = vec![(0, -1), (1, 1), (2, -1), (3, 1)];
+
+        let flipped = flip_circuit_in_triangulation(&simplices, &circuit).unwrap();
+
+        assert_eq!(
+            flipped.selected_side,
+            CircuitOmissionSide::PositiveCoefficient
+        );
+        assert_eq!(
+            flipped.flipped_side,
+            CircuitOmissionSide::NegativeCoefficient
+        );
+        assert_eq!(
+            flipped.removed_simplices,
+            vec![vec![0, 1, 2], vec![0, 2, 3]]
+        );
+        assert_eq!(flipped.added_simplices, vec![vec![0, 1, 3], vec![1, 2, 3]]);
+        assert_eq!(flipped.simplices, vec![vec![0, 1, 3], vec![1, 2, 3]]);
+
+        let restored = flip_circuit_in_triangulation(&flipped.simplices, &circuit).unwrap();
+        assert_eq!(restored.simplices, vec![vec![0, 1, 2], vec![0, 2, 3]]);
+    }
+
+    #[test]
+    fn circuit_flip_replaces_joined_square_link() {
+        let simplices = vec![
+            vec![0, 1, 2, 4, 5],
+            vec![0, 2, 3, 4, 5],
+            vec![6, 7, 8, 9, 10],
+        ];
+        let circuit = vec![(0, -1), (1, 1), (2, -1), (3, 1)];
+
+        let flipped = flip_circuit_in_triangulation(&simplices, &circuit).unwrap();
+
+        assert_eq!(
+            flipped.removed_simplices,
+            vec![vec![0, 1, 2, 4, 5], vec![0, 2, 3, 4, 5]]
+        );
+        assert_eq!(
+            flipped.added_simplices,
+            vec![vec![0, 1, 3, 4, 5], vec![1, 2, 3, 4, 5]]
+        );
+        assert_eq!(
+            flipped.simplices,
+            vec![
+                vec![0, 1, 3, 4, 5],
+                vec![1, 2, 3, 4, 5],
+                vec![6, 7, 8, 9, 10],
+            ]
+        );
+    }
+
+    #[test]
+    fn circuit_link_flip_allows_unrelated_partial_links() {
+        let simplices = vec![
+            vec![0, 55, 195, 208, 211],
+            vec![0, 46, 55, 195, 211],
+            vec![0, 46, 55, 211, 212],
+            vec![0, 55, 211, 212, 214],
+            vec![0, 55, 208, 211, 214],
+            vec![0, 46, 211, 212, 214],
+            vec![0, 55, 208, 212, 214],
+        ];
+        let circuit = vec![(0, -1), (55, -1), (195, 1), (212, 1)];
+
+        let global_error = flip_circuit_in_triangulation(&simplices, &circuit).unwrap_err();
+        assert!(global_error.to_string().contains("partial selected side"));
+        assert_eq!(
+            complete_circuit_flip_links(&simplices, &circuit).unwrap(),
+            vec![vec![46, 211]]
+        );
+
+        let flipped = flip_circuit_link_in_triangulation(&simplices, &circuit, &[211, 46]).unwrap();
+
+        assert_eq!(
+            flipped.removed_simplices,
+            vec![vec![0, 46, 55, 195, 211], vec![0, 46, 55, 211, 212]]
+        );
+        assert_eq!(
+            flipped.added_simplices,
+            vec![vec![0, 46, 195, 211, 212], vec![46, 55, 195, 211, 212]]
+        );
+        assert_eq!(flipped.simplices.len(), simplices.len());
+        assert!(flipped.simplices.contains(&vec![0, 55, 195, 208, 211]));
+    }
+
+    #[test]
+    fn circuit_flip_rejects_incomplete_link() {
+        let simplices = vec![vec![0, 1, 2, 4], vec![0, 2, 3, 5]];
+        let circuit = vec![(0, -1), (1, 1), (2, -1), (3, 1)];
+
+        let error = flip_circuit_in_triangulation(&simplices, &circuit).unwrap_err();
+
+        assert!(error.to_string().contains("partial selected side"));
+        let link_error =
+            flip_circuit_link_in_triangulation(&simplices, &circuit, &[4]).unwrap_err();
+        assert!(link_error.to_string().contains("partial selected side"));
     }
 
     #[test]

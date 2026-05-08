@@ -22,7 +22,8 @@ use cyrus_core::gv::{
 };
 use cyrus_core::triangulation::{
     CircuitOmissionSide, Triangulation, classify_circuit_omission_side,
-    compute_regular_triangulation, secondary_cone_height_pairings,
+    complete_circuit_flip_links, compute_regular_triangulation, flip_circuit_in_triangulation,
+    flip_circuit_link_in_triangulation, secondary_cone_height_pairings,
     secondary_cone_hyperplanes_native, secondary_cone_strictly_contains_height_vector,
 };
 use cyrus_core::types::rational::Rational;
@@ -933,12 +934,22 @@ struct LocalCygvStarUnionWallTransportReadiness {
 struct LocalCygvStarUnionCrossedWallRegularSideHint {
     status: String,
     selected_omission_side: Option<String>,
+    circuit_flip_status: Option<String>,
+    flipped_omission_side: Option<String>,
     positive_coefficient_points: Vec<usize>,
     negative_coefficient_points: Vec<usize>,
     positive_coefficient_omission_hits: Vec<usize>,
     negative_coefficient_omission_hits: Vec<usize>,
     selected_side_circuit_facets: Vec<Vec<usize>>,
     opposite_side_circuit_facets: Vec<Vec<usize>>,
+    circuit_flip_removed_simplices: Vec<Vec<usize>>,
+    circuit_flip_added_simplices: Vec<Vec<usize>>,
+    circuit_flip_simplex_count: Option<usize>,
+    local_circuit_flip_status: Option<String>,
+    local_circuit_flip_link: Option<Vec<usize>>,
+    local_circuit_flip_removed_simplices: Vec<Vec<usize>>,
+    local_circuit_flip_added_simplices: Vec<Vec<usize>>,
+    local_circuit_flip_simplex_count: Option<usize>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -21551,12 +21562,22 @@ fn local_cygv_star_union_crossed_wall_regular_side_hint(
     let empty = |status: &str| LocalCygvStarUnionCrossedWallRegularSideHint {
         status: status.to_string(),
         selected_omission_side: None,
+        circuit_flip_status: None,
+        flipped_omission_side: None,
         positive_coefficient_points: Vec::new(),
         negative_coefficient_points: Vec::new(),
         positive_coefficient_omission_hits: Vec::new(),
         negative_coefficient_omission_hits: Vec::new(),
         selected_side_circuit_facets: Vec::new(),
         opposite_side_circuit_facets: Vec::new(),
+        circuit_flip_removed_simplices: Vec::new(),
+        circuit_flip_added_simplices: Vec::new(),
+        circuit_flip_simplex_count: None,
+        local_circuit_flip_status: None,
+        local_circuit_flip_link: None,
+        local_circuit_flip_removed_simplices: Vec::new(),
+        local_circuit_flip_added_simplices: Vec::new(),
+        local_circuit_flip_simplex_count: None,
     };
     let Some(circuit) = wall.circuit_nonzero.as_ref() else {
         return empty("crossed_wall_regular_side_missing_wall_circuit");
@@ -21573,12 +21594,22 @@ fn local_cygv_star_union_crossed_wall_regular_side_hint(
                     status_error_fragment(&error.to_string())
                 ),
                 selected_omission_side: None,
+                circuit_flip_status: None,
+                flipped_omission_side: None,
                 positive_coefficient_points: Vec::new(),
                 negative_coefficient_points: Vec::new(),
                 positive_coefficient_omission_hits: Vec::new(),
                 negative_coefficient_omission_hits: Vec::new(),
                 selected_side_circuit_facets: Vec::new(),
                 opposite_side_circuit_facets: Vec::new(),
+                circuit_flip_removed_simplices: Vec::new(),
+                circuit_flip_added_simplices: Vec::new(),
+                circuit_flip_simplex_count: None,
+                local_circuit_flip_status: None,
+                local_circuit_flip_link: None,
+                local_circuit_flip_removed_simplices: Vec::new(),
+                local_circuit_flip_added_simplices: Vec::new(),
+                local_circuit_flip_simplex_count: None,
             };
         }
     };
@@ -21594,16 +21625,104 @@ fn local_cygv_star_union_crossed_wall_regular_side_hint(
             "crossed_wall_regular_side_mixed_or_partial_omission_facets"
         }
     };
+    let (circuit_flip_status, flipped_omission_side, removed_simplices, added_simplices, count) =
+        match flip_circuit_in_triangulation(&global_regular.simplices, circuit) {
+            Ok(flip) => (
+                Some("circuit_flip_constructed_adjacent_chamber".to_string()),
+                Some(flip.flipped_side.as_str().to_string()),
+                flip.removed_simplices,
+                flip.added_simplices,
+                Some(flip.simplices.len()),
+            ),
+            Err(error) => (
+                Some(format!(
+                    "circuit_flip_error:{}",
+                    status_error_fragment(&error.to_string())
+                )),
+                None,
+                Vec::new(),
+                Vec::new(),
+                None,
+            ),
+        };
+    let complete_links = complete_circuit_flip_links(&global_regular.simplices, circuit);
+    let (
+        local_circuit_flip_status,
+        local_circuit_flip_link,
+        local_removed_simplices,
+        local_added_simplices,
+        local_count,
+    ) = match complete_links {
+        Ok(links) if links.len() == 1 => {
+            let link = links[0].clone();
+            match flip_circuit_link_in_triangulation(&global_regular.simplices, circuit, &link) {
+                Ok(flip) => (
+                    Some("local_circuit_flip_constructed_adjacent_chamber".to_string()),
+                    Some(link),
+                    flip.removed_simplices,
+                    flip.added_simplices,
+                    Some(flip.simplices.len()),
+                ),
+                Err(error) => (
+                    Some(format!(
+                        "local_circuit_flip_error:{}",
+                        status_error_fragment(&error.to_string())
+                    )),
+                    Some(link),
+                    Vec::new(),
+                    Vec::new(),
+                    None,
+                ),
+            }
+        }
+        Ok(links) if links.is_empty() => (
+            Some("local_circuit_flip_no_complete_selected_link".to_string()),
+            None,
+            Vec::new(),
+            Vec::new(),
+            None,
+        ),
+        Ok(links) => (
+            Some(format!(
+                "local_circuit_flip_ambiguous_complete_selected_links:{}",
+                links.len()
+            )),
+            None,
+            Vec::new(),
+            Vec::new(),
+            None,
+        ),
+        Err(error) => (
+            Some(format!(
+                "local_circuit_flip_link_error:{}",
+                status_error_fragment(&error.to_string())
+            )),
+            None,
+            Vec::new(),
+            Vec::new(),
+            None,
+        ),
+    };
 
     LocalCygvStarUnionCrossedWallRegularSideHint {
         status: status.to_string(),
         selected_omission_side: Some(classification.side.as_str().to_string()),
+        circuit_flip_status,
+        flipped_omission_side,
         positive_coefficient_points: classification.positive_coefficient_points,
         negative_coefficient_points: classification.negative_coefficient_points,
         positive_coefficient_omission_hits: classification.positive_coefficient_omission_hits,
         negative_coefficient_omission_hits: classification.negative_coefficient_omission_hits,
         selected_side_circuit_facets: classification.selected_side_facets,
         opposite_side_circuit_facets: classification.opposite_side_facets,
+        circuit_flip_removed_simplices: removed_simplices,
+        circuit_flip_added_simplices: added_simplices,
+        circuit_flip_simplex_count: count,
+        local_circuit_flip_status,
+        local_circuit_flip_link,
+        local_circuit_flip_removed_simplices: local_removed_simplices,
+        local_circuit_flip_added_simplices: local_added_simplices,
+        local_circuit_flip_simplex_count: local_count,
     }
 }
 
@@ -27072,12 +27191,22 @@ mod tests {
                 LocalCygvStarUnionCrossedWallRegularSideHint {
                     status: "test".to_string(),
                     selected_omission_side: None,
+                    circuit_flip_status: None,
+                    flipped_omission_side: None,
                     positive_coefficient_points: Vec::new(),
                     negative_coefficient_points: Vec::new(),
                     positive_coefficient_omission_hits: Vec::new(),
                     negative_coefficient_omission_hits: Vec::new(),
                     selected_side_circuit_facets: Vec::new(),
                     opposite_side_circuit_facets: Vec::new(),
+                    circuit_flip_removed_simplices: Vec::new(),
+                    circuit_flip_added_simplices: Vec::new(),
+                    circuit_flip_simplex_count: None,
+                    local_circuit_flip_status: None,
+                    local_circuit_flip_link: None,
+                    local_circuit_flip_removed_simplices: Vec::new(),
+                    local_circuit_flip_added_simplices: Vec::new(),
+                    local_circuit_flip_simplex_count: None,
                 },
             shared_two_simplex_star_union_compact_omission_wall_side:
                 LocalCygvCompactOmissionWallSideSummary {
@@ -30262,6 +30391,19 @@ mod tests {
             Some("positive_coefficient_omission_side")
         );
         assert_eq!(
+            regular_side.circuit_flip_status.as_deref(),
+            Some("circuit_flip_constructed_adjacent_chamber")
+        );
+        assert_eq!(
+            regular_side.flipped_omission_side.as_deref(),
+            Some("negative_coefficient_omission_side")
+        );
+        assert_eq!(
+            regular_side.local_circuit_flip_status.as_deref(),
+            Some("local_circuit_flip_constructed_adjacent_chamber")
+        );
+        assert_eq!(regular_side.local_circuit_flip_link, Some(Vec::new()));
+        assert_eq!(
             regular_side.positive_coefficient_omission_hits,
             vec![195, 212]
         );
@@ -30274,6 +30416,24 @@ mod tests {
             regular_side.opposite_side_circuit_facets,
             vec![vec![0, 195, 212], vec![55, 195, 212]]
         );
+        assert_eq!(
+            regular_side.circuit_flip_removed_simplices,
+            vec![vec![0, 55, 195], vec![0, 55, 212]]
+        );
+        assert_eq!(
+            regular_side.circuit_flip_added_simplices,
+            vec![vec![0, 195, 212], vec![55, 195, 212]]
+        );
+        assert_eq!(regular_side.circuit_flip_simplex_count, Some(2));
+        assert_eq!(
+            regular_side.local_circuit_flip_removed_simplices,
+            vec![vec![0, 55, 195], vec![0, 55, 212]]
+        );
+        assert_eq!(
+            regular_side.local_circuit_flip_added_simplices,
+            vec![vec![0, 195, 212], vec![55, 195, 212]]
+        );
+        assert_eq!(regular_side.local_circuit_flip_simplex_count, Some(2));
         let compact_candidate =
             |omitted_point_indices: Vec<usize>, target_relation_omitted_coefficients: Vec<i64>| {
                 LocalCygvMultiColumnOmissionCandidate {

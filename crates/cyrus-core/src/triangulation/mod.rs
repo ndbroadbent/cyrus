@@ -18,8 +18,9 @@ mod secondary;
 pub use heights::{compute_delaunay_heights, compute_frst_heights};
 pub use regular::compute_regular_triangulation;
 pub use secondary::{
-    CircuitOmissionSide, CircuitOmissionSideClassification, circuit_omission_facets,
-    classify_circuit_omission_side, secondary_cone_height_pairings,
+    CircuitFlip, CircuitOmissionSide, CircuitOmissionSideClassification, circuit_omission_facets,
+    classify_circuit_omission_side, complete_circuit_flip_links, flip_circuit_in_triangulation,
+    flip_circuit_link_in_triangulation, secondary_cone_height_pairings,
     secondary_cone_hyperplanes_native, secondary_cone_hyperplanes_native_on_faces,
     secondary_cone_hyperplanes_native_on_polytope_2faces_4d,
     secondary_cone_strictly_contains_height_vector,
