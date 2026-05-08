@@ -169,12 +169,12 @@ pub use height_kahler::{
     project_heights_to_kahler,
 };
 pub use integer_math::{compute_glsm_and_linear_relations, compute_linear_relations_no_origin};
-pub use intersection::compute_intersection_cytools;
 pub use intersection::{
-    Intersection, compute_complete_intersection_cy3_intersection_numbers,
-    compute_intersection_numbers, compute_intersection_numbers_with_linear_relations,
-    compute_intersection_numbers_with_offset,
+    AmbientIntersectionNumbers, Intersection,
+    compute_complete_intersection_cy3_intersection_numbers, compute_intersection_numbers,
+    compute_intersection_numbers_with_linear_relations, compute_intersection_numbers_with_offset,
 };
+pub use intersection::{compute_ambient_intersections_cytools, compute_intersection_cytools};
 pub mod kklt;
 
 pub use kklt::{

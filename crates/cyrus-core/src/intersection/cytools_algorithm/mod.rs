@@ -3,6 +3,7 @@
 //! This module implements the exact algorithm from CYTools `_construct_intnum_equations_4d`.
 //! It builds a sparse linear system and solves for intersection numbers.
 
+mod ambient;
 mod distinct;
 mod equations;
 mod extract;
@@ -22,6 +23,8 @@ use equations::{build_c_dict, build_eqn_structures};
 use extract::extract_intersection_numbers;
 use solver::{build_linear_system, solve_sparse_system};
 use variables::build_variable_array;
+
+pub use ambient::{AmbientIntersectionNumbers, compute_ambient_intersections_cytools};
 
 /// Compute intersection numbers using the CYTools algorithm.
 ///

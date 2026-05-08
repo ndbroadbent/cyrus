@@ -3457,10 +3457,12 @@ the codimension-2 bipartitions at the local charge-matrix boundary. Both
 targets have `63` nontrivial bipartitions and `6` zero-degree split candidates,
 so the status is
 `complete_intersection_cy3_shape_ambiguous_zero_degree_nef_partition_candidates_requires_source_rule`.
-The reusable CYTools-style CICY tensor-reduction step now exists in core as
-`compute_complete_intersection_cy3_intersection_numbers`, but these reports
-still do not have the source-derived nef partition or ambient top intersections
-needed to use it.
+The reusable CYTools-style ambient top-form step now exists in core as
+`compute_ambient_intersections_cytools`, and the CICY tensor-reduction step
+exists as `compute_complete_intersection_cy3_intersection_numbers`. The local
+target-plus-star reports still do not have the source-derived nef partition,
+ambient triangulation/chamber certificate, semigroup, grading, or phase needed
+to use those pieces for a promoted GV value.
 This is useful but still not a source rule: it proves that Cyrus must derive
 which split, if any, comes from the star-union/CICY geometry instead of choosing
 one by scalar GV agreement. Target `7` also has no nonnegative primitive

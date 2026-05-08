@@ -18,7 +18,9 @@ mod helpers;
 mod linear_system;
 mod three_form;
 
-pub use cytools_algorithm::compute_intersection_cytools;
+pub use cytools_algorithm::{
+    AmbientIntersectionNumbers, compute_ambient_intersections_cytools, compute_intersection_cytools,
+};
 
 use crate::f64_pos;
 use crate::types::f64::F64;
