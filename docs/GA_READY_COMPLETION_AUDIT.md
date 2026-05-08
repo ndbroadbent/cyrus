@@ -781,6 +781,11 @@ The coordinate report now serializes that row directly in the union charge
 basis: target `7` has `target+star=[3,1,-1]`, target `8` has
 `target+star=[1,1,-1]`, and both point-row signatures sort to
 `[-3,-1,-1,1,1,1,2]` with zero total charge.
+The target-plus-star unit-tensor diagnostic report runs the explicit row
+through the one-parameter `cygv` path with tensor value `1`; targets `7` and
+`8` both return toy GV `0` with the status label ending in
+`computed_with_unit_tensor_uncertified`. This is evidence against a naive
+normalization shortcut, not a promoted GV source.
 The height-profile report now tags every union-support point by role and
 coefficient. Targets `3`/`6` have only a coefficient-zero zero-shared ray off
 the relation hyperplane, while targets `7`/`8` have a height `-1` star-side

@@ -586,6 +586,9 @@ struct LocalCygvSourceResolutionHintSummary {
     shared_two_simplex_star_union_global_basis_lookup: Vec<LocalCygvStarUnionGlobalBasisLookup>,
     shared_two_simplex_star_union_target_minus_star: Vec<(usize, i64)>,
     shared_two_simplex_star_union_target_plus_star: Vec<(usize, i64)>,
+    shared_two_simplex_star_union_target_plus_star_unit_tensor_candidate_gv: Option<String>,
+    shared_two_simplex_star_union_target_plus_star_unit_tensor_probe_status: String,
+    shared_two_simplex_star_union_target_plus_star_unit_tensor_probe_error: Option<String>,
     zero_relation_shared_two_simplex_points: Vec<usize>,
     zero_relation_shared_two_simplex_point_samples: Vec<OriginCircuitRelationPointSample>,
     resolved_shared_support_status: String,
@@ -14818,6 +14821,10 @@ fn local_cygv_source_resolution_hint_summaries(
                 &star_support_hint,
                 Some(context.q_matrix),
             );
+            let star_union_target_plus_star_unit_tensor_probe =
+                local_cygv_star_union_target_plus_star_unit_tensor_probe(
+                    &star_union_relation_hint.target_plus_star,
+                );
             let star_union_global_basis_lookup = local_cygv_star_union_global_basis_lookup_sample(
                 &star_union_relation_hint,
                 context,
@@ -14918,6 +14925,12 @@ fn local_cygv_source_resolution_hint_summaries(
                     .target_minus_star,
                 shared_two_simplex_star_union_target_plus_star: star_union_relation_hint
                     .target_plus_star,
+                shared_two_simplex_star_union_target_plus_star_unit_tensor_candidate_gv:
+                    star_union_target_plus_star_unit_tensor_probe.candidate_gv,
+                shared_two_simplex_star_union_target_plus_star_unit_tensor_probe_status:
+                    star_union_target_plus_star_unit_tensor_probe.status,
+                shared_two_simplex_star_union_target_plus_star_unit_tensor_probe_error:
+                    star_union_target_plus_star_unit_tensor_probe.error,
                 zero_relation_shared_two_simplex_points:
                     origin_circuit_zero_relation_shared_two_simplex_points(
                         target.origin_circuit_first_witness.as_ref(),
@@ -15726,6 +15739,52 @@ fn local_cygv_star_reduced_unit_tensor_probe(
         Err(error) => LocalCygvStarReducedUnitTensorProbe {
             candidate_gv: None,
             status: "star_reduced_unit_tensor_probe_hkty_error".to_string(),
+            error: Some(error),
+        },
+    }
+}
+
+fn local_cygv_star_union_target_plus_star_unit_tensor_probe(
+    target_plus_star: &[(usize, i64)],
+) -> LocalCygvStarReducedUnitTensorProbe {
+    if target_plus_star.is_empty() {
+        return LocalCygvStarReducedUnitTensorProbe {
+            candidate_gv: None,
+            status:
+                "star_union_target_plus_star_unit_tensor_probe_not_run_empty_target_plus_star_row"
+                    .to_string(),
+            error: None,
+        };
+    }
+    let charge_row = target_plus_star
+        .iter()
+        .map(|(_, coefficient)| *coefficient)
+        .collect::<Vec<_>>();
+    if charge_row.iter().sum::<i64>() != 0 {
+        return LocalCygvStarReducedUnitTensorProbe {
+            candidate_gv: None,
+            status: "star_union_target_plus_star_unit_tensor_probe_not_run_non_calabi_yau_charge"
+                .to_string(),
+            error: None,
+        };
+    }
+    let q_matrix = vec![charge_row];
+    match one_parameter_primitive_cygv_value(
+        &q_matrix,
+        &[1],
+        &[vec![0], vec![1]],
+        MalachiteRational::from(1),
+    ) {
+        Ok(value) => LocalCygvStarReducedUnitTensorProbe {
+            candidate_gv: Some(value),
+            status:
+                "star_union_target_plus_star_unit_tensor_probe_computed_with_unit_tensor_uncertified"
+                    .to_string(),
+            error: None,
+        },
+        Err(error) => LocalCygvStarReducedUnitTensorProbe {
+            candidate_gv: None,
+            status: "star_union_target_plus_star_unit_tensor_probe_hkty_error".to_string(),
             error: Some(error),
         },
     }
@@ -20563,6 +20622,19 @@ mod tests {
                 (214, 1)
             ]
         );
+        let target_plus_star_unit_tensor_probe =
+            local_cygv_star_union_target_plus_star_unit_tensor_probe(
+                &star_union_hint.target_plus_star,
+            );
+        assert_eq!(
+            target_plus_star_unit_tensor_probe.candidate_gv.as_deref(),
+            Some("0")
+        );
+        assert_eq!(
+            target_plus_star_unit_tensor_probe.status,
+            "star_union_target_plus_star_unit_tensor_probe_computed_with_unit_tensor_uncertified"
+        );
+        assert_eq!(target_plus_star_unit_tensor_probe.error, None);
         let star_union_height_profile = local_cygv_star_union_affine_height_profile(
             Some(&witness),
             &star_support_hint,

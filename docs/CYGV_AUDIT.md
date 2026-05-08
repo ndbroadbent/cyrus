@@ -3252,6 +3252,15 @@ degree-6 chamber row explicit in the local union charge basis: target `7` has
 point-index rows have sorted coefficient signature
 `[-3,-1,-1,1,1,1,2]` with total charge zero. This is the next local
 chamber/semigroup object to certify.
+Regenerating as
+`/tmp/cyrus_gv_context_star_union_target_plus_unit_report.json` runs only a
+diagnostic one-parameter unit-intersection-tensor `cygv` probe on those
+explicit point-row charges. Both target `7` and target `8` return toy GV `0`
+with status
+`star_union_target_plus_star_unit_tensor_probe_computed_with_unit_tensor_uncertified`.
+This rules out that naive unit-tensor normalization as the missing source, but
+it is not a promotable corrected-chamber GV value because the local
+intersection tensor, chamber certificate, and semigroup remain uncertified.
 Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
 serializes a role-tagged height profile over the full union support. For
 targets `3`/`6`, the off-hyperplane zero-shared ray has height `-1` but zero
