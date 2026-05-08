@@ -362,6 +362,11 @@ struct ContextReport {
     cygv_lower_seed_predecessor_candidate_count_counts: BTreeMap<String, usize>,
     cygv_lower_seed_predecessor_degree_split_counts: BTreeMap<String, usize>,
     cygv_lower_seed_predecessor_known_qn_history_pair_status_counts: BTreeMap<String, usize>,
+    cygv_lower_seed_unknown_candidate_unique_count: usize,
+    cygv_lower_seed_unknown_candidate_occurrence_count: usize,
+    cygv_lower_seed_unknown_candidate_degree_counts: BTreeMap<i128, usize>,
+    cygv_lower_seed_unknown_candidate_source_class_status_counts: BTreeMap<String, usize>,
+    cygv_lower_seed_unknown_candidate_sample: Vec<CygvLowerSeedUnknownCandidateSummary>,
     cygv_lower_seed_diamond_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_diamond_gv_counts: BTreeMap<String, usize>,
     cygv_pair_expanded_lower_seed_diamond_status_counts: BTreeMap<String, usize>,
@@ -908,6 +913,43 @@ struct CygvPathPredecessorCandidate {
 }
 
 #[derive(Clone, Debug, Serialize)]
+struct CygvLowerSeedUnknownCandidateSummary {
+    degree: i128,
+    occurrence_count: usize,
+    source_class_status_counts: BTreeMap<String, usize>,
+    counterpart_degree_counts: BTreeMap<i128, usize>,
+    counterpart_known_qn_history_status_counts: BTreeMap<String, usize>,
+    source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
+    matching_missing_target_index: Option<usize>,
+    matching_missing_target_degree: Option<i128>,
+    matching_missing_target_origin_circuit_pattern: Option<String>,
+    matching_missing_target_exact_kind: Option<String>,
+    matching_uncovered_source_ray_index: Option<usize>,
+    matching_uncovered_source_ray_degree: Option<i128>,
+    matching_uncovered_source_ray_origin_circuit_pattern: Option<String>,
+    matching_uncovered_source_ray_exact_kind: Option<String>,
+    matching_uncovered_source_ray_cms_check_status_counts: BTreeMap<String, usize>,
+    matching_uncovered_source_ray_cms_solution_summaries: Vec<CmsGeneralDivisorSolutionSummary>,
+    matching_uncovered_source_ray_local_charge_signature: Option<String>,
+    matching_uncovered_source_ray_local_cygv_readiness_counts: BTreeMap<String, usize>,
+    matching_uncovered_source_ray_local_missing_input_counts: BTreeMap<String, usize>,
+    curve_nonzero: Vec<(usize, i64)>,
+    occurrences: Vec<CygvLowerSeedUnknownCandidateOccurrence>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CygvLowerSeedUnknownCandidateOccurrence {
+    target_index: usize,
+    candidate_index: usize,
+    side: String,
+    counterpart_degree: i128,
+    counterpart_known_qn_history_status: String,
+    counterpart_toric_gv: Option<String>,
+    counterpart_source_derived_gv: Option<String>,
+    counterpart_nonzero: Vec<(usize, i64)>,
+}
+
+#[derive(Clone, Debug, Serialize)]
 struct CygvClosestKnownQnPredecessor {
     predecessor_degree: i128,
     difference_degree: i128,
@@ -1382,6 +1424,29 @@ struct CygvPathSupportSourceRaySummaryBuilder {
     source_ray_ambient_nonzero: Vec<(usize, i64)>,
     curve_nonzero: Vec<(usize, i64)>,
     occurrences: Vec<CygvPathSupportSourceRayOccurrence>,
+}
+
+struct CygvLowerSeedUnknownCandidateSummaryBuilder {
+    degree: i128,
+    source_class_status_counts: BTreeMap<String, usize>,
+    counterpart_degree_counts: BTreeMap<i128, usize>,
+    counterpart_known_qn_history_status_counts: BTreeMap<String, usize>,
+    source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
+    matching_missing_target_index: Option<usize>,
+    matching_missing_target_degree: Option<i128>,
+    matching_missing_target_origin_circuit_pattern: Option<String>,
+    matching_missing_target_exact_kind: Option<String>,
+    matching_uncovered_source_ray_index: Option<usize>,
+    matching_uncovered_source_ray_degree: Option<i128>,
+    matching_uncovered_source_ray_origin_circuit_pattern: Option<String>,
+    matching_uncovered_source_ray_exact_kind: Option<String>,
+    matching_uncovered_source_ray_cms_check_status_counts: BTreeMap<String, usize>,
+    matching_uncovered_source_ray_cms_solution_summaries: Vec<CmsGeneralDivisorSolutionSummary>,
+    matching_uncovered_source_ray_local_charge_signature: Option<String>,
+    matching_uncovered_source_ray_local_cygv_readiness_counts: BTreeMap<String, usize>,
+    matching_uncovered_source_ray_local_missing_input_counts: BTreeMap<String, usize>,
+    curve_nonzero: Vec<(usize, i64)>,
+    occurrences: Vec<CygvLowerSeedUnknownCandidateOccurrence>,
 }
 
 struct CygvClosestKnownQnResidualSourcePredecessorSummaryBuilder {
@@ -14416,6 +14481,28 @@ fn build_report(
                 .iter()
                 .map(|target| target.cygv_path_history_probe.as_ref()),
         );
+    let cygv_lower_seed_unknown_candidate_sample = cygv_lower_seed_unknown_candidate_summaries(
+        targets.iter().filter_map(|target| {
+            target
+                .cygv_path_history_probe
+                .as_ref()
+                .map(|probe| (target.index, probe))
+        }),
+        validated,
+    );
+    let cygv_lower_seed_unknown_candidate_unique_count =
+        cygv_lower_seed_unknown_candidate_sample.len();
+    let cygv_lower_seed_unknown_candidate_occurrence_count =
+        cygv_lower_seed_unknown_candidate_sample
+            .iter()
+            .map(|summary| summary.occurrence_count)
+            .sum();
+    let cygv_lower_seed_unknown_candidate_degree_counts =
+        cygv_lower_seed_unknown_candidate_degree_counts(&cygv_lower_seed_unknown_candidate_sample);
+    let cygv_lower_seed_unknown_candidate_source_class_status_counts =
+        cygv_lower_seed_unknown_candidate_source_class_status_counts(
+            &cygv_lower_seed_unknown_candidate_sample,
+        );
     let cygv_lower_seed_diamond_status_counts = optional_status_counts(
         targets.iter().map(|target| {
             target
@@ -14878,6 +14965,11 @@ fn build_report(
         cygv_lower_seed_predecessor_candidate_count_counts,
         cygv_lower_seed_predecessor_degree_split_counts,
         cygv_lower_seed_predecessor_known_qn_history_pair_status_counts,
+        cygv_lower_seed_unknown_candidate_unique_count,
+        cygv_lower_seed_unknown_candidate_occurrence_count,
+        cygv_lower_seed_unknown_candidate_degree_counts,
+        cygv_lower_seed_unknown_candidate_source_class_status_counts,
+        cygv_lower_seed_unknown_candidate_sample,
         cygv_lower_seed_diamond_status_counts,
         cygv_lower_seed_diamond_gv_counts,
         cygv_pair_expanded_lower_seed_diamond_status_counts,
@@ -18279,6 +18371,263 @@ fn cygv_lower_seed_predecessor_known_qn_history_pair_status_counts<'a>(
             *counts
                 .entry(candidate.known_qn_history_pair_status.clone())
                 .or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn cygv_lower_seed_unknown_candidate_summaries<'a>(
+    probes: impl IntoIterator<Item = (usize, &'a CygvPathHistoryProbe)>,
+    context: &ValidatedContext<'_>,
+) -> Vec<CygvLowerSeedUnknownCandidateSummary> {
+    let mut summaries: BTreeMap<Vec<(usize, i64)>, CygvLowerSeedUnknownCandidateSummaryBuilder> =
+        BTreeMap::new();
+    for (target_index, probe) in probes {
+        for (candidate_index, candidate) in probe
+            .lower_seed_predecessor_candidate_sample
+            .iter()
+            .enumerate()
+        {
+            add_lower_seed_unknown_candidate_side(
+                &mut summaries,
+                target_index,
+                candidate_index,
+                "predecessor",
+                candidate.predecessor_degree,
+                &candidate.predecessor_known_qn_history_status,
+                &candidate.predecessor_nonzero,
+                candidate.difference_degree,
+                &candidate.difference_known_qn_history_status,
+                candidate.difference_toric_gv.clone(),
+                candidate.difference_source_derived_gv.clone(),
+                &candidate.difference_nonzero,
+                context,
+            );
+            add_lower_seed_unknown_candidate_side(
+                &mut summaries,
+                target_index,
+                candidate_index,
+                "difference",
+                candidate.difference_degree,
+                &candidate.difference_known_qn_history_status,
+                &candidate.difference_nonzero,
+                candidate.predecessor_degree,
+                &candidate.predecessor_known_qn_history_status,
+                candidate.predecessor_toric_gv.clone(),
+                candidate.predecessor_source_derived_gv.clone(),
+                &candidate.predecessor_nonzero,
+                context,
+            );
+        }
+    }
+    let mut out = summaries
+        .into_values()
+        .map(|builder| CygvLowerSeedUnknownCandidateSummary {
+            degree: builder.degree,
+            occurrence_count: builder.occurrences.len(),
+            source_class_status_counts: builder.source_class_status_counts,
+            counterpart_degree_counts: builder.counterpart_degree_counts,
+            counterpart_known_qn_history_status_counts: builder
+                .counterpart_known_qn_history_status_counts,
+            source_ray_ambient_nonzero: builder.source_ray_ambient_nonzero,
+            matching_missing_target_index: builder.matching_missing_target_index,
+            matching_missing_target_degree: builder.matching_missing_target_degree,
+            matching_missing_target_origin_circuit_pattern: builder
+                .matching_missing_target_origin_circuit_pattern,
+            matching_missing_target_exact_kind: builder.matching_missing_target_exact_kind,
+            matching_uncovered_source_ray_index: builder.matching_uncovered_source_ray_index,
+            matching_uncovered_source_ray_degree: builder.matching_uncovered_source_ray_degree,
+            matching_uncovered_source_ray_origin_circuit_pattern: builder
+                .matching_uncovered_source_ray_origin_circuit_pattern,
+            matching_uncovered_source_ray_exact_kind: builder
+                .matching_uncovered_source_ray_exact_kind,
+            matching_uncovered_source_ray_cms_check_status_counts: builder
+                .matching_uncovered_source_ray_cms_check_status_counts,
+            matching_uncovered_source_ray_cms_solution_summaries: builder
+                .matching_uncovered_source_ray_cms_solution_summaries,
+            matching_uncovered_source_ray_local_charge_signature: builder
+                .matching_uncovered_source_ray_local_charge_signature,
+            matching_uncovered_source_ray_local_cygv_readiness_counts: builder
+                .matching_uncovered_source_ray_local_cygv_readiness_counts,
+            matching_uncovered_source_ray_local_missing_input_counts: builder
+                .matching_uncovered_source_ray_local_missing_input_counts,
+            curve_nonzero: builder.curve_nonzero,
+            occurrences: builder.occurrences,
+        })
+        .collect::<Vec<_>>();
+    out.sort_by(|lhs, rhs| {
+        lhs.degree
+            .cmp(&rhs.degree)
+            .then_with(|| lhs.curve_nonzero.cmp(&rhs.curve_nonzero))
+    });
+    out
+}
+
+#[allow(clippy::too_many_arguments)]
+fn add_lower_seed_unknown_candidate_side(
+    summaries: &mut BTreeMap<Vec<(usize, i64)>, CygvLowerSeedUnknownCandidateSummaryBuilder>,
+    target_index: usize,
+    candidate_index: usize,
+    side: &str,
+    degree: i128,
+    known_qn_history_status: &str,
+    curve_nonzero: &[(usize, i64)],
+    counterpart_degree: i128,
+    counterpart_known_qn_history_status: &str,
+    counterpart_toric_gv: Option<String>,
+    counterpart_source_derived_gv: Option<String>,
+    counterpart_nonzero: &[(usize, i64)],
+    context: &ValidatedContext<'_>,
+) {
+    if known_qn_history_status != "unknown_not_toric_covered" {
+        return;
+    }
+    let source_context = dense_from_sparse(curve_nonzero, context.dimension)
+        .ok()
+        .and_then(|curve| path_support_source_class_context(&curve, context).ok());
+    let source_class_status = source_context.as_ref().map_or_else(
+        || "source_context_lookup_error".to_string(),
+        |source_context| source_context.status.clone(),
+    );
+    let entry = summaries.entry(curve_nonzero.to_vec()).or_insert_with(|| {
+        CygvLowerSeedUnknownCandidateSummaryBuilder {
+            degree,
+            source_class_status_counts: BTreeMap::new(),
+            counterpart_degree_counts: BTreeMap::new(),
+            counterpart_known_qn_history_status_counts: BTreeMap::new(),
+            source_ray_ambient_nonzero: source_context
+                .as_ref()
+                .and_then(|source_context| source_context.source_ray_ambient_nonzero.clone()),
+            matching_missing_target_index: source_context
+                .as_ref()
+                .and_then(|source_context| source_context.matching_missing_target_index),
+            matching_missing_target_degree: source_context
+                .as_ref()
+                .and_then(|source_context| source_context.matching_missing_target_degree),
+            matching_missing_target_origin_circuit_pattern: source_context.as_ref().and_then(
+                |source_context| {
+                    source_context
+                        .matching_missing_target_origin_circuit_pattern
+                        .clone()
+                },
+            ),
+            matching_missing_target_exact_kind: source_context.as_ref().and_then(
+                |source_context| source_context.matching_missing_target_exact_kind.clone(),
+            ),
+            matching_uncovered_source_ray_index: source_context
+                .as_ref()
+                .and_then(|source_context| source_context.matching_uncovered_source_ray_index),
+            matching_uncovered_source_ray_degree: source_context
+                .as_ref()
+                .and_then(|source_context| source_context.matching_uncovered_source_ray_degree),
+            matching_uncovered_source_ray_origin_circuit_pattern: source_context.as_ref().and_then(
+                |source_context| {
+                    source_context
+                        .matching_uncovered_source_ray_origin_circuit_pattern
+                        .clone()
+                },
+            ),
+            matching_uncovered_source_ray_exact_kind: source_context.as_ref().and_then(
+                |source_context| {
+                    source_context
+                        .matching_uncovered_source_ray_exact_kind
+                        .clone()
+                },
+            ),
+            matching_uncovered_source_ray_cms_check_status_counts: source_context
+                .as_ref()
+                .map(|source_context| {
+                    source_context
+                        .matching_uncovered_source_ray_cms_check_status_counts
+                        .clone()
+                })
+                .unwrap_or_default(),
+            matching_uncovered_source_ray_cms_solution_summaries: source_context
+                .as_ref()
+                .map(|source_context| {
+                    source_context
+                        .matching_uncovered_source_ray_cms_solution_summaries
+                        .clone()
+                })
+                .unwrap_or_default(),
+            matching_uncovered_source_ray_local_charge_signature: source_context.as_ref().and_then(
+                |source_context| {
+                    source_context
+                        .matching_uncovered_source_ray_local_charge_signature
+                        .clone()
+                },
+            ),
+            matching_uncovered_source_ray_local_cygv_readiness_counts: BTreeMap::new(),
+            matching_uncovered_source_ray_local_missing_input_counts: BTreeMap::new(),
+            curve_nonzero: curve_nonzero.to_vec(),
+            occurrences: Vec::new(),
+        }
+    });
+    debug_assert_eq!(entry.degree, degree);
+    *entry
+        .source_class_status_counts
+        .entry(source_class_status)
+        .or_insert(0) += 1;
+    *entry
+        .counterpart_degree_counts
+        .entry(counterpart_degree)
+        .or_insert(0) += 1;
+    *entry
+        .counterpart_known_qn_history_status_counts
+        .entry(counterpart_known_qn_history_status.to_string())
+        .or_insert(0) += 1;
+    if let Some(source_context) = source_context.as_ref() {
+        if let Some(readiness) = &source_context.matching_uncovered_source_ray_local_cygv_readiness
+        {
+            *entry
+                .matching_uncovered_source_ray_local_cygv_readiness_counts
+                .entry(readiness.clone())
+                .or_insert(0) += 1;
+        }
+        for input in &source_context.matching_uncovered_source_ray_local_missing_inputs {
+            *entry
+                .matching_uncovered_source_ray_local_missing_input_counts
+                .entry(input.clone())
+                .or_insert(0) += 1;
+        }
+    }
+    entry
+        .matching_uncovered_source_ray_cms_solution_summaries
+        .sort();
+    entry
+        .matching_uncovered_source_ray_cms_solution_summaries
+        .dedup();
+    entry
+        .occurrences
+        .push(CygvLowerSeedUnknownCandidateOccurrence {
+            target_index,
+            candidate_index,
+            side: side.to_string(),
+            counterpart_degree,
+            counterpart_known_qn_history_status: counterpart_known_qn_history_status.to_string(),
+            counterpart_toric_gv,
+            counterpart_source_derived_gv,
+            counterpart_nonzero: counterpart_nonzero.to_vec(),
+        });
+}
+
+fn cygv_lower_seed_unknown_candidate_degree_counts(
+    summaries: &[CygvLowerSeedUnknownCandidateSummary],
+) -> BTreeMap<i128, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts.entry(summary.degree).or_insert(0) += 1;
+    }
+    counts
+}
+
+fn cygv_lower_seed_unknown_candidate_source_class_status_counts(
+    summaries: &[CygvLowerSeedUnknownCandidateSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        for (status, count) in &summary.source_class_status_counts {
+            *counts.entry(status.clone()).or_insert(0) += count;
         }
     }
     counts
@@ -25648,6 +25997,22 @@ mod tests {
                     .to_string(),
                 2
             )])
+        );
+        let lower_unknowns = cygv_lower_seed_unknown_candidate_summaries([(0, &probe)], &context);
+        assert_eq!(lower_unknowns.len(), 2);
+        assert_eq!(lower_unknowns[0].degree, 1);
+        assert_eq!(lower_unknowns[0].occurrence_count, 2);
+        assert_eq!(
+            lower_unknowns[0].source_class_status_counts,
+            BTreeMap::from([("source_ray_context_missing".to_string(), 2)])
+        );
+        assert_eq!(
+            cygv_lower_seed_unknown_candidate_degree_counts(&lower_unknowns),
+            BTreeMap::from([(1, 2)])
+        );
+        assert_eq!(
+            cygv_lower_seed_unknown_candidate_source_class_status_counts(&lower_unknowns),
+            BTreeMap::from([("source_ray_context_missing".to_string(), 4)])
         );
         assert_eq!(
             cygv_closest_known_qn_residual_qn_domain_status(Some(&probe)),

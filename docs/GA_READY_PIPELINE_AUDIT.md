@@ -225,7 +225,13 @@ run pass. Any remaining mismatch must be explicit and localizable.
    and the report now aggregates their candidate-count, degree-split, and
    known-history pair-status buckets at top level. They remain diagnostic
    evidence for the missing compact parent history rather than promotable GV
-   inputs.
+   inputs. The same report now also promotes unknown sides of those lower-seed
+   predecessor candidates into a unique diagnostic queue. Target `7` has two
+   unique unknown composites at degrees `4` and `8`; target `8` has three, one
+   at degree `4` and two at degree `8`. Every queued row is currently
+   `not_source_degree_bounded_ray`, so the next missing object is not another
+   uncovered source-ray leaf but the parent chamber/history that couples these
+   composite rows to known toric/source sides.
    The parent-only classifications now include parent-path-support runtime
    lookups from the same `cygv` run. On the regenerated target 7 report, the
    generated degree-10 side term is a real parent-domain nonzero object
