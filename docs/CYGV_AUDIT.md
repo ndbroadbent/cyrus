@@ -3321,7 +3321,10 @@ six zero pairings, no negative pairings, and neither the source-derived height
 vector nor its sign flip strictly inside. This rules out promoting that
 combined fan as the corrected-chamber certificate; the remaining object is a
 different certified chamber/continuation history, not the visible shared-face
-fan.
+fan. The same report now serializes the exact wall-circuit supports and
+pairings; for targets `7`/`8`, the shared resolved-conifold star-side circuit
+`[(0,-1),(55,-1),(195,1),(212,1)]` is one of the zero-pairing walls, making
+the degeneracy inspectable directly in point-index coordinates.
 Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
 serializes a role-tagged height profile over the full union support. For
 targets `3`/`6`, the off-hyperplane zero-shared ray has height `-1` but zero

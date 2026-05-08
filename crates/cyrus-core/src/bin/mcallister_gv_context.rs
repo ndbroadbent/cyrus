@@ -668,6 +668,8 @@ struct LocalCygvSourceResolutionHintSummary {
     shared_two_simplex_star_union_shared_face_secondary_negative_pairing_count: Option<usize>,
     shared_two_simplex_star_union_shared_face_secondary_strictly_inside: Option<bool>,
     shared_two_simplex_star_union_shared_face_secondary_flipped_strictly_inside: Option<bool>,
+    shared_two_simplex_star_union_shared_face_secondary_circuit_sample:
+        Vec<LocalCygvStarUnionSecondaryCircuitSample>,
     shared_two_simplex_star_union_target_minus_star: Vec<(usize, i64)>,
     shared_two_simplex_star_union_target_plus_star: Vec<(usize, i64)>,
     shared_two_simplex_star_union_target_plus_star_unit_tensor_candidate_gv: Option<String>,
@@ -16237,6 +16239,8 @@ fn local_cygv_source_resolution_hint_summaries(
                     star_union_shared_face_secondary.strictly_inside,
                 shared_two_simplex_star_union_shared_face_secondary_flipped_strictly_inside:
                     star_union_shared_face_secondary.flipped_strictly_inside,
+                shared_two_simplex_star_union_shared_face_secondary_circuit_sample:
+                    star_union_shared_face_secondary.circuit_sample,
                 shared_two_simplex_star_union_target_minus_star: star_union_relation_hint
                     .target_minus_star,
                 shared_two_simplex_star_union_target_plus_star: star_union_relation_hint
@@ -17386,6 +17390,13 @@ struct LocalCygvStarUnionSharedFaceSecondaryHint {
     negative_pairing_count: Option<usize>,
     strictly_inside: Option<bool>,
     flipped_strictly_inside: Option<bool>,
+    circuit_sample: Vec<LocalCygvStarUnionSecondaryCircuitSample>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvStarUnionSecondaryCircuitSample {
+    nonzero: Vec<(usize, i64)>,
+    pairing: String,
 }
 
 fn local_cygv_shared_two_simplex_star_support_hint(
@@ -18116,6 +18127,7 @@ fn local_cygv_star_union_shared_face_secondary_hint(
         negative_pairing_count: None,
         strictly_inside: None,
         flipped_strictly_inside: None,
+        circuit_sample: Vec::new(),
     };
     let Some(witness) = witness else {
         return empty("star_union_shared_face_secondary_missing_origin_circuit_witness");
@@ -18154,6 +18166,7 @@ fn local_cygv_star_union_shared_face_secondary_hint(
             negative_pairing_count: None,
             strictly_inside: None,
             flipped_strictly_inside: None,
+            circuit_sample: Vec::new(),
         };
     }
     let mut exclusive_points = vec![
@@ -18181,6 +18194,7 @@ fn local_cygv_star_union_shared_face_secondary_hint(
             negative_pairing_count: None,
             strictly_inside: None,
             flipped_strictly_inside: None,
+            circuit_sample: Vec::new(),
         };
     }
     let simplices = match exclusive_points
@@ -18214,6 +18228,7 @@ fn local_cygv_star_union_shared_face_secondary_hint(
                 negative_pairing_count: None,
                 strictly_inside: None,
                 flipped_strictly_inside: None,
+                circuit_sample: Vec::new(),
             };
         }
     };
@@ -18245,6 +18260,7 @@ fn local_cygv_star_union_shared_face_secondary_hint(
                 negative_pairing_count: None,
                 strictly_inside: None,
                 flipped_strictly_inside: None,
+                circuit_sample: Vec::new(),
             };
         }
     };
@@ -18264,6 +18280,7 @@ fn local_cygv_star_union_shared_face_secondary_hint(
                 negative_pairing_count: None,
                 strictly_inside: None,
                 flipped_strictly_inside: None,
+                circuit_sample: Vec::new(),
             };
         }
     };
@@ -18288,6 +18305,7 @@ fn local_cygv_star_union_shared_face_secondary_hint(
                 negative_pairing_count: None,
                 strictly_inside: None,
                 flipped_strictly_inside: None,
+                circuit_sample: Vec::new(),
             };
         }
     };
@@ -18309,6 +18327,22 @@ fn local_cygv_star_union_shared_face_secondary_hint(
         .iter()
         .filter(|pairing| pairing.get() < -1e-6)
         .count();
+    let circuit_sample = secondary_hyperplanes
+        .iter()
+        .zip(pairings.iter())
+        .map(
+            |(hyperplane, pairing)| LocalCygvStarUnionSecondaryCircuitSample {
+                nonzero: support
+                    .iter()
+                    .zip(hyperplane.iter())
+                    .filter_map(|(point, &coefficient)| {
+                        (coefficient != 0).then_some((point.point_index, coefficient))
+                    })
+                    .collect(),
+                pairing: pairing.get().to_string(),
+            },
+        )
+        .collect::<Vec<_>>();
     let status = if strictly_inside {
         "star_union_shared_face_secondary_strictly_inside"
     } else if flipped_strictly_inside {
@@ -18330,6 +18364,7 @@ fn local_cygv_star_union_shared_face_secondary_hint(
         negative_pairing_count: Some(negative_pairing_count),
         strictly_inside: Some(strictly_inside),
         flipped_strictly_inside: Some(flipped_strictly_inside),
+        circuit_sample,
     }
 }
 
@@ -22119,6 +22154,7 @@ mod tests {
             shared_two_simplex_star_union_shared_face_secondary_negative_pairing_count: None,
             shared_two_simplex_star_union_shared_face_secondary_strictly_inside: None,
             shared_two_simplex_star_union_shared_face_secondary_flipped_strictly_inside: None,
+            shared_two_simplex_star_union_shared_face_secondary_circuit_sample: Vec::new(),
             shared_two_simplex_star_union_target_minus_star: Vec::new(),
             shared_two_simplex_star_union_target_plus_star: Vec::new(),
             shared_two_simplex_star_union_target_plus_star_unit_tensor_candidate_gv: None,
@@ -24367,6 +24403,21 @@ mod tests {
         assert_eq!(shared_face_secondary.zero_pairing_count, Some(6));
         assert_eq!(shared_face_secondary.negative_pairing_count, Some(0));
         assert_eq!(shared_face_secondary.strictly_inside, Some(false));
+        assert_eq!(shared_face_secondary.circuit_sample.len(), 6);
+        assert!(
+            shared_face_secondary
+                .circuit_sample
+                .iter()
+                .all(|circuit| circuit.pairing == "0")
+        );
+        assert!(shared_face_secondary.circuit_sample.iter().all(|circuit| {
+            circuit
+                .nonzero
+                .iter()
+                .map(|(_, coefficient)| *coefficient)
+                .sum::<i64>()
+                == 0
+        }));
         let target_plus_star_unit_tensor_probe =
             local_cygv_star_union_target_plus_star_unit_tensor_probe(
                 &star_union_hint.target_plus_star,
