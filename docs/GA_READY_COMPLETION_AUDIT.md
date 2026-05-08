@@ -1364,6 +1364,10 @@ The origin-included target `7`/`8` reports make the adjacent negative result
 explicit: including point `0` creates six zero-degree balanced splits, but all
 origin-containing partition candidates fail the CYTools-style certificate with
 `invalid_input_nef_partition_parts_must_exclude_the_origin_index`.
+The origin-split role reports classify those same six candidates against the
+selected weighted-`P2` base/bundle phase: all are
+`weighted_p2_rank_three_origin_included_zero_degree_splits_mix_base_bundle_and_violate_origin_contract`,
+so they are not clean base-vs-bundle phase factors.
 The direct CYTools/PALP probe is negative as well: the visible six-point
 support is not reflexive, so PALP refuses codimension-2 nef partitions on that
 polytope.

@@ -1398,6 +1398,8 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
     local_toric_weighted_p2_rank_three_total_space_complex_dimension: Option<i64>,
     local_toric_weighted_p2_rank_three_required_cygv_codimension_for_threefold: Option<i64>,
     local_toric_weighted_p2_rank_three_numerical_gv_status: Option<String>,
+    local_toric_weighted_p2_rank_three_origin_included_zero_degree_split_summary:
+        WeightedP2RankThreeOriginIncludedZeroDegreeSplitSummary,
     ckyz_status: String,
     bounded_lower_seed_status: String,
     bounded_lower_seed_term_count: Option<usize>,
@@ -1545,6 +1547,23 @@ struct WeightedP2RankThreeSourceModelSummary {
     total_space_complex_dimension: Option<i64>,
     required_cygv_codimension_for_threefold: Option<i64>,
     numerical_gv_status: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct WeightedP2RankThreeOriginIncludedZeroDegreeSplitSummary {
+    status: String,
+    candidate_count: Option<usize>,
+    sample_role_signature_counts: BTreeMap<String, usize>,
+    sample: Vec<WeightedP2RankThreeOriginIncludedZeroDegreeSplitSample>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct WeightedP2RankThreeOriginIncludedZeroDegreeSplitSample {
+    first_part_point_roles: Vec<(usize, String)>,
+    second_part_point_roles: Vec<(usize, String)>,
+    role_signature: String,
+    target_relation_balance_status: Option<String>,
+    cytools_nef_certificate_status: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -20801,6 +20820,16 @@ fn unresolved_chamber_generator_summaries(
                         &context.local_toric_diagnostic.local_toric_charge_family_status,
                         &weighted_rank_three_phase,
                     );
+                let weighted_rank_three_origin_split_summary =
+                    weighted_p2_rank_three_origin_included_zero_degree_split_summary(
+                        &weighted_rank_three_phase,
+                        &context
+                            .local_toric_diagnostic
+                            .local_toric_complete_intersection_origin_included_nef_partition_candidate_sample,
+                        context
+                            .local_toric_diagnostic
+                            .local_toric_complete_intersection_origin_included_zero_degree_nef_partition_candidate_count,
+                    );
                 LocalCygvUnresolvedChamberGeneratorSummary {
                     occurrence_count: 0,
                     target_indices: Vec::new(),
@@ -20999,6 +21028,8 @@ fn unresolved_chamber_generator_summaries(
                             .required_cygv_codimension_for_threefold,
                     local_toric_weighted_p2_rank_three_numerical_gv_status:
                         weighted_rank_three_source_model.numerical_gv_status,
+                    local_toric_weighted_p2_rank_three_origin_included_zero_degree_split_summary:
+                        weighted_rank_three_origin_split_summary,
                     ckyz_status: context.local_toric_diagnostic.ckyz_status.clone(),
                     bounded_lower_seed_status:
                         chamber_semigroup_generator_bounded_lower_seed_status(context),
@@ -25961,6 +25992,173 @@ fn weighted_p2_rank_three_source_model_summary(
         required_cygv_codimension_for_threefold: Some(required_cygv_codimension_for_threefold),
         numerical_gv_status: Some(numerical_gv_status.to_string()),
     }
+}
+
+fn weighted_p2_rank_three_origin_included_zero_degree_split_summary(
+    phase_summary: &WeightedP2RankThreePhaseSummary,
+    candidates: &[LocalCygvNefPartitionCandidate],
+    candidate_count: Option<usize>,
+) -> WeightedP2RankThreeOriginIncludedZeroDegreeSplitSummary {
+    let empty = |status: &str| WeightedP2RankThreeOriginIncludedZeroDegreeSplitSummary {
+        status: status.to_string(),
+        candidate_count,
+        sample_role_signature_counts: BTreeMap::new(),
+        sample: Vec::new(),
+    };
+    if !phase_summary
+        .status
+        .starts_with("weighted_p2_rank_three_split_bundle_selected_")
+    {
+        return empty("weighted_p2_rank_three_origin_included_split_not_run_phase_not_selected");
+    }
+    let Some(role_by_point) = weighted_p2_rank_three_point_role_map(phase_summary) else {
+        return empty("weighted_p2_rank_three_origin_included_split_blocked_missing_phase_roles");
+    };
+    let sample = candidates
+        .iter()
+        .filter(|candidate| candidate.degree_status == "both_parts_zero_degree")
+        .map(|candidate| {
+            let first_part_point_roles = weighted_p2_rank_three_part_roles(
+                &candidate.first_part_point_indices,
+                &role_by_point,
+            );
+            let second_part_point_roles = weighted_p2_rank_three_part_roles(
+                &candidate.second_part_point_indices,
+                &role_by_point,
+            );
+            let role_signature = weighted_p2_rank_three_split_role_signature(
+                &first_part_point_roles,
+                &second_part_point_roles,
+            );
+            WeightedP2RankThreeOriginIncludedZeroDegreeSplitSample {
+                first_part_point_roles,
+                second_part_point_roles,
+                role_signature,
+                target_relation_balance_status: candidate.target_relation_balance_status.clone(),
+                cytools_nef_certificate_status: candidate.cytools_nef_certificate_status.clone(),
+            }
+        })
+        .collect::<Vec<_>>();
+    let mut sample_role_signature_counts = BTreeMap::new();
+    for split in &sample {
+        *sample_role_signature_counts
+            .entry(split.role_signature.clone())
+            .or_insert(0) += 1;
+    }
+    let all_sample_parts_mix_base_and_bundle = !sample.is_empty()
+        && sample.iter().all(|split| {
+            weighted_p2_rank_three_part_has_base_and_bundle_or_origin(&split.first_part_point_roles)
+                && weighted_p2_rank_three_part_has_base_and_bundle_or_origin(
+                    &split.second_part_point_roles,
+                )
+        });
+    let all_sample_violates_origin_contract = !sample.is_empty()
+        && sample.iter().all(|split| {
+            split.cytools_nef_certificate_status.as_deref()
+                == Some(
+                    "support_polytope_cytools_nef_certificate_failed:invalid_input_nef_partition_parts_must_exclude_the_origin_index",
+                )
+        });
+    let status = if sample.is_empty() {
+        "weighted_p2_rank_three_origin_included_split_no_zero_degree_sample"
+    } else if all_sample_parts_mix_base_and_bundle && all_sample_violates_origin_contract {
+        "weighted_p2_rank_three_origin_included_zero_degree_splits_mix_base_bundle_and_violate_origin_contract"
+    } else if all_sample_violates_origin_contract {
+        "weighted_p2_rank_three_origin_included_zero_degree_splits_violate_origin_contract"
+    } else {
+        "weighted_p2_rank_three_origin_included_zero_degree_splits_require_source_interpretation"
+    };
+    WeightedP2RankThreeOriginIncludedZeroDegreeSplitSummary {
+        status: status.to_string(),
+        candidate_count,
+        sample_role_signature_counts,
+        sample,
+    }
+}
+
+fn weighted_p2_rank_three_point_role_map(
+    phase_summary: &WeightedP2RankThreePhaseSummary,
+) -> Option<BTreeMap<usize, String>> {
+    let base_points = phase_summary.base_point_indices.as_ref()?;
+    let base_weights = phase_summary.base_weights.as_ref()?;
+    let bundle_points = phase_summary.bundle_point_indices.as_ref()?;
+    let bundle_degrees = phase_summary.bundle_degrees.as_ref()?;
+    if base_points.len() != base_weights.len() || bundle_points.len() != bundle_degrees.len() {
+        return None;
+    }
+    let mut roles = BTreeMap::new();
+    for (&point, &weight) in base_points.iter().zip(base_weights) {
+        roles.insert(point, format!("base_weight_{weight}"));
+    }
+    for (&point, &degree) in bundle_points.iter().zip(bundle_degrees) {
+        let role = if point == 0 {
+            format!("origin_bundle_degree_{degree}")
+        } else {
+            format!("bundle_degree_{degree}")
+        };
+        roles.insert(point, role);
+    }
+    Some(roles)
+}
+
+fn weighted_p2_rank_three_part_roles(
+    point_indices: &[usize],
+    role_by_point: &BTreeMap<usize, String>,
+) -> Vec<(usize, String)> {
+    point_indices
+        .iter()
+        .map(|&point| {
+            (
+                point,
+                role_by_point
+                    .get(&point)
+                    .cloned()
+                    .unwrap_or_else(|| "unknown_phase_role".to_string()),
+            )
+        })
+        .collect()
+}
+
+fn weighted_p2_rank_three_split_role_signature(
+    first_part_roles: &[(usize, String)],
+    second_part_roles: &[(usize, String)],
+) -> String {
+    format!(
+        "first={};second={}",
+        weighted_p2_rank_three_part_role_bucket(first_part_roles),
+        weighted_p2_rank_three_part_role_bucket(second_part_roles)
+    )
+}
+
+fn weighted_p2_rank_three_part_role_bucket(part_roles: &[(usize, String)]) -> String {
+    let mut counts = BTreeMap::new();
+    for (_, role) in part_roles {
+        let category = if role.starts_with("base_") {
+            "base"
+        } else if role.starts_with("bundle_") {
+            "bundle"
+        } else if role.starts_with("origin_") {
+            "origin"
+        } else {
+            "unknown"
+        };
+        *counts.entry(category).or_insert(0usize) += 1;
+    }
+    counts
+        .into_iter()
+        .map(|(category, count)| format!("{category}:{count}"))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn weighted_p2_rank_three_part_has_base_and_bundle_or_origin(
+    part_roles: &[(usize, String)],
+) -> bool {
+    let has_base = part_roles.iter().any(|(_, role)| role.starts_with("base_"));
+    let has_bundle_or_origin = part_roles
+        .iter()
+        .any(|(_, role)| role.starts_with("bundle_") || role.starts_with("origin_"));
+    has_base && has_bundle_or_origin
 }
 
 fn selected_choice_matches_split_bundle_phase(
@@ -38017,6 +38215,55 @@ mod tests {
             Some(
                 "weighted_p2_rank_three_visible_phase_is_not_numerical_cy3_requires_source_codim2_or_insertion_history"
             )
+        );
+        let point_samples = vec![
+            relation_point_sample(0, -1, &[0, 0, 0, 0], None),
+            relation_point_sample(55, -2, &[3, 4, 1, 5], None),
+            relation_point_sample(208, 1, &[2, 2, 1, 2], None),
+            relation_point_sample(211, 1, &[2, 3, 1, 3], None),
+            relation_point_sample(212, 2, &[2, 3, 1, 4], None),
+            relation_point_sample(214, -1, &[2, 3, 2, 3], None),
+        ];
+        let diagnostic = chamber_generator_local_toric_diagnostic(&point_relation, &point_samples);
+        let origin_split_summary =
+            weighted_p2_rank_three_origin_included_zero_degree_split_summary(
+                &selected_base,
+                &diagnostic
+                    .local_toric_complete_intersection_origin_included_nef_partition_candidate_sample,
+                diagnostic
+                    .local_toric_complete_intersection_origin_included_zero_degree_nef_partition_candidate_count,
+            );
+        assert_eq!(
+            origin_split_summary.status,
+            "weighted_p2_rank_three_origin_included_zero_degree_splits_mix_base_bundle_and_violate_origin_contract"
+        );
+        assert_eq!(origin_split_summary.candidate_count, Some(6));
+        assert_eq!(origin_split_summary.sample.len(), 6);
+        assert!(origin_split_summary.sample.iter().all(|split| split
+            .cytools_nef_certificate_status
+            .as_deref()
+            == Some(
+                "support_polytope_cytools_nef_certificate_failed:invalid_input_nef_partition_parts_must_exclude_the_origin_index"
+            )));
+        assert_eq!(
+            origin_split_summary.sample.first().map(|split| (
+                split.first_part_point_roles.clone(),
+                split.second_part_point_roles.clone(),
+                split.role_signature.as_str()
+            )),
+            Some((
+                vec![
+                    (0, "origin_bundle_degree_1".to_string()),
+                    (55, "bundle_degree_2".to_string()),
+                    (208, "base_weight_1".to_string()),
+                    (212, "base_weight_2".to_string())
+                ],
+                vec![
+                    (211, "base_weight_1".to_string()),
+                    (214, "bundle_degree_1".to_string())
+                ],
+                "first=base:2,bundle:1,origin:1;second=base:1,bundle:1"
+            ))
         );
 
         let selected_bundle = weighted_p2_rank_three_selected_phase_summary(

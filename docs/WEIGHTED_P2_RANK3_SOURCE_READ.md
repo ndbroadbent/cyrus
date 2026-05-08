@@ -53,6 +53,8 @@ The current report artifacts are:
 /tmp/cyrus_six_point_rank3_origin_included_partitions_target8_v1.json
 /tmp/cyrus_six_point_rank3_reflexivity_precondition_target7_v1.json
 /tmp/cyrus_six_point_rank3_reflexivity_precondition_target8_v1.json
+/tmp/cyrus_six_point_origin_split_roles_target7_v1.json
+/tmp/cyrus_six_point_origin_split_roles_target8_v1.json
 ```
 
 The v2 artifacts record the same source-model obstruction plus the source
@@ -95,6 +97,22 @@ still fail the CYTools-style certificate, now with
 missing codimension-2 source is not just the excluded origin; accepting the
 zero-degree origin-containing splits would violate the input contract we need
 for a faithful `cygv`/CYTools handoff.
+
+The origin-split role artifacts classify those six zero-degree candidates
+against the selected weighted-`P2` base/bundle phase. For both target rows the
+summary is
+`weighted_p2_rank_three_origin_included_zero_degree_splits_mix_base_bundle_and_violate_origin_contract`.
+The role-signature counts are:
+
+```text
+first=base:2,bundle:1,origin:1;second=base:1,bundle:1  -> 3
+first=base:1,origin:1;second=base:2,bundle:2           -> 2
+first=base:1,bundle:1,origin:1;second=base:2,bundle:1  -> 1
+```
+
+So the zero-degree balanced splits are not clean base-vs-bundle phase
+separations. They mix base and bundle roles and still include the origin in a
+nef part, which keeps them diagnostic-only.
 
 A direct CYTools/PALP probe of the same six support coordinates is also
 negative. With experimental CYTools features enabled, `Polytope(pts)` reports

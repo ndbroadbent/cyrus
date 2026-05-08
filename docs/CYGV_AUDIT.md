@@ -4455,6 +4455,16 @@ CYTools-style nef check with
 out treating the missing origin vertex as a harmless convention mismatch; a
 source-derived codimension-2 rule still has to supply a valid nef partition,
 tensor, and chamber/qN history.
+The role-classification reports
+`/tmp/cyrus_six_point_origin_split_roles_target7_v1.json` and
+`/tmp/cyrus_six_point_origin_split_roles_target8_v1.json` sharpen that further:
+the six zero-degree balanced splits all classify as
+`weighted_p2_rank_three_origin_included_zero_degree_splits_mix_base_bundle_and_violate_origin_contract`.
+Their sample signatures are three
+`first=base:2,bundle:1,origin:1;second=base:1,bundle:1`, two
+`first=base:1,origin:1;second=base:2,bundle:2`, and one
+`first=base:1,bundle:1,origin:1;second=base:2,bundle:1`. Thus the splits are
+not clean base-vs-bundle phase factors either.
 A direct CYTools/PALP check of the same six support coordinates is negative
 too: `Polytope(pts)` is four-dimensional with six points but
 `is_reflexive=False`, and `nef_partitions(codim=2)` stops with
