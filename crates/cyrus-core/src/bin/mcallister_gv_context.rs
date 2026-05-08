@@ -24735,6 +24735,12 @@ fn positive_degree_chamber_status_and_decomposition(
     String,
     Option<Vec<LocalCygvChamberSemigroupDecompositionTerm>>,
 ) {
+    if target.iter().all(|&entry| entry == 0) {
+        return (
+            "positive_degree_chamber_zero_target_plus_star".to_string(),
+            None,
+        );
+    }
     let degrees = generator_degrees_by_index(generators.len(), contexts);
     match degrees.and_then(|degrees| {
         positive_degree_chamber_decomposition_from_degrees(target, generators, &degrees)
@@ -24816,6 +24822,11 @@ fn positive_degree_chamber_decomposition_from_degrees(
 }
 
 fn positive_degree_transport_status(current_status: &str, flipped_status: &str) -> String {
+    if current_status == "positive_degree_chamber_zero_target_plus_star"
+        && flipped_status == "positive_degree_chamber_zero_target_plus_star"
+    {
+        return "positive_degree_transport_zero_target_plus_star".to_string();
+    }
     match (
         current_status == "positive_degree_chamber_contains_target_plus_star",
         flipped_status == "positive_degree_chamber_contains_target_plus_star",
@@ -35147,6 +35158,29 @@ mod tests {
         assert!(
             positive_decomposition.is_none(),
             "the local flip only contains the target by using the negative-degree generator"
+        );
+    }
+
+    #[test]
+    fn positive_degree_chamber_status_does_not_promote_zero_target() {
+        let (current_status, current_decomposition) =
+            positive_degree_chamber_status_and_decomposition(&[0], &[vec![1]], &[]);
+        let (flipped_status, flipped_decomposition) =
+            positive_degree_chamber_status_and_decomposition(&[0], &[vec![-1]], &[]);
+
+        assert_eq!(
+            current_status,
+            "positive_degree_chamber_zero_target_plus_star"
+        );
+        assert!(current_decomposition.is_none());
+        assert_eq!(
+            flipped_status,
+            "positive_degree_chamber_zero_target_plus_star"
+        );
+        assert!(flipped_decomposition.is_none());
+        assert_eq!(
+            positive_degree_transport_status(&current_status, &flipped_status),
+            "positive_degree_transport_zero_target_plus_star"
         );
     }
 
