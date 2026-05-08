@@ -7,6 +7,9 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use malachite::{Integer, Rational};
+use rand::rngs::StdRng;
+use rand::seq::SliceRandom;
+use rand::{Rng, SeedableRng};
 
 use super::Triangulation;
 use super::regular::compute_regular_triangulation;
@@ -497,6 +500,163 @@ pub fn fine_regular_triangulations_of_face_2d(
         }
     }
     Ok(triangulations)
+}
+
+/// Grow one fine triangulation of a two-dimensional face.
+///
+/// This ports the deterministic core of CYTools `Polytope.grow_ft`: start from
+/// a random unimodular triangle, repeatedly choose a non-boundary exposed edge,
+/// and attach a non-intersecting unimodular triangle until no choosable edges
+/// remain. Unlike CYTools' diagnostic helper, this fails loudly if a random
+/// growth attempt reaches a dead end before covering the supplied face points.
+///
+/// # Errors
+///
+/// Returns an error if the face is not affine rank two, if local coordinates
+/// are not integral, if no unimodular starting triangle exists, or if the
+/// growth attempt cannot be completed.
+pub fn grow_fine_triangulation_of_face_2d(
+    points: &[Point],
+    face: &[usize],
+    seed: u64,
+) -> Result<Triangulation> {
+    validate_point_dimensions(points, "grow fine face triangulation points")?;
+    let face_set = validate_face_indices(points, face, 0)?;
+    let local_points = local_rank_two_face_coordinates(points, &face_set, 0)?;
+    let candidate_triangles = fine_candidate_triangle_local_indices_2d(&local_points);
+    if candidate_triangles.is_empty() {
+        return Err(Error::InvalidInput(
+            "2D face has no unimodular starting triangle".to_string(),
+        ));
+    }
+    let boundary_edges = boundary_edges_2d(&local_points)?;
+    let mut rng = StdRng::seed_from_u64(seed);
+    let start = candidate_triangles[rng.gen_range(0..candidate_triangles.len())];
+
+    let mut simplices = BTreeSet::new();
+    simplices.insert(start);
+
+    let mut edges = triangle_local_edges(start)
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let mut choosable = edges
+        .difference(&boundary_edges)
+        .copied()
+        .collect::<BTreeSet<_>>();
+
+    while !choosable.is_empty() {
+        let edge_choice = rng.gen_range(0..choosable.len());
+        let edge = *choosable
+            .iter()
+            .nth(edge_choice)
+            .expect("choosable edge index is in range");
+        let mut to_try = (0..local_points.len())
+            .filter(|point_idx| *point_idx != edge[0] && *point_idx != edge[1])
+            .collect::<Vec<_>>();
+        to_try.shuffle(&mut rng);
+
+        let mut added = false;
+        for point_idx in to_try {
+            let simplex = sorted_triple([edge[0], edge[1], point_idx]);
+            if simplices.contains(&simplex)
+                || triangle_area_2x(local_triangle_points(&local_points, simplex)) != 1
+            {
+                continue;
+            }
+            let new_edges = [
+                sorted_pair(edge[0], point_idx),
+                sorted_pair(edge[1], point_idx),
+            ];
+            if proposed_edges_cross_existing_2d(&local_points, &new_edges, &edges) {
+                continue;
+            }
+
+            simplices.insert(simplex);
+            choosable.remove(&edge);
+            for new_edge in new_edges {
+                if !boundary_edges.contains(&new_edge) {
+                    if choosable.contains(&new_edge) {
+                        choosable.remove(&new_edge);
+                    } else {
+                        choosable.insert(new_edge);
+                    }
+                }
+                edges.insert(new_edge);
+            }
+            added = true;
+            break;
+        }
+
+        if !added {
+            return Err(Error::InvalidInput(format!(
+                "2D face grow_ft reached a dead end at edge {:?}",
+                edge.iter()
+                    .map(|&local_idx| local_points[local_idx].point_index)
+                    .collect::<Vec<_>>()
+            )));
+        }
+    }
+
+    let mut output_simplices = Vec::with_capacity(simplices.len());
+    let mut used_points = BTreeSet::new();
+    for simplex in simplices {
+        let mut global_simplex = simplex
+            .into_iter()
+            .map(|local_idx| local_points[local_idx].point_index)
+            .collect::<Vec<_>>();
+        global_simplex.sort_unstable();
+        used_points.extend(global_simplex.iter().copied());
+        output_simplices.push(global_simplex);
+    }
+    output_simplices.sort_unstable();
+    if used_points != face_set {
+        return Err(Error::InvalidInput(format!(
+            "2D face grow_ft did not cover all face points: used {}, expected {}",
+            used_points.len(),
+            face_set.len()
+        )));
+    }
+    Ok(Triangulation::new(output_simplices))
+}
+
+/// Sample fine regular triangulations of one two-dimensional face.
+///
+/// This is the narrow CYTools `grow_frt` counterpart: repeated
+/// [`grow_fine_triangulation_of_face_2d`] attempts are filtered by the native
+/// secondary-cone regularity check and deduplicated. The function returns up to
+/// `target_count` triangulations; getting fewer after `max_attempts` is an
+/// explicit sampling outcome, not an exact enumeration claim.
+///
+/// # Errors
+///
+/// Returns an error if the face data are invalid or if a growth attempt fails.
+pub fn sample_fine_regular_triangulations_of_face_2d(
+    points: &[Point],
+    face: &[usize],
+    target_count: usize,
+    max_attempts: usize,
+    seed: u64,
+) -> Result<Vec<Triangulation>> {
+    if target_count == 0 || max_attempts == 0 {
+        return Ok(Vec::new());
+    }
+
+    let mut triangulations = BTreeSet::new();
+    for attempt in 0..max_attempts {
+        let triangulation = grow_fine_triangulation_of_face_2d(
+            points,
+            face,
+            seed.wrapping_add(u64::try_from(attempt).unwrap_or(u64::MAX)),
+        )?;
+        if triangulation_is_regular_from_secondary_cone(points, &triangulation)? {
+            triangulations.insert(triangulation.simplices().to_vec());
+        }
+        if triangulations.len() == target_count {
+            break;
+        }
+    }
+
+    Ok(triangulations.into_iter().map(Triangulation::new).collect())
 }
 
 /// Enumerate exact fine regular triangulation choices for all 4D two-faces.
@@ -2052,6 +2212,117 @@ fn fine_candidate_triangles_2d(local_points: &[LocalFacePoint2D]) -> Vec<FineCan
     candidates
 }
 
+fn fine_candidate_triangle_local_indices_2d(local_points: &[LocalFacePoint2D]) -> Vec<[usize; 3]> {
+    let mut candidates = Vec::new();
+    for first in 0..local_points.len() {
+        for second in (first + 1)..local_points.len() {
+            for third in (second + 1)..local_points.len() {
+                let simplex = [first, second, third];
+                if triangle_area_2x(local_triangle_points(local_points, simplex)) == 1 {
+                    candidates.push(simplex);
+                }
+            }
+        }
+    }
+    candidates
+}
+
+fn boundary_edges_2d(local_points: &[LocalFacePoint2D]) -> Result<BTreeSet<[usize; 2]>> {
+    if local_points.len() < 3 {
+        return Err(Error::InvalidInput(
+            "2D face needs at least three points for boundary edges".to_string(),
+        ));
+    }
+    let mut edges = BTreeSet::new();
+    for first in 0..local_points.len() {
+        for second in (first + 1)..local_points.len() {
+            if !primitive_2d(coordinate_difference_2d(
+                local_points[first].coordinates,
+                local_points[second].coordinates,
+            )) {
+                continue;
+            }
+            let mut has_positive = false;
+            let mut has_negative = false;
+            for other in 0..local_points.len() {
+                if other == first || other == second {
+                    continue;
+                }
+                match orient_2d(
+                    local_points[first].coordinates,
+                    local_points[second].coordinates,
+                    local_points[other].coordinates,
+                )
+                .cmp(&0)
+                {
+                    std::cmp::Ordering::Greater => has_positive = true,
+                    std::cmp::Ordering::Less => has_negative = true,
+                    std::cmp::Ordering::Equal => {}
+                }
+                if has_positive && has_negative {
+                    break;
+                }
+            }
+            if !(has_positive && has_negative) {
+                edges.insert([first, second]);
+            }
+        }
+    }
+    Ok(edges)
+}
+
+fn triangle_local_edges(simplex: [usize; 3]) -> [[usize; 2]; 3] {
+    [
+        sorted_pair(simplex[0], simplex[1]),
+        sorted_pair(simplex[0], simplex[2]),
+        sorted_pair(simplex[1], simplex[2]),
+    ]
+}
+
+fn local_triangle_points(
+    local_points: &[LocalFacePoint2D],
+    simplex: [usize; 3],
+) -> [LocalFacePoint2D; 3] {
+    [
+        local_points[simplex[0]],
+        local_points[simplex[1]],
+        local_points[simplex[2]],
+    ]
+}
+
+fn sorted_pair(first: usize, second: usize) -> [usize; 2] {
+    if first <= second {
+        [first, second]
+    } else {
+        [second, first]
+    }
+}
+
+fn sorted_triple(mut simplex: [usize; 3]) -> [usize; 3] {
+    simplex.sort_unstable();
+    simplex
+}
+
+fn proposed_edges_cross_existing_2d(
+    local_points: &[LocalFacePoint2D],
+    new_edges: &[[usize; 2]],
+    existing_edges: &BTreeSet<[usize; 2]>,
+) -> bool {
+    new_edges.iter().any(|new_edge| {
+        let new_segment = (
+            local_points[new_edge[0]].coordinates,
+            local_points[new_edge[1]].coordinates,
+        );
+        existing_edges.iter().any(|existing_edge| {
+            let existing_segment = (
+                local_points[existing_edge[0]].coordinates,
+                local_points[existing_edge[1]].coordinates,
+            );
+            segments_cross_incompatibly_2d(new_segment, existing_segment)
+        })
+    })
+}
+
 fn triangle_compatibility_matrix_2d(candidates: &[FineCandidateTriangle2D]) -> Vec<Vec<bool>> {
     let mut compatibility = vec![vec![true; candidates.len()]; candidates.len()];
     for left in 0..candidates.len() {
@@ -2766,6 +3037,52 @@ mod tests {
         assert_eq!(
             choices,
             vec![vec![vec![vec![-1, 1, -1, 1]], vec![vec![1, -1, 1, -1]]]]
+        );
+    }
+
+    #[test]
+    fn grow_fine_face_triangulation_covers_square() {
+        let points = vec![
+            Point::new(vec![0, 0]),
+            Point::new(vec![1, 0]),
+            Point::new(vec![1, 1]),
+            Point::new(vec![0, 1]),
+        ];
+
+        let triangulation = grow_fine_triangulation_of_face_2d(&points, &[0, 1, 2, 3], 7).unwrap();
+        let used_points = triangulation
+            .simplices()
+            .iter()
+            .flat_map(|simplex| simplex.iter().copied())
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(triangulation.simplices().len(), 2);
+        assert_eq!(used_points, BTreeSet::from([0, 1, 2, 3]));
+        assert!(triangulation_is_regular_from_secondary_cone(&points, &triangulation).unwrap());
+    }
+
+    #[test]
+    fn sample_fine_regular_face_triangulations_deduplicates_square_diagonals() {
+        let points = vec![
+            Point::new(vec![0, 0]),
+            Point::new(vec![1, 0]),
+            Point::new(vec![1, 1]),
+            Point::new(vec![0, 1]),
+        ];
+
+        let triangulations =
+            sample_fine_regular_triangulations_of_face_2d(&points, &[0, 1, 2, 3], 2, 128, 0)
+                .unwrap()
+                .into_iter()
+                .map(|triangulation| triangulation.simplices().to_vec())
+                .collect::<Vec<_>>();
+
+        assert_eq!(
+            triangulations,
+            vec![
+                vec![vec![0, 1, 2], vec![0, 2, 3]],
+                vec![vec![0, 1, 3], vec![1, 2, 3]],
+            ]
         );
     }
 

@@ -1775,6 +1775,12 @@ to make the remaining GV layer more first-principles:
    and
    `expanded_secondary_chamber_hyperplanes_on_polytope_2faces_choice_index_with_star_4d`
    complete the exact small-face chamber path.
+   The first CYTools `grow2d` sampling primitive is now ported too:
+   `grow_fine_triangulation_of_face_2d` mirrors `Polytope.grow_ft` for one
+   two-face, while `sample_fine_regular_triangulations_of_face_2d` mirrors
+   `grow_frt` by retaining only secondary-cone-regular samples. This is the
+   per-face sampler needed before large-face automatic policy can replace the
+   current exact-enumeration guard.
    The top-level `ntfe_hypers` materialization logic for already-known
    face-inequality data is now exposed through
    `expanded_secondary_chamber_count_from_face_inequality_choices`,

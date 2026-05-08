@@ -130,6 +130,12 @@ The corresponding choice-index materializers
 and
 `expanded_secondary_chamber_hyperplanes_on_polytope_2faces_choice_index_with_star_4d`
 complete the exact small-face chamber path.
+The first CYTools `grow2d` sampling primitive is also ported:
+`grow_fine_triangulation_of_face_2d` mirrors `Polytope.grow_ft` for one
+two-face and `sample_fine_regular_triangulations_of_face_2d` mirrors the
+`grow_frt` loop by filtering grown fine triangulations through the
+secondary-cone regularity gate. This is still a per-face sampler, not automatic
+large-face policy.
 
 CYTools' `Cone.find_lattice_points` is a separate operation. It first checks
 that the grading vector has only the origin at nonpositive degree, then uses
