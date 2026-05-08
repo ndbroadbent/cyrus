@@ -1480,7 +1480,9 @@ to make the remaining GV layer more first-principles:
    candidates; all target-plus-star and origin-spectator CICY candidates fail
    because the partition-union hull does not equal the ambient support hull.
    Targets `7`/`8` have six zero-degree target-plus-star candidates each, but
-   none pass the certificate.
+   none pass the certificate; for those zero-degree candidates the missing
+   ambient vertex is the origin, pointing the next source rule at support or
+   chamber enlargement rather than split selection.
    A target-`1` rerun with pair limit `2048` adds term-level lower-history
    counts for its degree-16 target-plus-star row: the lower decomposition uses
    three known toric terms and one known source-derived term, but the bounded

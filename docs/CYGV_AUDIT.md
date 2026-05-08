@@ -3679,8 +3679,10 @@ candidate: every tested target-plus-star and origin-spectator CICY partition
 fails with
 `nef_partition_union_hull_does_not_equal_ambient_polytope_hull`. Targets `7`
 and `8` do have six zero-degree target-plus-star partition candidates each, but
-all six fail that certificate, so the missing `source_derived_nef_partition`
-cannot be filled by the current support partition scan.
+all six fail that certificate with the origin as a missing ambient vertex, so
+the missing `source_derived_nef_partition` cannot be filled by the current
+support partition scan. The next valid direction is support/chamber enlargement
+or transport, not choosing one of the failed zero-degree splits.
 A target-`1` rerun with `--lower-seed-pair-limit 2048` shows that this is not
 only the degree-ten weighted pair. Target `1` has target-plus-star degree `16`
 and a four-term lower decomposition into known history (`3` known toric terms
