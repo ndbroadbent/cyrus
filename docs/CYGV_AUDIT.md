@@ -3613,6 +3613,12 @@ The report now exposes this split directly through top-level CICY aggregates:
 status counts are `no_zero_degree_nef_partition_candidate:5` and
 `not_complete_intersection_cy3_shape:4`, with nef-candidate counts `15:5` and
 zero-degree counts `0:5`.
+The complementary four non-CICY rows are now also explicit in the generic
+missing-input aggregate as
+`weighted_p2_resolution_intersection_tensor:4` and
+`weighted_p2_resolution_chamber_certificate:4`. Thus the nine remaining rows
+split into five CICY source-rule blockers and four weighted-`P2`
+resolution/chamber blockers, all still non-promotable.
 This is useful but still not a source rule: it proves that Cyrus must derive
 which split, if any, comes from the star-union/CICY geometry instead of choosing
 one by scalar GV agreement. Target `7` also has no nonnegative primitive

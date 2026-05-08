@@ -11128,6 +11128,16 @@ fn local_cygv_input_skeleton(
     if local_chamber_certificate_status != "source_derived_local_p2_bundle_positive_base_chamber" {
         remaining_uncertified_inputs.push("local_chamber_certificate".to_string());
     }
+    if local_intersection_tensor_status
+        == "local_intersection_tensor_blocked_weighted_p2_split_bundle_requires_source_derived_resolution_chamber"
+    {
+        remaining_uncertified_inputs.push("weighted_p2_resolution_intersection_tensor".to_string());
+    }
+    if local_chamber_certificate_status
+        == "local_chamber_certificate_blocked_weighted_p2_split_bundle_requires_source_derived_resolution_chamber"
+    {
+        remaining_uncertified_inputs.push("weighted_p2_resolution_chamber_certificate".to_string());
+    }
     if let Some(candidate) = complete_intersection_shape_candidate.as_ref() {
         for input in &candidate.missing_inputs {
             if !remaining_uncertified_inputs.contains(input) {
@@ -33411,6 +33421,75 @@ mod tests {
                 .copied(),
             Some(1)
         );
+    }
+
+    #[test]
+    fn local_cygv_input_skeleton_reports_weighted_p2_resolution_inputs() {
+        let relation_points = vec![
+            relation_point_sample(0, -1, &[0, 0, 0], Some(4)),
+            relation_point_sample(2, 2, &[1, 0, 0], Some(1)),
+            relation_point_sample(208, -3, &[0, 1, 0], Some(2)),
+            relation_point_sample(211, 1, &[0, 0, 1], Some(2)),
+            relation_point_sample(214, 1, &[1, 1, 1], Some(2)),
+        ];
+        let mut sample = minimal_missing_sample(Vec::new());
+        sample.origin_circuit_first_witness = Some(OriginCircuitWitnessSample {
+            first_facet_exclusive_point: 2,
+            second_facet_exclusive_point: 208,
+            shared_two_simplex: vec![0, 211, 214],
+            shared_two_simplex_points: Vec::new(),
+            shared_two_simplex_star_simplices: Vec::new(),
+            shared_two_simplex_star_extra_point_samples: Vec::new(),
+            first_facet: Vec::new(),
+            second_facet: Vec::new(),
+            first_facet_size: 1,
+            second_facet_size: 1,
+            sparse_relation: relation_points
+                .iter()
+                .map(|point| (point.point_index, point.coefficient))
+                .collect(),
+            relation_points: relation_points.clone(),
+        });
+        let support = OriginCircuitAffineSupportSample {
+            affine_rank: 3,
+            coefficient_counts: BTreeMap::from([(-3, 1), (-1, 1), (1, 2), (2, 1)]),
+            local_charge_basis: vec![vec![-1, 2, -3, 1, 1]],
+            local_coordinates: relation_points
+                .iter()
+                .map(|point| OriginCircuitLocalCoordinateSample {
+                    point_index: point.point_index,
+                    coordinates: point.coordinates.clone(),
+                })
+                .collect(),
+            local_coordinates_2d: None,
+        };
+
+        let skeleton = local_cygv_input_skeleton(&sample, Some(&support))
+            .unwrap()
+            .expect("local skeleton should be present");
+
+        assert_eq!(
+            skeleton.local_intersection_tensor_status,
+            "local_intersection_tensor_blocked_weighted_p2_split_bundle_requires_source_derived_resolution_chamber"
+        );
+        assert_eq!(
+            skeleton.local_chamber_certificate_status,
+            "local_chamber_certificate_blocked_weighted_p2_split_bundle_requires_source_derived_resolution_chamber"
+        );
+        for missing_input in [
+            "local_intersection_tensor",
+            "local_chamber_certificate",
+            "weighted_p2_resolution_intersection_tensor",
+            "weighted_p2_resolution_chamber_certificate",
+        ] {
+            assert!(
+                skeleton
+                    .remaining_uncertified_inputs
+                    .iter()
+                    .any(|input| input == missing_input),
+                "missing input {missing_input} should be reported"
+            );
+        }
     }
 
     #[test]
