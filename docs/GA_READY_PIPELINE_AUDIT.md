@@ -1401,6 +1401,16 @@ to make the remaining GV layer more first-principles:
    star-union relation buckets still preserve the lower-level distinction:
    two weighted rows have integral target/star union coordinates and two have
    nonintegral target coordinates in the star-union charge basis.
+   The local target-plus-star `cygv` readiness now separates shape-level
+   actual-call readiness from promotion readiness. On
+   `/tmp/cyrus_all_promotion_gated_report.json`, every local target-plus-star
+   row remains `blocked_missing_source_derived_inputs` at the shape level, and
+   every row is additionally promotion-blocked by
+   `local_phase_chamber_membership_certificate`; the promotion-readiness buckets
+   split as the same five non-`P2`/origin-omitting phase blockers and four
+   weighted resolved-shared chamber-wall blockers. Thus a future source-derived
+   nef partition or local tensor cannot be promoted unless the chamber gate is
+   also certified.
    After recomputing the affine charge basis, every single-column omission for
    targets `7`/`8` remains Calabi-Yau charged but has `q_rows=6`, `q_cols=1`,
    and hypersurface `cy_dim=4`, so the next fix is a source-derived CICY

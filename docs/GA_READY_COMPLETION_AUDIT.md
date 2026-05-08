@@ -918,6 +918,18 @@ weighted-`P2` rows blocked by the resolved-shared chamber wall. The separate
 star-union relation buckets still preserve the lower-level distinction: two
 of those weighted rows have integral target/star union coordinates and two have
 nonintegral target coordinates in the star-union charge basis.
+The local `cygv` readiness report now has a separate promotion gate that
+requires this phase certificate in addition to the local shape/tensor/semigroup
+inputs. Regenerating `/tmp/cyrus_all_promotion_gated_report.json` keeps the
+shape-level actual-call readiness at `blocked_missing_source_derived_inputs:9`,
+but the promotion-readiness split is now five
+`blocked_local_phase_chamber_certificate:local_phase_chamber_blocked_local_chamber_certificate_blocked_not_including_origin_p2_bundle_phase`
+rows and four
+`blocked_local_phase_chamber_certificate:local_phase_chamber_blocked_weighted_p2_resolved_shared_chamber_weighted_p2_resolved_shared_chamber_outside_or_on_wall`
+rows. The promotion missing-input aggregate adds
+`local_phase_chamber_membership_certificate:9`, so no local support can be
+mistaken for a promotable `cygv` domain while the chamber certificate is
+absent.
 A bounded supporting-face rerun for the two integral weighted rows (`target 7`
 and `target 8`) does not provide that missing certificate. With
 `--certify-origin-witness-domains`, two LP anchors, and the facet-union cap

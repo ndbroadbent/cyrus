@@ -312,6 +312,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_local_cygv_readiness_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_target_plus_star_local_cygv_promotion_readiness_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_local_cygv_phase_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_zero_degree_nef_certificate_status_counts:
@@ -321,6 +323,8 @@ struct ContextReport {
     local_cygv_source_resolution_star_union_target_plus_star_two_column_omission_phase_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_target_plus_star_local_cygv_promotion_missing_input_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_chamber_coverage_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_shared_face_secondary_status_counts:
@@ -1038,6 +1042,9 @@ struct LocalCygvStarUnionTargetPlusStarLocalCygvReadiness {
     two_column_omission_candidates: Vec<LocalCygvMultiColumnOmissionCandidate>,
     actual_call_readiness: String,
     missing_inputs: Vec<String>,
+    local_phase_chamber_membership_certificate_status: Option<String>,
+    promotion_readiness: String,
+    promotion_missing_inputs: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -15796,6 +15803,10 @@ fn build_report(
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_readiness_counts(
             &local_cygv_source_resolution_hint_sample,
         );
+    let local_cygv_source_resolution_star_union_target_plus_star_local_cygv_promotion_readiness_counts =
+        local_cygv_source_resolution_star_union_target_plus_star_local_cygv_promotion_readiness_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
     let local_cygv_source_resolution_star_union_target_plus_star_local_cygv_phase_status_counts =
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_phase_status_counts(
             &local_cygv_source_resolution_hint_sample,
@@ -15814,6 +15825,10 @@ fn build_report(
         );
     let local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts =
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
+    let local_cygv_source_resolution_star_union_target_plus_star_local_cygv_promotion_missing_input_counts =
+        local_cygv_source_resolution_star_union_target_plus_star_local_cygv_promotion_missing_input_counts(
             &local_cygv_source_resolution_hint_sample,
         );
     let local_cygv_target_relation_global_secondary_height_status_counts =
@@ -16777,11 +16792,13 @@ fn build_report(
         local_cygv_source_resolution_star_union_target_plus_star_support_face_certificate_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_readiness_counts,
+        local_cygv_source_resolution_star_union_target_plus_star_local_cygv_promotion_readiness_counts,
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_phase_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_zero_degree_nef_certificate_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_single_column_omission_phase_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_two_column_omission_phase_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts,
+        local_cygv_source_resolution_star_union_target_plus_star_local_cygv_promotion_missing_input_counts,
         local_cygv_source_resolution_star_union_chamber_coverage_status_counts,
         local_cygv_source_resolution_star_union_shared_face_secondary_status_counts,
         local_cygv_source_resolution_star_union_opposite_star_wall_circuit_status_counts,
@@ -17126,6 +17143,17 @@ fn local_cygv_source_resolution_hint_summaries(
                 local_cygv_star_union_target_plus_star_local_cygv_readiness(
                     &star_union_target_plus_star_support,
                 );
+            let local_phase_chamber_membership_certificate_status =
+                local_phase_chamber_membership_certificate_status_with_witness(
+                    skeleton,
+                    target.origin_circuit_first_witness.as_ref(),
+                    context,
+                );
+            let star_union_target_plus_star_local_cygv_readiness =
+                attach_local_phase_chamber_to_target_plus_star_readiness(
+                    star_union_target_plus_star_local_cygv_readiness,
+                    &local_phase_chamber_membership_certificate_status,
+                );
             let star_union_chamber_coverage = local_cygv_star_union_chamber_coverage_hint(
                 target.origin_circuit_first_witness.as_ref(),
                 &star_support_hint,
@@ -17188,11 +17216,7 @@ fn local_cygv_source_resolution_hint_summaries(
                     .secondary_cone_height_certificate
                     .map(|certificate| certificate.status.clone()),
                 local_phase_chamber_membership_certificate_status:
-                    local_phase_chamber_membership_certificate_status_with_witness(
-                        skeleton,
-                        target.origin_circuit_first_witness.as_ref(),
-                        context,
-                    ),
+                    local_phase_chamber_membership_certificate_status,
                 zero_shared_affine_projection_status: affine_projection_hint.status,
                 relation_support_affine_hyperplane: affine_projection_hint.hyperplane,
                 zero_relation_shared_two_simplex_affine_heights: affine_projection_hint.heights,
@@ -17780,6 +17804,23 @@ fn local_cygv_source_resolution_star_union_target_plus_star_local_cygv_readiness
     counts
 }
 
+fn local_cygv_source_resolution_star_union_target_plus_star_local_cygv_promotion_readiness_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts
+            .entry(
+                summary
+                    .shared_two_simplex_star_union_target_plus_star_local_cygv_readiness
+                    .promotion_readiness
+                    .clone(),
+            )
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
 fn local_cygv_source_resolution_star_union_target_plus_star_local_cygv_phase_status_counts(
     summaries: &[LocalCygvSourceResolutionHintSummary],
 ) -> BTreeMap<String, usize> {
@@ -17861,6 +17902,21 @@ fn local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_i
         for missing in &summary
             .shared_two_simplex_star_union_target_plus_star_local_cygv_readiness
             .missing_inputs
+        {
+            *counts.entry(missing.clone()).or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_star_union_target_plus_star_local_cygv_promotion_missing_input_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        for missing in &summary
+            .shared_two_simplex_star_union_target_plus_star_local_cygv_readiness
+            .promotion_missing_inputs
         {
             *counts.entry(missing.clone()).or_insert(0usize) += 1;
         }
@@ -22551,6 +22607,8 @@ fn local_cygv_star_union_target_plus_star_local_cygv_readiness(
         "target_plus_star_local_cygv_blocked_missing_tensor_or_chamber_certificate"
     }
     .to_string();
+    let promotion_readiness = actual_call_readiness.clone();
+    let promotion_missing_inputs = missing_inputs.clone();
     LocalCygvStarUnionTargetPlusStarLocalCygvReadiness {
         status,
         hypersurface_shape: Some(shape),
@@ -22571,7 +22629,45 @@ fn local_cygv_star_union_target_plus_star_local_cygv_readiness(
         two_column_omission_candidates,
         actual_call_readiness,
         missing_inputs,
+        local_phase_chamber_membership_certificate_status: None,
+        promotion_readiness,
+        promotion_missing_inputs,
     }
+}
+
+fn attach_local_phase_chamber_to_target_plus_star_readiness(
+    mut readiness: LocalCygvStarUnionTargetPlusStarLocalCygvReadiness,
+    local_phase_status: &str,
+) -> LocalCygvStarUnionTargetPlusStarLocalCygvReadiness {
+    readiness.local_phase_chamber_membership_certificate_status =
+        Some(local_phase_status.to_string());
+    let local_phase_certified = local_phase_chamber_status_is_promotable(local_phase_status);
+    let mut promotion_missing_inputs = readiness.missing_inputs.clone();
+    if !local_phase_certified {
+        promotion_missing_inputs.push("local_phase_chamber_membership_certificate".to_string());
+    }
+    promotion_missing_inputs.sort();
+    promotion_missing_inputs.dedup();
+    readiness.promotion_missing_inputs = promotion_missing_inputs;
+    readiness.promotion_readiness = if !local_phase_certified {
+        format!(
+            "blocked_local_phase_chamber_certificate:{}",
+            status_error_fragment(local_phase_status)
+        )
+    } else if readiness.actual_call_readiness == "ready_for_actual_cygv_call" {
+        "ready_for_promoted_actual_cygv_call".to_string()
+    } else {
+        readiness.actual_call_readiness.clone()
+    };
+    readiness
+}
+
+fn local_phase_chamber_status_is_promotable(status: &str) -> bool {
+    matches!(
+        status,
+        "source_derived_local_phase_chamber_certificate_with_global_secondary_cone_checkpoint"
+            | "source_derived_local_phase_chamber_certificate_weighted_p2_resolved_shared_chamber"
+    )
 }
 
 struct RecomputedOmissionShape {
@@ -22785,7 +22881,10 @@ fn blocked_target_plus_star_local_cygv_readiness(
         single_column_omission_candidates: Vec::new(),
         two_column_omission_candidates: Vec::new(),
         actual_call_readiness: "blocked_missing_source_derived_inputs".to_string(),
-        missing_inputs,
+        missing_inputs: missing_inputs.clone(),
+        local_phase_chamber_membership_certificate_status: None,
+        promotion_readiness: "blocked_missing_source_derived_inputs".to_string(),
+        promotion_missing_inputs: missing_inputs,
     }
 }
 
@@ -25754,6 +25853,9 @@ mod tests {
                     two_column_omission_candidates: Vec::new(),
                     actual_call_readiness: "test".to_string(),
                     missing_inputs: Vec::new(),
+                    local_phase_chamber_membership_certificate_status: None,
+                    promotion_readiness: "test".to_string(),
+                    promotion_missing_inputs: Vec::new(),
                 },
             shared_two_simplex_star_union_chamber_coverage_status: "test".to_string(),
             shared_two_simplex_star_union_chamber_covered_simplex_count: 0,
@@ -28821,6 +28923,55 @@ mod tests {
         assert_eq!(hint.charge_basis, Some(vec![vec![1, -1, -1, 1]]));
         assert_eq!(hint.charge_row_sums, Some(vec![0]));
         assert_eq!(hint.relation_coordinates, Some(vec![1]));
+    }
+
+    #[test]
+    fn target_plus_star_promotion_readiness_requires_local_phase_chamber_certificate() {
+        let readiness = blocked_target_plus_star_local_cygv_readiness(
+            "target_plus_star_local_cygv_blocked_missing_charge_basis",
+            vec!["local_q_matrix_charge_basis".to_string()],
+        );
+        let blocked = attach_local_phase_chamber_to_target_plus_star_readiness(
+            readiness.clone(),
+            "local_phase_chamber_blocked_weighted_p2_resolved_shared_chamber:weighted_p2_resolved_shared_chamber_outside_or_on_wall",
+        );
+
+        assert_eq!(
+            blocked
+                .local_phase_chamber_membership_certificate_status
+                .as_deref(),
+            Some(
+                "local_phase_chamber_blocked_weighted_p2_resolved_shared_chamber:weighted_p2_resolved_shared_chamber_outside_or_on_wall"
+            )
+        );
+        assert_eq!(
+            blocked.promotion_readiness,
+            "blocked_local_phase_chamber_certificate:local_phase_chamber_blocked_weighted_p2_resolved_shared_chamber_weighted_p2_resolved_shared_chamber_outside_or_on_wall"
+        );
+        assert!(
+            blocked
+                .promotion_missing_inputs
+                .contains(&"local_phase_chamber_membership_certificate".to_string())
+        );
+        assert!(
+            blocked
+                .promotion_missing_inputs
+                .contains(&"local_q_matrix_charge_basis".to_string())
+        );
+
+        let certified = attach_local_phase_chamber_to_target_plus_star_readiness(
+            readiness,
+            "source_derived_local_phase_chamber_certificate_weighted_p2_resolved_shared_chamber",
+        );
+        assert_eq!(
+            certified.promotion_readiness,
+            "blocked_missing_source_derived_inputs"
+        );
+        assert!(
+            !certified
+                .promotion_missing_inputs
+                .contains(&"local_phase_chamber_membership_certificate".to_string())
+        );
     }
 
     #[test]

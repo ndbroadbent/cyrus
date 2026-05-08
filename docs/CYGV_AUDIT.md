@@ -3595,6 +3595,15 @@ weighted-`P2` rows blocked by the resolved-shared chamber wall. The separate
 star-union relation buckets still distinguish the two integral target/star
 union-coordinate rows from the two rows with nonintegral target coordinates in
 the star-union charge basis.
+The local target-plus-star readiness object now carries a second,
+promotion-level readiness field wired to that same phase certificate.
+`/tmp/cyrus_all_promotion_gated_report.json` leaves the shape-level
+actual-call readiness at `blocked_missing_source_derived_inputs:9`, but adds
+`local_phase_chamber_membership_certificate:9` to the promotion missing-input
+aggregate. Its promotion-readiness buckets split into the same five
+non-`P2`/origin-omitting phase blockers and four weighted resolved-shared
+chamber-wall blockers, so neither a CICY-shaped support nor a scalar local
+tensor can bypass the chamber gate.
 `/tmp/cyrus_star_union_wall_transport_readiness_smoke_all.json` now aggregates
 that implication directly. The readiness buckets are
 `wall_transport_blocked_missing_known_wall_circuit:6`,
