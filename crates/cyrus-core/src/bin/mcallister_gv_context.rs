@@ -373,6 +373,10 @@ struct ContextReport {
         BTreeMap<String, usize>,
     cygv_lower_seed_predecessor_candidate_pair_diamond_target_gw_coefficient_status_counts:
         BTreeMap<String, usize>,
+    cygv_lower_seed_predecessor_candidate_pair_diamond_gv_formula_sum_status_counts:
+        BTreeMap<String, usize>,
+    cygv_lower_seed_predecessor_candidate_pair_diamond_gw_candidate_formula_sum_status_counts:
+        BTreeMap<String, usize>,
     cygv_lower_seed_unknown_candidate_unique_count: usize,
     cygv_lower_seed_unknown_candidate_occurrence_count: usize,
     cygv_lower_seed_unknown_candidate_degree_counts: BTreeMap<i128, usize>,
@@ -941,6 +945,11 @@ struct CygvCandidatePairDiamondSummary {
     target_gw_instanton_coefficient: Option<String>,
     target_gw_candidate: Option<String>,
     candidate_status: String,
+    expected_toric_gv1_formula_value_sum: Option<String>,
+    gv_formula_sum_status: String,
+    gv_formula_sum_delta: Option<String>,
+    target_gw_candidate_formula_sum_status: String,
+    target_gw_candidate_formula_sum_delta: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -12088,6 +12097,8 @@ fn cygv_path_history_probe_inner(
         run_lower_seed_diamonds,
         element_limit,
     );
+    let expected_formula_values = sample_expected_toric_gv1_formula_values(sample);
+    let expected_formula_sum = sample_expected_toric_gv1_formula_value_sum(sample);
     let lower_seed_predecessor_candidate_sample = lower_seed_predecessor_candidates(
         target,
         &lower_seed_decomposition,
@@ -12096,6 +12107,7 @@ fn cygv_path_history_probe_inner(
         &reduced_seeds,
         CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
         run_lower_seed_diamonds,
+        expected_formula_sum.as_ref(),
     )?;
     let lower_seed_predecessor_candidate_count = lower_seed_predecessor_candidate_sample.len();
 
@@ -12160,8 +12172,6 @@ fn cygv_path_history_probe_inner(
         context,
         supporting_face_lp_options,
     )?;
-    let expected_formula_values = sample_expected_toric_gv1_formula_values(sample);
-    let expected_formula_sum = sample_expected_toric_gv1_formula_value_sum(sample);
     let path_support_target_reconstructed_pre_subtraction_formula_status =
         path_support_pre_subtraction_formula_status(
             path_support_generators
@@ -13177,6 +13187,7 @@ fn lower_seed_predecessor_candidates(
     reduced_seed_set: &HashSet<Vec<i64>>,
     sample_limit: usize,
     run_candidate_pair_diamonds: bool,
+    expected_formula_sum: Option<&String>,
 ) -> Result<Vec<CygvPathPredecessorCandidate>, String> {
     let Some(terms) = lower_seed_decomposition.terms.as_deref() else {
         return Ok(Vec::new());
@@ -13219,6 +13230,7 @@ fn lower_seed_predecessor_candidates(
             &difference,
             context,
             run_candidate_pair_diamonds,
+            expected_formula_sum,
         )?;
         let candidate = cygv_path_predecessor_candidate(
             &predecessor,
@@ -13251,6 +13263,7 @@ fn lower_seed_predecessor_candidate_pair_diamond(
     difference: &[i64],
     context: &ValidatedContext<'_>,
     run_candidate_pair_diamonds: bool,
+    expected_formula_sum: Option<&String>,
 ) -> Result<Option<CygvCandidatePairDiamondSummary>, String> {
     if !run_candidate_pair_diamonds {
         return Ok(None);
@@ -13260,6 +13273,17 @@ fn lower_seed_predecessor_candidate_pair_diamond(
         &[predecessor.to_vec(), difference.to_vec()],
         context,
     )?;
+    let (gv_formula_sum_status, gv_formula_sum_delta) = candidate_pair_formula_sum_status(
+        probe.gv.as_ref(),
+        expected_formula_sum,
+        "candidate_pair_diamond_gv",
+    )?;
+    let (target_gw_candidate_formula_sum_status, target_gw_candidate_formula_sum_delta) =
+        candidate_pair_formula_sum_status(
+            probe.target_gw_candidate.as_ref(),
+            expected_formula_sum,
+            "candidate_pair_diamond_gw_candidate",
+        )?;
     Ok(Some(CygvCandidatePairDiamondSummary {
         candidate_status: bounded_diamond_candidate_status(
             probe.status.as_deref(),
@@ -13279,6 +13303,11 @@ fn lower_seed_predecessor_candidate_pair_diamond(
         target_gw_coefficient_status: probe.target_gw_coefficient_status,
         target_gw_instanton_coefficient: probe.target_gw_instanton_coefficient,
         target_gw_candidate: probe.target_gw_candidate,
+        expected_toric_gv1_formula_value_sum: expected_formula_sum.cloned(),
+        gv_formula_sum_status,
+        gv_formula_sum_delta,
+        target_gw_candidate_formula_sum_status,
+        target_gw_candidate_formula_sum_delta,
     }))
 }
 
@@ -14659,6 +14688,18 @@ fn build_report(
                 .iter()
                 .map(|target| target.cygv_path_history_probe.as_ref()),
         );
+    let cygv_lower_seed_predecessor_candidate_pair_diamond_gv_formula_sum_status_counts =
+        cygv_lower_seed_predecessor_candidate_pair_diamond_gv_formula_sum_status_counts(
+            targets
+                .iter()
+                .map(|target| target.cygv_path_history_probe.as_ref()),
+        );
+    let cygv_lower_seed_predecessor_candidate_pair_diamond_gw_candidate_formula_sum_status_counts =
+        cygv_lower_seed_predecessor_candidate_pair_diamond_gw_candidate_formula_sum_status_counts(
+            targets
+                .iter()
+                .map(|target| target.cygv_path_history_probe.as_ref()),
+        );
     let cygv_lower_seed_diamond_status_counts = optional_status_counts(
         targets.iter().map(|target| {
             target
@@ -15128,6 +15169,8 @@ fn build_report(
         cygv_lower_seed_predecessor_candidate_pair_diamond_qn_trace_status_counts,
         cygv_lower_seed_predecessor_candidate_pair_diamond_gw_noninteger_candidate_count_counts,
         cygv_lower_seed_predecessor_candidate_pair_diamond_target_gw_coefficient_status_counts,
+        cygv_lower_seed_predecessor_candidate_pair_diamond_gv_formula_sum_status_counts,
+        cygv_lower_seed_predecessor_candidate_pair_diamond_gw_candidate_formula_sum_status_counts,
         cygv_lower_seed_unknown_candidate_unique_count,
         cygv_lower_seed_unknown_candidate_occurrence_count,
         cygv_lower_seed_unknown_candidate_degree_counts,
@@ -18678,6 +18721,40 @@ fn cygv_lower_seed_predecessor_candidate_pair_diamond_target_gw_coefficient_stat
     counts
 }
 
+fn cygv_lower_seed_predecessor_candidate_pair_diamond_gv_formula_sum_status_counts<'a>(
+    probes: impl IntoIterator<Item = Option<&'a CygvPathHistoryProbe>>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes.into_iter().flatten() {
+        for candidate in &probe.lower_seed_predecessor_candidate_sample {
+            let status = candidate
+                .candidate_pair_diamond
+                .as_ref()
+                .map_or("not_run", |diamond| diamond.gv_formula_sum_status.as_str());
+            *counts.entry(status.to_string()).or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn cygv_lower_seed_predecessor_candidate_pair_diamond_gw_candidate_formula_sum_status_counts<'a>(
+    probes: impl IntoIterator<Item = Option<&'a CygvPathHistoryProbe>>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes.into_iter().flatten() {
+        for candidate in &probe.lower_seed_predecessor_candidate_sample {
+            let status = candidate
+                .candidate_pair_diamond
+                .as_ref()
+                .map_or("not_run", |diamond| {
+                    diamond.target_gw_candidate_formula_sum_status.as_str()
+                });
+            *counts.entry(status.to_string()).or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
 fn lower_seed_predecessor_bounded_candidate_side_status(
     known_qn_history_status: &str,
     curve_nonzero: &[(usize, i64)],
@@ -19958,6 +20035,28 @@ fn path_support_pre_subtraction_formula_status(
         }
     }
     Ok("pre_subtraction_candidate_mismatches_formula_candidates".to_string())
+}
+
+fn candidate_pair_formula_sum_status(
+    candidate: Option<&String>,
+    expected_sum: Option<&String>,
+    label: &str,
+) -> Result<(String, Option<String>), String> {
+    let Some(expected_sum) = expected_sum else {
+        return Ok((format!("{label}_expected_formula_sum_missing"), None));
+    };
+    let Some(candidate) = candidate else {
+        return Ok((format!("{label}_missing"), None));
+    };
+    let expected_sum = parse_rational(expected_sum)?;
+    let candidate = parse_rational(candidate)?;
+    let delta = expected_sum - candidate;
+    let status = if delta == 0 {
+        format!("{label}_matches_expected_formula_sum")
+    } else {
+        format!("{label}_mismatches_expected_formula_sum")
+    };
+    Ok((status, Some(delta.to_string())))
 }
 
 fn expected_toric_gv1_formula_values(
@@ -22930,6 +23029,38 @@ mod tests {
             expected_toric_gv1_formula_value_sum(Some(&candidates)).as_deref(),
             Some("0")
         );
+    }
+
+    #[test]
+    fn candidate_pair_formula_sum_status_uses_exact_rationals() {
+        let (status, delta) = candidate_pair_formula_sum_status(
+            Some(&"2".to_string()),
+            Some(&"2".to_string()),
+            "candidate_pair_diamond_gv",
+        )
+        .unwrap();
+        assert_eq!(
+            status,
+            "candidate_pair_diamond_gv_matches_expected_formula_sum"
+        );
+        assert_eq!(delta.as_deref(), Some("0"));
+
+        let (status, delta) = candidate_pair_formula_sum_status(
+            Some(&"3/2".to_string()),
+            Some(&"2".to_string()),
+            "candidate_pair_diamond_gw_candidate",
+        )
+        .unwrap();
+        assert_eq!(
+            status,
+            "candidate_pair_diamond_gw_candidate_mismatches_expected_formula_sum"
+        );
+        assert_eq!(delta.as_deref(), Some("1/2"));
+
+        let (status, delta) =
+            candidate_pair_formula_sum_status(None, Some(&"2".to_string()), "candidate").unwrap();
+        assert_eq!(status, "candidate_missing");
+        assert_eq!(delta, None);
     }
 
     #[test]
@@ -26627,6 +26758,18 @@ mod tests {
                 "missing_candidate_pair_diamond_target_gw_coefficient_status".to_string(),
                 2
             )])
+        );
+        assert_eq!(
+            cygv_lower_seed_predecessor_candidate_pair_diamond_gv_formula_sum_status_counts([
+                Some(&probe)
+            ]),
+            BTreeMap::from([("not_run".to_string(), 2)])
+        );
+        assert_eq!(
+            cygv_lower_seed_predecessor_candidate_pair_diamond_gw_candidate_formula_sum_status_counts(
+                [Some(&probe)]
+            ),
+            BTreeMap::from([("not_run".to_string(), 2)])
         );
         assert_eq!(lower_unknowns.len(), 2);
         assert_eq!(lower_unknowns[0].degree, 1);

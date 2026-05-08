@@ -273,7 +273,12 @@ run pass. Any remaining mismatch must be explicit and localizable.
    diamond GV values, compressed errors, qN-trace statuses, noninteger counts,
    and target GW coefficient statuses; the target-8 smoke records GV `2` for
    the four integer-nonzero pair domains and one noninteger GW candidate for
-   each of the two HKTY-error domains.
+   each of the two HKTY-error domains. It now also compares the candidate-pair
+   diamond GV and target GW candidates against the independent CMS expected
+   formula sum using exact rationals. Target `8`'s four `GV=2` pair domains all
+   mismatch expected sum `3`, and target `6`'s zero/absent or HKTY-error pair
+   domains also mismatch expected sum `3`, so these candidate-pair diamonds are
+   explicitly nonpromotable rather than near-misses.
    The parent-only classifications now include parent-path-support runtime
    lookups from the same `cygv` run. On the regenerated target 7 report, the
    generated degree-10 side term is a real parent-domain nonzero object
