@@ -1750,6 +1750,10 @@ to make the remaining GV layer more first-principles:
    choices on reconstructed local-toric chamber-generator diagnostics,
    preserving the ambient point labels. This is chamber-choice evidence for
    downstream transport diagnostics, not a promotion of any GV value.
+   The report also aggregates circuit-triangulation choice counts separately
+   for current/flipped chamber generators and their decomposition terms, so
+   all-target runs can distinguish actual two-choice circuit rows from
+   non-circuit or missing-context rows without scanning each sample entry.
    The Stage 0 no-replay policy tests also now pass again after two policy
    cleanups: generic first-principles runs log the computed flux-coordinate
    basis separately from explicit production-basis overrides, and the opt-in

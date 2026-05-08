@@ -395,6 +395,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_kind_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_circuit_triangulation_choice_count_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_generator_ckyz_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_generator_ckyz_kind_counts:
@@ -404,6 +406,8 @@ struct ContextReport {
     local_cygv_source_resolution_star_union_current_chamber_decomposition_term_degree_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_decomposition_term_local_toric_kind_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_decomposition_term_local_toric_circuit_triangulation_choice_count_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_decomposition_term_ckyz_status_counts:
         BTreeMap<String, usize>,
@@ -440,6 +444,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_kind_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_circuit_triangulation_choice_count_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_flipped_chamber_generator_ckyz_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_flipped_chamber_generator_ckyz_kind_counts:
@@ -449,6 +455,8 @@ struct ContextReport {
     local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_degree_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_local_toric_kind_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_local_toric_circuit_triangulation_choice_count_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_ckyz_status_counts:
         BTreeMap<String, usize>,
@@ -16381,6 +16389,10 @@ fn build_report(
         chamber_semigroup_generator_local_toric_kind_counts(current_chamber_generator_contexts(
             &local_cygv_source_resolution_hint_sample,
         ));
+    let local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_circuit_triangulation_choice_count_counts =
+        chamber_semigroup_generator_local_toric_circuit_triangulation_choice_count_counts(
+            current_chamber_generator_contexts(&local_cygv_source_resolution_hint_sample),
+        );
     let local_cygv_source_resolution_star_union_current_chamber_generator_ckyz_status_counts =
         chamber_semigroup_generator_ckyz_status_counts(current_chamber_generator_contexts(
             &local_cygv_source_resolution_hint_sample,
@@ -16404,6 +16416,13 @@ fn build_report(
             &local_cygv_source_resolution_hint_sample,
             ChamberSide::Current,
         ));
+    let local_cygv_source_resolution_star_union_current_chamber_decomposition_term_local_toric_circuit_triangulation_choice_count_counts =
+        chamber_decomposition_term_local_toric_circuit_triangulation_choice_count_counts(
+            chamber_decomposition_term_contexts(
+                &local_cygv_source_resolution_hint_sample,
+                ChamberSide::Current,
+            ),
+        );
     let local_cygv_source_resolution_star_union_current_chamber_decomposition_term_ckyz_status_counts =
         chamber_decomposition_term_ckyz_status_counts(chamber_decomposition_term_contexts(
             &local_cygv_source_resolution_hint_sample,
@@ -16514,6 +16533,10 @@ fn build_report(
         chamber_semigroup_generator_local_toric_kind_counts(flipped_chamber_generator_contexts(
             &local_cygv_source_resolution_hint_sample,
         ));
+    let local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_circuit_triangulation_choice_count_counts =
+        chamber_semigroup_generator_local_toric_circuit_triangulation_choice_count_counts(
+            flipped_chamber_generator_contexts(&local_cygv_source_resolution_hint_sample),
+        );
     let local_cygv_source_resolution_star_union_flipped_chamber_generator_ckyz_status_counts =
         chamber_semigroup_generator_ckyz_status_counts(flipped_chamber_generator_contexts(
             &local_cygv_source_resolution_hint_sample,
@@ -16537,6 +16560,13 @@ fn build_report(
             &local_cygv_source_resolution_hint_sample,
             ChamberSide::Flipped,
         ));
+    let local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_local_toric_circuit_triangulation_choice_count_counts =
+        chamber_decomposition_term_local_toric_circuit_triangulation_choice_count_counts(
+            chamber_decomposition_term_contexts(
+                &local_cygv_source_resolution_hint_sample,
+                ChamberSide::Flipped,
+            ),
+        );
     let local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_ckyz_status_counts =
         chamber_decomposition_term_ckyz_status_counts(chamber_decomposition_term_contexts(
             &local_cygv_source_resolution_hint_sample,
@@ -17607,11 +17637,13 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_affine_rank_counts,
         local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_support_point_count_counts,
         local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_kind_counts,
+        local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_circuit_triangulation_choice_count_counts,
         local_cygv_source_resolution_star_union_current_chamber_generator_ckyz_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_generator_ckyz_kind_counts,
         local_cygv_source_resolution_star_union_current_chamber_decomposition_term_context_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_decomposition_term_degree_counts,
         local_cygv_source_resolution_star_union_current_chamber_decomposition_term_local_toric_kind_counts,
+        local_cygv_source_resolution_star_union_current_chamber_decomposition_term_local_toric_circuit_triangulation_choice_count_counts,
         local_cygv_source_resolution_star_union_current_chamber_decomposition_term_ckyz_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_decomposition_term_bounded_lower_seed_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_decomposition_term_relation_support_generator_count_counts,
@@ -17630,11 +17662,13 @@ fn build_report(
         local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_affine_rank_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_support_point_count_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_kind_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_circuit_triangulation_choice_count_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_generator_ckyz_status_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_generator_ckyz_kind_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_context_status_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_degree_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_local_toric_kind_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_local_toric_circuit_triangulation_choice_count_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_ckyz_status_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_bounded_lower_seed_status_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_relation_support_generator_count_counts,
@@ -19152,6 +19186,19 @@ fn chamber_semigroup_generator_local_toric_kind_counts<'a>(
     )
 }
 
+fn chamber_semigroup_generator_local_toric_circuit_triangulation_choice_count_counts<'a>(
+    contexts: impl IntoIterator<Item = &'a LocalCygvChamberSemigroupGeneratorContext>,
+) -> BTreeMap<String, usize> {
+    optional_usize_count_counts(
+        contexts.into_iter().map(|context| {
+            context
+                .local_toric_diagnostic
+                .circuit_triangulation_choice_count
+        }),
+        "not_available",
+    )
+}
+
 fn chamber_semigroup_generator_ckyz_status_counts<'a>(
     contexts: impl IntoIterator<Item = &'a LocalCygvChamberSemigroupGeneratorContext>,
 ) -> BTreeMap<String, usize> {
@@ -19205,6 +19252,17 @@ fn chamber_decomposition_term_local_toric_kind_counts<'a>(
             context.and_then(|c| c.local_toric_diagnostic.local_toric_kind.as_deref())
         }),
         "not_identified_or_missing_context",
+    )
+}
+
+fn chamber_decomposition_term_local_toric_circuit_triangulation_choice_count_counts<'a>(
+    contexts: impl IntoIterator<Item = Option<&'a LocalCygvChamberSemigroupGeneratorContext>>,
+) -> BTreeMap<String, usize> {
+    optional_usize_count_counts(
+        contexts.into_iter().map(|context| {
+            context.and_then(|c| c.local_toric_diagnostic.circuit_triangulation_choice_count)
+        }),
+        "not_available_or_missing_context",
     )
 }
 
@@ -31467,6 +31525,7 @@ mod tests {
         known_local_toric.support_point_count = 4;
         known_local_toric.affine_rank = Some(2);
         known_local_toric.local_toric_kind = Some("rank_two_quadrilateral".to_string());
+        known_local_toric.circuit_triangulation_choice_count = Some(2);
         known_local_toric.ckyz_status = "ckyz_no_source_match".to_string();
         let mut unknown_local_toric = chamber_generator_local_toric_diagnostic_not_run("test");
         unknown_local_toric.status = "local_toric_affine_circuit_reconstructed".to_string();
@@ -31548,6 +31607,10 @@ mod tests {
         let local_toric_kind_counts = chamber_semigroup_generator_local_toric_kind_counts([
             &known, &unknown, &invalid, &not_run,
         ]);
+        let local_toric_circuit_choice_counts =
+            chamber_semigroup_generator_local_toric_circuit_triangulation_choice_count_counts([
+                &known, &unknown, &invalid, &not_run,
+            ]);
         let ckyz_status_counts =
             chamber_semigroup_generator_ckyz_status_counts([&known, &unknown, &invalid, &not_run]);
         let ckyz_kind_counts =
@@ -31559,6 +31622,10 @@ mod tests {
             chamber_decomposition_term_degree_counts(term_contexts.iter().copied());
         let term_kind_counts =
             chamber_decomposition_term_local_toric_kind_counts(term_contexts.iter().copied());
+        let term_circuit_choice_counts =
+            chamber_decomposition_term_local_toric_circuit_triangulation_choice_count_counts(
+                term_contexts.iter().copied(),
+            );
         let term_ckyz_status_counts =
             chamber_decomposition_term_ckyz_status_counts(term_contexts.iter().copied());
         let term_lower_seed_counts = chamber_decomposition_term_bounded_lower_seed_status_counts(
@@ -31672,6 +31739,13 @@ mod tests {
             local_toric_kind_counts.get("not_identified").copied(),
             Some(1)
         );
+        assert_eq!(local_toric_circuit_choice_counts.get("2").copied(), Some(3));
+        assert_eq!(
+            local_toric_circuit_choice_counts
+                .get("not_available")
+                .copied(),
+            Some(1)
+        );
         assert_eq!(
             ckyz_status_counts.get("ckyz_no_source_match").copied(),
             Some(3)
@@ -31707,6 +31781,13 @@ mod tests {
         assert_eq!(
             term_kind_counts
                 .get("not_identified_or_missing_context")
+                .copied(),
+            Some(2)
+        );
+        assert_eq!(term_circuit_choice_counts.get("2").copied(), Some(1));
+        assert_eq!(
+            term_circuit_choice_counts
+                .get("not_available_or_missing_context")
                 .copied(),
             Some(2)
         );

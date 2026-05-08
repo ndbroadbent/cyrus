@@ -3875,6 +3875,10 @@ still not claiming to enumerate arbitrary two-face FRTs.
 the reconstructed local-toric chamber-generator diagnostics, preserving the
 original ambient point labels. This keeps the chamber-choice evidence available
 to the next transport step without treating it as a compact GV computation.
+The same context report now aggregates circuit-triangulation choice counts for
+current/flipped chamber generators and their decomposition terms, making the
+two-choice circuit rows visible in all-target summaries without promoting any
+local formula or compact `cygv` value.
 
 The star-union chamber semigroup probe now also lifts every current/flipped
 chamber generator back through the global curve-basis projection and reports
