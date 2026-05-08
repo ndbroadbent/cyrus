@@ -1356,7 +1356,14 @@ to make the remaining GV layer more first-principles:
    The report now also carries target-relation balance data for these
    candidates. For both targets, all six zero-degree candidates have
    `target_relation_balanced_inside_each_part`, so the integral target relation
-   does not pick a unique nef split either.
+   does not pick a unique nef split either. The same readiness diagnostic now
+   applies the reusable CYTools-style nef certificate to those zero-degree
+   splits on the visible local support polytope; all six candidates for each
+   target fail with
+   `support_polytope_cytools_nef_certificate_failed:invalid_input_nef_partition_union_hull_does_not_equal_ambient_polytope_hull`.
+   Thus the zero-degree split enumeration is not just ambiguous. On the local
+   target-plus-star support currently visible to Cyrus, it does not define a
+   CYTools nef partition.
    The reusable CYTools-style CICY tensor-reduction step now exists in core as
    `compute_complete_intersection_cy3_intersection_numbers`, but targets `7`/`8`
    still lack the source-derived nef partition and ambient top intersections

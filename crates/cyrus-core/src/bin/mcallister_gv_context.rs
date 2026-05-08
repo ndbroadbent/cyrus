@@ -27,7 +27,8 @@ use cyrus_core::types::rational::Rational;
 use cyrus_core::types::{f64::F64, tags::Finite, tags::Pos};
 use cyrus_core::{
     CygvQnTracePolynomial, GvDilogFailure, Intersection, Point,
-    check_stable_weyl_candidate_certificate, compute_gv_invariants_with_explicit_semigroup,
+    certify_nef_partition_cytools_style, check_stable_weyl_candidate_certificate,
+    compute_gv_invariants_with_explicit_semigroup,
     compute_gv_invariants_with_explicit_semigroup_qn_trace,
     compute_gv_invariants_with_provided_generators,
     compute_gv_invariants_with_provided_generators_qn_trace,
@@ -665,6 +666,7 @@ struct LocalCygvCompleteIntersectionShapeCandidate {
     nef_partition_candidate_count: Option<usize>,
     zero_degree_nef_partition_candidate_count: Option<usize>,
     zero_degree_target_relation_balance_status_counts: Option<BTreeMap<String, usize>>,
+    zero_degree_cytools_nef_certificate_status_counts: Option<BTreeMap<String, usize>>,
     zero_degree_nef_partition_candidate_sample: Vec<LocalCygvNefPartitionCandidate>,
     status: String,
     missing_inputs: Vec<String>,
@@ -682,6 +684,9 @@ struct LocalCygvNefPartitionCandidate {
     target_relation_first_part_nonzero_count: Option<usize>,
     target_relation_second_part_nonzero_count: Option<usize>,
     target_relation_balance_status: Option<String>,
+    cytools_nef_certificate_status: Option<String>,
+    cytools_nef_part_lattice_point_counts: Option<Vec<usize>>,
+    cytools_nef_minkowski_sum_vertex_count: Option<usize>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -9978,6 +9983,7 @@ fn local_cygv_hypersurface_shape_from_dimensions_and_charge_basis(
 fn local_cygv_complete_intersection_shape_candidate(
     hypersurface_shape: &LocalCygvHypersurfaceShape,
     support_point_indices: &[usize],
+    support_point_samples: &[OriginCircuitRelationPointSample],
     local_charge_basis: &[Vec<i64>],
     target_relation_coefficients: Option<&[i64]>,
 ) -> Option<LocalCygvCompleteIntersectionShapeCandidate> {
@@ -9992,6 +9998,7 @@ fn local_cygv_complete_intersection_shape_candidate(
     let nef_partition_candidates = if cy_codim == 2 {
         local_cygv_codim_two_nef_partition_candidates(
             support_point_indices,
+            support_point_samples,
             local_charge_basis,
             target_relation_coefficients,
         )
@@ -10029,6 +10036,18 @@ fn local_cygv_complete_intersection_shape_candidate(
             }
             (!counts.is_empty()).then_some(counts)
         });
+    let zero_degree_cytools_nef_certificate_status_counts =
+        nef_partition_candidates.as_ref().and_then(|candidates| {
+            let mut counts = BTreeMap::new();
+            for status in candidates
+                .iter()
+                .filter(|candidate| candidate.degree_status == "both_parts_zero_degree")
+                .filter_map(|candidate| candidate.cytools_nef_certificate_status.as_deref())
+            {
+                *counts.entry(status.to_string()).or_insert(0) += 1;
+            }
+            (!counts.is_empty()).then_some(counts)
+        });
     let nef_partition_candidate_count = nef_partition_candidates.as_ref().map(std::vec::Vec::len);
     let status = match zero_degree_nef_partition_candidate_count {
         Some(0) => {
@@ -10052,6 +10071,7 @@ fn local_cygv_complete_intersection_shape_candidate(
         nef_partition_candidate_count,
         zero_degree_nef_partition_candidate_count,
         zero_degree_target_relation_balance_status_counts,
+        zero_degree_cytools_nef_certificate_status_counts,
         zero_degree_nef_partition_candidate_sample,
         status: status.to_string(),
         missing_inputs: vec![
@@ -10064,6 +10084,7 @@ fn local_cygv_complete_intersection_shape_candidate(
 
 fn local_cygv_codim_two_nef_partition_candidates(
     support_point_indices: &[usize],
+    support_point_samples: &[OriginCircuitRelationPointSample],
     local_charge_basis: &[Vec<i64>],
     target_relation_coefficients: Option<&[i64]>,
 ) -> Result<Vec<LocalCygvNefPartitionCandidate>, String> {
@@ -10135,11 +10156,17 @@ fn local_cygv_codim_two_nef_partition_candidates(
                 second_part_target_relation_nonzero_count,
             )
         });
+        let degree_status =
+            local_cygv_nef_partition_degree_status(&first_part_degree, &second_part_degree);
+        let certificate = (degree_status == "both_parts_zero_degree").then(|| {
+            local_cygv_support_polytope_nef_certificate(
+                support_point_samples,
+                &first_part_point_indices,
+                &second_part_point_indices,
+            )
+        });
         candidates.push(LocalCygvNefPartitionCandidate {
-            degree_status: local_cygv_nef_partition_degree_status(
-                &first_part_degree,
-                &second_part_degree,
-            ),
+            degree_status,
             first_part_point_indices,
             second_part_point_indices,
             first_part_degree,
@@ -10153,6 +10180,15 @@ fn local_cygv_codim_two_nef_partition_candidates(
             target_relation_second_part_nonzero_count: target_relation_coefficients
                 .map(|_| second_part_target_relation_nonzero_count),
             target_relation_balance_status,
+            cytools_nef_certificate_status: certificate
+                .as_ref()
+                .map(|certificate| certificate.status.clone()),
+            cytools_nef_part_lattice_point_counts: certificate
+                .as_ref()
+                .and_then(|certificate| certificate.part_lattice_point_counts.clone()),
+            cytools_nef_minkowski_sum_vertex_count: certificate
+                .as_ref()
+                .and_then(|certificate| certificate.minkowski_sum_vertex_count),
         });
     }
     candidates.sort_by(|lhs, rhs| {
@@ -10168,6 +10204,94 @@ fn local_cygv_codim_two_nef_partition_candidates(
             })
     });
     Ok(candidates)
+}
+
+struct LocalCygvSupportNefCertificateProbe {
+    status: String,
+    part_lattice_point_counts: Option<Vec<usize>>,
+    minkowski_sum_vertex_count: Option<usize>,
+}
+
+fn local_cygv_support_polytope_nef_certificate(
+    support_point_samples: &[OriginCircuitRelationPointSample],
+    first_part_point_indices: &[usize],
+    second_part_point_indices: &[usize],
+) -> LocalCygvSupportNefCertificateProbe {
+    match local_cygv_support_polytope_nef_certificate_inner(
+        support_point_samples,
+        first_part_point_indices,
+        second_part_point_indices,
+    ) {
+        Ok(probe) => probe,
+        Err(error) => LocalCygvSupportNefCertificateProbe {
+            status: format!(
+                "support_polytope_cytools_nef_certificate_failed:{}",
+                status_error_fragment(&error)
+            ),
+            part_lattice_point_counts: None,
+            minkowski_sum_vertex_count: None,
+        },
+    }
+}
+
+fn local_cygv_support_polytope_nef_certificate_inner(
+    support_point_samples: &[OriginCircuitRelationPointSample],
+    first_part_point_indices: &[usize],
+    second_part_point_indices: &[usize],
+) -> Result<LocalCygvSupportNefCertificateProbe, String> {
+    let dim = support_point_samples
+        .first()
+        .map(|sample| sample.coordinates.len())
+        .ok_or_else(|| "support has no point samples".to_string())?;
+    if support_point_samples
+        .iter()
+        .any(|sample| sample.coordinates.len() != dim)
+    {
+        return Err("support point samples have inconsistent dimensions".to_string());
+    }
+
+    let mut points = Vec::with_capacity(support_point_samples.len() + 1);
+    points.push(Point::new(vec![0; dim]));
+    let mut local_index_by_global = HashMap::new();
+    for sample in support_point_samples {
+        if local_index_by_global
+            .insert(sample.point_index, points.len())
+            .is_some()
+        {
+            return Err(format!(
+                "support point {} appears more than once",
+                sample.point_index
+            ));
+        }
+        points.push(Point::new(sample.coordinates.clone()));
+    }
+
+    let nef_partition = vec![
+        local_cygv_support_nef_part(first_part_point_indices, &local_index_by_global)?,
+        local_cygv_support_nef_part(second_part_point_indices, &local_index_by_global)?,
+    ];
+    let certificate = certify_nef_partition_cytools_style(&points, &points, &nef_partition)
+        .map_err(|error| error.to_string())?;
+    Ok(LocalCygvSupportNefCertificateProbe {
+        status: "support_polytope_cytools_nef_certificate_passed".to_string(),
+        part_lattice_point_counts: Some(certificate.part_lattice_point_counts),
+        minkowski_sum_vertex_count: Some(certificate.minkowski_sum_vertex_count),
+    })
+}
+
+fn local_cygv_support_nef_part(
+    point_indices: &[usize],
+    local_index_by_global: &HashMap<usize, usize>,
+) -> Result<Vec<usize>, String> {
+    point_indices
+        .iter()
+        .map(|point_index| {
+            local_index_by_global
+                .get(point_index)
+                .copied()
+                .ok_or_else(|| format!("support point {point_index} is missing local coordinates"))
+        })
+        .collect()
 }
 
 fn local_cygv_nef_partition_degree_status(first: &[i64], second: &[i64]) -> String {
@@ -22199,6 +22323,7 @@ fn local_cygv_star_union_target_plus_star_local_cygv_readiness(
     let complete_intersection_shape_candidate = local_cygv_complete_intersection_shape_candidate(
         &shape,
         &support.point_indices,
+        &support.point_samples,
         charge_basis,
         target_relation_coefficients.as_deref(),
     );
@@ -28647,6 +28772,13 @@ mod tests {
                 6
             )]))
         );
+        assert_eq!(
+            complete_intersection.zero_degree_cytools_nef_certificate_status_counts,
+            Some(BTreeMap::from([(
+                "support_polytope_cytools_nef_certificate_failed:invalid_input_nef_partition_union_hull_does_not_equal_ambient_polytope_hull".to_string(),
+                6
+            )]))
+        );
         assert!(
             complete_intersection
                 .zero_degree_nef_partition_candidate_sample
@@ -28799,6 +28931,18 @@ mod tests {
                     .clone()),
             Some(BTreeMap::from([(
                 "target_relation_balanced_inside_each_part".to_string(),
+                6
+            )]))
+        );
+        assert_eq!(
+            readiness
+                .complete_intersection_shape_candidate
+                .as_ref()
+                .and_then(|candidate| candidate
+                    .zero_degree_cytools_nef_certificate_status_counts
+                    .clone()),
+            Some(BTreeMap::from([(
+                "support_polytope_cytools_nef_certificate_failed:invalid_input_nef_partition_union_hull_does_not_equal_ambient_polytope_hull".to_string(),
                 6
             )]))
         );

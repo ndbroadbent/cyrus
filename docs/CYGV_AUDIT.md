@@ -3460,7 +3460,13 @@ so the status is
 The target relation has now been threaded through these candidates as a
 non-promoting diagnostic. For targets `7` and `8`, every zero-degree split has
 `target_relation_balanced_inside_each_part`, so target-relation balance also
-leaves all six candidates ambiguous.
+leaves all six candidates ambiguous. The current diagnostic now additionally
+runs the reusable CYTools-style nef certificate on those zero-degree splits
+using the visible local target-plus-star support polytope. All six candidates
+for each target fail the certificate with
+`support_polytope_cytools_nef_certificate_failed:invalid_input_nef_partition_union_hull_does_not_equal_ambient_polytope_hull`.
+This rules out promoting the local zero-degree split enumeration as a nef
+partition source rule.
 The reusable CYTools-style ambient top-form step now exists in core as
 `compute_ambient_intersections_cytools`, and the CICY tensor-reduction step
 exists as `compute_complete_intersection_cy3_intersection_numbers`. The composed
