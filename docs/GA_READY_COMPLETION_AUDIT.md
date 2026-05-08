@@ -1274,6 +1274,12 @@ zero zero-degree nef candidates. The one-point enlargements have compact CY3
 omissions, but none preserve the target relation, so they remain
 non-promotable diagnostics.
 
+`/tmp/cyrus_six_point_height_side_v1.json` adds the global secondary-height
+side for those unresolved chamber generators. All four six-point rows are on
+the positive side; the shared target `7`/`8` row has pairing
+`0.04240825693838701`. Any source-derived chamber rule for this family must
+respect that side information.
+
 ## Next Concrete Action
 
 The next implementation should be one of these, in order:

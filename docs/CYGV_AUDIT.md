@@ -4347,3 +4347,13 @@ threefold omissions (`2` for point `46`, `4` for point `195`), but every such
 omission deletes terms from the actual target relation:
 `zero_coefficient_enlargements_sampled_compact_omissions_delete_target_relation_terms`.
 Thus the obvious support-enlargement repair is also non-promotable.
+
+`/tmp/cyrus_six_point_height_side_v1.json` now exposes the global secondary
+height side for the unresolved chamber generators themselves. All four
+remaining six-point rows are positive with respect to the saved
+origin-included secondary-height vector. The shared target `7`/`8` degree-`2`
+row has
+`global_secondary_height_status=global_basis_secondary_height_positive` and
+pairing `0.04240825693838701`. This gives the next chamber-rule search an
+explicit side constraint instead of relying on the larger target-plus-star
+diagnostics.

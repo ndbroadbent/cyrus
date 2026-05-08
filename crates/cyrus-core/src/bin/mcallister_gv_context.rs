@@ -1284,6 +1284,8 @@ struct LocalCygvChamberSemigroupGeneratorContext {
     global_basis_status: String,
     basis_nonzero: Option<Vec<(usize, i64)>>,
     degree: Option<i128>,
+    global_secondary_height_status: String,
+    global_secondary_height_pairing: Option<String>,
     known_qn_history_status: String,
     toric_gv: Option<String>,
     source_derived_gv: Option<String>,
@@ -1305,6 +1307,8 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
     degree: Option<i128>,
     basis_nonzero: Option<Vec<(usize, i64)>>,
     point_relation_nonzero: Option<Vec<(usize, i64)>>,
+    global_secondary_height_status: String,
+    global_secondary_height_pairing: Option<String>,
     known_qn_history_status: String,
     source_class_status: Option<String>,
     local_toric_kind: Option<String>,
@@ -20493,6 +20497,8 @@ fn unresolved_chamber_generator_summaries(
                     degree: context.degree,
                     basis_nonzero: context.basis_nonzero.clone(),
                     point_relation_nonzero: context.point_relation_nonzero.clone(),
+                    global_secondary_height_status: context.global_secondary_height_status.clone(),
+                    global_secondary_height_pairing: context.global_secondary_height_pairing.clone(),
                     known_qn_history_status: context.known_qn_history_status.clone(),
                     source_class_status: context.source_class_status.clone(),
                     local_toric_kind: context.local_toric_diagnostic.local_toric_kind.clone(),
@@ -25311,6 +25317,9 @@ fn chamber_semigroup_generator_context(
             global_basis_status: global_basis_status.to_string(),
             basis_nonzero: None,
             degree: None,
+            global_secondary_height_status:
+                "global_basis_secondary_height_not_run_without_global_basis".to_string(),
+            global_secondary_height_pairing: None,
             known_qn_history_status: known_qn_history_status.to_string(),
             toric_gv: None,
             source_derived_gv: None,
@@ -25355,6 +25364,8 @@ fn chamber_semigroup_generator_context(
             global_basis_status: "chamber_generator_global_basis_projection_zero".to_string(),
             basis_nonzero: Some(Vec::new()),
             degree: Some(0),
+            global_secondary_height_status: "global_basis_secondary_height_zero_curve".to_string(),
+            global_secondary_height_pairing: Some("0".to_string()),
             known_qn_history_status: "zero_chamber_generator".to_string(),
             toric_gv: None,
             source_derived_gv: None,
@@ -25398,6 +25409,7 @@ fn chamber_semigroup_generator_context(
         }
     };
     let basis_nonzero = sparse_from_dense(&basis_dense);
+    let global_secondary_height = global_basis_secondary_height_pairing_hint(&basis_dense, context);
     let degree = match curve_degree(&basis_dense, context.grading) {
         Ok(degree) => degree,
         Err(error) => {
@@ -25419,6 +25431,8 @@ fn chamber_semigroup_generator_context(
                     .to_string(),
                 basis_nonzero: Some(basis_nonzero),
                 degree: None,
+                global_secondary_height_status: global_secondary_height.status,
+                global_secondary_height_pairing: global_secondary_height.pairing,
                 known_qn_history_status: "invalid_chamber_generator_global_basis_degree"
                     .to_string(),
                 toric_gv: None,
@@ -25492,6 +25506,8 @@ fn chamber_semigroup_generator_context(
         global_basis_status: "chamber_generator_global_basis_projection_integral".to_string(),
         basis_nonzero: Some(basis_nonzero),
         degree: Some(degree),
+        global_secondary_height_status: global_secondary_height.status,
+        global_secondary_height_pairing: global_secondary_height.pairing,
         known_qn_history_status: known_qn_status,
         toric_gv,
         source_derived_gv,
@@ -35327,6 +35343,8 @@ mod tests {
             global_basis_status: "chamber_generator_global_basis_projection_integral".to_string(),
             basis_nonzero: None,
             degree: Some(4),
+            global_secondary_height_status: "global_basis_secondary_height_positive".to_string(),
+            global_secondary_height_pairing: Some("1".to_string()),
             known_qn_history_status: "known_nonzero_source_gv".to_string(),
             toric_gv: None,
             source_derived_gv: Some("1".to_string()),
