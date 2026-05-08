@@ -3879,6 +3879,11 @@ The same context report now aggregates circuit-triangulation choice counts for
 current/flipped chamber generators and their decomposition terms, making the
 two-choice circuit rows visible in all-target summaries without promoting any
 local formula or compact `cygv` value.
+Regenerating `/tmp/cyrus_star_union_all_circuit_choice_aggregate.json` from the
+current schema-4/global-height context gives choice-count buckets
+current generators `{2:15}`, current decomposition terms `{2:5}`, flipped
+generators `{2:10}`, flipped decomposition terms `{2:6}`, with
+`missing_target_count=9`.
 
 The star-union chamber semigroup probe now also lifts every current/flipped
 chamber generator back through the global curve-basis projection and reports

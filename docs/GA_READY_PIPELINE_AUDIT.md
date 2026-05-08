@@ -1754,6 +1754,12 @@ to make the remaining GV layer more first-principles:
    for current/flipped chamber generators and their decomposition terms, so
    all-target runs can distinguish actual two-choice circuit rows from
    non-circuit or missing-context rows without scanning each sample entry.
+   Regenerating
+   `/tmp/cyrus_star_union_all_circuit_choice_aggregate.json` from the current
+   schema-4/global-height context reports choice-count buckets
+   current generators `{2:15}`, current decomposition terms `{2:5}`,
+   flipped generators `{2:10}`, flipped decomposition terms `{2:6}`, while
+   preserving `missing_target_count=9`.
    The Stage 0 no-replay policy tests also now pass again after two policy
    cleanups: generic first-principles runs log the computed flux-coordinate
    basis separately from explicit production-basis overrides, and the opt-in
