@@ -1657,6 +1657,17 @@ to make the remaining GV layer more first-principles:
    constructing expanded-secondary chamber constraints from selected local
    face phases, but it does not yet enumerate NTFEs or solve the target
    `7`/`8` chamber transport.
+   The next CYTools expanded-secondary support primitive is also now ported:
+   `expanded_secondary_fan_hyperplanes_on_faces` and
+   `expanded_secondary_fan_hyperplanes_on_polytope_2faces_4d` implement the
+   `_2d_frt_subfan_ineqs` / `Polytope.expanded_secondary_fan` support
+   inequalities for two-faces. The focused secondary tests cover the two
+   CYTools cases, consecutive collinear three-site rows and primitive
+   area-three centroid rows, including an embedded 4D face-coordinate
+   regression. A direct reference run against CYTools on the same small cases
+   returned `[[1,-2,1,0]]` and `[[1,1,1,-3]]`, matching Cyrus. This is still
+   only the support of the expanded secondary fan; it does not choose an NTFE
+   chamber or certify the missing compact qN history.
    `mcallister_first_principles` now exposes this as
    `--dump-corrected-chamber-2face-secondary-certificate` and adds
    `secondary_cone_2face_height_certificate` to corrected-chamber GV context

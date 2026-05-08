@@ -20,7 +20,9 @@ pub use regular::compute_regular_triangulation;
 pub use secondary::{
     CircuitFlip, CircuitOmissionSide, CircuitOmissionSideClassification, circuit_omission_facets,
     classify_circuit_omission_side, complete_circuit_flip_links,
-    expanded_secondary_cone_hyperplanes_from_face_triangulations, flip_circuit_in_triangulation,
+    expanded_secondary_cone_hyperplanes_from_face_triangulations,
+    expanded_secondary_fan_hyperplanes_on_faces,
+    expanded_secondary_fan_hyperplanes_on_polytope_2faces_4d, flip_circuit_in_triangulation,
     flip_circuit_link_in_triangulation, secondary_cone_height_pairings,
     secondary_cone_hyperplanes_native, secondary_cone_hyperplanes_native_on_faces,
     secondary_cone_hyperplanes_native_on_polytope_2faces_4d,

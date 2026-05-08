@@ -3784,6 +3784,16 @@ two-face triangulations are converted to native CPL inequalities in ambient
 point-index space and deduplicated. This is a building block for selected
 local face phases and expanded-secondary chamber constraints, not yet the NTFE
 enumerator or a source-certified `target+star` transport history.
+The same secondary module now ports the CYTools expanded-secondary support
+primitive itself through `expanded_secondary_fan_hyperplanes_on_faces` and
+`expanded_secondary_fan_hyperplanes_on_polytope_2faces_4d`. These functions
+implement `_2d_frt_subfan_ineqs`: consecutive collinear three-site
+inequalities and primitive area-three centroid inequalities, after rebuilding
+local rank-two coordinates for embedded two-faces. Focused tests cover the
+native 2D and embedded 4D cases, and a direct CYTools reference run on the
+small rows returned `[[1,-2,1,0]]` and `[[1,1,1,-3]]`, matching Cyrus. This
+adds the support constraints needed before real NTFE/chamber enumeration; it
+does not by itself identify the target-plus-star chamber transport.
 
 The first-principles runner can now dump that certificate directly with
 `--dump-corrected-chamber-2face-secondary-certificate`, and corrected-chamber

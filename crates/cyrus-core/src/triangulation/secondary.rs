@@ -11,10 +11,11 @@ use malachite::{Integer, Rational};
 use super::Triangulation;
 use crate::Point;
 use crate::error::{Error, Result};
-use crate::integer_math::{integer_kernel, matrix_rank};
+use crate::integer_math::{hermite_normal_form, integer_kernel, matrix_rank};
 use crate::polytope::Polytope;
 use crate::types::f64::F64;
 use crate::types::tags::{Finite, Pos};
+use crate::utils::gcd_int;
 
 /// Which side of an affine circuit a triangulation selects.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -242,6 +243,62 @@ pub fn expanded_secondary_cone_hyperplanes_from_face_triangulations(
         }
     }
     Ok(hyperplanes.into_iter().collect())
+}
+
+/// Compute the expanded-secondary subfan support on supplied two-faces.
+///
+/// This ports CYTools' `Polytope.expanded_secondary_fan` support computation:
+/// for each two-face, add the universal inequalities that force any height
+/// vector in the support to induce a fine regular subdivision of that face.
+/// It does not choose one triangulation chamber. Instead it records the
+/// coarse support constraints shared by all FRT chambers:
+///
+/// - three consecutive collinear sites give `h_a - 2 h_b + h_c >= 0`;
+/// - a primitive area-three triangle with its centroid present gives
+///   `h_a + h_b + h_c - 3 h_centroid >= 0`.
+///
+/// The returned rows live in the ambient point-index space and are
+/// deduplicated across faces.
+///
+/// # Errors
+///
+/// Returns an error if a supplied face is not affine rank two, if its points
+/// cannot be expressed integrally in the reconstructed local face lattice, or
+/// if a required centroid lattice point is absent from the supplied face.
+pub fn expanded_secondary_fan_hyperplanes_on_faces(
+    points: &[Point],
+    faces: &[Vec<usize>],
+) -> Result<Vec<Vec<i64>>> {
+    validate_point_dimensions(points, "expanded secondary fan points")?;
+
+    let mut hyperplanes = BTreeSet::new();
+    for (face_idx, face) in faces.iter().enumerate() {
+        for hyperplane in expanded_secondary_fan_hyperplanes_for_face(points, face, face_idx)? {
+            hyperplanes.insert(hyperplane);
+        }
+    }
+    Ok(hyperplanes.into_iter().collect())
+}
+
+/// Compute CYTools-style expanded-secondary-fan support hyperplanes for all
+/// two-faces of a four-dimensional polytope.
+///
+/// This is the reusable Rust counterpart of
+/// `Polytope.expanded_secondary_fan(..., as_cone=False)` for the 4D
+/// reflexive-polytopes used by the McAllister pipeline. It first constructs
+/// the CYTools-style two-face point-index sets and then applies
+/// [`expanded_secondary_fan_hyperplanes_on_faces`].
+///
+/// # Errors
+///
+/// Returns an error if the 4D face construction fails or any computed two-face
+/// fails the local expanded-secondary support calculation.
+pub fn expanded_secondary_fan_hyperplanes_on_polytope_2faces_4d(
+    points: &[Point],
+    polytope: &Polytope,
+) -> Result<Vec<Vec<i64>>> {
+    let faces = polytope.faces_4d_for_points(points)?;
+    expanded_secondary_fan_hyperplanes_on_faces(points, &faces.twofaces)
 }
 
 /// Construct the circuit facets for one side of a bistellar flip.
@@ -859,6 +916,262 @@ fn affine_rank_for_point_index_set(points: &[Point], indices: &BTreeSet<usize>) 
     Ok(matrix_rank(&rows))
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct LocalFacePoint2D {
+    point_index: usize,
+    coordinates: [i64; 2],
+}
+
+fn expanded_secondary_fan_hyperplanes_for_face(
+    points: &[Point],
+    face: &[usize],
+    face_idx: usize,
+) -> Result<Vec<Vec<i64>>> {
+    let face_set = validate_face_indices(points, face, face_idx)?;
+    let local_points = local_rank_two_face_coordinates(points, &face_set, face_idx)?;
+    let point_lookup = local_points
+        .iter()
+        .map(|point| (point.coordinates, point.point_index))
+        .collect::<BTreeMap<_, _>>();
+
+    let mut hyperplanes = BTreeSet::new();
+    for first in 0..local_points.len() {
+        for second in (first + 1)..local_points.len() {
+            for third in (second + 1)..local_points.len() {
+                let triple = [
+                    local_points[first],
+                    local_points[second],
+                    local_points[third],
+                ];
+                let area_2x = triangle_area_2x([triple[0], triple[1], triple[2]]);
+                if area_2x == 0 {
+                    if let Some(ordering) = consecutive_collinear_site_ordering([
+                        triple[0].coordinates,
+                        triple[1].coordinates,
+                        triple[2].coordinates,
+                    ]) {
+                        let mut row = vec![0i64; points.len()];
+                        row[triple[ordering[0]].point_index] += 1;
+                        row[triple[ordering[1]].point_index] -= 2;
+                        row[triple[ordering[2]].point_index] += 1;
+                        hyperplanes.insert(row);
+                    }
+                    continue;
+                }
+
+                if area_2x == 1 {
+                    continue;
+                }
+
+                if area_2x == 3
+                    && primitive_2d(coordinate_difference_2d(
+                        triple[1].coordinates,
+                        triple[0].coordinates,
+                    ))
+                    && primitive_2d(coordinate_difference_2d(
+                        triple[2].coordinates,
+                        triple[0].coordinates,
+                    ))
+                    && primitive_2d(coordinate_difference_2d(
+                        triple[2].coordinates,
+                        triple[1].coordinates,
+                    ))
+                {
+                    let centroid = triangle_centroid_2d([
+                        triple[0].coordinates,
+                        triple[1].coordinates,
+                        triple[2].coordinates,
+                    ])?;
+                    let Some(&centroid_point_index) = point_lookup.get(&centroid) else {
+                        return Err(Error::InvalidInput(format!(
+                            "expanded secondary fan face {face_idx} is missing centroid point {centroid:?}"
+                        )));
+                    };
+                    let mut row = vec![0i64; points.len()];
+                    row[triple[0].point_index] += 1;
+                    row[triple[1].point_index] += 1;
+                    row[triple[2].point_index] += 1;
+                    row[centroid_point_index] -= 3;
+                    hyperplanes.insert(row);
+                }
+            }
+        }
+    }
+    Ok(hyperplanes.into_iter().collect())
+}
+
+fn local_rank_two_face_coordinates(
+    points: &[Point],
+    face_set: &BTreeSet<usize>,
+    face_idx: usize,
+) -> Result<Vec<LocalFacePoint2D>> {
+    let affine_rank = affine_rank_for_point_index_set(points, face_set)?;
+    if affine_rank != 2 {
+        return Err(Error::InvalidInput(format!(
+            "expanded secondary fan face {face_idx} has affine rank {affine_rank}, expected 2"
+        )));
+    }
+    let base_idx = *face_set
+        .iter()
+        .next()
+        .expect("validated nonempty face set has a first point");
+    let base = points
+        .get(base_idx)
+        .ok_or_else(|| Error::InvalidInput("local face base index out of bounds".into()))?;
+    let difference_rows = face_set
+        .iter()
+        .skip(1)
+        .map(|&point_idx| {
+            let point = points.get(point_idx).ok_or_else(|| {
+                Error::InvalidInput(format!("local face point index {point_idx} out of bounds"))
+            })?;
+            Ok(point
+                .coords()
+                .iter()
+                .zip(base.coords().iter())
+                .map(|(&coord, &base_coord)| Integer::from(coord - base_coord))
+                .collect::<Vec<_>>())
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let basis = hermite_normal_form(&difference_rows)
+        .into_iter()
+        .filter(|row| row.iter().any(|value| *value != 0))
+        .map(|row| {
+            row.into_iter()
+                .map(|value| {
+                    i64::try_from(&value).map_err(|_| {
+                        Error::InvalidInput(
+                            "expanded secondary fan local basis entry does not fit in i64".into(),
+                        )
+                    })
+                })
+                .collect::<Result<Vec<_>>>()
+        })
+        .collect::<Result<Vec<_>>>()?;
+    if basis.len() != 2 {
+        return Err(Error::InvalidInput(format!(
+            "expanded secondary fan face {face_idx} produced {} local basis rows",
+            basis.len()
+        )));
+    }
+
+    let mut local_points = Vec::with_capacity(face_set.len());
+    for &point_idx in face_set {
+        let point = points.get(point_idx).ok_or_else(|| {
+            Error::InvalidInput(format!("local face point index {point_idx} out of bounds"))
+        })?;
+        let target = point
+            .coords()
+            .iter()
+            .zip(base.coords().iter())
+            .map(|(&coord, &base_coord)| coord - base_coord)
+            .collect::<Vec<_>>();
+        let coordinates =
+            solve_in_two_vector_basis(&basis[0], &basis[1], &target).ok_or_else(|| {
+                Error::InvalidInput(format!(
+                    "expanded secondary fan face {face_idx} point {point_idx} is not integral in the local face basis"
+                ))
+            })?;
+        local_points.push(LocalFacePoint2D {
+            point_index: point_idx,
+            coordinates,
+        });
+    }
+    local_points.sort();
+    Ok(local_points)
+}
+
+fn solve_in_two_vector_basis(
+    first_basis: &[i64],
+    second_basis: &[i64],
+    target: &[i64],
+) -> Option<[i64; 2]> {
+    for first_coord in 0..target.len() {
+        for second_coord in (first_coord + 1)..target.len() {
+            let det = i128::from(first_basis[first_coord]) * i128::from(second_basis[second_coord])
+                - i128::from(first_basis[second_coord]) * i128::from(second_basis[first_coord]);
+            if det == 0 {
+                continue;
+            }
+            let first_num = i128::from(target[first_coord])
+                * i128::from(second_basis[second_coord])
+                - i128::from(target[second_coord]) * i128::from(second_basis[first_coord]);
+            let second_num = i128::from(first_basis[first_coord])
+                * i128::from(target[second_coord])
+                - i128::from(first_basis[second_coord]) * i128::from(target[first_coord]);
+            if first_num % det != 0 || second_num % det != 0 {
+                continue;
+            }
+            let first = i64::try_from(first_num / det).ok()?;
+            let second = i64::try_from(second_num / det).ok()?;
+            let reconstructs_target = target
+                .iter()
+                .zip(first_basis.iter().zip(second_basis.iter()))
+                .all(
+                    |(&target_coord, (&first_basis_coord, &second_basis_coord))| {
+                        i128::from(first) * i128::from(first_basis_coord)
+                            + i128::from(second) * i128::from(second_basis_coord)
+                            == i128::from(target_coord)
+                    },
+                );
+            if reconstructs_target {
+                return Some([first, second]);
+            }
+        }
+    }
+    None
+}
+
+fn triangle_area_2x(points: [LocalFacePoint2D; 3]) -> i64 {
+    let [first, second, third] = points.map(|point| point.coordinates);
+    let area = first[0] * (second[1] - third[1])
+        + second[0] * (third[1] - first[1])
+        + third[0] * (first[1] - second[1]);
+    area.abs()
+}
+
+fn consecutive_collinear_site_ordering(points: [[i64; 2]; 3]) -> Option<[usize; 3]> {
+    let first_delta = coordinate_difference_2d(points[1], points[0]);
+    let second_delta = coordinate_difference_2d(points[2], points[0]);
+    let first_primitive = primitive_2d(first_delta);
+    let second_primitive = primitive_2d(second_delta);
+
+    if first_primitive {
+        if second_primitive {
+            return Some([1, 0, 2]);
+        }
+        if double_2d(first_delta) == second_delta {
+            return Some([0, 1, 2]);
+        }
+    } else if second_primitive && double_2d(second_delta) == first_delta {
+        return Some([0, 2, 1]);
+    }
+    None
+}
+
+fn primitive_2d(vector: [i64; 2]) -> bool {
+    gcd_int(vector[0], vector[1]) == 1
+}
+
+fn coordinate_difference_2d(lhs: [i64; 2], rhs: [i64; 2]) -> [i64; 2] {
+    [lhs[0] - rhs[0], lhs[1] - rhs[1]]
+}
+
+fn double_2d(vector: [i64; 2]) -> [i64; 2] {
+    [2 * vector[0], 2 * vector[1]]
+}
+
+fn triangle_centroid_2d(points: [[i64; 2]; 3]) -> Result<[i64; 2]> {
+    let x_sum = points.iter().map(|point| point[0]).sum::<i64>();
+    let y_sum = points.iter().map(|point| point[1]).sum::<i64>();
+    if x_sum % 3 != 0 || y_sum % 3 != 0 {
+        return Err(Error::InvalidInput(
+            "expanded secondary fan area-three primitive triangle has non-integral centroid".into(),
+        ));
+    }
+    Ok([x_sum / 3, y_sum / 3])
+}
+
 /// Pair secondary-cone hyperplanes with a height vector.
 ///
 /// CYTools' `check_heights` tests these pairings against zero to decide whether
@@ -1055,6 +1368,61 @@ mod tests {
                 vec![0, 0, 0, 0, -1, 1, -1, 1],
             ]
         );
+    }
+
+    #[test]
+    fn expanded_secondary_fan_support_detects_collinear_three_sites() {
+        let points = vec![
+            Point::new(vec![0, 0]),
+            Point::new(vec![1, 0]),
+            Point::new(vec![2, 0]),
+            Point::new(vec![0, 1]),
+        ];
+
+        let hyperplanes =
+            expanded_secondary_fan_hyperplanes_on_faces(&points, &[vec![0, 1, 2, 3]]).unwrap();
+
+        assert_eq!(hyperplanes, vec![vec![1, -2, 1, 0]]);
+    }
+
+    #[test]
+    fn expanded_secondary_fan_support_detects_area_three_centroid() {
+        let points = vec![
+            Point::new(vec![0, 0]),
+            Point::new(vec![1, 2]),
+            Point::new(vec![2, 1]),
+            Point::new(vec![1, 1]),
+        ];
+
+        let hyperplanes =
+            expanded_secondary_fan_hyperplanes_on_faces(&points, &[vec![0, 1, 2, 3]]).unwrap();
+
+        assert_eq!(hyperplanes, vec![vec![1, 1, 1, -3]]);
+    }
+
+    #[test]
+    fn expanded_secondary_fan_support_uses_local_coordinates_for_embedded_face() {
+        let embed = |x: i64, y: i64| Point::new(vec![x, y, x + y, 2 * x - y]);
+        let points = vec![embed(0, 0), embed(1, 2), embed(2, 1), embed(1, 1)];
+
+        let hyperplanes =
+            expanded_secondary_fan_hyperplanes_on_faces(&points, &[vec![0, 1, 2, 3]]).unwrap();
+
+        assert_eq!(hyperplanes, vec![vec![1, 1, 1, -3]]);
+    }
+
+    #[test]
+    fn expanded_secondary_fan_support_rejects_non_two_face() {
+        let points = vec![
+            Point::new(vec![0, 0]),
+            Point::new(vec![1, 0]),
+            Point::new(vec![2, 0]),
+        ];
+
+        let error =
+            expanded_secondary_fan_hyperplanes_on_faces(&points, &[vec![0, 1, 2]]).unwrap_err();
+
+        assert!(error.to_string().contains("has affine rank 1, expected 2"));
     }
 
     #[test]
