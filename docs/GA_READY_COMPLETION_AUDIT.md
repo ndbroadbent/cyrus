@@ -871,15 +871,27 @@ role. This makes the wall-crossing obstruction visible at top level: zero
 off-height components are harmless, while nonzero components that are not
 integral global curve-basis classes remain local chamber-map data rather than
 promotable compact GV history.
+The same report now aggregates the star-union global-basis projection and
+known-qN lookup statuses. On a current release no-replay 4-214-647 export, the
+corrected chamber certificate is strictly inside the secondary cone
+(`1258` hyperplanes, minimum pairing `0.0011511487808064658`) and every missing
+target has two triangulation-star samples. The local blockers split into five
+non-`P2`/origin-omitting phase rows, two weighted-`P2` rows with integral
+target/star union coordinates, and two weighted-`P2` rows whose target relation
+has non-integral local charge coordinates. All four weighted rows do project
+integrally to the global no-origin CYTools basis for target, star, and the
+target±star sums, but the positive-direction target/star/sum qN lookups remain
+`unknown_not_toric_covered`; two negative star opposites have known
+source-derived nonzero GV values. The run still ends at
+`V_string=4711.504666533563`, with a corrected-volume residual of about
+`0.072167298`, so these counts are blocker evidence, not a reproduced result.
 Because the full corrected-chamber GV context export still exceeded a `300s`
 debug timeout before writing JSON, the runner also has a narrow
 `--dump-corrected-chamber-secondary-certificate` flag. On the validation-only
 `--allow-downstream-kahler` checkpoint path for 4-214-647, it writes in about
 `10.32s` and reports `1262` hyperplanes with minimum pairing
 `0.0002917945770377628`, maximum pairing `87.93218664229505`, and
-`strictly_inside=true`. The no-replay version of this light dump still exceeded
-a `180s` debug guard because it waits for the corrected Kähler solve before the
-corrected chamber exists, so this is a chamber-certificate validation check,
+`strictly_inside=true`. This remains a chamber-certificate validation check,
 not a production no-replay completion proof.
 
 ## Next Concrete Action

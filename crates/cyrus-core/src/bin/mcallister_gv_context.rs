@@ -268,6 +268,9 @@ struct ContextReport {
     local_cygv_source_resolution_star_reduction_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_off_height_status_counts: BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_global_basis_status_counts: BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_global_basis_lookup_status_counts:
+        BTreeMap<String, usize>,
     local_phase_chamber_membership_certificate_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_hint_sample: Vec<LocalCygvSourceResolutionHintSummary>,
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
@@ -13893,6 +13896,12 @@ fn build_report(
         local_cygv_source_resolution_star_union_status_counts(&targets);
     let local_cygv_source_resolution_star_union_off_height_status_counts =
         local_cygv_source_resolution_star_union_off_height_status_counts(&targets, validated);
+    let local_cygv_source_resolution_star_union_global_basis_status_counts =
+        local_cygv_source_resolution_star_union_global_basis_status_counts(&targets, validated);
+    let local_cygv_source_resolution_star_union_global_basis_lookup_status_counts =
+        local_cygv_source_resolution_star_union_global_basis_lookup_status_counts(
+            &targets, validated,
+        );
     let local_phase_chamber_membership_certificate_status_counts =
         local_phase_chamber_membership_certificate_status_counts(&targets, validated);
     let local_cygv_source_resolution_hint_sample =
@@ -14651,6 +14660,8 @@ fn build_report(
         local_cygv_source_resolution_star_reduction_status_counts,
         local_cygv_source_resolution_star_union_status_counts,
         local_cygv_source_resolution_star_union_off_height_status_counts,
+        local_cygv_source_resolution_star_union_global_basis_status_counts,
+        local_cygv_source_resolution_star_union_global_basis_lookup_status_counts,
         local_phase_chamber_membership_certificate_status_counts,
         local_cygv_source_resolution_hint_sample,
         local_cygv_target_candidate_status_counts,
@@ -15201,6 +15212,82 @@ fn local_cygv_source_resolution_star_union_off_height_status_counts_for_parts<'a
                     lookup.role, lookup.known_qn_history_status
                 ))
                 .or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_star_union_global_basis_status_counts<'a>(
+    targets: impl IntoIterator<Item = &'a TargetReport>,
+    context: &ValidatedContext<'_>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        let Some(skeleton) = target.local_cygv_input_skeleton.as_ref() else {
+            continue;
+        };
+        let star_status = local_cygv_zero_shared_star_status(
+            skeleton,
+            target.origin_circuit_first_witness.as_ref(),
+        );
+        if star_status != "weighted_p2_zero_shared_star_uses_two_alternate_chamber_points" {
+            *counts
+                .entry(format!("skipped:{star_status}"))
+                .or_insert(0usize) += 1;
+            continue;
+        }
+        let star_support_hint = local_cygv_shared_two_simplex_star_support_hint(
+            target.origin_circuit_first_witness.as_ref(),
+        );
+        let union = local_cygv_star_union_relation_hint(
+            target.origin_circuit_first_witness.as_ref(),
+            &star_support_hint,
+            Some(context.q_matrix),
+        );
+        *counts.entry(union.global_basis_status).or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_star_union_global_basis_lookup_status_counts<'a>(
+    targets: impl IntoIterator<Item = &'a TargetReport>,
+    context: &ValidatedContext<'_>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        let Some(skeleton) = target.local_cygv_input_skeleton.as_ref() else {
+            continue;
+        };
+        let star_status = local_cygv_zero_shared_star_status(
+            skeleton,
+            target.origin_circuit_first_witness.as_ref(),
+        );
+        if star_status != "weighted_p2_zero_shared_star_uses_two_alternate_chamber_points" {
+            *counts
+                .entry(format!("skipped:{star_status}"))
+                .or_insert(0usize) += 1;
+            continue;
+        }
+        let star_support_hint = local_cygv_shared_two_simplex_star_support_hint(
+            target.origin_circuit_first_witness.as_ref(),
+        );
+        let union = local_cygv_star_union_relation_hint(
+            target.origin_circuit_first_witness.as_ref(),
+            &star_support_hint,
+            Some(context.q_matrix),
+        );
+        for lookup in local_cygv_star_union_global_basis_lookup_sample(&union, context) {
+            *counts
+                .entry(format!(
+                    "{}:{}",
+                    lookup.role, lookup.known_qn_history_status
+                ))
+                .or_insert(0usize) += 1;
+            if let Some(status) = lookup.opposite_known_qn_history_status {
+                *counts
+                    .entry(format!("{}:opposite:{status}", lookup.role))
+                    .or_insert(0usize) += 1;
+            }
         }
     }
     counts
