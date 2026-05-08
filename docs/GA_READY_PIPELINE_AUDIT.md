@@ -1349,12 +1349,15 @@ to make the remaining GV layer more first-principles:
    Target `7` has no positive primitive orientation for `[3,-1]`; target `8`
    has positive `[1,1]` coordinates but still needs a source-derived
    nef partition, complete-intersection intersection tensor, semigroup/grading
-   certificate, and chamber/tensor data. After recomputing the affine charge
-   basis, every single-column omission for targets `7`/`8` remains
-   Calabi-Yau charged but has `q_rows=6`, `q_cols=1`, and hypersurface
-   `cy_dim=4`, so the next fix is a source-derived CICY reduction or
-   chamber-transport history, not a direct raw hypersurface `cygv` call or a
-   simple point deletion.
+   certificate, and chamber/tensor data. The reports enumerate the codimension-2
+   local bipartitions: both targets have `63` possible nontrivial splits and
+   `6` zero-degree split candidates, so the CICY status is
+   `complete_intersection_cy3_shape_ambiguous_zero_degree_nef_partition_candidates_requires_source_rule`.
+   After recomputing the affine charge basis, every single-column omission for
+   targets `7`/`8` remains Calabi-Yau charged but has `q_rows=6`, `q_cols=1`,
+   and hypersurface `cy_dim=4`, so the next fix is a source-derived CICY
+   nef-partition/reduction or chamber-transport history, not a direct raw
+   hypersurface `cygv` call or a simple point deletion.
    The full union-support height profile is now serialized as well. For
    targets `3`/`6`, the off-hyperplane zero-shared ray carries zero target and
    star coefficient; for targets `7`/`8`, the height `-1` zero-shared ray and

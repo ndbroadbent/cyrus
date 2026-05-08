@@ -662,8 +662,20 @@ struct LocalCygvCompleteIntersectionShapeCandidate {
     ambient_dim: i64,
     cy_dim: i64,
     nef_partition_part_count: usize,
+    nef_partition_candidate_count: Option<usize>,
+    zero_degree_nef_partition_candidate_count: Option<usize>,
+    zero_degree_nef_partition_candidate_sample: Vec<LocalCygvNefPartitionCandidate>,
     status: String,
     missing_inputs: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvNefPartitionCandidate {
+    first_part_point_indices: Vec<usize>,
+    second_part_point_indices: Vec<usize>,
+    first_part_degree: Vec<i64>,
+    second_part_degree: Vec<i64>,
+    degree_status: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -9959,6 +9971,8 @@ fn local_cygv_hypersurface_shape_from_dimensions_and_charge_basis(
 
 fn local_cygv_complete_intersection_shape_candidate(
     hypersurface_shape: &LocalCygvHypersurfaceShape,
+    support_point_indices: &[usize],
+    local_charge_basis: &[Vec<i64>],
 ) -> Option<LocalCygvCompleteIntersectionShapeCandidate> {
     let required_codim = hypersurface_shape.ambient_dim.checked_sub(3)?;
     if required_codim <= 1 {
@@ -9968,6 +9982,43 @@ fn local_cygv_complete_intersection_shape_candidate(
     if cy_codim > hypersurface_shape.q_rows {
         return None;
     }
+    let nef_partition_candidates = if cy_codim == 2 {
+        local_cygv_codim_two_nef_partition_candidates(support_point_indices, local_charge_basis)
+            .ok()
+    } else {
+        None
+    };
+    let zero_degree_nef_partition_candidate_sample = nef_partition_candidates
+        .as_ref()
+        .map(|candidates| {
+            candidates
+                .iter()
+                .filter(|candidate| candidate.degree_status == "both_parts_zero_degree")
+                .take(8)
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let zero_degree_nef_partition_candidate_count =
+        nef_partition_candidates.as_ref().map(|candidates| {
+            candidates
+                .iter()
+                .filter(|candidate| candidate.degree_status == "both_parts_zero_degree")
+                .count()
+        });
+    let nef_partition_candidate_count = nef_partition_candidates.as_ref().map(std::vec::Vec::len);
+    let status = match zero_degree_nef_partition_candidate_count {
+        Some(0) => {
+            "complete_intersection_cy3_shape_no_zero_degree_nef_partition_candidate_requires_source_rule"
+        }
+        Some(1) => {
+            "complete_intersection_cy3_shape_unique_zero_degree_nef_partition_candidate_uncertified"
+        }
+        Some(_) => {
+            "complete_intersection_cy3_shape_ambiguous_zero_degree_nef_partition_candidates_requires_source_rule"
+        }
+        None => "complete_intersection_cy3_shape_requires_source_derived_nef_partition",
+    };
     Some(LocalCygvCompleteIntersectionShapeCandidate {
         q_rows: hypersurface_shape.q_rows,
         q_cols: hypersurface_shape.q_cols,
@@ -9975,13 +10026,95 @@ fn local_cygv_complete_intersection_shape_candidate(
         ambient_dim: hypersurface_shape.ambient_dim,
         cy_dim: 3,
         nef_partition_part_count: cy_codim,
-        status: "complete_intersection_cy3_shape_requires_source_derived_nef_partition".to_string(),
+        nef_partition_candidate_count,
+        zero_degree_nef_partition_candidate_count,
+        zero_degree_nef_partition_candidate_sample,
+        status: status.to_string(),
         missing_inputs: vec![
             "source_derived_nef_partition".to_string(),
             "complete_intersection_intersection_tensor".to_string(),
             "complete_intersection_chamber_certificate".to_string(),
         ],
     })
+}
+
+fn local_cygv_codim_two_nef_partition_candidates(
+    support_point_indices: &[usize],
+    local_charge_basis: &[Vec<i64>],
+) -> Result<Vec<LocalCygvNefPartitionCandidate>, String> {
+    if support_point_indices.is_empty() {
+        return Ok(Vec::new());
+    }
+    let local_q_matrix_rows = transpose_local_charge_basis(local_charge_basis);
+    if local_q_matrix_rows.len() != support_point_indices.len() {
+        return Err("support point count does not match local q row count".to_string());
+    }
+    if support_point_indices.len() >= usize::BITS as usize {
+        return Err("support too large for codimension-two partition enumeration".to_string());
+    }
+    let support_len = support_point_indices.len();
+    let mut candidates = Vec::new();
+    for mask in 1usize..((1usize << support_len) - 1) {
+        if (mask & 1) == 0 {
+            continue;
+        }
+        let mut first_part_point_indices = Vec::new();
+        let mut second_part_point_indices = Vec::new();
+        let mut first_part_degree = vec![0i64; local_charge_basis.len()];
+        let mut second_part_degree = vec![0i64; local_charge_basis.len()];
+        for (idx, point_index) in support_point_indices.iter().copied().enumerate() {
+            let (points, degree) = if ((mask >> idx) & 1) == 1 {
+                (&mut first_part_point_indices, &mut first_part_degree)
+            } else {
+                (&mut second_part_point_indices, &mut second_part_degree)
+            };
+            points.push(point_index);
+            for (slot, &charge) in degree.iter_mut().zip(local_q_matrix_rows[idx].iter()) {
+                *slot += charge;
+            }
+        }
+        candidates.push(LocalCygvNefPartitionCandidate {
+            degree_status: local_cygv_nef_partition_degree_status(
+                &first_part_degree,
+                &second_part_degree,
+            ),
+            first_part_point_indices,
+            second_part_point_indices,
+            first_part_degree,
+            second_part_degree,
+        });
+    }
+    candidates.sort_by(|lhs, rhs| {
+        lhs.degree_status
+            .cmp(&rhs.degree_status)
+            .then_with(|| {
+                lhs.first_part_point_indices
+                    .cmp(&rhs.first_part_point_indices)
+            })
+            .then_with(|| {
+                lhs.second_part_point_indices
+                    .cmp(&rhs.second_part_point_indices)
+            })
+    });
+    Ok(candidates)
+}
+
+fn local_cygv_nef_partition_degree_status(first: &[i64], second: &[i64]) -> String {
+    let sign_status = |values: &[i64]| {
+        if values.iter().all(|&value| value == 0) {
+            "zero"
+        } else if values.iter().all(|&value| value >= 0) {
+            "nonnegative"
+        } else if values.iter().all(|&value| value <= 0) {
+            "nonpositive"
+        } else {
+            "mixed"
+        }
+    };
+    match (sign_status(first), sign_status(second)) {
+        ("zero", "zero") => "both_parts_zero_degree".to_string(),
+        (lhs, rhs) => format!("first_part_{lhs}_second_part_{rhs}"),
+    }
 }
 
 fn local_charge_row_permutation_signatures(local_charge_basis: &[Vec<i64>]) -> Vec<Vec<i64>> {
@@ -21972,8 +22105,11 @@ fn local_cygv_star_union_target_plus_star_local_cygv_readiness(
             );
         }
     };
-    let complete_intersection_shape_candidate =
-        local_cygv_complete_intersection_shape_candidate(&shape);
+    let complete_intersection_shape_candidate = local_cygv_complete_intersection_shape_candidate(
+        &shape,
+        &support.point_indices,
+        charge_basis,
+    );
     let relation_coordinates = support.relation_coordinates.as_deref();
     let target_relation_status = match relation_coordinates {
         Some(coordinates) if !coordinates.is_empty() => {
@@ -28410,8 +28546,16 @@ mod tests {
         assert_eq!(complete_intersection.cy_codim, 2);
         assert_eq!(complete_intersection.cy_dim, 3);
         assert_eq!(
+            complete_intersection.nef_partition_candidate_count,
+            Some(63)
+        );
+        assert_eq!(
+            complete_intersection.zero_degree_nef_partition_candidate_count,
+            Some(6)
+        );
+        assert_eq!(
             complete_intersection.status,
-            "complete_intersection_cy3_shape_requires_source_derived_nef_partition"
+            "complete_intersection_cy3_shape_ambiguous_zero_degree_nef_partition_candidates_requires_source_rule"
         );
         assert_eq!(
             readiness.target_relation_status,
@@ -28533,6 +28677,13 @@ mod tests {
                 .as_ref()
                 .map(|candidate| (candidate.cy_codim, candidate.cy_dim)),
             Some((2, 3))
+        );
+        assert_eq!(
+            readiness
+                .complete_intersection_shape_candidate
+                .as_ref()
+                .and_then(|candidate| candidate.zero_degree_nef_partition_candidate_count),
+            Some(6)
         );
         assert_eq!(
             readiness.local_q_matrix_orientation_status,

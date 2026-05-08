@@ -3441,11 +3441,18 @@ This does not promote a GV value: the missing inputs are now sharper and include
 `source_derived_nef_partition`,
 `complete_intersection_intersection_tensor`,
 `complete_intersection_chamber_certificate`, plus the existing semigroup,
-grading, phase, tensor, and chamber certificates. Target `7` also has no
-nonnegative primitive orientation for coordinates `[3,-1]`, while target `8`
-has positive coordinates `[1,1]` but still lacks the higher-rank semigroup and
-grading certificate. The same report checks the cheap one-column reductions by
-recomputing the affine charge basis after each omission. Across all
+grading, phase, tensor, and chamber certificates. The same report now enumerates
+the codimension-2 bipartitions at the local charge-matrix boundary. Both
+targets have `63` nontrivial bipartitions and `6` zero-degree split candidates,
+so the status is
+`complete_intersection_cy3_shape_ambiguous_zero_degree_nef_partition_candidates_requires_source_rule`.
+This is useful but still not a source rule: it proves that Cyrus must derive
+which split, if any, comes from the star-union/CICY geometry instead of choosing
+one by scalar GV agreement. Target `7` also has no nonnegative primitive
+orientation for coordinates `[3,-1]`, while target `8` has positive coordinates
+`[1,1]` but still lacks the higher-rank semigroup and grading certificate. The
+same report checks the cheap one-column reductions by recomputing the affine
+charge basis after each omission. Across all
 target-plus-star rows there are now `12` compact threefold Calabi-Yau omissions,
 `7` dimension-three non-Calabi-Yau omissions, and `26` omissions that are not
 dimension three. None of the compact-threefold omissions are the target `7`/`8`
