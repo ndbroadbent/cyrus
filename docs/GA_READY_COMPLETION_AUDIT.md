@@ -1154,6 +1154,15 @@ basis overrides. The opt-in `mcallister_gv` binary no longer reads
 `dual_curves.dat` or `dual_curves_gv.dat`; it computes GV invariants and leaves
 checkpoint comparison to validation tests.
 
+The latest target-plus-star origin-enlargement check rules out the simplest
+remaining local CICY repair. Adding the origin back as a zero-coefficient
+support point gives no certified CYTools-style nef partition in
+`/tmp/cyrus_origin_enlarged_support_v1.json`: targets `0`, `1`, `5`, `7`, and
+`8` enumerate candidate bipartitions, but every candidate fails the ambient
+union-hull equality check, and targets `7`/`8` have no zero-degree candidates
+after origin enlargement. The remaining path is still source-derived chamber
+transport/qN history, not a local support split.
+
 ## Next Concrete Action
 
 The next implementation should be one of these, in order:

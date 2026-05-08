@@ -4178,3 +4178,16 @@ The no-replay boundary around the standalone GV binary is stricter now:
 Those files remain validation checkpoints for tests and audits only; the
 binary computes its GV table from the upstream polytope, FRST, GLSM, Mori-cap
 rays, grading, and `cygv` handoff.
+
+The origin-enlarged target-plus-star support probe now makes the nearest CICY
+shortcut failure explicit. In `/tmp/cyrus_origin_enlarged_support_v1.json`,
+adding point index `0` as a zero-coefficient spectator to the visible
+target-plus-star support still produces zero certified CYTools-style nef
+partitions. Targets `0`, `1`, `5`, `7`, and `8` enumerate `15`, `15`, `63`,
+`63`, and `63` bipartitions respectively, but every one fails with
+`support_polytope_cytools_nef_certificate_failed:invalid_input_nef_partition_union_hull_does_not_equal_ambient_polytope_hull`.
+Targets `2` and `4` are zero target-plus-star relations, while targets `3` and
+`6` are blocked earlier by non-integral target coordinates. For targets `7`
+and `8`, the origin-enlarged run also leaves zero zero-degree candidates, so
+the missing input is not "add the origin back"; it is still a source-derived
+nef partition/chamber-semigroup history for the transported support.
