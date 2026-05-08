@@ -3639,13 +3639,17 @@ a valid `target+star` GV domain.
 that implication directly. The readiness buckets are
 `wall_transport_blocked_missing_known_wall_circuit:6`,
 `wall_transport_blocked_transport_identity:1`, and
-`wall_transport_known_wall_remainder_requires_chamber_semigroup:2`. The two
-ready-but-unresolved rows are exactly targets `7`/`8`: both carry crossed wall
-curve `[(0,-1),(55,-1),(195,1),(212,1)]`, crossed-wall GV `1`, no
-target-plus-star finite generator or support-face certificate, and the missing
-inputs `target_plus_star_qn_history`,
-`target_plus_star_chamber_semigroup_transport`, and
-`shrinking_divisor_or_flop_certificate`. This keeps the known wall component
+`wall_transport_known_wall_remainder_requires_wall_crossing_chamber_transport:2`.
+The two ready-but-unresolved rows are exactly targets `7`/`8`: both carry
+crossed wall curve `[(0,-1),(55,-1),(195,1),(212,1)]`, crossed-wall GV `1`,
+no target-plus-star finite generator or support-face certificate, local
+shared-face secondary status `star_union_shared_face_secondary_on_wall`, and
+corrected global-height status
+`star_union_shared_face_secondary_global_height_crosses_oriented_walls`. The
+missing-input aggregate now counts `target_plus_star_qn_history:9`,
+`target_plus_star_chamber_semigroup_transport:8`,
+`target_plus_star_wall_crossing_chamber_transport:2`, and
+`shrinking_divisor_or_flop_certificate:2`. This keeps the known wall component
 as certified input evidence without promoting it to a corrected-chamber GV
 value.
 `/tmp/cyrus_star_union_wall_branch_smoke_all.json` now carries the B-field

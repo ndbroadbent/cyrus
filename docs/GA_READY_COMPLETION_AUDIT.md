@@ -1045,6 +1045,20 @@ corrected-Kähler checkpoint path with `--stop-after volume`, the dump writes
 CYTools-style two-face skeleton, while leaving the target-plus-star chamber
 transport/qN-history problem open.
 
+The star-union wall-transport readiness report now consumes the local
+shared-face secondary certificate directly. Regenerating
+`/tmp/cyrus_star_union_wall_transport_readiness_smoke_all.json` classifies the
+two target `7`/`8` rows as
+`wall_transport_known_wall_remainder_requires_wall_crossing_chamber_transport`
+instead of the older generic semigroup bucket. Those rows carry local
+secondary status `star_union_shared_face_secondary_on_wall`, corrected
+global-height status
+`star_union_shared_face_secondary_global_height_crosses_oriented_walls`, and
+the new missing input `target_plus_star_wall_crossing_chamber_transport`.
+This narrows the unresolved object to wall-crossing chamber transport plus
+qN/semigroup history; it still does not compute the missing degree-6
+`target+star` GV value.
+
 The Stage 0 no-replay policy gate is green for the touched paths:
 `cargo test -p cyrus-core --test mcallister_e2e stage0_data_integrity -- --nocapture`
 passes. The first-principles runner now keeps generic computed-basis flux

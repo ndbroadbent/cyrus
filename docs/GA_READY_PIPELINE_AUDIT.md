@@ -1303,17 +1303,21 @@ to make the remaining GV layer more first-principles:
    degree-6 component remains a chamber/semigroup transport problem.
    `/tmp/cyrus_star_union_wall_transport_readiness_smoke_all.json` now makes
    that handoff machine-readable at report level. It reports two rows in
-   `wall_transport_known_wall_remainder_requires_chamber_semigroup`, six rows
-   still blocked by missing known wall-circuit history, and one row blocked
-   before the transport identity. The two ready-but-unresolved rows are targets
-   `7`/`8`: both have the crossed wall curve
+   `wall_transport_known_wall_remainder_requires_wall_crossing_chamber_transport`,
+   six rows still blocked by missing known wall-circuit history, and one row
+   blocked before the transport identity. The two ready-but-unresolved rows are
+   targets `7`/`8`: both have the crossed wall curve
    `[(0,-1),(55,-1),(195,1),(212,1)]`, crossed-wall GV `1`,
    target-plus-star support generator count `0`, support-face status
-   `origin_support_no_generators`, and missing inputs
-   `target_plus_star_qn_history`,
-   `target_plus_star_chamber_semigroup_transport`, and
-   `shrinking_divisor_or_flop_certificate`. This is a blocker certificate, not
-   a GV computation shortcut.
+   `origin_support_no_generators`, local shared-face secondary status
+   `star_union_shared_face_secondary_on_wall`, corrected global-height status
+   `star_union_shared_face_secondary_global_height_crosses_oriented_walls`,
+   and missing inputs `target_plus_star_qn_history`,
+   `target_plus_star_chamber_semigroup_transport`,
+   `target_plus_star_wall_crossing_chamber_transport`, and
+   `shrinking_divisor_or_flop_certificate`. The top-level missing-input
+   aggregate records the new wall-crossing transport gap twice. This is a
+   blocker certificate, not a GV computation shortcut.
    `/tmp/cyrus_star_union_wall_branch_smoke_all.json` now additionally records
    the B-field branch status of the same crossed wall. The targets `7`/`8`
    wall curve has `q.t=0.42571113815643002`, parity mod 2 equal to `0`, and

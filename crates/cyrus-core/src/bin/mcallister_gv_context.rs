@@ -345,6 +345,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_wall_transport_readiness_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_wall_transport_missing_input_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_crossed_wall_stable_weyl_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_global_secondary_height_status_counts:
@@ -894,6 +896,9 @@ struct LocalCygvStarUnionOppositeStarWallCircuitHint {
 struct LocalCygvStarUnionWallTransportReadiness {
     status: String,
     missing_inputs: Vec<String>,
+    local_shared_face_secondary_status: Option<String>,
+    local_shared_face_secondary_strictly_inside: Option<bool>,
+    local_shared_face_secondary_global_height_status: Option<String>,
     crossed_wall_curve_basis_nonzero: Option<Vec<(usize, i64)>>,
     crossed_wall_curve_ambient_nonzero: Option<Vec<(usize, i64)>>,
     crossed_wall_gv: Option<String>,
@@ -15809,6 +15814,10 @@ fn build_report(
         local_cygv_source_resolution_star_union_wall_transport_readiness_status_counts(
             &local_cygv_source_resolution_hint_sample,
         );
+    let local_cygv_source_resolution_star_union_wall_transport_missing_input_counts =
+        local_cygv_source_resolution_star_union_wall_transport_missing_input_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
     let local_cygv_source_resolution_star_union_crossed_wall_stable_weyl_status_counts =
         local_cygv_source_resolution_star_union_crossed_wall_stable_weyl_status_counts(
             &local_cygv_source_resolution_hint_sample,
@@ -16876,6 +16885,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_shared_face_secondary_status_counts,
         local_cygv_source_resolution_star_union_opposite_star_wall_circuit_status_counts,
         local_cygv_source_resolution_star_union_wall_transport_readiness_status_counts,
+        local_cygv_source_resolution_star_union_wall_transport_missing_input_counts,
         local_cygv_source_resolution_star_union_crossed_wall_stable_weyl_status_counts,
         local_cygv_source_resolution_star_union_global_secondary_height_status_counts,
         local_cygv_source_resolution_star_union_global_regular_triangulation_status_counts,
@@ -17261,6 +17271,7 @@ fn local_cygv_source_resolution_hint_summaries(
             let wall_transport_readiness = local_cygv_star_union_wall_transport_readiness(
                 &star_union_transport_decomposition,
                 &opposite_star_wall_circuit,
+                &star_union_shared_face_secondary,
                 &star_union_global_basis_lookup,
                 target_plus_star_support_generator_count,
                 target_plus_star_support_face_certificate_status.as_deref(),
@@ -18183,6 +18194,21 @@ fn local_cygv_source_resolution_star_union_wall_transport_readiness_status_count
                     .clone(),
             )
             .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_star_union_wall_transport_missing_input_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        for missing in &summary
+            .shared_two_simplex_star_union_wall_transport_readiness
+            .missing_inputs
+        {
+            *counts.entry(missing.clone()).or_insert(0usize) += 1;
+        }
     }
     counts
 }
@@ -20836,6 +20862,7 @@ fn sparse_entries_match(lhs: &[(usize, i64)], rhs: &[(usize, i64)]) -> bool {
 fn local_cygv_star_union_wall_transport_readiness(
     transport: &LocalCygvStarUnionTransportDecompositionSummary,
     wall: &LocalCygvStarUnionOppositeStarWallCircuitHint,
+    shared_face_secondary: &LocalCygvStarUnionSharedFaceSecondaryHint,
     lookups: &[LocalCygvStarUnionGlobalBasisLookup],
     target_plus_star_support_generator_count: Option<usize>,
     target_plus_star_support_face_certificate_status: Option<&str>,
@@ -20880,6 +20907,22 @@ fn local_cygv_star_union_wall_transport_readiness(
     if !target_plus_star_has_generator && !target_plus_star_has_support_face {
         missing_inputs.push("target_plus_star_chamber_semigroup_transport".to_string());
     }
+    let local_shared_face_is_wall = matches!(
+        shared_face_secondary.status.as_str(),
+        "star_union_shared_face_secondary_on_wall"
+            | "star_union_shared_face_secondary_not_strictly_inside"
+            | "star_union_shared_face_secondary_outside"
+    ) || matches!(
+        shared_face_secondary.global_height_status.as_str(),
+        "star_union_shared_face_secondary_global_height_on_all_walls"
+            | "star_union_shared_face_secondary_global_height_on_wall_nonnegative"
+            | "star_union_shared_face_secondary_global_height_on_wall_nonpositive"
+            | "star_union_shared_face_secondary_global_height_crosses_oriented_walls"
+            | "star_union_shared_face_secondary_global_height_crosses_wall"
+    );
+    if wall_known && local_shared_face_is_wall {
+        missing_inputs.push("target_plus_star_wall_crossing_chamber_transport".to_string());
+    }
     if wall_known {
         missing_inputs.push("shrinking_divisor_or_flop_certificate".to_string());
     }
@@ -20890,6 +20933,8 @@ fn local_cygv_star_union_wall_transport_readiness(
         "wall_transport_blocked_transport_identity"
     } else if !wall_known {
         "wall_transport_blocked_missing_known_wall_circuit"
+    } else if local_shared_face_is_wall {
+        "wall_transport_known_wall_remainder_requires_wall_crossing_chamber_transport"
     } else if !target_plus_star_known
         && !target_plus_star_has_generator
         && !target_plus_star_has_support_face
@@ -20904,6 +20949,11 @@ fn local_cygv_star_union_wall_transport_readiness(
     LocalCygvStarUnionWallTransportReadiness {
         status: status.to_string(),
         missing_inputs,
+        local_shared_face_secondary_status: Some(shared_face_secondary.status.clone()),
+        local_shared_face_secondary_strictly_inside: shared_face_secondary.strictly_inside,
+        local_shared_face_secondary_global_height_status: Some(
+            shared_face_secondary.global_height_status.clone(),
+        ),
         crossed_wall_curve_basis_nonzero: star
             .and_then(|lookup| lookup.opposite_basis_nonzero.clone()),
         crossed_wall_curve_ambient_nonzero: wall.circuit_nonzero.clone(),
@@ -26357,6 +26407,9 @@ mod tests {
                 LocalCygvStarUnionWallTransportReadiness {
                     status: "test".to_string(),
                     missing_inputs: Vec::new(),
+                    local_shared_face_secondary_status: None,
+                    local_shared_face_secondary_strictly_inside: None,
+                    local_shared_face_secondary_global_height_status: None,
                     crossed_wall_curve_basis_nonzero: None,
                     crossed_wall_curve_ambient_nonzero: None,
                     crossed_wall_gv: None,
@@ -29407,6 +29460,7 @@ mod tests {
         let readiness = local_cygv_star_union_wall_transport_readiness(
             &summary,
             &wall_hint,
+            &secondary,
             &lookups,
             Some(0),
             Some("origin_support_no_generators"),
@@ -29414,7 +29468,21 @@ mod tests {
         );
         assert_eq!(
             readiness.status,
-            "wall_transport_known_wall_remainder_requires_chamber_semigroup"
+            "wall_transport_known_wall_remainder_requires_wall_crossing_chamber_transport"
+        );
+        assert_eq!(
+            readiness.local_shared_face_secondary_status.as_deref(),
+            Some("star_union_shared_face_secondary_on_wall")
+        );
+        assert_eq!(
+            readiness.local_shared_face_secondary_strictly_inside,
+            Some(false)
+        );
+        assert_eq!(
+            readiness
+                .local_shared_face_secondary_global_height_status
+                .as_deref(),
+            Some("star_union_shared_face_secondary_global_height_crosses_wall")
         );
         assert_eq!(
             readiness.crossed_wall_branch_q_dot_t.as_deref(),
@@ -29431,6 +29499,11 @@ mod tests {
             readiness
                 .missing_inputs
                 .contains(&"target_plus_star_chamber_semigroup_transport".to_string())
+        );
+        assert!(
+            readiness
+                .missing_inputs
+                .contains(&"target_plus_star_wall_crossing_chamber_transport".to_string())
         );
         assert!(
             readiness
