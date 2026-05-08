@@ -148,14 +148,14 @@ and matrix-basis pipeline are no longer open.
    `local_chamber_certificate`. The source-derived GV-history importer now
    requires that same witness/facet context before accepting a CMS-derived
    scalar GV value, so shape-only CMS matches remain diagnostic rather than
-   known qN history. The schema-4 context export now also embeds the corrected
+   known qN history. The schema-4 context export can also embed the corrected
    two-face triangulation choice summary selected by the solved corrected
-   height vector. When the height vector selects unique per-face choices, that
-   summary now also carries the materialized selected expanded-secondary
-   chamber height-pairing certificate, and the context consumer validates and
-   reports both the summary and certificate; this preserves chamber-choice
-   evidence for the next semigroup/history step without promoting any new GV
-   value. The target `7`/`8` star-union secondary
+   height vector when the explicit face-choice include flag is set. When the
+   height vector selects unique per-face choices, that summary now also carries
+   the materialized selected expanded-secondary chamber height-pairing
+   certificate, and the context consumer validates and reports both the summary
+   and certificate; this preserves chamber-choice evidence for the next
+   semigroup/history step without promoting any new GV value. The target `7`/`8` star-union secondary
    circuits now expose role counts, signed role sums, and corrected global-height
    orientations directly: both rows have four positive and two negative local
    circuits, with the crossed resolved-conifold wall

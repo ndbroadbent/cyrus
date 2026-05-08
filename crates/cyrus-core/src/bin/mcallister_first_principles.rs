@@ -64,6 +64,9 @@
 //!   `--face-triangulation-samples-per-large-face`,
 //!   `--face-triangulation-max-sampling-attempts-per-face`, and
 //!   `--face-triangulation-seed`.
+//! - `--include-corrected-chamber-face-triangulation-choice-summary-in-gv-context`
+//!   to embed that expensive face-choice summary in the corrected-chamber GV
+//!   context export.
 //! - `--diagnose-chamber-updated-kklt` to run a diagnostic-only KKLT
 //!   fixed-point loop that recomputes the FRST chamber, intersections, divisor
 //!   χ, and toric-covered small-curve GV target correction at each iteration.
@@ -1302,6 +1305,7 @@ struct PipelineArgs {
     dump_corrected_chamber_2face_secondary_certificate_path: Option<String>,
     dump_corrected_chamber_expanded_secondary_fan_certificate_path: Option<String>,
     dump_corrected_chamber_face_triangulation_choice_summary_path: Option<String>,
+    include_corrected_chamber_face_triangulation_choice_summary_in_gv_context: bool,
     face_triangulation_max_exact_points: usize,
     face_triangulation_samples_per_large_face: usize,
     face_triangulation_max_sampling_attempts_per_face: usize,
@@ -1412,6 +1416,8 @@ fn parse_args() -> PipelineArgs {
         parse_arg_value::<String>("--dump-corrected-chamber-expanded-secondary-fan-certificate");
     let dump_corrected_chamber_face_triangulation_choice_summary_path =
         parse_arg_value::<String>("--dump-corrected-chamber-face-triangulation-choice-summary");
+    let include_corrected_chamber_face_triangulation_choice_summary_in_gv_context =
+        parse_flag("--include-corrected-chamber-face-triangulation-choice-summary-in-gv-context");
     let face_triangulation_max_exact_points =
         parse_arg_value::<usize>("--face-triangulation-max-exact-points")
             .unwrap_or(DEFAULT_FACE_TRIANGULATION_MAX_EXACT_POINTS);
@@ -1467,6 +1473,7 @@ fn parse_args() -> PipelineArgs {
         dump_corrected_chamber_2face_secondary_certificate_path,
         dump_corrected_chamber_expanded_secondary_fan_certificate_path,
         dump_corrected_chamber_face_triangulation_choice_summary_path,
+        include_corrected_chamber_face_triangulation_choice_summary_in_gv_context,
         face_triangulation_max_exact_points,
         face_triangulation_samples_per_large_face,
         face_triangulation_max_sampling_attempts_per_face,
@@ -7699,6 +7706,7 @@ fn diagnose_chamber_gv_volume_correction(
     ray_gv_requested: bool,
     lp_face_gv_requested: bool,
     missing_target_sample_limit: usize,
+    include_face_triangulation_choice_summary: bool,
     face_triangulation_max_exact_points: usize,
     face_triangulation_samples_per_large_face: usize,
     face_triangulation_max_sampling_attempts_per_face: usize,
@@ -7764,14 +7772,18 @@ fn diagnose_chamber_gv_volume_correction(
             .collect::<Vec<_>>(),
     );
     let corrected_chamber_face_triangulation_choice_summary =
-        Some(corrected_chamber_face_triangulation_choice_summary(
-            geom,
-            Some(&secondary_cone_typed_heights),
-            face_triangulation_max_exact_points,
-            face_triangulation_samples_per_large_face,
-            face_triangulation_max_sampling_attempts_per_face,
-            face_triangulation_seed,
-        )?);
+        if include_face_triangulation_choice_summary {
+            Some(corrected_chamber_face_triangulation_choice_summary(
+                geom,
+                Some(&secondary_cone_typed_heights),
+                face_triangulation_max_exact_points,
+                face_triangulation_samples_per_large_face,
+                face_triangulation_max_sampling_attempts_per_face,
+                face_triangulation_seed,
+            )?)
+        } else {
+            None
+        };
 
     let mut basis_ray_stats = None;
     let mut basis_rays_for_missing = None;
@@ -10383,6 +10395,7 @@ fn stage_volume(
     dump_corrected_chamber_2face_secondary_certificate_path: Option<&str>,
     dump_corrected_chamber_expanded_secondary_fan_certificate_path: Option<&str>,
     dump_corrected_chamber_face_triangulation_choice_summary_path: Option<&str>,
+    include_face_triangulation_choice_summary_in_gv_context: bool,
     face_triangulation_max_exact_points: usize,
     face_triangulation_samples_per_large_face: usize,
     face_triangulation_max_sampling_attempts_per_face: usize,
@@ -10484,11 +10497,8 @@ fn stage_volume(
         std::process::exit(2);
     }
     if (dump_corrected_chamber_face_triangulation_choice_summary_path.is_some()
-        || dump_corrected_chamber_gv_context_path.is_some()
-        || diagnose_corrected_chamber_gv
-        || diagnose_corrected_chamber_provided_generators_gv
-        || diagnose_corrected_chamber_ray_gv
-        || diagnose_corrected_chamber_lp_face_gv)
+        || (dump_corrected_chamber_gv_context_path.is_some()
+            && include_face_triangulation_choice_summary_in_gv_context))
         && face_triangulation_max_sampling_attempts_per_face == 0
     {
         eprintln!(
@@ -11570,6 +11580,7 @@ fn stage_volume(
             diagnose_corrected_chamber_ray_gv,
             diagnose_corrected_chamber_lp_face_gv,
             missing_target_sample_limit,
+            include_face_triangulation_choice_summary_in_gv_context,
             face_triangulation_max_exact_points,
             face_triangulation_samples_per_large_face,
             face_triangulation_max_sampling_attempts_per_face,
@@ -12224,6 +12235,7 @@ fn run_pipeline(args: PipelineArgs) {
             .as_deref(),
         args.dump_corrected_chamber_face_triangulation_choice_summary_path
             .as_deref(),
+        args.include_corrected_chamber_face_triangulation_choice_summary_in_gv_context,
         args.face_triangulation_max_exact_points,
         args.face_triangulation_samples_per_large_face,
         args.face_triangulation_max_sampling_attempts_per_face,
