@@ -1340,6 +1340,10 @@ This records why the named phase is not enough: the next task is still finding
 or deriving the missing codimension-2/twisted source model and qN chamber
 history, not guessing a one-parameter tensor. The focused source-read note is
 `docs/WEIGHTED_P2_RANK3_SOURCE_READ.md`.
+The regenerated v2 reports also expose that `sum(base weights)=4` equals
+`sum(bundle degrees)=4`, so the local fivefold phase is Calabi-Yau at the
+first-Chern level, and that the weighted base has `H^2=1/2`, so a fractional
+stack/source tensor normalization remains part of the missing input.
 
 `/tmp/cyrus_six_point_overlap_annotations_v1.json` also annotates the nearest
 degree-bounded support-overlap samples. For the shared target `7`/`8`

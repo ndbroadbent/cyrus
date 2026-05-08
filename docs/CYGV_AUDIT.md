@@ -4427,6 +4427,12 @@ twisted vector-bundle I-functions, but they do not by themselves provide a
 numerical CY3 GV source for the visible rank-three
 `O(-1) + O(-1) + O(-2) -> P(1,1,2)` total-space phase.
 The focused source-read note is `docs/WEIGHTED_P2_RANK3_SOURCE_READ.md`.
+The v2 target `7`/`8` artifacts also expose the source invariants:
+base anticanonical degree `4`, bundle degree sum `4`, total first-Chern
+degree `0`, and base hyperplane square `1/2`. Thus the visible total space is
+Calabi-Yau in the local fivefold sense, while the fractional base tensor still
+requires stack/source normalization before any threefold `cygv` input can be
+certified.
 
 `/tmp/cyrus_six_point_overlap_annotations_v1.json` annotates the nearest
 degree-bounded support-overlap samples with qN-history, source class, and

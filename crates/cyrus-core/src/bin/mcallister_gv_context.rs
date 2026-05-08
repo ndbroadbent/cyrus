@@ -1351,6 +1351,11 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
     local_toric_weighted_p2_rank_three_bundle_degrees: Option<Vec<i64>>,
     local_toric_weighted_p2_rank_three_source_model_status: String,
     local_toric_weighted_p2_rank_three_base_complex_dimension: Option<i64>,
+    local_toric_weighted_p2_rank_three_base_anticanonical_degree: Option<i64>,
+    local_toric_weighted_p2_rank_three_bundle_degree_sum: Option<i64>,
+    local_toric_weighted_p2_rank_three_total_first_chern_degree: Option<i64>,
+    local_toric_weighted_p2_rank_three_base_hyperplane_square: Option<String>,
+    local_toric_weighted_p2_rank_three_base_tensor_status: Option<String>,
     local_toric_weighted_p2_rank_three_bundle_rank: Option<i64>,
     local_toric_weighted_p2_rank_three_total_space_complex_dimension: Option<i64>,
     local_toric_weighted_p2_rank_three_required_cygv_codimension_for_threefold: Option<i64>,
@@ -1474,6 +1479,11 @@ struct WeightedP2RankThreePhaseSummary {
 struct WeightedP2RankThreeSourceModelSummary {
     status: String,
     base_complex_dimension: Option<i64>,
+    base_anticanonical_degree: Option<i64>,
+    bundle_degree_sum: Option<i64>,
+    total_first_chern_degree: Option<i64>,
+    base_hyperplane_square: Option<String>,
+    base_tensor_status: Option<String>,
     bundle_rank: Option<i64>,
     total_space_complex_dimension: Option<i64>,
     required_cygv_codimension_for_threefold: Option<i64>,
@@ -20701,6 +20711,16 @@ fn unresolved_chamber_generator_summaries(
                         weighted_rank_three_source_model.status,
                     local_toric_weighted_p2_rank_three_base_complex_dimension:
                         weighted_rank_three_source_model.base_complex_dimension,
+                    local_toric_weighted_p2_rank_three_base_anticanonical_degree:
+                        weighted_rank_three_source_model.base_anticanonical_degree,
+                    local_toric_weighted_p2_rank_three_bundle_degree_sum:
+                        weighted_rank_three_source_model.bundle_degree_sum,
+                    local_toric_weighted_p2_rank_three_total_first_chern_degree:
+                        weighted_rank_three_source_model.total_first_chern_degree,
+                    local_toric_weighted_p2_rank_three_base_hyperplane_square:
+                        weighted_rank_three_source_model.base_hyperplane_square,
+                    local_toric_weighted_p2_rank_three_base_tensor_status:
+                        weighted_rank_three_source_model.base_tensor_status,
                     local_toric_weighted_p2_rank_three_bundle_rank:
                         weighted_rank_three_source_model.bundle_rank,
                     local_toric_weighted_p2_rank_three_total_space_complex_dimension:
@@ -25598,6 +25618,11 @@ fn weighted_p2_rank_three_source_model_summary(
     let empty = |status: &str| WeightedP2RankThreeSourceModelSummary {
         status: status.to_string(),
         base_complex_dimension: None,
+        base_anticanonical_degree: None,
+        bundle_degree_sum: None,
+        total_first_chern_degree: None,
+        base_hyperplane_square: None,
+        base_tensor_status: None,
         bundle_rank: None,
         total_space_complex_dimension: None,
         required_cygv_codimension_for_threefold: None,
@@ -25619,6 +25644,24 @@ fn weighted_p2_rank_three_source_model_summary(
     }
     let base_complex_dimension =
         i64::try_from(base_weights.len() - 1).expect("weighted P2 base weight count fits i64");
+    let base_anticanonical_degree = base_weights.iter().sum::<i64>();
+    let bundle_degree_sum = bundle_degrees.iter().sum::<i64>();
+    let total_first_chern_degree = base_anticanonical_degree - bundle_degree_sum;
+    let base_weight_product = base_weights
+        .iter()
+        .try_fold(1i64, |product, &weight| product.checked_mul(weight))
+        .expect("weighted P2 base weight product fits i64");
+    let base_hyperplane_square = if base_weight_product == 1 {
+        "1".to_string()
+    } else {
+        format!("1/{base_weight_product}")
+    };
+    let base_tensor_status = if base_weight_product == 1 {
+        "weighted_p2_rank_three_base_hyperplane_square_integral".to_string()
+    } else {
+        "weighted_p2_rank_three_base_hyperplane_square_fractional_requires_stack_or_source_tensor_normalization"
+            .to_string()
+    };
     let bundle_rank =
         i64::try_from(bundle_degrees.len()).expect("weighted P2 bundle rank fits i64");
     let total_space_complex_dimension = base_complex_dimension + bundle_rank;
@@ -25639,6 +25682,11 @@ fn weighted_p2_rank_three_source_model_summary(
     WeightedP2RankThreeSourceModelSummary {
         status: status.to_string(),
         base_complex_dimension: Some(base_complex_dimension),
+        base_anticanonical_degree: Some(base_anticanonical_degree),
+        bundle_degree_sum: Some(bundle_degree_sum),
+        total_first_chern_degree: Some(total_first_chern_degree),
+        base_hyperplane_square: Some(base_hyperplane_square),
+        base_tensor_status: Some(base_tensor_status),
         bundle_rank: Some(bundle_rank),
         total_space_complex_dimension: Some(total_space_complex_dimension),
         required_cygv_codimension_for_threefold: Some(required_cygv_codimension_for_threefold),
@@ -37441,6 +37489,22 @@ mod tests {
             "weighted_p2_rank_three_source_model_visible_phase_is_local_cy5_total_space_not_promotable_gv_source"
         );
         assert_eq!(selected_base_source_model.base_complex_dimension, Some(2));
+        assert_eq!(
+            selected_base_source_model.base_anticanonical_degree,
+            Some(4)
+        );
+        assert_eq!(selected_base_source_model.bundle_degree_sum, Some(4));
+        assert_eq!(selected_base_source_model.total_first_chern_degree, Some(0));
+        assert_eq!(
+            selected_base_source_model.base_hyperplane_square.as_deref(),
+            Some("1/2")
+        );
+        assert_eq!(
+            selected_base_source_model.base_tensor_status.as_deref(),
+            Some(
+                "weighted_p2_rank_three_base_hyperplane_square_fractional_requires_stack_or_source_tensor_normalization"
+            )
+        );
         assert_eq!(selected_base_source_model.bundle_rank, Some(3));
         assert_eq!(
             selected_base_source_model.total_space_complex_dimension,

@@ -45,15 +45,23 @@ The current report artifacts are:
 ```text
 /tmp/cyrus_six_point_rank3_source_model_target7_v1.json
 /tmp/cyrus_six_point_rank3_source_model_target8_v1.json
+/tmp/cyrus_six_point_rank3_source_model_target7_v2.json
+/tmp/cyrus_six_point_rank3_source_model_target8_v2.json
 ```
 
-Both record the same source-model obstruction:
+The v2 artifacts record the same source-model obstruction plus the source
+invariants of the visible weighted-`P2` bundle:
 
 ```text
 source_model = weighted_p2_rank_three_source_model_visible_phase_is_local_cy5_total_space_not_promotable_gv_source
 total_dim    = 5
 required_cygv_codim = 2
 numerical_gv = weighted_p2_rank_three_visible_phase_is_not_numerical_cy3_requires_source_codim2_or_insertion_history
+base_anticanonical_degree = 4
+bundle_degree_sum = 4
+total_first_chern_degree = 0
+base_hyperplane_square = 1/2
+base_tensor_status = weighted_p2_rank_three_base_hyperplane_square_fractional_requires_stack_or_source_tensor_normalization
 ```
 
 ## Sources Read
