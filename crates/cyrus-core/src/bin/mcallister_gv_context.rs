@@ -314,6 +314,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_local_cygv_phase_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_target_plus_star_zero_degree_nef_certificate_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_single_column_omission_phase_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_two_column_omission_phase_status_counts:
@@ -15794,6 +15796,10 @@ fn build_report(
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_phase_status_counts(
             &local_cygv_source_resolution_hint_sample,
         );
+    let local_cygv_source_resolution_star_union_target_plus_star_zero_degree_nef_certificate_status_counts =
+        local_cygv_source_resolution_star_union_target_plus_star_zero_degree_nef_certificate_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
     let local_cygv_source_resolution_star_union_target_plus_star_single_column_omission_phase_status_counts =
         local_cygv_source_resolution_star_union_target_plus_star_single_column_omission_phase_status_counts(
             &local_cygv_source_resolution_hint_sample,
@@ -16760,6 +16766,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_readiness_counts,
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_phase_status_counts,
+        local_cygv_source_resolution_star_union_target_plus_star_zero_degree_nef_certificate_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_single_column_omission_phase_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_two_column_omission_phase_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts,
@@ -17772,6 +17779,28 @@ fn local_cygv_source_resolution_star_union_target_plus_star_local_cygv_phase_sta
                     .clone(),
             )
             .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_star_union_target_plus_star_zero_degree_nef_certificate_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        let Some(candidate) = &summary
+            .shared_two_simplex_star_union_target_plus_star_local_cygv_readiness
+            .complete_intersection_shape_candidate
+        else {
+            continue;
+        };
+        let Some(status_counts) = &candidate.zero_degree_cytools_nef_certificate_status_counts
+        else {
+            continue;
+        };
+        for (status, count) in status_counts {
+            *counts.entry(status.clone()).or_insert(0usize) += *count;
+        }
     }
     counts
 }
