@@ -235,7 +235,15 @@ run pass. Any remaining mismatch must be explicit and localizable.
    first-generation seed-sum evidence for the unknown side: the degree-4
    composites split as known toric plus known toric, while the degree-8
    composites split as known toric plus known source, with the source side
-   itself pair-reduced into known toric leaves.
+   itself pair-reduced into known toric leaves. It also runs a cheap bounded
+   seed-decomposition check for each queued composite without invoking another
+   compact `cygv` call. A target-6 schema-4 smoke report shows both degree-8
+   unknown composites are found as two-term bounded seed decompositions; one is
+   twice the same degree-4 source seed, explaining why the first-generation
+   reduced-seed split was absent there. Fresh target-7 and target-8 smokes show
+   the same status for every queued lower-seed unknown composite, so the current
+   blocker has moved from primitive source discovery to composite-history
+   propagation through the parent chamber.
    The parent-only classifications now include parent-path-support runtime
    lookups from the same `cygv` run. On the regenerated target 7 report, the
    generated degree-10 side term is a real parent-domain nonzero object
