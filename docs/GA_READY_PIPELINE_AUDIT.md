@@ -1231,8 +1231,11 @@ to make the remaining GV layer more first-principles:
    choice-block helper
    `expanded_secondary_face_inequality_choices_from_triangulations_with_star_4d`
    preserves CYTools-style face/choice grouping for later NTFE chamber
-   materialization. The regressions currently pin the `P^4` simplex star row
-   `[-5,1,1,1,1,1]` and its one-choice face block. This is
+   materialization, and
+   `expanded_secondary_chamber_hyperplanes_from_face_triangulation_choice_index_with_star_4d`
+   composes those blocks with the mixed-radix chamber-choice path. The
+   regressions currently pin the `P^4` simplex star row `[-5,1,1,1,1,1]`, its
+   one-choice face block, and the selected star chamber block. This is
    reusable chamber-constraint infrastructure; it does not by itself supply
    the corrected-chamber `q_N` history.
    The first-principles corrected-chamber context exporter now also carries the

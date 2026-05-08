@@ -537,6 +537,38 @@ pub fn expanded_secondary_chamber_hyperplanes_from_face_triangulation_choice_ind
     )
 }
 
+/// Materialize one star-constrained NTFE chamber from supplied face FRT choices.
+///
+/// This composes the supplied-`face_triangs`, `require_star=True` branch of
+/// CYTools `ntfe_hypers`: every face-triangulation choice is converted to
+/// native CPL plus `_2d_s_cone_ineqs` rows, optional boring-face grouping is
+/// applied, and `choice_index` selects one block per effective face.
+///
+/// # Errors
+///
+/// Returns an error if the supplied face triangulations are invalid, if a star
+/// circuit cannot be computed, if the effective choice blocks are invalid, or
+/// if `choice_index` is out of range.
+pub fn expanded_secondary_chamber_hyperplanes_from_face_triangulation_choice_index_with_star_4d(
+    points: &[Point],
+    face_triangulation_choices: &[Vec<Triangulation>],
+    choice_index: usize,
+    separate_boring: bool,
+    polytope: &Polytope,
+) -> Result<Vec<Vec<i64>>> {
+    let face_inequality_choices =
+        expanded_secondary_face_inequality_choices_from_triangulations_with_star_4d(
+            points,
+            face_triangulation_choices,
+            polytope,
+        )?;
+    expanded_secondary_chamber_hyperplanes_from_face_inequality_choice_index(
+        &face_inequality_choices,
+        choice_index,
+        separate_boring,
+    )
+}
+
 /// Compute the expanded-secondary subfan support on supplied two-faces.
 ///
 /// This ports CYTools' `Polytope.expanded_secondary_fan` support computation:
@@ -2074,6 +2106,32 @@ mod tests {
             .unwrap();
 
         assert_eq!(face_choices, vec![vec![vec![vec![-5, 1, 1, 1, 1, 1]]]]);
+    }
+
+    #[test]
+    fn expanded_secondary_chamber_choice_with_star_materializes_selected_block() {
+        let points = vec![
+            Point::new(vec![0, 0, 0, 0]),
+            Point::new(vec![1, 0, 0, 0]),
+            Point::new(vec![0, 1, 0, 0]),
+            Point::new(vec![0, 0, 1, 0]),
+            Point::new(vec![0, 0, 0, 1]),
+            Point::new(vec![-1, -1, -1, -1]),
+        ];
+        let polytope = Polytope::from_vertices(points[1..].to_vec()).unwrap();
+        let choices = vec![vec![Triangulation::new(vec![vec![1, 2, 3]])]];
+
+        let chamber =
+            expanded_secondary_chamber_hyperplanes_from_face_triangulation_choice_index_with_star_4d(
+                &points,
+                &choices,
+                0,
+                true,
+                &polytope,
+            )
+            .unwrap();
+
+        assert_eq!(chamber, vec![vec![-5, 1, 1, 1, 1, 1]]);
     }
 
     #[test]
