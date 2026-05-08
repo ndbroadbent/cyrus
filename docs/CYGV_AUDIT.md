@@ -4450,6 +4450,12 @@ CYTools-style nef check with
 out treating the missing origin vertex as a harmless convention mismatch; a
 source-derived codimension-2 rule still has to supply a valid nef partition,
 tensor, and chamber/qN history.
+A direct CYTools/PALP check of the same six support coordinates is negative
+too: `Polytope(pts)` is four-dimensional with six points but
+`is_reflexive=False`, and `nef_partitions(codim=2)` stops with
+`ValueError: The polytope must be reflexive`. Therefore the visible six-point
+support cannot be the PALP nef-partition source without source enlargement,
+stack/twisted data, or a different certified chamber history.
 
 `/tmp/cyrus_six_point_overlap_annotations_v1.json` annotates the nearest
 degree-bounded support-overlap samples with qN-history, source class, and

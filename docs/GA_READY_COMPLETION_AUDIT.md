@@ -226,6 +226,9 @@ and matrix-basis pipeline are no longer open.
    `invalid_input_nef_partition_parts_must_exclude_the_origin_index`, so the
    repair cannot be "just include the origin" without violating the CYTools
    nef-partition contract.
+   A direct CYTools/PALP check of the same six support coordinates also reports
+   `is_reflexive=False`, so `nef_partitions(codim=2)` is not available on the
+   visible support itself.
 2. **Exact corrected KKLT volume.** The no-replay path computes a corrected
    volume but still has a documented instanton/chamber residual.
 3. **Generic matrix-basis pipeline.** Matrix divisor-basis primitives now cover
@@ -1357,6 +1360,9 @@ The origin-included target `7`/`8` reports make the adjacent negative result
 explicit: including point `0` creates six zero-degree balanced splits, but all
 origin-containing partition candidates fail the CYTools-style certificate with
 `invalid_input_nef_partition_parts_must_exclude_the_origin_index`.
+The direct CYTools/PALP probe is negative as well: the visible six-point
+support is not reflexive, so PALP refuses codimension-2 nef partitions on that
+polytope.
 
 `/tmp/cyrus_six_point_overlap_annotations_v1.json` also annotates the nearest
 degree-bounded support-overlap samples. For the shared target `7`/`8`

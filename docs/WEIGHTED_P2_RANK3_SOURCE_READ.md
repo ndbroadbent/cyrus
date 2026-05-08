@@ -94,6 +94,14 @@ missing codimension-2 source is not just the excluded origin; accepting the
 zero-degree origin-containing splits would violate the input contract we need
 for a faithful `cygv`/CYTools handoff.
 
+A direct CYTools/PALP probe of the same six support coordinates is also
+negative. With experimental CYTools features enabled, `Polytope(pts)` reports
+dimension `4`, point count `6`, and `is_reflexive=False`; calling
+`nef_partitions(codim=2)` raises `ValueError: The polytope must be reflexive`.
+So the visible six-point support is not itself a PALP nef-partition source. A
+valid source must enlarge/change the source polytope, provide a stacky/twisted
+model, or supply the missing chamber/qN history by another sourced route.
+
 ## Sources Read
 
 ### cygv 0.1.2
@@ -121,6 +129,23 @@ sees `ambient_dim = 5` and `cy_dim = 4`, not a CY3. A codimension-2 nef
 partition would be needed before this can look like a threefold to `cygv`.
 Cyrus' CYTools-style codimension-2 scan currently finds no certified
 zero-degree nef partition for this support.
+
+### CYTools CICY validation
+
+Relevant files:
+
+```text
+reference/cytools/src/cytools/calabiyau.py
+reference/cytools/src/cytools/polytope.py
+```
+
+`CalabiYau.__init__` validates a supplied nef partition by requiring the union
+of the non-origin parts to reconstruct the ambient polytope, then adding the
+origin to each part-polytope and checking that their Minkowski sum is reflexive.
+`Polytope.nef_partitions` delegates to PALP, but first requires the polytope
+itself to be reflexive. These checks match the Cyrus diagnostics above: the
+raw non-origin split misses the origin as an ambient hull vertex, while the
+origin-containing split violates the non-origin part convention.
 
 ### Coates-Corti-Iritani-Tseng, arXiv:0804.2592
 
