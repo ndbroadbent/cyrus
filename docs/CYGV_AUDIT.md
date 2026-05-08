@@ -3311,6 +3311,17 @@ with status `exceeded_element_limit_150000_during_generation_2`, retains
 still has `target_in_closure=false`. Thus the degree-6 chamber row is already
 beyond the cheap first-layer history; resolving it still requires the certified
 corrected-chamber semigroup/history, not a small visible-generator shortcut.
+Regenerating
+`/tmp/cyrus_gv_context_star_union_shared_face_secondary_report.json` now also
+tests the obvious full star-union shared-face fan: the two target-exclusive
+simplices and the two star simplices over the common face. All four weighted-P2
+rows report `star_union_shared_face_secondary_on_wall`; each check has four
+simplices, six native secondary-cone hyperplanes, min/max height pairing `0`,
+six zero pairings, no negative pairings, and neither the source-derived height
+vector nor its sign flip strictly inside. This rules out promoting that
+combined fan as the corrected-chamber certificate; the remaining object is a
+different certified chamber/continuation history, not the visible shared-face
+fan.
 Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
 serializes a role-tagged height profile over the full union support. For
 targets `3`/`6`, the off-hyperplane zero-shared ray has height `-1` but zero

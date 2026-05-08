@@ -1189,6 +1189,16 @@ to make the remaining GV layer more first-principles:
    closure elements, generation-2 partial count `84462`, and
    `target_in_closure=false`. This pushes the next task back to certified
    chamber semigroup/history construction.
+   The shared-face fan over the full star-union support has now been checked
+   directly as a candidate chamber certificate: regenerating
+   `/tmp/cyrus_gv_context_star_union_shared_face_secondary_report.json`
+   completed in 23.42s and reports all four weighted-P2 rows as
+   `star_union_shared_face_secondary_on_wall`. Each has four shared-face
+   simplices, six native secondary-cone hyperplanes, min/max pairing `0`,
+   zero-pairing count `6`, no negative pairings, and neither sign of the
+   source-derived height vector strictly inside. Thus the obvious fan combining
+   the two target-exclusive simplices with the two star simplices is wall data,
+   not the missing corrected-chamber interior certificate.
    The full union-support height profile is now serialized as well. For
    targets `3`/`6`, the off-hyperplane zero-shared ray carries zero target and
    star coefficient; for targets `7`/`8`, the height `-1` zero-shared ray and

@@ -279,6 +279,8 @@ struct ContextReport {
     local_cygv_source_resolution_star_union_global_basis_lookup_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_chamber_coverage_status_counts: BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_shared_face_secondary_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts:
         BTreeMap<String, usize>,
     local_phase_chamber_membership_certificate_status_counts: BTreeMap<String, usize>,
@@ -657,6 +659,15 @@ struct LocalCygvSourceResolutionHintSummary {
     shared_two_simplex_star_union_chamber_coverage_status: String,
     shared_two_simplex_star_union_chamber_covered_simplex_count: usize,
     shared_two_simplex_star_union_chamber_uncovered_point_indices: Vec<usize>,
+    shared_two_simplex_star_union_shared_face_secondary_status: String,
+    shared_two_simplex_star_union_shared_face_secondary_simplex_count: Option<usize>,
+    shared_two_simplex_star_union_shared_face_secondary_hyperplane_count: Option<usize>,
+    shared_two_simplex_star_union_shared_face_secondary_min_pairing: Option<String>,
+    shared_two_simplex_star_union_shared_face_secondary_max_pairing: Option<String>,
+    shared_two_simplex_star_union_shared_face_secondary_zero_pairing_count: Option<usize>,
+    shared_two_simplex_star_union_shared_face_secondary_negative_pairing_count: Option<usize>,
+    shared_two_simplex_star_union_shared_face_secondary_strictly_inside: Option<bool>,
+    shared_two_simplex_star_union_shared_face_secondary_flipped_strictly_inside: Option<bool>,
     shared_two_simplex_star_union_target_minus_star: Vec<(usize, i64)>,
     shared_two_simplex_star_union_target_plus_star: Vec<(usize, i64)>,
     shared_two_simplex_star_union_target_plus_star_unit_tensor_candidate_gv: Option<String>,
@@ -14845,6 +14856,8 @@ fn build_report(
         );
     let local_cygv_source_resolution_star_union_chamber_coverage_status_counts =
         local_cygv_source_resolution_star_union_chamber_coverage_status_counts(&targets);
+    let local_cygv_source_resolution_star_union_shared_face_secondary_status_counts =
+        local_cygv_source_resolution_star_union_shared_face_secondary_status_counts(&targets);
     let local_phase_chamber_membership_certificate_status_counts =
         local_phase_chamber_membership_certificate_status_counts(&targets, validated);
     let local_cygv_source_resolution_hint_sample = local_cygv_source_resolution_hint_summaries(
@@ -15787,6 +15800,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_global_basis_status_counts,
         local_cygv_source_resolution_star_union_global_basis_lookup_status_counts,
         local_cygv_source_resolution_star_union_chamber_coverage_status_counts,
+        local_cygv_source_resolution_star_union_shared_face_secondary_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts,
         local_phase_chamber_membership_certificate_status_counts,
         local_cygv_source_resolution_hint_sample,
@@ -16098,6 +16112,11 @@ fn local_cygv_source_resolution_hint_summaries(
                 &star_support_hint,
                 affine_projection_hint.hyperplane.as_deref(),
             );
+            let star_union_shared_face_secondary = local_cygv_star_union_shared_face_secondary_hint(
+                target.origin_circuit_first_witness.as_ref(),
+                &star_support_hint,
+                affine_projection_hint.hyperplane.as_deref(),
+            );
             let star_union_off_height_lookup = local_cygv_star_union_off_height_lookup_sample(
                 &star_union_affine_height_profile,
                 context,
@@ -16200,6 +16219,24 @@ fn local_cygv_source_resolution_hint_summaries(
                     star_union_chamber_coverage.covered_simplex_count,
                 shared_two_simplex_star_union_chamber_uncovered_point_indices:
                     star_union_chamber_coverage.uncovered_point_indices,
+                shared_two_simplex_star_union_shared_face_secondary_status:
+                    star_union_shared_face_secondary.status,
+                shared_two_simplex_star_union_shared_face_secondary_simplex_count:
+                    star_union_shared_face_secondary.simplex_count,
+                shared_two_simplex_star_union_shared_face_secondary_hyperplane_count:
+                    star_union_shared_face_secondary.hyperplane_count,
+                shared_two_simplex_star_union_shared_face_secondary_min_pairing:
+                    star_union_shared_face_secondary.min_pairing,
+                shared_two_simplex_star_union_shared_face_secondary_max_pairing:
+                    star_union_shared_face_secondary.max_pairing,
+                shared_two_simplex_star_union_shared_face_secondary_zero_pairing_count:
+                    star_union_shared_face_secondary.zero_pairing_count,
+                shared_two_simplex_star_union_shared_face_secondary_negative_pairing_count:
+                    star_union_shared_face_secondary.negative_pairing_count,
+                shared_two_simplex_star_union_shared_face_secondary_strictly_inside:
+                    star_union_shared_face_secondary.strictly_inside,
+                shared_two_simplex_star_union_shared_face_secondary_flipped_strictly_inside:
+                    star_union_shared_face_secondary.flipped_strictly_inside,
                 shared_two_simplex_star_union_target_minus_star: star_union_relation_hint
                     .target_minus_star,
                 shared_two_simplex_star_union_target_plus_star: star_union_relation_hint
@@ -16512,6 +16549,41 @@ fn local_cygv_source_resolution_star_union_chamber_coverage_status_counts<'a>(
             &star_support_hint,
         );
         *counts.entry(coverage.status).or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_star_union_shared_face_secondary_status_counts<'a>(
+    targets: impl IntoIterator<Item = &'a TargetReport>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        let Some(skeleton) = target.local_cygv_input_skeleton.as_ref() else {
+            continue;
+        };
+        let star_status = local_cygv_zero_shared_star_status(
+            skeleton,
+            target.origin_circuit_first_witness.as_ref(),
+        );
+        if star_status != "weighted_p2_zero_shared_star_uses_two_alternate_chamber_points" {
+            *counts
+                .entry(format!("skipped:{star_status}"))
+                .or_insert(0usize) += 1;
+            continue;
+        }
+        let affine_projection_hint = local_cygv_zero_shared_affine_projection_hint(
+            skeleton,
+            target.origin_circuit_first_witness.as_ref(),
+        );
+        let star_support_hint = local_cygv_shared_two_simplex_star_support_hint(
+            target.origin_circuit_first_witness.as_ref(),
+        );
+        let secondary = local_cygv_star_union_shared_face_secondary_hint(
+            target.origin_circuit_first_witness.as_ref(),
+            &star_support_hint,
+            affine_projection_hint.hyperplane.as_deref(),
+        );
+        *counts.entry(secondary.status).or_insert(0usize) += 1;
     }
     counts
 }
@@ -17304,6 +17376,18 @@ struct LocalCygvStarUnionChamberCoverageHint {
     uncovered_point_indices: Vec<usize>,
 }
 
+struct LocalCygvStarUnionSharedFaceSecondaryHint {
+    status: String,
+    simplex_count: Option<usize>,
+    hyperplane_count: Option<usize>,
+    min_pairing: Option<String>,
+    max_pairing: Option<String>,
+    zero_pairing_count: Option<usize>,
+    negative_pairing_count: Option<usize>,
+    strictly_inside: Option<bool>,
+    flipped_strictly_inside: Option<bool>,
+}
+
 fn local_cygv_shared_two_simplex_star_support_hint(
     witness: Option<&OriginCircuitWitnessSample>,
 ) -> LocalCygvStarSupportHint {
@@ -18014,6 +18098,238 @@ fn local_cygv_star_union_chamber_coverage_hint(
         status: status.to_string(),
         covered_simplex_count: witness.shared_two_simplex_star_simplices.len(),
         uncovered_point_indices,
+    }
+}
+
+fn local_cygv_star_union_shared_face_secondary_hint(
+    witness: Option<&OriginCircuitWitnessSample>,
+    star_support: &LocalCygvStarSupportHint,
+    hyperplane: Option<&[i64]>,
+) -> LocalCygvStarUnionSharedFaceSecondaryHint {
+    let empty = |status: &str| LocalCygvStarUnionSharedFaceSecondaryHint {
+        status: status.to_string(),
+        simplex_count: None,
+        hyperplane_count: None,
+        min_pairing: None,
+        max_pairing: None,
+        zero_pairing_count: None,
+        negative_pairing_count: None,
+        strictly_inside: None,
+        flipped_strictly_inside: None,
+    };
+    let Some(witness) = witness else {
+        return empty("star_union_shared_face_secondary_missing_origin_circuit_witness");
+    };
+    let Some(hyperplane) = hyperplane else {
+        return empty("star_union_shared_face_secondary_missing_affine_hyperplane");
+    };
+    if star_support.point_indices.is_empty() {
+        return empty("star_union_shared_face_secondary_missing_star_support");
+    }
+    let support = origin_circuit_star_union_point_samples(witness, star_support);
+    if support.is_empty() {
+        return empty("star_union_shared_face_secondary_missing_union_points");
+    }
+    let point_to_local = support
+        .iter()
+        .enumerate()
+        .map(|(local, point)| (point.point_index, local))
+        .collect::<BTreeMap<_, _>>();
+    let mut shared_face = Vec::with_capacity(witness.shared_two_simplex.len() + 1);
+    shared_face.push(0);
+    shared_face.extend(witness.shared_two_simplex.iter().copied());
+    shared_face.sort_unstable();
+    shared_face.dedup();
+    if shared_face.len() != 4 {
+        return LocalCygvStarUnionSharedFaceSecondaryHint {
+            status: format!(
+                "star_union_shared_face_secondary_blocked_shared_face_size_{}",
+                shared_face.len()
+            ),
+            simplex_count: None,
+            hyperplane_count: None,
+            min_pairing: None,
+            max_pairing: None,
+            zero_pairing_count: None,
+            negative_pairing_count: None,
+            strictly_inside: None,
+            flipped_strictly_inside: None,
+        };
+    }
+    let mut exclusive_points = vec![
+        witness.first_facet_exclusive_point,
+        witness.second_facet_exclusive_point,
+    ];
+    exclusive_points.extend(
+        origin_circuit_shared_two_simplex_star_extra_points(Some(witness))
+            .into_iter()
+            .flatten(),
+    );
+    exclusive_points.sort_unstable();
+    exclusive_points.dedup();
+    if exclusive_points.len() < 2 {
+        return LocalCygvStarUnionSharedFaceSecondaryHint {
+            status: format!(
+                "star_union_shared_face_secondary_blocked_exclusive_point_count_{}",
+                exclusive_points.len()
+            ),
+            simplex_count: None,
+            hyperplane_count: None,
+            min_pairing: None,
+            max_pairing: None,
+            zero_pairing_count: None,
+            negative_pairing_count: None,
+            strictly_inside: None,
+            flipped_strictly_inside: None,
+        };
+    }
+    let simplices = match exclusive_points
+        .iter()
+        .map(|&exclusive| {
+            let mut simplex = shared_face.clone();
+            simplex.push(exclusive);
+            simplex
+                .iter()
+                .map(|point_index| {
+                    point_to_local.get(point_index).copied().ok_or_else(|| {
+                        format!("shared-face fan point {point_index} missing union support")
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .collect::<Result<Vec<_>, _>>()
+    {
+        Ok(simplices) => simplices,
+        Err(error) => {
+            return LocalCygvStarUnionSharedFaceSecondaryHint {
+                status: format!(
+                    "star_union_shared_face_secondary_simplex_error:{}",
+                    status_error_fragment(&error)
+                ),
+                simplex_count: None,
+                hyperplane_count: None,
+                min_pairing: None,
+                max_pairing: None,
+                zero_pairing_count: None,
+                negative_pairing_count: None,
+                strictly_inside: None,
+                flipped_strictly_inside: None,
+            };
+        }
+    };
+    let points = support
+        .iter()
+        .map(|point| Point::new(point.coordinates.clone()))
+        .collect::<Vec<_>>();
+    let heights = support
+        .iter()
+        .map(|point| {
+            F64::<Finite>::new(affine_hyperplane_height(hyperplane, &point.coordinates) as f64)
+                .expect("integer affine height is finite")
+        })
+        .collect::<Vec<_>>();
+    let triangulation = Triangulation::new(simplices);
+    let secondary_hyperplanes = match secondary_cone_hyperplanes_native(&points, &triangulation) {
+        Ok(hyperplanes) => hyperplanes,
+        Err(error) => {
+            return LocalCygvStarUnionSharedFaceSecondaryHint {
+                status: format!(
+                    "star_union_shared_face_secondary_error:{}",
+                    status_error_fragment(&error.to_string())
+                ),
+                simplex_count: Some(triangulation.simplices().len()),
+                hyperplane_count: None,
+                min_pairing: None,
+                max_pairing: None,
+                zero_pairing_count: None,
+                negative_pairing_count: None,
+                strictly_inside: None,
+                flipped_strictly_inside: None,
+            };
+        }
+    };
+    let pairings = match secondary_cone_height_pairings(&secondary_hyperplanes, &heights) {
+        Ok(pairings) => pairings,
+        Err(error) => {
+            return LocalCygvStarUnionSharedFaceSecondaryHint {
+                status: format!(
+                    "star_union_shared_face_secondary_pairing_error:{}",
+                    status_error_fragment(&error.to_string())
+                ),
+                simplex_count: Some(triangulation.simplices().len()),
+                hyperplane_count: Some(secondary_hyperplanes.len()),
+                min_pairing: None,
+                max_pairing: None,
+                zero_pairing_count: None,
+                negative_pairing_count: None,
+                strictly_inside: None,
+                flipped_strictly_inside: None,
+            };
+        }
+    };
+    let epsilon = F64::<Pos>::new(1e-6).expect("positive secondary cone epsilon");
+    let strictly_inside = match secondary_cone_strictly_contains_height_vector(
+        &secondary_hyperplanes,
+        &heights,
+        epsilon,
+    ) {
+        Ok(strictly_inside) => strictly_inside,
+        Err(error) => {
+            return LocalCygvStarUnionSharedFaceSecondaryHint {
+                status: format!(
+                    "star_union_shared_face_secondary_strict_check_error:{}",
+                    status_error_fragment(&error.to_string())
+                ),
+                simplex_count: Some(triangulation.simplices().len()),
+                hyperplane_count: Some(secondary_hyperplanes.len()),
+                min_pairing: pairing_min_string(&pairings),
+                max_pairing: pairing_max_string(&pairings),
+                zero_pairing_count: None,
+                negative_pairing_count: None,
+                strictly_inside: None,
+                flipped_strictly_inside: None,
+            };
+        }
+    };
+    let flipped_heights = heights
+        .iter()
+        .map(|height| F64::<Finite>::new(-height.get()).expect("negated finite height is finite"))
+        .collect::<Vec<_>>();
+    let flipped_strictly_inside = secondary_cone_strictly_contains_height_vector(
+        &secondary_hyperplanes,
+        &flipped_heights,
+        F64::<Pos>::new(1e-6).expect("positive secondary cone epsilon"),
+    )
+    .unwrap_or(false);
+    let zero_pairing_count = pairings
+        .iter()
+        .filter(|pairing| pairing.get().abs() <= 1e-6)
+        .count();
+    let negative_pairing_count = pairings
+        .iter()
+        .filter(|pairing| pairing.get() < -1e-6)
+        .count();
+    let status = if strictly_inside {
+        "star_union_shared_face_secondary_strictly_inside"
+    } else if flipped_strictly_inside {
+        "star_union_shared_face_secondary_strictly_inside_after_height_sign_flip"
+    } else if negative_pairing_count > 0 {
+        "star_union_shared_face_secondary_outside"
+    } else if zero_pairing_count > 0 {
+        "star_union_shared_face_secondary_on_wall"
+    } else {
+        "star_union_shared_face_secondary_not_strictly_inside"
+    };
+    LocalCygvStarUnionSharedFaceSecondaryHint {
+        status: status.to_string(),
+        simplex_count: Some(triangulation.simplices().len()),
+        hyperplane_count: Some(secondary_hyperplanes.len()),
+        min_pairing: pairing_min_string(&pairings),
+        max_pairing: pairing_max_string(&pairings),
+        zero_pairing_count: Some(zero_pairing_count),
+        negative_pairing_count: Some(negative_pairing_count),
+        strictly_inside: Some(strictly_inside),
+        flipped_strictly_inside: Some(flipped_strictly_inside),
     }
 }
 
@@ -21794,6 +22110,15 @@ mod tests {
             shared_two_simplex_star_union_chamber_coverage_status: "test".to_string(),
             shared_two_simplex_star_union_chamber_covered_simplex_count: 0,
             shared_two_simplex_star_union_chamber_uncovered_point_indices: Vec::new(),
+            shared_two_simplex_star_union_shared_face_secondary_status: "test".to_string(),
+            shared_two_simplex_star_union_shared_face_secondary_simplex_count: None,
+            shared_two_simplex_star_union_shared_face_secondary_hyperplane_count: None,
+            shared_two_simplex_star_union_shared_face_secondary_min_pairing: None,
+            shared_two_simplex_star_union_shared_face_secondary_max_pairing: None,
+            shared_two_simplex_star_union_shared_face_secondary_zero_pairing_count: None,
+            shared_two_simplex_star_union_shared_face_secondary_negative_pairing_count: None,
+            shared_two_simplex_star_union_shared_face_secondary_strictly_inside: None,
+            shared_two_simplex_star_union_shared_face_secondary_flipped_strictly_inside: None,
             shared_two_simplex_star_union_target_minus_star: Vec::new(),
             shared_two_simplex_star_union_target_plus_star: Vec::new(),
             shared_two_simplex_star_union_target_plus_star_unit_tensor_candidate_gv: None,
@@ -24028,6 +24353,20 @@ mod tests {
         );
         assert_eq!(star_union_coverage.covered_simplex_count, 2);
         assert_eq!(star_union_coverage.uncovered_point_indices, vec![211, 214]);
+        let shared_face_secondary = local_cygv_star_union_shared_face_secondary_hint(
+            Some(&witness),
+            &star_support_hint,
+            projection_hint.hyperplane.as_deref(),
+        );
+        assert_eq!(
+            shared_face_secondary.status,
+            "star_union_shared_face_secondary_on_wall"
+        );
+        assert_eq!(shared_face_secondary.simplex_count, Some(4));
+        assert_eq!(shared_face_secondary.hyperplane_count, Some(6));
+        assert_eq!(shared_face_secondary.zero_pairing_count, Some(6));
+        assert_eq!(shared_face_secondary.negative_pairing_count, Some(0));
+        assert_eq!(shared_face_secondary.strictly_inside, Some(false));
         let target_plus_star_unit_tensor_probe =
             local_cygv_star_union_target_plus_star_unit_tensor_probe(
                 &star_union_hint.target_plus_star,
