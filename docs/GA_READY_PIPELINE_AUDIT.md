@@ -1459,6 +1459,11 @@ to make the remaining GV layer more first-principles:
    targets `7`/`8`, the local flipped chamber contains target-plus-star only
    with a degree `-4` generator, so the positive-degree subsemigroup leaves
    only the current-chamber GV `0` path certified.
+   The all-target aggregate reports
+   `positive_degree_current_chamber_only_contains_target_plus_star:5` and
+   `positive_degree_transport_not_run:4`; the five current-only rows split into
+   three compact current-chamber GV `0` calls and two degree-zero
+   target-plus-star skips.
    The local phase-membership aggregation now reports the stricter
    resolved-shared secondary-cone blocker for the integral weighted rows before
    falling back to the coarser star-union relation label. Fresh target `7` and

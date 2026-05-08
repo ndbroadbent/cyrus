@@ -204,7 +204,10 @@ and matrix-basis pipeline are no longer open.
    shortcut for targets `7`/`8`: the flipped chamber contains target-plus-star
    only by using a degree `-4` generator, while the positive-degree subsemigroup
    contains target-plus-star only in the current chamber where `cygv` gives
-   GV `0`.
+   GV `0`. The all-target aggregate now reports five current-only
+   positive-degree rows and four not-run rows; among the current-only rows,
+   three compact calls give GV `0` and two are skipped because target-plus-star
+   has degree zero.
 2. **Exact corrected KKLT volume.** The no-replay path computes a corrected
    volume but still has a documented instanton/chamber residual.
 3. **Generic matrix-basis pipeline.** Matrix divisor-basis primitives now cover

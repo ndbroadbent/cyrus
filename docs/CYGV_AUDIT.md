@@ -3648,6 +3648,14 @@ provided-generator `cygv` probe is rejected before HKTY evaluation. After
 filtering to positive-degree generators, only the current chamber still
 contains target-plus-star, and that is exactly the chamber whose compact
 provided-generator call returns GV `0`.
+The all-target aggregate at `/tmp/cyrus_positive_degree_transport_all.json`
+generalizes this queue: five rows report
+`positive_degree_current_chamber_only_contains_target_plus_star` and four rows
+do not run the positive-degree chamber check because the star-union relation is
+not available integrally. Of the five current-only rows, three current-chamber
+provided-generator calls compute GV `0`, while two are skipped because the
+target-plus-star class has degree zero. This makes the positive-degree
+obstruction explicit without promoting any target-plus-star value.
 This is useful but still not a source rule: it proves that Cyrus must derive
 which split, if any, comes from the star-union/CICY geometry instead of choosing
 one by scalar GV agreement. Target `7` also has no nonnegative primitive
