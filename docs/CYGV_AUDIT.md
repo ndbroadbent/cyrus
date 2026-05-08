@@ -152,11 +152,12 @@ validation-only
 `--dump-corrected-chamber-face-triangulation-choice-summary` artifact, recording
 per-face point counts, exact-vs-sampled face counts, choice counts, total mixed
 choice count, height-compatible choice indices/counts for the solved corrected
-height vector, sampling limits, and seed. The runner-side `P^4` simplex
+height vector, unique mixed-radix chamber digits/index when every face has one
+compatible choice, sampling limits, and seed. The runner-side `P^4` simplex
 regression forces the sampled branch and verifies that the artifact reports the
-ten triangular two-faces with one compatible choice each. This is still
-chamber-search input evidence; it does not compute or promote any
-corrected-chamber GV value.
+ten triangular two-faces with one compatible choice each and chamber index
+`0`. This is still chamber-search input evidence; it does not compute or
+promote any corrected-chamber GV value.
 
 CYTools' `Cone.find_lattice_points` is a separate operation. It first checks
 that the grading vector has only the origin at nonpositive degree, then uses

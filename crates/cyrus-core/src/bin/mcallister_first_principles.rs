@@ -820,6 +820,8 @@ struct FaceTriangulationChoiceSummary {
     height_no_compatible_face_count: Option<usize>,
     height_multi_compatible_face_count: Option<usize>,
     height_first_no_compatible_face_index: Option<usize>,
+    height_unique_choice_digits: Option<Vec<usize>>,
+    height_unique_choice_index: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -7460,6 +7462,8 @@ fn corrected_chamber_face_triangulation_choice_summary(
         height_no_compatible_face_count,
         height_multi_compatible_face_count,
         height_first_no_compatible_face_index,
+        height_unique_choice_digits,
+        height_unique_choice_index,
     ) = if let Some(heights) = heights {
         let face_inequality_choices =
             expanded_secondary_face_inequality_choices_from_triangulations(
@@ -7492,6 +7496,25 @@ fn corrected_chamber_face_triangulation_choice_summary(
         let first_no_choice = compatible_counts
             .iter()
             .position(|&choice_count| choice_count == 0);
+        let unique_digits = if no_choice_count == 0 && multi_choice_count == 0 {
+            Some(
+                compatible
+                    .iter()
+                    .map(|choices| choices[0])
+                    .collect::<Vec<_>>(),
+            )
+        } else {
+            None
+        };
+        let unique_choice_index = unique_digits.as_ref().map(|digits| {
+            digits
+                .iter()
+                .zip(choice_counts.iter())
+                .fold(malachite::Integer::from(0), |acc, (&digit, &base)| {
+                    acc * malachite::Integer::from(base) + malachite::Integer::from(digit)
+                })
+                .to_string()
+        });
         (
             Some(compatible),
             Some(compatible_counts),
@@ -7499,9 +7522,11 @@ fn corrected_chamber_face_triangulation_choice_summary(
             Some(no_choice_count),
             Some(multi_choice_count),
             first_no_choice,
+            unique_digits,
+            unique_choice_index,
         )
     } else {
-        (None, None, None, None, None, None)
+        (None, None, None, None, None, None, None, None)
     };
 
     Ok(FaceTriangulationChoiceSummary {
@@ -7529,6 +7554,8 @@ fn corrected_chamber_face_triangulation_choice_summary(
         height_no_compatible_face_count,
         height_multi_compatible_face_count,
         height_first_no_compatible_face_index,
+        height_unique_choice_digits,
+        height_unique_choice_index,
     })
 }
 
@@ -12834,6 +12861,8 @@ mod tests {
         assert_eq!(summary.height_no_compatible_face_count, Some(0));
         assert_eq!(summary.height_multi_compatible_face_count, Some(0));
         assert_eq!(summary.height_first_no_compatible_face_index, None);
+        assert_eq!(summary.height_unique_choice_digits, Some(vec![0; 10]));
+        assert_eq!(summary.height_unique_choice_index, Some("0".to_string()));
     }
 
     #[test]
