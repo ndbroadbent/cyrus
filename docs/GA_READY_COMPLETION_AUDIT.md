@@ -1290,6 +1290,15 @@ the positive side; the shared target `7`/`8` row has pairing
 `0.04240825693838701`. Any source-derived chamber rule for this family must
 respect that side information.
 
+`/tmp/cyrus_six_point_circuit_choices_target7_v1.json` exposes the remaining
+six-point row's local circuit phase choices directly in the unresolved
+generator summary. For target `7`, there are two triangulation choices, each
+with three five-point simplices, and the secondary inequalities are the
+six-point relation `[(0,-1),(55,-2),(208,1),(211,1),(212,2),(214,-1)]` and
+its negative. This gives the next source-rule pass the local wall alternatives
+without digging through the full target sample, but it is still not a source
+certificate.
+
 `/tmp/cyrus_six_point_overlap_annotations_v1.json` also annotates the nearest
 degree-bounded support-overlap samples. For the shared target `7`/`8`
 six-point row, all five sampled nearest degree-`2` neighbors are known toric

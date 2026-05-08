@@ -1335,6 +1335,10 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
     local_toric_unit_tensor_candidate_gv: Option<String>,
     local_toric_unit_tensor_probe_status: String,
     local_toric_unit_tensor_target_qn_trace_status: Option<String>,
+    local_toric_circuit_triangulation_choice_count: Option<usize>,
+    local_toric_circuit_triangulation_choices: Option<Vec<Vec<Vec<usize>>>>,
+    local_toric_circuit_secondary_inequality_choices: Option<Vec<Vec<Vec<(usize, i64)>>>>,
+    local_toric_circuit_secondary_inequality_error: Option<String>,
     ckyz_status: String,
     bounded_lower_seed_status: String,
     bounded_lower_seed_term_count: Option<usize>,
@@ -20592,6 +20596,21 @@ fn unresolved_chamber_generator_summaries(
                     local_toric_unit_tensor_target_qn_trace_status: context
                         .local_toric_diagnostic
                         .local_toric_unit_tensor_target_qn_trace_status
+                        .clone(),
+                    local_toric_circuit_triangulation_choice_count: context
+                        .local_toric_diagnostic
+                        .circuit_triangulation_choice_count,
+                    local_toric_circuit_triangulation_choices: context
+                        .local_toric_diagnostic
+                        .circuit_triangulation_choices
+                        .clone(),
+                    local_toric_circuit_secondary_inequality_choices: context
+                        .local_toric_diagnostic
+                        .circuit_secondary_inequality_choices
+                        .clone(),
+                    local_toric_circuit_secondary_inequality_error: context
+                        .local_toric_diagnostic
+                        .circuit_secondary_inequality_error
                         .clone(),
                     ckyz_status: context.local_toric_diagnostic.ckyz_status.clone(),
                     bounded_lower_seed_status:

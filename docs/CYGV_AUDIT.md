@@ -4371,6 +4371,16 @@ pairing `0.04240825693838701`. This gives the next chamber-rule search an
 explicit side constraint instead of relying on the larger target-plus-star
 diagnostics.
 
+`/tmp/cyrus_six_point_circuit_choices_target7_v1.json` now lifts the local
+six-point circuit phase choices into the unresolved-generator queue itself. For
+target `7`, the remaining degree-`2` row has exactly two local triangulation
+choices, each with three five-point simplices. The paired secondary
+inequalities are the circuit relation
+`[(0,-1),(55,-2),(208,1),(211,1),(212,2),(214,-1)]` and its negative. This is
+phase-choice evidence only: it identifies the local wall alternatives that any
+source-derived chamber rule must choose between, but it does not supply a
+nef partition, intersection tensor, or promotable GV value.
+
 `/tmp/cyrus_six_point_overlap_annotations_v1.json` annotates the nearest
 degree-bounded support-overlap samples with qN-history, source class, and
 global secondary-height side. For the shared target `7`/`8` six-point row, all
