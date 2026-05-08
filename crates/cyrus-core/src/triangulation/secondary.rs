@@ -314,6 +314,54 @@ pub fn expanded_secondary_face_inequality_choices_from_triangulations(
     Ok(face_inequality_choices)
 }
 
+/// Construct the two triangulation choices of an affine circuit.
+///
+/// An affine circuit has exactly two triangulations: omit each
+/// positive-coefficient point, or omit each negative-coefficient point. This is
+/// the local bistellar-flip primitive used by secondary-fan chamber moves.
+///
+/// # Errors
+///
+/// Returns an error if the circuit is malformed.
+pub fn circuit_triangulation_choices(circuit: &[(usize, i64)]) -> Result<Vec<Triangulation>> {
+    Ok(vec![
+        Triangulation::new(circuit_omission_facets(
+            circuit,
+            CircuitOmissionSide::PositiveCoefficient,
+        )?),
+        Triangulation::new(circuit_omission_facets(
+            circuit,
+            CircuitOmissionSide::NegativeCoefficient,
+        )?),
+    ])
+}
+
+/// Compute per-face inequality choices for faces represented by circuits.
+///
+/// This is a narrow face-FRT source for circuit faces such as rank-two
+/// quadrilaterals: each circuit contributes its two bistellar triangulations,
+/// and each triangulation is converted to native CPL inequalities in ambient
+/// point-index coordinates. It does not enumerate arbitrary non-circuit
+/// two-face triangulations.
+///
+/// # Errors
+///
+/// Returns an error if a circuit is malformed or if the resulting
+/// triangulation choices are invalid for the supplied points.
+pub fn expanded_secondary_face_inequality_choices_from_circuit_faces(
+    points: &[Point],
+    face_circuits: &[Vec<(usize, i64)>],
+) -> Result<Vec<Vec<Vec<Vec<i64>>>>> {
+    let face_triangulation_choices = face_circuits
+        .iter()
+        .map(|circuit| circuit_triangulation_choices(circuit))
+        .collect::<Result<Vec<_>>>()?;
+    expanded_secondary_face_inequality_choices_from_triangulations(
+        points,
+        &face_triangulation_choices,
+    )
+}
+
 /// Materialize one NTFE chamber from supplied per-face FRT choices.
 ///
 /// This is the supplied-`face_triangs`, `require_star=False`, single-choice
@@ -1731,6 +1779,44 @@ mod tests {
                 })
                 .collect::<BTreeSet<_>>(),
             BTreeSet::from([vec![0, 1, 2], vec![0, 2, 3]])
+        );
+    }
+
+    #[test]
+    fn circuit_triangulation_choices_give_both_square_diagonals() {
+        let points = vec![
+            Point::new(vec![0, 0]),
+            Point::new(vec![1, 0]),
+            Point::new(vec![1, 1]),
+            Point::new(vec![0, 1]),
+        ];
+        let circuit = vec![(0, -1), (1, 1), (2, -1), (3, 1)];
+
+        let triangulations = circuit_triangulation_choices(&circuit).unwrap();
+
+        assert_eq!(
+            triangulations
+                .iter()
+                .map(|triangulation| {
+                    triangulation
+                        .simplices()
+                        .iter()
+                        .cloned()
+                        .collect::<BTreeSet<_>>()
+                })
+                .collect::<Vec<_>>(),
+            vec![
+                BTreeSet::from([vec![0, 1, 2], vec![0, 2, 3]]),
+                BTreeSet::from([vec![0, 1, 3], vec![1, 2, 3]]),
+            ]
+        );
+
+        let choices =
+            expanded_secondary_face_inequality_choices_from_circuit_faces(&points, &[circuit])
+                .unwrap();
+        assert_eq!(
+            choices,
+            vec![vec![vec![vec![-1, 1, -1, 1]], vec![vec![1, -1, 1, -1]],]]
         );
     }
 

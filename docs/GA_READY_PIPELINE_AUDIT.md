@@ -1737,6 +1737,15 @@ to make the remaining GV layer more first-principles:
    mixed-radix chamber-index order for callers that want one expanded
    secondary chamber by index. They still require caller-supplied face FRT
    choices; automatic face-FRT enumeration/sampling remains unported.
+   For the specific local case that keeps appearing in corrected-chamber
+   diagnostics, affine circuit faces now have a narrow source of face choices:
+   `circuit_triangulation_choices` returns the two bistellar triangulations of
+   a circuit, and
+   `expanded_secondary_face_inequality_choices_from_circuit_faces` converts
+   those choices to ambient CPL inequalities. A square circuit regression
+   verifies both diagonals and the two opposite secondary-cone rows. This is
+   not a replacement for arbitrary face-FRT enumeration, but it is the exact
+   local primitive needed for rank-two quadrilateral chamber rows.
    The Stage 0 no-replay policy tests also now pass again after two policy
    cleanups: generic first-principles runs log the computed flux-coordinate
    basis separately from explicit production-basis overrides, and the opt-in

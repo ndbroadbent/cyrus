@@ -19,7 +19,7 @@ pub use heights::{compute_delaunay_heights, compute_frst_heights};
 pub use regular::compute_regular_triangulation;
 pub use secondary::{
     CircuitFlip, CircuitOmissionSide, CircuitOmissionSideClassification, circuit_omission_facets,
-    classify_circuit_omission_side, complete_circuit_flip_links,
+    circuit_triangulation_choices, classify_circuit_omission_side, complete_circuit_flip_links,
     expanded_secondary_chamber_choice_count, expanded_secondary_chamber_choice_digits,
     expanded_secondary_chamber_count_from_face_inequality_choices,
     expanded_secondary_chamber_hyperplanes_from_choice,
@@ -27,6 +27,7 @@ pub use secondary::{
     expanded_secondary_chamber_hyperplanes_from_face_inequality_choice_index,
     expanded_secondary_chamber_hyperplanes_from_face_triangulation_choice_index,
     expanded_secondary_cone_hyperplanes_from_face_triangulations,
+    expanded_secondary_face_inequality_choices_from_circuit_faces,
     expanded_secondary_face_inequality_choices_from_triangulations,
     expanded_secondary_fan_hyperplanes_on_faces,
     expanded_secondary_fan_hyperplanes_on_polytope_2faces_4d,

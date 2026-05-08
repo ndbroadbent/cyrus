@@ -3863,6 +3863,14 @@ materialize a chamber by CYTools mixed-radix index from precomputed
 caller duplication of the CYTools ordering rules while keeping the boundary
 explicit: face-FRT enumeration/sampling and optional star-ness inequalities
 are still not part of this helper.
+For affine circuit faces, Cyrus now has the exact two-choice local FRT source:
+`circuit_triangulation_choices` returns the positive- and
+negative-coefficient omission triangulations, and
+`expanded_secondary_face_inequality_choices_from_circuit_faces` converts those
+two choices into ambient secondary inequalities. The square-circuit regression
+pins both diagonals and their opposite CPL rows. This directly supports the
+rank-two quadrilateral chamber rows seen in the current diagnostics, while
+still not claiming to enumerate arbitrary two-face FRTs.
 
 The star-union chamber semigroup probe now also lifts every current/flipped
 chamber generator back through the global curve-basis projection and reports
