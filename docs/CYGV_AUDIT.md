@@ -3789,6 +3789,18 @@ height is strictly inside with minimum pairing `0.0002917945770377628`. This is
 stronger chamber evidence for the global two-face skeleton; it still does not
 certify the unresolved local target-plus-star phase transport.
 
+The star-union chamber semigroup probe now also lifts every current/flipped
+chamber generator back through the global curve-basis projection and reports
+known toric/source-derived qN-history status. On the latest target `7` and
+target `8` runs, all five current-chamber and all five flipped-chamber
+generators project integrally. In both targets and both chambers the status
+split is `known_nonzero_source_gv:1` and `unknown_not_toric_covered:4`. The
+current chamber's known row is the degree-4 source wall component with `GV=1`;
+the flipped chamber's known row is the degree-8 source component with `GV=-2`.
+The target-plus-star decompositions still depend on unknown generators, so this
+is evidence for a real global chamber-semigroup object but not a replacement
+for source-certified compact qN history.
+
 The no-replay boundary around the standalone GV binary is stricter now:
 `mcallister_gv` no longer reads `dual_curves.dat` or `dual_curves_gv.dat`.
 Those files remain validation checkpoints for tests and audits only; the

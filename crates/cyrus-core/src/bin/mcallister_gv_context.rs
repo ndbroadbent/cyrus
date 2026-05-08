@@ -960,10 +960,14 @@ struct LocalCygvStarUnionChamberSemigroupTransportProbe {
     target_plus_star_coordinates: Option<Vec<i64>>,
     current_chamber_generator_count: Option<usize>,
     current_chamber_generators: Vec<Vec<i64>>,
+    current_chamber_generator_context: Vec<LocalCygvChamberSemigroupGeneratorContext>,
+    current_chamber_generator_known_qn_history_status_counts: BTreeMap<String, usize>,
     current_chamber_decomposition: Option<Vec<LocalCygvChamberSemigroupDecompositionTerm>>,
     flipped_chamber_status: Option<String>,
     flipped_chamber_generator_count: Option<usize>,
     flipped_chamber_generators: Vec<Vec<i64>>,
+    flipped_chamber_generator_context: Vec<LocalCygvChamberSemigroupGeneratorContext>,
+    flipped_chamber_generator_known_qn_history_status_counts: BTreeMap<String, usize>,
     flipped_chamber_decomposition: Option<Vec<LocalCygvChamberSemigroupDecompositionTerm>>,
     error: Option<String>,
 }
@@ -973,6 +977,23 @@ struct LocalCygvChamberSemigroupDecompositionTerm {
     generator_index: usize,
     coefficient: i64,
     generator: Vec<i64>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvChamberSemigroupGeneratorContext {
+    generator_index: usize,
+    chamber_coordinate: Vec<i64>,
+    point_relation_status: String,
+    point_relation_nonzero: Option<Vec<(usize, i64)>>,
+    global_basis_status: String,
+    basis_nonzero: Option<Vec<(usize, i64)>>,
+    degree: Option<i128>,
+    known_qn_history_status: String,
+    toric_gv: Option<String>,
+    source_derived_gv: Option<String>,
+    source_class_status: Option<String>,
+    source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
+    error: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -17539,6 +17560,7 @@ fn local_cygv_source_resolution_hint_summaries(
                     &star_union_relation_hint,
                     &star_union_global_regular_triangulation,
                     &crossed_wall_regular_side,
+                    Some(context),
                 );
             let compact_omission_wall_side = local_cygv_compact_omission_wall_side_summary(
                 &star_union_target_plus_star_local_cygv_readiness,
@@ -21763,6 +21785,7 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
     star_union: &LocalCygvStarUnionRelationHint,
     global_regular: &LocalCygvStarUnionGlobalRegularTriangulationHint,
     regular_side: &LocalCygvStarUnionCrossedWallRegularSideHint,
+    context: Option<&ValidatedContext<'_>>,
 ) -> LocalCygvStarUnionChamberSemigroupTransportProbe {
     let blocked =
         |status: &str, error: Option<String>| LocalCygvStarUnionChamberSemigroupTransportProbe {
@@ -21770,10 +21793,14 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
             target_plus_star_coordinates: star_union.target_plus_star_coordinates.clone(),
             current_chamber_generator_count: None,
             current_chamber_generators: Vec::new(),
+            current_chamber_generator_context: Vec::new(),
+            current_chamber_generator_known_qn_history_status_counts: BTreeMap::new(),
             current_chamber_decomposition: None,
             flipped_chamber_status: None,
             flipped_chamber_generator_count: None,
             flipped_chamber_generators: Vec::new(),
+            flipped_chamber_generator_context: Vec::new(),
+            flipped_chamber_generator_known_qn_history_status_counts: BTreeMap::new(),
             flipped_chamber_decomposition: None,
             error,
         };
@@ -21885,16 +21912,49 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
         (false, false) => "star_union_chamber_semigroup_candidate_target_plus_star_not_found",
     };
 
+    let current_chamber_generator_context = context
+        .map(|context| {
+            chamber_semigroup_generator_contexts(
+                &star_union.point_indices,
+                charge_basis,
+                &current_generators,
+                context,
+            )
+        })
+        .unwrap_or_default();
+    let flipped_chamber_generator_context = context
+        .map(|context| {
+            chamber_semigroup_generator_contexts(
+                &star_union.point_indices,
+                charge_basis,
+                &flipped_generators,
+                context,
+            )
+        })
+        .unwrap_or_default();
+    let current_chamber_generator_known_qn_history_status_counts =
+        chamber_semigroup_generator_known_qn_history_status_counts(
+            &current_chamber_generator_context,
+        );
+    let flipped_chamber_generator_known_qn_history_status_counts =
+        chamber_semigroup_generator_known_qn_history_status_counts(
+            &flipped_chamber_generator_context,
+        );
+
     LocalCygvStarUnionChamberSemigroupTransportProbe {
         status: status.to_string(),
         target_plus_star_coordinates: Some(target.to_vec()),
         current_chamber_generator_count: Some(current_generators.len()),
         current_chamber_generators: current_generators,
+        current_chamber_generator_context,
+        current_chamber_generator_known_qn_history_status_counts,
         current_chamber_decomposition: current_decomposition,
         flipped_chamber_status: flipped_status,
         flipped_chamber_generator_count: (!flipped_generators.is_empty())
             .then_some(flipped_generators.len()),
         flipped_chamber_generators: flipped_generators,
+        flipped_chamber_generator_context,
+        flipped_chamber_generator_known_qn_history_status_counts,
         flipped_chamber_decomposition: flipped_decomposition,
         error: None,
     }
@@ -21970,6 +22030,214 @@ fn local_cygv_star_union_chamber_generators_in_charge_basis(
         )?);
     }
     Ok(generators.into_iter().collect())
+}
+
+fn chamber_semigroup_generator_contexts(
+    point_indices: &[usize],
+    charge_basis: &[Vec<i64>],
+    generators: &[Vec<i64>],
+    context: &ValidatedContext<'_>,
+) -> Vec<LocalCygvChamberSemigroupGeneratorContext> {
+    generators
+        .iter()
+        .enumerate()
+        .map(|(generator_index, generator)| {
+            chamber_semigroup_generator_context(
+                generator_index,
+                generator,
+                point_indices,
+                charge_basis,
+                context,
+            )
+        })
+        .collect()
+}
+
+fn chamber_semigroup_generator_context(
+    generator_index: usize,
+    generator: &[i64],
+    point_indices: &[usize],
+    charge_basis: &[Vec<i64>],
+    context: &ValidatedContext<'_>,
+) -> LocalCygvChamberSemigroupGeneratorContext {
+    let empty = |point_relation_status: &str,
+                 point_relation_nonzero: Option<Vec<(usize, i64)>>,
+                 global_basis_status: &str,
+                 known_qn_history_status: &str,
+                 error: Option<String>|
+     -> LocalCygvChamberSemigroupGeneratorContext {
+        LocalCygvChamberSemigroupGeneratorContext {
+            generator_index,
+            chamber_coordinate: generator.to_vec(),
+            point_relation_status: point_relation_status.to_string(),
+            point_relation_nonzero,
+            global_basis_status: global_basis_status.to_string(),
+            basis_nonzero: None,
+            degree: None,
+            known_qn_history_status: known_qn_history_status.to_string(),
+            toric_gv: None,
+            source_derived_gv: None,
+            source_class_status: None,
+            source_ray_ambient_nonzero: None,
+            error,
+        }
+    };
+
+    let point_relation =
+        match chamber_semigroup_generator_point_relation(point_indices, charge_basis, generator) {
+            Ok(point_relation) => point_relation,
+            Err(error) => {
+                return empty(
+                    "chamber_generator_point_relation_error",
+                    None,
+                    "chamber_generator_global_basis_projection_not_run",
+                    "invalid_chamber_generator_point_relation",
+                    Some(error),
+                );
+            }
+        };
+    let point_relation_nonzero = point_indices
+        .iter()
+        .copied()
+        .zip(point_relation.iter().copied())
+        .filter(|(_, coefficient)| *coefficient != 0)
+        .collect::<Vec<_>>();
+    if point_relation_nonzero.is_empty() {
+        return LocalCygvChamberSemigroupGeneratorContext {
+            generator_index,
+            chamber_coordinate: generator.to_vec(),
+            point_relation_status: "chamber_generator_point_relation_zero".to_string(),
+            point_relation_nonzero: Some(point_relation_nonzero),
+            global_basis_status: "chamber_generator_global_basis_projection_zero".to_string(),
+            basis_nonzero: Some(Vec::new()),
+            degree: Some(0),
+            known_qn_history_status: "zero_chamber_generator".to_string(),
+            toric_gv: None,
+            source_derived_gv: None,
+            source_class_status: None,
+            source_ray_ambient_nonzero: None,
+            error: None,
+        };
+    }
+
+    let basis_dense = match project_star_union_relation_to_global_basis(
+        point_indices,
+        &point_relation,
+        context.q_matrix,
+    ) {
+        Ok(Some(basis_dense)) => basis_dense,
+        Ok(None) => {
+            return empty(
+                "chamber_generator_point_relation_reconstructed",
+                Some(point_relation_nonzero),
+                "chamber_generator_global_basis_projection_no_integral_basis_coordinates",
+                "chamber_generator_not_in_global_basis",
+                None,
+            );
+        }
+        Err(error) => {
+            return empty(
+                "chamber_generator_point_relation_reconstructed",
+                Some(point_relation_nonzero),
+                "chamber_generator_global_basis_projection_error",
+                "invalid_chamber_generator_global_basis_projection",
+                Some(error),
+            );
+        }
+    };
+    let basis_nonzero = sparse_from_dense(&basis_dense);
+    let degree = match curve_degree(&basis_dense, context.grading) {
+        Ok(degree) => degree,
+        Err(error) => {
+            return LocalCygvChamberSemigroupGeneratorContext {
+                generator_index,
+                chamber_coordinate: generator.to_vec(),
+                point_relation_status: "chamber_generator_point_relation_reconstructed".to_string(),
+                point_relation_nonzero: Some(point_relation_nonzero),
+                global_basis_status: "chamber_generator_global_basis_projection_integral"
+                    .to_string(),
+                basis_nonzero: Some(basis_nonzero),
+                degree: None,
+                known_qn_history_status: "invalid_chamber_generator_global_basis_degree"
+                    .to_string(),
+                toric_gv: None,
+                source_derived_gv: None,
+                source_class_status: None,
+                source_ray_ambient_nonzero: None,
+                error: Some(error),
+            };
+        }
+    };
+    let (known_qn_history_status, toric_gv, source_derived_gv, error) =
+        global_basis_known_qn_history(&basis_dense, context);
+    let (source_class_status, source_ray_ambient_nonzero) =
+        global_basis_source_class_lookup(&basis_dense, context);
+
+    LocalCygvChamberSemigroupGeneratorContext {
+        generator_index,
+        chamber_coordinate: generator.to_vec(),
+        point_relation_status: "chamber_generator_point_relation_reconstructed".to_string(),
+        point_relation_nonzero: Some(point_relation_nonzero),
+        global_basis_status: "chamber_generator_global_basis_projection_integral".to_string(),
+        basis_nonzero: Some(basis_nonzero),
+        degree: Some(degree),
+        known_qn_history_status,
+        toric_gv,
+        source_derived_gv,
+        source_class_status,
+        source_ray_ambient_nonzero,
+        error,
+    }
+}
+
+fn chamber_semigroup_generator_point_relation(
+    point_indices: &[usize],
+    charge_basis: &[Vec<i64>],
+    generator: &[i64],
+) -> Result<Vec<i64>, String> {
+    if generator.len() != charge_basis.len() {
+        return Err(format!(
+            "chamber generator dimension {} does not match charge-basis row count {}",
+            generator.len(),
+            charge_basis.len()
+        ));
+    }
+    if charge_basis
+        .iter()
+        .any(|row| row.len() != point_indices.len())
+    {
+        return Err("chamber generator charge-basis width mismatch".to_string());
+    }
+    let mut relation = vec![0i64; point_indices.len()];
+    for col in 0..point_indices.len() {
+        let mut coefficient = 0i128;
+        for (&coordinate, row) in generator.iter().zip(charge_basis.iter()) {
+            let product = i128::from(coordinate)
+                .checked_mul(i128::from(row[col]))
+                .ok_or_else(|| {
+                    "chamber generator point-relation product overflows i128".to_string()
+                })?;
+            coefficient = coefficient.checked_add(product).ok_or_else(|| {
+                "chamber generator point-relation coefficient overflows i128".to_string()
+            })?;
+        }
+        relation[col] = i64::try_from(coefficient).map_err(|_| {
+            "chamber generator point-relation coefficient does not fit in i64".to_string()
+        })?;
+    }
+    Ok(relation)
+}
+
+fn chamber_semigroup_generator_known_qn_history_status_counts(
+    contexts: &[LocalCygvChamberSemigroupGeneratorContext],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for context in contexts {
+        *counts
+            .entry(context.known_qn_history_status.clone())
+            .or_insert(0) += 1;
+    }
+    counts
 }
 
 fn local_cygv_star_union_flipped_link_simplices(
@@ -27326,6 +27594,62 @@ mod tests {
     }
 
     #[test]
+    fn chamber_semigroup_generator_context_projects_known_global_curve() {
+        let stats = MissingGvTargetStats {
+            target_count: 0,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: Vec::new(),
+        };
+        let grading = vec![1, 1];
+        let q_matrix = vec![vec![1, 0], vec![0, 1]];
+        let degree_bounded_rays = Vec::new();
+        let context = ValidatedContext {
+            dimension: 2,
+            degree_bound: 5,
+            q_cols: 2,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: None,
+            covered_toric_gv_by_basis: HashMap::from([(vec![2, 3], "-7".to_string())]),
+            source_derived_gv_by_basis: HashMap::new(),
+            intersection: Intersection::new(2),
+            stats: &stats,
+            uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
+            secondary_cone_heights: None,
+        };
+        let point_indices = vec![0, 1, 2];
+        let charge_basis = vec![vec![0, 1, 0], vec![0, 0, 1]];
+
+        let contexts = chamber_semigroup_generator_contexts(
+            &point_indices,
+            &charge_basis,
+            &[vec![2, 3]],
+            &context,
+        );
+
+        assert_eq!(contexts.len(), 1);
+        assert_eq!(
+            contexts[0].point_relation_nonzero,
+            Some(vec![(1, 2), (2, 3)])
+        );
+        assert_eq!(contexts[0].basis_nonzero, Some(vec![(0, 2), (1, 3)]));
+        assert_eq!(contexts[0].degree, Some(5));
+        assert_eq!(
+            contexts[0].known_qn_history_status,
+            "known_nonzero_toric_gv"
+        );
+        assert_eq!(contexts[0].toric_gv.as_deref(), Some("-7"));
+        assert_eq!(
+            chamber_semigroup_generator_known_qn_history_status_counts(&contexts),
+            BTreeMap::from([("known_nonzero_toric_gv".to_string(), 1)])
+        );
+    }
+
+    #[test]
     fn star_union_target_plus_star_path_history_probe_is_opt_in() {
         let stats = MissingGvTargetStats {
             target_count: 0,
@@ -27588,10 +27912,14 @@ mod tests {
                     target_plus_star_coordinates: None,
                     current_chamber_generator_count: None,
                     current_chamber_generators: Vec::new(),
+                    current_chamber_generator_context: Vec::new(),
+                    current_chamber_generator_known_qn_history_status_counts: BTreeMap::new(),
                     current_chamber_decomposition: None,
                     flipped_chamber_status: None,
                     flipped_chamber_generator_count: None,
                     flipped_chamber_generators: Vec::new(),
+                    flipped_chamber_generator_context: Vec::new(),
+                    flipped_chamber_generator_known_qn_history_status_counts: BTreeMap::new(),
                     flipped_chamber_decomposition: None,
                     error: None,
                 },
@@ -31086,6 +31414,7 @@ mod tests {
             &star_union,
             &global_regular,
             &regular_side,
+            None,
         );
 
         assert_eq!(

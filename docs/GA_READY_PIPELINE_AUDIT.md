@@ -1513,6 +1513,16 @@ to make the remaining GV layer more first-principles:
    `[-1,-2,1] + 3[0,1,0] + 2[2,0,-1]`. This is a chamber-semigroup candidate,
    not a promoted certificate: the qN history, complete-intersection nef/tensor
    input, and wall-crossing continuation remain uncertified.
+   A follow-up enrichment now lifts each chamber-semigroup generator back to
+   the global curve basis. For targets `7` and `8`, every current/flipped
+   chamber generator projects integrally, but the known-history split is only
+   `known_nonzero_source_gv:1` and `unknown_not_toric_covered:4` in each
+   chamber. The known source generator changes from the current chamber
+   degree-4 wall component (`GV=1`) to the flipped chamber degree-8 source
+   component (`GV=-2`), while the decompositions still use unknown generators.
+   This confirms the semigroup candidate is globally meaningful local chamber
+   data, but it is not yet the certified compact `q_N` history needed for
+   promotion.
    A follow-up compact-omission wall-side summary confirms this selected side
    is not one of the compact omission phases: both target rows have four
    compact omissions, but zero full-positive-side or full-negative-side
