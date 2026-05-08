@@ -1687,6 +1687,13 @@ to make the remaining GV layer more first-principles:
    The corresponding no-replay `--stop-after volume` run with the same dump
    flag timed out at 600 seconds before reaching the dump point, so this is a
    verified diagnostic hook but not yet a fast first-principles gate.
+   Corrected-chamber GV context JSON now also carries the optional
+   `expanded_secondary_fan_height_certificate`, and `mcallister_gv_context`
+   validates and reports it at top level. A schema-4 4-214-647 context patched
+   with the validation certificate above reports
+   `expanded_secondary_fan_height_certificate_status=strictly_inside_secondary_cone`,
+   `strictly_inside=true`, `hyperplane_count=6390`, and min pairing
+   `0.04219187862736362`, while preserving `missing_target_count=9`.
    The Stage 0 no-replay policy tests also now pass again after two policy
    cleanups: generic first-principles runs log the computed flux-coordinate
    basis separately from explicit production-basis overrides, and the opt-in

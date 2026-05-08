@@ -752,6 +752,7 @@ struct ChamberGvDiagnostic {
         Option<Vec<ToricGvDiagnosticContextSample>>,
     secondary_cone_height_certificate: Option<SecondaryConeHeightCertificate>,
     secondary_cone_2face_height_certificate: Option<SecondaryConeHeightCertificate>,
+    expanded_secondary_fan_height_certificate: Option<SecondaryConeHeightCertificate>,
     secondary_cone_heights_for_missing: Option<Vec<f64>>,
     basis_mori_rays_for_missing_degree_bound: Option<i128>,
     basis_mori_rays_for_missing_degree_bounded: Option<Vec<Vec<i64>>>,
@@ -837,6 +838,7 @@ struct CorrectedChamberGvContextExport<'a> {
         Option<&'a Vec<ToricGvDiagnosticContextSample>>,
     secondary_cone_height_certificate: Option<&'a SecondaryConeHeightCertificate>,
     secondary_cone_2face_height_certificate: Option<&'a SecondaryConeHeightCertificate>,
+    expanded_secondary_fan_height_certificate: Option<&'a SecondaryConeHeightCertificate>,
     secondary_cone_heights_for_missing: Option<&'a Vec<f64>>,
     gv_q_matrix_for_missing: Option<&'a Vec<Vec<i64>>>,
     gv_curve_basis_matrix_for_missing: Option<&'a Vec<Vec<String>>>,
@@ -7506,6 +7508,9 @@ fn diagnose_chamber_gv_volume_correction(
     let secondary_cone_2face_height_certificate = Some(
         secondary_cone_2face_height_certificate_for_kahler(tri, geom, &intersection.basis, kahler)?,
     );
+    let expanded_secondary_fan_height_certificate = Some(
+        expanded_secondary_fan_height_certificate_for_kahler(geom, &intersection.basis, kahler)?,
+    );
     let secondary_cone_heights_for_missing = Some(secondary_cone_heights_for_kahler(
         geom,
         &intersection.basis,
@@ -8327,6 +8332,7 @@ fn diagnose_chamber_gv_volume_correction(
         degree_bounded_toric_gv_diagnostic_context_for_missing,
         secondary_cone_height_certificate,
         secondary_cone_2face_height_certificate,
+        expanded_secondary_fan_height_certificate,
         secondary_cone_heights_for_missing,
         gv_q_matrix_for_missing: gv_basis_data_for_missing
             .as_ref()
@@ -9216,6 +9222,9 @@ fn write_corrected_chamber_gv_context_export(
         secondary_cone_height_certificate: diag.secondary_cone_height_certificate.as_ref(),
         secondary_cone_2face_height_certificate: diag
             .secondary_cone_2face_height_certificate
+            .as_ref(),
+        expanded_secondary_fan_height_certificate: diag
+            .expanded_secondary_fan_height_certificate
             .as_ref(),
         secondary_cone_heights_for_missing: diag.secondary_cone_heights_for_missing.as_ref(),
         gv_q_matrix_for_missing: diag.gv_q_matrix_for_missing.as_ref(),
@@ -12381,6 +12390,7 @@ mod tests {
                 max_pairing: Some(1.5),
                 strictly_inside: true,
             }),
+            expanded_secondary_fan_height_certificate: None,
             secondary_cone_heights_for_missing: Some(vec![0.0, 0.0, 1.5]),
             basis_mori_rays_for_missing_degree_bound: None,
             basis_mori_rays_for_missing_degree_bounded: None,

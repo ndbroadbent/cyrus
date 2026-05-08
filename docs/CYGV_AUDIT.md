@@ -3816,6 +3816,14 @@ dump point, so this currently validates the diagnostic plumbing and
 checkpoint chamber support, while also showing that the first-principles
 volume-stage path needs a faster/cached route before this can be a routine
 gate.
+The corrected-chamber GV context schema now accepts the same certificate as
+`expanded_secondary_fan_height_certificate`, and `mcallister_gv_context`
+validates plus reports it. Rebuilding the context reader and running it on a
+schema-4 4-214-647 context patched with the dumped certificate reports
+`strictly_inside_secondary_cone`, `strictly_inside=true`, `6390` hyperplanes,
+and minimum pairing `0.04219187862736362`; the actual corrected-GV queue
+remains nine missing targets. Thus the new field is chamber-support evidence
+available to downstream diagnostics, not a promotion of any missing GV value.
 
 The star-union chamber semigroup probe now also lifts every current/flipped
 chamber generator back through the global curve-basis projection and reports

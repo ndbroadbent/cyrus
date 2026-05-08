@@ -82,6 +82,8 @@ struct CorrectedChamberGvContext {
     #[serde(default)]
     secondary_cone_2face_height_certificate: Option<SecondaryConeHeightCertificate>,
     #[serde(default)]
+    expanded_secondary_fan_height_certificate: Option<SecondaryConeHeightCertificate>,
+    #[serde(default)]
     secondary_cone_heights_for_missing: Option<Vec<f64>>,
     uncovered_source_ray_stats_for_missing: Option<MissingGvTargetStats>,
     #[serde(default)]
@@ -278,6 +280,10 @@ struct ContextReport {
     secondary_cone_2face_height_certificate_strictly_inside: Option<bool>,
     secondary_cone_2face_height_certificate_hyperplane_count: Option<usize>,
     secondary_cone_2face_height_certificate_min_pairing: Option<f64>,
+    expanded_secondary_fan_height_certificate_status: Option<String>,
+    expanded_secondary_fan_height_certificate_strictly_inside: Option<bool>,
+    expanded_secondary_fan_height_certificate_hyperplane_count: Option<usize>,
+    expanded_secondary_fan_height_certificate_min_pairing: Option<f64>,
     secondary_cone_height_vector_count: Option<usize>,
     q_rows: usize,
     q_cols: usize,
@@ -11834,6 +11840,12 @@ fn validate_context<'a>(
             "secondary-cone 2-face height certificate",
         )?;
     }
+    if let Some(certificate) = context.expanded_secondary_fan_height_certificate.as_ref() {
+        validate_secondary_cone_height_certificate(
+            certificate,
+            "expanded-secondary fan height certificate",
+        )?;
+    }
     if let Some(heights) = context.secondary_cone_heights_for_missing.as_ref() {
         let expected_height_count = q_cols
             .checked_add(1)
@@ -17497,6 +17509,22 @@ fn build_report(
             .map(|certificate| certificate.hyperplane_count),
         secondary_cone_2face_height_certificate_min_pairing: context
             .secondary_cone_2face_height_certificate
+            .as_ref()
+            .and_then(|certificate| certificate.min_pairing),
+        expanded_secondary_fan_height_certificate_status: context
+            .expanded_secondary_fan_height_certificate
+            .as_ref()
+            .map(|certificate| certificate.status.clone()),
+        expanded_secondary_fan_height_certificate_strictly_inside: context
+            .expanded_secondary_fan_height_certificate
+            .as_ref()
+            .map(|certificate| certificate.strictly_inside),
+        expanded_secondary_fan_height_certificate_hyperplane_count: context
+            .expanded_secondary_fan_height_certificate
+            .as_ref()
+            .map(|certificate| certificate.hyperplane_count),
+        expanded_secondary_fan_height_certificate_min_pairing: context
+            .expanded_secondary_fan_height_certificate
             .as_ref()
             .and_then(|certificate| certificate.min_pairing),
         secondary_cone_height_vector_count: context
@@ -29541,6 +29569,7 @@ mod tests {
             degree_bounded_toric_gv_diagnostic_context_for_missing: None,
             secondary_cone_height_certificate: None,
             secondary_cone_2face_height_certificate: None,
+            expanded_secondary_fan_height_certificate: None,
             secondary_cone_heights_for_missing: None,
             uncovered_source_ray_stats_for_missing: None,
             shared_facet_unresolved_source_ray_stats_for_missing: None,
