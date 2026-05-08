@@ -1262,6 +1262,16 @@ The next step therefore has to derive a source/chamber rule for the six-point
 local model; simply running the one-parameter compact wrapper would be another
 uncertified shortcut.
 
+`/tmp/cyrus_six_point_ci_partition_full_v1.json` makes that negative
+codimension-2 result more explicit. All four remaining six-point rows have
+`15` raw non-origin bipartitions, zero zero-degree partitions, and zero
+CYTools-nef partitions. For the shared target `7`/`8` degree-`2` row the
+degree buckets are `8/1/2/4` across the nonnegative/nonpositive/zero split
+statuses, and every candidate fails the CYTools-style nef certificate because
+the partition union hull does not equal the ambient support hull. The
+remaining blocker is therefore a source-derived phase or local model, not a
+hidden accepted partition in the current scan.
+
 `/tmp/cyrus_six_point_omission_shape_v1.json` also checks the compact
 threefold column-omission alternative for the same rows. It finds zero compact
 CY3 omission candidates, so the remaining six-point blocker is not repaired by

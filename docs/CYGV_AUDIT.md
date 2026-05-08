@@ -4330,6 +4330,19 @@ a missing call to the one-parameter compact hypersurface wrapper; Cyrus needs a
 source-derived phase/nef-partition rule or a different certified local model
 for the six-point circuit before any `cygv` value can be promoted.
 
+`/tmp/cyrus_six_point_ci_partition_full_v1.json` exposes the full
+codimension-2 partition certificate counts for the same unresolved rows, not
+just the zero-degree subset. Each of the four six-point rows has `15` raw
+non-origin bipartitions, zero CYTools-nef partitions, and zero zero-degree
+partitions. For the shared target `7`/`8` row the degree buckets are
+`first_part_nonnegative_second_part_nonpositive=8`,
+`first_part_nonpositive_second_part_nonnegative=1`,
+`first_part_nonpositive_second_part_zero=2`, and
+`first_part_zero_second_part_nonpositive=4`; all `15` candidates fail the
+CYTools-style nef certificate because the nef-partition union hull does not
+equal the ambient support polytope hull. This rules out "we missed a
+nonzero-degree CYTools nef partition" as the six-point repair path.
+
 `/tmp/cyrus_six_point_omission_shape_v1.json` runs the same compact
 threefold-omission summary on those chamber generators. The result is also
 negative: all four remaining six-point rows have
