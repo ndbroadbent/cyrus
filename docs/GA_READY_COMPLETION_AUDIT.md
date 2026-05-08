@@ -1064,7 +1064,11 @@ status and missing inputs, so even a future local phase/tensor certificate
 cannot promote the `target+star` class while wall-crossing transport remains
 uncertified. This narrows the unresolved object to wall-crossing chamber
 transport plus qN/semigroup history; it still does not compute the missing
-degree-6 `target+star` GV value.
+degree-6 `target+star` GV value. The concurrent local CICY readiness diagnostic
+also keeps the complete-intersection shortcut blocked: every sampled
+zero-degree nef candidate for targets `7`/`8` omits point index `0`, and that
+origin is an ambient vertex of the local support hull, so the candidate part
+union fails the CYTools-style ambient-polytope hull equality check.
 
 The Stage 0 no-replay policy gate is green for the touched paths:
 `cargo test -p cyrus-core --test mcallister_e2e stage0_data_integrity -- --nocapture`

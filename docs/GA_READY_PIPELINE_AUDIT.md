@@ -1375,6 +1375,10 @@ to make the remaining GV layer more first-principles:
    splits on the visible local support polytope; all six candidates for each
    target fail with
    `support_polytope_cytools_nef_certificate_failed:invalid_input_nef_partition_union_hull_does_not_equal_ambient_polytope_hull`.
+   The failure is now localized further: every sampled zero-degree candidate
+   omits point index `0`, and that origin is an ambient vertex of the local
+   support polytope. Thus the visible target-plus-star CICY split cannot be
+   promoted by treating the remaining part-union hull as the ambient support.
    Thus the zero-degree split enumeration is not just ambiguous. On the local
    target-plus-star support currently visible to Cyrus, it does not define a
    CYTools nef partition.

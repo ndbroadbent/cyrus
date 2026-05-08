@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 
+use cyrus_core::geometry::ConvexHull;
 use cyrus_core::gv::{
     CygvGvCoefficientTrace, SupportingMoriFaceLpSearchOptions,
     certify_supporting_mori_face_by_exact_kernel, certify_supporting_mori_face_by_lp_search,
@@ -711,6 +712,8 @@ struct LocalCygvNefPartitionCandidate {
     cytools_nef_certificate_status: Option<String>,
     cytools_nef_part_lattice_point_counts: Option<Vec<usize>>,
     cytools_nef_minkowski_sum_vertex_count: Option<usize>,
+    cytools_nef_origin_is_missing_ambient_vertex: Option<bool>,
+    cytools_nef_missing_ambient_vertex_point_indices: Option<Vec<usize>>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -10232,6 +10235,12 @@ fn local_cygv_codim_two_nef_partition_candidates(
             cytools_nef_minkowski_sum_vertex_count: certificate
                 .as_ref()
                 .and_then(|certificate| certificate.minkowski_sum_vertex_count),
+            cytools_nef_origin_is_missing_ambient_vertex: certificate
+                .as_ref()
+                .and_then(|certificate| certificate.origin_is_missing_ambient_vertex),
+            cytools_nef_missing_ambient_vertex_point_indices: certificate
+                .as_ref()
+                .and_then(|certificate| certificate.missing_ambient_vertex_point_indices.clone()),
         });
     }
     candidates.sort_by(|lhs, rhs| {
@@ -10253,6 +10262,8 @@ struct LocalCygvSupportNefCertificateProbe {
     status: String,
     part_lattice_point_counts: Option<Vec<usize>>,
     minkowski_sum_vertex_count: Option<usize>,
+    origin_is_missing_ambient_vertex: Option<bool>,
+    missing_ambient_vertex_point_indices: Option<Vec<usize>>,
 }
 
 fn local_cygv_support_polytope_nef_certificate(
@@ -10273,6 +10284,8 @@ fn local_cygv_support_polytope_nef_certificate(
             ),
             part_lattice_point_counts: None,
             minkowski_sum_vertex_count: None,
+            origin_is_missing_ambient_vertex: None,
+            missing_ambient_vertex_point_indices: None,
         },
     }
 }
@@ -10308,17 +10321,86 @@ fn local_cygv_support_polytope_nef_certificate_inner(
         }
         points.push(Point::new(sample.coordinates.clone()));
     }
+    let mut global_indices_by_local = vec![0usize];
+    global_indices_by_local.extend(
+        support_point_samples
+            .iter()
+            .map(|sample| sample.point_index),
+    );
 
     let nef_partition = vec![
         local_cygv_support_nef_part(first_part_point_indices, &local_index_by_global)?,
         local_cygv_support_nef_part(second_part_point_indices, &local_index_by_global)?,
     ];
-    let certificate = certify_nef_partition_cytools_style(&points, &points, &nef_partition)
-        .map_err(|error| error.to_string())?;
-    Ok(LocalCygvSupportNefCertificateProbe {
-        status: "support_polytope_cytools_nef_certificate_passed".to_string(),
-        part_lattice_point_counts: Some(certificate.part_lattice_point_counts),
-        minkowski_sum_vertex_count: Some(certificate.minkowski_sum_vertex_count),
+    let vertex_diagnostic =
+        local_cygv_support_nef_vertex_diagnostic(&points, &nef_partition, &global_indices_by_local);
+    match certify_nef_partition_cytools_style(&points, &points, &nef_partition) {
+        Ok(certificate) => Ok(LocalCygvSupportNefCertificateProbe {
+            status: "support_polytope_cytools_nef_certificate_passed".to_string(),
+            part_lattice_point_counts: Some(certificate.part_lattice_point_counts),
+            minkowski_sum_vertex_count: Some(certificate.minkowski_sum_vertex_count),
+            origin_is_missing_ambient_vertex: vertex_diagnostic
+                .as_ref()
+                .map(|diagnostic| diagnostic.origin_is_missing_ambient_vertex),
+            missing_ambient_vertex_point_indices: vertex_diagnostic
+                .map(|diagnostic| diagnostic.missing_ambient_vertex_point_indices),
+        }),
+        Err(error) => Ok(LocalCygvSupportNefCertificateProbe {
+            status: format!(
+                "support_polytope_cytools_nef_certificate_failed:{}",
+                status_error_fragment(&error.to_string())
+            ),
+            part_lattice_point_counts: None,
+            minkowski_sum_vertex_count: None,
+            origin_is_missing_ambient_vertex: vertex_diagnostic
+                .as_ref()
+                .map(|diagnostic| diagnostic.origin_is_missing_ambient_vertex),
+            missing_ambient_vertex_point_indices: vertex_diagnostic
+                .map(|diagnostic| diagnostic.missing_ambient_vertex_point_indices),
+        }),
+    }
+}
+
+struct LocalCygvSupportNefVertexDiagnostic {
+    origin_is_missing_ambient_vertex: bool,
+    missing_ambient_vertex_point_indices: Vec<usize>,
+}
+
+fn local_cygv_support_nef_vertex_diagnostic(
+    points: &[Point],
+    nef_partition: &[Vec<usize>],
+    global_indices_by_local: &[usize],
+) -> Option<LocalCygvSupportNefVertexDiagnostic> {
+    let coords = points
+        .iter()
+        .map(|point| point.coords().to_vec())
+        .collect::<Vec<_>>();
+    let ambient_hull = ConvexHull::compute(&coords)?;
+    let union_local_indices = nef_partition
+        .iter()
+        .flat_map(|part| part.iter().copied())
+        .collect::<Vec<_>>();
+    let union_coords = union_local_indices
+        .iter()
+        .map(|&idx| coords.get(idx).cloned())
+        .collect::<Option<Vec<_>>>()?;
+    let union_hull = ConvexHull::compute(&union_coords)?;
+    let union_vertex_coords = union_hull
+        .vertex_indices
+        .into_iter()
+        .map(|idx| union_coords[idx].clone())
+        .collect::<HashSet<_>>();
+    let mut missing_ambient_vertex_point_indices = ambient_hull
+        .vertex_indices
+        .into_iter()
+        .filter(|&local_idx| !union_vertex_coords.contains(&coords[local_idx]))
+        .filter_map(|local_idx| global_indices_by_local.get(local_idx).copied())
+        .collect::<Vec<_>>();
+    missing_ambient_vertex_point_indices.sort_unstable();
+    missing_ambient_vertex_point_indices.dedup();
+    Some(LocalCygvSupportNefVertexDiagnostic {
+        origin_is_missing_ambient_vertex: missing_ambient_vertex_point_indices.contains(&0),
+        missing_ambient_vertex_point_indices,
     })
 }
 
@@ -29816,6 +29898,11 @@ mod tests {
                         && candidate.target_relation_second_part_sum == Some(0)
                         && candidate.target_relation_balance_status.as_deref()
                             == Some("target_relation_balanced_inside_each_part")
+                        && candidate.cytools_nef_origin_is_missing_ambient_vertex == Some(true)
+                        && candidate
+                            .cytools_nef_missing_ambient_vertex_point_indices
+                            .as_deref()
+                            == Some(&[0])
                 )
         );
         assert_eq!(
@@ -29982,6 +30069,21 @@ mod tests {
                 "support_polytope_cytools_nef_certificate_failed:invalid_input_nef_partition_union_hull_does_not_equal_ambient_polytope_hull".to_string(),
                 6
             )]))
+        );
+        assert!(
+            readiness
+                .complete_intersection_shape_candidate
+                .as_ref()
+                .expect("complete-intersection candidate should be visible")
+                .zero_degree_nef_partition_candidate_sample
+                .iter()
+                .all(|candidate| {
+                    candidate.cytools_nef_origin_is_missing_ambient_vertex == Some(true)
+                        && candidate
+                            .cytools_nef_missing_ambient_vertex_point_indices
+                            .as_deref()
+                            == Some(&[0])
+                })
         );
         assert_eq!(
             readiness.local_q_matrix_orientation_status,

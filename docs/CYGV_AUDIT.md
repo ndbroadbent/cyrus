@@ -3469,6 +3469,10 @@ runs the reusable CYTools-style nef certificate on those zero-degree splits
 using the visible local target-plus-star support polytope. All six candidates
 for each target fail the certificate with
 `support_polytope_cytools_nef_certificate_failed:invalid_input_nef_partition_union_hull_does_not_equal_ambient_polytope_hull`.
+The refined diagnostic records the concrete hull obstruction: every sampled
+zero-degree candidate omits point index `0`, and that origin is an ambient
+vertex of the local support polytope. The candidate part union is therefore not
+the same ambient polytope seen by the CYTools-style nef check.
 This rules out promoting the local zero-degree split enumeration as a nef
 partition source rule.
 A bounded CYTools/PALP diagnostic on the full 4-214-647 `points.dat` and
