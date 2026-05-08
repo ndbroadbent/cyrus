@@ -148,7 +148,16 @@ and matrix-basis pipeline are no longer open.
    `local_chamber_certificate`. The source-derived GV-history importer now
    requires that same witness/facet context before accepting a CMS-derived
    scalar GV value, so shape-only CMS matches remain diagnostic rather than
-   known qN history.
+   known qN history. The target `7`/`8` star-union secondary circuits now
+   expose role counts, signed role sums, and corrected global-height
+   orientations directly: both rows have four positive and two negative local
+   circuits, with the crossed resolved-conifold wall
+   `[(0,-1),(55,-1),(195,1),(212,1)]` carrying signed role profile
+   `origin=-1`, `zero_relation_shared_two_simplex=-1`, `star_extra=2`. This
+   sharpens the chamber-transport object that must be certified, but the rows
+   still require target-plus-star qN history, target-plus-star chamber
+   semigroup transport, wall-crossing chamber transport, and a non-Weyl
+   transport certificate.
 2. **Exact corrected KKLT volume.** The no-replay path computes a corrected
    volume but still has a documented instanton/chamber residual.
 3. **Generic matrix-basis pipeline.** Matrix divisor-basis primitives now cover

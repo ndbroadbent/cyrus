@@ -1464,6 +1464,17 @@ to make the remaining GV layer more first-principles:
    height `-1` star extra `212` carry opposite star coefficients. This keeps
    the next source-derived task focused on the actual chamber map and
    intersection transport across that wall.
+   The local star-union secondary circuits now carry role counts, signed role
+   sums, and corrected global-height orientations. In the regenerated
+   `/tmp/cyrus_star_union_wall_transport_readiness_smoke_all.json`, targets
+   `7`/`8` each have four positive and two negative corrected-height circuits;
+   the known crossed wall is the positive resolved-conifold circuit
+   `[(0,-1),(55,-1),(195,1),(212,1)]` with signed role profile
+   `origin=-1`, `zero_relation_shared_two_simplex=-1`, `star_extra=2`. This is
+   the concrete chamber-map handle for the next step, not a promotion
+   certificate: the same rows still report
+   `wall_transport_known_wall_remainder_requires_wall_crossing_chamber_transport`
+   and missing target-plus-star qN/chamber transport inputs.
    A direct off-height global projection lookup now rules out another shortcut:
    the target `7`/`8` star-side off-height pair `[(55,1),(212,-1)]` is not an
    integral global curve-basis class, and targets `3`/`6` have no nonzero

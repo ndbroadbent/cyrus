@@ -3688,6 +3688,20 @@ so the cheap real separator problem also finds no candidate exact certificate.
 This keeps the stable-Weyl path blocked at concrete missing source certificates
 rather than at the earlier vague
 `shrinking_divisor_or_flop_certificate` label.
+The refreshed wall-transport smoke also serializes role labels for every
+nonzero point in each local star-union secondary circuit, plus the corrected
+global-height orientation of each circuit. For targets `7`/`8`, the shared
+star-union fan has four positive and two negative global-height circuit
+pairings. The resolved-conifold crossed wall is the positive circuit
+`[(0,-1),(55,-1),(195,1),(212,1)]`, with role counts `origin=1`,
+`zero_relation_shared_two_simplex=1`, `star_extra=2` and signed role sums
+`origin=-1`, `zero_relation_shared_two_simplex=-1`, `star_extra=2`. This
+identifies the local wall component in semantic terms, but it still does not
+promote the known wall GV into a corrected-chamber target value because the
+star-union global regular chamber selects the serialized star extras and the
+missing transport inputs remain the target-plus-star chamber semigroup,
+target-plus-star qN history, wall-crossing chamber transport, and non-Weyl
+transport certificate.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:

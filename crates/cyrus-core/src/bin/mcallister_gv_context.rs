@@ -19552,6 +19552,9 @@ struct LocalCygvStarUnionSecondaryCircuitSample {
     nonzero: Vec<(usize, i64)>,
     pairing: String,
     global_height_pairing: Option<String>,
+    global_height_orientation: Option<String>,
+    role_counts: BTreeMap<String, usize>,
+    role_signed_sums: BTreeMap<String, i64>,
 }
 
 fn local_cygv_shared_two_simplex_star_support_hint(
@@ -20195,6 +20198,86 @@ fn star_union_point_role(
     }
 }
 
+fn star_union_point_role_map(
+    witness: &OriginCircuitWitnessSample,
+    star_support: &LocalCygvStarSupportHint,
+) -> BTreeMap<usize, String> {
+    let target_by_point = witness
+        .relation_points
+        .iter()
+        .map(|point| (point.point_index, point.coefficient))
+        .collect::<BTreeMap<_, _>>();
+    let star_by_point = star_support
+        .point_indices
+        .iter()
+        .copied()
+        .map(|point_index| (point_index, 0_i64))
+        .collect::<BTreeMap<_, _>>();
+    let shared_two_simplex = witness
+        .shared_two_simplex
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let zero_shared = origin_circuit_zero_relation_shared_two_simplex_points(Some(witness))
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let relation_exclusive = BTreeSet::from([
+        witness.first_facet_exclusive_point,
+        witness.second_facet_exclusive_point,
+    ]);
+    let star_extra = origin_circuit_shared_two_simplex_star_extra_points(Some(witness))
+        .into_iter()
+        .flatten()
+        .collect::<BTreeSet<_>>();
+    origin_circuit_star_union_point_samples(witness, star_support)
+        .into_iter()
+        .map(|point| {
+            (
+                point.point_index,
+                star_union_point_role(
+                    point.point_index,
+                    &zero_shared,
+                    &shared_two_simplex,
+                    &relation_exclusive,
+                    &star_extra,
+                    &target_by_point,
+                    &star_by_point,
+                ),
+            )
+        })
+        .collect()
+}
+
+fn star_union_circuit_role_counts(
+    nonzero: &[(usize, i64)],
+    role_by_point: &BTreeMap<usize, String>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for &(point_index, _) in nonzero {
+        let role = role_by_point
+            .get(&point_index)
+            .cloned()
+            .unwrap_or_else(|| "unknown".to_string());
+        *counts.entry(role).or_insert(0) += 1;
+    }
+    counts
+}
+
+fn star_union_circuit_role_signed_sums(
+    nonzero: &[(usize, i64)],
+    role_by_point: &BTreeMap<usize, String>,
+) -> BTreeMap<String, i64> {
+    let mut sums = BTreeMap::new();
+    for &(point_index, coefficient) in nonzero {
+        let role = role_by_point
+            .get(&point_index)
+            .cloned()
+            .unwrap_or_else(|| "unknown".to_string());
+        *sums.entry(role).or_insert(0) += coefficient;
+    }
+    sums
+}
+
 fn local_cygv_star_union_off_height_lookup_sample(
     height_profile: &[StarUnionAffineHeight],
     context: &ValidatedContext<'_>,
@@ -20537,23 +20620,32 @@ fn local_cygv_star_union_shared_face_secondary_hint(
         &secondary_hyperplanes,
         global_secondary_heights,
     );
+    let role_by_point = star_union_point_role_map(witness, star_support);
     let circuit_sample = secondary_hyperplanes
         .iter()
         .zip(pairings.iter())
         .zip(global_height_summary.circuit_pairings.iter())
-        .map(|((hyperplane, pairing), global_height_pairing)| {
-            LocalCygvStarUnionSecondaryCircuitSample {
-                nonzero: support
+        .zip(global_height_summary.circuit_pairing_orientations.iter())
+        .map(
+            |(((hyperplane, pairing), global_height_pairing), global_height_orientation)| {
+                let nonzero = support
                     .iter()
                     .zip(hyperplane.iter())
                     .filter_map(|(point, &coefficient)| {
                         (coefficient != 0).then_some((point.point_index, coefficient))
                     })
-                    .collect(),
-                pairing: pairing.get().to_string(),
-                global_height_pairing: global_height_pairing.clone(),
-            }
-        })
+                    .collect::<Vec<_>>();
+
+                LocalCygvStarUnionSecondaryCircuitSample {
+                    role_counts: star_union_circuit_role_counts(&nonzero, &role_by_point),
+                    role_signed_sums: star_union_circuit_role_signed_sums(&nonzero, &role_by_point),
+                    nonzero,
+                    pairing: pairing.get().to_string(),
+                    global_height_pairing: global_height_pairing.clone(),
+                    global_height_orientation: global_height_orientation.clone(),
+                }
+            },
+        )
         .collect::<Vec<_>>();
     let status = if strictly_inside {
         "star_union_shared_face_secondary_strictly_inside"
@@ -21175,6 +21267,7 @@ struct LocalCygvStarUnionGlobalSecondaryHeightSummary {
     positive_pairing_count: Option<usize>,
     negative_pairing_count: Option<usize>,
     circuit_pairings: Vec<Option<String>>,
+    circuit_pairing_orientations: Vec<Option<String>>,
 }
 
 struct LocalCygvTargetRelationGlobalSecondaryHeightHint {
@@ -21354,6 +21447,7 @@ fn local_cygv_star_union_global_secondary_height_summary(
         positive_pairing_count: None,
         negative_pairing_count: None,
         circuit_pairings: vec![None; hyperplanes.len()],
+        circuit_pairing_orientations: vec![None; hyperplanes.len()],
     };
     let Some(global_secondary_heights) = global_secondary_heights else {
         return missing_or_error(
@@ -21417,6 +21511,20 @@ fn local_cygv_star_union_global_secondary_height_summary(
             .iter()
             .map(|pairing| Some(pairing.get().to_string()))
             .collect(),
+        circuit_pairing_orientations: pairings
+            .iter()
+            .map(|pairing| Some(pairing_orientation(*pairing).to_string()))
+            .collect(),
+    }
+}
+
+fn pairing_orientation(pairing: F64<Finite>) -> &'static str {
+    if pairing.get().abs() <= 1e-6 {
+        "zero"
+    } else if pairing.get() > 0.0 {
+        "positive"
+    } else {
+        "negative"
     }
 }
 
@@ -29199,6 +29307,12 @@ mod tests {
                 .iter()
                 .all(|circuit| circuit.global_height_pairing.as_deref() == Some("0"))
         );
+        assert!(
+            shared_face_secondary_with_global_height
+                .circuit_sample
+                .iter()
+                .all(|circuit| circuit.global_height_orientation.as_deref() == Some("zero"))
+        );
         let mut corrected_global_heights = vec![0.0; 215];
         corrected_global_heights[46] = -36.235_325_629_200_96;
         corrected_global_heights[55] = -95.693_037_865_253_63;
@@ -29207,6 +29321,65 @@ mod tests {
         corrected_global_heights[211] = -64.848_928_851_829_84;
         corrected_global_heights[212] = -77.124_321_146_428_6;
         corrected_global_heights[214] = -74.485_238_575_046_94;
+        let shared_face_secondary_with_corrected_global_height =
+            local_cygv_star_union_shared_face_secondary_hint(
+                Some(&witness),
+                &star_support_hint,
+                projection_hint.hyperplane.as_deref(),
+                Some(&corrected_global_heights),
+            );
+        assert_eq!(
+            shared_face_secondary_with_corrected_global_height.global_height_status,
+            "star_union_shared_face_secondary_global_height_crosses_oriented_walls"
+        );
+        assert_eq!(
+            shared_face_secondary_with_corrected_global_height
+                .circuit_sample
+                .iter()
+                .filter(|circuit| {
+                    circuit.global_height_orientation.as_deref() == Some("positive")
+                })
+                .count(),
+            4
+        );
+        assert_eq!(
+            shared_face_secondary_with_corrected_global_height
+                .circuit_sample
+                .iter()
+                .filter(|circuit| {
+                    circuit.global_height_orientation.as_deref() == Some("negative")
+                })
+                .count(),
+            2
+        );
+        let crossed_wall_circuit =
+            &shared_face_secondary_with_corrected_global_height.circuit_sample[0];
+        assert_eq!(
+            crossed_wall_circuit.global_height_orientation.as_deref(),
+            Some("positive")
+        );
+        assert_eq!(crossed_wall_circuit.role_counts.get("origin"), Some(&1));
+        assert_eq!(
+            crossed_wall_circuit
+                .role_counts
+                .get("zero_relation_shared_two_simplex"),
+            Some(&1)
+        );
+        assert_eq!(crossed_wall_circuit.role_counts.get("star_extra"), Some(&2));
+        assert_eq!(
+            crossed_wall_circuit.role_signed_sums.get("origin"),
+            Some(&-1)
+        );
+        assert_eq!(
+            crossed_wall_circuit
+                .role_signed_sums
+                .get("zero_relation_shared_two_simplex"),
+            Some(&-1)
+        );
+        assert_eq!(
+            crossed_wall_circuit.role_signed_sums.get("star_extra"),
+            Some(&2)
+        );
         let global_regular = local_cygv_star_union_global_regular_triangulation_hint(
             Some(&witness),
             &star_support_hint,
@@ -29633,6 +29806,9 @@ mod tests {
                 nonzero: vec![(195, 1), (55, -1), (212, 1), (0, -1)],
                 pairing: "0".to_string(),
                 global_height_pairing: Some("1/2".to_string()),
+                global_height_orientation: Some("positive".to_string()),
+                role_counts: BTreeMap::new(),
+                role_signed_sums: BTreeMap::new(),
             }],
         };
         let wall_hint = local_cygv_star_union_opposite_star_wall_circuit_hint(&secondary, &lookups);
