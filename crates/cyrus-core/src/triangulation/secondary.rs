@@ -301,6 +301,30 @@ pub fn expanded_secondary_fan_hyperplanes_on_polytope_2faces_4d(
     expanded_secondary_fan_hyperplanes_on_faces(points, &faces.twofaces)
 }
 
+/// Group one-choice two-face blocks like CYTools `ntfe_hypers`.
+///
+/// CYTools' `separate_boring=True` removes every two-face with exactly one FRT
+/// inequality block, concatenates those blocks in original face order, and
+/// appends the result as a final one-choice block. Faces with multiple choices
+/// keep their original relative order.
+pub fn expanded_secondary_group_boring_chamber_choices(
+    face_inequality_choices: &[Vec<Vec<Vec<i64>>>],
+) -> Vec<Vec<Vec<Vec<i64>>>> {
+    let mut grouped = Vec::with_capacity(face_inequality_choices.len());
+    let mut boring_rows = Vec::new();
+    for choices in face_inequality_choices {
+        if choices.len() == 1 {
+            boring_rows.extend(choices[0].iter().cloned());
+        } else {
+            grouped.push(choices.clone());
+        }
+    }
+    if !boring_rows.is_empty() {
+        grouped.push(vec![boring_rows]);
+    }
+    grouped
+}
+
 /// Count expanded-secondary chamber choices from per-face inequality blocks.
 ///
 /// This ports the mixed-radix counting core of CYTools `ntfe_hypers`: each
@@ -1603,6 +1627,33 @@ mod tests {
             ])
             .unwrap(),
             6
+        );
+    }
+
+    #[test]
+    fn expanded_secondary_group_boring_chamber_choices_matches_cytools_order() {
+        let face_choices = vec![
+            vec![vec![vec![1, 0, 0], vec![1, 0, 0]]],
+            vec![vec![vec![0, 1, 0]], vec![vec![0, -1, 0]]],
+            vec![vec![vec![0, 0, 1]]],
+        ];
+
+        let grouped = expanded_secondary_group_boring_chamber_choices(&face_choices);
+
+        assert_eq!(
+            grouped,
+            vec![
+                vec![vec![vec![0, 1, 0]], vec![vec![0, -1, 0]]],
+                vec![vec![vec![1, 0, 0], vec![1, 0, 0], vec![0, 0, 1]]],
+            ]
+        );
+        assert_eq!(
+            expanded_secondary_chamber_choice_count(&grouped).unwrap(),
+            2
+        );
+        assert_eq!(
+            expanded_secondary_chamber_hyperplanes_from_choice_index(&grouped, 1).unwrap(),
+            vec![vec![0, -1, 0], vec![0, 0, 1], vec![1, 0, 0]]
         );
     }
 

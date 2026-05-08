@@ -3832,6 +3832,13 @@ secondary test suite pins the last-face-fastest index order, duplicate-row
 behavior, and invalid block rejection. This is the next mechanical expanded
 secondary-fan primitive needed before real NTFE/chamber enumeration; it is not
 a source-derived corrected-chamber semigroup or GV promotion rule.
+The CYTools `separate_boring=True` grouping rule is also ported as
+`expanded_secondary_group_boring_chamber_choices`: all one-choice two-face
+blocks are concatenated in original face order and appended as the final
+one-choice block, while multi-choice faces retain their relative order. The
+test keeps duplicate rows through grouping and relies on the later chamber
+materialization step for deduplication, matching the `LIL_stack.dense()`
+boundary.
 
 The star-union chamber semigroup probe now also lifts every current/flipped
 chamber generator back through the global curve-basis projection and reports

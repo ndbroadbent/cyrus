@@ -1704,6 +1704,13 @@ to make the remaining GV layer more first-principles:
    fastest), row deduplication, and invalid block rejection. This removes the
    next mechanical NTFE support operation, but it still does not enumerate
    face FRTs or certify the missing target-plus-star compact qN history.
+   The adjacent `separate_boring=True` helper is now ported as
+   `expanded_secondary_group_boring_chamber_choices`: one-choice two-face
+   blocks are concatenated in their original face order and appended as a
+   final one-choice block, while multi-choice faces keep their relative order.
+   The focused regression preserves duplicate rows through this grouping step
+   and verifies that the subsequent chamber stack still deduplicates only when
+   materializing the selected hyperplanes.
    The Stage 0 no-replay policy tests also now pass again after two policy
    cleanups: generic first-principles runs log the computed flux-coordinate
    basis separately from explicit production-basis overrides, and the opt-in
