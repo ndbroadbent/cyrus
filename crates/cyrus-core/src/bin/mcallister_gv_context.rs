@@ -13872,9 +13872,6 @@ fn bounded_cygv_semigroup_closure(
     if element_limit == 0 {
         return Err("bounded cygv closure element limit must be positive".to_string());
     }
-    if generation_limit == Some(0) {
-        return Err("bounded cygv closure generation limit must be positive".to_string());
-    }
     let dimension = grading_vector.len();
     if dimension == 0 {
         return Err("grading vector is empty".to_string());
@@ -13897,6 +13894,15 @@ fn bounded_cygv_semigroup_closure(
     if elements.len() > element_limit {
         return Ok(BoundedCygvClosure {
             status: format!("exceeded_element_limit_initial_{element_limit}"),
+            elements,
+            degree_counts,
+            generation_counts,
+            completed: false,
+        });
+    }
+    if generation_limit == Some(0) {
+        return Ok(BoundedCygvClosure {
+            status: "stopped_generation_limit_0".to_string(),
             elements,
             degree_counts,
             generation_counts,
@@ -21845,6 +21851,38 @@ mod tests {
     }
 
     #[test]
+    fn sparse_seed_pair_sums_match_dense_ordering_and_cancellation() {
+        let seeds = vec![vec![0, 2, -2], vec![1, 0, 0], vec![0, -2, 2]];
+        let sparse = seeds
+            .iter()
+            .map(|seed| sparse_from_dense(seed))
+            .collect::<Vec<_>>();
+        let pair_sums = sparse_seed_pair_sums(&sparse).unwrap();
+
+        assert_eq!(pair_sums.get(&sparse_from_dense(&[0, 0, 0])), Some(&(0, 2)));
+
+        let mut sparse_keys = pair_sums.keys().cloned().collect::<Vec<_>>();
+        sparse_keys.sort_by(|left, right| compare_sparse_as_dense(left, right, 3));
+        let sparse_as_dense = sparse_keys
+            .iter()
+            .map(|key| dense_from_sparse(key, 3).unwrap())
+            .collect::<Vec<_>>();
+
+        let mut dense_keys = Vec::new();
+        for i in 0..seeds.len() {
+            for j in i..seeds.len() {
+                let sum = checked_vector_sum(&seeds[i], &seeds[j]).unwrap();
+                if !dense_keys.contains(&sum) {
+                    dense_keys.push(sum);
+                }
+            }
+        }
+        dense_keys.sort();
+
+        assert_eq!(sparse_as_dense, dense_keys);
+    }
+
+    #[test]
     fn lower_seed_decomposition_probe_skips_oversized_pair_sum_domains() {
         let seeds = (0..=DEFAULT_CYGV_LOWER_SEED_PAIR_LIMIT)
             .map(|idx| vec![i64::try_from(idx).unwrap(), 0])
@@ -24019,6 +24057,23 @@ mod tests {
         assert_eq!(closure.degree_counts.get(&3), None);
         assert_eq!(closure.generation_counts.len(), 1);
         assert!(!closure.generation_counts[0].truncated_at_limit);
+    }
+
+    #[test]
+    fn bounded_cygv_closure_can_stop_before_first_generation() {
+        let seeds = vec![vec![1, 0], vec![0, 1]];
+        let closure = bounded_cygv_semigroup_closure(&seeds, &[1, 1], 3, 16, Some(0)).unwrap();
+
+        assert_eq!(closure.status, "stopped_generation_limit_0");
+        assert!(!closure.completed);
+        assert_eq!(closure.elements.len(), 3);
+        assert!(closure.elements.contains(&vec![0, 0]));
+        assert!(closure.elements.contains(&vec![1, 0]));
+        assert!(closure.elements.contains(&vec![0, 1]));
+        assert_eq!(closure.degree_counts.get(&0), Some(&1));
+        assert_eq!(closure.degree_counts.get(&1), Some(&2));
+        assert_eq!(closure.degree_counts.get(&2), None);
+        assert!(closure.generation_counts.is_empty());
     }
 
     #[test]

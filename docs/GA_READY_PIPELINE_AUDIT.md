@@ -319,7 +319,14 @@ run pass. Any remaining mismatch must be explicit and localizable.
    high-budget `--lower-seed-pair-limit 2048`, a target-`0` path-history probe
    with `--closure-generation-limit 1` now completes in 83.15 seconds,
    pair-reduces `1616` seeds to `702`, and finds a three-term lower-seed
-   decomposition before hitting the bounded closure element limit.
+   decomposition before hitting the bounded closure element limit. The same
+   `--closure-generation-limit` option now accepts `0` to stop immediately
+   after the initial seed set, so high-budget seed-decomposition probes can be
+   separated from closure expansion. A target-`1` zero-generation smoke with
+   `--lower-seed-pair-limit 2048` completed in 45.40 seconds, pair-reduced
+   `1616` seeds to `702`, found a repeated-term three-seed decomposition, and
+   exported four lower-seed predecessor candidates with status
+   `stopped_generation_limit_0`.
    The parent-only classifications now include parent-path-support runtime
    lookups from the same `cygv` run. On the regenerated target 7 report, the
    generated degree-10 side term is a real parent-domain nonzero object
