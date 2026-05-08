@@ -227,6 +227,7 @@ pub use triangulation::{
     expanded_secondary_group_boring_chamber_choices,
     expanded_secondary_regular_triangulation_from_face_triangulations,
     expanded_secondary_star_hyperplanes_for_face_triangulation_4d,
+    fine_regular_triangulation_choices_on_polytope_2faces_4d,
     fine_regular_triangulations_of_face_2d, secondary_cone_height_pairings,
     secondary_cone_hyperplanes_native, secondary_cone_hyperplanes_native_on_faces,
     secondary_cone_hyperplanes_native_on_polytope_2faces_4d,

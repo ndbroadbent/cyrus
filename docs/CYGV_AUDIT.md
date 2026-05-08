@@ -116,7 +116,11 @@ The first exact small-face enumerator,
 `fine_regular_triangulations_of_face_2d`, now uses that gate after enumerating
 compatible unimodular triangle covers in the local rank-two lattice. It is
 validated on the square face and remains an exact small-face path, not a
-replacement for CYTools' broader `grow2d` sampling.
+replacement for CYTools' broader `grow2d` sampling. The 4D wrapper
+`fine_regular_triangulation_choices_on_polytope_2faces_4d` now applies this
+exact path to every computed two-face of a 4D polytope with an explicit
+`max_face_points` guard; the `P^4` simplex regression pins the ten triangular
+two-face choices and the guard failure mode.
 
 CYTools' `Cone.find_lattice_points` is a separate operation. It first checks
 that the grading vector has only the origin at nonpositive degree, then uses

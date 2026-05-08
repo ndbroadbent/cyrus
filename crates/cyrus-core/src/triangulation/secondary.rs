@@ -499,6 +499,41 @@ pub fn fine_regular_triangulations_of_face_2d(
     Ok(triangulations)
 }
 
+/// Enumerate exact fine regular triangulation choices for all 4D two-faces.
+///
+/// This is the small-face exact subset of CYTools
+/// `Polytope.face_triangs(dim=2, only_regular=True)`: the 4D CYTools-style
+/// two-face point sets are computed from the polytope, and each face is passed
+/// to [`fine_regular_triangulations_of_face_2d`]. If `max_face_points` is set,
+/// faces above that size fail loudly instead of silently switching to a random
+/// sampler.
+///
+/// # Errors
+///
+/// Returns an error if 4D face construction fails, if a face exceeds the
+/// supplied exact-enumeration size guard, or if a face triangulation cannot be
+/// enumerated/certified.
+pub fn fine_regular_triangulation_choices_on_polytope_2faces_4d(
+    points: &[Point],
+    polytope: &Polytope,
+    max_face_points: Option<usize>,
+) -> Result<Vec<Vec<Triangulation>>> {
+    let faces = polytope.faces_4d_for_points(points)?;
+    let mut choices = Vec::with_capacity(faces.twofaces.len());
+    for (face_idx, face) in faces.twofaces.iter().enumerate() {
+        if let Some(max_points) = max_face_points {
+            if face.len() > max_points {
+                return Err(Error::InvalidInput(format!(
+                    "2-face {face_idx} has {} points, exceeding exact enumeration limit {max_points}",
+                    face.len()
+                )));
+            }
+        }
+        choices.push(fine_regular_triangulations_of_face_2d(points, face)?);
+    }
+    Ok(choices)
+}
+
 /// Compute per-face expanded-secondary inequality choices.
 ///
 /// This ports the provided-`face_triangs`, `require_star=False` branch of
@@ -3130,5 +3165,49 @@ mod tests {
         .unwrap();
 
         assert!(hyperplanes.is_empty());
+    }
+
+    #[test]
+    fn fine_regular_choices_on_polytope_2faces_4d_enumerates_p4_triangle_faces() {
+        let points = vec![
+            Point::new(vec![1, 0, 0, 0]),
+            Point::new(vec![0, 1, 0, 0]),
+            Point::new(vec![0, 0, 1, 0]),
+            Point::new(vec![0, 0, 0, 1]),
+            Point::new(vec![-1, -1, -1, -1]),
+        ];
+        let polytope = Polytope::from_vertices(points.clone()).unwrap();
+
+        let choices =
+            fine_regular_triangulation_choices_on_polytope_2faces_4d(&points, &polytope, Some(3))
+                .unwrap();
+
+        assert_eq!(choices.len(), 10);
+        assert!(choices.iter().all(|face_choices| face_choices.len() == 1));
+        assert!(choices.iter().all(|face_choices| {
+            face_choices[0].simplices().len() == 1 && face_choices[0].simplices()[0].len() == 3
+        }));
+    }
+
+    #[test]
+    fn fine_regular_choices_on_polytope_2faces_4d_enforces_size_guard() {
+        let points = vec![
+            Point::new(vec![1, 0, 0, 0]),
+            Point::new(vec![0, 1, 0, 0]),
+            Point::new(vec![0, 0, 1, 0]),
+            Point::new(vec![0, 0, 0, 1]),
+            Point::new(vec![-1, -1, -1, -1]),
+        ];
+        let polytope = Polytope::from_vertices(points.clone()).unwrap();
+
+        let error =
+            fine_regular_triangulation_choices_on_polytope_2faces_4d(&points, &polytope, Some(2))
+                .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("exceeding exact enumeration limit 2")
+        );
     }
 }

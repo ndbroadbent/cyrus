@@ -1760,7 +1760,12 @@ to make the remaining GV layer more first-principles:
    gate. Square-face regressions pin the two diagonals and show the enumerated
    FRTs feed directly into the existing face-inequality choice blocks. This is
    exact but exponential; broader CYTools `grow2d`-style sampling is still
-   unported.
+   unported. The companion 4D wrapper
+   `fine_regular_triangulation_choices_on_polytope_2faces_4d` now computes the
+   CYTools-style two-face sets from a 4D polytope and applies the exact
+   enumerator to each face, failing loudly through `max_face_points` instead of
+   silently switching to sampling. The `P^4` simplex regression pins the ten
+   triangular two-face choices and the size-guard error path.
    The top-level `ntfe_hypers` materialization logic for already-known
    face-inequality data is now exposed through
    `expanded_secondary_chamber_count_from_face_inequality_choices`,
