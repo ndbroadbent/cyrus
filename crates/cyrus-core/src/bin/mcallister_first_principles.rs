@@ -764,6 +764,7 @@ struct ChamberGvDiagnostic {
     uncovered_source_ray_toric_diagnostic_sample: Option<Vec<ToricGvDiagnosticContextSample>>,
     degree_bounded_toric_gv_diagnostic_context_for_missing:
         Option<Vec<ToricGvDiagnosticContextSample>>,
+    corrected_chamber_face_triangulation_choice_summary: Option<FaceTriangulationChoiceSummary>,
     secondary_cone_height_certificate: Option<SecondaryConeHeightCertificate>,
     secondary_cone_2face_height_certificate: Option<SecondaryConeHeightCertificate>,
     expanded_secondary_fan_height_certificate: Option<SecondaryConeHeightCertificate>,
@@ -880,6 +881,7 @@ struct CorrectedChamberGvContextExport<'a> {
     covered_toric_gv_context_for_missing: Option<&'a Vec<CoveredToricGvContextSample>>,
     degree_bounded_toric_gv_diagnostic_context_for_missing:
         Option<&'a Vec<ToricGvDiagnosticContextSample>>,
+    corrected_chamber_face_triangulation_choice_summary: Option<&'a FaceTriangulationChoiceSummary>,
     secondary_cone_height_certificate: Option<&'a SecondaryConeHeightCertificate>,
     secondary_cone_2face_height_certificate: Option<&'a SecondaryConeHeightCertificate>,
     expanded_secondary_fan_height_certificate: Option<&'a SecondaryConeHeightCertificate>,
@@ -7594,19 +7596,6 @@ fn secondary_cone_height_certificate_from_hyperplanes(
     })
 }
 
-fn secondary_cone_heights_for_kahler(
-    geom: &PrimalGeom,
-    basis: &[usize],
-    kahler: &[F64<Finite>],
-) -> Result<Vec<f64>, String> {
-    Ok(
-        secondary_cone_typed_heights_for_kahler(geom, basis, kahler)?
-            .iter()
-            .map(|height| height.get())
-            .collect(),
-    )
-}
-
 fn secondary_cone_typed_heights_for_kahler(
     geom: &PrimalGeom,
     basis: &[usize],
@@ -7690,6 +7679,10 @@ fn diagnose_chamber_gv_volume_correction(
     ray_gv_requested: bool,
     lp_face_gv_requested: bool,
     missing_target_sample_limit: usize,
+    face_triangulation_max_exact_points: usize,
+    face_triangulation_samples_per_large_face: usize,
+    face_triangulation_max_sampling_attempts_per_face: usize,
+    face_triangulation_seed: u64,
 ) -> Result<ChamberGvDiagnostic, String> {
     let ambient_rays = compute_mori_cone_cap_rays(
         tri,
@@ -7742,11 +7735,23 @@ fn diagnose_chamber_gv_volume_correction(
     let expanded_secondary_fan_height_certificate = Some(
         expanded_secondary_fan_height_certificate_for_kahler(geom, &intersection.basis, kahler)?,
     );
-    let secondary_cone_heights_for_missing = Some(secondary_cone_heights_for_kahler(
-        geom,
-        &intersection.basis,
-        kahler,
-    )?);
+    let secondary_cone_typed_heights =
+        secondary_cone_typed_heights_for_kahler(geom, &intersection.basis, kahler)?;
+    let secondary_cone_heights_for_missing = Some(
+        secondary_cone_typed_heights
+            .iter()
+            .map(|height| height.get())
+            .collect::<Vec<_>>(),
+    );
+    let corrected_chamber_face_triangulation_choice_summary =
+        Some(corrected_chamber_face_triangulation_choice_summary(
+            geom,
+            Some(&secondary_cone_typed_heights),
+            face_triangulation_max_exact_points,
+            face_triangulation_samples_per_large_face,
+            face_triangulation_max_sampling_attempts_per_face,
+            face_triangulation_seed,
+        )?);
 
     let mut basis_ray_stats = None;
     let mut basis_rays_for_missing = None;
@@ -8556,6 +8561,7 @@ fn diagnose_chamber_gv_volume_correction(
         uncovered_source_ray_stats_for_missing,
         shared_facet_unresolved_source_ray_stats_for_missing,
         uncovered_source_ray_toric_diagnostic_sample,
+        corrected_chamber_face_triangulation_choice_summary,
         basis_mori_rays_for_missing_degree_bound: basis_rays_for_missing_degree_bound,
         basis_mori_rays_for_missing_degree_bounded: basis_rays_for_missing_degree_bounded,
         degree_bounded_mori_ray_context_for_missing,
@@ -9449,6 +9455,9 @@ fn write_corrected_chamber_gv_context_export(
         covered_toric_gv_context_for_missing: diag.covered_toric_gv_context_for_missing.as_ref(),
         degree_bounded_toric_gv_diagnostic_context_for_missing: diag
             .degree_bounded_toric_gv_diagnostic_context_for_missing
+            .as_ref(),
+        corrected_chamber_face_triangulation_choice_summary: diag
+            .corrected_chamber_face_triangulation_choice_summary
             .as_ref(),
         secondary_cone_height_certificate: diag.secondary_cone_height_certificate.as_ref(),
         secondary_cone_2face_height_certificate: diag
@@ -10454,7 +10463,12 @@ fn stage_volume(
         );
         std::process::exit(2);
     }
-    if dump_corrected_chamber_face_triangulation_choice_summary_path.is_some()
+    if (dump_corrected_chamber_face_triangulation_choice_summary_path.is_some()
+        || dump_corrected_chamber_gv_context_path.is_some()
+        || diagnose_corrected_chamber_gv
+        || diagnose_corrected_chamber_provided_generators_gv
+        || diagnose_corrected_chamber_ray_gv
+        || diagnose_corrected_chamber_lp_face_gv)
         && face_triangulation_max_sampling_attempts_per_face == 0
     {
         eprintln!(
@@ -11536,6 +11550,10 @@ fn stage_volume(
             diagnose_corrected_chamber_ray_gv,
             diagnose_corrected_chamber_lp_face_gv,
             missing_target_sample_limit,
+            face_triangulation_max_exact_points,
+            face_triangulation_samples_per_large_face,
+            face_triangulation_max_sampling_attempts_per_face,
+            face_triangulation_seed,
         )
         .unwrap_or_else(|e| {
             eprintln!("[ERROR] corrected-chamber GV diagnostic failed: {e}");
@@ -12694,6 +12712,36 @@ mod tests {
                     basis_nonzero: vec![(0, 1)],
                 },
             ]),
+            corrected_chamber_face_triangulation_choice_summary: Some(
+                FaceTriangulationChoiceSummary {
+                    status: "face_triangulation_choices_exact".to_string(),
+                    max_exact_face_points: 17,
+                    samples_per_large_face: 1000,
+                    max_sampling_attempts_per_face: 100000,
+                    seed: 0,
+                    face_count: 1,
+                    exact_face_count: 1,
+                    sampled_face_count: 0,
+                    empty_choice_face_count: 0,
+                    min_face_points: Some(4),
+                    max_face_points: Some(4),
+                    min_choice_count: Some(2),
+                    max_choice_count: Some(2),
+                    total_choice_count: "2".to_string(),
+                    face_point_counts: vec![4],
+                    choice_counts: vec![2],
+                    sampled_face_indices: Vec::new(),
+                    sampled_face_point_counts: Vec::new(),
+                    height_compatible_choice_indices: Some(vec![vec![1]]),
+                    height_compatible_choice_counts: Some(vec![1]),
+                    height_unique_compatible_face_count: Some(1),
+                    height_no_compatible_face_count: Some(0),
+                    height_multi_compatible_face_count: Some(0),
+                    height_first_no_compatible_face_index: None,
+                    height_unique_choice_digits: Some(vec![1]),
+                    height_unique_choice_index: Some("1".to_string()),
+                },
+            ),
             secondary_cone_height_certificate: Some(SecondaryConeHeightCertificate {
                 status: "strictly_inside_secondary_cone".to_string(),
                 epsilon: 1e-6,
@@ -12753,6 +12801,22 @@ mod tests {
         assert_eq!(degree_bounded_sample.len(), 1);
         assert_eq!(degree_bounded_sample[0]["gv"], "1");
         assert_eq!(degree_bounded_sample[0]["source_bucket"], "two_face");
+        let face_choice_summary = &value["corrected_chamber_face_triangulation_choice_summary"];
+        assert_eq!(
+            face_choice_summary["status"],
+            "face_triangulation_choices_exact"
+        );
+        assert_eq!(face_choice_summary["face_count"], 1);
+        assert_eq!(face_choice_summary["height_unique_choice_index"], "1");
+        assert_eq!(
+            face_choice_summary["height_compatible_choice_counts"]
+                .as_array()
+                .expect("height-compatible choice counts should be exported")
+                .iter()
+                .map(|entry| entry.as_u64().expect("count should be integer"))
+                .collect::<Vec<_>>(),
+            vec![1]
+        );
         let chamber_certificate = &value["secondary_cone_height_certificate"];
         assert_eq!(
             chamber_certificate["status"],

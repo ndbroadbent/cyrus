@@ -86,6 +86,8 @@ struct CorrectedChamberGvContext {
     expanded_secondary_fan_height_certificate: Option<SecondaryConeHeightCertificate>,
     #[serde(default)]
     secondary_cone_heights_for_missing: Option<Vec<f64>>,
+    #[serde(default)]
+    corrected_chamber_face_triangulation_choice_summary: Option<FaceTriangulationChoiceSummary>,
     uncovered_source_ray_stats_for_missing: Option<MissingGvTargetStats>,
     #[serde(default)]
     shared_facet_unresolved_source_ray_stats_for_missing: Option<MissingGvTargetStats>,
@@ -104,6 +106,36 @@ struct SecondaryConeHeightCertificate {
     min_pairing: Option<f64>,
     max_pairing: Option<f64>,
     strictly_inside: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct FaceTriangulationChoiceSummary {
+    status: String,
+    max_exact_face_points: usize,
+    samples_per_large_face: usize,
+    max_sampling_attempts_per_face: usize,
+    seed: u64,
+    face_count: usize,
+    exact_face_count: usize,
+    sampled_face_count: usize,
+    empty_choice_face_count: usize,
+    min_face_points: Option<usize>,
+    max_face_points: Option<usize>,
+    min_choice_count: Option<usize>,
+    max_choice_count: Option<usize>,
+    total_choice_count: String,
+    face_point_counts: Vec<usize>,
+    choice_counts: Vec<usize>,
+    sampled_face_indices: Vec<usize>,
+    sampled_face_point_counts: Vec<usize>,
+    height_compatible_choice_indices: Option<Vec<Vec<usize>>>,
+    height_compatible_choice_counts: Option<Vec<usize>>,
+    height_unique_compatible_face_count: Option<usize>,
+    height_no_compatible_face_count: Option<usize>,
+    height_multi_compatible_face_count: Option<usize>,
+    height_first_no_compatible_face_index: Option<usize>,
+    height_unique_choice_digits: Option<Vec<usize>>,
+    height_unique_choice_index: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -286,6 +318,14 @@ struct ContextReport {
     expanded_secondary_fan_height_certificate_hyperplane_count: Option<usize>,
     expanded_secondary_fan_height_certificate_min_pairing: Option<f64>,
     secondary_cone_height_vector_count: Option<usize>,
+    corrected_chamber_face_choice_summary_status: Option<String>,
+    corrected_chamber_face_choice_face_count: Option<usize>,
+    corrected_chamber_face_choice_sampled_face_count: Option<usize>,
+    corrected_chamber_face_choice_empty_choice_face_count: Option<usize>,
+    corrected_chamber_face_choice_height_unique_compatible_face_count: Option<usize>,
+    corrected_chamber_face_choice_height_no_compatible_face_count: Option<usize>,
+    corrected_chamber_face_choice_height_multi_compatible_face_count: Option<usize>,
+    corrected_chamber_face_choice_height_unique_choice_index: Option<String>,
     q_rows: usize,
     q_cols: usize,
     kappa_nonzero_entries: usize,
@@ -11882,6 +11922,12 @@ fn validate_context<'a>(
             );
         }
     }
+    if let Some(summary) = context
+        .corrected_chamber_face_triangulation_choice_summary
+        .as_ref()
+    {
+        validate_face_triangulation_choice_summary(summary)?;
+    }
     let mut covered_toric_gv_by_basis = HashMap::new();
     if let Some(covered_context) = context.covered_toric_gv_context_for_missing.as_ref() {
         for (idx, sample) in covered_context.iter().enumerate() {
@@ -12021,6 +12067,262 @@ fn validate_secondary_cone_height_certificate(
             "{label} is strict but has status {}",
             certificate.status
         ));
+    }
+    Ok(())
+}
+
+fn validate_face_triangulation_choice_summary(
+    summary: &FaceTriangulationChoiceSummary,
+) -> Result<(), String> {
+    if summary.face_count != summary.face_point_counts.len() {
+        return Err(format!(
+            "face triangulation choice summary face_count {} does not match face_point_counts length {}",
+            summary.face_count,
+            summary.face_point_counts.len()
+        ));
+    }
+    if summary.face_count != summary.choice_counts.len() {
+        return Err(format!(
+            "face triangulation choice summary face_count {} does not match choice_counts length {}",
+            summary.face_count,
+            summary.choice_counts.len()
+        ));
+    }
+    if summary.min_face_points != summary.face_point_counts.iter().copied().min() {
+        return Err("face triangulation choice summary min_face_points mismatch".into());
+    }
+    if summary.max_face_points != summary.face_point_counts.iter().copied().max() {
+        return Err("face triangulation choice summary max_face_points mismatch".into());
+    }
+    if summary.min_choice_count != summary.choice_counts.iter().copied().min() {
+        return Err("face triangulation choice summary min_choice_count mismatch".into());
+    }
+    if summary.max_choice_count != summary.choice_counts.iter().copied().max() {
+        return Err("face triangulation choice summary max_choice_count mismatch".into());
+    }
+    let total_choice_count = summary
+        .choice_counts
+        .iter()
+        .fold(Integer::from(1), |acc, &choice_count| {
+            acc * Integer::from(choice_count)
+        })
+        .to_string();
+    if summary.total_choice_count != total_choice_count {
+        return Err(format!(
+            "face triangulation choice summary total_choice_count {} does not match computed {total_choice_count}",
+            summary.total_choice_count
+        ));
+    }
+    if summary.exact_face_count + summary.sampled_face_count != summary.face_count {
+        return Err(format!(
+            "face triangulation choice summary exact+sampled count {} does not match face_count {}",
+            summary.exact_face_count + summary.sampled_face_count,
+            summary.face_count
+        ));
+    }
+    let computed_empty = summary
+        .choice_counts
+        .iter()
+        .filter(|&&choice_count| choice_count == 0)
+        .count();
+    if summary.empty_choice_face_count != computed_empty {
+        return Err(format!(
+            "face triangulation choice summary empty_choice_face_count {} does not match computed {computed_empty}",
+            summary.empty_choice_face_count
+        ));
+    }
+    if summary.sampled_face_indices.len() != summary.sampled_face_count {
+        return Err(format!(
+            "face triangulation choice summary sampled_face_indices length {} does not match sampled_face_count {}",
+            summary.sampled_face_indices.len(),
+            summary.sampled_face_count
+        ));
+    }
+    if summary.sampled_face_point_counts.len() != summary.sampled_face_count {
+        return Err(format!(
+            "face triangulation choice summary sampled_face_point_counts length {} does not match sampled_face_count {}",
+            summary.sampled_face_point_counts.len(),
+            summary.sampled_face_count
+        ));
+    }
+    let expected_sampled_face_indices = summary
+        .face_point_counts
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, &point_count)| {
+            (point_count > summary.max_exact_face_points).then_some(idx)
+        })
+        .collect::<Vec<_>>();
+    if summary.sampled_face_indices != expected_sampled_face_indices {
+        return Err(format!(
+            "face triangulation choice summary sampled_face_indices {:?} do not match threshold-derived {:?}",
+            summary.sampled_face_indices, expected_sampled_face_indices
+        ));
+    }
+    for (entry_idx, &face_idx) in summary.sampled_face_indices.iter().enumerate() {
+        let Some(&point_count) = summary.face_point_counts.get(face_idx) else {
+            return Err(format!(
+                "face triangulation choice summary sampled face index {face_idx} at entry {entry_idx} is out of range"
+            ));
+        };
+        if summary.sampled_face_point_counts[entry_idx] != point_count {
+            return Err(format!(
+                "face triangulation choice summary sampled face {face_idx} point count {} does not match face_point_counts {point_count}",
+                summary.sampled_face_point_counts[entry_idx]
+            ));
+        }
+    }
+    let expected_status = if summary.empty_choice_face_count > 0 {
+        "face_triangulation_choices_have_empty_face_blocks"
+    } else if summary.sampled_face_indices.is_empty() {
+        "face_triangulation_choices_exact"
+    } else {
+        "face_triangulation_choices_exact_and_sampled"
+    };
+    if summary.status != expected_status {
+        return Err(format!(
+            "face triangulation choice summary status {} does not match computed {expected_status}",
+            summary.status
+        ));
+    }
+    if summary.height_compatible_choice_indices.is_some()
+        != summary.height_compatible_choice_counts.is_some()
+    {
+        return Err(
+            "face triangulation choice summary has partial height-compatible choice data".into(),
+        );
+    }
+    if let Some(compatible_counts) = summary.height_compatible_choice_counts.as_ref() {
+        if compatible_counts.len() != summary.face_count {
+            return Err(format!(
+                "face triangulation choice summary compatible count length {} does not match face_count {}",
+                compatible_counts.len(),
+                summary.face_count
+            ));
+        }
+        let unique_count = compatible_counts
+            .iter()
+            .filter(|&&choice_count| choice_count == 1)
+            .count();
+        let no_choice_count = compatible_counts
+            .iter()
+            .filter(|&&choice_count| choice_count == 0)
+            .count();
+        let multi_choice_count = compatible_counts
+            .iter()
+            .filter(|&&choice_count| choice_count > 1)
+            .count();
+        if summary.height_unique_compatible_face_count != Some(unique_count) {
+            return Err(
+                "face triangulation choice summary unique-compatible count mismatch".into(),
+            );
+        }
+        if summary.height_no_compatible_face_count != Some(no_choice_count) {
+            return Err("face triangulation choice summary no-compatible count mismatch".into());
+        }
+        if summary.height_multi_compatible_face_count != Some(multi_choice_count) {
+            return Err("face triangulation choice summary multi-compatible count mismatch".into());
+        }
+        if summary.height_first_no_compatible_face_index
+            != compatible_counts
+                .iter()
+                .position(|&choice_count| choice_count == 0)
+        {
+            return Err(
+                "face triangulation choice summary first no-compatible index mismatch".into(),
+            );
+        }
+        if let Some(compatible_indices) = summary.height_compatible_choice_indices.as_ref() {
+            for (face_idx, choices) in compatible_indices.iter().enumerate() {
+                if choices.len() != compatible_counts[face_idx] {
+                    return Err(format!(
+                        "face triangulation choice summary compatible index length {} for face {face_idx} does not match count {}",
+                        choices.len(),
+                        compatible_counts[face_idx]
+                    ));
+                }
+            }
+        }
+    }
+    if let Some(compatible_indices) = summary.height_compatible_choice_indices.as_ref() {
+        if compatible_indices.len() != summary.face_count {
+            return Err(format!(
+                "face triangulation choice summary compatible index length {} does not match face_count {}",
+                compatible_indices.len(),
+                summary.face_count
+            ));
+        }
+        for (face_idx, choices) in compatible_indices.iter().enumerate() {
+            let choice_count = summary.choice_counts[face_idx];
+            if choices.iter().any(|&choice| choice >= choice_count) {
+                return Err(format!(
+                    "face triangulation choice summary compatible choices for face {face_idx} exceed choice count {choice_count}"
+                ));
+            }
+        }
+    }
+    if let Some(digits) = summary.height_unique_choice_digits.as_ref() {
+        let compatible_counts = summary
+            .height_compatible_choice_counts
+            .as_ref()
+            .ok_or_else(|| {
+                "face triangulation choice summary unique digits require compatible counts"
+                    .to_string()
+            })?;
+        let compatible_indices = summary
+            .height_compatible_choice_indices
+            .as_ref()
+            .ok_or_else(|| {
+                "face triangulation choice summary unique digits require compatible indices"
+                    .to_string()
+            })?;
+        if digits.len() != summary.face_count {
+            return Err(format!(
+                "face triangulation choice summary unique choice digits length {} does not match face_count {}",
+                digits.len(),
+                summary.face_count
+            ));
+        }
+        for (face_idx, &digit) in digits.iter().enumerate() {
+            if compatible_counts[face_idx] != 1 {
+                return Err(format!(
+                    "face triangulation choice summary unique digit for face {face_idx} exists but compatible count is {}",
+                    compatible_counts[face_idx]
+                ));
+            }
+            if compatible_indices[face_idx] != [digit] {
+                return Err(format!(
+                    "face triangulation choice summary unique digit {digit} for face {face_idx} does not match compatible choices {:?}",
+                    compatible_indices[face_idx]
+                ));
+            }
+            if digit >= summary.choice_counts[face_idx] {
+                return Err(format!(
+                    "face triangulation choice summary unique digit {digit} for face {face_idx} exceeds choice count {}",
+                    summary.choice_counts[face_idx]
+                ));
+            }
+        }
+        let index = digits
+            .iter()
+            .zip(summary.choice_counts.iter())
+            .fold(Integer::from(0), |acc, (&digit, &base)| {
+                acc * Integer::from(base) + Integer::from(digit)
+            })
+            .to_string();
+        if summary.height_unique_choice_index.as_deref() != Some(index.as_str()) {
+            return Err(format!(
+                "face triangulation choice summary unique choice index {:?} does not match computed {index}",
+                summary.height_unique_choice_index
+            ));
+        }
+    }
+    if summary.height_unique_choice_digits.is_none() && summary.height_unique_choice_index.is_some()
+    {
+        return Err(
+            "face triangulation choice summary has unique choice index without unique digits"
+                .into(),
+        );
     }
     Ok(())
 }
@@ -17567,6 +17869,38 @@ fn build_report(
             .secondary_cone_heights_for_missing
             .as_ref()
             .map(Vec::len),
+        corrected_chamber_face_choice_summary_status: context
+            .corrected_chamber_face_triangulation_choice_summary
+            .as_ref()
+            .map(|summary| summary.status.clone()),
+        corrected_chamber_face_choice_face_count: context
+            .corrected_chamber_face_triangulation_choice_summary
+            .as_ref()
+            .map(|summary| summary.face_count),
+        corrected_chamber_face_choice_sampled_face_count: context
+            .corrected_chamber_face_triangulation_choice_summary
+            .as_ref()
+            .map(|summary| summary.sampled_face_count),
+        corrected_chamber_face_choice_empty_choice_face_count: context
+            .corrected_chamber_face_triangulation_choice_summary
+            .as_ref()
+            .map(|summary| summary.empty_choice_face_count),
+        corrected_chamber_face_choice_height_unique_compatible_face_count: context
+            .corrected_chamber_face_triangulation_choice_summary
+            .as_ref()
+            .and_then(|summary| summary.height_unique_compatible_face_count),
+        corrected_chamber_face_choice_height_no_compatible_face_count: context
+            .corrected_chamber_face_triangulation_choice_summary
+            .as_ref()
+            .and_then(|summary| summary.height_no_compatible_face_count),
+        corrected_chamber_face_choice_height_multi_compatible_face_count: context
+            .corrected_chamber_face_triangulation_choice_summary
+            .as_ref()
+            .and_then(|summary| summary.height_multi_compatible_face_count),
+        corrected_chamber_face_choice_height_unique_choice_index: context
+            .corrected_chamber_face_triangulation_choice_summary
+            .as_ref()
+            .and_then(|summary| summary.height_unique_choice_index.clone()),
         q_rows: validated.q_matrix.len(),
         q_cols: validated.q_cols,
         kappa_nonzero_entries: validated.intersection.num_nonzero(),
@@ -29762,6 +30096,7 @@ mod tests {
             secondary_cone_2face_height_certificate: None,
             expanded_secondary_fan_height_certificate: None,
             secondary_cone_heights_for_missing: None,
+            corrected_chamber_face_triangulation_choice_summary: None,
             uncovered_source_ray_stats_for_missing: None,
             shared_facet_unresolved_source_ray_stats_for_missing: None,
             gv_q_matrix_for_missing: Some(vec![vec![1, 0], vec![0, 1]]),
@@ -29772,6 +30107,37 @@ mod tests {
                 real_cone_decomposition_exact_kind_counts: HashMap::new(),
                 sample: Vec::new(),
             }),
+        }
+    }
+
+    fn minimal_face_choice_summary() -> FaceTriangulationChoiceSummary {
+        FaceTriangulationChoiceSummary {
+            status: "face_triangulation_choices_exact_and_sampled".to_string(),
+            max_exact_face_points: 17,
+            samples_per_large_face: 1000,
+            max_sampling_attempts_per_face: 100000,
+            seed: 11,
+            face_count: 2,
+            exact_face_count: 1,
+            sampled_face_count: 1,
+            empty_choice_face_count: 0,
+            min_face_points: Some(4),
+            max_face_points: Some(18),
+            min_choice_count: Some(2),
+            max_choice_count: Some(3),
+            total_choice_count: "6".to_string(),
+            face_point_counts: vec![4, 18],
+            choice_counts: vec![2, 3],
+            sampled_face_indices: vec![1],
+            sampled_face_point_counts: vec![18],
+            height_compatible_choice_indices: Some(vec![vec![1], vec![2]]),
+            height_compatible_choice_counts: Some(vec![1, 1]),
+            height_unique_compatible_face_count: Some(2),
+            height_no_compatible_face_count: Some(0),
+            height_multi_compatible_face_count: Some(0),
+            height_first_no_compatible_face_index: None,
+            height_unique_choice_digits: Some(vec![1, 2]),
+            height_unique_choice_index: Some("5".to_string()),
         }
     }
 
@@ -30137,6 +30503,114 @@ mod tests {
                 .map(|certificate| certificate.hyperplane_count),
             Some(2)
         );
+    }
+
+    #[test]
+    fn validate_context_reports_face_triangulation_choice_summary() {
+        let mut context = minimal_corrected_context(
+            4,
+            Some(vec![DegreeBoundedMoriRayContextSample {
+                degree: 1,
+                ambient_nonzero: vec![(5, 1)],
+                basis_nonzero: vec![(0, 1)],
+            }]),
+        );
+        context.corrected_chamber_face_triangulation_choice_summary =
+            Some(minimal_face_choice_summary());
+
+        let validated = validate_context(&context).unwrap();
+        let report = build_report(
+            &context,
+            &validated,
+            None,
+            false,
+            false,
+            None,
+            None,
+            false,
+            false,
+            false,
+            false,
+            64,
+            false,
+            64,
+            false,
+            64,
+            None,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            None,
+            None,
+            None,
+            None,
+            false,
+            2,
+            None,
+            64,
+            DEFAULT_CYGV_LOWER_SEED_PAIR_LIMIT,
+            None,
+            &SupportingMoriFaceLpSearchOptions::default(),
+        );
+
+        assert_eq!(
+            report
+                .corrected_chamber_face_choice_summary_status
+                .as_deref(),
+            Some("face_triangulation_choices_exact_and_sampled")
+        );
+        assert_eq!(report.corrected_chamber_face_choice_face_count, Some(2));
+        assert_eq!(
+            report.corrected_chamber_face_choice_sampled_face_count,
+            Some(1)
+        );
+        assert_eq!(
+            report.corrected_chamber_face_choice_empty_choice_face_count,
+            Some(0)
+        );
+        assert_eq!(
+            report.corrected_chamber_face_choice_height_unique_compatible_face_count,
+            Some(2)
+        );
+        assert_eq!(
+            report.corrected_chamber_face_choice_height_no_compatible_face_count,
+            Some(0)
+        );
+        assert_eq!(
+            report.corrected_chamber_face_choice_height_multi_compatible_face_count,
+            Some(0)
+        );
+        assert_eq!(
+            report
+                .corrected_chamber_face_choice_height_unique_choice_index
+                .as_deref(),
+            Some("5")
+        );
+    }
+
+    #[test]
+    fn validate_context_rejects_invalid_face_triangulation_choice_summary() {
+        let mut context = minimal_corrected_context(
+            4,
+            Some(vec![DegreeBoundedMoriRayContextSample {
+                degree: 1,
+                ambient_nonzero: vec![(5, 1)],
+                basis_nonzero: vec![(0, 1)],
+            }]),
+        );
+        let mut summary = minimal_face_choice_summary();
+        summary.total_choice_count = "5".to_string();
+        context.corrected_chamber_face_triangulation_choice_summary = Some(summary);
+
+        let err = match validate_context(&context) {
+            Ok(_) => panic!("invalid face-choice summary should fail validation"),
+            Err(err) => err,
+        };
+
+        assert!(err.contains("total_choice_count 5 does not match computed 6"));
     }
 
     #[test]

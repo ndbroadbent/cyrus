@@ -156,8 +156,11 @@ height vector, unique mixed-radix chamber digits/index when every face has one
 compatible choice, sampling limits, and seed. The runner-side `P^4` simplex
 regression forces the sampled branch and verifies that the artifact reports the
 ten triangular two-faces with one compatible choice each and chamber index
-`0`. This is still chamber-search input evidence; it does not compute or
-promote any corrected-chamber GV value.
+`0`. The corrected-chamber GV context export now carries this same face-choice
+summary, and `mcallister_gv_context` rejects internally inconsistent summaries
+before surfacing the chamber-choice counts and selected mixed-radix index in
+its report. This is still chamber-search input evidence; it does not compute
+or promote any corrected-chamber GV value.
 
 CYTools' `Cone.find_lattice_points` is a separate operation. It first checks
 that the grading vector has only the origin at nonpositive degree, then uses
