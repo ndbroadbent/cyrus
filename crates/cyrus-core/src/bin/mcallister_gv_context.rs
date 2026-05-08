@@ -2140,6 +2140,7 @@ fn lower_seed_decomposition_probe(
     seeds: &[Vec<i64>],
     max_terms: usize,
     seed_pair_limit: usize,
+    positive_grading: Option<&[i64]>,
 ) -> LowerSeedDecompositionProbe {
     if seeds.len() > seed_pair_limit {
         return LowerSeedDecompositionProbe {
@@ -2153,7 +2154,12 @@ fn lower_seed_decomposition_probe(
             )),
         };
     }
-    match bounded_seed_decomposition(target, seeds, max_terms) {
+    let decomposition = if let Some(grading) = positive_grading {
+        bounded_seed_decomposition_with_positive_grading(target, seeds, max_terms, grading)
+    } else {
+        bounded_seed_decomposition(target, seeds, max_terms)
+    };
+    match decomposition {
         Ok(Some(terms)) => LowerSeedDecompositionProbe {
             status: "found_lower_seed_decomposition".to_string(),
             term_count: Some(terms.len()),
@@ -7323,6 +7329,24 @@ fn bounded_seed_decomposition(
     seeds: &[Vec<i64>],
     max_terms: usize,
 ) -> Result<Option<Vec<Vec<i64>>>, String> {
+    bounded_seed_decomposition_impl(target, seeds, max_terms, None)
+}
+
+fn bounded_seed_decomposition_with_positive_grading(
+    target: &[i64],
+    seeds: &[Vec<i64>],
+    max_terms: usize,
+    grading: &[i64],
+) -> Result<Option<Vec<Vec<i64>>>, String> {
+    bounded_seed_decomposition_impl(target, seeds, max_terms, Some(grading))
+}
+
+fn bounded_seed_decomposition_impl(
+    target: &[i64],
+    seeds: &[Vec<i64>],
+    max_terms: usize,
+    positive_grading: Option<&[i64]>,
+) -> Result<Option<Vec<Vec<i64>>>, String> {
     if max_terms < 2 || seeds.is_empty() {
         return Ok(None);
     }
@@ -7332,13 +7356,38 @@ fn bounded_seed_decomposition(
     if seeds.iter().any(|seed| seed.len() != target.len()) {
         return Err("bounded seed decomposition seed dimension mismatch".to_string());
     }
+    let (seed_degrees, target_degree) = if let Some(grading) = positive_grading {
+        if grading.len() != target.len() {
+            return Err("bounded seed decomposition grading dimension mismatch".to_string());
+        }
+        let target_degree = curve_degree(target, grading)?;
+        if target_degree <= 0 {
+            return Err(
+                "positive-graded bounded seed decomposition target degree must be positive"
+                    .to_string(),
+            );
+        }
+        let seed_degrees = seeds
+            .iter()
+            .map(|seed| curve_degree(seed, grading))
+            .collect::<Result<Vec<_>, _>>()?;
+        if seed_degrees.iter().any(|&degree| degree <= 0) {
+            return Err(
+                "positive-graded bounded seed decomposition seeds must have positive degree"
+                    .to_string(),
+            );
+        }
+        (Some(seed_degrees), Some(target_degree))
+    } else {
+        (None, None)
+    };
 
     let target_sparse = sparse_from_dense(target);
     let seed_sparse = seeds
         .iter()
         .map(|seed| sparse_from_dense(seed))
         .collect::<Vec<_>>();
-    let pair_sums = sparse_seed_pair_sums(&seed_sparse)?;
+    let pair_sums = sparse_seed_pair_sums(&seed_sparse, seed_degrees.as_deref(), target_degree)?;
     if let Some(&(i, j)) = pair_sums.get(&target_sparse) {
         return Ok(Some(sorted_decomposition(vec![
             seeds[i].clone(),
@@ -7386,10 +7435,28 @@ fn bounded_seed_decomposition(
 
 fn sparse_seed_pair_sums(
     seeds: &[Vec<(usize, i64)>],
+    seed_degrees: Option<&[i128]>,
+    max_pair_degree: Option<i128>,
 ) -> Result<HashMap<Vec<(usize, i64)>, (usize, usize)>, String> {
+    if seed_degrees.is_some() != max_pair_degree.is_some() {
+        return Err("sparse seed pair degree filter is incomplete".to_string());
+    }
+    if let Some(degrees) = seed_degrees
+        && degrees.len() != seeds.len()
+    {
+        return Err("sparse seed pair degree filter length mismatch".to_string());
+    }
     let mut pair_sums = HashMap::new();
     for i in 0..seeds.len() {
         for j in i..seeds.len() {
+            if let (Some(degrees), Some(max_degree)) = (seed_degrees, max_pair_degree) {
+                let pair_degree = degrees[i]
+                    .checked_add(degrees[j])
+                    .ok_or_else(|| "sparse seed pair degree overflowed".to_string())?;
+                if pair_degree > max_degree {
+                    continue;
+                }
+            }
             let sum = checked_sparse_sum(&seeds[i], &seeds[j])?;
             pair_sums.entry(sum).or_insert((i, j));
         }
@@ -12325,8 +12392,13 @@ fn cygv_path_history_probe_inner(
         .into_iter()
         .collect::<HashSet<_>>();
     let reduced_seed_count = reduced_seeds.len();
-    let lower_seed_decomposition =
-        lower_seed_decomposition_probe(target, &seeds, 4, lower_seed_pair_limit);
+    let lower_seed_decomposition = lower_seed_decomposition_probe(
+        target,
+        &seeds,
+        4,
+        lower_seed_pair_limit,
+        Some(context.grading),
+    );
     let lower_seed_diamond = lower_seed_diamond_probe(
         target,
         &lower_seed_decomposition,
@@ -21851,13 +21923,33 @@ mod tests {
     }
 
     #[test]
+    fn positive_graded_bounded_seed_decomposition_ignores_overdegree_pairs() {
+        let seeds = vec![
+            vec![0, 1],
+            vec![1, 0],
+            vec![2, 0],
+            vec![100, 0],
+            vec![0, 100],
+        ];
+
+        assert_eq!(
+            bounded_seed_decomposition_with_positive_grading(&[3, 1], &seeds, 3, &[1, 1]).unwrap(),
+            Some(vec![vec![0, 1], vec![1, 0], vec![2, 0]])
+        );
+        assert_eq!(
+            bounded_seed_decomposition(&[3, 1], &seeds, 3).unwrap(),
+            bounded_seed_decomposition_with_positive_grading(&[3, 1], &seeds, 3, &[1, 1]).unwrap()
+        );
+    }
+
+    #[test]
     fn sparse_seed_pair_sums_match_dense_ordering_and_cancellation() {
         let seeds = vec![vec![0, 2, -2], vec![1, 0, 0], vec![0, -2, 2]];
         let sparse = seeds
             .iter()
             .map(|seed| sparse_from_dense(seed))
             .collect::<Vec<_>>();
-        let pair_sums = sparse_seed_pair_sums(&sparse).unwrap();
+        let pair_sums = sparse_seed_pair_sums(&sparse, None, None).unwrap();
 
         assert_eq!(pair_sums.get(&sparse_from_dense(&[0, 0, 0])), Some(&(0, 2)));
 
@@ -21888,8 +21980,13 @@ mod tests {
             .map(|idx| vec![i64::try_from(idx).unwrap(), 0])
             .collect::<Vec<_>>();
 
-        let probe =
-            lower_seed_decomposition_probe(&[1, 0], &seeds, 4, DEFAULT_CYGV_LOWER_SEED_PAIR_LIMIT);
+        let probe = lower_seed_decomposition_probe(
+            &[1, 0],
+            &seeds,
+            4,
+            DEFAULT_CYGV_LOWER_SEED_PAIR_LIMIT,
+            None,
+        );
 
         assert_eq!(probe.status, "skipped_seed_pair_limit_1024".to_string());
         assert!(probe.terms.is_none());
