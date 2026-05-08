@@ -1349,6 +1349,12 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
     local_toric_weighted_p2_rank_three_base_weights: Option<Vec<i64>>,
     local_toric_weighted_p2_rank_three_bundle_point_indices: Option<Vec<usize>>,
     local_toric_weighted_p2_rank_three_bundle_degrees: Option<Vec<i64>>,
+    local_toric_weighted_p2_rank_three_source_model_status: String,
+    local_toric_weighted_p2_rank_three_base_complex_dimension: Option<i64>,
+    local_toric_weighted_p2_rank_three_bundle_rank: Option<i64>,
+    local_toric_weighted_p2_rank_three_total_space_complex_dimension: Option<i64>,
+    local_toric_weighted_p2_rank_three_required_cygv_codimension_for_threefold: Option<i64>,
+    local_toric_weighted_p2_rank_three_numerical_gv_status: Option<String>,
     ckyz_status: String,
     bounded_lower_seed_status: String,
     bounded_lower_seed_term_count: Option<usize>,
@@ -1462,6 +1468,16 @@ struct WeightedP2RankThreePhaseSummary {
     base_weights: Option<Vec<i64>>,
     bundle_point_indices: Option<Vec<usize>>,
     bundle_degrees: Option<Vec<i64>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct WeightedP2RankThreeSourceModelSummary {
+    status: String,
+    base_complex_dimension: Option<i64>,
+    bundle_rank: Option<i64>,
+    total_space_complex_dimension: Option<i64>,
+    required_cygv_codimension_for_threefold: Option<i64>,
+    numerical_gv_status: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -20551,6 +20567,11 @@ fn unresolved_chamber_generator_summaries(
                             .circuit_global_height_choice_summary
                             .selected_choice_index,
                     );
+                let weighted_rank_three_source_model =
+                    weighted_p2_rank_three_source_model_summary(
+                        &context.local_toric_diagnostic.local_toric_charge_family_status,
+                        &weighted_rank_three_phase,
+                    );
                 LocalCygvUnresolvedChamberGeneratorSummary {
                     occurrence_count: 0,
                     target_indices: Vec::new(),
@@ -20676,6 +20697,19 @@ fn unresolved_chamber_generator_summaries(
                         weighted_rank_three_phase.bundle_point_indices,
                     local_toric_weighted_p2_rank_three_bundle_degrees: weighted_rank_three_phase
                         .bundle_degrees,
+                    local_toric_weighted_p2_rank_three_source_model_status:
+                        weighted_rank_three_source_model.status,
+                    local_toric_weighted_p2_rank_three_base_complex_dimension:
+                        weighted_rank_three_source_model.base_complex_dimension,
+                    local_toric_weighted_p2_rank_three_bundle_rank:
+                        weighted_rank_three_source_model.bundle_rank,
+                    local_toric_weighted_p2_rank_three_total_space_complex_dimension:
+                        weighted_rank_three_source_model.total_space_complex_dimension,
+                    local_toric_weighted_p2_rank_three_required_cygv_codimension_for_threefold:
+                        weighted_rank_three_source_model
+                            .required_cygv_codimension_for_threefold,
+                    local_toric_weighted_p2_rank_three_numerical_gv_status:
+                        weighted_rank_three_source_model.numerical_gv_status,
                     ckyz_status: context.local_toric_diagnostic.ckyz_status.clone(),
                     bounded_lower_seed_status:
                         chamber_semigroup_generator_bounded_lower_seed_status(context),
@@ -25555,6 +25589,61 @@ fn weighted_p2_rank_three_selected_phase_summary(
         return with_parts("weighted_p2_rank_three_split_bundle_selected_bundle_phase");
     }
     with_parts("weighted_p2_rank_three_split_bundle_selected_mixed_or_unknown_phase")
+}
+
+fn weighted_p2_rank_three_source_model_summary(
+    charge_family_status: &str,
+    phase_summary: &WeightedP2RankThreePhaseSummary,
+) -> WeightedP2RankThreeSourceModelSummary {
+    let empty = |status: &str| WeightedP2RankThreeSourceModelSummary {
+        status: status.to_string(),
+        base_complex_dimension: None,
+        bundle_rank: None,
+        total_space_complex_dimension: None,
+        required_cygv_codimension_for_threefold: None,
+        numerical_gv_status: None,
+    };
+    if !charge_family_status
+        .starts_with("local_toric_weighted_p2_rank_three_split_bundle_charge_family")
+    {
+        return empty("weighted_p2_rank_three_source_model_not_run_not_rank_three_family");
+    }
+    let (Some(base_weights), Some(bundle_degrees)) = (
+        phase_summary.base_weights.as_ref(),
+        phase_summary.bundle_degrees.as_ref(),
+    ) else {
+        return empty("weighted_p2_rank_three_source_model_blocked_missing_phase_split");
+    };
+    if base_weights.is_empty() || bundle_degrees.is_empty() {
+        return empty("weighted_p2_rank_three_source_model_blocked_empty_phase_split");
+    }
+    let base_complex_dimension =
+        i64::try_from(base_weights.len() - 1).expect("weighted P2 base weight count fits i64");
+    let bundle_rank =
+        i64::try_from(bundle_degrees.len()).expect("weighted P2 bundle rank fits i64");
+    let total_space_complex_dimension = base_complex_dimension + bundle_rank;
+    let required_cygv_codimension_for_threefold = total_space_complex_dimension - 3;
+    let numerical_gv_status = if total_space_complex_dimension == 3 {
+        "weighted_p2_rank_three_visible_phase_is_threefold"
+    } else {
+        "weighted_p2_rank_three_visible_phase_is_not_numerical_cy3_requires_source_codim2_or_insertion_history"
+    };
+    let status = if phase_summary
+        .status
+        .starts_with("weighted_p2_rank_three_split_bundle_selected_")
+    {
+        "weighted_p2_rank_three_source_model_visible_phase_is_local_cy5_total_space_not_promotable_gv_source"
+    } else {
+        "weighted_p2_rank_three_source_model_blocked_phase_not_selected"
+    };
+    WeightedP2RankThreeSourceModelSummary {
+        status: status.to_string(),
+        base_complex_dimension: Some(base_complex_dimension),
+        bundle_rank: Some(bundle_rank),
+        total_space_complex_dimension: Some(total_space_complex_dimension),
+        required_cygv_codimension_for_threefold: Some(required_cygv_codimension_for_threefold),
+        numerical_gv_status: Some(numerical_gv_status.to_string()),
+    }
 }
 
 fn selected_choice_matches_split_bundle_phase(
@@ -37343,6 +37432,30 @@ mod tests {
         assert_eq!(selected_base.base_weights, Some(vec![1, 1, 2]));
         assert_eq!(selected_base.bundle_point_indices, Some(vec![0, 214, 55]));
         assert_eq!(selected_base.bundle_degrees, Some(vec![1, 1, 2]));
+        let selected_base_source_model = weighted_p2_rank_three_source_model_summary(
+            "local_toric_weighted_p2_rank_three_split_bundle_charge_family:base=1,1,2;bundle=1,1,2;base_hyperplane_square=1/2",
+            &selected_base,
+        );
+        assert_eq!(
+            selected_base_source_model.status,
+            "weighted_p2_rank_three_source_model_visible_phase_is_local_cy5_total_space_not_promotable_gv_source"
+        );
+        assert_eq!(selected_base_source_model.base_complex_dimension, Some(2));
+        assert_eq!(selected_base_source_model.bundle_rank, Some(3));
+        assert_eq!(
+            selected_base_source_model.total_space_complex_dimension,
+            Some(5)
+        );
+        assert_eq!(
+            selected_base_source_model.required_cygv_codimension_for_threefold,
+            Some(2)
+        );
+        assert_eq!(
+            selected_base_source_model.numerical_gv_status.as_deref(),
+            Some(
+                "weighted_p2_rank_three_visible_phase_is_not_numerical_cy3_requires_source_codim2_or_insertion_history"
+            )
+        );
 
         let selected_bundle = weighted_p2_rank_three_selected_phase_summary(
             Some(&point_relation),

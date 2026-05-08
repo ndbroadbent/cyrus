@@ -4411,6 +4411,21 @@ It still does not promote a GV value: the row's source class is now explicitly
 because the rank-three bundle phase needs a source-derived local
 model/intersection tensor and qN/chamber history, not just a named GIT chamber.
 
+`/tmp/cyrus_six_point_rank3_source_model_target7_v1.json` now records the
+dimension obstruction for that same selected phase. The visible base has
+complex dimension `2`, the split bundle has rank `3`, and the total-space
+phase therefore has complex dimension `5`. The report consequently marks the
+row as
+`weighted_p2_rank_three_source_model_visible_phase_is_local_cy5_total_space_not_promotable_gv_source`
+with numerical-GV status
+`weighted_p2_rank_three_visible_phase_is_not_numerical_cy3_requires_source_codim2_or_insertion_history`
+and required `cygv` codimension `2` for a threefold model. This matches the
+source read of Coates--Corti--Iritani--Tseng arXiv:0804.2592: their
+weighted-projective examples cover canonical bundles such as `K_P(1,1,2)` and
+twisted vector-bundle I-functions, but they do not by themselves provide a
+numerical CY3 GV source for the visible rank-three
+`O(-1) + O(-1) + O(-2) -> P(1,1,2)` total-space phase.
+
 `/tmp/cyrus_six_point_overlap_annotations_v1.json` annotates the nearest
 degree-bounded support-overlap samples with qN-history, source class, and
 global secondary-height side. For the shared target `7`/`8` six-point row, all

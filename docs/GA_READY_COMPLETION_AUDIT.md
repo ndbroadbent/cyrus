@@ -1326,6 +1326,19 @@ source class now reports
 so Cyrus still lacks the source-derived local intersection tensor and
 qN/chamber history for this rank-three weighted-`P2` model.
 
+`/tmp/cyrus_six_point_rank3_source_model_target7_v1.json` adds the source-model
+dimension check to that row. The selected visible phase is a rank-three
+split-bundle total space over weighted `P(1,1,2)`: base complex dimension `2`,
+bundle rank `3`, total-space complex dimension `5`. The report therefore
+labels it
+`weighted_p2_rank_three_source_model_visible_phase_is_local_cy5_total_space_not_promotable_gv_source`,
+with required `cygv` codimension `2` before it can become a threefold source
+and numerical-GV status
+`weighted_p2_rank_three_visible_phase_is_not_numerical_cy3_requires_source_codim2_or_insertion_history`.
+This records why the named phase is not enough: the next task is still finding
+or deriving the missing codimension-2/twisted source model and qN chamber
+history, not guessing a one-parameter tensor.
+
 `/tmp/cyrus_six_point_overlap_annotations_v1.json` also annotates the nearest
 degree-bounded support-overlap samples. For the shared target `7`/`8`
 six-point row, all five sampled nearest degree-`2` neighbors are known toric
