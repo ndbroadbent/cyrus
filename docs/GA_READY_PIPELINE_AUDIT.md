@@ -1444,7 +1444,10 @@ to make the remaining GV layer more first-principles:
    `weighted_p2_resolution_intersection_tensor:4` and
    `weighted_p2_resolution_chamber_certificate:4`, preserving the distinction
    between scalar unit-probe agreement and a source-derived resolution/chamber
-   certificate.
+   certificate. The missing-input queue also now records the two chamber-map
+   blockers behind those rows:
+   `weighted_p2_restricted_resolved_chamber_wall_certificate:4` and
+   `weighted_p2_full_chamber_transport_certificate:4`.
    The local phase-membership aggregation now reports the stricter
    resolved-shared secondary-cone blocker for the integral weighted rows before
    falling back to the coarser star-union relation label. Fresh target `7` and

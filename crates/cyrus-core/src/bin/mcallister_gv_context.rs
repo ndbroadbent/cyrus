@@ -17154,11 +17154,29 @@ fn build_report(
             |diagnostic| diagnostic.best_extra_point_count,
             "missing_overlap",
         );
-    let missing_local_cygv_missing_source_input_counts = local_cygv_missing_source_input_counts(
+    let mut missing_local_cygv_missing_source_input_counts = local_cygv_missing_source_input_counts(
         targets
             .iter()
             .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
     );
+    for (input, count) in local_cygv_weighted_p2_chamber_transport_missing_input_counts(
+        local_cygv_source_resolution_hint_sample
+            .iter()
+            .map(|summary| {
+                (
+                    summary
+                        .local_phase_chamber_membership_certificate_status
+                        .as_str(),
+                    summary
+                        .resolved_shared_chamber_full_union_compatibility_status
+                        .as_str(),
+                )
+            }),
+    ) {
+        *missing_local_cygv_missing_source_input_counts
+            .entry(input)
+            .or_insert(0usize) += count;
+    }
     let missing_cms_general_divisor_candidate_status_counts =
         cms_general_divisor_candidate_status_counts(&targets);
     let missing_cms_general_divisor_intersection_check_status_counts =
@@ -27594,6 +27612,29 @@ fn local_cygv_missing_source_input_counts<'a>(
     counts
 }
 
+fn local_cygv_weighted_p2_chamber_transport_missing_input_counts<'a>(
+    statuses: impl IntoIterator<Item = (&'a str, &'a str)>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for (local_phase_status, full_union_status) in statuses {
+        if local_phase_status
+            == "local_phase_chamber_blocked_weighted_p2_resolved_shared_affine_wall_global_height_strict:weighted_p2_resolved_shared_chamber_outside_or_on_wall"
+        {
+            *counts
+                .entry("weighted_p2_restricted_resolved_chamber_wall_certificate".to_string())
+                .or_insert(0usize) += 1;
+        }
+        if full_union_status
+            == "resolved_global_height_strict_but_full_union_selects_star_extras_requires_chamber_transport"
+        {
+            *counts
+                .entry("weighted_p2_full_chamber_transport_certificate".to_string())
+                .or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
 fn cms_general_divisor_candidate_status_counts(
     targets: &[TargetReport],
 ) -> BTreeMap<String, usize> {
@@ -32589,6 +32630,31 @@ mod tests {
         assert_eq!(counts.get("local_semigroup_generators").copied(), Some(2));
         assert_eq!(counts.get("local_intersection_tensor").copied(), Some(1));
         assert_eq!(counts.get("local_chamber_certificate").copied(), Some(1));
+
+        let weighted_transport_counts =
+            local_cygv_weighted_p2_chamber_transport_missing_input_counts([
+                (
+                    "local_phase_chamber_blocked_weighted_p2_resolved_shared_affine_wall_global_height_strict:weighted_p2_resolved_shared_chamber_outside_or_on_wall",
+                    "resolved_global_height_strict_but_full_union_selects_star_extras_requires_chamber_transport",
+                ),
+                (
+                    "local_phase_chamber_blocked_local_chamber_certificate_blocked_not_including_origin_p2_bundle_phase",
+                    "resolved_full_union_compatibility_skipped:resolved_shared_chamber_global_height_not_weighted_p2_split_bundle",
+                ),
+            ]);
+        assert_eq!(
+            weighted_transport_counts
+                .get("weighted_p2_restricted_resolved_chamber_wall_certificate")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(
+            weighted_transport_counts
+                .get("weighted_p2_full_chamber_transport_certificate")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(weighted_transport_counts.len(), 2);
     }
 
     #[test]

@@ -3619,6 +3619,15 @@ missing-input aggregate as
 `weighted_p2_resolution_chamber_certificate:4`. Thus the nine remaining rows
 split into five CICY source-rule blockers and four weighted-`P2`
 resolution/chamber blockers, all still non-promotable.
+The same aggregate now carries the chamber-transport evidence instead of
+leaving it only in the long source-resolution sample: the four weighted rows
+also count
+`weighted_p2_restricted_resolved_chamber_wall_certificate:4` and
+`weighted_p2_full_chamber_transport_certificate:4`. These are driven by the
+phase status
+`local_phase_chamber_blocked_weighted_p2_resolved_shared_affine_wall_global_height_strict:weighted_p2_resolved_shared_chamber_outside_or_on_wall`
+and the full-union status
+`resolved_global_height_strict_but_full_union_selects_star_extras_requires_chamber_transport`.
 This is useful but still not a source rule: it proves that Cyrus must derive
 which split, if any, comes from the star-union/CICY geometry instead of choosing
 one by scalar GV agreement. Target `7` also has no nonnegative primitive

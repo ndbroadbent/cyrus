@@ -193,7 +193,9 @@ and matrix-basis pipeline are no longer open.
    input rather than an unclassified local support. The other four rows now
    report explicit weighted-`P2` resolution tensor and chamber-certificate
    inputs, keeping their unit-tensor scalar agreement separate from a promoted
-   compact GV computation.
+   compact GV computation. Their chamber transport blockers are now explicit
+   in the same missing-input queue as restricted resolved-chamber wall
+   certificates and full star-union chamber-transport certificates.
 2. **Exact corrected KKLT volume.** The no-replay path computes a corrected
    volume but still has a documented instanton/chamber residual.
 3. **Generic matrix-basis pipeline.** Matrix divisor-basis primitives now cover
