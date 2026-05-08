@@ -490,6 +490,8 @@ struct ContextReport {
         usize,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_occurrence_count:
         usize,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_origin_split_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample:
         Vec<LocalCygvUnresolvedChamberGeneratorSummary>,
     local_cygv_source_resolution_star_union_current_chamber_decomposition_term_context_status_counts:
@@ -17572,6 +17574,10 @@ fn build_report(
             .iter()
             .map(|summary| summary.occurrence_count)
             .sum();
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_origin_split_status_counts =
+        unresolved_generator_weighted_p2_origin_split_status_counts(
+            &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
+        );
     let local_cygv_source_resolution_star_union_current_chamber_decomposition_term_context_status_counts =
         chamber_decomposition_term_context_status_counts(chamber_decomposition_term_contexts(
             &local_cygv_source_resolution_hint_sample,
@@ -19006,6 +19012,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_generator_ckyz_kind_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_unique_count,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_occurrence_count,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_origin_split_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
         local_cygv_source_resolution_star_union_current_chamber_decomposition_term_context_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_decomposition_term_degree_counts,
@@ -21108,6 +21115,19 @@ fn unresolved_chamber_generator_summaries(
             })
     });
     summaries
+}
+
+fn unresolved_generator_weighted_p2_origin_split_status_counts(
+    summaries: &[LocalCygvUnresolvedChamberGeneratorSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        let status = &summary
+            .local_toric_weighted_p2_rank_three_origin_included_zero_degree_split_summary
+            .status;
+        *counts.entry(status.clone()).or_insert(0) += 1;
+    }
+    counts
 }
 
 fn chamber_decomposition_term_contexts(

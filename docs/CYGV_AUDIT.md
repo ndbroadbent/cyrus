@@ -4465,6 +4465,12 @@ Their sample signatures are three
 `first=base:1,origin:1;second=base:2,bundle:2`, and one
 `first=base:1,bundle:1,origin:1;second=base:2,bundle:1`. Thus the splits are
 not clean base-vs-bundle phase factors either.
+The aggregate report
+`/tmp/cyrus_six_point_origin_split_roles_aggregate_target7_v1.json` now exposes
+the same conclusion at top level for unique current-chamber unresolved
+generators:
+`local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_origin_split_status_counts =
+{"weighted_p2_rank_three_origin_included_zero_degree_splits_mix_base_bundle_and_violate_origin_contract":1}`.
 A direct CYTools/PALP check of the same six support coordinates is negative
 too: `Polytope(pts)` is four-dimensional with six points but
 `is_reflexive=False`, and `nef_partitions(codim=2)` stops with

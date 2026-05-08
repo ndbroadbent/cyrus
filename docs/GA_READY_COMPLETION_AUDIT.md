@@ -1367,7 +1367,9 @@ origin-containing partition candidates fail the CYTools-style certificate with
 The origin-split role reports classify those same six candidates against the
 selected weighted-`P2` base/bundle phase: all are
 `weighted_p2_rank_three_origin_included_zero_degree_splits_mix_base_bundle_and_violate_origin_contract`,
-so they are not clean base-vs-bundle phase factors.
+so they are not clean base-vs-bundle phase factors. The current-chamber
+unresolved-generator aggregate now exposes this as a top-level unique-generator
+status count.
 The direct CYTools/PALP probe is negative as well: the visible six-point
 support is not reflexive, so PALP refuses codimension-2 nef partitions on that
 polytope.
