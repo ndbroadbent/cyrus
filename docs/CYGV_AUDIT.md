@@ -4224,3 +4224,15 @@ flipped compact `cygv` probe as
 `skipped_uncertified_chamber_secondary_certificate:chamber_secondary_certificate_no_strict_interior_point`.
 Thus the local flip does not provide a certified adjacent chamber or a
 promotable semigroup history for the missing target-plus-star class.
+
+The provided-generator `cygv` probe now has its own promotion gate as well.
+Regenerating `/tmp/cyrus_chamber_cygv_promotion_v1.json` leaves all five
+current/flipped chamber probes at
+`blocked_missing_source_derived_chamber_qn_history`. For targets `7` and `8`,
+the current chamber still computes diagnostic `GV=0`, but the probe records
+the precise promotion blockers:
+`source_derived_chamber_generator_qn_history:4` and
+`target_plus_star_qn_history:support_overlap_qn_not_required_zero_or_absent_gv`.
+The flipped side is additionally blocked by the uncertified secondary-cone
+status. This makes the non-promotable nature of the current-domain `GV=0`
+machine-readable, rather than relying on prose around the report.

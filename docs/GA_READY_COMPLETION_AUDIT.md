@@ -1184,6 +1184,16 @@ Flipped compact `cygv` probes are therefore skipped as uncertified instead of
 being allowed to masquerade as source-derived HKTY inputs. This rules out the
 visible local flip as the missing GA-ready chamber transport.
 
+The current-chamber compact `cygv` diagnostics are also promotion-gated now.
+In `/tmp/cyrus_chamber_cygv_promotion_v1.json`, targets `7` and `8` still have
+diagnostic current-chamber `GV=0`, but the probe itself reports
+`blocked_missing_source_derived_chamber_qn_history` with missing inputs
+`source_derived_chamber_generator_qn_history:4` and
+`target_plus_star_qn_history:support_overlap_qn_not_required_zero_or_absent_gv`.
+So the remaining GA-ready work is no longer just "run `cygv` on a certified
+local chamber"; it is to supply the source-derived chamber-generator qN
+history and target qN polynomial that make such a call reusable.
+
 ## Next Concrete Action
 
 The next implementation should be one of these, in order:
