@@ -288,6 +288,14 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_support_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_target_plus_star_local_cygv_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_target_plus_star_local_cygv_readiness_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_target_plus_star_local_cygv_phase_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_chamber_coverage_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_shared_face_secondary_status_counts:
         BTreeMap<String, usize>,
@@ -677,6 +685,8 @@ struct LocalCygvSourceResolutionHintSummary {
         LocalCygvStarUnionTransportDecompositionSummary,
     shared_two_simplex_star_union_target_plus_star_support:
         LocalCygvStarUnionTargetPlusStarSupportHint,
+    shared_two_simplex_star_union_target_plus_star_local_cygv_readiness:
+        LocalCygvStarUnionTargetPlusStarLocalCygvReadiness,
     shared_two_simplex_star_union_chamber_coverage_status: String,
     shared_two_simplex_star_union_chamber_covered_simplex_count: usize,
     shared_two_simplex_star_union_chamber_uncovered_point_indices: Vec<usize>,
@@ -877,6 +887,26 @@ struct LocalCygvStarUnionTargetPlusStarSupportHint {
     relation_coordinates: Option<Vec<i64>>,
     relation_rational_coordinates: Option<Vec<String>>,
     relation_rational_denominators: Option<Vec<String>>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvStarUnionTargetPlusStarLocalCygvReadiness {
+    status: String,
+    hypersurface_shape: Option<LocalCygvHypersurfaceShape>,
+    local_q_matrix_rows: Option<Vec<Vec<i64>>>,
+    local_cygv_wrapper_q_matrix_candidate: Option<Vec<Vec<i64>>>,
+    local_cygv_phase_q_matrix_candidate: Option<Vec<Vec<i64>>>,
+    target_relation_status: String,
+    orientation_candidates: Vec<LocalCygvOrientationCandidate>,
+    local_q_matrix_orientation_status: String,
+    local_q_matrix_layout_status: String,
+    local_cygv_q_matrix_phase_status: String,
+    local_semigroup_generator_status: String,
+    local_grading_vector_status: String,
+    local_intersection_tensor_status: String,
+    local_chamber_certificate_status: String,
+    actual_call_readiness: String,
+    missing_inputs: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -9570,21 +9600,38 @@ fn local_cygv_hypersurface_shape(
     let Some(support) = sample.origin_circuit_affine_support.as_ref() else {
         return Ok(None);
     };
-    let Some(first_row) = support.local_charge_basis.first() else {
-        return Err("origin-circuit affine support has no local charge rows".to_string());
+    local_cygv_hypersurface_shape_from_charge_basis(&support.local_charge_basis).map(Some)
+}
+
+fn local_cygv_hypersurface_shape_from_charge_basis(
+    local_charge_basis: &[Vec<i64>],
+) -> Result<LocalCygvHypersurfaceShape, String> {
+    let Some(first_row) = local_charge_basis.first() else {
+        return Err("local charge basis has no rows".to_string());
     };
     let q_rows = first_row.len();
     if q_rows == 0 {
-        return Err("origin-circuit local charge row is empty".to_string());
+        return Err("local charge row is empty".to_string());
     }
-    if support
-        .local_charge_basis
-        .iter()
-        .any(|row| row.len() != q_rows)
-    {
-        return Err("origin-circuit local charge rows have inconsistent lengths".to_string());
+    if local_charge_basis.iter().any(|row| row.len() != q_rows) {
+        return Err("local charge rows have inconsistent lengths".to_string());
     }
-    let q_cols = support.local_charge_basis.len();
+    let q_cols = local_charge_basis.len();
+    local_cygv_hypersurface_shape_from_dimensions_and_charge_basis(
+        q_rows,
+        q_cols,
+        local_charge_basis,
+    )
+}
+
+fn local_cygv_hypersurface_shape_from_dimensions_and_charge_basis(
+    q_rows: usize,
+    q_cols: usize,
+    local_charge_basis: &[Vec<i64>],
+) -> Result<LocalCygvHypersurfaceShape, String> {
+    if local_charge_basis.iter().any(|row| row.len() != q_rows) {
+        return Err("local charge rows have inconsistent lengths".to_string());
+    }
     let q_rows_i64 =
         i64::try_from(q_rows).map_err(|_| "local q row count does not fit in i64".to_string())?;
     let q_cols_i64 = i64::try_from(q_cols)
@@ -9592,15 +9639,13 @@ fn local_cygv_hypersurface_shape(
     let cy_codim = 1usize;
     let ambient_dim = q_rows_i64 - q_cols_i64;
     let cy_dim = ambient_dim - i64::try_from(cy_codim).expect("cy_codim fits in i64");
-    let charge_sums = support
-        .local_charge_basis
+    let charge_sums = local_charge_basis
         .iter()
         .map(|row| row.iter().sum())
         .collect::<Vec<i64>>();
     let charge_row_permutation_signatures =
-        local_charge_row_permutation_signatures(&support.local_charge_basis);
-    let charge_row_multiplicities = support
-        .local_charge_basis
+        local_charge_row_permutation_signatures(local_charge_basis);
+    let charge_row_multiplicities = local_charge_basis
         .iter()
         .map(|row| local_charge_multiplicities(row))
         .collect::<Vec<_>>();
@@ -9608,7 +9653,7 @@ fn local_cygv_hypersurface_shape(
     let is_compact_threefold_hypersurface_shape = is_calabi_yau_charge && cy_dim == 3;
     let (cygv_compact_input_status, cygv_compact_input_missing) =
         cygv_compact_input_readiness(is_compact_threefold_hypersurface_shape);
-    Ok(Some(LocalCygvHypersurfaceShape {
+    Ok(LocalCygvHypersurfaceShape {
         q_rows,
         q_cols,
         cy_codim,
@@ -9621,7 +9666,7 @@ fn local_cygv_hypersurface_shape(
         is_compact_threefold_hypersurface_shape,
         cygv_compact_input_status,
         cygv_compact_input_missing,
-    }))
+    })
 }
 
 fn local_charge_row_permutation_signatures(local_charge_basis: &[Vec<i64>]) -> Vec<Vec<i64>> {
@@ -14994,6 +15039,22 @@ fn build_report(
         local_cygv_source_resolution_star_union_target_plus_star_support_status_counts(
             &local_cygv_source_resolution_hint_sample,
         );
+    let local_cygv_source_resolution_star_union_target_plus_star_local_cygv_status_counts =
+        local_cygv_source_resolution_star_union_target_plus_star_local_cygv_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
+    let local_cygv_source_resolution_star_union_target_plus_star_local_cygv_readiness_counts =
+        local_cygv_source_resolution_star_union_target_plus_star_local_cygv_readiness_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
+    let local_cygv_source_resolution_star_union_target_plus_star_local_cygv_phase_status_counts =
+        local_cygv_source_resolution_star_union_target_plus_star_local_cygv_phase_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
+    let local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts =
+        local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
     let local_cygv_target_relation_global_secondary_height_status_counts =
         local_cygv_target_relation_global_secondary_height_status_counts(
             &local_cygv_source_resolution_hint_sample,
@@ -15941,6 +16002,10 @@ fn build_report(
         local_cygv_source_resolution_star_union_transport_status_counts,
         local_cygv_source_resolution_star_union_transport_component_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_support_status_counts,
+        local_cygv_source_resolution_star_union_target_plus_star_local_cygv_status_counts,
+        local_cygv_source_resolution_star_union_target_plus_star_local_cygv_readiness_counts,
+        local_cygv_source_resolution_star_union_target_plus_star_local_cygv_phase_status_counts,
+        local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts,
         local_cygv_source_resolution_star_union_chamber_coverage_status_counts,
         local_cygv_source_resolution_star_union_shared_face_secondary_status_counts,
         local_cygv_source_resolution_star_union_global_secondary_height_status_counts,
@@ -16260,6 +16325,10 @@ fn local_cygv_source_resolution_hint_summaries(
                     &star_support_hint,
                     &star_union_relation_hint.target_plus_star,
                 );
+            let star_union_target_plus_star_local_cygv_readiness =
+                local_cygv_star_union_target_plus_star_local_cygv_readiness(
+                    &star_union_target_plus_star_support,
+                );
             let star_union_chamber_coverage = local_cygv_star_union_chamber_coverage_hint(
                 target.origin_circuit_first_witness.as_ref(),
                 &star_support_hint,
@@ -16387,6 +16456,8 @@ fn local_cygv_source_resolution_hint_summaries(
                     star_union_transport_decomposition,
                 shared_two_simplex_star_union_target_plus_star_support:
                     star_union_target_plus_star_support,
+                shared_two_simplex_star_union_target_plus_star_local_cygv_readiness:
+                    star_union_target_plus_star_local_cygv_readiness,
                 shared_two_simplex_star_union_chamber_coverage_status: star_union_chamber_coverage
                     .status,
                 shared_two_simplex_star_union_chamber_covered_simplex_count:
@@ -16804,6 +16875,72 @@ fn local_cygv_source_resolution_star_union_target_plus_star_support_status_count
                     .clone(),
             )
             .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_star_union_target_plus_star_local_cygv_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts
+            .entry(
+                summary
+                    .shared_two_simplex_star_union_target_plus_star_local_cygv_readiness
+                    .status
+                    .clone(),
+            )
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_star_union_target_plus_star_local_cygv_readiness_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts
+            .entry(
+                summary
+                    .shared_two_simplex_star_union_target_plus_star_local_cygv_readiness
+                    .actual_call_readiness
+                    .clone(),
+            )
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_star_union_target_plus_star_local_cygv_phase_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts
+            .entry(
+                summary
+                    .shared_two_simplex_star_union_target_plus_star_local_cygv_readiness
+                    .local_cygv_q_matrix_phase_status
+                    .clone(),
+            )
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_star_union_target_plus_star_local_cygv_missing_input_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        for missing in &summary
+            .shared_two_simplex_star_union_target_plus_star_local_cygv_readiness
+            .missing_inputs
+        {
+            *counts.entry(missing.clone()).or_insert(0usize) += 1;
+        }
     }
     counts
 }
@@ -20567,6 +20704,168 @@ fn local_cygv_star_union_target_plus_star_support_hint_for_samples(
     }
 }
 
+fn local_cygv_star_union_target_plus_star_local_cygv_readiness(
+    support: &LocalCygvStarUnionTargetPlusStarSupportHint,
+) -> LocalCygvStarUnionTargetPlusStarLocalCygvReadiness {
+    let Some(charge_basis) = support.charge_basis.as_ref() else {
+        return blocked_target_plus_star_local_cygv_readiness(
+            "target_plus_star_local_cygv_blocked_missing_charge_basis",
+            vec!["local_q_matrix_charge_basis".to_string()],
+        );
+    };
+    let shape = match local_cygv_hypersurface_shape_from_charge_basis(charge_basis) {
+        Ok(shape) => shape,
+        Err(error) => {
+            return blocked_target_plus_star_local_cygv_readiness(
+                &format!(
+                    "target_plus_star_local_cygv_shape_error:{}",
+                    status_error_fragment(&error)
+                ),
+                vec!["compact_threefold_hypersurface_shape".to_string()],
+            );
+        }
+    };
+    let relation_coordinates = support.relation_coordinates.as_deref();
+    let target_relation_status = match relation_coordinates {
+        Some(coordinates) if !coordinates.is_empty() => {
+            "target_relation_integral_in_target_plus_star_charge_basis"
+        }
+        Some(_) => "target_relation_zero_in_target_plus_star_charge_basis",
+        None if support.relation_rational_coordinates.is_some() => {
+            "target_relation_nonintegral_in_target_plus_star_charge_basis"
+        }
+        None => "target_relation_not_in_target_plus_star_charge_basis",
+    }
+    .to_string();
+    let local_q_matrix_rows = transpose_local_charge_basis(charge_basis);
+    let orientation_candidates =
+        local_cygv_orientation_candidates(&local_q_matrix_rows, relation_coordinates);
+    let (local_q_matrix_orientation_candidate, local_q_matrix_orientation_status) =
+        local_cygv_q_matrix_orientation_candidate(&orientation_candidates);
+    let (local_semigroup_generators_candidate, local_semigroup_generator_status) =
+        local_cygv_semigroup_generators_candidate(
+            &orientation_candidates,
+            local_q_matrix_orientation_candidate,
+        );
+    let (
+        _local_cygv_q_matrix_rows_candidate,
+        local_cygv_wrapper_q_matrix_candidate,
+        local_q_matrix_layout_status,
+    ) = local_cygv_q_matrix_layout_candidate(
+        &orientation_candidates,
+        local_q_matrix_orientation_candidate,
+    );
+    let (local_cygv_phase_q_matrix_candidate, local_cygv_q_matrix_phase_status) =
+        local_cygv_q_matrix_phase_candidate(
+            &support.point_indices,
+            local_cygv_wrapper_q_matrix_candidate.as_deref(),
+        );
+    let (local_grading_vector_candidate, local_grading_vector_status) =
+        local_cygv_grading_vector_candidate(&orientation_candidates);
+    let (
+        local_intersection_tensor_candidate,
+        local_intersection_tensor_status,
+        local_chamber_certificate_status,
+    ) = local_p2_bundle_tensor_chamber_certificate(
+        local_cygv_phase_q_matrix_candidate.as_deref(),
+        local_semigroup_generators_candidate.as_deref(),
+        local_grading_vector_candidate.as_deref(),
+        &local_cygv_q_matrix_phase_status,
+    );
+    let mut missing_inputs = Vec::new();
+    if !shape.is_compact_threefold_hypersurface_shape {
+        missing_inputs.push("compact_threefold_hypersurface_shape".to_string());
+    }
+    if relation_coordinates.is_none() {
+        missing_inputs.push("target_class_to_local_semigroup_coordinate".to_string());
+    }
+    if local_semigroup_generators_candidate.is_none() {
+        missing_inputs.push("local_semigroup_generators".to_string());
+    }
+    if local_grading_vector_candidate.is_none() {
+        missing_inputs.push("local_grading_vector".to_string());
+    }
+    if !local_cygv_q_matrix_phase_status
+        .starts_with("source_derived_unique_compact_threefold_phase")
+    {
+        missing_inputs.push("local_q_matrix_orientation_and_phase".to_string());
+    }
+    if local_intersection_tensor_candidate.is_none() {
+        missing_inputs.push("local_intersection_tensor".to_string());
+    }
+    if local_chamber_certificate_status != "source_derived_local_p2_bundle_positive_base_chamber" {
+        missing_inputs.push("local_chamber_certificate".to_string());
+    }
+    let has_supported_orientation = orientation_candidates.iter().any(|candidate| {
+        candidate.target_candidate_status
+            == "target_primitive_positive_supported_by_cygv_omega_bucket"
+    });
+    let actual_call_readiness = if !missing_inputs.is_empty() {
+        "blocked_missing_source_derived_inputs"
+    } else if has_supported_orientation {
+        "ready_for_actual_cygv_call"
+    } else {
+        "blocked_no_supported_target_orientation"
+    }
+    .to_string();
+    let status = if actual_call_readiness == "ready_for_actual_cygv_call" {
+        "target_plus_star_local_cygv_ready_for_actual_call"
+    } else if !shape.is_compact_threefold_hypersurface_shape {
+        "target_plus_star_local_cygv_blocked_not_compact_threefold_shape"
+    } else if relation_coordinates.is_none() {
+        "target_plus_star_local_cygv_blocked_missing_integral_target_coordinate"
+    } else if local_semigroup_generators_candidate.is_none()
+        || local_grading_vector_candidate.is_none()
+    {
+        "target_plus_star_local_cygv_blocked_missing_semigroup_or_grading_certificate"
+    } else {
+        "target_plus_star_local_cygv_blocked_missing_tensor_or_chamber_certificate"
+    }
+    .to_string();
+    LocalCygvStarUnionTargetPlusStarLocalCygvReadiness {
+        status,
+        hypersurface_shape: Some(shape),
+        local_q_matrix_rows: Some(local_q_matrix_rows),
+        local_cygv_wrapper_q_matrix_candidate,
+        local_cygv_phase_q_matrix_candidate,
+        target_relation_status,
+        orientation_candidates,
+        local_q_matrix_orientation_status,
+        local_q_matrix_layout_status,
+        local_cygv_q_matrix_phase_status,
+        local_semigroup_generator_status,
+        local_grading_vector_status,
+        local_intersection_tensor_status,
+        local_chamber_certificate_status,
+        actual_call_readiness,
+        missing_inputs,
+    }
+}
+
+fn blocked_target_plus_star_local_cygv_readiness(
+    status: &str,
+    missing_inputs: Vec<String>,
+) -> LocalCygvStarUnionTargetPlusStarLocalCygvReadiness {
+    LocalCygvStarUnionTargetPlusStarLocalCygvReadiness {
+        status: status.to_string(),
+        hypersurface_shape: None,
+        local_q_matrix_rows: None,
+        local_cygv_wrapper_q_matrix_candidate: None,
+        local_cygv_phase_q_matrix_candidate: None,
+        target_relation_status: "target_relation_unavailable".to_string(),
+        orientation_candidates: Vec::new(),
+        local_q_matrix_orientation_status: "local_q_orientation_not_evaluated".to_string(),
+        local_q_matrix_layout_status: "local_q_matrix_layout_not_evaluated".to_string(),
+        local_cygv_q_matrix_phase_status: "local_q_matrix_phase_not_evaluated".to_string(),
+        local_semigroup_generator_status: "local_semigroup_generators_not_evaluated".to_string(),
+        local_grading_vector_status: "local_grading_not_evaluated".to_string(),
+        local_intersection_tensor_status: "local_intersection_tensor_not_evaluated".to_string(),
+        local_chamber_certificate_status: "local_chamber_certificate_not_evaluated".to_string(),
+        actual_call_readiness: "blocked_missing_source_derived_inputs".to_string(),
+        missing_inputs,
+    }
+}
+
 fn global_basis_known_qn_history(
     basis_dense: &[i64],
     context: &ValidatedContext<'_>,
@@ -23466,6 +23765,25 @@ mod tests {
                     relation_rational_coordinates: None,
                     relation_rational_denominators: None,
                 },
+            shared_two_simplex_star_union_target_plus_star_local_cygv_readiness:
+                LocalCygvStarUnionTargetPlusStarLocalCygvReadiness {
+                    status: "test".to_string(),
+                    hypersurface_shape: None,
+                    local_q_matrix_rows: None,
+                    local_cygv_wrapper_q_matrix_candidate: None,
+                    local_cygv_phase_q_matrix_candidate: None,
+                    target_relation_status: "test".to_string(),
+                    orientation_candidates: Vec::new(),
+                    local_q_matrix_orientation_status: "test".to_string(),
+                    local_q_matrix_layout_status: "test".to_string(),
+                    local_cygv_q_matrix_phase_status: "test".to_string(),
+                    local_semigroup_generator_status: "test".to_string(),
+                    local_grading_vector_status: "test".to_string(),
+                    local_intersection_tensor_status: "test".to_string(),
+                    local_chamber_certificate_status: "test".to_string(),
+                    actual_call_readiness: "test".to_string(),
+                    missing_inputs: Vec::new(),
+                },
             shared_two_simplex_star_union_chamber_coverage_status: "test".to_string(),
             shared_two_simplex_star_union_chamber_covered_simplex_count: 0,
             shared_two_simplex_star_union_chamber_uncovered_point_indices: Vec::new(),
@@ -26303,6 +26621,124 @@ mod tests {
         assert_eq!(hint.charge_basis, Some(vec![vec![1, -1, -1, 1]]));
         assert_eq!(hint.charge_row_sums, Some(vec![0]));
         assert_eq!(hint.relation_coordinates, Some(vec![1]));
+    }
+
+    #[test]
+    fn target_plus_star_local_cygv_readiness_keeps_two_parameter_support_blocked() {
+        let support = LocalCygvStarUnionTargetPlusStarSupportHint {
+            status:
+                "target_plus_star_support_multi_parameter_integral_relation:affine_rank_4:charge_rows_2"
+                    .to_string(),
+            point_indices: vec![46, 55, 195, 208, 211, 212, 214],
+            affine_rank: Some(4),
+            charge_basis: Some(vec![
+                vec![1, 0, -1, 1, -1, 0, 0],
+                vec![1, -1, -2, 2, 0, 1, -1],
+            ]),
+            charge_row_sums: Some(vec![0, 0]),
+            relation_coordinates: Some(vec![3, -1]),
+            relation_rational_coordinates: Some(vec!["3".to_string(), "-1".to_string()]),
+            relation_rational_denominators: Some(vec!["1".to_string(), "1".to_string()]),
+        };
+
+        let readiness = local_cygv_star_union_target_plus_star_local_cygv_readiness(&support);
+
+        assert_eq!(
+            readiness.status,
+            "target_plus_star_local_cygv_blocked_not_compact_threefold_shape"
+        );
+        assert_eq!(
+            readiness.actual_call_readiness,
+            "blocked_missing_source_derived_inputs"
+        );
+        let shape = readiness
+            .hypersurface_shape
+            .as_ref()
+            .expect("shape should be computed");
+        assert_eq!(shape.q_rows, 7);
+        assert_eq!(shape.q_cols, 2);
+        assert_eq!(shape.cy_dim, 4);
+        assert!(shape.is_calabi_yau_charge);
+        assert!(!shape.is_compact_threefold_hypersurface_shape);
+        assert_eq!(
+            readiness.target_relation_status,
+            "target_relation_integral_in_target_plus_star_charge_basis"
+        );
+        assert_eq!(
+            readiness.local_q_matrix_orientation_status,
+            "local_q_orientation_blocked_no_positive_primitive_target"
+        );
+        assert_eq!(
+            readiness.local_cygv_q_matrix_phase_status,
+            "local_q_matrix_phase_blocked_no_wrapper_q_matrix"
+        );
+        assert!(
+            readiness
+                .missing_inputs
+                .contains(&"compact_threefold_hypersurface_shape".to_string())
+        );
+        assert!(
+            readiness
+                .missing_inputs
+                .contains(&"local_intersection_tensor".to_string())
+        );
+        assert!(
+            readiness
+                .missing_inputs
+                .contains(&"local_chamber_certificate".to_string())
+        );
+    }
+
+    #[test]
+    fn target_plus_star_local_cygv_readiness_reports_higher_rank_semigroup_gap() {
+        let support = LocalCygvStarUnionTargetPlusStarSupportHint {
+            status:
+                "target_plus_star_support_multi_parameter_integral_relation:affine_rank_4:charge_rows_2"
+                    .to_string(),
+            point_indices: vec![2, 55, 195, 208, 211, 212, 214],
+            affine_rank: Some(4),
+            charge_basis: Some(vec![
+                vec![1, 0, -1, -1, 1, 0, 0],
+                vec![1, 1, 0, -2, 0, -1, 1],
+            ]),
+            charge_row_sums: Some(vec![0, 0]),
+            relation_coordinates: Some(vec![1, 1]),
+            relation_rational_coordinates: Some(vec!["1".to_string(), "1".to_string()]),
+            relation_rational_denominators: Some(vec!["1".to_string(), "1".to_string()]),
+        };
+
+        let readiness = local_cygv_star_union_target_plus_star_local_cygv_readiness(&support);
+
+        assert_eq!(
+            readiness.local_q_matrix_orientation_status,
+            "source_derived_target_positive_orientation"
+        );
+        assert_eq!(
+            readiness.local_semigroup_generator_status,
+            "local_semigroup_generators_blocked_not_one_parameter_unit"
+        );
+        assert_eq!(
+            readiness.local_grading_vector_status,
+            "local_grading_requires_higher_rank_dual_cone_certificate"
+        );
+        assert_eq!(
+            readiness.local_cygv_q_matrix_phase_status,
+            "local_q_matrix_phase_blocked_no_dimension_three_phase"
+        );
+        assert_eq!(
+            readiness.orientation_candidates[1].target_candidate_status,
+            "target_positive_but_omega_bucket_unavailable"
+        );
+        assert!(
+            readiness
+                .missing_inputs
+                .contains(&"local_semigroup_generators".to_string())
+        );
+        assert!(
+            readiness
+                .missing_inputs
+                .contains(&"local_grading_vector".to_string())
+        );
     }
 
     #[test]

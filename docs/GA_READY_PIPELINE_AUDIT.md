@@ -1262,6 +1262,16 @@ to make the remaining GV layer more first-principles:
    This rules out treating the residual as a one-parameter scalar source
    formula; the missing computation is a certified two-parameter local
    chamber/qN history.
+   `/tmp/cyrus_gv_context_target_plus_star_local_cygv_readiness_report.json`
+   now tests that two-parameter support against the actual compact `cygv`
+   input shape. All nine target-plus-star handoffs are still
+   `blocked_missing_source_derived_inputs`; for targets `7`/`8`, the support is
+   Calabi-Yau charged but has `q_rows=7`, `q_cols=2`, and `cy_dim=4`, so it is
+   not a compact CY3 hypersurface input. Target `7` has no positive primitive
+   orientation for `[3,-1]`; target `8` has positive `[1,1]` coordinates but
+   still needs a source-derived higher-rank semigroup/grading certificate and
+   chamber/tensor data. So the next fix is a source-derived reduction or
+   chamber-transport history, not a direct raw `cygv` call.
    The full union-support height profile is now serialized as well. For
    targets `3`/`6`, the off-hyperplane zero-shared ray carries zero target and
    star coefficient; for targets `7`/`8`, the height `-1` zero-shared ray and

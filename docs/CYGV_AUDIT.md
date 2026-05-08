@@ -3409,6 +3409,24 @@ not one-parameter scalar residuals. Target `7` has support
 remaining chamber/qN object is a two-parameter local support with an integral
 target direction; reducing it to a one-parameter formula would be another
 shortcut.
+Regenerating as
+`/tmp/cyrus_gv_context_target_plus_star_local_cygv_readiness_report.json` now
+evaluates that support against the actual compact `cygv` input shape
+requirements before any value is attempted. All nine target-plus-star local
+handoffs remain `blocked_missing_source_derived_inputs`. In aggregate, four
+rows are blocked as
+`target_plus_star_local_cygv_blocked_not_compact_threefold_shape`, two lack an
+integral target coordinate, two lack a charge basis because the target-plus-star
+relation is absent, and one reaches a compact threefold phase but still lacks
+tensor/chamber certification. For the concrete target `7`/`8` blocker, both
+supports are Calabi-Yau charge rows with `q_rows=7`, `q_cols=2`,
+`ambient_dim=5`, and `cy_dim=4`; target `7` also has no nonnegative primitive
+orientation for coordinates `[3,-1]`, while target `8` has positive
+coordinates `[1,1]` but is blocked on a higher-rank semigroup and grading
+certificate plus the missing compact-threefold phase. This rules out handing
+the two-parameter target-plus-star row directly to compact `cygv`; the next
+object must be a source-derived chamber/reduction history, not a raw local
+`cygv` call.
 Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
 serializes a role-tagged height profile over the full union support. For
 targets `3`/`6`, the off-hyperplane zero-shared ray has height `-1` but zero
