@@ -3841,6 +3841,23 @@ uses a degree-16 generator, and targets `7`/`8` each use a degree-2
 therefore those unknown decomposition-term generators, not the known toric or
 source-derived rows around them.
 
+The chamber-generator report now also reconstructs local point-coordinate
+affine circuits for those generators and aggregates them at top level. In
+`/tmp/cyrus_star_union_all_chamber_generator_local_toric_aggregate.json`, all
+15 current-chamber generators and all 10 flipped-chamber generators reconstruct
+as `local_toric_affine_circuit_reconstructed`. The current generator ranks are
+`{2:5, 3:5, 4:5}` with support sizes `{4:5, 5:5, 6:5}`; the flipped generator
+ranks are `{2:2, 3:6, 4:2}` with support sizes `{4:2, 5:6, 6:2}`. Existing
+CKYZ source matching does not cover them: current CKYZ statuses are
+`ckyz_no_source_match:5` and `ckyz_not_run_non_rank_two_support:10`, while
+flipped statuses are `ckyz_no_source_match:2` and
+`ckyz_not_run_non_rank_two_support:8`. The target `1`, `7`, and `8`
+decomposition terms therefore remain source-history/chamber-construction
+problems: the rank-two terms do not match the current CKYZ source library, and
+the rank-three/rank-four terms are outside the rank-two potent-ray extractor.
+No local CKYZ candidate is promoted into corrected-chamber GV history from this
+diagnostic.
+
 The no-replay boundary around the standalone GV binary is stricter now:
 `mcallister_gv` no longer reads `dual_curves.dat` or `dual_curves_gv.dat`.
 Those files remain validation checkpoints for tests and audits only; the

@@ -29,8 +29,10 @@ use cyrus_core::triangulation::{
 use cyrus_core::types::rational::Rational;
 use cyrus_core::types::{f64::F64, tags::Finite, tags::Pos};
 use cyrus_core::{
-    CygvQnTracePolynomial, GvDilogFailure, Intersection, Point,
-    certify_nef_partition_cytools_style, check_stable_weyl_candidate_certificate,
+    CkyzLocalSurfaceKind, CygvQnTracePolynomial, GvDilogFailure, Intersection,
+    LocalToricCircuitKind, Point, certify_nef_partition_cytools_style,
+    check_stable_weyl_candidate_certificate, ckyz_local_surface_target_degrees,
+    compute_ckyz_local_surface_gv_invariants_for_multiples_with_causal_domain,
     compute_gv_invariants_with_explicit_semigroup,
     compute_gv_invariants_with_explicit_semigroup_qn_trace,
     compute_gv_invariants_with_provided_generators,
@@ -38,8 +40,9 @@ use cyrus_core::{
     compute_gw_coefficient_trace_with_explicit_semigroup,
     compute_gw_coefficient_trace_with_provided_generators, curve_row_span_rank,
     diagnose_affine_toric_circuit, divisor_quadratic_vanishes_on_curve_facet,
-    gv_dilog_from_curve_volume_checked,
+    gv_dilog_from_curve_volume_checked, identify_ckyz_local_surface,
     integer_math::{integer_kernel, solve_linear_system_rational},
+    rank_two_local_charge_model, rank_two_local_support_signature,
     utils::gcd_list_int,
     weyl_reflection_matches_flop_transform,
 };
@@ -376,6 +379,16 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_generator_bounded_lower_seed_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_affine_rank_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_support_point_count_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_generator_ckyz_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_generator_ckyz_kind_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_flipped_chamber_cygv_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_flipped_chamber_cygv_gv_counts: BTreeMap<String, usize>,
@@ -386,6 +399,16 @@ struct ContextReport {
     local_cygv_source_resolution_star_union_flipped_chamber_generator_degree_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_flipped_chamber_generator_bounded_lower_seed_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_affine_rank_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_support_point_count_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_generator_ckyz_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_generator_ckyz_kind_counts:
         BTreeMap<String, usize>,
     local_phase_chamber_membership_certificate_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_hint_sample: Vec<LocalCygvSourceResolutionHintSummary>,
@@ -1017,10 +1040,34 @@ struct LocalCygvChamberSemigroupGeneratorContext {
     source_derived_gv: Option<String>,
     source_class_status: Option<String>,
     source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
+    local_toric_diagnostic: LocalCygvChamberGeneratorLocalToricDiagnostic,
     lower_seed_sum_decomposition: Option<CygvSeedSumDecomposition>,
     bounded_lower_seed_decomposition: Option<CygvBoundedSeedDecompositionSummary>,
     lower_seed_decomposition_error: Option<String>,
     error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvChamberGeneratorLocalToricDiagnostic {
+    status: String,
+    support_point_count: usize,
+    affine_rank: Option<usize>,
+    coefficient_counts: BTreeMap<i64, usize>,
+    local_charge_basis: Option<Vec<Vec<i64>>>,
+    local_coordinates: Option<Vec<LocalCygvChamberGeneratorLocalCoordinate>>,
+    local_toric_kind: Option<String>,
+    ckyz_status: String,
+    ckyz_kind: Option<String>,
+    ckyz_source_target_direction: Option<Vec<i64>>,
+    ckyz_first_multiple_target_degree: Option<Vec<usize>>,
+    ckyz_first_multiple_gv_candidate: Option<String>,
+    error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvChamberGeneratorLocalCoordinate {
+    point_index: usize,
+    coordinates: Vec<i64>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -16228,6 +16275,26 @@ fn build_report(
         chamber_semigroup_generator_bounded_lower_seed_status_counts(
             current_chamber_generator_contexts(&local_cygv_source_resolution_hint_sample),
         );
+    let local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_status_counts =
+        chamber_semigroup_generator_local_toric_status_counts(current_chamber_generator_contexts(
+            &local_cygv_source_resolution_hint_sample,
+        ));
+    let local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_affine_rank_counts =
+        chamber_semigroup_generator_local_toric_affine_rank_counts(
+            current_chamber_generator_contexts(&local_cygv_source_resolution_hint_sample),
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_support_point_count_counts =
+        chamber_semigroup_generator_local_toric_support_point_count_counts(
+            current_chamber_generator_contexts(&local_cygv_source_resolution_hint_sample),
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_generator_ckyz_status_counts =
+        chamber_semigroup_generator_ckyz_status_counts(current_chamber_generator_contexts(
+            &local_cygv_source_resolution_hint_sample,
+        ));
+    let local_cygv_source_resolution_star_union_current_chamber_generator_ckyz_kind_counts =
+        chamber_semigroup_generator_ckyz_kind_counts(current_chamber_generator_contexts(
+            &local_cygv_source_resolution_hint_sample,
+        ));
     let local_cygv_source_resolution_star_union_flipped_chamber_cygv_status_counts =
         provided_generator_cygv_probe_status_counts(
             local_cygv_source_resolution_hint_sample
@@ -16258,6 +16325,26 @@ fn build_report(
         chamber_semigroup_generator_bounded_lower_seed_status_counts(
             flipped_chamber_generator_contexts(&local_cygv_source_resolution_hint_sample),
         );
+    let local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_status_counts =
+        chamber_semigroup_generator_local_toric_status_counts(flipped_chamber_generator_contexts(
+            &local_cygv_source_resolution_hint_sample,
+        ));
+    let local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_affine_rank_counts =
+        chamber_semigroup_generator_local_toric_affine_rank_counts(
+            flipped_chamber_generator_contexts(&local_cygv_source_resolution_hint_sample),
+        );
+    let local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_support_point_count_counts =
+        chamber_semigroup_generator_local_toric_support_point_count_counts(
+            flipped_chamber_generator_contexts(&local_cygv_source_resolution_hint_sample),
+        );
+    let local_cygv_source_resolution_star_union_flipped_chamber_generator_ckyz_status_counts =
+        chamber_semigroup_generator_ckyz_status_counts(flipped_chamber_generator_contexts(
+            &local_cygv_source_resolution_hint_sample,
+        ));
+    let local_cygv_source_resolution_star_union_flipped_chamber_generator_ckyz_kind_counts =
+        chamber_semigroup_generator_ckyz_kind_counts(flipped_chamber_generator_contexts(
+            &local_cygv_source_resolution_hint_sample,
+        ));
     let missing_local_cygv_missing_source_input_counts = local_cygv_missing_source_input_counts(
         targets
             .iter()
@@ -17244,12 +17331,22 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_generator_known_qn_history_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_generator_degree_counts,
         local_cygv_source_resolution_star_union_current_chamber_generator_bounded_lower_seed_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_affine_rank_counts,
+        local_cygv_source_resolution_star_union_current_chamber_generator_local_toric_support_point_count_counts,
+        local_cygv_source_resolution_star_union_current_chamber_generator_ckyz_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_generator_ckyz_kind_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_cygv_status_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_cygv_gv_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_cygv_qn_status_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_generator_known_qn_history_status_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_generator_degree_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_generator_bounded_lower_seed_status_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_status_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_affine_rank_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_generator_local_toric_support_point_count_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_generator_ckyz_status_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_generator_ckyz_kind_counts,
         local_phase_chamber_membership_certificate_status_counts,
         local_cygv_source_resolution_hint_sample,
         local_cygv_target_candidate_status_counts,
@@ -18675,6 +18772,63 @@ fn chamber_semigroup_generator_bounded_lower_seed_status(
         return format!("error_{}", status_error_fragment(error));
     }
     "not_run_or_not_applicable".to_string()
+}
+
+fn chamber_semigroup_generator_local_toric_status_counts<'a>(
+    contexts: impl IntoIterator<Item = &'a LocalCygvChamberSemigroupGeneratorContext>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for context in contexts {
+        *counts
+            .entry(context.local_toric_diagnostic.status.clone())
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn chamber_semigroup_generator_local_toric_affine_rank_counts<'a>(
+    contexts: impl IntoIterator<Item = &'a LocalCygvChamberSemigroupGeneratorContext>,
+) -> BTreeMap<String, usize> {
+    optional_usize_count_counts(
+        contexts
+            .into_iter()
+            .map(|context| context.local_toric_diagnostic.affine_rank),
+        "missing_affine_rank",
+    )
+}
+
+fn chamber_semigroup_generator_local_toric_support_point_count_counts<'a>(
+    contexts: impl IntoIterator<Item = &'a LocalCygvChamberSemigroupGeneratorContext>,
+) -> BTreeMap<String, usize> {
+    optional_usize_count_counts(
+        contexts
+            .into_iter()
+            .map(|context| Some(context.local_toric_diagnostic.support_point_count)),
+        "missing_support_point_count",
+    )
+}
+
+fn chamber_semigroup_generator_ckyz_status_counts<'a>(
+    contexts: impl IntoIterator<Item = &'a LocalCygvChamberSemigroupGeneratorContext>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for context in contexts {
+        *counts
+            .entry(context.local_toric_diagnostic.ckyz_status.clone())
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn chamber_semigroup_generator_ckyz_kind_counts<'a>(
+    contexts: impl IntoIterator<Item = &'a LocalCygvChamberSemigroupGeneratorContext>,
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        contexts
+            .into_iter()
+            .map(|context| context.local_toric_diagnostic.ckyz_kind.as_deref()),
+        "not_identified",
+    )
 }
 
 fn local_cygv_source_resolution_star_union_opposite_star_wall_circuit_status_counts(
@@ -22134,6 +22288,7 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
         .map(|context| {
             chamber_semigroup_generator_contexts(
                 &star_union.point_indices,
+                point_samples,
                 charge_basis,
                 &current_generators,
                 context,
@@ -22144,6 +22299,7 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
         .map(|context| {
             chamber_semigroup_generator_contexts(
                 &star_union.point_indices,
+                point_samples,
                 charge_basis,
                 &flipped_generators,
                 context,
@@ -22270,6 +22426,7 @@ fn local_cygv_star_union_chamber_generators_in_charge_basis(
 
 fn chamber_semigroup_generator_contexts(
     point_indices: &[usize],
+    point_samples: &[OriginCircuitRelationPointSample],
     charge_basis: &[Vec<i64>],
     generators: &[Vec<i64>],
     context: &ValidatedContext<'_>,
@@ -22282,6 +22439,7 @@ fn chamber_semigroup_generator_contexts(
                 generator_index,
                 generator,
                 point_indices,
+                point_samples,
                 charge_basis,
                 context,
             )
@@ -22293,6 +22451,7 @@ fn chamber_semigroup_generator_context(
     generator_index: usize,
     generator: &[i64],
     point_indices: &[usize],
+    point_samples: &[OriginCircuitRelationPointSample],
     charge_basis: &[Vec<i64>],
     context: &ValidatedContext<'_>,
 ) -> LocalCygvChamberSemigroupGeneratorContext {
@@ -22315,6 +22474,9 @@ fn chamber_semigroup_generator_context(
             source_derived_gv: None,
             source_class_status: None,
             source_ray_ambient_nonzero: None,
+            local_toric_diagnostic: chamber_generator_local_toric_diagnostic_not_run(
+                "point_relation_unavailable",
+            ),
             lower_seed_sum_decomposition: None,
             bounded_lower_seed_decomposition: None,
             lower_seed_decomposition_error: None,
@@ -22355,6 +22517,9 @@ fn chamber_semigroup_generator_context(
             source_derived_gv: None,
             source_class_status: None,
             source_ray_ambient_nonzero: None,
+            local_toric_diagnostic: chamber_generator_local_toric_diagnostic_not_run(
+                "zero_point_relation",
+            ),
             lower_seed_sum_decomposition: None,
             bounded_lower_seed_decomposition: None,
             lower_seed_decomposition_error: None,
@@ -22391,6 +22556,8 @@ fn chamber_semigroup_generator_context(
     let degree = match curve_degree(&basis_dense, context.grading) {
         Ok(degree) => degree,
         Err(error) => {
+            let local_toric_diagnostic =
+                chamber_generator_local_toric_diagnostic(&point_relation_nonzero, point_samples);
             return LocalCygvChamberSemigroupGeneratorContext {
                 generator_index,
                 chamber_coordinate: generator.to_vec(),
@@ -22406,6 +22573,7 @@ fn chamber_semigroup_generator_context(
                 source_derived_gv: None,
                 source_class_status: None,
                 source_ray_ambient_nonzero: None,
+                local_toric_diagnostic,
                 lower_seed_sum_decomposition: None,
                 bounded_lower_seed_decomposition: None,
                 lower_seed_decomposition_error: None,
@@ -22422,6 +22590,8 @@ fn chamber_semigroup_generator_context(
         bounded_lower_seed_decomposition,
         lower_seed_decomposition_error,
     ) = star_union_lower_seed_diagnostics(&basis_dense, degree, context, true);
+    let local_toric_diagnostic =
+        chamber_generator_local_toric_diagnostic(&point_relation_nonzero, point_samples);
 
     LocalCygvChamberSemigroupGeneratorContext {
         generator_index,
@@ -22436,6 +22606,7 @@ fn chamber_semigroup_generator_context(
         source_derived_gv,
         source_class_status,
         source_ray_ambient_nonzero,
+        local_toric_diagnostic,
         lower_seed_sum_decomposition,
         bounded_lower_seed_decomposition,
         lower_seed_decomposition_error,
@@ -22479,6 +22650,243 @@ fn chamber_semigroup_generator_point_relation(
         })?;
     }
     Ok(relation)
+}
+
+fn chamber_generator_local_toric_diagnostic_not_run(
+    reason: &str,
+) -> LocalCygvChamberGeneratorLocalToricDiagnostic {
+    LocalCygvChamberGeneratorLocalToricDiagnostic {
+        status: format!("not_run_{reason}"),
+        support_point_count: 0,
+        affine_rank: None,
+        coefficient_counts: BTreeMap::new(),
+        local_charge_basis: None,
+        local_coordinates: None,
+        local_toric_kind: None,
+        ckyz_status: "ckyz_not_run".to_string(),
+        ckyz_kind: None,
+        ckyz_source_target_direction: None,
+        ckyz_first_multiple_target_degree: None,
+        ckyz_first_multiple_gv_candidate: None,
+        error: None,
+    }
+}
+
+fn chamber_generator_local_toric_diagnostic(
+    point_relation_nonzero: &[(usize, i64)],
+    point_samples: &[OriginCircuitRelationPointSample],
+) -> LocalCygvChamberGeneratorLocalToricDiagnostic {
+    let blocked = |status: &str,
+                   support_point_count: usize,
+                   error: Option<String>|
+     -> LocalCygvChamberGeneratorLocalToricDiagnostic {
+        LocalCygvChamberGeneratorLocalToricDiagnostic {
+            status: status.to_string(),
+            support_point_count,
+            affine_rank: None,
+            coefficient_counts: BTreeMap::new(),
+            local_charge_basis: None,
+            local_coordinates: None,
+            local_toric_kind: None,
+            ckyz_status: "ckyz_not_run".to_string(),
+            ckyz_kind: None,
+            ckyz_source_target_direction: None,
+            ckyz_first_multiple_target_degree: None,
+            ckyz_first_multiple_gv_candidate: None,
+            error,
+        }
+    };
+
+    if point_relation_nonzero.is_empty() {
+        return blocked("local_toric_relation_empty", 0, None);
+    }
+    let point_sample_by_index = point_samples
+        .iter()
+        .map(|sample| (sample.point_index, sample))
+        .collect::<BTreeMap<_, _>>();
+    let mut coefficients = Vec::with_capacity(point_relation_nonzero.len());
+    let mut points = Vec::with_capacity(point_relation_nonzero.len());
+    for &(point_index, coefficient) in point_relation_nonzero {
+        let Some(sample) = point_sample_by_index.get(&point_index) else {
+            return blocked(
+                "local_toric_relation_missing_coordinate_sample",
+                point_relation_nonzero.len(),
+                Some(format!("missing coordinate sample for point {point_index}")),
+            );
+        };
+        coefficients.push(coefficient);
+        points.push(Point::new(sample.coordinates.clone()));
+    }
+
+    let diagnostic = match diagnose_affine_toric_circuit(&coefficients, &points) {
+        Ok(Some(diagnostic)) => diagnostic,
+        Ok(None) => {
+            return blocked(
+                "local_toric_relation_not_affine_circuit",
+                point_relation_nonzero.len(),
+                None,
+            );
+        }
+        Err(error) => {
+            return blocked(
+                "local_toric_relation_error",
+                point_relation_nonzero.len(),
+                Some(error.to_string()),
+            );
+        }
+    };
+
+    let local_coordinates = diagnostic
+        .local_coordinates
+        .iter()
+        .map(|coordinate| {
+            let point_index = point_relation_nonzero
+                .get(coordinate.point_index)
+                .map_or(coordinate.point_index, |(point_index, _)| *point_index);
+            LocalCygvChamberGeneratorLocalCoordinate {
+                point_index,
+                coordinates: coordinate.coordinates.clone(),
+            }
+        })
+        .collect::<Vec<_>>();
+    let local_toric_kind = diagnostic.kind.as_ref().map(local_toric_circuit_kind_label);
+    let (ckyz_status, ckyz_kind, ckyz_source_target_direction, ckyz_first_degree, ckyz_gv) =
+        chamber_generator_ckyz_diagnostic(&diagnostic);
+
+    LocalCygvChamberGeneratorLocalToricDiagnostic {
+        status: "local_toric_affine_circuit_reconstructed".to_string(),
+        support_point_count: point_relation_nonzero.len(),
+        affine_rank: Some(diagnostic.affine_rank),
+        coefficient_counts: diagnostic.coefficient_counts,
+        local_charge_basis: Some(diagnostic.local_charge_basis),
+        local_coordinates: Some(local_coordinates),
+        local_toric_kind,
+        ckyz_status,
+        ckyz_kind,
+        ckyz_source_target_direction,
+        ckyz_first_multiple_target_degree: ckyz_first_degree,
+        ckyz_first_multiple_gv_candidate: ckyz_gv,
+        error: None,
+    }
+}
+
+fn chamber_generator_ckyz_diagnostic(
+    diagnostic: &cyrus_core::AffineToricCircuitDiagnostic,
+) -> (
+    String,
+    Option<String>,
+    Option<Vec<i64>>,
+    Option<Vec<usize>>,
+    Option<String>,
+) {
+    let Some(signature) = rank_two_local_support_signature(diagnostic) else {
+        return (
+            "ckyz_not_run_non_rank_two_support".to_string(),
+            None,
+            None,
+            None,
+            None,
+        );
+    };
+    let model = match rank_two_local_charge_model(&signature) {
+        Ok(model) => model,
+        Err(error) => {
+            return (
+                format!(
+                    "ckyz_charge_model_error_{}",
+                    status_error_fragment(&error.to_string())
+                ),
+                None,
+                None,
+                None,
+                None,
+            );
+        }
+    };
+    let identification = match identify_ckyz_local_surface(&model) {
+        Ok(Some(identification)) => identification,
+        Ok(None) => {
+            return ("ckyz_no_source_match".to_string(), None, None, None, None);
+        }
+        Err(error) => {
+            return (
+                format!(
+                    "ckyz_identification_error_{}",
+                    status_error_fragment(&error.to_string())
+                ),
+                None,
+                None,
+                None,
+                None,
+            );
+        }
+    };
+
+    let kind = ckyz_surface_kind_label(&identification.kind).to_string();
+    let source_target_direction = identification.source_target_direction.clone();
+    let first_degree = match ckyz_local_surface_target_degrees(&identification, 1) {
+        Ok(mut degrees) => degrees.pop(),
+        Err(error) => {
+            return (
+                format!(
+                    "ckyz_target_degree_error_{}",
+                    status_error_fragment(&error.to_string())
+                ),
+                Some(kind),
+                Some(source_target_direction),
+                None,
+                None,
+            );
+        }
+    };
+    let gv = match compute_ckyz_local_surface_gv_invariants_for_multiples_with_causal_domain(
+        &identification,
+        1,
+    ) {
+        Ok(gvs) => first_degree
+            .as_ref()
+            .and_then(|degree| gvs.get(degree))
+            .map(ToString::to_string),
+        Err(error) => {
+            return (
+                format!(
+                    "ckyz_gv_error_{}",
+                    status_error_fragment(&error.to_string())
+                ),
+                Some(kind),
+                Some(source_target_direction),
+                first_degree,
+                None,
+            );
+        }
+    };
+    let status = if gv.is_some() {
+        "ckyz_identified_first_multiple_gv_computed"
+    } else {
+        "ckyz_identified_first_multiple_gv_missing"
+    };
+    (
+        status.to_string(),
+        Some(kind),
+        Some(source_target_direction),
+        first_degree,
+        gv,
+    )
+}
+
+fn local_toric_circuit_kind_label(kind: &LocalToricCircuitKind) -> String {
+    match kind {
+        LocalToricCircuitKind::LocalP2Triangle { .. } => "local_p2_triangle".to_string(),
+    }
+}
+
+fn ckyz_surface_kind_label(kind: &CkyzLocalSurfaceKind) -> &'static str {
+    match kind {
+        CkyzLocalSurfaceKind::LocalP2 => "local_p2",
+        CkyzLocalSurfaceKind::HirzebruchF0 => "hirzebruch_f0",
+        CkyzLocalSurfaceKind::HirzebruchF1 => "hirzebruch_f1",
+        CkyzLocalSurfaceKind::Polygon5 => "polygon5",
+    }
 }
 
 fn chamber_semigroup_generator_known_qn_history_status_counts(
@@ -27964,10 +28372,31 @@ mod tests {
             secondary_cone_heights: None,
         };
         let point_indices = vec![0, 1, 2];
+        let point_samples = vec![
+            OriginCircuitRelationPointSample {
+                point_index: 0,
+                coefficient: 0,
+                coordinates: vec![0, 0],
+                face_dimension: None,
+            },
+            OriginCircuitRelationPointSample {
+                point_index: 1,
+                coefficient: 0,
+                coordinates: vec![1, 0],
+                face_dimension: None,
+            },
+            OriginCircuitRelationPointSample {
+                point_index: 2,
+                coefficient: 0,
+                coordinates: vec![0, 1],
+                face_dimension: None,
+            },
+        ];
         let charge_basis = vec![vec![0, 1, 0], vec![0, 0, 1]];
 
         let contexts = chamber_semigroup_generator_contexts(
             &point_indices,
+            &point_samples,
             &charge_basis,
             &[vec![2, 3]],
             &context,
@@ -27985,6 +28414,10 @@ mod tests {
             "known_nonzero_toric_gv"
         );
         assert_eq!(contexts[0].toric_gv.as_deref(), Some("-7"));
+        assert_eq!(
+            contexts[0].local_toric_diagnostic.status,
+            "local_toric_relation_not_affine_circuit"
+        );
         assert_eq!(
             chamber_semigroup_generator_known_qn_history_status_counts(&contexts),
             BTreeMap::from([("known_nonzero_toric_gv".to_string(), 1)])
@@ -30137,6 +30570,17 @@ mod tests {
             status: "not_found_up_to_4".to_string(),
             ..bounded.clone()
         };
+        let mut known_local_toric = chamber_generator_local_toric_diagnostic_not_run("test");
+        known_local_toric.status = "local_toric_affine_circuit_reconstructed".to_string();
+        known_local_toric.support_point_count = 4;
+        known_local_toric.affine_rank = Some(2);
+        known_local_toric.ckyz_status = "ckyz_no_source_match".to_string();
+        let mut unknown_local_toric = chamber_generator_local_toric_diagnostic_not_run("test");
+        unknown_local_toric.status = "local_toric_affine_circuit_reconstructed".to_string();
+        unknown_local_toric.support_point_count = 5;
+        unknown_local_toric.affine_rank = Some(3);
+        unknown_local_toric.ckyz_status = "ckyz_not_run_non_rank_two_support".to_string();
+        unknown_local_toric.ckyz_kind = Some("local_p2".to_string());
         let known = LocalCygvChamberSemigroupGeneratorContext {
             generator_index: 0,
             chamber_coordinate: vec![1, 0, 0],
@@ -30150,6 +30594,7 @@ mod tests {
             source_derived_gv: Some("1".to_string()),
             source_class_status: None,
             source_ray_ambient_nonzero: None,
+            local_toric_diagnostic: known_local_toric,
             lower_seed_sum_decomposition: None,
             bounded_lower_seed_decomposition: Some(bounded),
             lower_seed_decomposition_error: None,
@@ -30161,6 +30606,7 @@ mod tests {
             degree: Some(6),
             known_qn_history_status: "unknown_not_toric_covered".to_string(),
             source_derived_gv: None,
+            local_toric_diagnostic: unknown_local_toric,
             bounded_lower_seed_decomposition: Some(not_found),
             ..known.clone()
         };
@@ -30193,6 +30639,20 @@ mod tests {
         let lower_seed_counts = chamber_semigroup_generator_bounded_lower_seed_status_counts([
             &known, &unknown, &invalid, &not_run,
         ]);
+        let local_toric_counts = chamber_semigroup_generator_local_toric_status_counts([
+            &known, &unknown, &invalid, &not_run,
+        ]);
+        let local_toric_rank_counts = chamber_semigroup_generator_local_toric_affine_rank_counts([
+            &known, &unknown, &invalid, &not_run,
+        ]);
+        let local_toric_support_counts =
+            chamber_semigroup_generator_local_toric_support_point_count_counts([
+                &known, &unknown, &invalid, &not_run,
+            ]);
+        let ckyz_status_counts =
+            chamber_semigroup_generator_ckyz_status_counts([&known, &unknown, &invalid, &not_run]);
+        let ckyz_kind_counts =
+            chamber_semigroup_generator_ckyz_kind_counts([&known, &unknown, &invalid, &not_run]);
 
         assert_eq!(
             history_counts.get("known_nonzero_source_gv").copied(),
@@ -30229,6 +30689,28 @@ mod tests {
             lower_seed_counts.get("not_run_or_not_applicable").copied(),
             Some(1)
         );
+        assert_eq!(
+            local_toric_counts
+                .get("local_toric_affine_circuit_reconstructed")
+                .copied(),
+            Some(4)
+        );
+        assert_eq!(local_toric_rank_counts.get("2").copied(), Some(3));
+        assert_eq!(local_toric_rank_counts.get("3").copied(), Some(1));
+        assert_eq!(local_toric_support_counts.get("4").copied(), Some(3));
+        assert_eq!(local_toric_support_counts.get("5").copied(), Some(1));
+        assert_eq!(
+            ckyz_status_counts.get("ckyz_no_source_match").copied(),
+            Some(3)
+        );
+        assert_eq!(
+            ckyz_status_counts
+                .get("ckyz_not_run_non_rank_two_support")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(ckyz_kind_counts.get("local_p2").copied(), Some(1));
+        assert_eq!(ckyz_kind_counts.get("not_identified").copied(), Some(3));
     }
 
     #[test]
