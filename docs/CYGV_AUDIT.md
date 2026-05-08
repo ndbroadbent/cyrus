@@ -3257,9 +3257,10 @@ Regenerating as
 diagnostic one-parameter unit-intersection-tensor `cygv` probe on those
 explicit point-row charges. Both target `7` and target `8` return toy GV `0`
 with status
-`star_union_target_plus_star_unit_tensor_probe_computed_with_unit_tensor_uncertified`.
+`star_union_target_plus_star_unit_tensor_probe_computed_with_unit_tensor_not_compact_threefold_shape_cy_dim_5_uncertified`.
 This rules out that naive unit-tensor normalization as the missing source, but
-it is not a promotable corrected-chamber GV value because the local
+it is not a promotable corrected-chamber GV value because the one-parameter
+compression is not a compact threefold hypersurface shape and the real local
 intersection tensor, chamber certificate, and semigroup remain uncertified.
 Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
 serializes a role-tagged height profile over the full union support. For

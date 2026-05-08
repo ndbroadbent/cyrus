@@ -1032,9 +1032,9 @@ to make the remaining GV layer more first-principles:
    `target+star=[1,1,-1]`; both have sorted point-coefficient signature
    `[-3,-1,-1,1,1,1,2]`.
    A unit-tensor diagnostic on the explicit point-row charges now returns toy
-   GV `0` for both targets. The report labels this as
-   `computed_with_unit_tensor_uncertified`, so it stays diagnostic and does not
-   close the corrected-chamber GV gap.
+   GV `0` for both targets. The report labels the compressed one-parameter
+   row as `not_compact_threefold_shape_cy_dim_5`, so it stays diagnostic and
+   does not close the corrected-chamber GV gap.
    The full union-support height profile is now serialized as well. For
    targets `3`/`6`, the off-hyperplane zero-shared ray carries zero target and
    star coefficient; for targets `7`/`8`, the height `-1` zero-shared ray and

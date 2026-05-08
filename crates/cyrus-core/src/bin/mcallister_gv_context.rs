@@ -15768,6 +15768,14 @@ fn local_cygv_star_union_target_plus_star_unit_tensor_probe(
             error: None,
         };
     }
+    let cy_dim = i64::try_from(charge_row.len())
+        .ok()
+        .and_then(|len| len.checked_sub(2));
+    let shape_status = match cy_dim {
+        Some(3) => "compact_threefold_shape".to_string(),
+        Some(cy_dim) => format!("not_compact_threefold_shape_cy_dim_{cy_dim}"),
+        None => "shape_dimension_overflow".to_string(),
+    };
     let q_matrix = vec![charge_row];
     match one_parameter_primitive_cygv_value(
         &q_matrix,
@@ -15777,9 +15785,9 @@ fn local_cygv_star_union_target_plus_star_unit_tensor_probe(
     ) {
         Ok(value) => LocalCygvStarReducedUnitTensorProbe {
             candidate_gv: Some(value),
-            status:
-                "star_union_target_plus_star_unit_tensor_probe_computed_with_unit_tensor_uncertified"
-                    .to_string(),
+            status: format!(
+                "star_union_target_plus_star_unit_tensor_probe_computed_with_unit_tensor_{shape_status}_uncertified"
+            ),
             error: None,
         },
         Err(error) => LocalCygvStarReducedUnitTensorProbe {
@@ -20632,7 +20640,7 @@ mod tests {
         );
         assert_eq!(
             target_plus_star_unit_tensor_probe.status,
-            "star_union_target_plus_star_unit_tensor_probe_computed_with_unit_tensor_uncertified"
+            "star_union_target_plus_star_unit_tensor_probe_computed_with_unit_tensor_not_compact_threefold_shape_cy_dim_5_uncertified"
         );
         assert_eq!(target_plus_star_unit_tensor_probe.error, None);
         let star_union_height_profile = local_cygv_star_union_affine_height_profile(
