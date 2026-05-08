@@ -217,6 +217,33 @@ pub fn secondary_cone_hyperplanes_native_on_polytope_2faces_4d(
     secondary_cone_hyperplanes_native_on_faces(points, triangulation, &faces.twofaces)
 }
 
+/// Union secondary-cone inequalities from selected face triangulations.
+///
+/// This is the reusable core of CYTools' NTFE
+/// `generate_secondary_cone(..., require_star=False)` path: for each supplied
+/// 2-face triangulation, compute the native CPL inequalities in the ambient
+/// point-index space and deduplicate the resulting hyperplanes. Passing a
+/// subset of face triangulations leaves the omitted faces unconstrained.
+///
+/// # Errors
+///
+/// Returns an error if any supplied face triangulation has invalid point
+/// indices, degenerate simplices, or a non-unique adjacent circuit relation.
+pub fn expanded_secondary_cone_hyperplanes_from_face_triangulations(
+    points: &[Point],
+    face_triangulations: &[Triangulation],
+) -> Result<Vec<Vec<i64>>> {
+    validate_point_dimensions(points, "expanded secondary cone points")?;
+
+    let mut hyperplanes = BTreeSet::new();
+    for triangulation in face_triangulations {
+        for hyperplane in secondary_cone_hyperplanes_native(points, triangulation)? {
+            hyperplanes.insert(hyperplane);
+        }
+    }
+    Ok(hyperplanes.into_iter().collect())
+}
+
 /// Construct the circuit facets for one side of a bistellar flip.
 ///
 /// For a circuit `C = C_+ union C_-`, the two triangulations of the circuit are
@@ -995,6 +1022,39 @@ mod tests {
         .unwrap();
 
         assert_eq!(hyperplanes, vec![vec![-1, 1, -1, 1, 0]]);
+    }
+
+    #[test]
+    fn expanded_secondary_cone_unions_selected_face_triangulations() {
+        let points = vec![
+            Point::new(vec![0, 0, 0]),
+            Point::new(vec![1, 0, 0]),
+            Point::new(vec![1, 1, 0]),
+            Point::new(vec![0, 1, 0]),
+            Point::new(vec![0, 0, 1]),
+            Point::new(vec![1, 0, 1]),
+            Point::new(vec![1, 1, 1]),
+            Point::new(vec![0, 1, 1]),
+        ];
+        let face_triangulations = vec![
+            Triangulation::new(vec![vec![0, 1, 2], vec![0, 2, 3]]),
+            Triangulation::new(vec![vec![4, 5, 6], vec![4, 6, 7]]),
+            Triangulation::new(vec![vec![0, 1, 2], vec![0, 2, 3]]),
+        ];
+
+        let hyperplanes = expanded_secondary_cone_hyperplanes_from_face_triangulations(
+            &points,
+            &face_triangulations,
+        )
+        .unwrap();
+
+        assert_eq!(
+            hyperplanes,
+            vec![
+                vec![-1, 1, -1, 1, 0, 0, 0, 0],
+                vec![0, 0, 0, 0, -1, 1, -1, 1],
+            ]
+        );
     }
 
     #[test]

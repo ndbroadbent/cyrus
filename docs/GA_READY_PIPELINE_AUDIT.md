@@ -1648,6 +1648,15 @@ to make the remaining GV layer more first-principles:
    the 4D two-face sets first and then applies the native face-restriction
    circuit cone. Focused tests pin the 4D projective-simplex facet/two-face
    counts and the polytope-two-face secondary helper.
+   The secondary module now also exposes
+   `expanded_secondary_cone_hyperplanes_from_face_triangulations`, the
+   `require_star=False` core of CYTools' NTFE
+   `generate_secondary_cone`: it unions and deduplicates native CPL
+   inequalities from caller-selected two-face triangulations in ambient
+   point-index space. This gives Cyrus the first reusable primitive for
+   constructing expanded-secondary chamber constraints from selected local
+   face phases, but it does not yet enumerate NTFEs or solve the target
+   `7`/`8` chamber transport.
    `mcallister_first_principles` now exposes this as
    `--dump-corrected-chamber-2face-secondary-certificate` and adds
    `secondary_cone_2face_height_certificate` to corrected-chamber GV context

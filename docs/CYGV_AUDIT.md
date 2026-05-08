@@ -3777,6 +3777,13 @@ code. The old private `gv.rs` copy now delegates to this method, and the
 secondary module has a polytope-aware two-face helper that composes it with the
 native face-restriction cone. This removes another duplicated chamber
 diagnostic path, but it is not a substitute for the missing compact qN history.
+The same module now includes
+`expanded_secondary_cone_hyperplanes_from_face_triangulations`, which ports the
+`require_star=False` core of CYTools' NTFE `generate_secondary_cone`: supplied
+two-face triangulations are converted to native CPL inequalities in ambient
+point-index space and deduplicated. This is a building block for selected
+local face phases and expanded-secondary chamber constraints, not yet the NTFE
+enumerator or a source-certified `target+star` transport history.
 
 The first-principles runner can now dump that certificate directly with
 `--dump-corrected-chamber-2face-secondary-certificate`, and corrected-chamber
