@@ -1750,6 +1750,14 @@ to make the remaining GV layer more first-principles:
    choices on reconstructed local-toric chamber-generator diagnostics,
    preserving the ambient point labels. This is chamber-choice evidence for
    downstream transport diagnostics, not a promotion of any GV value.
+   The same diagnostic also serializes the corresponding sparse ambient
+   secondary-inequality rows for each circuit choice, which is the local
+   `triangface_ineqs`-shaped object needed before chamber transport can select
+   and certify a target-plus-star phase.
+   A fresh `/tmp/cyrus_star_union_all_circuit_choice_ineqs.json` run confirms
+   real 4-214-647 rows are serialized as sparse ambient CPL rows; the first
+   sampled current generator has opposite choices supported on ambient labels
+   `[0,32,41,148,151,180]`.
    The report also aggregates circuit-triangulation choice counts separately
    for current/flipped chamber generators and their decomposition terms, so
    all-target runs can distinguish actual two-choice circuit rows from

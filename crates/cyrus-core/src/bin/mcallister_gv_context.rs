@@ -1148,6 +1148,8 @@ struct LocalCygvChamberGeneratorLocalToricDiagnostic {
     circuit_triangulation_choice_count: Option<usize>,
     circuit_triangulation_choices: Option<Vec<Vec<Vec<usize>>>>,
     circuit_triangulation_error: Option<String>,
+    circuit_secondary_inequality_choices: Option<Vec<Vec<Vec<(usize, i64)>>>>,
+    circuit_secondary_inequality_error: Option<String>,
     ckyz_status: String,
     ckyz_kind: Option<String>,
     ckyz_source_target_direction: Option<Vec<i64>>,
@@ -23379,6 +23381,8 @@ fn chamber_generator_local_toric_diagnostic_not_run(
         circuit_triangulation_choice_count: None,
         circuit_triangulation_choices: None,
         circuit_triangulation_error: None,
+        circuit_secondary_inequality_choices: None,
+        circuit_secondary_inequality_error: None,
         ckyz_status: "ckyz_not_run".to_string(),
         ckyz_kind: None,
         ckyz_source_target_direction: None,
@@ -23517,6 +23521,8 @@ fn chamber_generator_local_toric_diagnostic(
             circuit_triangulation_choice_count: None,
             circuit_triangulation_choices: None,
             circuit_triangulation_error: None,
+            circuit_secondary_inequality_choices: None,
+            circuit_secondary_inequality_error: None,
             ckyz_status: "ckyz_not_run".to_string(),
             ckyz_kind: None,
             ckyz_source_target_direction: None,
@@ -23595,6 +23601,14 @@ fn chamber_generator_local_toric_diagnostic(
         }
         Err(error) => (None, None, Some(error.to_string())),
     };
+    let (circuit_secondary_inequality_choices, circuit_secondary_inequality_error) =
+        match circuit_secondary_inequality_choices_for_relation(
+            point_relation_nonzero,
+            point_samples,
+        ) {
+            Ok(choices) => (Some(choices), None),
+            Err(error) => (None, Some(error)),
+        };
 
     LocalCygvChamberGeneratorLocalToricDiagnostic {
         status: "local_toric_affine_circuit_reconstructed".to_string(),
@@ -23607,6 +23621,8 @@ fn chamber_generator_local_toric_diagnostic(
         circuit_triangulation_choice_count,
         circuit_triangulation_choices,
         circuit_triangulation_error,
+        circuit_secondary_inequality_choices,
+        circuit_secondary_inequality_error,
         ckyz_status,
         ckyz_kind,
         ckyz_source_target_direction,
@@ -23614,6 +23630,54 @@ fn chamber_generator_local_toric_diagnostic(
         ckyz_first_multiple_gv_candidate: ckyz_gv,
         error: None,
     }
+}
+
+fn circuit_secondary_inequality_choices_for_relation(
+    point_relation_nonzero: &[(usize, i64)],
+    point_samples: &[OriginCircuitRelationPointSample],
+) -> Result<Vec<Vec<Vec<(usize, i64)>>>, String> {
+    let max_point_index = point_relation_nonzero
+        .iter()
+        .map(|(point_index, _)| *point_index)
+        .max()
+        .ok_or_else(|| "circuit relation is empty".to_string())?;
+    let point_sample_by_index = point_samples
+        .iter()
+        .map(|sample| (sample.point_index, sample))
+        .collect::<BTreeMap<_, _>>();
+    let dimension = point_relation_nonzero
+        .iter()
+        .find_map(|(point_index, _)| point_sample_by_index.get(point_index))
+        .map(|sample| sample.coordinates.len())
+        .ok_or_else(|| "circuit relation has no coordinate samples".to_string())?;
+    let mut dense_points = (0..=max_point_index)
+        .map(|_| Point::new(vec![0; dimension]))
+        .collect::<Vec<_>>();
+    for &(point_index, _) in point_relation_nonzero {
+        let sample = point_sample_by_index
+            .get(&point_index)
+            .ok_or_else(|| format!("missing coordinate sample for point {point_index}"))?;
+        if sample.coordinates.len() != dimension {
+            return Err("circuit coordinate samples have inconsistent dimensions".to_string());
+        }
+        dense_points[point_index] = Point::new(sample.coordinates.clone());
+    }
+
+    let triangulations =
+        circuit_triangulation_choices(point_relation_nonzero).map_err(|error| error.to_string())?;
+    triangulations
+        .iter()
+        .map(|triangulation| {
+            secondary_cone_hyperplanes_native(&dense_points, triangulation)
+                .map(|hyperplanes| {
+                    hyperplanes
+                        .iter()
+                        .map(|hyperplane| sparse_from_dense(hyperplane))
+                        .collect::<Vec<_>>()
+                })
+                .map_err(|error| error.to_string())
+        })
+        .collect()
 }
 
 fn chamber_generator_ckyz_diagnostic(
@@ -29218,6 +29282,14 @@ mod tests {
             Some(vec![
                 vec![vec![10, 11, 12], vec![10, 12, 13]],
                 vec![vec![10, 11, 13], vec![11, 12, 13]],
+            ])
+        );
+        assert_eq!(diagnostic.circuit_secondary_inequality_error, None);
+        assert_eq!(
+            diagnostic.circuit_secondary_inequality_choices,
+            Some(vec![
+                vec![vec![(10, -1), (11, 1), (12, -1), (13, 1)]],
+                vec![vec![(10, 1), (11, -1), (12, 1), (13, -1)]],
             ])
         );
     }

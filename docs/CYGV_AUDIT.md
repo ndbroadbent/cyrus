@@ -3875,6 +3875,12 @@ still not claiming to enumerate arbitrary two-face FRTs.
 the reconstructed local-toric chamber-generator diagnostics, preserving the
 original ambient point labels. This keeps the chamber-choice evidence available
 to the next transport step without treating it as a compact GV computation.
+It now also writes the sparse ambient secondary-inequality rows for each
+circuit choice, giving downstream diagnostics the local `triangface_ineqs`
+shape without replaying any GV values.
+A fresh `/tmp/cyrus_star_union_all_circuit_choice_ineqs.json` run confirms the
+real 4-214-647 rows are present; the first sampled current generator has
+opposite sparse CPL choices on ambient labels `[0,32,41,148,151,180]`.
 The same context report now aggregates circuit-triangulation choice counts for
 current/flipped chamber generators and their decomposition terms, making the
 two-choice circuit rows visible in all-target summaries without promoting any
