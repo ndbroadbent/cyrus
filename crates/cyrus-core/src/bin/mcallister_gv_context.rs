@@ -286,6 +286,10 @@ struct ContextReport {
     local_cygv_source_resolution_star_union_transport_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_transport_component_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_target_plus_star_extremal_ray_certificate_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_opposite_star_extremal_ray_certificate_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_support_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_local_cygv_status_counts:
@@ -841,6 +845,7 @@ struct LocalCygvStarUnionGlobalBasisLookup {
     source_derived_gv: Option<String>,
     source_class_status: Option<String>,
     source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
+    extremal_ray_certificate: Option<TargetExtremalRayCertificateProbe>,
     lower_seed_sum_decomposition: Option<CygvSeedSumDecomposition>,
     bounded_lower_seed_decomposition: Option<CygvBoundedSeedDecompositionSummary>,
     lower_seed_decomposition_error: Option<String>,
@@ -851,6 +856,7 @@ struct LocalCygvStarUnionGlobalBasisLookup {
     opposite_source_derived_gv: Option<String>,
     opposite_source_class_status: Option<String>,
     opposite_source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
+    opposite_extremal_ray_certificate: Option<TargetExtremalRayCertificateProbe>,
     opposite_lower_seed_sum_decomposition: Option<CygvSeedSumDecomposition>,
     opposite_bounded_lower_seed_decomposition: Option<CygvBoundedSeedDecompositionSummary>,
     opposite_lower_seed_decomposition_error: Option<String>,
@@ -879,6 +885,8 @@ struct LocalCygvStarUnionTransportDecompositionSummary {
     opposite_star_known_qn_history_status: Option<String>,
     opposite_star_source_derived_gv: Option<String>,
     target_plus_star_bounded_lower_seed_status: Option<String>,
+    target_plus_star_extremal_ray_certificate: Option<TargetExtremalRayCertificateProbe>,
+    opposite_star_extremal_ray_certificate: Option<TargetExtremalRayCertificateProbe>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -9446,13 +9454,77 @@ fn target_extremal_ray_certificate_probe(
             decomposition_active_generators_nonzero: None,
         });
     }
-    if context.degree_bounded_rays.len() > generator_limit {
+    curve_extremal_ray_certificate_probe(
+        target,
+        context,
+        true,
+        generator_limit,
+        None,
+        "skipped_target_degree_limit",
+    )
+}
+
+fn curve_extremal_ray_certificate_probe(
+    curve: &[i64],
+    context: &ValidatedContext<'_>,
+    run: bool,
+    generator_limit: usize,
+    max_curve_degree: Option<i128>,
+    degree_limit_status: &str,
+) -> Option<TargetExtremalRayCertificateProbe> {
+    if !run {
+        return None;
+    }
+    match curve_degree(curve, context.grading) {
+        Ok(degree) if max_curve_degree.is_some_and(|max_degree| degree > max_degree) => {
+            return Some(TargetExtremalRayCertificateProbe {
+                status: degree_limit_status.to_string(),
+                same_ray_generator_count: None,
+                zero_other_generator_count: None,
+                positive_other_generator_count: None,
+                separator_normal_nonzero: None,
+                decomposition_kind: None,
+                decomposition_active_generator_count: None,
+                decomposition_exact_coefficients: None,
+                decomposition_active_generators_nonzero: None,
+            });
+        }
+        Ok(_) => {}
+        Err(error) => {
+            return Some(TargetExtremalRayCertificateProbe {
+                status: format!("error_invalid_degree_{}", status_error_fragment(&error)),
+                same_ray_generator_count: None,
+                zero_other_generator_count: None,
+                positive_other_generator_count: None,
+                separator_normal_nonzero: None,
+                decomposition_kind: None,
+                decomposition_active_generator_count: None,
+                decomposition_exact_coefficients: None,
+                decomposition_active_generators_nonzero: None,
+            });
+        }
+    }
+    let same_ray_generator_count =
+        match same_positive_ray_generator_count(curve, context.degree_bounded_rays) {
+            Ok(count) => count,
+            Err(error) => {
+                return Some(TargetExtremalRayCertificateProbe {
+                    status: format!("error_invalid_ray_{}", status_error_fragment(&error)),
+                    same_ray_generator_count: None,
+                    zero_other_generator_count: None,
+                    positive_other_generator_count: None,
+                    separator_normal_nonzero: None,
+                    decomposition_kind: None,
+                    decomposition_active_generator_count: None,
+                    decomposition_exact_coefficients: None,
+                    decomposition_active_generators_nonzero: None,
+                });
+            }
+        };
+    if same_ray_generator_count == 0 {
         return Some(TargetExtremalRayCertificateProbe {
-            status: format!(
-                "skipped_generator_limit_{generator_limit}_actual_{}",
-                context.degree_bounded_rays.len()
-            ),
-            same_ray_generator_count: None,
+            status: "not_certified_no_same_positive_ray_generator".to_string(),
+            same_ray_generator_count: Some(0),
             zero_other_generator_count: None,
             positive_other_generator_count: None,
             separator_normal_nonzero: None,
@@ -9462,7 +9534,23 @@ fn target_extremal_ray_certificate_probe(
             decomposition_active_generators_nonzero: None,
         });
     }
-    match find_extremal_mori_ray_separator(target, context.degree_bounded_rays) {
+    if context.degree_bounded_rays.len() > generator_limit {
+        return Some(TargetExtremalRayCertificateProbe {
+            status: format!(
+                "skipped_generator_limit_{generator_limit}_actual_{}",
+                context.degree_bounded_rays.len()
+            ),
+            same_ray_generator_count: Some(same_ray_generator_count),
+            zero_other_generator_count: None,
+            positive_other_generator_count: None,
+            separator_normal_nonzero: None,
+            decomposition_kind: None,
+            decomposition_active_generator_count: None,
+            decomposition_exact_coefficients: None,
+            decomposition_active_generators_nonzero: None,
+        });
+    }
+    match find_extremal_mori_ray_separator(curve, context.degree_bounded_rays) {
         Ok(Some(certificate)) => Some(TargetExtremalRayCertificateProbe {
             status: "certified_exact_extremal_ray".to_string(),
             same_ray_generator_count: Some(certificate.same_ray_generator_count),
@@ -9497,6 +9585,44 @@ fn target_extremal_ray_certificate_probe(
             decomposition_active_generators_nonzero: None,
         }),
     }
+}
+
+fn same_positive_ray_generator_count(
+    target_curve: &[i64],
+    mori_generators: &[Vec<i64>],
+) -> Result<usize, String> {
+    let target_primitive = primitive_i64_ray_direction(target_curve, "target curve")?;
+    let mut count = 0usize;
+    for generator in mori_generators {
+        if generator.len() != target_curve.len() {
+            return Err(format!(
+                "Mori generator dimension {} does not match target dimension {}",
+                generator.len(),
+                target_curve.len()
+            ));
+        }
+        if generator.iter().all(|&entry| entry == 0) {
+            continue;
+        }
+        if primitive_i64_ray_direction(generator, "Mori generator")? == target_primitive {
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+
+fn primitive_i64_ray_direction(curve: &[i64], label: &str) -> Result<Vec<i64>, String> {
+    if curve.is_empty() {
+        return Err(format!("{label} is empty"));
+    }
+    if curve.iter().all(|&entry| entry == 0) {
+        return Err(format!("{label} is zero"));
+    }
+    let gcd = gcd_list_int(curve).abs();
+    if gcd == 0 {
+        return Err(format!("{label} has zero gcd"));
+    }
+    Ok(curve.iter().map(|&entry| entry / gcd).collect())
 }
 
 fn target_exact_non_extremal_decomposition_probe(
@@ -15046,6 +15172,9 @@ fn build_report(
         &targets,
         validated,
         probe_star_union_path_history,
+        certify_target_extremal_rays,
+        target_extremal_generator_limit,
+        target_extremal_max_degree,
         element_limit,
         lower_seed_pair_limit,
         closure_generation_limit,
@@ -15068,6 +15197,14 @@ fn build_report(
         );
     let local_cygv_source_resolution_star_union_transport_component_status_counts =
         local_cygv_source_resolution_star_union_transport_component_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
+    let local_cygv_source_resolution_star_union_target_plus_star_extremal_ray_certificate_status_counts =
+        local_cygv_source_resolution_star_union_target_plus_star_extremal_ray_certificate_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
+    let local_cygv_source_resolution_star_union_opposite_star_extremal_ray_certificate_status_counts =
+        local_cygv_source_resolution_star_union_opposite_star_extremal_ray_certificate_status_counts(
             &local_cygv_source_resolution_hint_sample,
         );
     let local_cygv_source_resolution_star_union_target_plus_star_support_status_counts =
@@ -16044,6 +16181,8 @@ fn build_report(
         local_cygv_source_resolution_star_union_global_basis_lookup_height_status_counts,
         local_cygv_source_resolution_star_union_transport_status_counts,
         local_cygv_source_resolution_star_union_transport_component_status_counts,
+        local_cygv_source_resolution_star_union_target_plus_star_extremal_ray_certificate_status_counts,
+        local_cygv_source_resolution_star_union_opposite_star_extremal_ray_certificate_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_support_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_local_cygv_readiness_counts,
@@ -16296,6 +16435,9 @@ fn local_cygv_source_resolution_hint_summaries(
     targets: &[TargetReport],
     context: &ValidatedContext<'_>,
     probe_star_union_path_history: bool,
+    certify_star_union_extremal_rays: bool,
+    star_union_extremal_generator_limit: usize,
+    star_union_extremal_max_degree: Option<i128>,
     element_limit: usize,
     lower_seed_pair_limit: usize,
     closure_generation_limit: Option<usize>,
@@ -16358,6 +16500,9 @@ fn local_cygv_source_resolution_hint_summaries(
             let star_union_global_basis_lookup = local_cygv_star_union_global_basis_lookup_sample(
                 &star_union_relation_hint,
                 context,
+                certify_star_union_extremal_rays,
+                star_union_extremal_generator_limit,
+                star_union_extremal_max_degree,
             );
             let star_union_transport_decomposition =
                 local_cygv_star_union_transport_decomposition_summary(
@@ -16834,7 +16979,9 @@ fn local_cygv_source_resolution_star_union_global_basis_lookup_status_counts<'a>
             &star_support_hint,
             Some(context.q_matrix),
         );
-        for lookup in local_cygv_star_union_global_basis_lookup_sample(&union, context) {
+        for lookup in
+            local_cygv_star_union_global_basis_lookup_sample(&union, context, false, 0, None)
+        {
             *counts
                 .entry(format!(
                     "{}:{}",
@@ -16905,6 +17052,36 @@ fn local_cygv_source_resolution_star_union_transport_component_status_counts(
             .or_insert(0usize) += 1;
     }
     counts
+}
+
+fn local_cygv_source_resolution_star_union_target_plus_star_extremal_ray_certificate_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        summaries.iter().map(|summary| {
+            summary
+                .shared_two_simplex_star_union_transport_decomposition
+                .target_plus_star_extremal_ray_certificate
+                .as_ref()
+                .map(|probe| probe.status.as_str())
+        }),
+        "not_run",
+    )
+}
+
+fn local_cygv_source_resolution_star_union_opposite_star_extremal_ray_certificate_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        summaries.iter().map(|summary| {
+            summary
+                .shared_two_simplex_star_union_transport_decomposition
+                .opposite_star_extremal_ray_certificate
+                .as_ref()
+                .map(|probe| probe.status.as_str())
+        }),
+        "not_run",
+    )
 }
 
 fn local_cygv_source_resolution_star_union_target_plus_star_support_status_counts(
@@ -20183,6 +20360,9 @@ fn project_star_union_relation_to_global_basis(
 fn local_cygv_star_union_global_basis_lookup_sample(
     hint: &LocalCygvStarUnionRelationHint,
     context: &ValidatedContext<'_>,
+    certify_extremal_rays: bool,
+    extremal_generator_limit: usize,
+    extremal_max_degree: Option<i128>,
 ) -> Vec<LocalCygvStarUnionGlobalBasisLookup> {
     [
         ("target", &hint.target_basis_nonzero),
@@ -20192,7 +20372,14 @@ fn local_cygv_star_union_global_basis_lookup_sample(
     ]
     .into_iter()
     .map(|(role, basis_nonzero)| {
-        local_cygv_star_union_global_basis_lookup(role, basis_nonzero.as_ref(), context)
+        local_cygv_star_union_global_basis_lookup(
+            role,
+            basis_nonzero.as_ref(),
+            context,
+            certify_extremal_rays,
+            extremal_generator_limit,
+            extremal_max_degree,
+        )
     })
     .collect()
 }
@@ -20201,6 +20388,9 @@ fn local_cygv_star_union_global_basis_lookup(
     role: &str,
     basis_nonzero: Option<&Vec<(usize, i64)>>,
     context: &ValidatedContext<'_>,
+    certify_extremal_rays: bool,
+    extremal_generator_limit: usize,
+    extremal_max_degree: Option<i128>,
 ) -> LocalCygvStarUnionGlobalBasisLookup {
     let Some(basis_nonzero) = basis_nonzero else {
         return LocalCygvStarUnionGlobalBasisLookup {
@@ -20215,6 +20405,7 @@ fn local_cygv_star_union_global_basis_lookup(
             source_derived_gv: None,
             source_class_status: None,
             source_ray_ambient_nonzero: None,
+            extremal_ray_certificate: None,
             lower_seed_sum_decomposition: None,
             bounded_lower_seed_decomposition: None,
             lower_seed_decomposition_error: None,
@@ -20225,6 +20416,7 @@ fn local_cygv_star_union_global_basis_lookup(
             opposite_source_derived_gv: None,
             opposite_source_class_status: None,
             opposite_source_ray_ambient_nonzero: None,
+            opposite_extremal_ray_certificate: None,
             opposite_lower_seed_sum_decomposition: None,
             opposite_bounded_lower_seed_decomposition: None,
             opposite_lower_seed_decomposition_error: None,
@@ -20249,6 +20441,7 @@ fn local_cygv_star_union_global_basis_lookup(
                 source_derived_gv: None,
                 source_class_status: None,
                 source_ray_ambient_nonzero: None,
+                extremal_ray_certificate: None,
                 lower_seed_sum_decomposition: None,
                 bounded_lower_seed_decomposition: None,
                 lower_seed_decomposition_error: None,
@@ -20259,6 +20452,7 @@ fn local_cygv_star_union_global_basis_lookup(
                 opposite_source_derived_gv: None,
                 opposite_source_class_status: None,
                 opposite_source_ray_ambient_nonzero: None,
+                opposite_extremal_ray_certificate: None,
                 opposite_lower_seed_sum_decomposition: None,
                 opposite_bounded_lower_seed_decomposition: None,
                 opposite_lower_seed_decomposition_error: None,
@@ -20284,6 +20478,7 @@ fn local_cygv_star_union_global_basis_lookup(
                 source_derived_gv: None,
                 source_class_status: None,
                 source_ray_ambient_nonzero: None,
+                extremal_ray_certificate: None,
                 lower_seed_sum_decomposition: None,
                 bounded_lower_seed_decomposition: None,
                 lower_seed_decomposition_error: None,
@@ -20294,6 +20489,7 @@ fn local_cygv_star_union_global_basis_lookup(
                 opposite_source_derived_gv: None,
                 opposite_source_class_status: None,
                 opposite_source_ray_ambient_nonzero: None,
+                opposite_extremal_ray_certificate: None,
                 opposite_lower_seed_sum_decomposition: None,
                 opposite_bounded_lower_seed_decomposition: None,
                 opposite_lower_seed_decomposition_error: None,
@@ -20309,6 +20505,14 @@ fn local_cygv_star_union_global_basis_lookup(
         global_basis_known_qn_history(&basis_dense, context);
     let (source_class_status, source_ray_ambient_nonzero) =
         global_basis_source_class_lookup(&basis_dense, context);
+    let extremal_ray_certificate = curve_extremal_ray_certificate_probe(
+        &basis_dense,
+        context,
+        certify_extremal_rays,
+        extremal_generator_limit,
+        extremal_max_degree,
+        "skipped_component_degree_limit",
+    );
     let (
         lower_seed_sum_decomposition,
         bounded_lower_seed_decomposition,
@@ -20322,6 +20526,7 @@ fn local_cygv_star_union_global_basis_lookup(
         opposite_source_derived_gv,
         opposite_source_class_status,
         opposite_source_ray_ambient_nonzero,
+        opposite_extremal_ray_certificate,
         opposite_lower_seed_sum_decomposition,
         opposite_bounded_lower_seed_decomposition,
         opposite_lower_seed_decomposition_error,
@@ -20350,6 +20555,15 @@ fn local_cygv_star_union_global_basis_lookup(
                         ) = global_basis_known_qn_history(&opposite_dense, context);
                         let (opposite_source_class_status, opposite_source_ray_ambient_nonzero) =
                             global_basis_source_class_lookup(&opposite_dense, context);
+                        let opposite_extremal_ray_certificate =
+                            curve_extremal_ray_certificate_probe(
+                                &opposite_dense,
+                                context,
+                                certify_extremal_rays,
+                                extremal_generator_limit,
+                                extremal_max_degree,
+                                "skipped_component_degree_limit",
+                            );
                         let (
                             opposite_lower_seed_sum_decomposition,
                             opposite_bounded_lower_seed_decomposition,
@@ -20369,6 +20583,7 @@ fn local_cygv_star_union_global_basis_lookup(
                             opposite_source_derived_gv,
                             opposite_source_class_status,
                             opposite_source_ray_ambient_nonzero,
+                            opposite_extremal_ray_certificate,
                             opposite_lower_seed_sum_decomposition,
                             opposite_bounded_lower_seed_decomposition,
                             opposite_lower_seed_decomposition_error,
@@ -20379,6 +20594,7 @@ fn local_cygv_star_union_global_basis_lookup(
                     }
                     Err(error) => (
                         opposite_basis_nonzero,
+                        None,
                         None,
                         None,
                         None,
@@ -20407,12 +20623,13 @@ fn local_cygv_star_union_global_basis_lookup(
                 None,
                 None,
                 None,
+                None,
                 Some(error),
             ),
         }
     } else {
         (
-            None, None, None, None, None, None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None, None, None, None, None, None, None,
         )
     };
     LocalCygvStarUnionGlobalBasisLookup {
@@ -20426,6 +20643,7 @@ fn local_cygv_star_union_global_basis_lookup(
         source_derived_gv,
         source_class_status,
         source_ray_ambient_nonzero,
+        extremal_ray_certificate,
         lower_seed_sum_decomposition,
         bounded_lower_seed_decomposition,
         lower_seed_decomposition_error,
@@ -20436,6 +20654,7 @@ fn local_cygv_star_union_global_basis_lookup(
         opposite_source_derived_gv,
         opposite_source_class_status,
         opposite_source_ray_ambient_nonzero,
+        opposite_extremal_ray_certificate,
         opposite_lower_seed_sum_decomposition,
         opposite_bounded_lower_seed_decomposition,
         opposite_lower_seed_decomposition_error,
@@ -20468,6 +20687,8 @@ fn local_cygv_star_union_transport_decomposition_summary(
         opposite_star_known_qn_history_status: None,
         opposite_star_source_derived_gv: None,
         target_plus_star_bounded_lower_seed_status: None,
+        target_plus_star_extremal_ray_certificate: None,
+        opposite_star_extremal_ray_certificate: None,
     };
     let Some(target) = star_union_lookup_by_role(lookups, "target") else {
         return empty("star_union_transport_missing_target_lookup");
@@ -20598,6 +20819,10 @@ fn local_cygv_star_union_transport_decomposition_summary(
             .bounded_lower_seed_decomposition
             .as_ref()
             .map(|summary| summary.status.clone()),
+        target_plus_star_extremal_ray_certificate: target_plus_star
+            .extremal_ray_certificate
+            .clone(),
+        opposite_star_extremal_ray_certificate: star.opposite_extremal_ray_certificate.clone(),
     }
 }
 
@@ -24058,6 +24283,8 @@ mod tests {
                     opposite_star_known_qn_history_status: None,
                     opposite_star_source_derived_gv: None,
                     target_plus_star_bounded_lower_seed_status: None,
+                    target_plus_star_extremal_ray_certificate: None,
+                    opposite_star_extremal_ray_certificate: None,
                 },
             shared_two_simplex_star_union_target_plus_star_support:
                 LocalCygvStarUnionTargetPlusStarSupportHint {
@@ -24357,8 +24584,14 @@ mod tests {
             "source_ray_known_source_derived_gv"
         );
         let toric_basis = vec![(0, 1)];
-        let toric_lookup =
-            local_cygv_star_union_global_basis_lookup("target", Some(&toric_basis), &validated);
+        let toric_lookup = local_cygv_star_union_global_basis_lookup(
+            "target",
+            Some(&toric_basis),
+            &validated,
+            false,
+            0,
+            None,
+        );
         assert_eq!(
             toric_lookup.known_qn_history_status,
             "known_nonzero_toric_gv"
@@ -24370,6 +24603,9 @@ mod tests {
             "target_plus_star",
             Some(&source_basis),
             &validated,
+            false,
+            0,
+            None,
         );
         assert_eq!(
             source_lookup.known_qn_history_status,
@@ -24395,11 +24631,29 @@ mod tests {
                 .map(|decomposition| decomposition.status.as_str()),
             Some("found_lower_seed_decomposition")
         );
+        let certified_toric_lookup = local_cygv_star_union_global_basis_lookup(
+            "target",
+            Some(&toric_basis),
+            &validated,
+            true,
+            2,
+            None,
+        );
+        assert_eq!(
+            certified_toric_lookup
+                .extremal_ray_certificate
+                .as_ref()
+                .map(|probe| probe.status.as_str()),
+            Some("certified_exact_extremal_ray")
+        );
         let negative_toric_basis = vec![(0, -1)];
         let negative_toric_lookup = local_cygv_star_union_global_basis_lookup(
             "star",
             Some(&negative_toric_basis),
             &validated,
+            false,
+            0,
+            None,
         );
         assert_eq!(negative_toric_lookup.degree, Some(-1));
         assert_eq!(
@@ -24430,6 +24684,21 @@ mod tests {
         assert_eq!(
             negative_toric_lookup.opposite_source_ray_ambient_nonzero,
             Some(vec![(5, 1)])
+        );
+        let certified_negative_toric_lookup = local_cygv_star_union_global_basis_lookup(
+            "star",
+            Some(&negative_toric_basis),
+            &validated,
+            true,
+            2,
+            None,
+        );
+        assert_eq!(
+            certified_negative_toric_lookup
+                .opposite_extremal_ray_certificate
+                .as_ref()
+                .map(|probe| probe.status.as_str()),
+            Some("certified_exact_extremal_ray")
         );
         assert_eq!(
             degree_bounded_mori_ray_context_status(&validated),
@@ -26756,6 +27025,7 @@ mod tests {
                 source_derived_gv: None,
                 source_class_status: None,
                 source_ray_ambient_nonzero: None,
+                extremal_ray_certificate: None,
                 lower_seed_sum_decomposition: None,
                 bounded_lower_seed_decomposition: bounded_status.map(|status| {
                     CygvBoundedSeedDecompositionSummary {
@@ -26790,6 +27060,7 @@ mod tests {
                 opposite_source_derived_gv: opposite_source_gv.map(str::to_string),
                 opposite_source_class_status: None,
                 opposite_source_ray_ambient_nonzero: None,
+                opposite_extremal_ray_certificate: None,
                 opposite_lower_seed_sum_decomposition: None,
                 opposite_bounded_lower_seed_decomposition: None,
                 opposite_lower_seed_decomposition_error: None,
@@ -26800,7 +27071,7 @@ mod tests {
                 error: None,
             }
         };
-        let lookups = vec![
+        let mut lookups = vec![
             lookup(
                 "target",
                 Some(vec![(0, 2), (1, 1)]),
@@ -26854,6 +27125,30 @@ mod tests {
                 None,
             ),
         ];
+        let target_plus_star_certificate = TargetExtremalRayCertificateProbe {
+            status: "not_certified_as_extremal_ray".to_string(),
+            same_ray_generator_count: None,
+            zero_other_generator_count: None,
+            positive_other_generator_count: None,
+            separator_normal_nonzero: None,
+            decomposition_kind: None,
+            decomposition_active_generator_count: None,
+            decomposition_exact_coefficients: None,
+            decomposition_active_generators_nonzero: None,
+        };
+        let opposite_star_certificate = TargetExtremalRayCertificateProbe {
+            status: "certified_exact_extremal_ray".to_string(),
+            same_ray_generator_count: Some(1),
+            zero_other_generator_count: Some(0),
+            positive_other_generator_count: Some(1),
+            separator_normal_nonzero: Some(vec![(0, -1), (1, 1)]),
+            decomposition_kind: None,
+            decomposition_active_generator_count: None,
+            decomposition_exact_coefficients: None,
+            decomposition_active_generators_nonzero: None,
+        };
+        lookups[1].opposite_extremal_ray_certificate = Some(opposite_star_certificate);
+        lookups[2].extremal_ray_certificate = Some(target_plus_star_certificate);
 
         let summary = local_cygv_star_union_transport_decomposition_summary(&lookups, 2);
 
@@ -26884,6 +27179,20 @@ mod tests {
                 .target_plus_star_bounded_lower_seed_status
                 .as_deref(),
             Some("not_found_up_to_4")
+        );
+        assert_eq!(
+            summary
+                .target_plus_star_extremal_ray_certificate
+                .as_ref()
+                .map(|probe| probe.status.as_str()),
+            Some("not_certified_as_extremal_ray")
+        );
+        assert_eq!(
+            summary
+                .opposite_star_extremal_ray_certificate
+                .as_ref()
+                .map(|probe| probe.status.as_str()),
+            Some("certified_exact_extremal_ray")
         );
     }
 
@@ -27644,6 +27953,42 @@ mod tests {
         )
         .expect("enabled probe should report a limit status");
         assert_eq!(limited.status, "skipped_generator_limit_2_actual_3");
+        assert_eq!(limited.same_ray_generator_count, Some(1));
+    }
+
+    #[test]
+    fn curve_extremal_probe_short_circuits_without_same_generator_ray() {
+        let stats = MissingGvTargetStats {
+            target_count: 0,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: Vec::new(),
+        };
+        let grading = vec![1, 1];
+        let q_matrix = vec![vec![1, 0], vec![0, 1]];
+        let degree_bounded_rays = vec![vec![1, 0], vec![0, 1]];
+        let context = ValidatedContext {
+            dimension: 2,
+            degree_bound: 2,
+            q_cols: 2,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: None,
+            covered_toric_gv_by_basis: HashMap::new(),
+            source_derived_gv_by_basis: HashMap::new(),
+            intersection: Intersection::new(2),
+            stats: &stats,
+            uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
+        };
+
+        let probe = curve_extremal_ray_certificate_probe(&[1, 1], &context, true, 0, None, "limit")
+            .expect("enabled probe should report why no separator was searched");
+
+        assert_eq!(probe.status, "not_certified_no_same_positive_ray_generator");
+        assert_eq!(probe.same_ray_generator_count, Some(0));
     }
 
     #[test]

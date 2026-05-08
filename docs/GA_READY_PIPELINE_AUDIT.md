@@ -1260,6 +1260,20 @@ to make the remaining GV layer more first-principles:
    the corrected height pairings add back to the target `q.t`. The remaining
    missing object has therefore narrowed again to the positive degree-6
    target-plus-star qN/chamber history.
+   The component extremal-ray probe now runs on these transported rows under
+   the same `--certify-target-extremal-rays` guard used for original targets.
+   It performs an exact same-positive-ray scan before any expensive separator
+   search. The current all-target smoke report,
+   `/tmp/cyrus_star_union_extremal_smoke_all.json`, shows all nine original
+   targets are non-extremal by exact serialized decompositions. It also shows
+   the positive target-plus-star components are not finite Mori generator rays:
+   six report `not_certified_no_same_positive_ray_generator`, two are zero
+   target-plus-star rows, and one lacks a target projection. For the concrete
+   target `7`/`8` blocker, target-plus-star has same-ray count `0`, while the
+   known opposite-star component has same-ray count `1` but is skipped by the
+   default full-cone separator guard (`2963` generators versus limit `256`).
+   This rules out another false path: the target-plus-star row is not an
+   extremal finite-cone generator waiting for a scalar GV value.
    `/tmp/cyrus_gv_context_target_plus_star_support_report.json` now reconstructs
    the point-support charge bases for that degree-6 component. Targets `7`/`8`
    are integral two-parameter relations on affine-rank-4 seven-point supports:

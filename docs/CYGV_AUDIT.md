@@ -3475,6 +3475,22 @@ component reports
 height-`-1` chamber pair is not itself a global curve-basis class with a GV
 history entry. It has to be handled as part of the local wall/chamber
 transport.
+The star-union transport report now also applies the exact extremal-ray
+certificate probe to transported components when
+`--certify-target-extremal-rays` is enabled. The probe first does a cheap exact
+same-positive-ray scan before attempting DDM, so skipped high-generator cases
+still report whether the component is represented by any finite Mori generator
+ray. A smoke report at `/tmp/cyrus_star_union_extremal_smoke_all.json` shows
+that all nine original missing targets are already non-extremal by serialized
+exact decompositions, six target-plus-star components have
+`not_certified_no_same_positive_ray_generator`, two target-plus-star components
+are the zero curve, and one row has no target projection. For targets `7`/`8`
+specifically, the positive degree-6 target-plus-star component has no same
+positive finite Mori generator ray, while the positive opposite-star component
+has exactly one same ray but is skipped by the default separator-search guard
+(`skipped_generator_limit_256_actual_2963`). Thus the degree-6
+target-plus-star object should not be pursued as a finite-cone extremal Mori
+generator; the remaining task is still its chamber/semigroup transport history.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:
