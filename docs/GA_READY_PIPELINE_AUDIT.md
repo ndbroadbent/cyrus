@@ -209,6 +209,9 @@ run pass. Any remaining mismatch must be explicit and localizable.
    degree-8 residual from each parent-only term shows all offsets are known
    degree-2 toric classes with `GV=-2`; target 7 sees both its own and target
    8's residual difference, while target 8 sees target 8's residual difference.
+   The context report now aggregates those parent-only offset degrees separately
+   from known-qN status, so future reports can distinguish low-degree known
+   toric offsets from broader unknown qN history without mining each sample row.
    The parent-only classifications now include parent-path-support runtime
    lookups from the same `cygv` run. On the regenerated target 7 report, the
    generated degree-10 side term is a real parent-domain nonzero object
