@@ -263,6 +263,13 @@ run pass. Any remaining mismatch must be explicit and localizable.
    candidate pairs can be read directly. Fresh target-6 and target-8 smokes
    show the expected split between known-source/known-toric partners and
    bounded integer-nonzero, zero/absent, or noninteger-blocked composites.
+   The same flag now also runs a two-generator candidate-pair diamond using
+   the lower-seed predecessor and difference as the domain generators. Target 6
+   reports pair domains that are either zero/absent or blocked by HKTY
+   noninteger candidates, while target 8 reports four integer-nonzero pair
+   domains with GV `2` and two HKTY-error pair domains. This distinguishes
+   "the unknown side has a nonzero bounded diamond" from "the candidate pair
+   computes the missing target."
    The parent-only classifications now include parent-path-support runtime
    lookups from the same `cygv` run. On the regenerated target 7 report, the
    generated degree-10 side term is a real parent-domain nonzero object

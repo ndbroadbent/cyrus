@@ -363,6 +363,8 @@ struct ContextReport {
     cygv_lower_seed_predecessor_degree_split_counts: BTreeMap<String, usize>,
     cygv_lower_seed_predecessor_known_qn_history_pair_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_predecessor_bounded_candidate_pair_status_counts: BTreeMap<String, usize>,
+    cygv_lower_seed_predecessor_candidate_pair_diamond_candidate_status_counts:
+        BTreeMap<String, usize>,
     cygv_lower_seed_unknown_candidate_unique_count: usize,
     cygv_lower_seed_unknown_candidate_occurrence_count: usize,
     cygv_lower_seed_unknown_candidate_degree_counts: BTreeMap<i128, usize>,
@@ -911,8 +913,26 @@ struct CygvPathPredecessorCandidate {
     difference_is_reduced_seed: bool,
     predecessor_first_generation_seed_sum: Option<CygvSeedSumDecomposition>,
     difference_first_generation_seed_sum: Option<CygvSeedSumDecomposition>,
+    candidate_pair_diamond: Option<CygvCandidatePairDiamondSummary>,
     predecessor_nonzero: Vec<(usize, i64)>,
     difference_nonzero: Vec<(usize, i64)>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CygvCandidatePairDiamondSummary {
+    element_count: Option<usize>,
+    status: Option<String>,
+    gv: Option<String>,
+    error: Option<String>,
+    qn_trace_polynomial_count: Option<usize>,
+    target_qn_trace_status: Option<String>,
+    target_qn_trace_term_count: Option<usize>,
+    gw_noninteger_candidate_count: Option<usize>,
+    gw_coefficient_trace_error: Option<String>,
+    target_gw_coefficient_status: Option<String>,
+    target_gw_instanton_coefficient: Option<String>,
+    target_gw_candidate: Option<String>,
+    candidate_status: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -2332,6 +2352,7 @@ fn residual_path_support_generator_probe(
             &context.covered_toric_gv_by_basis,
             &context.source_derived_gv_by_basis,
         )?,
+        candidate_pair_diamond: None,
         predecessor_nonzero: residual.predecessor_nonzero.clone(),
         difference_nonzero: residual.difference_nonzero.clone(),
     };
@@ -12066,6 +12087,7 @@ fn cygv_path_history_probe_inner(
         &seen,
         &reduced_seeds,
         CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT,
+        run_lower_seed_diamonds,
     )?;
     let lower_seed_predecessor_candidate_count = lower_seed_predecessor_candidate_sample.len();
 
@@ -13078,6 +13100,7 @@ fn cygv_path_predecessor_candidate(
     source_derived_gv_by_basis: &HashMap<Vec<i64>, String>,
     seed_set: &HashSet<Vec<i64>>,
     reduced_seed_set: &HashSet<Vec<i64>>,
+    candidate_pair_diamond: Option<CygvCandidatePairDiamondSummary>,
 ) -> Result<CygvPathPredecessorCandidate, String> {
     let predecessor_toric_gv = covered_toric_gv_by_basis.get(predecessor).cloned();
     let difference_toric_gv = covered_toric_gv_by_basis.get(difference).cloned();
@@ -13132,6 +13155,7 @@ fn cygv_path_predecessor_candidate(
             covered_toric_gv_by_basis,
             source_derived_gv_by_basis,
         )?,
+        candidate_pair_diamond,
         predecessor_nonzero: sparse_from_dense(predecessor),
         difference_nonzero: sparse_from_dense(difference),
     })
@@ -13144,6 +13168,7 @@ fn lower_seed_predecessor_candidates(
     seed_set: &HashSet<Vec<i64>>,
     reduced_seed_set: &HashSet<Vec<i64>>,
     sample_limit: usize,
+    run_candidate_pair_diamonds: bool,
 ) -> Result<Vec<CygvPathPredecessorCandidate>, String> {
     let Some(terms) = lower_seed_decomposition.terms.as_deref() else {
         return Ok(Vec::new());
@@ -13180,6 +13205,13 @@ fn lower_seed_predecessor_candidates(
             continue;
         }
         let distance = cygv_series_distance(&difference);
+        let candidate_pair_diamond = lower_seed_predecessor_candidate_pair_diamond(
+            target,
+            &predecessor,
+            &difference,
+            context,
+            run_candidate_pair_diamonds,
+        )?;
         let candidate = cygv_path_predecessor_candidate(
             &predecessor,
             &difference,
@@ -13188,6 +13220,7 @@ fn lower_seed_predecessor_candidates(
             &context.source_derived_gv_by_basis,
             seed_set,
             reduced_seed_set,
+            candidate_pair_diamond,
         )?;
         candidates.push((distance, candidate));
     }
@@ -13202,6 +13235,43 @@ fn lower_seed_predecessor_candidates(
         .into_iter()
         .map(|(_, candidate)| candidate)
         .collect())
+}
+
+fn lower_seed_predecessor_candidate_pair_diamond(
+    target: &[i64],
+    predecessor: &[i64],
+    difference: &[i64],
+    context: &ValidatedContext<'_>,
+    run_candidate_pair_diamonds: bool,
+) -> Result<Option<CygvCandidatePairDiamondSummary>, String> {
+    if !run_candidate_pair_diamonds {
+        return Ok(None);
+    }
+    let probe = bounded_decomposition_diamond_qn_trace(
+        target,
+        &[predecessor.to_vec(), difference.to_vec()],
+        context,
+    )?;
+    Ok(Some(CygvCandidatePairDiamondSummary {
+        candidate_status: bounded_diamond_candidate_status(
+            probe.status.as_deref(),
+            probe.gv.as_deref(),
+            probe.gw_noninteger_candidate_count,
+            probe.target_qn_trace_status.as_deref(),
+        ),
+        element_count: probe.element_count,
+        status: probe.status,
+        gv: probe.gv,
+        error: probe.error,
+        qn_trace_polynomial_count: probe.qn_trace_polynomial_count,
+        target_qn_trace_status: probe.target_qn_trace_status,
+        target_qn_trace_term_count: probe.target_qn_trace_term_count,
+        gw_noninteger_candidate_count: probe.gw_noninteger_candidate_count,
+        gw_coefficient_trace_error: probe.gw_coefficient_trace_error,
+        target_gw_coefficient_status: probe.target_gw_coefficient_status,
+        target_gw_instanton_coefficient: probe.target_gw_instanton_coefficient,
+        target_gw_candidate: probe.target_gw_candidate,
+    }))
 }
 
 fn cygv_path_predecessor_stats(
@@ -13286,6 +13356,7 @@ fn cygv_path_predecessor_stats(
                 source_derived_gv_by_basis,
                 seed_set,
                 reduced_seed_set,
+                None,
             )?;
             debug_assert_eq!(candidate.difference_degree, difference_degree);
             candidate_sample.push((distance, candidate));
@@ -13308,6 +13379,7 @@ fn cygv_path_predecessor_stats(
                 source_derived_gv_by_basis,
                 seed_set,
                 reduced_seed_set,
+                None,
             )?;
             debug_assert_eq!(candidate.difference_degree, difference_degree);
             candidate_sample.push((distance, candidate));
@@ -14543,6 +14615,12 @@ fn build_report(
                 .map(|target| target.cygv_path_history_probe.as_ref()),
             &cygv_lower_seed_unknown_candidate_sample,
         );
+    let cygv_lower_seed_predecessor_candidate_pair_diamond_candidate_status_counts =
+        cygv_lower_seed_predecessor_candidate_pair_diamond_candidate_status_counts(
+            targets
+                .iter()
+                .map(|target| target.cygv_path_history_probe.as_ref()),
+        );
     let cygv_lower_seed_diamond_status_counts = optional_status_counts(
         targets.iter().map(|target| {
             target
@@ -15006,6 +15084,7 @@ fn build_report(
         cygv_lower_seed_predecessor_degree_split_counts,
         cygv_lower_seed_predecessor_known_qn_history_pair_status_counts,
         cygv_lower_seed_predecessor_bounded_candidate_pair_status_counts,
+        cygv_lower_seed_predecessor_candidate_pair_diamond_candidate_status_counts,
         cygv_lower_seed_unknown_candidate_unique_count,
         cygv_lower_seed_unknown_candidate_occurrence_count,
         cygv_lower_seed_unknown_candidate_degree_counts,
@@ -18449,6 +18528,22 @@ fn cygv_lower_seed_predecessor_bounded_candidate_pair_status_counts<'a>(
     counts
 }
 
+fn cygv_lower_seed_predecessor_candidate_pair_diamond_candidate_status_counts<'a>(
+    probes: impl IntoIterator<Item = Option<&'a CygvPathHistoryProbe>>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes.into_iter().flatten() {
+        for candidate in &probe.lower_seed_predecessor_candidate_sample {
+            let status = candidate
+                .candidate_pair_diamond
+                .as_ref()
+                .map_or("not_run", |diamond| diamond.candidate_status.as_str());
+            *counts.entry(status.to_string()).or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
 fn lower_seed_predecessor_bounded_candidate_side_status(
     known_qn_history_status: &str,
     curve_nonzero: &[(usize, i64)],
@@ -18865,19 +18960,30 @@ fn lower_seed_unknown_bounded_seed_diamond_candidate_status(
     if decomposition.status != "found_lower_seed_decomposition" {
         return decomposition.status.clone();
     }
-    let Some(diamond_status) = decomposition.diamond_status.as_deref() else {
+    bounded_diamond_candidate_status(
+        decomposition.diamond_status.as_deref(),
+        decomposition.diamond_gv.as_deref(),
+        decomposition.diamond_gw_noninteger_candidate_count,
+        decomposition.diamond_target_qn_trace_status.as_deref(),
+    )
+}
+
+fn bounded_diamond_candidate_status(
+    diamond_status: Option<&str>,
+    diamond_gv: Option<&str>,
+    diamond_gw_noninteger_candidate_count: Option<usize>,
+    diamond_target_qn_trace_status: Option<&str>,
+) -> String {
+    let Some(diamond_status) = diamond_status else {
         return "diamond_not_run".to_string();
     };
     if diamond_status != "computed_bounded_decomposition_diamond_qn_trace" {
         return format!("diamond_{diamond_status}");
     }
-    if decomposition
-        .diamond_gw_noninteger_candidate_count
-        .is_some_and(|count| count > 0)
-    {
+    if diamond_gw_noninteger_candidate_count.is_some_and(|count| count > 0) {
         return "blocked_noninteger_gw_candidates".to_string();
     }
-    let Some(gv) = decomposition.diamond_gv.as_deref() else {
+    let Some(gv) = diamond_gv else {
         return "missing_diamond_gv".to_string();
     };
     let parsed_gv = match parse_rational(gv) {
@@ -18890,7 +18996,7 @@ fn lower_seed_unknown_bounded_seed_diamond_candidate_status(
     if parsed_gv == MalachiteRational::from(0) {
         return "integer_zero_or_absent_gv".to_string();
     }
-    match decomposition.diamond_target_qn_trace_status.as_deref() {
+    match diamond_target_qn_trace_status {
         Some("path_support_qn_materialized_for_nonzero_gv") => "integer_nonzero_gv".to_string(),
         Some(status) => format!("integer_nonzero_gv_with_{status}"),
         None => "integer_nonzero_gv_missing_qn_trace_status".to_string(),
@@ -23269,6 +23375,7 @@ mod tests {
                 seed_nonzero: vec![(3, -1)],
             }),
             difference_first_generation_seed_sum: None,
+            candidate_pair_diamond: None,
             predecessor_nonzero: vec![(1, 1)],
             difference_nonzero: vec![(3, 0), (4, 1)],
         };
@@ -26345,6 +26452,12 @@ mod tests {
                     .to_string(),
                 2
             )])
+        );
+        assert_eq!(
+            cygv_lower_seed_predecessor_candidate_pair_diamond_candidate_status_counts([Some(
+                &probe
+            )]),
+            BTreeMap::from([("not_run".to_string(), 2)])
         );
         assert_eq!(lower_unknowns.len(), 2);
         assert_eq!(lower_unknowns[0].degree, 1);
