@@ -14,15 +14,16 @@ use malachite::num::basic::traits::Zero;
 use crate::Point;
 use crate::error::{Error, Result};
 use crate::geometry::ConvexHull;
+use crate::integer_math::matrix_rank;
 use crate::triangulation::Triangulation;
 use crate::types::rational::Rational as TypedRational;
 use crate::types::tags::Finite;
-use crate::utils::gcd_integers;
+use crate::utils::{gcd_integers, lll_reduce};
 
 use super::Intersection;
 use super::cytools_algorithm::compute_ambient_intersections_cytools;
 
-/// CYTools-style nef-partition data certified from full-dimensional polytopes.
+/// CYTools-style nef-partition data certified from polytope checks.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FullDimensionalNefPartitionCertificate {
     /// Nef parts converted to triangulation-point indices, excluding origin.
@@ -33,29 +34,31 @@ pub struct FullDimensionalNefPartitionCertificate {
     pub minkowski_sum_vertex_count: usize,
 }
 
-/// Certify a CYTools-style nef partition when all part polytopes are full-dimensional.
+/// Alias for the general CYTools-style nef certificate.
+pub type CytoolsNefPartitionCertificate = FullDimensionalNefPartitionCertificate;
+
+/// Certify a CYTools-style nef partition.
 ///
-/// This ports the explicit checks in `CalabiYau.__init__` for the case Cyrus'
-/// current exact convex-hull machinery supports directly:
+/// This ports the explicit checks in `CalabiYau.__init__`:
 ///
 /// 1. the convex hull of the union of partition points equals the ambient hull;
 /// 2. the Minkowski sum of the part polytopes is reflexive;
 /// 3. each part is converted from part-polytope lattice points to
 ///    triangulation-point indices, excluding the origin.
 ///
-/// Lower-dimensional part polytopes are rejected loudly. CYTools supports those
-/// through its optimal-coordinate machinery, so accepting them here before that
-/// port would be another hidden source of convention errors.
+/// Lower-dimensional part polytopes use CYTools' translate + LLL-reduce + drop
+/// zero directions convention before lattice-point enumeration, then map the
+/// resulting lattice points back to the original ambient coordinates.
 ///
 /// # Errors
 /// Returns an error if indices are invalid, the partition does not cover the
-/// ambient hull, a part is lower-dimensional, or the Minkowski sum is not
-/// reflexive.
-pub fn certify_nef_partition_cytools_style_full_dim(
+/// ambient hull, the affine reduction is inconsistent, or the Minkowski sum is
+/// not reflexive.
+pub fn certify_nef_partition_cytools_style(
     ambient_points: &[Point],
     triangulation_points: &[Point],
     nef_partition: &[Vec<usize>],
-) -> Result<FullDimensionalNefPartitionCertificate> {
+) -> Result<CytoolsNefPartitionCertificate> {
     validate_nef_partition_point_indices(ambient_points, nef_partition)?;
     validate_same_point_dimension(ambient_points, "ambient points")?;
     validate_same_point_dimension(triangulation_points, "triangulation points")?;
@@ -67,10 +70,10 @@ pub fn certify_nef_partition_cytools_style_full_dim(
     validate_nef_partition_union_hull(ambient_points, nef_partition)?;
 
     let certified =
-        certify_nef_partition_parts_full_dim(ambient_points, triangulation_points, nef_partition)?;
+        certify_nef_partition_parts_cytools(ambient_points, triangulation_points, nef_partition)?;
 
-    let minkowski_vertices = minkowski_sum_hull_vertices(&certified.part_vertex_sets)?;
-    if !is_reflexive_full_dim_by_facets(&minkowski_vertices, "nef partition Minkowski sum")? {
+    let minkowski_vertices = minkowski_sum_cytools_vertices(&certified.part_vertex_sets)?;
+    if !is_reflexive_cytools_polytope(&minkowski_vertices, "nef partition Minkowski sum")? {
         return Err(Error::InvalidInput(
             "nef partition Minkowski sum is not reflexive".into(),
         ));
@@ -83,10 +86,46 @@ pub fn certify_nef_partition_cytools_style_full_dim(
     })
 }
 
-struct CertifiedFullDimensionalNefParts {
+/// Certify a CYTools-style nef partition, requiring every part to be full-dimensional.
+///
+/// This is a stricter wrapper around [`certify_nef_partition_cytools_style`]
+/// used by tests and callers that need to avoid affine-span reduction.
+///
+/// # Errors
+/// Returns an error if any nef part is lower-dimensional, or if the general
+/// CYTools-style nef checks fail.
+pub fn certify_nef_partition_cytools_style_full_dim(
+    ambient_points: &[Point],
+    triangulation_points: &[Point],
+    nef_partition: &[Vec<usize>],
+) -> Result<FullDimensionalNefPartitionCertificate> {
+    validate_nef_partition_point_indices(ambient_points, nef_partition)?;
+    let ambient_dim = ambient_points
+        .first()
+        .ok_or_else(|| Error::InvalidInput("ambient point set is empty".into()))?
+        .dim();
+    for (part_idx, part) in nef_partition.iter().enumerate() {
+        let part_input = nef_part_input_points(ambient_points, part);
+        if affine_rank_i64_points(&part_input) != ambient_dim {
+            return Err(Error::InvalidInput(format!(
+                "nef part {part_idx} polytope must be full-dimensional"
+            )));
+        }
+    }
+    certify_nef_partition_cytools_style(ambient_points, triangulation_points, nef_partition)
+}
+
+struct CertifiedCytoolsNefParts {
     nef_parts: Vec<Vec<usize>>,
     part_lattice_point_counts: Vec<usize>,
     part_vertex_sets: Vec<Vec<Point>>,
+}
+
+struct CytoolsPolytopeModel {
+    dimension: usize,
+    input_lattice_points: Vec<Point>,
+    input_vertices: Vec<Point>,
+    optimal_vertices: Vec<Point>,
 }
 
 /// Compute a CICY threefold triple-intersection tensor from ambient toric data.
@@ -162,8 +201,8 @@ fn validate_nef_partition_union_hull(
         .flat_map(|part| part.iter().copied())
         .map(|idx| ambient_points[idx].clone())
         .collect::<Vec<_>>();
-    if convex_hull_vertex_set(&union_points, "nef partition union")?
-        != convex_hull_vertex_set(ambient_points, "ambient polytope")?
+    if cytools_polytope_vertex_set(&union_points, "nef partition union")?
+        != cytools_polytope_vertex_set(ambient_points, "ambient polytope")?
     {
         return Err(Error::InvalidInput(
             "nef partition union hull does not equal ambient polytope hull".into(),
@@ -172,32 +211,27 @@ fn validate_nef_partition_union_hull(
     Ok(())
 }
 
-fn certify_nef_partition_parts_full_dim(
+fn certify_nef_partition_parts_cytools(
     ambient_points: &[Point],
     triangulation_points: &[Point],
     nef_partition: &[Vec<usize>],
-) -> Result<CertifiedFullDimensionalNefParts> {
+) -> Result<CertifiedCytoolsNefParts> {
     let triangulation_index_by_point = triangulation_point_index_by_coords(triangulation_points)?;
     let mut part_vertex_sets = Vec::with_capacity(nef_partition.len());
     let mut nef_parts = Vec::with_capacity(nef_partition.len());
     let mut part_lattice_point_counts = Vec::with_capacity(nef_partition.len());
     for (part_idx, part) in nef_partition.iter().enumerate() {
         let part_input = nef_part_input_points(ambient_points, part);
-        let part_lattice_points = lattice_points_in_full_dim_polytope(
-            &part_input,
-            &format!("nef part {part_idx} polytope"),
-        )?;
+        let part_model = cytools_polytope_model(&part_input, &format!("nef part {part_idx}"))?;
+        let part_lattice_points = part_model.input_lattice_points;
         part_lattice_point_counts.push(part_lattice_points.len());
         nef_parts.push(triangulation_indices_for_part_lattice_points(
             &part_lattice_points,
             &triangulation_index_by_point,
         ));
-        part_vertex_sets.push(convex_hull_vertex_points(
-            &part_input,
-            &format!("nef part {part_idx} polytope"),
-        )?);
+        part_vertex_sets.push(part_model.input_vertices);
     }
-    Ok(CertifiedFullDimensionalNefParts {
+    Ok(CertifiedCytoolsNefParts {
         nef_parts,
         part_lattice_point_counts,
         part_vertex_sets,
@@ -250,11 +284,205 @@ fn triangulation_indices_for_part_lattice_points(
     out
 }
 
-fn convex_hull_vertex_set(points: &[Point], context: &str) -> Result<BTreeSet<Vec<i64>>> {
-    Ok(convex_hull_vertex_points(points, context)?
+fn cytools_polytope_vertex_set(points: &[Point], context: &str) -> Result<BTreeSet<Vec<i64>>> {
+    Ok(cytools_polytope_model(points, context)?
+        .input_vertices
         .into_iter()
         .map(|point| point.coords().to_vec())
         .collect())
+}
+
+fn cytools_polytope_model(points: &[Point], context: &str) -> Result<CytoolsPolytopeModel> {
+    validate_same_point_dimension(points, context)?;
+    let ambient_dim = points
+        .first()
+        .expect("validated point set is nonempty")
+        .dim();
+    let dimension = affine_rank_i64_points(points);
+    if dimension == 0 {
+        return Ok(cytools_zero_dim_polytope_model(points));
+    }
+    cytools_positive_dim_polytope_model(points, context, dimension, ambient_dim)
+}
+
+fn cytools_zero_dim_polytope_model(points: &[Point]) -> CytoolsPolytopeModel {
+    let point = points
+        .first()
+        .expect("validated point set is nonempty")
+        .clone();
+    CytoolsPolytopeModel {
+        dimension: 0,
+        input_lattice_points: vec![point.clone()],
+        input_vertices: vec![point],
+        optimal_vertices: vec![Point::new(Vec::new())],
+    }
+}
+
+fn cytools_positive_dim_polytope_model(
+    points: &[Point],
+    context: &str,
+    dimension: usize,
+    ambient_dim: usize,
+) -> Result<CytoolsPolytopeModel> {
+    let translation = cytools_affine_translation(points, dimension, ambient_dim);
+    let translated = translate_points(points, &translation)?;
+    let lll = lll_reduce(&translated, true);
+    let dim_diff = ambient_dim
+        .checked_sub(dimension)
+        .ok_or_else(|| Error::InvalidInput(format!("{context} has impossible affine rank")))?;
+    let optimal_points = cytools_optimal_points_from_lll(&lll.reduced, dim_diff, context)?;
+    let optimal_lattice_points =
+        lattice_points_in_full_dim_polytope(&optimal_points, &format!("{context} optimal"))?;
+    let optimal_vertices =
+        convex_hull_vertex_points(&optimal_points, &format!("{context} optimal"))?;
+    let transform_inv = lll.transform_inv.ok_or_else(|| {
+        Error::InvalidInput(format!("{context} LLL transform inverse was not computed"))
+    })?;
+    let input_lattice_points = cytools_optimal_points_to_input(
+        &optimal_lattice_points,
+        ambient_dim,
+        dim_diff,
+        &transform_inv,
+        &translation,
+    )?;
+    let input_vertices = cytools_optimal_points_to_input(
+        &optimal_vertices,
+        ambient_dim,
+        dim_diff,
+        &transform_inv,
+        &translation,
+    )?;
+    Ok(CytoolsPolytopeModel {
+        dimension,
+        input_lattice_points,
+        input_vertices,
+        optimal_vertices,
+    })
+}
+
+fn affine_rank_i64_points(points: &[Point]) -> usize {
+    let Some(base) = points.first() else {
+        return 0;
+    };
+    let rows = points
+        .iter()
+        .skip(1)
+        .map(|point| {
+            point
+                .coords()
+                .iter()
+                .zip(base.coords().iter())
+                .map(|(&coord, &base_coord)| MalachiteRational::from(coord - base_coord))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    matrix_rank(&rows)
+}
+
+fn cytools_affine_translation(points: &[Point], dimension: usize, ambient_dim: usize) -> Vec<i64> {
+    if dimension == ambient_dim {
+        vec![0; ambient_dim]
+    } else {
+        points
+            .first()
+            .expect("validated point set is nonempty")
+            .coords()
+            .to_vec()
+    }
+}
+
+fn translate_points(points: &[Point], translation: &[i64]) -> Result<Vec<Vec<i64>>> {
+    points
+        .iter()
+        .map(|point| {
+            if point.dim() != translation.len() {
+                return Err(Error::InvalidInput(
+                    "point dimension does not match affine translation".into(),
+                ));
+            }
+            Ok(point
+                .coords()
+                .iter()
+                .zip(translation.iter())
+                .map(|(&coord, &shift)| coord - shift)
+                .collect::<Vec<_>>())
+        })
+        .collect()
+}
+
+fn cytools_optimal_points_from_lll(
+    reduced: &[Vec<i64>],
+    dim_diff: usize,
+    context: &str,
+) -> Result<Vec<Point>> {
+    let mut optimal = Vec::with_capacity(reduced.len());
+    for row in reduced {
+        if row.len() < dim_diff {
+            return Err(Error::InvalidInput(format!(
+                "{context} LLL row is shorter than dropped dimension count"
+            )));
+        }
+        if row[..dim_diff].iter().any(|&coord| coord != 0) {
+            return Err(Error::InvalidInput(format!(
+                "{context} LLL reduction did not isolate affine zero directions"
+            )));
+        }
+        optimal.push(Point::new(row[dim_diff..].to_vec()));
+    }
+    Ok(dedup_points(optimal))
+}
+
+fn dedup_points(points: Vec<Point>) -> Vec<Point> {
+    let mut seen = BTreeSet::new();
+    let mut out = Vec::new();
+    for point in points {
+        if seen.insert(point.coords().to_vec()) {
+            out.push(point);
+        }
+    }
+    out
+}
+
+fn cytools_optimal_points_to_input(
+    optimal_points: &[Point],
+    ambient_dim: usize,
+    dim_diff: usize,
+    transform_inv: &[Vec<i64>],
+    translation: &[i64],
+) -> Result<Vec<Point>> {
+    if transform_inv.len() != ambient_dim
+        || transform_inv.iter().any(|row| row.len() != ambient_dim)
+    {
+        return Err(Error::InvalidInput(
+            "LLL transform inverse has wrong dimensions".into(),
+        ));
+    }
+    optimal_points
+        .iter()
+        .map(|point| {
+            if point.dim() + dim_diff != ambient_dim {
+                return Err(Error::InvalidInput(
+                    "optimal point dimension does not match affine embedding".into(),
+                ));
+            }
+            let mut padded = vec![0i64; ambient_dim];
+            for (idx, &coord) in point.coords().iter().enumerate() {
+                padded[dim_diff + idx] = coord;
+            }
+            let coords = transform_inv
+                .iter()
+                .zip(translation.iter())
+                .map(|(row, &shift)| {
+                    row.iter()
+                        .zip(padded.iter())
+                        .map(|(&matrix_entry, &coord)| matrix_entry * coord)
+                        .sum::<i64>()
+                        + shift
+                })
+                .collect::<Vec<_>>();
+            Ok(Point::new(coords))
+        })
+        .collect()
 }
 
 fn convex_hull_vertex_points(points: &[Point], context: &str) -> Result<Vec<Point>> {
@@ -338,7 +566,7 @@ fn advance_lattice_box_point(
     false
 }
 
-fn minkowski_sum_hull_vertices(part_vertex_sets: &[Vec<Point>]) -> Result<Vec<Point>> {
+fn minkowski_sum_cytools_vertices(part_vertex_sets: &[Vec<Point>]) -> Result<Vec<Point>> {
     let Some(first_part) = part_vertex_sets.first() else {
         return Err(Error::InvalidInput(
             "Minkowski sum requires at least one part".into(),
@@ -376,7 +604,15 @@ fn minkowski_sum_hull_vertices(part_vertex_sets: &[Vec<Point>]) -> Result<Vec<Po
         sums = next;
     }
     let sum_points = sums.into_iter().map(Point::new).collect::<Vec<_>>();
-    convex_hull_vertex_points(&sum_points, "nef partition Minkowski sum")
+    Ok(cytools_polytope_model(&sum_points, "nef partition Minkowski sum")?.input_vertices)
+}
+
+fn is_reflexive_cytools_polytope(points: &[Point], context: &str) -> Result<bool> {
+    let model = cytools_polytope_model(points, context)?;
+    if model.dimension == 0 {
+        return Ok(true);
+    }
+    is_reflexive_full_dim_by_facets(&model.optimal_vertices, &format!("{context} optimal"))
 }
 
 fn is_reflexive_full_dim_by_facets(points: &[Point], context: &str) -> Result<bool> {
@@ -703,6 +939,25 @@ mod tests {
             err.to_string()
                 .contains("nef part 0 polytope must be full-dimensional")
         );
+    }
+
+    #[test]
+    fn cytools_nef_certificate_accepts_lower_dimensional_segment_parts() {
+        let points = vec![
+            Point::new(vec![0, 0]),
+            Point::new(vec![1, 0]),
+            Point::new(vec![0, 1]),
+            Point::new(vec![-1, 0]),
+            Point::new(vec![0, -1]),
+        ];
+
+        let certificate =
+            certify_nef_partition_cytools_style(&points, &points, &[vec![1, 3], vec![2, 4]])
+                .unwrap();
+
+        assert_eq!(certificate.nef_parts, vec![vec![1, 3], vec![2, 4]]);
+        assert_eq!(certificate.part_lattice_point_counts, vec![3, 3]);
+        assert_eq!(certificate.minkowski_sum_vertex_count, 4);
     }
 
     #[test]

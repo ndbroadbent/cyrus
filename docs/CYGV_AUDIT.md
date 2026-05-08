@@ -3466,10 +3466,12 @@ The reusable CYTools-style ambient top-form step now exists in core as
 exists as `compute_complete_intersection_cy3_intersection_numbers`. The composed
 `compute_complete_intersection_cy3_from_ambient_cytools` helper wires those two
 steps together, while still requiring a source-derived nef partition. The local
-`certify_nef_partition_cytools_style_full_dim` helper now covers CYTools'
-union-hull/reflexive-Minkowski/conversion checks when all part polytopes are
-full-dimensional, and rejects lower-dimensional parts instead of silently
-guessing CYTools' optimal-coordinate behavior. The local
+`certify_nef_partition_cytools_style` helper now covers CYTools'
+union-hull/reflexive-Minkowski/conversion checks, including the
+translate/LLL/drop-zero affine reduction CYTools uses for lower-dimensional
+part polytopes. The stricter
+`certify_nef_partition_cytools_style_full_dim` wrapper remains available for
+callers that intentionally reject affine-span reduction. The local
 target-plus-star reports still do not have the source-derived nef partition,
 ambient triangulation/chamber certificate, semigroup, grading, or phase needed
 to use those pieces for a promoted GV value.

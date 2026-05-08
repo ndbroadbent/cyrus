@@ -170,7 +170,8 @@ pub use height_kahler::{
 };
 pub use integer_math::{compute_glsm_and_linear_relations, compute_linear_relations_no_origin};
 pub use intersection::{
-    AmbientIntersectionNumbers, FullDimensionalNefPartitionCertificate, Intersection,
+    AmbientIntersectionNumbers, CytoolsNefPartitionCertificate,
+    FullDimensionalNefPartitionCertificate, Intersection, certify_nef_partition_cytools_style,
     certify_nef_partition_cytools_style_full_dim,
     compute_complete_intersection_cy3_from_ambient_cytools,
     compute_complete_intersection_cy3_intersection_numbers, compute_intersection_numbers,
