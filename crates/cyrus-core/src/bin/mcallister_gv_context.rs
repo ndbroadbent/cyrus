@@ -799,6 +799,8 @@ struct LocalCygvSourceResolutionHintSummary {
         LocalCygvStarUnionWallTransportReadiness,
     shared_two_simplex_star_union_crossed_wall_regular_side:
         LocalCygvStarUnionCrossedWallRegularSideHint,
+    shared_two_simplex_star_union_compact_omission_wall_side:
+        LocalCygvCompactOmissionWallSideSummary,
     shared_two_simplex_star_union_global_secondary_height_status: String,
     shared_two_simplex_star_union_global_secondary_height_min_pairing: Option<String>,
     shared_two_simplex_star_union_global_secondary_height_max_pairing: Option<String>,
@@ -931,6 +933,27 @@ struct LocalCygvStarUnionCrossedWallRegularSideHint {
     negative_coefficient_points: Vec<usize>,
     positive_coefficient_omission_hits: Vec<usize>,
     negative_coefficient_omission_hits: Vec<usize>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvCompactOmissionWallSideSummary {
+    status: String,
+    compact_candidate_count: usize,
+    positive_side_candidate_count: usize,
+    negative_side_candidate_count: usize,
+    mixed_side_candidate_count: usize,
+    partial_positive_side_candidate_count: usize,
+    partial_negative_side_candidate_count: usize,
+    unrelated_candidate_count: usize,
+    candidate_samples: Vec<LocalCygvCompactOmissionWallSideSample>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvCompactOmissionWallSideSample {
+    omitted_point_indices: Vec<usize>,
+    wall_side_status: String,
+    target_relation_omitted_coefficients: Option<Vec<i64>>,
+    phase_status: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -17441,6 +17464,10 @@ fn local_cygv_source_resolution_hint_summaries(
                 &opposite_star_wall_circuit,
                 &star_union_global_regular_triangulation,
             );
+            let compact_omission_wall_side = local_cygv_compact_omission_wall_side_summary(
+                &star_union_target_plus_star_local_cygv_readiness,
+                &crossed_wall_regular_side,
+            );
             let resolved_full_union_compatibility =
                 local_cygv_resolved_shared_chamber_full_union_compatibility_status(
                     &resolved_chamber_global_height,
@@ -17585,6 +17612,8 @@ fn local_cygv_source_resolution_hint_summaries(
                     opposite_star_wall_circuit,
                 shared_two_simplex_star_union_wall_transport_readiness: wall_transport_readiness,
                 shared_two_simplex_star_union_crossed_wall_regular_side: crossed_wall_regular_side,
+                shared_two_simplex_star_union_compact_omission_wall_side:
+                    compact_omission_wall_side,
                 shared_two_simplex_star_union_global_secondary_height_status:
                     star_union_shared_face_secondary.global_height_status,
                 shared_two_simplex_star_union_global_secondary_height_min_pairing:
@@ -21538,6 +21567,101 @@ fn local_cygv_star_union_crossed_wall_regular_side_hint(
         negative_coefficient_points: negative_points,
         positive_coefficient_omission_hits: positive_hits,
         negative_coefficient_omission_hits: negative_hits,
+    }
+}
+
+fn local_cygv_compact_omission_wall_side_summary(
+    readiness: &LocalCygvStarUnionTargetPlusStarLocalCygvReadiness,
+    regular_side: &LocalCygvStarUnionCrossedWallRegularSideHint,
+) -> LocalCygvCompactOmissionWallSideSummary {
+    let positive_set = regular_side
+        .positive_coefficient_points
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let negative_set = regular_side
+        .negative_coefficient_points
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let mut positive_side_count = 0;
+    let mut negative_side_count = 0;
+    let mut mixed_side_count = 0;
+    let mut partial_positive_count = 0;
+    let mut partial_negative_count = 0;
+    let mut unrelated_count = 0;
+    let mut samples = Vec::new();
+
+    for candidate in readiness
+        .two_column_omission_candidates
+        .iter()
+        .filter(|candidate| local_cygv_is_compact_threefold_omission_candidate(candidate))
+    {
+        let omitted = candidate
+            .omitted_point_indices
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        let positive_hits = omitted.intersection(&positive_set).count();
+        let negative_hits = omitted.intersection(&negative_set).count();
+        let wall_side_status = if !positive_set.is_empty() && omitted == positive_set {
+            positive_side_count += 1;
+            "compact_omission_matches_positive_coefficient_wall_side"
+        } else if !negative_set.is_empty() && omitted == negative_set {
+            negative_side_count += 1;
+            "compact_omission_matches_negative_coefficient_wall_side"
+        } else if positive_hits > 0 && negative_hits > 0 {
+            mixed_side_count += 1;
+            "compact_omission_mixes_positive_and_negative_wall_sides"
+        } else if positive_hits > 0 {
+            partial_positive_count += 1;
+            "compact_omission_partial_positive_coefficient_wall_side"
+        } else if negative_hits > 0 {
+            partial_negative_count += 1;
+            "compact_omission_partial_negative_coefficient_wall_side"
+        } else {
+            unrelated_count += 1;
+            "compact_omission_not_on_crossed_wall_circuit_side"
+        };
+        samples.push(LocalCygvCompactOmissionWallSideSample {
+            omitted_point_indices: candidate.omitted_point_indices.clone(),
+            wall_side_status: wall_side_status.to_string(),
+            target_relation_omitted_coefficients: candidate
+                .target_relation_omitted_coefficients
+                .clone(),
+            phase_status: candidate.phase_status.clone(),
+        });
+    }
+
+    let compact_count = samples.len();
+    let selected_positive =
+        regular_side.status == "crossed_wall_regular_selects_positive_coefficient_omission_side";
+    let selected_negative =
+        regular_side.status == "crossed_wall_regular_selects_negative_coefficient_omission_side";
+    let status = if compact_count == 0 {
+        "compact_omission_wall_side_no_compact_threefold_candidates"
+    } else if selected_positive && positive_side_count > 0 {
+        "compact_omission_wall_side_matches_selected_positive_side"
+    } else if selected_negative && negative_side_count > 0 {
+        "compact_omission_wall_side_matches_selected_negative_side"
+    } else if selected_positive {
+        "compact_omission_wall_side_selected_positive_side_has_no_compact_candidate"
+    } else if selected_negative {
+        "compact_omission_wall_side_selected_negative_side_has_no_compact_candidate"
+    } else {
+        "compact_omission_wall_side_selected_side_not_classified"
+    };
+
+    LocalCygvCompactOmissionWallSideSummary {
+        status: status.to_string(),
+        compact_candidate_count: compact_count,
+        positive_side_candidate_count: positive_side_count,
+        negative_side_candidate_count: negative_side_count,
+        mixed_side_candidate_count: mixed_side_count,
+        partial_positive_side_candidate_count: partial_positive_count,
+        partial_negative_side_candidate_count: partial_negative_count,
+        unrelated_candidate_count: unrelated_count,
+        candidate_samples: samples,
     }
 }
 
@@ -26845,6 +26969,18 @@ mod tests {
                     positive_coefficient_omission_hits: Vec::new(),
                     negative_coefficient_omission_hits: Vec::new(),
                 },
+            shared_two_simplex_star_union_compact_omission_wall_side:
+                LocalCygvCompactOmissionWallSideSummary {
+                    status: "test".to_string(),
+                    compact_candidate_count: 0,
+                    positive_side_candidate_count: 0,
+                    negative_side_candidate_count: 0,
+                    mixed_side_candidate_count: 0,
+                    partial_positive_side_candidate_count: 0,
+                    partial_negative_side_candidate_count: 0,
+                    unrelated_candidate_count: 0,
+                    candidate_samples: Vec::new(),
+                },
             shared_two_simplex_star_union_global_secondary_height_status: "test".to_string(),
             shared_two_simplex_star_union_global_secondary_height_min_pairing: None,
             shared_two_simplex_star_union_global_secondary_height_max_pairing: None,
@@ -29988,6 +30124,44 @@ mod tests {
             vec![195, 212]
         );
         assert!(regular_side.negative_coefficient_omission_hits.is_empty());
+        let compact_candidate =
+            |omitted_point_indices: Vec<usize>, target_relation_omitted_coefficients: Vec<i64>| {
+                LocalCygvMultiColumnOmissionCandidate {
+                    omitted_point_indices,
+                    omitted_charge_columns: Vec::new(),
+                    target_relation_omitted_coefficients: Some(
+                        target_relation_omitted_coefficients,
+                    ),
+                    preserves_target_relation_support: Some(false),
+                    q_rows: 5,
+                    q_cols: 1,
+                    cy_dim: 3,
+                    charge_sums_after_omission: vec![0],
+                    is_calabi_yau_charge: true,
+                    phase_status: "source_derived_unique_compact_threefold_phase_including_origin"
+                        .to_string(),
+                }
+            };
+        let mut omission_readiness =
+            blocked_target_plus_star_local_cygv_readiness("test", Vec::new());
+        omission_readiness.two_column_omission_candidates = vec![
+            compact_candidate(vec![55, 212], vec![1, -1]),
+            compact_candidate(vec![55, 214], vec![1, 1]),
+            compact_candidate(vec![195, 208], vec![-1, 1]),
+            compact_candidate(vec![212, 214], vec![-1, 1]),
+        ];
+        let omission_wall_side =
+            local_cygv_compact_omission_wall_side_summary(&omission_readiness, &regular_side);
+        assert_eq!(
+            omission_wall_side.status,
+            "compact_omission_wall_side_selected_positive_side_has_no_compact_candidate"
+        );
+        assert_eq!(omission_wall_side.compact_candidate_count, 4);
+        assert_eq!(omission_wall_side.positive_side_candidate_count, 0);
+        assert_eq!(omission_wall_side.negative_side_candidate_count, 0);
+        assert_eq!(omission_wall_side.mixed_side_candidate_count, 1);
+        assert_eq!(omission_wall_side.partial_positive_side_candidate_count, 2);
+        assert_eq!(omission_wall_side.partial_negative_side_candidate_count, 1);
 
         let readiness = local_cygv_star_union_wall_transport_readiness(
             &summary,

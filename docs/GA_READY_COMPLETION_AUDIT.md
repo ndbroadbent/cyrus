@@ -162,7 +162,10 @@ and matrix-basis pipeline are no longer open.
    directly for subsequent transport checks. The crossed-wall regular-side
    hint also shows that the corrected global regular triangulation selects the
    positive-coefficient/star-extra omission side for targets `7`/`8`:
-   `[195,212]` are omission hits and `[0,55]` are not.
+   `[195,212]` are omission hits and `[0,55]` are not. The compact-omission
+   wall-side summary then rules out using the nearby compact omissions as this
+   selected chamber reduction: both rows have four compact omissions, zero full
+   positive-side matches, and zero full negative-side matches.
 2. **Exact corrected KKLT volume.** The no-replay path computes a corrected
    volume but still has a documented instanton/chamber residual.
 3. **Generic matrix-basis pipeline.** Matrix divisor-basis primitives now cover

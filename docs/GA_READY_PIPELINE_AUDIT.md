@@ -1483,6 +1483,13 @@ to make the remaining GV layer more first-principles:
    negative points `[0,55]` have no omission hits. This pins the chamber side
    that needs transport instead of leaving the wall side implicit in the
    simplex list.
+   A follow-up compact-omission wall-side summary confirms this selected side
+   is not one of the compact omission phases: both target rows have four
+   compact omissions, but zero full-positive-side or full-negative-side
+   matches. The samples split into one mixed wall-side omission, two
+   partial-positive omissions, and one partial-negative omission. This keeps
+   compact omissions classified as neighboring diagnostics, not as a
+   target-plus-star chamber certificate.
    A direct off-height global projection lookup now rules out another shortcut:
    the target `7`/`8` star-side off-height pair `[(55,1),(212,-1)]` is not an
    integral global curve-basis class, and targets `3`/`6` have no nonzero

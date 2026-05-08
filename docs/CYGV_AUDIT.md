@@ -3714,6 +3714,13 @@ Thus the current global chamber is the star-extra side of the local
 resolved-conifold wall; the unresolved task is transporting the
 target-plus-star qN/semigroup history across that identified wall, not finding
 which local side the corrected chamber occupies.
+Comparing the compact two-column omission phases against this wall side rules
+out another shortcut. For both targets `7`/`8`, the selected positive side has
+no compact threefold omission candidate: each row has four compact omissions,
+split as one mixed positive/negative wall-side omission, two partial-positive
+omissions, and one partial-negative omission. None omits the full selected
+positive side `[195,212]`, so these compact phases remain neighboring
+diagnostics rather than a source-derived target-plus-star chamber reduction.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:
