@@ -1262,6 +1262,11 @@ The next step therefore has to derive a source/chamber rule for the six-point
 local model; simply running the one-parameter compact wrapper would be another
 uncertified shortcut.
 
+`/tmp/cyrus_six_point_omission_shape_v1.json` also checks the compact
+threefold column-omission alternative for the same rows. It finds zero compact
+CY3 omission candidates, so the remaining six-point blocker is not repaired by
+dropping columns from the visible circuit.
+
 ## Next Concrete Action
 
 The next implementation should be one of these, in order:

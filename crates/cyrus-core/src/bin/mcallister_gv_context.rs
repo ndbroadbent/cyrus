@@ -1314,6 +1314,9 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
     local_toric_complete_intersection_zero_degree_nef_partition_candidate_count: Option<usize>,
     local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts:
         Option<BTreeMap<String, usize>>,
+    local_toric_compact_threefold_omission_candidate_count: usize,
+    local_toric_compact_threefold_omission_preserving_relation_count: usize,
+    local_toric_compact_threefold_omission_relation_status: String,
     local_toric_unit_tensor_candidate_gv: Option<String>,
     local_toric_unit_tensor_probe_status: String,
     local_toric_unit_tensor_target_qn_trace_status: Option<String>,
@@ -1377,6 +1380,9 @@ struct LocalCygvChamberGeneratorLocalToricDiagnostic {
     local_toric_complete_intersection_zero_degree_nef_partition_candidate_count: Option<usize>,
     local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts:
         Option<BTreeMap<String, usize>>,
+    local_toric_compact_threefold_omission_candidate_count: usize,
+    local_toric_compact_threefold_omission_preserving_relation_count: usize,
+    local_toric_compact_threefold_omission_relation_status: String,
     local_toric_unit_tensor_candidate_gv: Option<String>,
     local_toric_unit_tensor_probe_status: String,
     local_toric_unit_tensor_probe_error: Option<String>,
@@ -20489,6 +20495,16 @@ fn unresolved_chamber_generator_summaries(
                             .local_toric_diagnostic
                             .local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts
                             .clone(),
+                    local_toric_compact_threefold_omission_candidate_count: context
+                        .local_toric_diagnostic
+                        .local_toric_compact_threefold_omission_candidate_count,
+                    local_toric_compact_threefold_omission_preserving_relation_count: context
+                        .local_toric_diagnostic
+                        .local_toric_compact_threefold_omission_preserving_relation_count,
+                    local_toric_compact_threefold_omission_relation_status: context
+                        .local_toric_diagnostic
+                        .local_toric_compact_threefold_omission_relation_status
+                        .clone(),
                     local_toric_unit_tensor_candidate_gv: context
                         .local_toric_diagnostic
                         .local_toric_unit_tensor_candidate_gv
@@ -25509,6 +25525,10 @@ fn chamber_generator_local_toric_diagnostic_not_run(
         local_toric_complete_intersection_status: None,
         local_toric_complete_intersection_zero_degree_nef_partition_candidate_count: None,
         local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts: None,
+        local_toric_compact_threefold_omission_candidate_count: 0,
+        local_toric_compact_threefold_omission_preserving_relation_count: 0,
+        local_toric_compact_threefold_omission_relation_status:
+            "compact_threefold_omissions_not_evaluated".to_string(),
         local_toric_unit_tensor_candidate_gv: None,
         local_toric_unit_tensor_probe_status: "local_toric_unit_tensor_probe_not_run".to_string(),
         local_toric_unit_tensor_probe_error: None,
@@ -25662,6 +25682,10 @@ fn chamber_generator_local_toric_diagnostic(
             local_toric_complete_intersection_zero_degree_nef_partition_candidate_count: None,
             local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts:
                 None,
+            local_toric_compact_threefold_omission_candidate_count: 0,
+            local_toric_compact_threefold_omission_preserving_relation_count: 0,
+            local_toric_compact_threefold_omission_relation_status:
+                "compact_threefold_omissions_not_evaluated".to_string(),
             local_toric_unit_tensor_candidate_gv: None,
             local_toric_unit_tensor_probe_status: "local_toric_unit_tensor_probe_not_run"
                 .to_string(),
@@ -25744,6 +25768,13 @@ fn chamber_generator_local_toric_diagnostic(
             Some(&relation_coefficients),
         )
     });
+    let two_column_omission_candidates = local_cygv_two_column_omission_candidates(
+        &support_point_samples,
+        &local_charge_basis,
+        Some(&relation_coefficients),
+    );
+    let compact_omission_relation =
+        local_cygv_compact_threefold_omission_relation_summary(&two_column_omission_candidates);
     let local_coordinates = diagnostic
         .local_coordinates
         .iter()
@@ -25814,6 +25845,10 @@ fn chamber_generator_local_toric_diagnostic(
                         .zero_degree_cytools_nef_certificate_status_counts
                         .clone()
                 }),
+        local_toric_compact_threefold_omission_candidate_count: compact_omission_relation.0,
+        local_toric_compact_threefold_omission_preserving_relation_count: compact_omission_relation
+            .1,
+        local_toric_compact_threefold_omission_relation_status: compact_omission_relation.2,
         local_toric_unit_tensor_candidate_gv: local_toric_unit_tensor_probe.candidate_gv,
         local_toric_unit_tensor_probe_status: local_toric_unit_tensor_probe.status,
         local_toric_unit_tensor_probe_error: local_toric_unit_tensor_probe.error,
@@ -32110,6 +32145,18 @@ mod tests {
         assert_eq!(
             diagnostic.local_toric_complete_intersection_zero_degree_nef_partition_candidate_count,
             Some(0)
+        );
+        assert_eq!(
+            diagnostic.local_toric_compact_threefold_omission_candidate_count,
+            0
+        );
+        assert_eq!(
+            diagnostic.local_toric_compact_threefold_omission_preserving_relation_count,
+            0
+        );
+        assert_eq!(
+            diagnostic.local_toric_compact_threefold_omission_relation_status,
+            "no_compact_threefold_omission_candidates"
         );
         assert_eq!(
             diagnostic.local_toric_unit_tensor_probe_status,

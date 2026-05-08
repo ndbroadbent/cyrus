@@ -4329,3 +4329,11 @@ with zero zero-degree nef candidates. Thus the remaining source problem is not
 a missing call to the one-parameter compact hypersurface wrapper; Cyrus needs a
 source-derived phase/nef-partition rule or a different certified local model
 for the six-point circuit before any `cygv` value can be promoted.
+
+`/tmp/cyrus_six_point_omission_shape_v1.json` runs the same compact
+threefold-omission summary on those chamber generators. The result is also
+negative: all four remaining six-point rows have
+`local_toric_compact_threefold_omission_candidate_count=0` and
+`local_toric_compact_threefold_omission_relation_status=no_compact_threefold_omission_candidates`.
+So the missing model is not a smaller compact CY3 hypersurface obtained by
+deleting two columns from the visible six-point circuit.
