@@ -3640,6 +3640,14 @@ closure. Targets `3` and `6` are blocked earlier: their target relation is
 non-integral in the same union lattice. Thus even inside the weighted-`P2`
 family there are two separate chamber-transport obstructions, neither of which
 is a scalar local GV formula.
+The same target `7`/`8` probes now separate the raw local chamber semigroup
+from a compact positive-degree `cygv` handoff. The local flipped chamber does
+contain the target-plus-star vector algebraically, but only by using one
+negative-degree generator (`degree -4` in both target probes), so the flipped
+provided-generator `cygv` probe is rejected before HKTY evaluation. After
+filtering to positive-degree generators, only the current chamber still
+contains target-plus-star, and that is exactly the chamber whose compact
+provided-generator call returns GV `0`.
 This is useful but still not a source rule: it proves that Cyrus must derive
 which split, if any, comes from the star-union/CICY geometry instead of choosing
 one by scalar GV agreement. Target `7` also has no nonnegative primitive

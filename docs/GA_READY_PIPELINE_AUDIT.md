@@ -1454,6 +1454,11 @@ to make the remaining GV layer more first-principles:
    target-plus-star path history exceeds the initial 256-element limit without
    reaching the target; targets `3`/`6` are blocked earlier by non-integral
    target coordinates in that union lattice.
+   The chamber semigroup report now additionally filters generators by
+   positive global degree before considering a compact `cygv` handoff: for
+   targets `7`/`8`, the local flipped chamber contains target-plus-star only
+   with a degree `-4` generator, so the positive-degree subsemigroup leaves
+   only the current-chamber GV `0` path certified.
    The local phase-membership aggregation now reports the stricter
    resolved-shared secondary-cone blocker for the integral weighted rows before
    falling back to the coarser star-union relation label. Fresh target `7` and

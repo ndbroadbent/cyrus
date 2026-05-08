@@ -199,7 +199,12 @@ and matrix-basis pipeline are no longer open.
    star-union probes show targets `7`/`8` reach an integral union lattice but
    still give current-chamber GV `0` and no bounded target closure at element
    limit `256`; targets `3`/`6` are blocked before that by non-integral
-   target coordinates in the union lattice.
+   target coordinates in the union lattice. A fresh positive-degree semigroup
+   check also rules out treating the local flipped chamber as a compact `cygv`
+   shortcut for targets `7`/`8`: the flipped chamber contains target-plus-star
+   only by using a degree `-4` generator, while the positive-degree subsemigroup
+   contains target-plus-star only in the current chamber where `cygv` gives
+   GV `0`.
 2. **Exact corrected KKLT volume.** The no-replay path computes a corrected
    volume but still has a documented instanton/chamber residual.
 3. **Generic matrix-basis pipeline.** Matrix divisor-basis primitives now cover

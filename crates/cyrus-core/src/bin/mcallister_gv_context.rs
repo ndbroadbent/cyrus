@@ -549,6 +549,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_nearest_support_extra_count_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_positive_degree_transport_status_counts:
+        BTreeMap<String, usize>,
     local_phase_chamber_membership_certificate_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_hint_sample: Vec<LocalCygvSourceResolutionHintSummary>,
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
@@ -1148,6 +1150,9 @@ struct LocalCygvStarUnionChamberSemigroupTransportProbe {
     current_chamber_generator_known_qn_history_status_counts: BTreeMap<String, usize>,
     current_chamber_provided_generator_cygv_probe: Option<ProvidedGeneratorTargetGvProbe>,
     current_chamber_decomposition: Option<Vec<LocalCygvChamberSemigroupDecompositionTerm>>,
+    current_chamber_positive_degree_status: String,
+    current_chamber_positive_degree_decomposition:
+        Option<Vec<LocalCygvChamberSemigroupDecompositionTerm>>,
     flipped_chamber_status: Option<String>,
     flipped_chamber_generator_count: Option<usize>,
     flipped_chamber_generators: Vec<Vec<i64>>,
@@ -1155,6 +1160,10 @@ struct LocalCygvStarUnionChamberSemigroupTransportProbe {
     flipped_chamber_generator_known_qn_history_status_counts: BTreeMap<String, usize>,
     flipped_chamber_provided_generator_cygv_probe: Option<ProvidedGeneratorTargetGvProbe>,
     flipped_chamber_decomposition: Option<Vec<LocalCygvChamberSemigroupDecompositionTerm>>,
+    flipped_chamber_positive_degree_status: String,
+    flipped_chamber_positive_degree_decomposition:
+        Option<Vec<LocalCygvChamberSemigroupDecompositionTerm>>,
+    positive_degree_transport_status: String,
     error: Option<String>,
 }
 
@@ -17154,6 +17163,10 @@ fn build_report(
             |diagnostic| diagnostic.best_extra_point_count,
             "missing_overlap",
         );
+    let local_cygv_source_resolution_star_union_positive_degree_transport_status_counts =
+        local_cygv_source_resolution_star_union_positive_degree_transport_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
     let mut missing_local_cygv_missing_source_input_counts = local_cygv_missing_source_input_counts(
         targets
             .iter()
@@ -18321,6 +18334,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_nearest_support_overlap_count_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_nearest_support_missing_count_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_nearest_support_extra_count_counts,
+        local_cygv_source_resolution_star_union_positive_degree_transport_status_counts,
         local_phase_chamber_membership_certificate_status_counts,
         local_cygv_source_resolution_hint_sample,
         local_cygv_target_candidate_status_counts,
@@ -19906,6 +19920,23 @@ fn chamber_semigroup_generator_ckyz_kind_counts<'a>(
             .map(|context| context.local_toric_diagnostic.ckyz_kind.as_deref()),
         "not_identified",
     )
+}
+
+fn local_cygv_source_resolution_star_union_positive_degree_transport_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts
+            .entry(
+                summary
+                    .shared_two_simplex_star_union_chamber_semigroup_transport
+                    .positive_degree_transport_status
+                    .clone(),
+            )
+            .or_insert(0usize) += 1;
+    }
+    counts
 }
 
 fn chamber_decomposition_term_context_status_counts<'a>(
@@ -23531,6 +23562,8 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
             current_chamber_generator_known_qn_history_status_counts: BTreeMap::new(),
             current_chamber_provided_generator_cygv_probe: None,
             current_chamber_decomposition: None,
+            current_chamber_positive_degree_status: "positive_degree_chamber_not_run".to_string(),
+            current_chamber_positive_degree_decomposition: None,
             flipped_chamber_status: None,
             flipped_chamber_generator_count: None,
             flipped_chamber_generators: Vec::new(),
@@ -23538,6 +23571,9 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
             flipped_chamber_generator_known_qn_history_status_counts: BTreeMap::new(),
             flipped_chamber_provided_generator_cygv_probe: None,
             flipped_chamber_decomposition: None,
+            flipped_chamber_positive_degree_status: "positive_degree_chamber_not_run".to_string(),
+            flipped_chamber_positive_degree_decomposition: None,
+            positive_degree_transport_status: "positive_degree_transport_not_run".to_string(),
             error,
         };
 
@@ -23694,6 +23730,42 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
             "flipped_chamber_generators",
         )
     });
+    let (
+        current_chamber_positive_degree_status,
+        current_chamber_positive_degree_decomposition,
+        flipped_chamber_positive_degree_status,
+        flipped_chamber_positive_degree_decomposition,
+        positive_degree_transport_status,
+    ) = if context.is_some() {
+        let (current_status, current_decomposition) =
+            positive_degree_chamber_status_and_decomposition(
+                target,
+                &current_generators,
+                &current_chamber_generator_context,
+            );
+        let (flipped_status, flipped_decomposition) =
+            positive_degree_chamber_status_and_decomposition(
+                target,
+                &flipped_generators,
+                &flipped_chamber_generator_context,
+            );
+        let transport_status = positive_degree_transport_status(&current_status, &flipped_status);
+        (
+            current_status,
+            current_decomposition,
+            flipped_status,
+            flipped_decomposition,
+            transport_status,
+        )
+    } else {
+        (
+            "positive_degree_chamber_not_run_without_global_degree_context".to_string(),
+            None,
+            "positive_degree_chamber_not_run_without_global_degree_context".to_string(),
+            None,
+            "positive_degree_transport_not_run_without_global_degree_context".to_string(),
+        )
+    };
 
     LocalCygvStarUnionChamberSemigroupTransportProbe {
         status: status.to_string(),
@@ -23704,6 +23776,8 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
         current_chamber_generator_known_qn_history_status_counts,
         current_chamber_provided_generator_cygv_probe,
         current_chamber_decomposition: current_decomposition,
+        current_chamber_positive_degree_status,
+        current_chamber_positive_degree_decomposition,
         flipped_chamber_status: flipped_status,
         flipped_chamber_generator_count: (!flipped_generators.is_empty())
             .then_some(flipped_generators.len()),
@@ -23712,6 +23786,9 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
         flipped_chamber_generator_known_qn_history_status_counts,
         flipped_chamber_provided_generator_cygv_probe,
         flipped_chamber_decomposition: flipped_decomposition,
+        flipped_chamber_positive_degree_status,
+        flipped_chamber_positive_degree_decomposition,
+        positive_degree_transport_status,
         error: None,
     }
 }
@@ -24648,6 +24725,107 @@ fn chamber_semigroup_decomposition_terms(
             })
             .collect(),
     ))
+}
+
+fn positive_degree_chamber_status_and_decomposition(
+    target: &[i64],
+    generators: &[Vec<i64>],
+    contexts: &[LocalCygvChamberSemigroupGeneratorContext],
+) -> (
+    String,
+    Option<Vec<LocalCygvChamberSemigroupDecompositionTerm>>,
+) {
+    let degrees = generator_degrees_by_index(generators.len(), contexts);
+    match degrees.and_then(|degrees| {
+        positive_degree_chamber_decomposition_from_degrees(target, generators, &degrees)
+    }) {
+        Ok(Some(decomposition)) => (
+            "positive_degree_chamber_contains_target_plus_star".to_string(),
+            Some(decomposition),
+        ),
+        Ok(None) => (
+            "positive_degree_chamber_target_plus_star_not_found".to_string(),
+            None,
+        ),
+        Err(error) => (
+            format!(
+                "positive_degree_chamber_error_{}",
+                status_error_fragment(&error)
+            ),
+            None,
+        ),
+    }
+}
+
+fn generator_degrees_by_index(
+    generator_count: usize,
+    contexts: &[LocalCygvChamberSemigroupGeneratorContext],
+) -> Result<Vec<Option<i128>>, String> {
+    let by_index = contexts
+        .iter()
+        .map(|context| (context.generator_index, context.degree))
+        .collect::<BTreeMap<_, _>>();
+    let mut degrees = Vec::with_capacity(generator_count);
+    let mut generator_index = 0usize;
+    while generator_index < generator_count {
+        let Some(degree) = by_index.get(&generator_index) else {
+            return Err(format!(
+                "missing context for chamber generator {generator_index}"
+            ));
+        };
+        degrees.push(*degree);
+        generator_index += 1;
+    }
+    Ok(degrees)
+}
+
+fn positive_degree_chamber_decomposition_from_degrees(
+    target: &[i64],
+    generators: &[Vec<i64>],
+    degrees: &[Option<i128>],
+) -> Result<Option<Vec<LocalCygvChamberSemigroupDecompositionTerm>>, String> {
+    if generators.len() != degrees.len() {
+        return Err("positive-degree chamber generator/degree length mismatch".to_string());
+    }
+    let mut positive_generator_indices = Vec::new();
+    let mut positive_generators = Vec::new();
+    for (generator_index, (generator, degree)) in generators.iter().zip(degrees.iter()).enumerate()
+    {
+        let Some(degree) = degree else {
+            return Err(format!("generator {generator_index} has missing degree"));
+        };
+        if *degree > 0 {
+            positive_generator_indices.push(generator_index);
+            positive_generators.push(generator.clone());
+        }
+    }
+    let Some(decomposition) = chamber_semigroup_decomposition_terms(target, &positive_generators)?
+    else {
+        return Ok(None);
+    };
+    Ok(Some(
+        decomposition
+            .into_iter()
+            .map(|term| LocalCygvChamberSemigroupDecompositionTerm {
+                generator_index: positive_generator_indices[term.generator_index],
+                coefficient: term.coefficient,
+                generator: term.generator,
+            })
+            .collect(),
+    ))
+}
+
+fn positive_degree_transport_status(current_status: &str, flipped_status: &str) -> String {
+    match (
+        current_status == "positive_degree_chamber_contains_target_plus_star",
+        flipped_status == "positive_degree_chamber_contains_target_plus_star",
+    ) {
+        (true, true) => "positive_degree_current_and_flipped_chambers_contain_target_plus_star",
+        (true, false) => "positive_degree_current_chamber_only_contains_target_plus_star",
+        (false, true) => "positive_degree_flipped_chamber_only_contains_target_plus_star",
+        (false, false) => "positive_degree_no_chamber_contains_target_plus_star",
+    }
+    .to_string()
 }
 
 fn nonnegative_integer_generator_coefficients(
@@ -30351,6 +30529,9 @@ mod tests {
                     current_chamber_generator_known_qn_history_status_counts: BTreeMap::new(),
                     current_chamber_provided_generator_cygv_probe: None,
                     current_chamber_decomposition: None,
+                    current_chamber_positive_degree_status: "positive_degree_chamber_not_run"
+                        .to_string(),
+                    current_chamber_positive_degree_decomposition: None,
                     flipped_chamber_status: None,
                     flipped_chamber_generator_count: None,
                     flipped_chamber_generators: Vec::new(),
@@ -30358,6 +30539,11 @@ mod tests {
                     flipped_chamber_generator_known_qn_history_status_counts: BTreeMap::new(),
                     flipped_chamber_provided_generator_cygv_probe: None,
                     flipped_chamber_decomposition: None,
+                    flipped_chamber_positive_degree_status: "positive_degree_chamber_not_run"
+                        .to_string(),
+                    flipped_chamber_positive_degree_decomposition: None,
+                    positive_degree_transport_status: "positive_degree_transport_not_run"
+                        .to_string(),
                     error: None,
                 },
             shared_two_simplex_star_union_compact_omission_wall_side:
@@ -34923,6 +35109,44 @@ mod tests {
                     .collect::<Vec<_>>()
             }),
             Some(vec![(0, 1), (1, 3), (3, 2)])
+        );
+        assert_eq!(
+            probe.positive_degree_transport_status,
+            "positive_degree_transport_not_run_without_global_degree_context"
+        );
+    }
+
+    #[test]
+    fn positive_degree_chamber_decomposition_rejects_negative_degree_local_flip() {
+        let target = [3, 1, -1];
+        let flipped_generators = vec![
+            vec![-1, -2, 1],
+            vec![0, 1, 0],
+            vec![1, 0, -1],
+            vec![2, 0, -1],
+            vec![2, 1, -1],
+        ];
+        let full_decomposition =
+            chamber_semigroup_decomposition_terms(&target, &flipped_generators)
+                .expect("full local chamber decomposition should be checked")
+                .expect("full local chamber contains target");
+        assert_eq!(
+            full_decomposition
+                .iter()
+                .map(|term| (term.generator_index, term.coefficient))
+                .collect::<Vec<_>>(),
+            vec![(0, 1), (1, 3), (3, 2)]
+        );
+
+        let positive_decomposition = positive_degree_chamber_decomposition_from_degrees(
+            &target,
+            &flipped_generators,
+            &[Some(2), Some(-4), Some(6), Some(8), Some(4)],
+        )
+        .expect("positive-degree filter should run");
+        assert!(
+            positive_decomposition.is_none(),
+            "the local flip only contains the target by using the negative-degree generator"
         );
     }
 
