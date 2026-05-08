@@ -1227,8 +1227,12 @@ to make the remaining GV layer more first-principles:
    builds the origin-plus-two-facet circuit rows with an exact barycentric
    convex-hull guard, and
    `expanded_secondary_cone_hyperplanes_from_face_triangulations_with_star_4d`
-   unions those rows with native two-face CPL inequalities. The regression
-   currently pins the `P^4` simplex star row `[-5,1,1,1,1,1]`. This is
+   unions those rows with native two-face CPL inequalities. The per-face
+   choice-block helper
+   `expanded_secondary_face_inequality_choices_from_triangulations_with_star_4d`
+   preserves CYTools-style face/choice grouping for later NTFE chamber
+   materialization. The regressions currently pin the `P^4` simplex star row
+   `[-5,1,1,1,1,1]` and its one-choice face block. This is
    reusable chamber-constraint infrastructure; it does not by itself supply
    the corrected-chamber `q_N` history.
    The first-principles corrected-chamber context exporter now also carries the

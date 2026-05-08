@@ -430,6 +430,39 @@ pub fn expanded_secondary_face_inequality_choices_from_triangulations(
     Ok(face_inequality_choices)
 }
 
+/// Compute per-face expanded-secondary inequality choices with star constraints.
+///
+/// This is the caller-supplied two-face triangulation counterpart of CYTools'
+/// `require_star=True` path: each face-triangulation choice is converted to
+/// native CPL inequalities plus `_2d_s_cone_ineqs` star rows, with duplicate
+/// rows removed inside each choice block. It does not enumerate two-face FRTs.
+///
+/// # Errors
+///
+/// Returns an error if any supplied face triangulation has invalid native CPL
+/// rows or invalid 4D star-constraint circuits.
+pub fn expanded_secondary_face_inequality_choices_from_triangulations_with_star_4d(
+    points: &[Point],
+    face_triangulation_choices: &[Vec<Triangulation>],
+    polytope: &Polytope,
+) -> Result<Vec<Vec<Vec<Vec<i64>>>>> {
+    let mut face_inequality_choices = Vec::with_capacity(face_triangulation_choices.len());
+    for face_triangulations in face_triangulation_choices {
+        let mut choices = Vec::with_capacity(face_triangulations.len());
+        for triangulation in face_triangulations {
+            choices.push(
+                expanded_secondary_cone_hyperplanes_from_face_triangulations_with_star_4d(
+                    points,
+                    std::slice::from_ref(triangulation),
+                    polytope,
+                )?,
+            );
+        }
+        face_inequality_choices.push(choices);
+    }
+    Ok(face_inequality_choices)
+}
+
 /// Construct the two triangulation choices of an affine circuit.
 ///
 /// An affine circuit has exactly two triangulations: omit each
@@ -2019,6 +2052,28 @@ mod tests {
 
         assert_eq!(star_rows, vec![vec![-5, 1, 1, 1, 1, 1]]);
         assert_eq!(combined, vec![vec![-5, 1, 1, 1, 1, 1]]);
+    }
+
+    #[test]
+    fn expanded_secondary_face_choices_with_star_keep_choice_blocks() {
+        let points = vec![
+            Point::new(vec![0, 0, 0, 0]),
+            Point::new(vec![1, 0, 0, 0]),
+            Point::new(vec![0, 1, 0, 0]),
+            Point::new(vec![0, 0, 1, 0]),
+            Point::new(vec![0, 0, 0, 1]),
+            Point::new(vec![-1, -1, -1, -1]),
+        ];
+        let polytope = Polytope::from_vertices(points[1..].to_vec()).unwrap();
+        let choices = vec![vec![Triangulation::new(vec![vec![1, 2, 3]])]];
+
+        let face_choices =
+            expanded_secondary_face_inequality_choices_from_triangulations_with_star_4d(
+                &points, &choices, &polytope,
+            )
+            .unwrap();
+
+        assert_eq!(face_choices, vec![vec![vec![vec![-5, 1, 1, 1, 1, 1]]]]);
     }
 
     #[test]

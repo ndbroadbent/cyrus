@@ -100,10 +100,11 @@ too. The core triangulation module ports CYTools' optional
 triangulations: facet-boundary labels are computed from exact facet saturation,
 candidate origin circuits are filtered by exact rational barycentric
 containment, and the resulting star rows can be unioned with the native
-two-face CPL inequalities. The pinned `P^4` simplex regression gives the
-expected star row `[-5,1,1,1,1,1]`. This is chamber-constraint infrastructure;
-it still has to be connected to a certified corrected-chamber semigroup before
-any McAllister missing-target GV can be promoted.
+two-face CPL inequalities while preserving CYTools-style per-face choice
+blocks. The pinned `P^4` simplex regressions give the expected star row
+`[-5,1,1,1,1,1]` and one-choice face block. This is chamber-constraint
+infrastructure; it still has to be connected to a certified corrected-chamber
+semigroup before any McAllister missing-target GV can be promoted.
 
 CYTools' `Cone.find_lattice_points` is a separate operation. It first checks
 that the grading vector has only the origin at nonpositive degree, then uses
