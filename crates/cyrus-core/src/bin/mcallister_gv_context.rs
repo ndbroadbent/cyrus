@@ -288,6 +288,9 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_global_regular_triangulation_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_target_relation_global_secondary_height_status_counts: BTreeMap<String, usize>,
+    local_cygv_target_relation_global_secondary_height_branch_match_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts:
         BTreeMap<String, usize>,
     local_phase_chamber_membership_certificate_status_counts: BTreeMap<String, usize>,
@@ -688,6 +691,11 @@ struct LocalCygvSourceResolutionHintSummary {
     shared_two_simplex_star_union_global_regular_shared_face_extra_points: Vec<usize>,
     shared_two_simplex_star_union_global_regular_target_exclusive_selected_points: Vec<usize>,
     shared_two_simplex_star_union_global_regular_star_extra_selected_points: Vec<usize>,
+    target_relation_global_secondary_height_status: String,
+    target_relation_global_secondary_height_pairing: Option<String>,
+    target_relation_global_secondary_height_branch_q_dot_t: Option<String>,
+    target_relation_global_secondary_height_delta_vs_branch_q_dot_t: Option<String>,
+    target_relation_global_secondary_height_branch_match_status: String,
     shared_two_simplex_star_union_shared_face_secondary_circuit_sample:
         Vec<LocalCygvStarUnionSecondaryCircuitSample>,
     shared_two_simplex_star_union_target_minus_star: Vec<(usize, i64)>,
@@ -14922,6 +14930,14 @@ fn build_report(
         local_cygv_source_resolution_star_union_global_regular_triangulation_status_counts(
             &local_cygv_source_resolution_hint_sample,
         );
+    let local_cygv_target_relation_global_secondary_height_status_counts =
+        local_cygv_target_relation_global_secondary_height_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
+    let local_cygv_target_relation_global_secondary_height_branch_match_status_counts =
+        local_cygv_target_relation_global_secondary_height_branch_match_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
     let local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts =
         local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts(
             &local_cygv_source_resolution_hint_sample,
@@ -15861,6 +15877,8 @@ fn build_report(
         local_cygv_source_resolution_star_union_shared_face_secondary_status_counts,
         local_cygv_source_resolution_star_union_global_secondary_height_status_counts,
         local_cygv_source_resolution_star_union_global_regular_triangulation_status_counts,
+        local_cygv_target_relation_global_secondary_height_status_counts,
+        local_cygv_target_relation_global_secondary_height_branch_match_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts,
         local_phase_chamber_membership_certificate_status_counts,
         local_cygv_source_resolution_hint_sample,
@@ -16184,6 +16202,12 @@ fn local_cygv_source_resolution_hint_summaries(
                     &star_support_hint,
                     context.secondary_cone_heights,
                 );
+            let target_relation_global_secondary_height =
+                local_cygv_target_relation_global_secondary_height_hint(
+                    target.origin_circuit_first_witness.as_ref(),
+                    context.secondary_cone_heights,
+                    target.branch_diagnostic.as_ref(),
+                );
             let star_union_off_height_lookup = local_cygv_star_union_off_height_lookup_sample(
                 &star_union_affine_height_profile,
                 context,
@@ -16330,6 +16354,16 @@ fn local_cygv_source_resolution_hint_summaries(
                     star_union_global_regular_triangulation.target_exclusive_selected_points,
                 shared_two_simplex_star_union_global_regular_star_extra_selected_points:
                     star_union_global_regular_triangulation.star_extra_selected_points,
+                target_relation_global_secondary_height_status:
+                    target_relation_global_secondary_height.status,
+                target_relation_global_secondary_height_pairing:
+                    target_relation_global_secondary_height.pairing,
+                target_relation_global_secondary_height_branch_q_dot_t:
+                    target_relation_global_secondary_height.branch_q_dot_t,
+                target_relation_global_secondary_height_delta_vs_branch_q_dot_t:
+                    target_relation_global_secondary_height.delta_vs_branch_q_dot_t,
+                target_relation_global_secondary_height_branch_match_status:
+                    target_relation_global_secondary_height.branch_match_status,
                 shared_two_simplex_star_union_shared_face_secondary_circuit_sample:
                     star_union_shared_face_secondary.circuit_sample,
                 shared_two_simplex_star_union_target_minus_star: star_union_relation_hint
@@ -16723,6 +16757,38 @@ fn local_cygv_source_resolution_star_union_global_regular_triangulation_status_c
             .entry(
                 summary
                     .shared_two_simplex_star_union_global_regular_triangulation_status
+                    .clone(),
+            )
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_target_relation_global_secondary_height_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts
+            .entry(
+                summary
+                    .target_relation_global_secondary_height_status
+                    .clone(),
+            )
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_target_relation_global_secondary_height_branch_match_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts
+            .entry(
+                summary
+                    .target_relation_global_secondary_height_branch_match_status
                     .clone(),
             )
             .or_insert(0usize) += 1;
@@ -18572,6 +18638,14 @@ struct LocalCygvStarUnionGlobalSecondaryHeightSummary {
     circuit_pairings: Vec<Option<String>>,
 }
 
+struct LocalCygvTargetRelationGlobalSecondaryHeightHint {
+    status: String,
+    pairing: Option<String>,
+    branch_q_dot_t: Option<String>,
+    delta_vs_branch_q_dot_t: Option<String>,
+    branch_match_status: String,
+}
+
 struct LocalCygvStarUnionGlobalRegularTriangulationHint {
     status: String,
     simplex_count: Option<usize>,
@@ -18828,6 +18902,142 @@ fn star_union_circuit_global_secondary_height_pairing(
     }
     F64::<Finite>::new(pairing)
         .ok_or_else(|| "global secondary height circuit pairing is not finite".to_string())
+}
+
+fn local_cygv_target_relation_global_secondary_height_hint(
+    witness: Option<&OriginCircuitWitnessSample>,
+    global_secondary_heights: Option<&[f64]>,
+    branch_diagnostic: Option<&MissingGvBranchDiagnostic>,
+) -> LocalCygvTargetRelationGlobalSecondaryHeightHint {
+    let empty = |status: &str| LocalCygvTargetRelationGlobalSecondaryHeightHint {
+        status: status.to_string(),
+        pairing: None,
+        branch_q_dot_t: branch_diagnostic.map(|diagnostic| diagnostic.q_dot_t.clone()),
+        delta_vs_branch_q_dot_t: None,
+        branch_match_status: "target_relation_global_secondary_height_branch_match_not_evaluated"
+            .to_string(),
+    };
+    let Some(witness) = witness else {
+        return empty("target_relation_global_secondary_height_missing_origin_circuit_witness");
+    };
+    if witness.sparse_relation.is_empty() {
+        return empty("target_relation_global_secondary_height_missing_sparse_relation");
+    }
+    let Some(global_secondary_heights) = global_secondary_heights else {
+        return empty("target_relation_global_secondary_height_missing_vector");
+    };
+    let pairing = match origin_circuit_relation_global_secondary_height_pairing(
+        &witness.sparse_relation,
+        global_secondary_heights,
+    ) {
+        Ok(pairing) => pairing,
+        Err(error) => {
+            return empty(&format!(
+                "target_relation_global_secondary_height_error:{}",
+                status_error_fragment(&error)
+            ));
+        }
+    };
+    let status = if pairing.get().abs() <= 1e-6 {
+        "target_relation_global_secondary_height_zero_wall"
+    } else if pairing.get() > 0.0 {
+        "target_relation_global_secondary_height_positive"
+    } else {
+        "target_relation_global_secondary_height_negative"
+    };
+
+    let (branch_q_dot_t, delta_vs_branch_q_dot_t, branch_match_status) = match branch_diagnostic {
+        Some(diagnostic) => match parse_f64_or_fraction(&diagnostic.q_dot_t) {
+            Ok(branch_q_dot_t) => {
+                let delta = pairing.get() - branch_q_dot_t;
+                let branch_match_status = if delta.abs() <= 1e-6 {
+                    "target_relation_global_secondary_height_matches_branch_q_dot_t"
+                } else if (pairing.get() + branch_q_dot_t).abs() <= 1e-6 {
+                    "target_relation_global_secondary_height_matches_negated_branch_q_dot_t"
+                } else {
+                    "target_relation_global_secondary_height_differs_from_branch_q_dot_t"
+                };
+                (
+                    Some(diagnostic.q_dot_t.clone()),
+                    Some(delta.to_string()),
+                    branch_match_status.to_string(),
+                )
+            }
+            Err(error) => (
+                Some(diagnostic.q_dot_t.clone()),
+                None,
+                format!(
+                    "target_relation_global_secondary_height_branch_q_dot_t_parse_error:{}",
+                    status_error_fragment(&error)
+                ),
+            ),
+        },
+        None => (
+            None,
+            None,
+            "target_relation_global_secondary_height_missing_branch_q_dot_t".to_string(),
+        ),
+    };
+
+    LocalCygvTargetRelationGlobalSecondaryHeightHint {
+        status: status.to_string(),
+        pairing: Some(pairing.get().to_string()),
+        branch_q_dot_t,
+        delta_vs_branch_q_dot_t,
+        branch_match_status,
+    }
+}
+
+fn origin_circuit_relation_global_secondary_height_pairing(
+    sparse_relation: &[(usize, i64)],
+    global_secondary_heights: &[f64],
+) -> Result<F64<Finite>, String> {
+    let mut pairing = 0.0;
+    for &(point_index, coefficient) in sparse_relation {
+        let height = *global_secondary_heights.get(point_index).ok_or_else(|| {
+            format!(
+                "point index {point_index} maps to missing origin-included secondary height entry"
+            )
+        })?;
+        if !height.is_finite() {
+            return Err(format!(
+                "point index {point_index} has non-finite origin-included secondary height"
+            ));
+        }
+        pairing += (coefficient as f64) * height;
+    }
+    F64::<Finite>::new(pairing)
+        .ok_or_else(|| "target relation global secondary height pairing is not finite".to_string())
+}
+
+fn parse_f64_or_fraction(value: &str) -> Result<f64, String> {
+    if let Some((numerator, denominator)) = value.split_once('/') {
+        let numerator = numerator
+            .trim()
+            .parse::<f64>()
+            .map_err(|error| format!("failed to parse numerator {numerator}: {error}"))?;
+        let denominator = denominator
+            .trim()
+            .parse::<f64>()
+            .map_err(|error| format!("failed to parse denominator {denominator}: {error}"))?;
+        if denominator == 0.0 {
+            return Err(format!("fraction {value} has zero denominator"));
+        }
+        let result = numerator / denominator;
+        if !result.is_finite() {
+            return Err(format!("fraction {value} is not finite as f64"));
+        }
+        Ok(result)
+    } else {
+        let result = value
+            .trim()
+            .parse::<f64>()
+            .map_err(|error| format!("failed to parse f64 {value}: {error}"))?;
+        if !result.is_finite() {
+            return Err(format!("value {value} is not finite as f64"));
+        }
+        Ok(result)
+    }
 }
 
 fn local_cygv_star_union_off_height_lookup(
@@ -22631,6 +22841,11 @@ mod tests {
             shared_two_simplex_star_union_global_regular_target_exclusive_selected_points: Vec::new(
             ),
             shared_two_simplex_star_union_global_regular_star_extra_selected_points: Vec::new(),
+            target_relation_global_secondary_height_status: "test".to_string(),
+            target_relation_global_secondary_height_pairing: None,
+            target_relation_global_secondary_height_branch_q_dot_t: None,
+            target_relation_global_secondary_height_delta_vs_branch_q_dot_t: None,
+            target_relation_global_secondary_height_branch_match_status: "test".to_string(),
             shared_two_simplex_star_union_shared_face_secondary_circuit_sample: Vec::new(),
             shared_two_simplex_star_union_target_minus_star: Vec::new(),
             shared_two_simplex_star_union_target_plus_star: Vec::new(),
@@ -25180,6 +25395,51 @@ mod tests {
         .unwrap();
 
         assert_eq!(pairing.get(), 33.0);
+    }
+
+    #[test]
+    fn target_relation_global_secondary_height_pairing_compares_branch_q_dot_t() {
+        let witness = OriginCircuitWitnessSample {
+            first_facet_exclusive_point: 7,
+            second_facet_exclusive_point: 11,
+            shared_two_simplex: vec![2, 3],
+            shared_two_simplex_points: Vec::new(),
+            shared_two_simplex_star_simplices: Vec::new(),
+            shared_two_simplex_star_extra_point_samples: Vec::new(),
+            first_facet: Vec::new(),
+            second_facet: Vec::new(),
+            first_facet_size: 0,
+            second_facet_size: 0,
+            sparse_relation: vec![(0, -2), (7, 1), (11, 1)],
+            relation_points: Vec::new(),
+        };
+        let branch = MissingGvBranchDiagnostic {
+            q_dot_t: "1/2".to_string(),
+            parity: 0,
+            parity_mod2: 0,
+            q_dot_bucket: "positive".to_string(),
+            dilog_status: "real_ok".to_string(),
+        };
+
+        let hint = local_cygv_target_relation_global_secondary_height_hint(
+            Some(&witness),
+            Some(&[
+                0.0, 13.0, 17.0, 19.0, 23.0, 29.0, 31.0, 0.25, 37.0, 41.0, 43.0, 0.25,
+            ]),
+            Some(&branch),
+        );
+
+        assert_eq!(
+            hint.status,
+            "target_relation_global_secondary_height_positive"
+        );
+        assert_eq!(hint.pairing.as_deref(), Some("0.5"));
+        assert_eq!(hint.branch_q_dot_t.as_deref(), Some("1/2"));
+        assert_eq!(hint.delta_vs_branch_q_dot_t.as_deref(), Some("0"));
+        assert_eq!(
+            hint.branch_match_status,
+            "target_relation_global_secondary_height_matches_branch_q_dot_t"
+        );
     }
 
     #[test]

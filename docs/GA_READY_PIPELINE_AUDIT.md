@@ -1231,6 +1231,14 @@ to make the remaining GV layer more first-principles:
    by the corrected global height, and the missing target relation requires a
    chamber-transport or wall-crossing computation rather than a hidden local
    triangulation swap.
+   `/tmp/cyrus_gv_context_target_relation_height_report.json` now also pairs
+   each missing target origin-circuit relation with the corrected global height
+   vector and compares it to the branch `q.t` diagnostic. All nine missing
+   targets are positive and all nine match `q.t` to tolerance. This confirms
+   the target relations are genuine positive-volume classes in the corrected
+   chamber even when the weighted shared-face regular triangulation selects the
+   star extras, so the remaining blocker is the chamber-transport/qN history
+   between those data rather than a hidden zero-wall relation.
    The full union-support height profile is now serialized as well. For
    targets `3`/`6`, the off-hyperplane zero-shared ray carries zero target and
    star coefficient; for targets `7`/`8`, the height `-1` zero-shared ray and

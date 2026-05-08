@@ -3358,6 +3358,17 @@ relation points over that shared face. This confirms that the serialized star
 simplices are the actual local chamber chosen by the corrected global height,
 not missing chamber data that can be swapped for the target relation without a
 wall-crossing/transport computation.
+The follow-up `/tmp/cyrus_gv_context_target_relation_height_report.json` now
+evaluates each missing target's own origin-circuit relation against the same
+corrected global height vector and compares the signed pairing to the branch
+`q.t` diagnostic. All nine missing target relations have positive global
+height pairing, and all nine match `q.t` to numerical tolerance. For the
+weighted rows this separates two facts that were previously entangled: the
+corrected global height chooses the serialized star extras over the shared
+face, while the target relation itself has positive corrected volume rather
+than sitting on a zero wall. The remaining missing object is therefore the
+wall-crossing/chamber-transport history that relates those data, not a hidden
+zero target relation.
 Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
 serializes a role-tagged height profile over the full union support. For
 targets `3`/`6`, the off-hyperplane zero-shared ray has height `-1` but zero
