@@ -893,6 +893,14 @@ origin-circuit exclusive target-relation points (`[208,211]`, `[49,52]`,
 integral global-basis projection is not enough to promote the local value; a
 source-derived chamber covering those target-relation points, or a different
 certified support semigroup, is still required.
+A bounded supporting-face rerun for the two integral weighted rows (`target 7`
+and `target 8`) does not provide that missing certificate. With
+`--certify-origin-witness-domains`, two LP anchors, and the facet-union cap
+raised to `1024`, relation supports are still skipped as single-generator
+codimension-`213` domains, shared-facet domains return `lp_no_certificate`,
+and the full facet-union domains also return `lp_no_certificate` at ranks
+`194` and `177` respectively. The cheap face-certification path is therefore
+closed for these rows.
 Because the full corrected-chamber GV context export still exceeded a `300s`
 debug timeout before writing JSON, the runner also has a narrow
 `--dump-corrected-chamber-secondary-certificate` flag. On the validation-only
