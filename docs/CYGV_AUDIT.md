@@ -3609,6 +3609,10 @@ The aggregate missing-input counts therefore now include
 local-intersection and local-chamber blockers. This is negative evidence: it
 sharpens the source-rule gap for those base supports, but it does not promote a
 compact `cygv` value or remove the nine corrected-chamber misses.
+The report now exposes this split directly through top-level CICY aggregates:
+status counts are `no_zero_degree_nef_partition_candidate:5` and
+`not_complete_intersection_cy3_shape:4`, with nef-candidate counts `15:5` and
+zero-degree counts `0:5`.
 This is useful but still not a source rule: it proves that Cyrus must derive
 which split, if any, comes from the star-union/CICY geometry instead of choosing
 one by scalar GV agreement. Target `7` also has no nonnegative primitive

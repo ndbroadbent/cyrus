@@ -1436,7 +1436,10 @@ to make the remaining GV layer more first-principles:
    `complete_intersection_intersection_tensor:5`, and
    `complete_intersection_chamber_certificate:5`, so these base supports are
    blocked by an explicit CICY source-rule gap rather than by an unclassified
-   local skeleton.
+   local skeleton. The same split is now available as top-level report counts:
+   CICY shape status `no_zero_degree_nef_partition_candidate:5` versus
+   `not_complete_intersection_cy3_shape:4`, with nef-candidate count `15:5`
+   and zero-degree nef-candidate count `0:5`.
    The local phase-membership aggregation now reports the stricter
    resolved-shared secondary-cone blocker for the integral weighted rows before
    falling back to the coarser star-union relation label. Fresh target `7` and

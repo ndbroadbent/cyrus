@@ -374,6 +374,10 @@ struct ContextReport {
     active_decomposition_source_leaf_cms_candidate_status_counts: BTreeMap<String, usize>,
     local_cygv_charge_signature_counts: BTreeMap<String, usize>,
     local_cygv_one_parameter_family_status_counts: BTreeMap<String, usize>,
+    local_cygv_complete_intersection_shape_status_counts: BTreeMap<String, usize>,
+    local_cygv_complete_intersection_nef_partition_candidate_count_counts: BTreeMap<String, usize>,
+    local_cygv_complete_intersection_zero_degree_nef_partition_candidate_count_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_hint_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_resolved_support_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_resolved_shared_chamber_certificate_status_counts:
@@ -16674,6 +16678,24 @@ fn build_report(
                 .iter()
                 .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
         );
+    let local_cygv_complete_intersection_shape_status_counts =
+        local_cygv_complete_intersection_shape_status_counts(
+            targets
+                .iter()
+                .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
+        );
+    let local_cygv_complete_intersection_nef_partition_candidate_count_counts =
+        local_cygv_complete_intersection_nef_partition_candidate_count_counts(
+            targets
+                .iter()
+                .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
+        );
+    let local_cygv_complete_intersection_zero_degree_nef_partition_candidate_count_counts =
+        local_cygv_complete_intersection_zero_degree_nef_partition_candidate_count_counts(
+            targets
+                .iter()
+                .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
+        );
     let local_cygv_source_resolution_hint_status_counts =
         local_cygv_source_resolution_hint_status_counts(&targets);
     let local_cygv_source_resolution_resolved_support_status_counts =
@@ -18176,6 +18198,9 @@ fn build_report(
         local_cygv_charge_signature_counts: missing_local_cygv_charge_signature_counts,
         local_cygv_one_parameter_family_status_counts:
             missing_local_cygv_one_parameter_family_status_counts,
+        local_cygv_complete_intersection_shape_status_counts,
+        local_cygv_complete_intersection_nef_partition_candidate_count_counts,
+        local_cygv_complete_intersection_zero_degree_nef_partition_candidate_count_counts,
         local_cygv_source_resolution_hint_status_counts,
         local_cygv_source_resolution_resolved_support_status_counts,
         local_cygv_source_resolution_resolved_shared_chamber_certificate_status_counts,
@@ -18500,6 +18525,48 @@ fn local_cygv_one_parameter_family_status_counts<'a>(
             .or_insert(0usize) += 1;
     }
     counts
+}
+
+fn local_cygv_complete_intersection_shape_status_counts<'a>(
+    skeletons: impl IntoIterator<Item = &'a LocalCygvInputSkeleton>,
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        skeletons.into_iter().map(|skeleton| {
+            skeleton
+                .complete_intersection_shape_candidate
+                .as_ref()
+                .map(|candidate| candidate.status.as_str())
+        }),
+        "not_complete_intersection_cy3_shape",
+    )
+}
+
+fn local_cygv_complete_intersection_nef_partition_candidate_count_counts<'a>(
+    skeletons: impl IntoIterator<Item = &'a LocalCygvInputSkeleton>,
+) -> BTreeMap<String, usize> {
+    optional_usize_count_counts(
+        skeletons.into_iter().map(|skeleton| {
+            skeleton
+                .complete_intersection_shape_candidate
+                .as_ref()
+                .and_then(|candidate| candidate.nef_partition_candidate_count)
+        }),
+        "not_complete_intersection_cy3_shape",
+    )
+}
+
+fn local_cygv_complete_intersection_zero_degree_nef_partition_candidate_count_counts<'a>(
+    skeletons: impl IntoIterator<Item = &'a LocalCygvInputSkeleton>,
+) -> BTreeMap<String, usize> {
+    optional_usize_count_counts(
+        skeletons.into_iter().map(|skeleton| {
+            skeleton
+                .complete_intersection_shape_candidate
+                .as_ref()
+                .and_then(|candidate| candidate.zero_degree_nef_partition_candidate_count)
+        }),
+        "not_complete_intersection_cy3_shape",
+    )
 }
 
 fn local_cygv_source_resolution_hint_summaries(
@@ -32194,6 +32261,39 @@ mod tests {
                 "missing input {missing_input} should be reported"
             );
         }
+
+        let no_ci_skeleton = skeleton_with_origin_phase_probe(Vec::new(), None);
+        assert_eq!(
+            local_cygv_complete_intersection_shape_status_counts([&skeleton, &no_ci_skeleton]),
+            BTreeMap::from([
+                (
+                    "complete_intersection_cy3_shape_no_zero_degree_nef_partition_candidate_requires_source_rule"
+                        .to_string(),
+                    1
+                ),
+                ("not_complete_intersection_cy3_shape".to_string(), 1)
+            ])
+        );
+        assert_eq!(
+            local_cygv_complete_intersection_nef_partition_candidate_count_counts([
+                &skeleton,
+                &no_ci_skeleton
+            ]),
+            BTreeMap::from([
+                ("15".to_string(), 1),
+                ("not_complete_intersection_cy3_shape".to_string(), 1)
+            ])
+        );
+        assert_eq!(
+            local_cygv_complete_intersection_zero_degree_nef_partition_candidate_count_counts([
+                &skeleton,
+                &no_ci_skeleton
+            ]),
+            BTreeMap::from([
+                ("0".to_string(), 1),
+                ("not_complete_intersection_cy3_shape".to_string(), 1)
+            ])
+        );
     }
 
     #[test]
