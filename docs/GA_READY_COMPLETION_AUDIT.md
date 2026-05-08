@@ -885,6 +885,14 @@ target±star sums, but the positive-direction target/star/sum qN lookups remain
 source-derived nonzero GV values. The run still ends at
 `V_string=4711.504666533563`, with a corrected-volume residual of about
 `0.072167298`, so these counts are blocker evidence, not a reproduced result.
+The weighted-row chamber coverage diagnostic is stricter: all four weighted
+rows are now blocked because the two star simplices do not cover the full
+target/star union support. In each case the uncovered points are precisely the
+origin-circuit exclusive target-relation points (`[208,211]`, `[49,52]`,
+`[208,214]`, and `[211,214]` for targets `3`, `6`, `7`, and `8`). Thus
+integral global-basis projection is not enough to promote the local value; a
+source-derived chamber covering those target-relation points, or a different
+certified support semigroup, is still required.
 Because the full corrected-chamber GV context export still exceeded a `300s`
 debug timeout before writing JSON, the runner also has a narrow
 `--dump-corrected-chamber-secondary-certificate` flag. On the validation-only

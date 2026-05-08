@@ -271,6 +271,7 @@ struct ContextReport {
     local_cygv_source_resolution_star_union_global_basis_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_global_basis_lookup_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_chamber_coverage_status_counts: BTreeMap<String, usize>,
     local_phase_chamber_membership_certificate_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_hint_sample: Vec<LocalCygvSourceResolutionHintSummary>,
     local_cygv_target_candidate_status_counts: BTreeMap<String, usize>,
@@ -608,6 +609,9 @@ struct LocalCygvSourceResolutionHintSummary {
     shared_two_simplex_star_union_target_minus_star_basis_nonzero: Option<Vec<(usize, i64)>>,
     shared_two_simplex_star_union_target_plus_star_basis_nonzero: Option<Vec<(usize, i64)>>,
     shared_two_simplex_star_union_global_basis_lookup: Vec<LocalCygvStarUnionGlobalBasisLookup>,
+    shared_two_simplex_star_union_chamber_coverage_status: String,
+    shared_two_simplex_star_union_chamber_covered_simplex_count: usize,
+    shared_two_simplex_star_union_chamber_uncovered_point_indices: Vec<usize>,
     shared_two_simplex_star_union_target_minus_star: Vec<(usize, i64)>,
     shared_two_simplex_star_union_target_plus_star: Vec<(usize, i64)>,
     shared_two_simplex_star_union_target_plus_star_unit_tensor_candidate_gv: Option<String>,
@@ -13902,6 +13906,8 @@ fn build_report(
         local_cygv_source_resolution_star_union_global_basis_lookup_status_counts(
             &targets, validated,
         );
+    let local_cygv_source_resolution_star_union_chamber_coverage_status_counts =
+        local_cygv_source_resolution_star_union_chamber_coverage_status_counts(&targets);
     let local_phase_chamber_membership_certificate_status_counts =
         local_phase_chamber_membership_certificate_status_counts(&targets, validated);
     let local_cygv_source_resolution_hint_sample =
@@ -14662,6 +14668,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_off_height_status_counts,
         local_cygv_source_resolution_star_union_global_basis_status_counts,
         local_cygv_source_resolution_star_union_global_basis_lookup_status_counts,
+        local_cygv_source_resolution_star_union_chamber_coverage_status_counts,
         local_phase_chamber_membership_certificate_status_counts,
         local_cygv_source_resolution_hint_sample,
         local_cygv_target_candidate_status_counts,
@@ -14917,6 +14924,10 @@ fn local_cygv_source_resolution_hint_summaries(
                 &star_union_relation_hint,
                 context,
             );
+            let star_union_chamber_coverage = local_cygv_star_union_chamber_coverage_hint(
+                target.origin_circuit_first_witness.as_ref(),
+                &star_support_hint,
+            );
             let star_union_affine_height_profile = local_cygv_star_union_affine_height_profile(
                 target.origin_circuit_first_witness.as_ref(),
                 &star_support_hint,
@@ -15018,6 +15029,12 @@ fn local_cygv_source_resolution_hint_summaries(
                 shared_two_simplex_star_union_target_plus_star_basis_nonzero:
                     star_union_relation_hint.target_plus_star_basis_nonzero,
                 shared_two_simplex_star_union_global_basis_lookup: star_union_global_basis_lookup,
+                shared_two_simplex_star_union_chamber_coverage_status: star_union_chamber_coverage
+                    .status,
+                shared_two_simplex_star_union_chamber_covered_simplex_count:
+                    star_union_chamber_coverage.covered_simplex_count,
+                shared_two_simplex_star_union_chamber_uncovered_point_indices:
+                    star_union_chamber_coverage.uncovered_point_indices,
                 shared_two_simplex_star_union_target_minus_star: star_union_relation_hint
                     .target_minus_star,
                 shared_two_simplex_star_union_target_plus_star: star_union_relation_hint
@@ -15289,6 +15306,36 @@ fn local_cygv_source_resolution_star_union_global_basis_lookup_status_counts<'a>
                     .or_insert(0usize) += 1;
             }
         }
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_star_union_chamber_coverage_status_counts<'a>(
+    targets: impl IntoIterator<Item = &'a TargetReport>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for target in targets {
+        let Some(skeleton) = target.local_cygv_input_skeleton.as_ref() else {
+            continue;
+        };
+        let star_status = local_cygv_zero_shared_star_status(
+            skeleton,
+            target.origin_circuit_first_witness.as_ref(),
+        );
+        if star_status != "weighted_p2_zero_shared_star_uses_two_alternate_chamber_points" {
+            *counts
+                .entry(format!("skipped:{star_status}"))
+                .or_insert(0usize) += 1;
+            continue;
+        }
+        let star_support_hint = local_cygv_shared_two_simplex_star_support_hint(
+            target.origin_circuit_first_witness.as_ref(),
+        );
+        let coverage = local_cygv_star_union_chamber_coverage_hint(
+            target.origin_circuit_first_witness.as_ref(),
+            &star_support_hint,
+        );
+        *counts.entry(coverage.status).or_insert(0usize) += 1;
     }
     counts
 }
@@ -15846,6 +15893,12 @@ struct LocalCygvStarUnionRelationHint {
     target_plus_star: Vec<(usize, i64)>,
 }
 
+struct LocalCygvStarUnionChamberCoverageHint {
+    status: String,
+    covered_simplex_count: usize,
+    uncovered_point_indices: Vec<usize>,
+}
+
 fn local_cygv_shared_two_simplex_star_support_hint(
     witness: Option<&OriginCircuitWitnessSample>,
 ) -> LocalCygvStarSupportHint {
@@ -16313,6 +16366,68 @@ fn local_cygv_star_union_off_height_lookup_sample(
         .into_iter()
         .map(|role| local_cygv_star_union_off_height_lookup(role, height_profile, context))
         .collect()
+}
+
+fn local_cygv_star_union_chamber_coverage_hint(
+    witness: Option<&OriginCircuitWitnessSample>,
+    star_support: &LocalCygvStarSupportHint,
+) -> LocalCygvStarUnionChamberCoverageHint {
+    let empty = |status: &str| LocalCygvStarUnionChamberCoverageHint {
+        status: status.to_string(),
+        covered_simplex_count: 0,
+        uncovered_point_indices: Vec::new(),
+    };
+    let Some(witness) = witness else {
+        return empty("star_union_chamber_coverage_missing_origin_circuit_witness");
+    };
+    if star_support.point_indices.is_empty() {
+        return empty("star_union_chamber_coverage_missing_star_support");
+    }
+    if witness.shared_two_simplex_star_simplices.is_empty() {
+        return empty("star_union_chamber_coverage_missing_star_simplices");
+    }
+    let union_points = origin_circuit_star_union_point_samples(witness, star_support)
+        .into_iter()
+        .map(|point| point.point_index)
+        .collect::<BTreeSet<_>>();
+    if union_points.is_empty() {
+        return empty("star_union_chamber_coverage_missing_union_points");
+    }
+    let covered_points = witness
+        .shared_two_simplex_star_simplices
+        .iter()
+        .flatten()
+        .copied()
+        .filter(|point_index| union_points.contains(point_index))
+        .collect::<BTreeSet<_>>();
+    let uncovered_point_indices = union_points
+        .difference(&covered_points)
+        .copied()
+        .collect::<Vec<_>>();
+    let relation_points = witness
+        .relation_points
+        .iter()
+        .map(|point| point.point_index)
+        .collect::<BTreeSet<_>>();
+    let star_points = star_support
+        .point_indices
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let status = if uncovered_point_indices.is_empty() {
+        "star_union_chamber_star_triangulation_covers_union_points"
+    } else if uncovered_point_indices.iter().all(|point_index| {
+        relation_points.contains(point_index) && !star_points.contains(point_index)
+    }) {
+        "star_union_chamber_blocked_star_triangulation_missing_target_relation_points"
+    } else {
+        "star_union_chamber_blocked_star_triangulation_missing_union_points"
+    };
+    LocalCygvStarUnionChamberCoverageHint {
+        status: status.to_string(),
+        covered_simplex_count: witness.shared_two_simplex_star_simplices.len(),
+        uncovered_point_indices,
+    }
 }
 
 fn local_cygv_star_union_off_height_lookup(
@@ -21117,6 +21232,14 @@ mod tests {
                 (214, 1)
             ]
         );
+        let star_union_coverage =
+            local_cygv_star_union_chamber_coverage_hint(Some(&witness), &star_support_hint);
+        assert_eq!(
+            star_union_coverage.status,
+            "star_union_chamber_blocked_star_triangulation_missing_target_relation_points"
+        );
+        assert_eq!(star_union_coverage.covered_simplex_count, 2);
+        assert_eq!(star_union_coverage.uncovered_point_indices, vec![211, 214]);
         let target_plus_star_unit_tensor_probe =
             local_cygv_star_union_target_plus_star_unit_tensor_probe(
                 &star_union_hint.target_plus_star,
