@@ -4282,3 +4282,20 @@ degree-`2` rows return `local_toric_unit_tensor_probe_hkty_error` with
 out the naive "just call the default hypersurface wrapper on `[-1,-1,1,1]`"
 promotion path: a GA-ready resolved-conifold source import needs the correct
 local noncompact threefold input model, not the compact hypersurface wrapper.
+
+`/tmp/cyrus_resolved_conifold_formula_import_v1.json` imports the primitive
+resolved-conifold local formula only for chamber-generator rows whose
+star-union chamber has a regular secondary-cone certificate. The current
+target `7`/`8` resolved-conifold rows are now
+`known_nonzero_source_gv` with `source_derived_gv=1` and
+`source_class_status=source_ray_known_local_resolved_conifold_formula_certified_chamber`.
+The flipped rows with the same local charge family remain unpromoted because
+their chamber certificate is
+`chamber_secondary_certificate_no_strict_interior_point`; they record
+`source_ray_local_resolved_conifold_formula_blocked_uncertified_chamber`.
+This reduces the current-chamber unresolved generator queue from `10` unique
+classes / `12` occurrences to `8` unique classes / `10` occurrences. For
+targets `7`/`8`, the resolved-conifold degree-`2` rows are closed; the remaining
+target `7`/`8` rows are the shared unclassified degree-`2` family, the shared
+weighted-`P2` split-bundle degree-`6` family, and the two weighted-`P2`
+split-bundle degree-`4` rows whose bounded diamonds still give `GV=0`.

@@ -24984,6 +24984,7 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
                 charge_basis,
                 &current_generators,
                 context,
+                Some(&current_chamber_secondary_certificate),
             )
         })
         .unwrap_or_default();
@@ -24995,6 +24996,7 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
                 charge_basis,
                 &flipped_generators,
                 context,
+                Some(&flipped_chamber_secondary_certificate),
             )
         })
         .unwrap_or_default();
@@ -25167,6 +25169,7 @@ fn chamber_semigroup_generator_contexts(
     charge_basis: &[Vec<i64>],
     generators: &[Vec<i64>],
     context: &ValidatedContext<'_>,
+    chamber_secondary_certificate: Option<&LocalCygvStarUnionChamberSecondaryCertificate>,
 ) -> Vec<LocalCygvChamberSemigroupGeneratorContext> {
     generators
         .iter()
@@ -25179,6 +25182,7 @@ fn chamber_semigroup_generator_contexts(
                 point_samples,
                 charge_basis,
                 context,
+                chamber_secondary_certificate,
             )
         })
         .collect()
@@ -25191,6 +25195,7 @@ fn chamber_semigroup_generator_context(
     point_samples: &[OriginCircuitRelationPointSample],
     charge_basis: &[Vec<i64>],
     context: &ValidatedContext<'_>,
+    chamber_secondary_certificate: Option<&LocalCygvStarUnionChamberSecondaryCertificate>,
 ) -> LocalCygvChamberSemigroupGeneratorContext {
     let empty = |point_relation_status: &str,
                  point_relation_nonzero: Option<Vec<(usize, i64)>>,
@@ -25345,9 +25350,9 @@ fn chamber_semigroup_generator_context(
             };
         }
     };
-    let (known_qn_history_status, toric_gv, source_derived_gv, error) =
+    let (mut known_qn_status, toric_gv, mut source_derived_gv, mut error) =
         global_basis_known_qn_history(&basis_dense, context);
-    let (source_class_status, source_ray_ambient_nonzero) =
+    let (mut source_class_status, source_ray_ambient_nonzero) =
         global_basis_source_class_lookup(&basis_dense, context);
     let (
         lower_seed_sum_decomposition,
@@ -25356,6 +25361,37 @@ fn chamber_semigroup_generator_context(
     ) = star_union_lower_seed_diagnostics(&basis_dense, degree, context, true);
     let local_toric_diagnostic =
         chamber_generator_local_toric_diagnostic(&point_relation_nonzero, point_samples);
+    if let Some((local_gv, local_status)) = chamber_generator_local_source_formula_gv(
+        &local_toric_diagnostic,
+        chamber_secondary_certificate,
+    ) {
+        source_class_status = Some(local_status);
+        match source_derived_gv.as_deref() {
+            Some(existing_gv) if existing_gv != local_gv => {
+                known_qn_status = "known_qn_history_conflict".to_string();
+                error = Some(format!(
+                    "global source-derived GV value {existing_gv} conflicts with local source formula GV value {local_gv}"
+                ));
+            }
+            _ => {
+                source_derived_gv = Some(local_gv);
+                let (status, status_error) = match known_qn_history_status(
+                    toric_gv.as_deref(),
+                    source_derived_gv.as_deref(),
+                ) {
+                    Ok(status) => (status.to_string(), None),
+                    Err(error) => ("known_qn_history_conflict".to_string(), Some(error)),
+                };
+                known_qn_status = status;
+                error = status_error;
+            }
+        }
+    } else if let Some(local_status) = chamber_generator_local_source_formula_blocker(
+        &local_toric_diagnostic,
+        chamber_secondary_certificate,
+    ) {
+        source_class_status = Some(local_status);
+    }
     let degree_bounded_support_overlap_diagnostic =
         chamber_generator_degree_bounded_support_overlap_diagnostic(
             &point_relation_nonzero,
@@ -25372,7 +25408,7 @@ fn chamber_semigroup_generator_context(
         global_basis_status: "chamber_generator_global_basis_projection_integral".to_string(),
         basis_nonzero: Some(basis_nonzero),
         degree: Some(degree),
-        known_qn_history_status,
+        known_qn_history_status: known_qn_status,
         toric_gv,
         source_derived_gv,
         source_class_status,
@@ -25869,6 +25905,47 @@ fn local_toric_unit_tensor_probe(
             }
         }
         Err(error) => empty("local_toric_unit_tensor_probe_hkty_error", Some(error)),
+    }
+}
+
+fn chamber_generator_local_source_formula_gv(
+    local_toric_diagnostic: &LocalCygvChamberGeneratorLocalToricDiagnostic,
+    chamber_secondary_certificate: Option<&LocalCygvStarUnionChamberSecondaryCertificate>,
+) -> Option<(String, String)> {
+    if local_toric_diagnostic.local_toric_charge_family_status
+        != "local_toric_resolved_conifold_charge_family"
+    {
+        return None;
+    }
+    let certificate = chamber_secondary_certificate?;
+    if !chamber_secondary_certificate_is_regular(certificate) {
+        return None;
+    }
+    Some((
+        "1".to_string(),
+        "source_ray_known_local_resolved_conifold_formula_certified_chamber".to_string(),
+    ))
+}
+
+fn chamber_generator_local_source_formula_blocker(
+    local_toric_diagnostic: &LocalCygvChamberGeneratorLocalToricDiagnostic,
+    chamber_secondary_certificate: Option<&LocalCygvStarUnionChamberSecondaryCertificate>,
+) -> Option<String> {
+    if local_toric_diagnostic.local_toric_charge_family_status
+        != "local_toric_resolved_conifold_charge_family"
+    {
+        return None;
+    }
+    match chamber_secondary_certificate {
+        Some(certificate) if chamber_secondary_certificate_is_regular(certificate) => None,
+        Some(certificate) => Some(format!(
+            "source_ray_local_resolved_conifold_formula_blocked_uncertified_chamber:{}",
+            certificate.status
+        )),
+        None => Some(
+            "source_ray_local_resolved_conifold_formula_blocked_missing_chamber_certificate"
+                .to_string(),
+        ),
     }
 }
 
@@ -31772,6 +31849,39 @@ mod tests {
                 .as_deref()
                 .is_some_and(|error| error.contains("dimension of the CY must be at least three"))
         );
+        let regular_certificate = LocalCygvStarUnionChamberSecondaryCertificate {
+            status: "chamber_secondary_certificate_regular_strictly_inside_secondary_cone"
+                .to_string(),
+            simplex_count: Some(2),
+            hyperplane_count: Some(1),
+            height_count: Some(4),
+            min_pairing: Some("1".to_string()),
+            max_pairing: Some("1".to_string()),
+            zero_pairing_count: Some(0),
+            strictly_inside: Some(true),
+        };
+        assert_eq!(
+            chamber_generator_local_source_formula_gv(&diagnostic, Some(&regular_certificate)),
+            Some((
+                "1".to_string(),
+                "source_ray_known_local_resolved_conifold_formula_certified_chamber".to_string()
+            ))
+        );
+        let blocked_certificate = LocalCygvStarUnionChamberSecondaryCertificate {
+            status: "chamber_secondary_certificate_no_strict_interior_point".to_string(),
+            ..regular_certificate
+        };
+        assert_eq!(
+            chamber_generator_local_source_formula_gv(&diagnostic, Some(&blocked_certificate)),
+            None
+        );
+        assert_eq!(
+            chamber_generator_local_source_formula_blocker(
+                &diagnostic,
+                Some(&blocked_certificate)
+            ),
+            Some("source_ray_local_resolved_conifold_formula_blocked_uncertified_chamber:chamber_secondary_certificate_no_strict_interior_point".to_string())
+        );
         assert_eq!(diagnostic.circuit_triangulation_choice_count, Some(2));
         assert_eq!(diagnostic.circuit_triangulation_error, None);
         assert_eq!(
@@ -31848,6 +31958,7 @@ mod tests {
             &charge_basis,
             &[vec![2, 3]],
             &context,
+            None,
         );
 
         assert_eq!(contexts.len(), 1);

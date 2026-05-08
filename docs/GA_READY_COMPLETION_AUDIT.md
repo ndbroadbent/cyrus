@@ -1231,15 +1231,26 @@ So the resolved-conifold family still needs a source-derived noncompact local
 model or a separately certified formula import; the current wrapper result is
 not promotable.
 
+The primitive resolved-conifold formula import is now gated on the local
+star-union chamber certificate. In
+`/tmp/cyrus_resolved_conifold_formula_import_v1.json`, the certified current
+target `7`/`8` conifold rows become `known_nonzero_source_gv` with
+`source_derived_gv=1`, while the flipped conifold rows remain blocked by
+`chamber_secondary_certificate_no_strict_interior_point`. The unresolved
+current-chamber generator queue drops from `10` unique / `12` occurrences to
+`8` unique / `10` occurrences. The remaining target `7`/`8` blockers are now
+the shared unclassified degree-`2` local family plus the weighted-`P2`
+split-bundle degree-`6` and degree-`4` families.
+
 ## Next Concrete Action
 
 The next implementation should be one of these, in order:
 
 1. For corrected-chamber missing GV classes, construct a source-derived compact
-   semigroup or certified supporting-face semigroup for the resolved-conifold,
-   weighted-`P2` split-bundle, and unclassified six-point local charge families,
-   then hand it to the existing `cygv` wrappers. If the semigroup cannot be
-   certified, keep the result diagnostic-only.
+   semigroup or certified supporting-face semigroup for the weighted-`P2`
+   split-bundle and unclassified six-point local charge families, then hand it
+   to the existing `cygv` wrappers. If the semigroup cannot be certified, keep
+   the result diagnostic-only.
 2. Extend any new local phase or supporting-face semigroup with an explicit
    secondary-cone/chamber-membership certificate before promotion.
 3. Clean up the remaining matrix-basis diagnostic/export edges in
