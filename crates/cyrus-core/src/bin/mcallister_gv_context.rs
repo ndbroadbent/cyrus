@@ -18149,7 +18149,20 @@ fn cygv_closest_known_qn_residual_qn_domain_status(probe: Option<&CygvPathHistor
         return comparison.term_signature_comparison_status.clone();
     }
     if probe.status.starts_with("exceeded_element_limit") {
-        return format!("unavailable_{}", probe.status);
+        let closure_status = match probe.target_in_closure {
+            Some(true) => "target_in_closure",
+            Some(false) => "target_not_in_closure",
+            None => "target_closure_status_unknown",
+        };
+        let predecessor_status = match probe.predecessor_difference_count {
+            Some(0) => "no_predecessor_differences".to_string(),
+            Some(count) => format!("predecessor_differences_{count}"),
+            None => "predecessor_differences_unknown".to_string(),
+        };
+        return format!(
+            "unavailable_{}__{}__{}",
+            probe.status, closure_status, predecessor_status
+        );
     }
     if probe.closest_known_qn_residual_predecessor.is_none() {
         return format!(
@@ -25442,7 +25455,7 @@ mod tests {
         assert_eq!(probe.closest_series_distance.as_deref(), Some("1.000000"));
         assert_eq!(
             cygv_closest_known_qn_residual_qn_domain_status(Some(&probe)),
-            "unavailable_exceeded_element_limit_initial_2"
+            "unavailable_exceeded_element_limit_initial_2__target_not_in_closure__predecessor_differences_2"
         );
         assert_eq!(
             cygv_closest_known_qn_residual_qn_domain_status(None),
