@@ -26731,6 +26731,22 @@ fn chamber_generator_local_source_formula_blocker(
     let charge_family = local_toric_diagnostic
         .local_toric_charge_family_status
         .as_str();
+    if charge_family.starts_with("local_toric_weighted_p2_rank_three_split_bundle_charge_family") {
+        return match chamber_secondary_certificate {
+            Some(certificate) if chamber_secondary_certificate_is_regular(certificate) => Some(
+                "source_ray_weighted_p2_rank_three_split_bundle_source_import_blocked_missing_source_model_tensor_qn_history"
+                    .to_string(),
+            ),
+            Some(certificate) => Some(format!(
+                "source_ray_weighted_p2_rank_three_split_bundle_source_import_blocked_uncertified_chamber:{}",
+                certificate.status,
+            )),
+            None => Some(
+                "source_ray_weighted_p2_rank_three_split_bundle_source_import_blocked_missing_chamber_certificate"
+                    .to_string(),
+            ),
+        };
+    }
     if !matches!(
         charge_family,
         "local_toric_resolved_conifold_charge_family" | "local_toric_local_p2_bundle_charge_family"
@@ -32856,6 +32872,21 @@ mod tests {
         assert_eq!(
             diagnostic.local_toric_unit_tensor_probe_status,
             "local_toric_unit_tensor_probe_not_run_not_supported_one_parameter_charge_family"
+        );
+        let regular_certificate = LocalCygvStarUnionChamberSecondaryCertificate {
+            status: "chamber_secondary_certificate_regular_strictly_inside_secondary_cone"
+                .to_string(),
+            simplex_count: Some(3),
+            hyperplane_count: Some(1),
+            height_count: Some(6),
+            min_pairing: Some("1".to_string()),
+            max_pairing: Some("1".to_string()),
+            zero_pairing_count: Some(0),
+            strictly_inside: Some(true),
+        };
+        assert_eq!(
+            chamber_generator_local_source_formula_blocker(&diagnostic, Some(&regular_certificate)),
+            Some("source_ray_weighted_p2_rank_three_split_bundle_source_import_blocked_missing_source_model_tensor_qn_history".to_string())
         );
         assert_eq!(
             diagnostic.local_toric_zero_coefficient_enlargement_status,

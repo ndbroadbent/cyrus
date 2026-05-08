@@ -4399,16 +4399,17 @@ needed to call `cygv`. The target-filtered report
 `/tmp/cyrus_six_point_weighted_p2_rank3_target7_v1.json` verifies this
 classifier together with the selected local circuit side.
 
-`/tmp/cyrus_six_point_rank3_phase_target7_v1.json` now turns that selected
+`/tmp/cyrus_six_point_rank3_phase_target7_v2.json` now turns that selected
 side into an explicit local phase statement. The target `7` shared degree-`2`
 row has
 `local_toric_weighted_p2_rank_three_phase_status=weighted_p2_rank_three_split_bundle_selected_base_phase`,
 with base points `[208,211,212]` of weights `[1,1,2]` and bundle points
 `[0,214,55]` of degrees `[1,1,2]`. This confirms that the corrected global
 height chooses the total-space-over-weighted-`P2` side of the visible circuit.
-It still does not promote a GV value: the rank-three bundle phase needs a
-source-derived local model/intersection tensor and qN/chamber history, not just
-a named GIT chamber.
+It still does not promote a GV value: the row's source class is now explicitly
+`source_ray_weighted_p2_rank_three_split_bundle_source_import_blocked_missing_source_model_tensor_qn_history`,
+because the rank-three bundle phase needs a source-derived local
+model/intersection tensor and qN/chamber history, not just a named GIT chamber.
 
 `/tmp/cyrus_six_point_overlap_annotations_v1.json` annotates the nearest
 degree-bounded support-overlap samples with qN-history, source class, and

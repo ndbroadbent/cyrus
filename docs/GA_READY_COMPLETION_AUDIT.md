@@ -1315,14 +1315,16 @@ tensor, and chamber certificate before any value can be promoted. The
 target-filtered report `/tmp/cyrus_six_point_weighted_p2_rank3_target7_v1.json`
 checks the classifier and selected side together.
 
-`/tmp/cyrus_six_point_rank3_phase_target7_v1.json` now verifies the selected
+`/tmp/cyrus_six_point_rank3_phase_target7_v2.json` now verifies the selected
 side as the base phase of that rank-three split bundle: base points
 `[208,211,212]` have weights `[1,1,2]`, bundle points `[0,214,55]` have degrees
 `[1,1,2]`, and the phase status is
 `weighted_p2_rank_three_split_bundle_selected_base_phase`. This is a useful
-local chamber certificate, but it deliberately remains non-promoting: Cyrus
-still lacks the source-derived local intersection tensor and qN/chamber history
-for this rank-three weighted-`P2` model.
+local chamber certificate, but it deliberately remains non-promoting. The
+source class now reports
+`source_ray_weighted_p2_rank_three_split_bundle_source_import_blocked_missing_source_model_tensor_qn_history`,
+so Cyrus still lacks the source-derived local intersection tensor and
+qN/chamber history for this rank-three weighted-`P2` model.
 
 `/tmp/cyrus_six_point_overlap_annotations_v1.json` also annotates the nearest
 degree-bounded support-overlap samples. For the shared target `7`/`8`
