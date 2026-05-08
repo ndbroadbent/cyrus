@@ -23,9 +23,9 @@ use cyrus_core::gv::{
 use cyrus_core::triangulation::{
     CircuitOmissionSide, Triangulation, circuit_triangulation_choices,
     classify_circuit_omission_side, complete_circuit_flip_links, compute_regular_triangulation,
-    flip_circuit_in_triangulation, flip_circuit_link_in_triangulation,
-    secondary_cone_height_pairings, secondary_cone_hyperplanes_native,
-    secondary_cone_strictly_contains_height_vector,
+    expanded_secondary_face_inequality_choices_from_circuit_faces, flip_circuit_in_triangulation,
+    flip_circuit_link_in_triangulation, secondary_cone_height_pairings,
+    secondary_cone_hyperplanes_native, secondary_cone_strictly_contains_height_vector,
 };
 use cyrus_core::types::rational::Rational;
 use cyrus_core::types::{f64::F64, tags::Finite, tags::Pos};
@@ -23663,21 +23663,23 @@ fn circuit_secondary_inequality_choices_for_relation(
         dense_points[point_index] = Point::new(sample.coordinates.clone());
     }
 
-    let triangulations =
-        circuit_triangulation_choices(point_relation_nonzero).map_err(|error| error.to_string())?;
-    triangulations
-        .iter()
-        .map(|triangulation| {
-            secondary_cone_hyperplanes_native(&dense_points, triangulation)
-                .map(|hyperplanes| {
-                    hyperplanes
-                        .iter()
-                        .map(|hyperplane| sparse_from_dense(hyperplane))
-                        .collect::<Vec<_>>()
-                })
-                .map_err(|error| error.to_string())
+    let face_choices = expanded_secondary_face_inequality_choices_from_circuit_faces(
+        &dense_points,
+        &[point_relation_nonzero.to_vec()],
+    )
+    .map_err(|error| error.to_string())?;
+    let Some(choice_blocks) = face_choices.into_iter().next() else {
+        return Ok(Vec::new());
+    };
+    Ok(choice_blocks
+        .into_iter()
+        .map(|hyperplanes| {
+            hyperplanes
+                .iter()
+                .map(|hyperplane| sparse_from_dense(hyperplane))
+                .collect::<Vec<_>>()
         })
-        .collect()
+        .collect())
 }
 
 fn chamber_generator_ckyz_diagnostic(
