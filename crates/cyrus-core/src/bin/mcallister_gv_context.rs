@@ -919,6 +919,7 @@ struct CygvLowerSeedUnknownCandidateSummary {
     source_class_status_counts: BTreeMap<String, usize>,
     counterpart_degree_counts: BTreeMap<i128, usize>,
     counterpart_known_qn_history_status_counts: BTreeMap<String, usize>,
+    first_generation_seed_sum_status_counts: BTreeMap<String, usize>,
     source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
     matching_missing_target_index: Option<usize>,
     matching_missing_target_degree: Option<i128>,
@@ -947,6 +948,7 @@ struct CygvLowerSeedUnknownCandidateOccurrence {
     counterpart_toric_gv: Option<String>,
     counterpart_source_derived_gv: Option<String>,
     counterpart_nonzero: Vec<(usize, i64)>,
+    first_generation_seed_sum: Option<CygvSeedSumDecomposition>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1431,6 +1433,7 @@ struct CygvLowerSeedUnknownCandidateSummaryBuilder {
     source_class_status_counts: BTreeMap<String, usize>,
     counterpart_degree_counts: BTreeMap<i128, usize>,
     counterpart_known_qn_history_status_counts: BTreeMap<String, usize>,
+    first_generation_seed_sum_status_counts: BTreeMap<String, usize>,
     source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
     matching_missing_target_index: Option<usize>,
     matching_missing_target_degree: Option<i128>,
@@ -18401,6 +18404,7 @@ fn cygv_lower_seed_unknown_candidate_summaries<'a>(
                 candidate.difference_toric_gv.clone(),
                 candidate.difference_source_derived_gv.clone(),
                 &candidate.difference_nonzero,
+                candidate.predecessor_first_generation_seed_sum.clone(),
                 context,
             );
             add_lower_seed_unknown_candidate_side(
@@ -18416,6 +18420,7 @@ fn cygv_lower_seed_unknown_candidate_summaries<'a>(
                 candidate.predecessor_toric_gv.clone(),
                 candidate.predecessor_source_derived_gv.clone(),
                 &candidate.predecessor_nonzero,
+                candidate.difference_first_generation_seed_sum.clone(),
                 context,
             );
         }
@@ -18429,6 +18434,8 @@ fn cygv_lower_seed_unknown_candidate_summaries<'a>(
             counterpart_degree_counts: builder.counterpart_degree_counts,
             counterpart_known_qn_history_status_counts: builder
                 .counterpart_known_qn_history_status_counts,
+            first_generation_seed_sum_status_counts: builder
+                .first_generation_seed_sum_status_counts,
             source_ray_ambient_nonzero: builder.source_ray_ambient_nonzero,
             matching_missing_target_index: builder.matching_missing_target_index,
             matching_missing_target_degree: builder.matching_missing_target_degree,
@@ -18477,6 +18484,7 @@ fn add_lower_seed_unknown_candidate_side(
     counterpart_toric_gv: Option<String>,
     counterpart_source_derived_gv: Option<String>,
     counterpart_nonzero: &[(usize, i64)],
+    first_generation_seed_sum: Option<CygvSeedSumDecomposition>,
     context: &ValidatedContext<'_>,
 ) {
     if known_qn_history_status != "unknown_not_toric_covered" {
@@ -18495,6 +18503,7 @@ fn add_lower_seed_unknown_candidate_side(
             source_class_status_counts: BTreeMap::new(),
             counterpart_degree_counts: BTreeMap::new(),
             counterpart_known_qn_history_status_counts: BTreeMap::new(),
+            first_generation_seed_sum_status_counts: BTreeMap::new(),
             source_ray_ambient_nonzero: source_context
                 .as_ref()
                 .and_then(|source_context| source_context.source_ray_ambient_nonzero.clone()),
@@ -18576,6 +18585,12 @@ fn add_lower_seed_unknown_candidate_side(
         .counterpart_known_qn_history_status_counts
         .entry(counterpart_known_qn_history_status.to_string())
         .or_insert(0) += 1;
+    *entry
+        .first_generation_seed_sum_status_counts
+        .entry(lower_seed_unknown_first_generation_seed_sum_status(
+            first_generation_seed_sum.as_ref(),
+        ))
+        .or_insert(0) += 1;
     if let Some(source_context) = source_context.as_ref() {
         if let Some(readiness) = &source_context.matching_uncovered_source_ray_local_cygv_readiness
         {
@@ -18608,7 +18623,23 @@ fn add_lower_seed_unknown_candidate_side(
             counterpart_toric_gv,
             counterpart_source_derived_gv,
             counterpart_nonzero: counterpart_nonzero.to_vec(),
+            first_generation_seed_sum,
         });
+}
+
+fn lower_seed_unknown_first_generation_seed_sum_status(
+    seed_sum: Option<&CygvSeedSumDecomposition>,
+) -> String {
+    seed_sum.map_or_else(
+        || "missing_first_generation_seed_sum".to_string(),
+        |seed_sum| {
+            format!(
+                "reduced_seed_{}__seed_{}",
+                seed_sum.reduced_seed_known_qn_history_status,
+                seed_sum.seed_known_qn_history_status
+            )
+        },
+    )
 }
 
 fn cygv_lower_seed_unknown_candidate_degree_counts(
@@ -26005,6 +26036,10 @@ mod tests {
         assert_eq!(
             lower_unknowns[0].source_class_status_counts,
             BTreeMap::from([("source_ray_context_missing".to_string(), 2)])
+        );
+        assert_eq!(
+            lower_unknowns[0].first_generation_seed_sum_status_counts,
+            BTreeMap::from([("missing_first_generation_seed_sum".to_string(), 2)])
         );
         assert_eq!(
             cygv_lower_seed_unknown_candidate_degree_counts(&lower_unknowns),

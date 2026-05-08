@@ -231,7 +231,11 @@ run pass. Any remaining mismatch must be explicit and localizable.
    at degree `4` and two at degree `8`. Every queued row is currently
    `not_source_degree_bounded_ray`, so the next missing object is not another
    uncovered source-ray leaf but the parent chamber/history that couples these
-   composite rows to known toric/source sides.
+   composite rows to known toric/source sides. The queue now carries the
+   first-generation seed-sum evidence for the unknown side: the degree-4
+   composites split as known toric plus known toric, while the degree-8
+   composites split as known toric plus known source, with the source side
+   itself pair-reduced into known toric leaves.
    The parent-only classifications now include parent-path-support runtime
    lookups from the same `cygv` run. On the regenerated target 7 report, the
    generated degree-10 side term is a real parent-domain nonzero object
