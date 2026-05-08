@@ -1505,6 +1505,14 @@ to make the remaining GV layer more first-principles:
    local chamber candidate, but the report still marks target-plus-star qN
    history, chamber transport, semigroup transport, and non-Weyl wall-crossing
    transport as missing.
+   The source-resolution report now also projects the full star-union chamber
+   circuits into the star-union charge basis. For target `7`, both the current
+   and locally flipped chamber circuit semigroups contain the target-plus-star
+   coordinate `[3,1,-1]`: in the current chamber it decomposes as
+   `[1,0,0] + [2,1,-1]`, while in the local flip it decomposes as
+   `[-1,-2,1] + 3[0,1,0] + 2[2,0,-1]`. This is a chamber-semigroup candidate,
+   not a promoted certificate: the qN history, complete-intersection nef/tensor
+   input, and wall-crossing continuation remain uncertified.
    A follow-up compact-omission wall-side summary confirms this selected side
    is not one of the compact omission phases: both target rows have four
    compact omissions, but zero full-positive-side or full-negative-side

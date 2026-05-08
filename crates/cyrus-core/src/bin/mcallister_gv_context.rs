@@ -803,6 +803,8 @@ struct LocalCygvSourceResolutionHintSummary {
         LocalCygvStarUnionWallTransportReadiness,
     shared_two_simplex_star_union_crossed_wall_regular_side:
         LocalCygvStarUnionCrossedWallRegularSideHint,
+    shared_two_simplex_star_union_chamber_semigroup_transport:
+        LocalCygvStarUnionChamberSemigroupTransportProbe,
     shared_two_simplex_star_union_compact_omission_wall_side:
         LocalCygvCompactOmissionWallSideSummary,
     shared_two_simplex_star_union_global_secondary_height_status: String,
@@ -950,6 +952,27 @@ struct LocalCygvStarUnionCrossedWallRegularSideHint {
     local_circuit_flip_removed_simplices: Vec<Vec<usize>>,
     local_circuit_flip_added_simplices: Vec<Vec<usize>>,
     local_circuit_flip_simplex_count: Option<usize>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvStarUnionChamberSemigroupTransportProbe {
+    status: String,
+    target_plus_star_coordinates: Option<Vec<i64>>,
+    current_chamber_generator_count: Option<usize>,
+    current_chamber_generators: Vec<Vec<i64>>,
+    current_chamber_decomposition: Option<Vec<LocalCygvChamberSemigroupDecompositionTerm>>,
+    flipped_chamber_status: Option<String>,
+    flipped_chamber_generator_count: Option<usize>,
+    flipped_chamber_generators: Vec<Vec<i64>>,
+    flipped_chamber_decomposition: Option<Vec<LocalCygvChamberSemigroupDecompositionTerm>>,
+    error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvChamberSemigroupDecompositionTerm {
+    generator_index: usize,
+    coefficient: i64,
+    generator: Vec<i64>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -17399,6 +17422,11 @@ fn local_cygv_source_resolution_hint_summaries(
                 &star_support_hint,
                 Some(context.q_matrix),
             );
+            let star_union_point_samples = target
+                .origin_circuit_first_witness
+                .as_ref()
+                .map(|witness| origin_circuit_star_union_point_samples(witness, &star_support_hint))
+                .unwrap_or_default();
             let star_union_target_plus_star_unit_tensor_probe =
                 local_cygv_star_union_target_plus_star_unit_tensor_probe(
                     &star_union_relation_hint.target_plus_star,
@@ -17505,15 +17533,17 @@ fn local_cygv_source_resolution_hint_summaries(
                 &opposite_star_wall_circuit,
                 &star_union_global_regular_triangulation,
             );
+            let chamber_semigroup_transport =
+                local_cygv_star_union_chamber_semigroup_transport_probe(
+                    &star_union_point_samples,
+                    &star_union_relation_hint,
+                    &star_union_global_regular_triangulation,
+                    &crossed_wall_regular_side,
+                );
             let compact_omission_wall_side = local_cygv_compact_omission_wall_side_summary(
                 &star_union_target_plus_star_local_cygv_readiness,
                 &crossed_wall_regular_side,
             );
-            let star_union_point_samples = target
-                .origin_circuit_first_witness
-                .as_ref()
-                .map(|witness| origin_circuit_star_union_point_samples(witness, &star_support_hint))
-                .unwrap_or_default();
             let target_plus_star_origin_spectator_cicy =
                 local_cygv_target_plus_star_origin_spectator_cicy_hint(
                     &star_union_relation_hint.point_indices,
@@ -17667,6 +17697,8 @@ fn local_cygv_source_resolution_hint_summaries(
                     opposite_star_wall_circuit,
                 shared_two_simplex_star_union_wall_transport_readiness: wall_transport_readiness,
                 shared_two_simplex_star_union_crossed_wall_regular_side: crossed_wall_regular_side,
+                shared_two_simplex_star_union_chamber_semigroup_transport:
+                    chamber_semigroup_transport,
                 shared_two_simplex_star_union_compact_omission_wall_side:
                     compact_omission_wall_side,
                 shared_two_simplex_star_union_global_secondary_height_status:
@@ -21724,6 +21756,348 @@ fn local_cygv_star_union_crossed_wall_regular_side_hint(
         local_circuit_flip_added_simplices: local_added_simplices,
         local_circuit_flip_simplex_count: local_count,
     }
+}
+
+fn local_cygv_star_union_chamber_semigroup_transport_probe(
+    point_samples: &[OriginCircuitRelationPointSample],
+    star_union: &LocalCygvStarUnionRelationHint,
+    global_regular: &LocalCygvStarUnionGlobalRegularTriangulationHint,
+    regular_side: &LocalCygvStarUnionCrossedWallRegularSideHint,
+) -> LocalCygvStarUnionChamberSemigroupTransportProbe {
+    let blocked =
+        |status: &str, error: Option<String>| LocalCygvStarUnionChamberSemigroupTransportProbe {
+            status: status.to_string(),
+            target_plus_star_coordinates: star_union.target_plus_star_coordinates.clone(),
+            current_chamber_generator_count: None,
+            current_chamber_generators: Vec::new(),
+            current_chamber_decomposition: None,
+            flipped_chamber_status: None,
+            flipped_chamber_generator_count: None,
+            flipped_chamber_generators: Vec::new(),
+            flipped_chamber_decomposition: None,
+            error,
+        };
+
+    let Some(charge_basis) = star_union.charge_basis.as_deref() else {
+        return blocked(
+            "star_union_chamber_semigroup_blocked_missing_charge_basis",
+            None,
+        );
+    };
+    let Some(target) = star_union.target_plus_star_coordinates.as_deref() else {
+        return blocked(
+            "star_union_chamber_semigroup_blocked_missing_target_plus_star_coordinates",
+            None,
+        );
+    };
+    if global_regular.simplices.is_empty() {
+        return blocked(
+            "star_union_chamber_semigroup_blocked_missing_global_regular_triangulation",
+            None,
+        );
+    }
+
+    let current_generators = match local_cygv_star_union_chamber_generators_in_charge_basis(
+        point_samples,
+        &star_union.point_indices,
+        charge_basis,
+        &global_regular.simplices,
+    ) {
+        Ok(generators) => generators,
+        Err(error) => {
+            return blocked(
+                "star_union_chamber_semigroup_current_chamber_error",
+                Some(error),
+            );
+        }
+    };
+    let current_decomposition =
+        match chamber_semigroup_decomposition_terms(target, &current_generators) {
+            Ok(decomposition) => decomposition,
+            Err(error) => {
+                return blocked(
+                    "star_union_chamber_semigroup_current_decomposition_error",
+                    Some(error),
+                );
+            }
+        };
+
+    let flipped = local_cygv_star_union_flipped_link_simplices(global_regular, regular_side);
+    let (flipped_status, flipped_generators, flipped_decomposition) = match flipped {
+        Ok(Some(flipped_simplices)) => {
+            match local_cygv_star_union_chamber_generators_in_charge_basis(
+                point_samples,
+                &star_union.point_indices,
+                charge_basis,
+                &flipped_simplices,
+            ) {
+                Ok(generators) => {
+                    match chamber_semigroup_decomposition_terms(target, &generators) {
+                        Ok(decomposition) => (
+                            Some("local_flip_chamber_semigroup_computed".to_string()),
+                            generators,
+                            decomposition,
+                        ),
+                        Err(error) => (
+                            Some(format!(
+                                "local_flip_chamber_semigroup_decomposition_error:{}",
+                                status_error_fragment(&error)
+                            )),
+                            generators,
+                            None,
+                        ),
+                    }
+                }
+                Err(error) => (
+                    Some(format!(
+                        "local_flip_chamber_semigroup_error:{}",
+                        status_error_fragment(&error)
+                    )),
+                    Vec::new(),
+                    None,
+                ),
+            }
+        }
+        Ok(None) => (
+            Some("local_flip_chamber_semigroup_not_available".to_string()),
+            Vec::new(),
+            None,
+        ),
+        Err(error) => (
+            Some(format!(
+                "local_flip_chamber_semigroup_error:{}",
+                status_error_fragment(&error)
+            )),
+            Vec::new(),
+            None,
+        ),
+    };
+
+    let status = match (
+        current_decomposition.is_some(),
+        flipped_decomposition.is_some(),
+    ) {
+        (true, true) => {
+            "star_union_chamber_semigroup_candidate_current_and_flipped_contain_target_plus_star"
+        }
+        (true, false) => "star_union_chamber_semigroup_candidate_current_contains_target_plus_star",
+        (false, true) => "star_union_chamber_semigroup_candidate_flipped_contains_target_plus_star",
+        (false, false) => "star_union_chamber_semigroup_candidate_target_plus_star_not_found",
+    };
+
+    LocalCygvStarUnionChamberSemigroupTransportProbe {
+        status: status.to_string(),
+        target_plus_star_coordinates: Some(target.to_vec()),
+        current_chamber_generator_count: Some(current_generators.len()),
+        current_chamber_generators: current_generators,
+        current_chamber_decomposition: current_decomposition,
+        flipped_chamber_status: flipped_status,
+        flipped_chamber_generator_count: (!flipped_generators.is_empty())
+            .then_some(flipped_generators.len()),
+        flipped_chamber_generators: flipped_generators,
+        flipped_chamber_decomposition: flipped_decomposition,
+        error: None,
+    }
+}
+
+fn local_cygv_star_union_chamber_generators_in_charge_basis(
+    point_samples: &[OriginCircuitRelationPointSample],
+    point_indices: &[usize],
+    charge_basis: &[Vec<i64>],
+    global_simplices: &[Vec<usize>],
+) -> Result<Vec<Vec<i64>>, String> {
+    if point_indices.is_empty() {
+        return Err("star-union chamber semigroup has no point indices".to_string());
+    }
+    if charge_basis.is_empty() {
+        return Err("star-union chamber semigroup has no charge basis".to_string());
+    }
+    if charge_basis
+        .iter()
+        .any(|row| row.len() != point_indices.len())
+    {
+        return Err("star-union chamber semigroup charge-basis width mismatch".to_string());
+    }
+    let by_point = point_samples
+        .iter()
+        .map(|sample| (sample.point_index, sample))
+        .collect::<BTreeMap<_, _>>();
+    let points = point_indices
+        .iter()
+        .map(|point_index| {
+            by_point
+                .get(point_index)
+                .map(|sample| Point::new(sample.coordinates.clone()))
+                .ok_or_else(|| {
+                    format!("star-union chamber point {point_index} has no coordinate sample")
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let local_index_by_global = point_indices
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(local, global)| (global, local))
+        .collect::<BTreeMap<_, _>>();
+    let local_simplices = global_simplices
+        .iter()
+        .map(|simplex| {
+            simplex
+                .iter()
+                .map(|point| {
+                    local_index_by_global.get(point).copied().ok_or_else(|| {
+                        format!("star-union chamber simplex contains point {point} outside support")
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let triangulation = Triangulation::new(local_simplices);
+    let hyperplanes = secondary_cone_hyperplanes_native(&points, &triangulation)
+        .map_err(|error| error.to_string())?;
+    let mut generators = BTreeSet::new();
+    for hyperplane in hyperplanes {
+        let Some(coordinates) =
+            relation_coordinates_in_local_charge_basis(&hyperplane, charge_basis)?
+        else {
+            return Err(format!(
+                "star-union chamber circuit {hyperplane:?} is not in charge basis"
+            ));
+        };
+        generators.insert(primitive_i64_ray_direction(
+            &coordinates,
+            "star-union chamber circuit coordinate",
+        )?);
+    }
+    Ok(generators.into_iter().collect())
+}
+
+fn local_cygv_star_union_flipped_link_simplices(
+    global_regular: &LocalCygvStarUnionGlobalRegularTriangulationHint,
+    regular_side: &LocalCygvStarUnionCrossedWallRegularSideHint,
+) -> Result<Option<Vec<Vec<usize>>>, String> {
+    if regular_side.local_circuit_flip_status.as_deref()
+        != Some("local_circuit_flip_constructed_adjacent_chamber")
+    {
+        return Ok(None);
+    }
+    let removed = regular_side
+        .local_circuit_flip_removed_simplices
+        .iter()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let added = regular_side
+        .local_circuit_flip_added_simplices
+        .iter()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    if removed.is_empty() || added.is_empty() {
+        return Err("local flip has empty removed or added simplex set".to_string());
+    }
+    let mut simplices = BTreeSet::new();
+    for simplex in &global_regular.simplices {
+        if !removed.contains(simplex) {
+            simplices.insert(simplex.clone());
+        }
+    }
+    for simplex in removed {
+        if global_regular
+            .simplices
+            .iter()
+            .all(|existing| existing != &simplex)
+        {
+            return Err(format!(
+                "local flip removed simplex {simplex:?} is absent from global triangulation"
+            ));
+        }
+    }
+    simplices.extend(added);
+    Ok(Some(simplices.into_iter().collect()))
+}
+
+fn chamber_semigroup_decomposition_terms(
+    target: &[i64],
+    generators: &[Vec<i64>],
+) -> Result<Option<Vec<LocalCygvChamberSemigroupDecompositionTerm>>, String> {
+    let Some(coefficients) = nonnegative_integer_generator_coefficients(target, generators)? else {
+        return Ok(None);
+    };
+    Ok(Some(
+        coefficients
+            .into_iter()
+            .enumerate()
+            .filter_map(|(generator_index, coefficient)| {
+                (coefficient != 0).then(|| LocalCygvChamberSemigroupDecompositionTerm {
+                    generator_index,
+                    coefficient,
+                    generator: generators[generator_index].clone(),
+                })
+            })
+            .collect(),
+    ))
+}
+
+fn nonnegative_integer_generator_coefficients(
+    target: &[i64],
+    generators: &[Vec<i64>],
+) -> Result<Option<Vec<i64>>, String> {
+    if target.is_empty() {
+        return Err("semigroup target is empty".to_string());
+    }
+    if generators
+        .iter()
+        .any(|generator| generator.len() != target.len())
+    {
+        return Err("semigroup generator dimension mismatch".to_string());
+    }
+    if generators.is_empty() {
+        return Ok(None);
+    }
+    let max_subset = target.len().min(generators.len());
+    for subset_len in 1..=max_subset {
+        for subset in column_combinations(generators.len(), subset_len) {
+            let matrix = (0..target.len())
+                .map(|row| {
+                    subset
+                        .iter()
+                        .map(|&generator_index| {
+                            MalachiteRational::from(Integer::from(generators[generator_index][row]))
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+            let rhs = target
+                .iter()
+                .map(|&entry| MalachiteRational::from(Integer::from(entry)))
+                .collect::<Vec<_>>();
+            let Some(solution) = solve_rectangular_linear_system_rational(&matrix, &rhs)? else {
+                continue;
+            };
+            if solution.len() != subset_len {
+                return Err("semigroup decomposition solver returned wrong width".to_string());
+            }
+            let mut coefficients = vec![0i64; generators.len()];
+            let mut valid = true;
+            for (&generator_index, coefficient) in subset.iter().zip(solution.iter()) {
+                if coefficient < &MalachiteRational::from(0)
+                    || coefficient.denominator_ref() != &1u32
+                {
+                    valid = false;
+                    break;
+                }
+                let integer = Integer::try_from(coefficient.clone()).map_err(|_| {
+                    "semigroup decomposition coefficient is not integral".to_string()
+                })?;
+                coefficients[generator_index] = i64::try_from(&integer).map_err(|_| {
+                    "semigroup decomposition coefficient does not fit in i64".to_string()
+                })?;
+            }
+            if valid {
+                return Ok(Some(coefficients));
+            }
+        }
+    }
+    Ok(None)
 }
 
 fn local_cygv_compact_omission_wall_side_summary(
@@ -27208,6 +27582,19 @@ mod tests {
                     local_circuit_flip_added_simplices: Vec::new(),
                     local_circuit_flip_simplex_count: None,
                 },
+            shared_two_simplex_star_union_chamber_semigroup_transport:
+                LocalCygvStarUnionChamberSemigroupTransportProbe {
+                    status: "test".to_string(),
+                    target_plus_star_coordinates: None,
+                    current_chamber_generator_count: None,
+                    current_chamber_generators: Vec::new(),
+                    current_chamber_decomposition: None,
+                    flipped_chamber_status: None,
+                    flipped_chamber_generator_count: None,
+                    flipped_chamber_generators: Vec::new(),
+                    flipped_chamber_decomposition: None,
+                    error: None,
+                },
             shared_two_simplex_star_union_compact_omission_wall_side:
                 LocalCygvCompactOmissionWallSideSummary {
                     status: "test".to_string(),
@@ -30604,6 +30991,149 @@ mod tests {
             blocked_by_wall
                 .promotion_missing_inputs
                 .contains(&"target_plus_star_wall_crossing_chamber_transport".to_string())
+        );
+    }
+
+    #[test]
+    fn star_union_chamber_semigroup_probe_tracks_local_flip_target_plus_star() {
+        let point_samples = vec![
+            relation_point_sample(0, -1, &[0, 0, 0, 0], Some(4)),
+            relation_point_sample(46, 2, &[1, 2, 0, 2], Some(1)),
+            relation_point_sample(55, 0, &[3, 4, 1, 5], None),
+            relation_point_sample(195, 0, &[1, 1, 0, 1], None),
+            relation_point_sample(208, 1, &[2, 2, 1, 2], Some(2)),
+            relation_point_sample(211, -3, &[2, 3, 1, 3], Some(2)),
+            relation_point_sample(212, 0, &[2, 3, 1, 4], None),
+            relation_point_sample(214, 1, &[2, 3, 2, 3], Some(2)),
+        ];
+        let star_union = LocalCygvStarUnionRelationHint {
+            status: "test".to_string(),
+            point_indices: vec![0, 46, 55, 195, 208, 211, 212, 214],
+            affine_rank: Some(4),
+            charge_basis: Some(vec![
+                vec![0, 1, 0, -1, 1, -1, 0, 0],
+                vec![1, 0, 1, -1, 0, 0, -1, 0],
+                vec![1, 1, 0, -3, 2, 0, 0, -1],
+            ]),
+            target_coordinates: None,
+            target_rational_coordinates: None,
+            target_rational_denominators: None,
+            star_coordinates: None,
+            star_rational_coordinates: None,
+            star_rational_denominators: None,
+            target_minus_star_coordinates: None,
+            target_plus_star_coordinates: Some(vec![3, 1, -1]),
+            global_basis_status: "test".to_string(),
+            target_basis_nonzero: None,
+            star_basis_nonzero: None,
+            target_minus_star_basis_nonzero: None,
+            target_plus_star_basis_nonzero: None,
+            target_minus_star: Vec::new(),
+            target_plus_star: Vec::new(),
+        };
+        let global_regular = LocalCygvStarUnionGlobalRegularTriangulationHint {
+            status: "star_union_global_regular_shared_face_matches_serialized_star_extras"
+                .to_string(),
+            simplex_count: Some(7),
+            simplices: vec![
+                vec![0, 55, 195, 208, 211],
+                vec![0, 46, 55, 195, 211],
+                vec![0, 46, 55, 211, 212],
+                vec![0, 55, 208, 212, 214],
+                vec![0, 55, 211, 212, 214],
+                vec![0, 46, 211, 212, 214],
+                vec![0, 55, 208, 211, 214],
+            ],
+            shared_face_simplex_count: Some(2),
+            shared_face_extra_points: vec![195, 212],
+            target_exclusive_selected_points: Vec::new(),
+            star_extra_selected_points: vec![195, 212],
+        };
+        let regular_side = LocalCygvStarUnionCrossedWallRegularSideHint {
+            status: "crossed_wall_regular_selects_positive_coefficient_omission_side".to_string(),
+            selected_omission_side: Some("positive_coefficient_omission_side".to_string()),
+            circuit_flip_status: Some(
+                "circuit_flip_error:invalid_input_circuit_flip_link_208_211_has_partial_selected_side"
+                    .to_string(),
+            ),
+            flipped_omission_side: None,
+            positive_coefficient_points: vec![195, 212],
+            negative_coefficient_points: vec![0, 55],
+            positive_coefficient_omission_hits: vec![195, 212],
+            negative_coefficient_omission_hits: Vec::new(),
+            selected_side_circuit_facets: vec![vec![0, 55, 195], vec![0, 55, 212]],
+            opposite_side_circuit_facets: vec![vec![0, 195, 212], vec![55, 195, 212]],
+            circuit_flip_removed_simplices: Vec::new(),
+            circuit_flip_added_simplices: Vec::new(),
+            circuit_flip_simplex_count: None,
+            local_circuit_flip_status: Some(
+                "local_circuit_flip_constructed_adjacent_chamber".to_string(),
+            ),
+            local_circuit_flip_link: Some(vec![46, 211]),
+            local_circuit_flip_removed_simplices: vec![
+                vec![0, 46, 55, 195, 211],
+                vec![0, 46, 55, 211, 212],
+            ],
+            local_circuit_flip_added_simplices: vec![
+                vec![0, 46, 195, 211, 212],
+                vec![46, 55, 195, 211, 212],
+            ],
+            local_circuit_flip_simplex_count: Some(7),
+        };
+
+        let probe = local_cygv_star_union_chamber_semigroup_transport_probe(
+            &point_samples,
+            &star_union,
+            &global_regular,
+            &regular_side,
+        );
+
+        assert_eq!(
+            probe.status,
+            "star_union_chamber_semigroup_candidate_current_and_flipped_contain_target_plus_star"
+        );
+        assert_eq!(probe.current_chamber_generator_count, Some(5));
+        assert_eq!(
+            probe.current_chamber_generators,
+            vec![
+                vec![-1, -2, 1],
+                vec![0, -1, 0],
+                vec![1, 0, -1],
+                vec![1, 0, 0],
+                vec![2, 1, -1],
+            ]
+        );
+        assert_eq!(
+            probe.current_chamber_decomposition.as_ref().map(|terms| {
+                terms
+                    .iter()
+                    .map(|term| (term.generator_index, term.coefficient))
+                    .collect::<Vec<_>>()
+            }),
+            Some(vec![(3, 1), (4, 1)])
+        );
+        assert_eq!(
+            probe.flipped_chamber_status.as_deref(),
+            Some("local_flip_chamber_semigroup_computed")
+        );
+        assert_eq!(
+            probe.flipped_chamber_generators,
+            vec![
+                vec![-1, -2, 1],
+                vec![0, 1, 0],
+                vec![1, 0, -1],
+                vec![2, 0, -1],
+                vec![2, 1, -1],
+            ]
+        );
+        assert_eq!(
+            probe.flipped_chamber_decomposition.as_ref().map(|terms| {
+                terms
+                    .iter()
+                    .map(|term| (term.generator_index, term.coefficient))
+                    .collect::<Vec<_>>()
+            }),
+            Some(vec![(0, 1), (1, 3), (3, 2)])
         );
     }
 
