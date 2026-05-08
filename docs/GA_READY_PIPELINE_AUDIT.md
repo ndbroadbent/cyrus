@@ -1606,6 +1606,14 @@ to make the remaining GV layer more first-principles:
    higher-codimension supports. This rules out using the term-local point
    relation support as an already-certified Mori face; the remaining task is
    still source/chamber transport for the missing compact qN history.
+   The same report now preserves nearest degree-bounded support-overlap
+   diagnostics for those term rows. All five current terms find nearby
+   degree-bounded rows, but none match exactly: best overlap buckets are
+   `{2:2, 3:2, 4:1}`, best missing-point buckets are `{1:1, 2:4}`, and best
+   extra-point buckets are `{1:4, 2:1}`. For targets `7`/`8`, the nearest
+   degree-2 rows repeatedly introduce point `56` or a neighboring point
+   `49`/`52` while omitting part of the target/star support, which is concrete
+   chamber-transport evidence rather than a valid compact semigroup domain.
    A follow-up compact-omission wall-side summary confirms this selected side
    is not one of the compact omission phases: both target rows have four
    compact omissions, but zero full-positive-side or full-negative-side

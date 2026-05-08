@@ -59,6 +59,7 @@ const CYGV_BOUNDED_DIAMOND_PARENT_QN_DIFF_SAMPLE_LIMIT: usize = 16;
 const ORIGIN_CIRCUIT_WITNESS_DOMAIN_UNRESOLVED_SAMPLE_LIMIT: usize = 64;
 const ORIGIN_CIRCUIT_WITNESS_DOMAIN_OCCURRENCE_SAMPLE_LIMIT: usize = 8;
 const ORIGIN_CIRCUIT_WITNESS_DOMAIN_SPAN_CLOSURE_SAMPLE_LIMIT: usize = 16;
+const CHAMBER_GENERATOR_SUPPORT_OVERLAP_SAMPLE_LIMIT: usize = 5;
 
 #[derive(Debug, Deserialize)]
 struct CorrectedChamberGvContext {
@@ -405,6 +406,14 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_decomposition_term_relation_support_face_certificate_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_decomposition_term_nearest_support_overlap_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_decomposition_term_nearest_support_overlap_count_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_decomposition_term_nearest_support_missing_count_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_decomposition_term_nearest_support_extra_count_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_flipped_chamber_cygv_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_flipped_chamber_cygv_gv_counts: BTreeMap<String, usize>,
@@ -441,6 +450,14 @@ struct ContextReport {
     local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_relation_support_generator_count_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_relation_support_face_certificate_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_nearest_support_overlap_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_nearest_support_overlap_count_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_nearest_support_missing_count_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_nearest_support_extra_count_counts:
         BTreeMap<String, usize>,
     local_phase_chamber_membership_certificate_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_hint_sample: Vec<LocalCygvSourceResolutionHintSummary>,
@@ -1073,10 +1090,35 @@ struct LocalCygvChamberSemigroupGeneratorContext {
     source_class_status: Option<String>,
     source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
     local_toric_diagnostic: LocalCygvChamberGeneratorLocalToricDiagnostic,
+    degree_bounded_support_overlap_diagnostic: LocalCygvChamberGeneratorSupportOverlapDiagnostic,
     lower_seed_sum_decomposition: Option<CygvSeedSumDecomposition>,
     bounded_lower_seed_decomposition: Option<CygvBoundedSeedDecompositionSummary>,
     lower_seed_decomposition_error: Option<String>,
     error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvChamberGeneratorSupportOverlapDiagnostic {
+    status: String,
+    sample_limit: usize,
+    best_overlap_count: Option<usize>,
+    best_missing_point_count: Option<usize>,
+    best_extra_point_count: Option<usize>,
+    best_symmetric_difference_count: Option<usize>,
+    sample: Vec<LocalCygvChamberGeneratorSupportOverlapSample>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvChamberGeneratorSupportOverlapSample {
+    degree: i128,
+    overlap_count: usize,
+    missing_point_count: usize,
+    extra_point_count: usize,
+    symmetric_difference_count: usize,
+    missing_points: Vec<usize>,
+    extra_points: Vec<usize>,
+    ambient_nonzero: Vec<(usize, i64)>,
+    basis_nonzero: Vec<(usize, i64)>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -16376,6 +16418,40 @@ fn build_report(
         chamber_decomposition_term_relation_support_face_certificate_status_counts(
             &current_chamber_decomposition_term_relation_support_probes,
         );
+    let local_cygv_source_resolution_star_union_current_chamber_decomposition_term_nearest_support_overlap_status_counts =
+        chamber_decomposition_term_support_overlap_status_counts(
+            chamber_decomposition_term_contexts(
+                &local_cygv_source_resolution_hint_sample,
+                ChamberSide::Current,
+            ),
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_decomposition_term_nearest_support_overlap_count_counts =
+        chamber_decomposition_term_support_overlap_count_counts(
+            chamber_decomposition_term_contexts(
+                &local_cygv_source_resolution_hint_sample,
+                ChamberSide::Current,
+            ),
+            |diagnostic| diagnostic.best_overlap_count,
+            "missing_overlap",
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_decomposition_term_nearest_support_missing_count_counts =
+        chamber_decomposition_term_support_overlap_count_counts(
+            chamber_decomposition_term_contexts(
+                &local_cygv_source_resolution_hint_sample,
+                ChamberSide::Current,
+            ),
+            |diagnostic| diagnostic.best_missing_point_count,
+            "missing_overlap",
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_decomposition_term_nearest_support_extra_count_counts =
+        chamber_decomposition_term_support_overlap_count_counts(
+            chamber_decomposition_term_contexts(
+                &local_cygv_source_resolution_hint_sample,
+                ChamberSide::Current,
+            ),
+            |diagnostic| diagnostic.best_extra_point_count,
+            "missing_overlap",
+        );
     let local_cygv_source_resolution_star_union_flipped_chamber_cygv_status_counts =
         provided_generator_cygv_probe_status_counts(
             local_cygv_source_resolution_hint_sample
@@ -16474,6 +16550,40 @@ fn build_report(
     let local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_relation_support_face_certificate_status_counts =
         chamber_decomposition_term_relation_support_face_certificate_status_counts(
             &flipped_chamber_decomposition_term_relation_support_probes,
+        );
+    let local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_nearest_support_overlap_status_counts =
+        chamber_decomposition_term_support_overlap_status_counts(
+            chamber_decomposition_term_contexts(
+                &local_cygv_source_resolution_hint_sample,
+                ChamberSide::Flipped,
+            ),
+        );
+    let local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_nearest_support_overlap_count_counts =
+        chamber_decomposition_term_support_overlap_count_counts(
+            chamber_decomposition_term_contexts(
+                &local_cygv_source_resolution_hint_sample,
+                ChamberSide::Flipped,
+            ),
+            |diagnostic| diagnostic.best_overlap_count,
+            "missing_overlap",
+        );
+    let local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_nearest_support_missing_count_counts =
+        chamber_decomposition_term_support_overlap_count_counts(
+            chamber_decomposition_term_contexts(
+                &local_cygv_source_resolution_hint_sample,
+                ChamberSide::Flipped,
+            ),
+            |diagnostic| diagnostic.best_missing_point_count,
+            "missing_overlap",
+        );
+    let local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_nearest_support_extra_count_counts =
+        chamber_decomposition_term_support_overlap_count_counts(
+            chamber_decomposition_term_contexts(
+                &local_cygv_source_resolution_hint_sample,
+                ChamberSide::Flipped,
+            ),
+            |diagnostic| diagnostic.best_extra_point_count,
+            "missing_overlap",
         );
     let missing_local_cygv_missing_source_input_counts = local_cygv_missing_source_input_counts(
         targets
@@ -17474,6 +17584,10 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_decomposition_term_bounded_lower_seed_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_decomposition_term_relation_support_generator_count_counts,
         local_cygv_source_resolution_star_union_current_chamber_decomposition_term_relation_support_face_certificate_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_decomposition_term_nearest_support_overlap_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_decomposition_term_nearest_support_overlap_count_counts,
+        local_cygv_source_resolution_star_union_current_chamber_decomposition_term_nearest_support_missing_count_counts,
+        local_cygv_source_resolution_star_union_current_chamber_decomposition_term_nearest_support_extra_count_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_cygv_status_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_cygv_gv_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_cygv_qn_status_counts,
@@ -17493,6 +17607,10 @@ fn build_report(
         local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_bounded_lower_seed_status_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_relation_support_generator_count_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_relation_support_face_certificate_status_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_nearest_support_overlap_status_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_nearest_support_overlap_count_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_nearest_support_missing_count_counts,
+        local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_nearest_support_extra_count_counts,
         local_phase_chamber_membership_certificate_status_counts,
         local_cygv_source_resolution_hint_sample,
         local_cygv_target_candidate_status_counts,
@@ -19267,6 +19385,38 @@ fn chamber_decomposition_term_relation_support_face_certificate_status_counts(
             .or_insert(0usize) += 1;
     }
     counts
+}
+
+fn chamber_decomposition_term_support_overlap_status_counts<'a>(
+    contexts: impl IntoIterator<Item = Option<&'a LocalCygvChamberSemigroupGeneratorContext>>,
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        contexts.into_iter().map(|context| {
+            context.map(|context| {
+                context
+                    .degree_bounded_support_overlap_diagnostic
+                    .status
+                    .as_str()
+            })
+        }),
+        "missing_generator_context",
+    )
+}
+
+fn chamber_decomposition_term_support_overlap_count_counts<'a, F>(
+    contexts: impl IntoIterator<Item = Option<&'a LocalCygvChamberSemigroupGeneratorContext>>,
+    value: F,
+    missing_status: &str,
+) -> BTreeMap<String, usize>
+where
+    F: Fn(&LocalCygvChamberGeneratorSupportOverlapDiagnostic) -> Option<usize>,
+{
+    optional_usize_count_counts(
+        contexts.into_iter().map(|context| {
+            context.and_then(|context| value(&context.degree_bounded_support_overlap_diagnostic))
+        }),
+        missing_status,
+    )
 }
 
 fn local_cygv_source_resolution_star_union_opposite_star_wall_circuit_status_counts(
@@ -22899,6 +23049,22 @@ fn chamber_semigroup_generator_context(
                  known_qn_history_status: &str,
                  error: Option<String>|
      -> LocalCygvChamberSemigroupGeneratorContext {
+        let degree_bounded_support_overlap_diagnostic =
+            point_relation_nonzero.as_deref().map_or_else(
+                || {
+                    chamber_generator_support_overlap_diagnostic_not_run(
+                        "point_relation_unavailable",
+                    )
+                },
+                |point_relation_nonzero| {
+                    chamber_generator_degree_bounded_support_overlap_diagnostic(
+                        point_relation_nonzero,
+                        None,
+                        context,
+                        CHAMBER_GENERATOR_SUPPORT_OVERLAP_SAMPLE_LIMIT,
+                    )
+                },
+            );
         LocalCygvChamberSemigroupGeneratorContext {
             generator_index,
             chamber_coordinate: generator.to_vec(),
@@ -22915,6 +23081,7 @@ fn chamber_semigroup_generator_context(
             local_toric_diagnostic: chamber_generator_local_toric_diagnostic_not_run(
                 "point_relation_unavailable",
             ),
+            degree_bounded_support_overlap_diagnostic,
             lower_seed_sum_decomposition: None,
             bounded_lower_seed_decomposition: None,
             lower_seed_decomposition_error: None,
@@ -22958,6 +23125,8 @@ fn chamber_semigroup_generator_context(
             local_toric_diagnostic: chamber_generator_local_toric_diagnostic_not_run(
                 "zero_point_relation",
             ),
+            degree_bounded_support_overlap_diagnostic:
+                chamber_generator_support_overlap_diagnostic_not_run("zero_point_relation"),
             lower_seed_sum_decomposition: None,
             bounded_lower_seed_decomposition: None,
             lower_seed_decomposition_error: None,
@@ -22996,6 +23165,13 @@ fn chamber_semigroup_generator_context(
         Err(error) => {
             let local_toric_diagnostic =
                 chamber_generator_local_toric_diagnostic(&point_relation_nonzero, point_samples);
+            let degree_bounded_support_overlap_diagnostic =
+                chamber_generator_degree_bounded_support_overlap_diagnostic(
+                    &point_relation_nonzero,
+                    None,
+                    context,
+                    CHAMBER_GENERATOR_SUPPORT_OVERLAP_SAMPLE_LIMIT,
+                );
             return LocalCygvChamberSemigroupGeneratorContext {
                 generator_index,
                 chamber_coordinate: generator.to_vec(),
@@ -23012,6 +23188,7 @@ fn chamber_semigroup_generator_context(
                 source_class_status: None,
                 source_ray_ambient_nonzero: None,
                 local_toric_diagnostic,
+                degree_bounded_support_overlap_diagnostic,
                 lower_seed_sum_decomposition: None,
                 bounded_lower_seed_decomposition: None,
                 lower_seed_decomposition_error: None,
@@ -23030,6 +23207,13 @@ fn chamber_semigroup_generator_context(
     ) = star_union_lower_seed_diagnostics(&basis_dense, degree, context, true);
     let local_toric_diagnostic =
         chamber_generator_local_toric_diagnostic(&point_relation_nonzero, point_samples);
+    let degree_bounded_support_overlap_diagnostic =
+        chamber_generator_degree_bounded_support_overlap_diagnostic(
+            &point_relation_nonzero,
+            Some(degree),
+            context,
+            CHAMBER_GENERATOR_SUPPORT_OVERLAP_SAMPLE_LIMIT,
+        );
 
     LocalCygvChamberSemigroupGeneratorContext {
         generator_index,
@@ -23045,6 +23229,7 @@ fn chamber_semigroup_generator_context(
         source_class_status,
         source_ray_ambient_nonzero,
         local_toric_diagnostic,
+        degree_bounded_support_overlap_diagnostic,
         lower_seed_sum_decomposition,
         bounded_lower_seed_decomposition,
         lower_seed_decomposition_error,
@@ -23107,6 +23292,116 @@ fn chamber_generator_local_toric_diagnostic_not_run(
         ckyz_first_multiple_target_degree: None,
         ckyz_first_multiple_gv_candidate: None,
         error: None,
+    }
+}
+
+fn chamber_generator_support_overlap_diagnostic_not_run(
+    reason: &str,
+) -> LocalCygvChamberGeneratorSupportOverlapDiagnostic {
+    LocalCygvChamberGeneratorSupportOverlapDiagnostic {
+        status: format!("not_run_{reason}"),
+        sample_limit: CHAMBER_GENERATOR_SUPPORT_OVERLAP_SAMPLE_LIMIT,
+        best_overlap_count: None,
+        best_missing_point_count: None,
+        best_extra_point_count: None,
+        best_symmetric_difference_count: None,
+        sample: Vec::new(),
+    }
+}
+
+fn chamber_generator_degree_bounded_support_overlap_diagnostic(
+    point_relation_nonzero: &[(usize, i64)],
+    max_degree: Option<i128>,
+    context: &ValidatedContext<'_>,
+    sample_limit: usize,
+) -> LocalCygvChamberGeneratorSupportOverlapDiagnostic {
+    let blocked = |status: String| LocalCygvChamberGeneratorSupportOverlapDiagnostic {
+        status,
+        sample_limit,
+        best_overlap_count: None,
+        best_missing_point_count: None,
+        best_extra_point_count: None,
+        best_symmetric_difference_count: None,
+        sample: Vec::new(),
+    };
+    if point_relation_nonzero.is_empty() {
+        return blocked("support_overlap_missing_point_relation_support".to_string());
+    }
+    let Some(max_degree) = max_degree else {
+        return blocked("support_overlap_missing_degree".to_string());
+    };
+    if max_degree <= 0 {
+        return blocked(format!("support_overlap_nonpositive_degree_{max_degree}"));
+    }
+    let Some(ray_context) = context.degree_bounded_ray_context else {
+        return blocked("support_overlap_missing_degree_bounded_mori_ray_context".to_string());
+    };
+
+    let support = point_relation_nonzero
+        .iter()
+        .map(|&(point_index, _)| point_index)
+        .collect::<BTreeSet<_>>();
+    let mut candidates = Vec::new();
+    for ray in ray_context {
+        if ray.degree <= 0 || ray.degree > max_degree {
+            continue;
+        }
+        let ray_support = ray
+            .ambient_nonzero
+            .iter()
+            .map(|&(point_index, _)| point_index)
+            .collect::<BTreeSet<_>>();
+        let overlap_count = support.intersection(&ray_support).count();
+        let missing_points = support
+            .difference(&ray_support)
+            .copied()
+            .collect::<Vec<_>>();
+        let extra_points = ray_support
+            .difference(&support)
+            .copied()
+            .collect::<Vec<_>>();
+        candidates.push(LocalCygvChamberGeneratorSupportOverlapSample {
+            degree: ray.degree,
+            overlap_count,
+            missing_point_count: missing_points.len(),
+            extra_point_count: extra_points.len(),
+            symmetric_difference_count: missing_points.len() + extra_points.len(),
+            missing_points,
+            extra_points,
+            ambient_nonzero: ray.ambient_nonzero.clone(),
+            basis_nonzero: ray.basis_nonzero.clone(),
+        });
+    }
+    if candidates.is_empty() {
+        return blocked("support_overlap_no_degree_bounded_candidates_le_degree".to_string());
+    }
+    candidates.sort_by(|left, right| {
+        left.symmetric_difference_count
+            .cmp(&right.symmetric_difference_count)
+            .then_with(|| left.missing_point_count.cmp(&right.missing_point_count))
+            .then_with(|| left.extra_point_count.cmp(&right.extra_point_count))
+            .then_with(|| right.overlap_count.cmp(&left.overlap_count))
+            .then_with(|| left.degree.cmp(&right.degree))
+            .then_with(|| left.ambient_nonzero.cmp(&right.ambient_nonzero))
+            .then_with(|| left.basis_nonzero.cmp(&right.basis_nonzero))
+    });
+    let best = candidates
+        .first()
+        .expect("candidates was checked as nonempty");
+    let best_overlap_count = Some(best.overlap_count);
+    let best_missing_point_count = Some(best.missing_point_count);
+    let best_extra_point_count = Some(best.extra_point_count);
+    let best_symmetric_difference_count = Some(best.symmetric_difference_count);
+    candidates.truncate(sample_limit);
+
+    LocalCygvChamberGeneratorSupportOverlapDiagnostic {
+        status: "support_overlap_nearest_degree_bounded_candidates_sampled".to_string(),
+        sample_limit,
+        best_overlap_count,
+        best_missing_point_count,
+        best_extra_point_count,
+        best_symmetric_difference_count,
+        sample: candidates,
     }
 }
 
@@ -30138,6 +30433,76 @@ mod tests {
     }
 
     #[test]
+    fn chamber_generator_support_overlap_diagnostic_samples_nearest_degree_bounded_rays() {
+        let stats = MissingGvTargetStats {
+            target_count: 0,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: Vec::new(),
+        };
+        let grading = vec![1, 1];
+        let q_matrix = vec![vec![1, 0], vec![0, 1]];
+        let degree_bounded_rays = vec![vec![1, 0], vec![0, 1], vec![1, 1]];
+        let ray_context = vec![
+            DegreeBoundedMoriRayContextSample {
+                degree: 2,
+                ambient_nonzero: vec![(46, 1), (56, 1), (211, -2)],
+                basis_nonzero: vec![(0, 1)],
+            },
+            DegreeBoundedMoriRayContextSample {
+                degree: 2,
+                ambient_nonzero: vec![(46, 1), (195, -1), (208, 1), (211, -1)],
+                basis_nonzero: vec![(0, 1), (1, 1)],
+            },
+            DegreeBoundedMoriRayContextSample {
+                degree: 4,
+                ambient_nonzero: vec![(46, 1), (195, -1), (300, 1)],
+                basis_nonzero: vec![(1, 1)],
+            },
+        ];
+        let context = ValidatedContext {
+            dimension: 2,
+            degree_bound: 4,
+            q_cols: 2,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: Some(&ray_context),
+            covered_toric_gv_by_basis: HashMap::new(),
+            source_derived_gv_by_basis: HashMap::new(),
+            intersection: Intersection::new(2),
+            stats: &stats,
+            uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
+            secondary_cone_heights: None,
+        };
+        let relation = vec![(46, 1), (195, -1), (208, 1), (211, -1)];
+
+        let diagnostic = chamber_generator_degree_bounded_support_overlap_diagnostic(
+            &relation,
+            Some(2),
+            &context,
+            2,
+        );
+
+        assert_eq!(
+            diagnostic.status,
+            "support_overlap_nearest_degree_bounded_candidates_sampled"
+        );
+        assert_eq!(diagnostic.best_overlap_count, Some(4));
+        assert_eq!(diagnostic.best_missing_point_count, Some(0));
+        assert_eq!(diagnostic.best_extra_point_count, Some(0));
+        assert_eq!(diagnostic.best_symmetric_difference_count, Some(0));
+        assert_eq!(diagnostic.sample.len(), 2);
+        assert_eq!(diagnostic.sample[0].missing_points, Vec::<usize>::new());
+        assert_eq!(diagnostic.sample[0].extra_points, Vec::<usize>::new());
+        assert_eq!(diagnostic.sample[1].overlap_count, 2);
+        assert_eq!(diagnostic.sample[1].missing_points, vec![195, 208]);
+        assert_eq!(diagnostic.sample[1].extra_points, vec![56]);
+    }
+
+    #[test]
     fn integer_decomposition_terms_expands_integral_coefficients_only() {
         let generators = vec![vec![1, 0], vec![0, 1]];
         let terms = integer_decomposition_terms(&generators, &["2".to_string(), "1".to_string()])
@@ -31035,6 +31400,8 @@ mod tests {
             source_class_status: None,
             source_ray_ambient_nonzero: None,
             local_toric_diagnostic: known_local_toric,
+            degree_bounded_support_overlap_diagnostic:
+                chamber_generator_support_overlap_diagnostic_not_run("test"),
             lower_seed_sum_decomposition: None,
             bounded_lower_seed_decomposition: Some(bounded),
             lower_seed_decomposition_error: None,

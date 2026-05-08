@@ -3884,6 +3884,14 @@ higher-codimension supports. This is negative evidence: the term-local point
 relation supports are not certified compact HKTY domains, so the missing input
 remains a transported/source-derived chamber history rather than a scalar local
 formula.
+The same report now carries nearest-overlap samples against the degree-bounded
+Mori-ray context. The five current terms all have sampled neighbors but no
+exact match: best overlap counts are `{2:2, 3:2, 4:1}`, best missing-point
+counts are `{1:1, 2:4}`, and best extra-point counts are `{1:4, 2:1}`. The
+target `7`/`8` nearest rows repeatedly swap in point `56` or neighboring
+points `49`/`52` while dropping part of the target/star support. That is useful
+chamber-transport evidence, but still not a source-certified compact HKTY
+domain.
 
 The no-replay boundary around the standalone GV binary is stricter now:
 `mcallister_gv` no longer reads `dual_curves.dat` or `dual_curves_gv.dat`.
