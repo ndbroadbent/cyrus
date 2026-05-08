@@ -49,6 +49,8 @@ The current report artifacts are:
 /tmp/cyrus_six_point_rank3_source_model_target8_v2.json
 /tmp/cyrus_six_point_rank3_partition_samples_target7_v1.json
 /tmp/cyrus_six_point_rank3_partition_samples_target8_v1.json
+/tmp/cyrus_six_point_rank3_origin_included_partitions_target7_v1.json
+/tmp/cyrus_six_point_rank3_origin_included_partitions_target8_v1.json
 ```
 
 The v2 artifacts record the same source-model obstruction plus the source
@@ -81,6 +83,16 @@ missing. The target `8` report has the same sampled obstruction. This makes the
 current source gap concrete: the obvious codimension-2 partition enumeration is
 not merely missing a zero-degree candidate; its raw candidates also fail the
 support-hull certificate.
+
+The origin-included partition artifacts test the nearest tempting repair:
+allow point `0` into a partition part instead of following the CYTools
+nef-partition convention. For both target `7` and target `8`, this gives `31`
+origin-included bipartitions and `6` zero-degree balanced candidates. All `31`
+still fail the CYTools-style certificate, now with
+`invalid_input_nef_partition_parts_must_exclude_the_origin_index`. Thus the
+missing codimension-2 source is not just the excluded origin; accepting the
+zero-degree origin-containing splits would violate the input contract we need
+for a faithful `cygv`/CYTools handoff.
 
 ## Sources Read
 

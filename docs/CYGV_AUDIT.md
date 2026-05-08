@@ -4440,6 +4440,16 @@ bounded raw codimension-2 partition candidates. Their first sampled partition
 has parts `[55]` and `[208,211,212,214]`, degrees `[2]` and `[-3]`, target
 relation sums `-2` and `3`, and fails because the CYTools-style nef partition
 union hull misses ambient vertex `0`.
+The follow-up origin-included reports
+`/tmp/cyrus_six_point_rank3_origin_included_partitions_target7_v1.json` and
+`/tmp/cyrus_six_point_rank3_origin_included_partitions_target8_v1.json` show
+that adding point `0` into the partition scan creates `31` bipartitions and
+`6` zero-degree balanced candidates for both target rows, but all `31` fail the
+CYTools-style nef check with
+`invalid_input_nef_partition_parts_must_exclude_the_origin_index`. This rules
+out treating the missing origin vertex as a harmless convention mismatch; a
+source-derived codimension-2 rule still has to supply a valid nef partition,
+tensor, and chamber/qN history.
 
 `/tmp/cyrus_six_point_overlap_annotations_v1.json` annotates the nearest
 degree-bounded support-overlap samples with qN-history, source class, and

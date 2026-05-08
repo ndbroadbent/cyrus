@@ -928,6 +928,15 @@ struct LocalCygvCompleteIntersectionShapeCandidate {
     nef_partition_candidate_sample: Vec<LocalCygvNefPartitionCandidate>,
     cytools_nef_partition_candidate_sample: Vec<LocalCygvNefPartitionCandidate>,
     zero_degree_nef_partition_candidate_sample: Vec<LocalCygvNefPartitionCandidate>,
+    origin_included_nef_partition_candidate_count: Option<usize>,
+    origin_included_nef_partition_degree_status_counts: Option<BTreeMap<String, usize>>,
+    origin_included_nef_partition_cytools_nef_certificate_status_counts:
+        Option<BTreeMap<String, usize>>,
+    origin_included_cytools_nef_partition_candidate_count: Option<usize>,
+    origin_included_zero_degree_nef_partition_candidate_count: Option<usize>,
+    origin_included_zero_degree_cytools_nef_certificate_status_counts:
+        Option<BTreeMap<String, usize>>,
+    origin_included_nef_partition_candidate_sample: Vec<LocalCygvNefPartitionCandidate>,
     status: String,
     missing_inputs: Vec<String>,
 }
@@ -1329,6 +1338,19 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
     local_toric_complete_intersection_zero_degree_nef_partition_candidate_count: Option<usize>,
     local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts:
         Option<BTreeMap<String, usize>>,
+    local_toric_complete_intersection_origin_included_nef_partition_candidate_count: Option<usize>,
+    local_toric_complete_intersection_origin_included_nef_partition_degree_status_counts:
+        Option<BTreeMap<String, usize>>,
+    local_toric_complete_intersection_origin_included_cytools_nef_partition_candidate_count:
+        Option<usize>,
+    local_toric_complete_intersection_origin_included_nef_partition_cytools_nef_certificate_status_counts:
+        Option<BTreeMap<String, usize>>,
+    local_toric_complete_intersection_origin_included_zero_degree_nef_partition_candidate_count:
+        Option<usize>,
+    local_toric_complete_intersection_origin_included_zero_degree_cytools_nef_certificate_status_counts:
+        Option<BTreeMap<String, usize>>,
+    local_toric_complete_intersection_origin_included_nef_partition_candidate_sample:
+        Vec<LocalCygvNefPartitionCandidate>,
     local_toric_compact_threefold_omission_candidate_count: usize,
     local_toric_compact_threefold_omission_preserving_relation_count: usize,
     local_toric_compact_threefold_omission_relation_status: String,
@@ -1437,6 +1459,19 @@ struct LocalCygvChamberGeneratorLocalToricDiagnostic {
     local_toric_complete_intersection_zero_degree_nef_partition_candidate_count: Option<usize>,
     local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts:
         Option<BTreeMap<String, usize>>,
+    local_toric_complete_intersection_origin_included_nef_partition_candidate_count: Option<usize>,
+    local_toric_complete_intersection_origin_included_nef_partition_degree_status_counts:
+        Option<BTreeMap<String, usize>>,
+    local_toric_complete_intersection_origin_included_cytools_nef_partition_candidate_count:
+        Option<usize>,
+    local_toric_complete_intersection_origin_included_nef_partition_cytools_nef_certificate_status_counts:
+        Option<BTreeMap<String, usize>>,
+    local_toric_complete_intersection_origin_included_zero_degree_nef_partition_candidate_count:
+        Option<usize>,
+    local_toric_complete_intersection_origin_included_zero_degree_cytools_nef_certificate_status_counts:
+        Option<BTreeMap<String, usize>>,
+    local_toric_complete_intersection_origin_included_nef_partition_candidate_sample:
+        Vec<LocalCygvNefPartitionCandidate>,
     local_toric_compact_threefold_omission_candidate_count: usize,
     local_toric_compact_threefold_omission_preserving_relation_count: usize,
     local_toric_compact_threefold_omission_relation_status: String,
@@ -10742,6 +10777,19 @@ fn local_cygv_complete_intersection_shape_candidate(
             support_point_samples,
             local_charge_basis,
             target_relation_coefficients,
+            false,
+        )
+        .ok()
+    } else {
+        None
+    };
+    let origin_included_nef_partition_candidates = if cy_codim == 2 {
+        local_cygv_codim_two_nef_partition_candidates(
+            support_point_indices,
+            support_point_samples,
+            local_charge_basis,
+            target_relation_coefficients,
+            true,
         )
         .ok()
     } else {
@@ -10836,6 +10884,71 @@ fn local_cygv_complete_intersection_shape_candidate(
             (!counts.is_empty()).then_some(counts)
         });
     let nef_partition_candidate_count = nef_partition_candidates.as_ref().map(std::vec::Vec::len);
+    let origin_included_nef_partition_candidate_sample = origin_included_nef_partition_candidates
+        .as_ref()
+        .map(|candidates| candidates.iter().take(8).cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+    let origin_included_nef_partition_degree_status_counts =
+        origin_included_nef_partition_candidates
+            .as_ref()
+            .map(|candidates| {
+                let mut counts = BTreeMap::new();
+                for candidate in candidates {
+                    *counts.entry(candidate.degree_status.clone()).or_insert(0) += 1;
+                }
+                counts
+            });
+    let origin_included_nef_partition_cytools_nef_certificate_status_counts =
+        origin_included_nef_partition_candidates
+            .as_ref()
+            .map(|candidates| {
+                let mut counts = BTreeMap::new();
+                for status in candidates
+                    .iter()
+                    .filter_map(|candidate| candidate.cytools_nef_certificate_status.as_deref())
+                {
+                    *counts.entry(status.to_string()).or_insert(0) += 1;
+                }
+                counts
+            });
+    let origin_included_cytools_nef_partition_candidate_count =
+        origin_included_nef_partition_candidates
+            .as_ref()
+            .map(|candidates| {
+                candidates
+                    .iter()
+                    .filter(|candidate| {
+                        candidate.cytools_nef_certificate_status.as_deref()
+                            == Some("support_polytope_cytools_nef_certificate_passed")
+                    })
+                    .count()
+            });
+    let origin_included_zero_degree_nef_partition_candidate_count =
+        origin_included_nef_partition_candidates
+            .as_ref()
+            .map(|candidates| {
+                candidates
+                    .iter()
+                    .filter(|candidate| candidate.degree_status == "both_parts_zero_degree")
+                    .count()
+            });
+    let origin_included_zero_degree_cytools_nef_certificate_status_counts =
+        origin_included_nef_partition_candidates
+            .as_ref()
+            .and_then(|candidates| {
+                let mut counts = BTreeMap::new();
+                for status in candidates
+                    .iter()
+                    .filter(|candidate| candidate.degree_status == "both_parts_zero_degree")
+                    .filter_map(|candidate| candidate.cytools_nef_certificate_status.as_deref())
+                {
+                    *counts.entry(status.to_string()).or_insert(0) += 1;
+                }
+                (!counts.is_empty()).then_some(counts)
+            });
+    let origin_included_nef_partition_candidate_count = origin_included_nef_partition_candidates
+        .as_ref()
+        .map(std::vec::Vec::len);
     let status = match zero_degree_nef_partition_candidate_count {
         Some(0) => {
             "complete_intersection_cy3_shape_no_zero_degree_nef_partition_candidate_requires_source_rule"
@@ -10865,6 +10978,13 @@ fn local_cygv_complete_intersection_shape_candidate(
         nef_partition_candidate_sample,
         cytools_nef_partition_candidate_sample,
         zero_degree_nef_partition_candidate_sample,
+        origin_included_nef_partition_candidate_count,
+        origin_included_nef_partition_degree_status_counts,
+        origin_included_nef_partition_cytools_nef_certificate_status_counts,
+        origin_included_cytools_nef_partition_candidate_count,
+        origin_included_zero_degree_nef_partition_candidate_count,
+        origin_included_zero_degree_cytools_nef_certificate_status_counts,
+        origin_included_nef_partition_candidate_sample,
         status: status.to_string(),
         missing_inputs: vec![
             "source_derived_nef_partition".to_string(),
@@ -10879,6 +10999,7 @@ fn local_cygv_codim_two_nef_partition_candidates(
     support_point_samples: &[OriginCircuitRelationPointSample],
     local_charge_basis: &[Vec<i64>],
     target_relation_coefficients: Option<&[i64]>,
+    include_origin: bool,
 ) -> Result<Vec<LocalCygvNefPartitionCandidate>, String> {
     if support_point_indices.is_empty() {
         return Ok(Vec::new());
@@ -10897,7 +11018,7 @@ fn local_cygv_codim_two_nef_partition_candidates(
     let partition_positions = support_point_indices
         .iter()
         .enumerate()
-        .filter_map(|(idx, &point_index)| (point_index != 0).then_some(idx))
+        .filter_map(|(idx, &point_index)| (include_origin || point_index != 0).then_some(idx))
         .collect::<Vec<_>>();
     if partition_positions.len() >= usize::BITS as usize {
         return Err("support too large for codimension-two partition enumeration".to_string());
@@ -20648,6 +20769,38 @@ fn unresolved_chamber_generator_summaries(
                             .local_toric_diagnostic
                             .local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts
                             .clone(),
+                    local_toric_complete_intersection_origin_included_nef_partition_candidate_count:
+                        context
+                            .local_toric_diagnostic
+                            .local_toric_complete_intersection_origin_included_nef_partition_candidate_count,
+                    local_toric_complete_intersection_origin_included_nef_partition_degree_status_counts:
+                        context
+                            .local_toric_diagnostic
+                            .local_toric_complete_intersection_origin_included_nef_partition_degree_status_counts
+                            .clone(),
+                    local_toric_complete_intersection_origin_included_cytools_nef_partition_candidate_count:
+                        context
+                            .local_toric_diagnostic
+                            .local_toric_complete_intersection_origin_included_cytools_nef_partition_candidate_count,
+                    local_toric_complete_intersection_origin_included_nef_partition_cytools_nef_certificate_status_counts:
+                        context
+                            .local_toric_diagnostic
+                            .local_toric_complete_intersection_origin_included_nef_partition_cytools_nef_certificate_status_counts
+                            .clone(),
+                    local_toric_complete_intersection_origin_included_zero_degree_nef_partition_candidate_count:
+                        context
+                            .local_toric_diagnostic
+                            .local_toric_complete_intersection_origin_included_zero_degree_nef_partition_candidate_count,
+                    local_toric_complete_intersection_origin_included_zero_degree_cytools_nef_certificate_status_counts:
+                        context
+                            .local_toric_diagnostic
+                            .local_toric_complete_intersection_origin_included_zero_degree_cytools_nef_certificate_status_counts
+                            .clone(),
+                    local_toric_complete_intersection_origin_included_nef_partition_candidate_sample:
+                        context
+                            .local_toric_diagnostic
+                            .local_toric_complete_intersection_origin_included_nef_partition_candidate_sample
+                            .clone(),
                     local_toric_compact_threefold_omission_candidate_count: context
                         .local_toric_diagnostic
                         .local_toric_compact_threefold_omission_candidate_count,
@@ -26069,6 +26222,18 @@ fn chamber_generator_local_toric_diagnostic_not_run(
         local_toric_complete_intersection_nef_partition_candidate_sample: Vec::new(),
         local_toric_complete_intersection_zero_degree_nef_partition_candidate_count: None,
         local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts: None,
+        local_toric_complete_intersection_origin_included_nef_partition_candidate_count: None,
+        local_toric_complete_intersection_origin_included_nef_partition_degree_status_counts: None,
+        local_toric_complete_intersection_origin_included_cytools_nef_partition_candidate_count:
+            None,
+        local_toric_complete_intersection_origin_included_nef_partition_cytools_nef_certificate_status_counts:
+            None,
+        local_toric_complete_intersection_origin_included_zero_degree_nef_partition_candidate_count:
+            None,
+        local_toric_complete_intersection_origin_included_zero_degree_cytools_nef_certificate_status_counts:
+            None,
+        local_toric_complete_intersection_origin_included_nef_partition_candidate_sample:
+            Vec::new(),
         local_toric_compact_threefold_omission_candidate_count: 0,
         local_toric_compact_threefold_omission_preserving_relation_count: 0,
         local_toric_compact_threefold_omission_relation_status:
@@ -26278,6 +26443,19 @@ fn chamber_generator_local_toric_diagnostic(
             local_toric_complete_intersection_zero_degree_nef_partition_candidate_count: None,
             local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts:
                 None,
+            local_toric_complete_intersection_origin_included_nef_partition_candidate_count: None,
+            local_toric_complete_intersection_origin_included_nef_partition_degree_status_counts:
+                None,
+            local_toric_complete_intersection_origin_included_cytools_nef_partition_candidate_count:
+                None,
+            local_toric_complete_intersection_origin_included_nef_partition_cytools_nef_certificate_status_counts:
+                None,
+            local_toric_complete_intersection_origin_included_zero_degree_nef_partition_candidate_count:
+                None,
+            local_toric_complete_intersection_origin_included_zero_degree_cytools_nef_certificate_status_counts:
+                None,
+            local_toric_complete_intersection_origin_included_nef_partition_candidate_sample:
+                Vec::new(),
             local_toric_compact_threefold_omission_candidate_count: 0,
             local_toric_compact_threefold_omission_preserving_relation_count: 0,
             local_toric_compact_threefold_omission_relation_status:
@@ -26478,6 +26656,54 @@ fn chamber_generator_local_toric_diagnostic(
                 .and_then(|candidate| {
                     candidate
                         .zero_degree_cytools_nef_certificate_status_counts
+                        .clone()
+                }),
+        local_toric_complete_intersection_origin_included_nef_partition_candidate_count:
+            complete_intersection_shape_candidate
+                .as_ref()
+                .and_then(|candidate| candidate.origin_included_nef_partition_candidate_count),
+        local_toric_complete_intersection_origin_included_nef_partition_degree_status_counts:
+            complete_intersection_shape_candidate
+                .as_ref()
+                .and_then(|candidate| {
+                    candidate
+                        .origin_included_nef_partition_degree_status_counts
+                        .clone()
+                }),
+        local_toric_complete_intersection_origin_included_cytools_nef_partition_candidate_count:
+            complete_intersection_shape_candidate
+                .as_ref()
+                .and_then(|candidate| {
+                    candidate.origin_included_cytools_nef_partition_candidate_count
+                }),
+        local_toric_complete_intersection_origin_included_nef_partition_cytools_nef_certificate_status_counts:
+            complete_intersection_shape_candidate
+                .as_ref()
+                .and_then(|candidate| {
+                    candidate
+                        .origin_included_nef_partition_cytools_nef_certificate_status_counts
+                        .clone()
+                }),
+        local_toric_complete_intersection_origin_included_zero_degree_nef_partition_candidate_count:
+            complete_intersection_shape_candidate
+                .as_ref()
+                .and_then(|candidate| {
+                    candidate.origin_included_zero_degree_nef_partition_candidate_count
+                }),
+        local_toric_complete_intersection_origin_included_zero_degree_cytools_nef_certificate_status_counts:
+            complete_intersection_shape_candidate
+                .as_ref()
+                .and_then(|candidate| {
+                    candidate
+                        .origin_included_zero_degree_cytools_nef_certificate_status_counts
+                        .clone()
+                }),
+        local_toric_complete_intersection_origin_included_nef_partition_candidate_sample:
+            complete_intersection_shape_candidate
+                .as_ref()
+                .map_or_else(Vec::new, |candidate| {
+                    candidate
+                        .origin_included_nef_partition_candidate_sample
                         .clone()
                 }),
         local_toric_compact_threefold_omission_candidate_count: compact_omission_relation.0,
@@ -33030,6 +33256,72 @@ mod tests {
         assert_eq!(
             diagnostic.local_toric_complete_intersection_zero_degree_nef_partition_candidate_count,
             Some(0)
+        );
+        assert_eq!(
+            diagnostic
+                .local_toric_complete_intersection_origin_included_nef_partition_candidate_count,
+            Some(31)
+        );
+        assert_eq!(
+            diagnostic.local_toric_complete_intersection_origin_included_nef_partition_degree_status_counts,
+            Some(BTreeMap::from([
+                ("both_parts_zero_degree".to_string(), 6),
+                (
+                    "first_part_nonnegative_second_part_nonpositive".to_string(),
+                    16
+                ),
+                (
+                    "first_part_nonpositive_second_part_nonnegative".to_string(),
+                    9
+                ),
+            ]))
+        );
+        assert_eq!(
+            diagnostic.local_toric_complete_intersection_origin_included_cytools_nef_partition_candidate_count,
+            Some(0)
+        );
+        assert_eq!(
+            diagnostic.local_toric_complete_intersection_origin_included_zero_degree_nef_partition_candidate_count,
+            Some(6)
+        );
+        assert_eq!(
+            diagnostic
+                .local_toric_complete_intersection_origin_included_nef_partition_cytools_nef_certificate_status_counts,
+            Some(BTreeMap::from([(
+                "support_polytope_cytools_nef_certificate_failed:invalid_input_nef_partition_parts_must_exclude_the_origin_index".to_string(),
+                31
+            )]))
+        );
+        assert_eq!(
+            diagnostic
+                .local_toric_complete_intersection_origin_included_zero_degree_cytools_nef_certificate_status_counts,
+            Some(BTreeMap::from([(
+                "support_polytope_cytools_nef_certificate_failed:invalid_input_nef_partition_parts_must_exclude_the_origin_index".to_string(),
+                6
+            )]))
+        );
+        assert_eq!(
+            diagnostic
+                .local_toric_complete_intersection_origin_included_nef_partition_candidate_sample
+                .first()
+                .map(|candidate| (
+                    candidate.first_part_point_indices.clone(),
+                    candidate.second_part_point_indices.clone(),
+                    candidate.degree_status.as_str(),
+                    candidate.target_relation_balance_status.as_deref(),
+                    candidate.cytools_nef_certificate_status.as_deref(),
+                    candidate.cytools_nef_origin_is_missing_ambient_vertex
+                )),
+            Some((
+                vec![0, 55, 208, 212],
+                vec![211, 214],
+                "both_parts_zero_degree",
+                Some("target_relation_balanced_inside_each_part"),
+                Some(
+                    "support_polytope_cytools_nef_certificate_failed:invalid_input_nef_partition_parts_must_exclude_the_origin_index"
+                ),
+                Some(false)
+            ))
         );
         assert_eq!(
             diagnostic.local_toric_compact_threefold_omission_candidate_count,
