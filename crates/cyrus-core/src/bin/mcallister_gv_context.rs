@@ -19653,8 +19653,35 @@ fn local_cygv_star_union_crossed_wall_stable_weyl_probe(
         })
         .collect::<Vec<_>>();
     if matching_checks.is_empty() {
+        if let Some(first_check) = checks.first() {
+            let check_status = cms_general_divisor_intersection_check_status(first_check);
+            return LocalCygvStarUnionCrossedWallStableWeylProbe {
+                status: format!(
+                    "stable_weyl_blocked_{}",
+                    status_error_fragment(&check_status)
+                ),
+                source_sample_status: source_sample_status.to_string(),
+                matching_candidate_count: Some(checks.len()),
+                shrinking_divisor_index: Some(first_check.shrinking_divisor_index),
+                shrinking_divisor_basis_nonzero: first_check.solution_basis_nonzero.clone(),
+                shrinking_divisor_ambient_basis_nonzero: first_check
+                    .solution_ambient_basis_nonzero
+                    .clone(),
+                divisor_quadratic_vanishes_on_curve_facet: None,
+                weyl_reflection_matches_flop_transform: None,
+                extremal_ray_certificate_status: star
+                    .opposite_extremal_ray_certificate
+                    .as_ref()
+                    .map(|probe| probe.status.clone()),
+                separator_normal_nonzero: star
+                    .opposite_extremal_ray_certificate
+                    .as_ref()
+                    .and_then(|probe| probe.separator_normal_nonzero.clone()),
+                error: None,
+            };
+        }
         return empty(
-            "stable_weyl_blocked_no_integral_shrinking_divisor_candidate",
+            "stable_weyl_blocked_no_cms_divisor_checks",
             source_sample_status,
         );
     }

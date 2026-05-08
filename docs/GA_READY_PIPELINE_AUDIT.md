@@ -1321,11 +1321,12 @@ to make the remaining GV layer more first-principles:
    `/tmp/cyrus_target7_stable_weyl_probe_report.json` now threads the crossed
    wall through the stable-Weyl/flop-certificate gate. For target `7`, the
    report bucket is
-   `stable_weyl_blocked_no_integral_shrinking_divisor_candidate`: the wall GV
-   is known in the context map, but the matching source sample does not import
-   an integral CMS shrinking-divisor certificate. Thus the existing exact
-   stable-Weyl algebra is wired into the blocker, but it still has no
-   source-derived shrinking divisor to check or promote.
+   `stable_weyl_blocked_cms_general_divisor_no_rational_divisor_solution`:
+   the crossed-wall source sample has shape candidate divisor `55`, but its
+   CMS divisor check has no rational divisor solution; the opposite-wall
+   extremal check is also still guard-skipped at `2963` generators under the
+   smoke limit. Thus the exact stable-Weyl algebra is wired into the blocker,
+   but it still has no source-derived shrinking divisor to check or promote.
    `/tmp/cyrus_gv_context_target_plus_star_support_report.json` now reconstructs
    the point-support charge bases for that degree-6 component. Targets `7`/`8`
    are integral two-parameter relations on affine-rank-4 seven-point supports:
