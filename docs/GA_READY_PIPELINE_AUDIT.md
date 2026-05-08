@@ -1361,6 +1361,13 @@ to make the remaining GV layer more first-principles:
    `compute_complete_intersection_cy3_intersection_numbers`, but targets `7`/`8`
    still lack the source-derived nef partition and ambient top intersections
    needed to call it.
+   Cyrus also has a bounded
+   `certify_nef_partition_cytools_style_full_dim` helper that ports the
+   CYTools nef checks for full-dimensional part polytopes: union-hull equality,
+   reflexive Minkowski sum, and conversion from part lattice points to
+   triangulation indices. It rejects lower-dimensional part polytopes loudly,
+   because CYTools handles those through additional optimal-coordinate
+   machinery that is not yet ported.
    After recomputing the affine charge basis, every single-column omission for
    targets `7`/`8` remains Calabi-Yau charged but has `q_rows=6`, `q_cols=1`,
    and hypersurface `cy_dim=4`, so the next fix is a source-derived CICY

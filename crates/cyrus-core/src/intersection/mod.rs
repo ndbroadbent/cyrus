@@ -30,6 +30,7 @@ use malachite::Rational;
 use std::collections::HashMap;
 
 pub use complete_intersection::{
+    FullDimensionalNefPartitionCertificate, certify_nef_partition_cytools_style_full_dim,
     compute_complete_intersection_cy3_from_ambient_cytools,
     compute_complete_intersection_cy3_intersection_numbers,
 };

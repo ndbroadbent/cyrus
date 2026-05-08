@@ -233,18 +233,49 @@ fn are_affinely_independent(points: &[Vec<i64>], indices: &[usize]) -> bool {
         return false; // More vectors than dimensions
     }
 
-    // Check if the vectors span the expected dimension
-    // Use the first k columns
-    let minor: Vec<Vec<Integer>> = diffs
-        .iter()
-        .map(|row| row.iter().take(k).cloned().collect())
-        .collect();
+    has_nonzero_column_minor(&diffs, k, d)
+}
 
-    if minor.is_empty() || minor[0].is_empty() {
+fn has_nonzero_column_minor(
+    diffs: &[Vec<Integer>],
+    minor_size: usize,
+    column_count: usize,
+) -> bool {
+    if minor_size == 0 {
         return true;
     }
+    let mut columns = Vec::with_capacity(minor_size);
+    has_nonzero_column_minor_from(diffs, minor_size, column_count, 0, &mut columns)
+}
 
-    determinant_exact(&minor) != 0
+fn has_nonzero_column_minor_from(
+    diffs: &[Vec<Integer>],
+    minor_size: usize,
+    column_count: usize,
+    start_column: usize,
+    columns: &mut Vec<usize>,
+) -> bool {
+    if columns.len() == minor_size {
+        let minor = diffs
+            .iter()
+            .map(|row| {
+                columns
+                    .iter()
+                    .map(|&column| row[column].clone())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        return determinant_exact(&minor) != 0;
+    }
+    let remaining = minor_size - columns.len();
+    for column in start_column..=column_count - remaining {
+        columns.push(column);
+        if has_nonzero_column_minor_from(diffs, minor_size, column_count, column + 1, columns) {
+            return true;
+        }
+        columns.pop();
+    }
+    false
 }
 
 /// Create initial facets from a simplex.
@@ -375,5 +406,23 @@ mod tests {
         // Should have 4 vertices and 4 facets
         assert_eq!(hull.vertex_indices.len(), 4);
         assert_eq!(hull.facets.len(), 4);
+    }
+
+    #[test]
+    fn test_convex_hull_4d_simplex_with_off_axis_column_pivot() {
+        let points = vec![
+            vec![0i64, 0, 0, 0],
+            vec![-1, -1, -1, -1],
+            vec![1, 0, 0, 0],
+            vec![0, 1, 0, 0],
+            vec![0, 0, 1, 0],
+            vec![0, 0, 0, 1],
+        ];
+
+        let hull = ConvexHull::compute(&points).unwrap();
+
+        assert_eq!(hull.vertex_indices.len(), 5);
+        assert!(!hull.vertex_indices.contains(&0));
+        assert_eq!(hull.facets.len(), 5);
     }
 }
