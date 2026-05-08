@@ -12181,7 +12181,7 @@ mod tests {
                 max_pairing: Some(1.0),
                 strictly_inside: true,
             }),
-            secondary_cone_heights_for_missing: Some(vec![0.0, 1.5]),
+            secondary_cone_heights_for_missing: Some(vec![0.0, 0.0, 1.5]),
             basis_mori_rays_for_missing_degree_bound: None,
             basis_mori_rays_for_missing_degree_bounded: None,
             degree_bounded_mori_ray_context_for_missing: None,
@@ -12235,7 +12235,7 @@ mod tests {
                 .iter()
                 .map(|entry| entry.as_f64().expect("height should be numeric"))
                 .collect::<Vec<_>>(),
-            vec![0.0, 1.5]
+            vec![0.0, 0.0, 1.5]
         );
 
         let _ = std::fs::remove_file(path);

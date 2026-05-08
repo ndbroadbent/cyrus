@@ -284,6 +284,8 @@ struct ContextReport {
     local_cygv_source_resolution_star_union_chamber_coverage_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_shared_face_secondary_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_global_secondary_height_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts:
         BTreeMap<String, usize>,
     local_phase_chamber_membership_certificate_status_counts: BTreeMap<String, usize>,
@@ -671,6 +673,12 @@ struct LocalCygvSourceResolutionHintSummary {
     shared_two_simplex_star_union_shared_face_secondary_negative_pairing_count: Option<usize>,
     shared_two_simplex_star_union_shared_face_secondary_strictly_inside: Option<bool>,
     shared_two_simplex_star_union_shared_face_secondary_flipped_strictly_inside: Option<bool>,
+    shared_two_simplex_star_union_global_secondary_height_status: String,
+    shared_two_simplex_star_union_global_secondary_height_min_pairing: Option<String>,
+    shared_two_simplex_star_union_global_secondary_height_max_pairing: Option<String>,
+    shared_two_simplex_star_union_global_secondary_height_zero_pairing_count: Option<usize>,
+    shared_two_simplex_star_union_global_secondary_height_positive_pairing_count: Option<usize>,
+    shared_two_simplex_star_union_global_secondary_height_negative_pairing_count: Option<usize>,
     shared_two_simplex_star_union_shared_face_secondary_circuit_sample:
         Vec<LocalCygvStarUnionSecondaryCircuitSample>,
     shared_two_simplex_star_union_target_minus_star: Vec<(usize, i64)>,
@@ -10631,14 +10639,25 @@ fn validate_context<'a>(
         }
     }
     if let Some(heights) = context.secondary_cone_heights_for_missing.as_ref() {
-        if heights.len() != q_cols {
+        let expected_height_count = q_cols
+            .checked_add(1)
+            .ok_or_else(|| "secondary-cone height vector expected width overflow".to_string())?;
+        if heights.len() != expected_height_count {
             return Err(format!(
-                "secondary-cone height vector length {} does not match no-origin q-matrix width {q_cols}",
-                heights.len()
+                "secondary-cone height vector length {} does not match origin-included q-matrix width {expected_height_count}",
+                heights.len(),
             ));
         }
         if heights.iter().any(|height| !height.is_finite()) {
             return Err("secondary-cone height vector contains non-finite value".to_string());
+        }
+        if heights
+            .first()
+            .is_some_and(|origin_height| origin_height.abs() > 1e-9)
+        {
+            return Err(
+                "secondary-cone height vector origin entry is not normalized to zero".to_string(),
+            );
         }
     }
     let mut covered_toric_gv_by_basis = HashMap::new();
@@ -10742,6 +10761,7 @@ fn validate_context<'a>(
             .shared_facet_unresolved_source_ray_stats_for_missing
             .as_ref(),
         secondary_cone_height_certificate: context.secondary_cone_height_certificate.as_ref(),
+        secondary_cone_heights: context.secondary_cone_heights_for_missing.as_deref(),
     })
 }
 
@@ -11032,6 +11052,7 @@ struct ValidatedContext<'a> {
     uncovered_source_ray_stats: Option<&'a MissingGvTargetStats>,
     shared_facet_unresolved_source_ray_stats: Option<&'a MissingGvTargetStats>,
     secondary_cone_height_certificate: Option<&'a SecondaryConeHeightCertificate>,
+    secondary_cone_heights: Option<&'a [f64]>,
 }
 
 fn report_target(
@@ -14884,6 +14905,10 @@ fn build_report(
         lower_seed_pair_limit,
         closure_generation_limit,
     );
+    let local_cygv_source_resolution_star_union_global_secondary_height_status_counts =
+        local_cygv_source_resolution_star_union_global_secondary_height_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
     let local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts =
         local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts(
             &local_cygv_source_resolution_hint_sample,
@@ -15821,6 +15846,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_global_basis_lookup_status_counts,
         local_cygv_source_resolution_star_union_chamber_coverage_status_counts,
         local_cygv_source_resolution_star_union_shared_face_secondary_status_counts,
+        local_cygv_source_resolution_star_union_global_secondary_height_status_counts,
         local_cygv_source_resolution_star_union_target_plus_star_path_history_status_counts,
         local_phase_chamber_membership_certificate_status_counts,
         local_cygv_source_resolution_hint_sample,
@@ -16136,6 +16162,7 @@ fn local_cygv_source_resolution_hint_summaries(
                 target.origin_circuit_first_witness.as_ref(),
                 &star_support_hint,
                 affine_projection_hint.hyperplane.as_deref(),
+                context.secondary_cone_heights,
             );
             let star_union_off_height_lookup = local_cygv_star_union_off_height_lookup_sample(
                 &star_union_affine_height_profile,
@@ -16257,6 +16284,18 @@ fn local_cygv_source_resolution_hint_summaries(
                     star_union_shared_face_secondary.strictly_inside,
                 shared_two_simplex_star_union_shared_face_secondary_flipped_strictly_inside:
                     star_union_shared_face_secondary.flipped_strictly_inside,
+                shared_two_simplex_star_union_global_secondary_height_status:
+                    star_union_shared_face_secondary.global_height_status,
+                shared_two_simplex_star_union_global_secondary_height_min_pairing:
+                    star_union_shared_face_secondary.global_height_min_pairing,
+                shared_two_simplex_star_union_global_secondary_height_max_pairing:
+                    star_union_shared_face_secondary.global_height_max_pairing,
+                shared_two_simplex_star_union_global_secondary_height_zero_pairing_count:
+                    star_union_shared_face_secondary.global_height_zero_pairing_count,
+                shared_two_simplex_star_union_global_secondary_height_positive_pairing_count:
+                    star_union_shared_face_secondary.global_height_positive_pairing_count,
+                shared_two_simplex_star_union_global_secondary_height_negative_pairing_count:
+                    star_union_shared_face_secondary.global_height_negative_pairing_count,
                 shared_two_simplex_star_union_shared_face_secondary_circuit_sample:
                     star_union_shared_face_secondary.circuit_sample,
                 shared_two_simplex_star_union_target_minus_star: star_union_relation_hint
@@ -16604,6 +16643,7 @@ fn local_cygv_source_resolution_star_union_shared_face_secondary_status_counts<'
             target.origin_circuit_first_witness.as_ref(),
             &star_support_hint,
             affine_projection_hint.hyperplane.as_deref(),
+            None,
         );
         *counts.entry(secondary.status).or_insert(0usize) += 1;
     }
@@ -16622,6 +16662,22 @@ fn local_cygv_source_resolution_star_union_target_plus_star_path_history_status_
         }),
         "not_run",
     )
+}
+
+fn local_cygv_source_resolution_star_union_global_secondary_height_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts
+            .entry(
+                summary
+                    .shared_two_simplex_star_union_global_secondary_height_status
+                    .clone(),
+            )
+            .or_insert(0usize) += 1;
+    }
+    counts
 }
 
 fn local_cygv_source_resolution_resolved_shared_chamber_certificate_status_counts<'a>(
@@ -17408,6 +17464,12 @@ struct LocalCygvStarUnionSharedFaceSecondaryHint {
     negative_pairing_count: Option<usize>,
     strictly_inside: Option<bool>,
     flipped_strictly_inside: Option<bool>,
+    global_height_status: String,
+    global_height_min_pairing: Option<String>,
+    global_height_max_pairing: Option<String>,
+    global_height_zero_pairing_count: Option<usize>,
+    global_height_positive_pairing_count: Option<usize>,
+    global_height_negative_pairing_count: Option<usize>,
     circuit_sample: Vec<LocalCygvStarUnionSecondaryCircuitSample>,
 }
 
@@ -17415,6 +17477,7 @@ struct LocalCygvStarUnionSharedFaceSecondaryHint {
 struct LocalCygvStarUnionSecondaryCircuitSample {
     nonzero: Vec<(usize, i64)>,
     pairing: String,
+    global_height_pairing: Option<String>,
 }
 
 fn local_cygv_shared_two_simplex_star_support_hint(
@@ -18134,6 +18197,7 @@ fn local_cygv_star_union_shared_face_secondary_hint(
     witness: Option<&OriginCircuitWitnessSample>,
     star_support: &LocalCygvStarSupportHint,
     hyperplane: Option<&[i64]>,
+    global_secondary_heights: Option<&[f64]>,
 ) -> LocalCygvStarUnionSharedFaceSecondaryHint {
     let empty = |status: &str| LocalCygvStarUnionSharedFaceSecondaryHint {
         status: status.to_string(),
@@ -18145,6 +18209,13 @@ fn local_cygv_star_union_shared_face_secondary_hint(
         negative_pairing_count: None,
         strictly_inside: None,
         flipped_strictly_inside: None,
+        global_height_status: "star_union_shared_face_secondary_global_height_not_evaluated"
+            .to_string(),
+        global_height_min_pairing: None,
+        global_height_max_pairing: None,
+        global_height_zero_pairing_count: None,
+        global_height_positive_pairing_count: None,
+        global_height_negative_pairing_count: None,
         circuit_sample: Vec::new(),
     };
     let Some(witness) = witness else {
@@ -18184,6 +18255,13 @@ fn local_cygv_star_union_shared_face_secondary_hint(
             negative_pairing_count: None,
             strictly_inside: None,
             flipped_strictly_inside: None,
+            global_height_status: "star_union_shared_face_secondary_global_height_not_evaluated"
+                .to_string(),
+            global_height_min_pairing: None,
+            global_height_max_pairing: None,
+            global_height_zero_pairing_count: None,
+            global_height_positive_pairing_count: None,
+            global_height_negative_pairing_count: None,
             circuit_sample: Vec::new(),
         };
     }
@@ -18212,6 +18290,13 @@ fn local_cygv_star_union_shared_face_secondary_hint(
             negative_pairing_count: None,
             strictly_inside: None,
             flipped_strictly_inside: None,
+            global_height_status: "star_union_shared_face_secondary_global_height_not_evaluated"
+                .to_string(),
+            global_height_min_pairing: None,
+            global_height_max_pairing: None,
+            global_height_zero_pairing_count: None,
+            global_height_positive_pairing_count: None,
+            global_height_negative_pairing_count: None,
             circuit_sample: Vec::new(),
         };
     }
@@ -18246,6 +18331,13 @@ fn local_cygv_star_union_shared_face_secondary_hint(
                 negative_pairing_count: None,
                 strictly_inside: None,
                 flipped_strictly_inside: None,
+                global_height_status:
+                    "star_union_shared_face_secondary_global_height_not_evaluated".to_string(),
+                global_height_min_pairing: None,
+                global_height_max_pairing: None,
+                global_height_zero_pairing_count: None,
+                global_height_positive_pairing_count: None,
+                global_height_negative_pairing_count: None,
                 circuit_sample: Vec::new(),
             };
         }
@@ -18278,6 +18370,13 @@ fn local_cygv_star_union_shared_face_secondary_hint(
                 negative_pairing_count: None,
                 strictly_inside: None,
                 flipped_strictly_inside: None,
+                global_height_status:
+                    "star_union_shared_face_secondary_global_height_not_evaluated".to_string(),
+                global_height_min_pairing: None,
+                global_height_max_pairing: None,
+                global_height_zero_pairing_count: None,
+                global_height_positive_pairing_count: None,
+                global_height_negative_pairing_count: None,
                 circuit_sample: Vec::new(),
             };
         }
@@ -18298,6 +18397,13 @@ fn local_cygv_star_union_shared_face_secondary_hint(
                 negative_pairing_count: None,
                 strictly_inside: None,
                 flipped_strictly_inside: None,
+                global_height_status:
+                    "star_union_shared_face_secondary_global_height_not_evaluated".to_string(),
+                global_height_min_pairing: None,
+                global_height_max_pairing: None,
+                global_height_zero_pairing_count: None,
+                global_height_positive_pairing_count: None,
+                global_height_negative_pairing_count: None,
                 circuit_sample: Vec::new(),
             };
         }
@@ -18323,6 +18429,13 @@ fn local_cygv_star_union_shared_face_secondary_hint(
                 negative_pairing_count: None,
                 strictly_inside: None,
                 flipped_strictly_inside: None,
+                global_height_status:
+                    "star_union_shared_face_secondary_global_height_not_evaluated".to_string(),
+                global_height_min_pairing: None,
+                global_height_max_pairing: None,
+                global_height_zero_pairing_count: None,
+                global_height_positive_pairing_count: None,
+                global_height_negative_pairing_count: None,
                 circuit_sample: Vec::new(),
             };
         }
@@ -18345,11 +18458,17 @@ fn local_cygv_star_union_shared_face_secondary_hint(
         .iter()
         .filter(|pairing| pairing.get() < -1e-6)
         .count();
+    let global_height_summary = local_cygv_star_union_global_secondary_height_summary(
+        &support,
+        &secondary_hyperplanes,
+        global_secondary_heights,
+    );
     let circuit_sample = secondary_hyperplanes
         .iter()
         .zip(pairings.iter())
-        .map(
-            |(hyperplane, pairing)| LocalCygvStarUnionSecondaryCircuitSample {
+        .zip(global_height_summary.circuit_pairings.iter())
+        .map(|((hyperplane, pairing), global_height_pairing)| {
+            LocalCygvStarUnionSecondaryCircuitSample {
                 nonzero: support
                     .iter()
                     .zip(hyperplane.iter())
@@ -18358,8 +18477,9 @@ fn local_cygv_star_union_shared_face_secondary_hint(
                     })
                     .collect(),
                 pairing: pairing.get().to_string(),
-            },
-        )
+                global_height_pairing: global_height_pairing.clone(),
+            }
+        })
         .collect::<Vec<_>>();
     let status = if strictly_inside {
         "star_union_shared_face_secondary_strictly_inside"
@@ -18382,8 +18502,131 @@ fn local_cygv_star_union_shared_face_secondary_hint(
         negative_pairing_count: Some(negative_pairing_count),
         strictly_inside: Some(strictly_inside),
         flipped_strictly_inside: Some(flipped_strictly_inside),
+        global_height_status: global_height_summary.status,
+        global_height_min_pairing: global_height_summary.min_pairing,
+        global_height_max_pairing: global_height_summary.max_pairing,
+        global_height_zero_pairing_count: global_height_summary.zero_pairing_count,
+        global_height_positive_pairing_count: global_height_summary.positive_pairing_count,
+        global_height_negative_pairing_count: global_height_summary.negative_pairing_count,
         circuit_sample,
     }
+}
+
+struct LocalCygvStarUnionGlobalSecondaryHeightSummary {
+    status: String,
+    min_pairing: Option<String>,
+    max_pairing: Option<String>,
+    zero_pairing_count: Option<usize>,
+    positive_pairing_count: Option<usize>,
+    negative_pairing_count: Option<usize>,
+    circuit_pairings: Vec<Option<String>>,
+}
+
+fn local_cygv_star_union_global_secondary_height_summary(
+    support: &[OriginCircuitRelationPointSample],
+    hyperplanes: &[Vec<i64>],
+    global_secondary_heights: Option<&[f64]>,
+) -> LocalCygvStarUnionGlobalSecondaryHeightSummary {
+    let missing_or_error = |status: String| LocalCygvStarUnionGlobalSecondaryHeightSummary {
+        status,
+        min_pairing: None,
+        max_pairing: None,
+        zero_pairing_count: None,
+        positive_pairing_count: None,
+        negative_pairing_count: None,
+        circuit_pairings: vec![None; hyperplanes.len()],
+    };
+    let Some(global_secondary_heights) = global_secondary_heights else {
+        return missing_or_error(
+            "star_union_shared_face_secondary_global_height_missing_vector".to_string(),
+        );
+    };
+    let pairings = match hyperplanes
+        .iter()
+        .map(|hyperplane| {
+            star_union_circuit_global_secondary_height_pairing(
+                support,
+                hyperplane,
+                global_secondary_heights,
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()
+    {
+        Ok(pairings) => pairings,
+        Err(error) => {
+            return missing_or_error(format!(
+                "star_union_shared_face_secondary_global_height_error:{}",
+                status_error_fragment(&error)
+            ));
+        }
+    };
+    let zero_pairing_count = pairings
+        .iter()
+        .filter(|pairing| pairing.get().abs() <= 1e-6)
+        .count();
+    let positive_pairing_count = pairings
+        .iter()
+        .filter(|pairing| pairing.get() > 1e-6)
+        .count();
+    let negative_pairing_count = pairings
+        .iter()
+        .filter(|pairing| pairing.get() < -1e-6)
+        .count();
+    let status = if pairings.is_empty() {
+        "star_union_shared_face_secondary_global_height_no_circuits"
+    } else if zero_pairing_count == pairings.len() {
+        "star_union_shared_face_secondary_global_height_on_all_walls"
+    } else if negative_pairing_count == 0 && zero_pairing_count == 0 {
+        "star_union_shared_face_secondary_global_height_strictly_inside"
+    } else if positive_pairing_count == 0 && zero_pairing_count == 0 {
+        "star_union_shared_face_secondary_global_height_strictly_inside_after_height_sign_flip"
+    } else if negative_pairing_count == 0 {
+        "star_union_shared_face_secondary_global_height_on_wall_nonnegative"
+    } else if positive_pairing_count == 0 {
+        "star_union_shared_face_secondary_global_height_on_wall_nonpositive"
+    } else {
+        "star_union_shared_face_secondary_global_height_crosses_oriented_walls"
+    };
+    LocalCygvStarUnionGlobalSecondaryHeightSummary {
+        status: status.to_string(),
+        min_pairing: pairing_min_string(&pairings),
+        max_pairing: pairing_max_string(&pairings),
+        zero_pairing_count: Some(zero_pairing_count),
+        positive_pairing_count: Some(positive_pairing_count),
+        negative_pairing_count: Some(negative_pairing_count),
+        circuit_pairings: pairings
+            .iter()
+            .map(|pairing| Some(pairing.get().to_string()))
+            .collect(),
+    }
+}
+
+fn star_union_circuit_global_secondary_height_pairing(
+    support: &[OriginCircuitRelationPointSample],
+    hyperplane: &[i64],
+    global_secondary_heights: &[f64],
+) -> Result<F64<Finite>, String> {
+    if hyperplane.len() != support.len() {
+        return Err(format!(
+            "global secondary height circuit length {} does not match support length {}",
+            hyperplane.len(),
+            support.len()
+        ));
+    }
+    let mut pairing = 0.0;
+    for (point, &coefficient) in support.iter().zip(hyperplane.iter()) {
+        let height = *global_secondary_heights
+            .get(point.point_index)
+            .ok_or_else(|| {
+                format!(
+                    "point index {} maps to missing origin-included secondary height entry",
+                    point.point_index
+                )
+            })?;
+        pairing += (coefficient as f64) * height;
+    }
+    F64::<Finite>::new(pairing)
+        .ok_or_else(|| "global secondary height circuit pairing is not finite".to_string())
 }
 
 fn local_cygv_star_union_off_height_lookup(
@@ -22074,6 +22317,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
         };
         let target_plus_star = vec![(0, 1), (1, 1)];
 
@@ -22172,6 +22416,12 @@ mod tests {
             shared_two_simplex_star_union_shared_face_secondary_negative_pairing_count: None,
             shared_two_simplex_star_union_shared_face_secondary_strictly_inside: None,
             shared_two_simplex_star_union_shared_face_secondary_flipped_strictly_inside: None,
+            shared_two_simplex_star_union_global_secondary_height_status: "test".to_string(),
+            shared_two_simplex_star_union_global_secondary_height_min_pairing: None,
+            shared_two_simplex_star_union_global_secondary_height_max_pairing: None,
+            shared_two_simplex_star_union_global_secondary_height_zero_pairing_count: None,
+            shared_two_simplex_star_union_global_secondary_height_positive_pairing_count: None,
+            shared_two_simplex_star_union_global_secondary_height_negative_pairing_count: None,
             shared_two_simplex_star_union_shared_face_secondary_circuit_sample: Vec::new(),
             shared_two_simplex_star_union_target_minus_star: Vec::new(),
             shared_two_simplex_star_union_target_plus_star: Vec::new(),
@@ -22505,7 +22755,7 @@ mod tests {
             max_pairing: Some(4.0),
             strictly_inside: true,
         });
-        context.secondary_cone_heights_for_missing = Some(vec![0.0, 1.5]);
+        context.secondary_cone_heights_for_missing = Some(vec![0.0, 0.0, 1.5]);
 
         let validated = validate_context(&context).unwrap();
 
@@ -22564,15 +22814,27 @@ mod tests {
             Err(err) => err,
         };
 
-        assert!(err.contains("height vector length 1 does not match no-origin q-matrix width 2"));
+        assert!(
+            err.contains("height vector length 1 does not match origin-included q-matrix width 3")
+        );
 
-        context.secondary_cone_heights_for_missing = Some(vec![0.0, f64::NAN]);
+        context.secondary_cone_heights_for_missing = Some(vec![0.0, f64::NAN, 1.5]);
         let err = match validate_context(&context) {
             Ok(_) => panic!("non-finite secondary-cone height vector should fail validation"),
             Err(err) => err,
         };
 
         assert!(err.contains("secondary-cone height vector contains non-finite value"));
+
+        context.secondary_cone_heights_for_missing = Some(vec![1.0, 0.0, 1.5]);
+        let err = match validate_context(&context) {
+            Ok(_) => panic!("nonzero origin secondary-cone height should fail validation"),
+            Err(err) => err,
+        };
+
+        assert!(
+            err.contains("secondary-cone height vector origin entry is not normalized to zero")
+        );
     }
 
     #[test]
@@ -22751,6 +23013,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
         };
         let sample = MissingGvTargetSample {
             degree: 2,
@@ -22952,6 +23215,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
         };
         let allowed_support = [4usize].into_iter().collect::<HashSet<_>>();
 
@@ -24441,6 +24705,7 @@ mod tests {
             Some(&witness),
             &star_support_hint,
             projection_hint.hyperplane.as_deref(),
+            None,
         );
         assert_eq!(
             shared_face_secondary.status,
@@ -24555,7 +24820,29 @@ mod tests {
         q_matrix[0][54] = 1;
         q_matrix[1][211] = 1;
         context.gv_q_matrix_for_missing = Some(q_matrix);
+        context.secondary_cone_heights_for_missing = Some(vec![0.0; 215]);
         let validated = validate_context(&context).unwrap();
+        let shared_face_secondary_with_global_height =
+            local_cygv_star_union_shared_face_secondary_hint(
+                Some(&witness),
+                &star_support_hint,
+                projection_hint.hyperplane.as_deref(),
+                validated.secondary_cone_heights,
+            );
+        assert_eq!(
+            shared_face_secondary_with_global_height.global_height_status,
+            "star_union_shared_face_secondary_global_height_on_all_walls"
+        );
+        assert_eq!(
+            shared_face_secondary_with_global_height.global_height_zero_pairing_count,
+            Some(6)
+        );
+        assert!(
+            shared_face_secondary_with_global_height
+                .circuit_sample
+                .iter()
+                .all(|circuit| circuit.global_height_pairing.as_deref() == Some("0"))
+        );
         let off_height_lookup =
             local_cygv_star_union_off_height_lookup_sample(&star_union_height_profile, &validated);
         assert_eq!(off_height_lookup.len(), 4);
@@ -24636,6 +24923,33 @@ mod tests {
             classify_zero_charge_reduced_one_parameter_family(&[2, -1, -1, -2, 2]),
             "star_reduction_weighted_p2_split_bundle_after_zero_charge_removal_and_sign_flip:base=1,1,2;bundle=2,2;base_hyperplane_square=1/2"
         );
+    }
+
+    #[test]
+    fn star_union_global_secondary_height_pairing_uses_origin_included_point_indexing() {
+        let support = vec![
+            OriginCircuitRelationPointSample {
+                point_index: 0,
+                coefficient: 0,
+                coordinates: vec![0, 0],
+                face_dimension: None,
+            },
+            OriginCircuitRelationPointSample {
+                point_index: 2,
+                coefficient: 0,
+                coordinates: vec![1, 0],
+                face_dimension: None,
+            },
+        ];
+
+        let pairing = star_union_circuit_global_secondary_height_pairing(
+            &support,
+            &[5, 3],
+            &[0.0, 7.0, 11.0],
+        )
+        .unwrap();
+
+        assert_eq!(pairing.get(), 33.0);
     }
 
     #[test]
@@ -24902,6 +25216,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
         };
         let decomposition = LowerSeedDecompositionProbe {
             status: "found_lower_seed_decomposition".to_string(),
@@ -24968,6 +25283,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
         };
         let mut cache = HashMap::new();
 
@@ -25091,6 +25407,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
         };
 
         let probe = target_extremal_ray_certificate_probe(
@@ -25173,6 +25490,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
         };
 
         let probe = target_extremal_ray_certificate_probe(
@@ -25520,6 +25838,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
         };
         let trace = vec![CygvGvCoefficientTrace {
             element_index: 0,
@@ -25971,6 +26290,7 @@ mod tests {
             uncovered_source_ray_stats: Some(&source_stats),
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
         };
         let residual = CygvClosestKnownQnPredecessor {
             predecessor_degree: 1,
@@ -26401,6 +26721,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
         };
 
         let seed_set = [vec![1, 0]].into_iter().collect::<HashSet<_>>();
@@ -26560,6 +26881,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
         };
 
         let probe = path_support_generator_probe_inner(&[1], 1, &[], &context, None)
@@ -26880,6 +27202,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
         };
 
         annotate_target_monomial_qn_sources_with_seed_decompositions(
@@ -27092,6 +27415,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
         };
         let term_context = qn_term_signature_context_sample(
             &comparison.parent_only_term_signature_sample,
@@ -27334,6 +27658,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
         };
 
         let probe = support_overlap_generator_gv(&stats.sample[0], &context, 0, false, true)
@@ -27521,6 +27846,7 @@ mod tests {
             uncovered_source_ray_stats: Some(&uncovered_stats),
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
         };
 
         let counts =
@@ -28292,6 +28618,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
         };
 
         let target = vec![1, 1];
@@ -28460,6 +28787,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
         };
 
         let target = vec![1, 1];
@@ -28702,6 +29030,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
         };
 
         let target = vec![1, 1];
@@ -28775,6 +29104,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
         };
 
         let target = vec![1, 1];
@@ -29150,6 +29480,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
         };
 
         let mut semigroup_measurement_cache = HashMap::new();
@@ -29292,6 +29623,7 @@ mod tests {
             uncovered_source_ray_stats: None,
             shared_facet_unresolved_source_ray_stats: None,
             secondary_cone_height_certificate: None,
+            secondary_cone_heights: None,
         };
         let mut semigroup_measurement_cache = HashMap::new();
         let mut semigroup_ladder_cache = HashMap::new();

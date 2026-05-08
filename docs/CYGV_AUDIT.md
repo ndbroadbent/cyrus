@@ -3326,12 +3326,27 @@ pairings; for targets `7`/`8`, the shared resolved-conifold star-side circuit
 `[(0,-1),(55,-1),(195,1),(212,1)]` is one of the zero-pairing walls, making
 the degeneracy inspectable directly in point-index coordinates.
 The corrected-chamber context schema now also exports
-`secondary_cone_heights_for_missing`, the full no-origin secondary-fan height
-vector induced by the current Kähler point, and the GV context validator rejects
-missing-width or non-finite height vectors. This is plumbing for the next
-certificate step: comparing the serialized local wall circuits against the
-actual corrected global chamber height, not just against the local affine
-relation hyperplane.
+`secondary_cone_heights_for_missing`, the full origin-included secondary-fan
+height vector induced by the current Kähler point, and the GV context validator
+rejects missing-width, non-finite, or nonzero-origin height vectors. This is
+plumbing for the next certificate step: comparing the serialized local wall
+circuits against the actual corrected global chamber height, not just against
+the local affine relation hyperplane.
+Regenerating the first-principles context as
+`/tmp/cyrus_corrected_chamber_gv_context_global_heights.json` confirms the
+origin-included convention: the corrected secondary height vector has `219`
+entries while the compact no-origin `q` matrix has `218` columns. Running
+`mcallister_gv_context` on that dump as
+`/tmp/cyrus_gv_context_global_height_report.json` evaluates the six shared-face
+wall circuits for each weighted row against the actual corrected global height.
+All four weighted rows are
+`star_union_shared_face_secondary_global_height_crosses_oriented_walls`, with
+four positive and two negative nonzero global-height pairings and no zero
+global-height wall pairings. For targets `7`/`8`, the resolved-conifold
+star-side circuit `[(0,-1),(55,-1),(195,1),(212,1)]` has global corrected
+height pairing `0.42571113815644424`, not `0`. This rules out the visible
+shared-face wall fan as a chamber-compatible global certificate; the corrected
+height crosses those local oriented walls rather than lying on them.
 Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
 serializes a role-tagged height profile over the full union support. For
 targets `3`/`6`, the off-hyperplane zero-shared ray has height `-1` but zero

@@ -1206,10 +1206,22 @@ to make the remaining GV layer more first-principles:
    The first-principles corrected-chamber context exporter now also carries the
    full corrected secondary-fan height vector as
    `secondary_cone_heights_for_missing`, and `mcallister_gv_context` validates
-   its length and finiteness against the no-origin q-matrix width. That gives
-   the next pass the actual chamber height data needed to compare these local
-   wall circuits against the corrected global chamber, rather than only against
-   the relation-support affine height.
+   its origin-included length, finite entries, and zero origin normalization
+   against the no-origin q-matrix width plus one. That gives the next pass the
+   actual chamber height data needed to compare these local wall circuits
+   against the corrected global chamber, rather than only against the
+   relation-support affine height.
+   A fresh first-principles context dump at
+   `/tmp/cyrus_corrected_chamber_gv_context_global_heights.json` confirms the
+   origin-included height convention (`219` heights vs. `218` no-origin
+   `q`-matrix columns). The corresponding
+   `/tmp/cyrus_gv_context_global_height_report.json` evaluates those local wall
+   circuits on the actual corrected global height vector: all four weighted rows
+   cross oriented walls, each with six nonzero global-height pairings split as
+   four positive and two negative. The target-`7`/`8` resolved-conifold
+   star-side circuit `[(0,-1),(55,-1),(195,1),(212,1)]` has global pairing
+   `0.42571113815644424`, so the visible shared-face wall fan is not compatible
+   with the corrected global chamber height.
    The full union-support height profile is now serialized as well. For
    targets `3`/`6`, the off-hyperplane zero-shared ray carries zero target and
    star coefficient; for targets `7`/`8`, the height `-1` zero-shared ray and
