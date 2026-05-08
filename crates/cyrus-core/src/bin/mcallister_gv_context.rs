@@ -286,6 +286,8 @@ struct ContextReport {
     local_cygv_source_resolution_star_union_transport_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_transport_component_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_target_plus_star_support_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_chamber_coverage_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_shared_face_secondary_status_counts:
         BTreeMap<String, usize>,
@@ -673,6 +675,8 @@ struct LocalCygvSourceResolutionHintSummary {
     shared_two_simplex_star_union_global_basis_lookup: Vec<LocalCygvStarUnionGlobalBasisLookup>,
     shared_two_simplex_star_union_transport_decomposition:
         LocalCygvStarUnionTransportDecompositionSummary,
+    shared_two_simplex_star_union_target_plus_star_support:
+        LocalCygvStarUnionTargetPlusStarSupportHint,
     shared_two_simplex_star_union_chamber_coverage_status: String,
     shared_two_simplex_star_union_chamber_covered_simplex_count: usize,
     shared_two_simplex_star_union_chamber_uncovered_point_indices: Vec<usize>,
@@ -861,6 +865,18 @@ struct LocalCygvStarUnionTransportDecompositionSummary {
     opposite_star_known_qn_history_status: Option<String>,
     opposite_star_source_derived_gv: Option<String>,
     target_plus_star_bounded_lower_seed_status: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvStarUnionTargetPlusStarSupportHint {
+    status: String,
+    point_indices: Vec<usize>,
+    affine_rank: Option<usize>,
+    charge_basis: Option<Vec<Vec<i64>>>,
+    charge_row_sums: Option<Vec<i64>>,
+    relation_coordinates: Option<Vec<i64>>,
+    relation_rational_coordinates: Option<Vec<String>>,
+    relation_rational_denominators: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -14974,6 +14990,10 @@ fn build_report(
         local_cygv_source_resolution_star_union_transport_component_status_counts(
             &local_cygv_source_resolution_hint_sample,
         );
+    let local_cygv_source_resolution_star_union_target_plus_star_support_status_counts =
+        local_cygv_source_resolution_star_union_target_plus_star_support_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
     let local_cygv_target_relation_global_secondary_height_status_counts =
         local_cygv_target_relation_global_secondary_height_status_counts(
             &local_cygv_source_resolution_hint_sample,
@@ -15920,6 +15940,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_global_basis_lookup_height_status_counts,
         local_cygv_source_resolution_star_union_transport_status_counts,
         local_cygv_source_resolution_star_union_transport_component_status_counts,
+        local_cygv_source_resolution_star_union_target_plus_star_support_status_counts,
         local_cygv_source_resolution_star_union_chamber_coverage_status_counts,
         local_cygv_source_resolution_star_union_shared_face_secondary_status_counts,
         local_cygv_source_resolution_star_union_global_secondary_height_status_counts,
@@ -16233,6 +16254,12 @@ fn local_cygv_source_resolution_hint_summaries(
                     &star_union_global_basis_lookup,
                     context.dimension,
                 );
+            let star_union_target_plus_star_support =
+                local_cygv_star_union_target_plus_star_support_hint(
+                    target.origin_circuit_first_witness.as_ref(),
+                    &star_support_hint,
+                    &star_union_relation_hint.target_plus_star,
+                );
             let star_union_chamber_coverage = local_cygv_star_union_chamber_coverage_hint(
                 target.origin_circuit_first_witness.as_ref(),
                 &star_support_hint,
@@ -16358,6 +16385,8 @@ fn local_cygv_source_resolution_hint_summaries(
                 shared_two_simplex_star_union_global_basis_lookup: star_union_global_basis_lookup,
                 shared_two_simplex_star_union_transport_decomposition:
                     star_union_transport_decomposition,
+                shared_two_simplex_star_union_target_plus_star_support:
+                    star_union_target_plus_star_support,
                 shared_two_simplex_star_union_chamber_coverage_status: star_union_chamber_coverage
                     .status,
                 shared_two_simplex_star_union_chamber_covered_simplex_count:
@@ -16755,6 +16784,23 @@ fn local_cygv_source_resolution_star_union_transport_component_status_counts(
                 summary
                     .shared_two_simplex_star_union_transport_decomposition
                     .component_status
+                    .clone(),
+            )
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_star_union_target_plus_star_support_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts
+            .entry(
+                summary
+                    .shared_two_simplex_star_union_target_plus_star_support
+                    .status
                     .clone(),
             )
             .or_insert(0usize) += 1;
@@ -20353,6 +20399,174 @@ fn height_delta(total: Option<&str>, first: Option<&str>, second: Option<&str>) 
     Some((total - first - second).to_string())
 }
 
+fn local_cygv_star_union_target_plus_star_support_hint(
+    witness: Option<&OriginCircuitWitnessSample>,
+    star_support: &LocalCygvStarSupportHint,
+    target_plus_star: &[(usize, i64)],
+) -> LocalCygvStarUnionTargetPlusStarSupportHint {
+    let empty = |status: &str| LocalCygvStarUnionTargetPlusStarSupportHint {
+        status: status.to_string(),
+        point_indices: Vec::new(),
+        affine_rank: None,
+        charge_basis: None,
+        charge_row_sums: None,
+        relation_coordinates: None,
+        relation_rational_coordinates: None,
+        relation_rational_denominators: None,
+    };
+    let Some(witness) = witness else {
+        return empty("target_plus_star_support_missing_origin_circuit_witness");
+    };
+    if target_plus_star.is_empty() {
+        return empty("target_plus_star_support_missing_relation");
+    }
+    let union_samples = origin_circuit_star_union_point_samples(witness, star_support);
+    local_cygv_star_union_target_plus_star_support_hint_for_samples(
+        &union_samples,
+        target_plus_star,
+    )
+}
+
+fn local_cygv_star_union_target_plus_star_support_hint_for_samples(
+    union_samples: &[OriginCircuitRelationPointSample],
+    target_plus_star: &[(usize, i64)],
+) -> LocalCygvStarUnionTargetPlusStarSupportHint {
+    let empty =
+        |status: &str, point_indices: Vec<usize>| LocalCygvStarUnionTargetPlusStarSupportHint {
+            status: status.to_string(),
+            point_indices,
+            affine_rank: None,
+            charge_basis: None,
+            charge_row_sums: None,
+            relation_coordinates: None,
+            relation_rational_coordinates: None,
+            relation_rational_denominators: None,
+        };
+    let mut relation_by_point = BTreeMap::new();
+    for &(point_index, coefficient) in target_plus_star {
+        if coefficient == 0 {
+            continue;
+        }
+        if relation_by_point.insert(point_index, coefficient).is_some() {
+            return empty(
+                "target_plus_star_support_duplicate_relation_point",
+                Vec::new(),
+            );
+        }
+    }
+    let point_indices = relation_by_point.keys().copied().collect::<Vec<_>>();
+    if point_indices.is_empty() {
+        return empty("target_plus_star_support_zero_relation", point_indices);
+    }
+    let union_by_point = union_samples
+        .iter()
+        .cloned()
+        .map(|sample| (sample.point_index, sample))
+        .collect::<BTreeMap<_, _>>();
+    let mut support = Vec::new();
+    for point_index in &point_indices {
+        let Some(sample) = union_by_point.get(point_index) else {
+            return empty(
+                "target_plus_star_support_missing_point_sample",
+                point_indices,
+            );
+        };
+        support.push(sample.clone());
+    }
+    let affine_rank = match affine_rank_for_point_samples(&support) {
+        Ok(rank) => rank,
+        Err(error) => {
+            return LocalCygvStarUnionTargetPlusStarSupportHint {
+                status: format!(
+                    "target_plus_star_support_affine_rank_error:{}",
+                    status_error_fragment(&error)
+                ),
+                point_indices,
+                affine_rank: None,
+                charge_basis: None,
+                charge_row_sums: None,
+                relation_coordinates: None,
+                relation_rational_coordinates: None,
+                relation_rational_denominators: None,
+            };
+        }
+    };
+    let charge_basis = match affine_charge_basis_for_point_samples(&support) {
+        Ok(charge_basis) => charge_basis,
+        Err(error) => {
+            return LocalCygvStarUnionTargetPlusStarSupportHint {
+                status: format!(
+                    "target_plus_star_support_charge_basis_error:{}",
+                    status_error_fragment(&error)
+                ),
+                point_indices,
+                affine_rank: Some(affine_rank),
+                charge_basis: None,
+                charge_row_sums: None,
+                relation_coordinates: None,
+                relation_rational_coordinates: None,
+                relation_rational_denominators: None,
+            };
+        }
+    };
+    let charge_row_sums = charge_basis
+        .iter()
+        .map(|row| row.iter().sum::<i64>())
+        .collect::<Vec<_>>();
+    let relation_coefficients = point_indices
+        .iter()
+        .map(|point_index| relation_by_point[point_index])
+        .collect::<Vec<_>>();
+    let rational_coordinates = match relation_rational_coordinates_in_local_charge_basis(
+        &relation_coefficients,
+        &charge_basis,
+    ) {
+        Ok(coordinates) => coordinates,
+        Err(error) => {
+            return LocalCygvStarUnionTargetPlusStarSupportHint {
+                status: format!(
+                    "target_plus_star_support_relation_coordinate_error:{}",
+                    status_error_fragment(&error)
+                ),
+                point_indices,
+                affine_rank: Some(affine_rank),
+                charge_basis: Some(charge_basis),
+                charge_row_sums: Some(charge_row_sums),
+                relation_coordinates: None,
+                relation_rational_coordinates: None,
+                relation_rational_denominators: None,
+            };
+        }
+    };
+    let integral_coordinates =
+        integral_coordinates_from_optional_rational(rational_coordinates.as_deref())
+            .ok()
+            .flatten();
+    let relation_status = match (&rational_coordinates, &integral_coordinates) {
+        (Some(_), Some(_)) if charge_basis.len() == 1 => {
+            "target_plus_star_support_one_parameter_integral_relation"
+        }
+        (Some(_), Some(_)) => "target_plus_star_support_multi_parameter_integral_relation",
+        (Some(_), None) => "target_plus_star_support_nonintegral_relation_coordinates",
+        (None, _) => "target_plus_star_support_relation_not_in_charge_basis",
+    };
+    LocalCygvStarUnionTargetPlusStarSupportHint {
+        status: format!(
+            "{relation_status}:affine_rank_{affine_rank}:charge_rows_{}",
+            charge_basis.len()
+        ),
+        point_indices,
+        affine_rank: Some(affine_rank),
+        charge_basis: Some(charge_basis),
+        charge_row_sums: Some(charge_row_sums),
+        relation_coordinates: integral_coordinates,
+        relation_rational_coordinates: optional_rational_vec_to_strings(&rational_coordinates),
+        relation_rational_denominators: optional_rational_denominators_to_strings(
+            &rational_coordinates,
+        ),
+    }
+}
+
 fn global_basis_known_qn_history(
     basis_dense: &[i64],
     context: &ValidatedContext<'_>,
@@ -23241,6 +23455,17 @@ mod tests {
                     opposite_star_source_derived_gv: None,
                     target_plus_star_bounded_lower_seed_status: None,
                 },
+            shared_two_simplex_star_union_target_plus_star_support:
+                LocalCygvStarUnionTargetPlusStarSupportHint {
+                    status: "test".to_string(),
+                    point_indices: Vec::new(),
+                    affine_rank: None,
+                    charge_basis: None,
+                    charge_row_sums: None,
+                    relation_coordinates: None,
+                    relation_rational_coordinates: None,
+                    relation_rational_denominators: None,
+                },
             shared_two_simplex_star_union_chamber_coverage_status: "test".to_string(),
             shared_two_simplex_star_union_chamber_covered_simplex_count: 0,
             shared_two_simplex_star_union_chamber_uncovered_point_indices: Vec::new(),
@@ -26034,6 +26259,50 @@ mod tests {
                 .as_deref(),
             Some("not_found_up_to_4")
         );
+    }
+
+    #[test]
+    fn target_plus_star_support_reconstructs_local_relation_coordinates() {
+        let samples = vec![
+            OriginCircuitRelationPointSample {
+                point_index: 10,
+                coefficient: 0,
+                coordinates: vec![0, 0],
+                face_dimension: Some(2),
+            },
+            OriginCircuitRelationPointSample {
+                point_index: 11,
+                coefficient: 0,
+                coordinates: vec![1, 0],
+                face_dimension: Some(2),
+            },
+            OriginCircuitRelationPointSample {
+                point_index: 12,
+                coefficient: 0,
+                coordinates: vec![0, 1],
+                face_dimension: Some(2),
+            },
+            OriginCircuitRelationPointSample {
+                point_index: 13,
+                coefficient: 0,
+                coordinates: vec![1, 1],
+                face_dimension: Some(2),
+            },
+        ];
+        let hint = local_cygv_star_union_target_plus_star_support_hint_for_samples(
+            &samples,
+            &[(10, 1), (11, -1), (12, -1), (13, 1)],
+        );
+
+        assert_eq!(
+            hint.status,
+            "target_plus_star_support_one_parameter_integral_relation:affine_rank_2:charge_rows_1"
+        );
+        assert_eq!(hint.point_indices, vec![10, 11, 12, 13]);
+        assert_eq!(hint.affine_rank, Some(2));
+        assert_eq!(hint.charge_basis, Some(vec![vec![1, -1, -1, 1]]));
+        assert_eq!(hint.charge_row_sums, Some(vec![0]));
+        assert_eq!(hint.relation_coordinates, Some(vec![1]));
     }
 
     #[test]

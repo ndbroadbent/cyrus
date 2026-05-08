@@ -1255,6 +1255,13 @@ to make the remaining GV layer more first-principles:
    the corrected height pairings add back to the target `q.t`. The remaining
    missing object has therefore narrowed again to the positive degree-6
    target-plus-star qN/chamber history.
+   `/tmp/cyrus_gv_context_target_plus_star_support_report.json` now reconstructs
+   the point-support charge bases for that degree-6 component. Targets `7`/`8`
+   are integral two-parameter relations on affine-rank-4 seven-point supports:
+   target `7` has coordinates `[3,-1]`, target `8` has coordinates `[1,1]`.
+   This rules out treating the residual as a one-parameter scalar source
+   formula; the missing computation is a certified two-parameter local
+   chamber/qN history.
    The full union-support height profile is now serialized as well. For
    targets `3`/`6`, the off-hyperplane zero-shared ray carries zero target and
    star coefficient; for targets `7`/`8`, the height `-1` zero-shared ray and

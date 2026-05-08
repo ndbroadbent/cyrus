@@ -3397,6 +3397,18 @@ floating tolerance, and target `8` has
 remaining missing term is not the known opposite-star source value; it is the
 degree-6 positive target-plus-star qN/chamber history that combines with that
 known wall component.
+The target-plus-star support report
+`/tmp/cyrus_gv_context_target_plus_star_support_report.json` reconstructs the
+affine support of that degree-6 component directly. Targets `7` and `8` are
+both integral two-parameter relations on affine-rank-4 seven-point supports,
+not one-parameter scalar residuals. Target `7` has support
+`[46,55,195,208,211,212,214]`, charge basis
+`[[1,0,-1,1,-1,0,0],[1,-1,-2,2,0,1,-1]]`, and target-plus-star coordinates
+`[3,-1]`. Target `8` has support `[2,55,195,208,211,212,214]`, charge basis
+`[[1,0,-1,-1,1,0,0],[1,1,0,-2,0,-1,1]]`, and coordinates `[1,1]`. Thus the
+remaining chamber/qN object is a two-parameter local support with an integral
+target direction; reducing it to a one-parameter formula would be another
+shortcut.
 Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
 serializes a role-tagged height profile over the full union support. For
 targets `3`/`6`, the off-hyperplane zero-shared ray has height `-1` but zero
