@@ -26,13 +26,14 @@ use cyrus_core::triangulation::{
 use cyrus_core::types::rational::Rational;
 use cyrus_core::types::{f64::F64, tags::Finite, tags::Pos};
 use cyrus_core::{
-    CygvQnTracePolynomial, Intersection, Point, compute_gv_invariants_with_explicit_semigroup,
+    CygvQnTracePolynomial, GvDilogFailure, Intersection, Point,
+    compute_gv_invariants_with_explicit_semigroup,
     compute_gv_invariants_with_explicit_semigroup_qn_trace,
     compute_gv_invariants_with_provided_generators,
     compute_gv_invariants_with_provided_generators_qn_trace,
     compute_gw_coefficient_trace_with_explicit_semigroup,
     compute_gw_coefficient_trace_with_provided_generators, curve_row_span_rank,
-    diagnose_affine_toric_circuit,
+    diagnose_affine_toric_circuit, gv_dilog_from_curve_volume_checked,
     integer_math::{integer_kernel, solve_linear_system_rational},
     utils::gcd_list_int,
 };
@@ -817,6 +818,10 @@ struct LocalCygvStarUnionWallTransportReadiness {
     crossed_wall_curve_basis_nonzero: Option<Vec<(usize, i64)>>,
     crossed_wall_curve_ambient_nonzero: Option<Vec<(usize, i64)>>,
     crossed_wall_gv: Option<String>,
+    crossed_wall_branch_q_dot_t: Option<String>,
+    crossed_wall_parity_mod2: Option<i128>,
+    crossed_wall_positive_dilog_status: Option<String>,
+    crossed_wall_negative_continuation_status: Option<String>,
     target_plus_star_basis_nonzero: Option<Vec<(usize, i64)>>,
     target_plus_star_extremal_status: Option<String>,
     target_plus_star_support_generator_count: Option<usize>,
@@ -881,6 +886,7 @@ struct LocalCygvStarUnionGlobalBasisLookup {
     source_derived_gv: Option<String>,
     source_class_status: Option<String>,
     source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
+    source_branch_diagnostic: Option<MissingGvBranchDiagnostic>,
     extremal_ray_certificate: Option<TargetExtremalRayCertificateProbe>,
     lower_seed_sum_decomposition: Option<CygvSeedSumDecomposition>,
     bounded_lower_seed_decomposition: Option<CygvBoundedSeedDecompositionSummary>,
@@ -892,6 +898,7 @@ struct LocalCygvStarUnionGlobalBasisLookup {
     opposite_source_derived_gv: Option<String>,
     opposite_source_class_status: Option<String>,
     opposite_source_ray_ambient_nonzero: Option<Vec<(usize, i64)>>,
+    opposite_source_branch_diagnostic: Option<MissingGvBranchDiagnostic>,
     opposite_extremal_ray_certificate: Option<TargetExtremalRayCertificateProbe>,
     opposite_lower_seed_sum_decomposition: Option<CygvSeedSumDecomposition>,
     opposite_bounded_lower_seed_decomposition: Option<CygvBoundedSeedDecompositionSummary>,
@@ -19388,6 +19395,8 @@ fn local_cygv_star_union_wall_transport_readiness(
 ) -> LocalCygvStarUnionWallTransportReadiness {
     let target_plus_star = star_union_lookup_by_role(lookups, "target_plus_star");
     let star = star_union_lookup_by_role(lookups, "star");
+    let crossed_wall_branch =
+        star.and_then(|lookup| lookup.opposite_source_branch_diagnostic.as_ref());
     let target_plus_star_extremal_status = transport
         .target_plus_star_extremal_ray_certificate
         .as_ref()
@@ -19451,12 +19460,46 @@ fn local_cygv_star_union_wall_transport_readiness(
             .and_then(|lookup| lookup.opposite_basis_nonzero.clone()),
         crossed_wall_curve_ambient_nonzero: wall.circuit_nonzero.clone(),
         crossed_wall_gv: wall.opposite_star_source_derived_gv.clone(),
+        crossed_wall_branch_q_dot_t: crossed_wall_branch.map(|branch| branch.q_dot_t.clone()),
+        crossed_wall_parity_mod2: crossed_wall_branch.map(|branch| branch.parity_mod2),
+        crossed_wall_positive_dilog_status: crossed_wall_branch
+            .map(|branch| branch.dilog_status.clone()),
+        crossed_wall_negative_continuation_status: crossed_wall_negative_continuation_status(
+            crossed_wall_branch,
+        ),
         target_plus_star_basis_nonzero: target_plus_star
             .and_then(|lookup| lookup.basis_nonzero.clone()),
         target_plus_star_extremal_status,
         target_plus_star_support_generator_count,
         target_plus_star_support_face_certificate_status:
             target_plus_star_support_face_certificate_status.map(str::to_string),
+    }
+}
+
+fn crossed_wall_negative_continuation_status(
+    branch: Option<&MissingGvBranchDiagnostic>,
+) -> Option<String> {
+    let branch = branch?;
+    let q_dot_t = match branch.q_dot_t.parse::<f64>() {
+        Ok(value) => value,
+        Err(_) => return Some("crossed_wall_negative_continuation_q_dot_t_parse_error".into()),
+    };
+    match gv_dilog_from_curve_volume_checked(-q_dot_t, branch.parity) {
+        Ok(_) => Some("crossed_wall_negative_continuation_real_axis_ok".into()),
+        Err(failure) => Some(format!(
+            "crossed_wall_negative_continuation_{}",
+            gv_dilog_failure_status(failure)
+        )),
+    }
+}
+
+fn gv_dilog_failure_status(failure: GvDilogFailure) -> &'static str {
+    match failure {
+        GvDilogFailure::NonFiniteCurveVolume => "nonfinite_curve_volume",
+        GvDilogFailure::ZeroCurveVolume => "zero_curve_volume",
+        GvDilogFailure::NonFiniteArgument => "nonfinite_argument",
+        GvDilogFailure::RealBranchCut => "real_branch_cut",
+        GvDilogFailure::EvaluationFailed => "evaluation_failed",
     }
 }
 
@@ -20688,6 +20731,7 @@ fn local_cygv_star_union_global_basis_lookup(
             source_derived_gv: None,
             source_class_status: None,
             source_ray_ambient_nonzero: None,
+            source_branch_diagnostic: None,
             extremal_ray_certificate: None,
             lower_seed_sum_decomposition: None,
             bounded_lower_seed_decomposition: None,
@@ -20699,6 +20743,7 @@ fn local_cygv_star_union_global_basis_lookup(
             opposite_source_derived_gv: None,
             opposite_source_class_status: None,
             opposite_source_ray_ambient_nonzero: None,
+            opposite_source_branch_diagnostic: None,
             opposite_extremal_ray_certificate: None,
             opposite_lower_seed_sum_decomposition: None,
             opposite_bounded_lower_seed_decomposition: None,
@@ -20724,6 +20769,7 @@ fn local_cygv_star_union_global_basis_lookup(
                 source_derived_gv: None,
                 source_class_status: None,
                 source_ray_ambient_nonzero: None,
+                source_branch_diagnostic: None,
                 extremal_ray_certificate: None,
                 lower_seed_sum_decomposition: None,
                 bounded_lower_seed_decomposition: None,
@@ -20735,6 +20781,7 @@ fn local_cygv_star_union_global_basis_lookup(
                 opposite_source_derived_gv: None,
                 opposite_source_class_status: None,
                 opposite_source_ray_ambient_nonzero: None,
+                opposite_source_branch_diagnostic: None,
                 opposite_extremal_ray_certificate: None,
                 opposite_lower_seed_sum_decomposition: None,
                 opposite_bounded_lower_seed_decomposition: None,
@@ -20761,6 +20808,7 @@ fn local_cygv_star_union_global_basis_lookup(
                 source_derived_gv: None,
                 source_class_status: None,
                 source_ray_ambient_nonzero: None,
+                source_branch_diagnostic: None,
                 extremal_ray_certificate: None,
                 lower_seed_sum_decomposition: None,
                 bounded_lower_seed_decomposition: None,
@@ -20772,6 +20820,7 @@ fn local_cygv_star_union_global_basis_lookup(
                 opposite_source_derived_gv: None,
                 opposite_source_class_status: None,
                 opposite_source_ray_ambient_nonzero: None,
+                opposite_source_branch_diagnostic: None,
                 opposite_extremal_ray_certificate: None,
                 opposite_lower_seed_sum_decomposition: None,
                 opposite_bounded_lower_seed_decomposition: None,
@@ -20788,6 +20837,7 @@ fn local_cygv_star_union_global_basis_lookup(
         global_basis_known_qn_history(&basis_dense, context);
     let (source_class_status, source_ray_ambient_nonzero) =
         global_basis_source_class_lookup(&basis_dense, context);
+    let source_branch_diagnostic = global_basis_branch_diagnostic_lookup(&basis_dense, context);
     let extremal_ray_certificate = curve_extremal_ray_certificate_probe(
         &basis_dense,
         context,
@@ -20809,6 +20859,7 @@ fn local_cygv_star_union_global_basis_lookup(
         opposite_source_derived_gv,
         opposite_source_class_status,
         opposite_source_ray_ambient_nonzero,
+        opposite_source_branch_diagnostic,
         opposite_extremal_ray_certificate,
         opposite_lower_seed_sum_decomposition,
         opposite_bounded_lower_seed_decomposition,
@@ -20838,6 +20889,8 @@ fn local_cygv_star_union_global_basis_lookup(
                         ) = global_basis_known_qn_history(&opposite_dense, context);
                         let (opposite_source_class_status, opposite_source_ray_ambient_nonzero) =
                             global_basis_source_class_lookup(&opposite_dense, context);
+                        let opposite_source_branch_diagnostic =
+                            global_basis_branch_diagnostic_lookup(&opposite_dense, context);
                         let opposite_extremal_ray_certificate =
                             curve_extremal_ray_certificate_probe(
                                 &opposite_dense,
@@ -20866,6 +20919,7 @@ fn local_cygv_star_union_global_basis_lookup(
                             opposite_source_derived_gv,
                             opposite_source_class_status,
                             opposite_source_ray_ambient_nonzero,
+                            opposite_source_branch_diagnostic,
                             opposite_extremal_ray_certificate,
                             opposite_lower_seed_sum_decomposition,
                             opposite_bounded_lower_seed_decomposition,
@@ -20877,6 +20931,7 @@ fn local_cygv_star_union_global_basis_lookup(
                     }
                     Err(error) => (
                         opposite_basis_nonzero,
+                        None,
                         None,
                         None,
                         None,
@@ -20907,12 +20962,14 @@ fn local_cygv_star_union_global_basis_lookup(
                 None,
                 None,
                 None,
+                None,
                 Some(error),
             ),
         }
     } else {
         (
             None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+            None,
         )
     };
     LocalCygvStarUnionGlobalBasisLookup {
@@ -20926,6 +20983,7 @@ fn local_cygv_star_union_global_basis_lookup(
         source_derived_gv,
         source_class_status,
         source_ray_ambient_nonzero,
+        source_branch_diagnostic,
         extremal_ray_certificate,
         lower_seed_sum_decomposition,
         bounded_lower_seed_decomposition,
@@ -20937,6 +20995,7 @@ fn local_cygv_star_union_global_basis_lookup(
         opposite_source_derived_gv,
         opposite_source_class_status,
         opposite_source_ray_ambient_nonzero,
+        opposite_source_branch_diagnostic,
         opposite_extremal_ray_certificate,
         opposite_lower_seed_sum_decomposition,
         opposite_bounded_lower_seed_decomposition,
@@ -21760,6 +21819,22 @@ fn global_basis_source_class_lookup(
             None,
         ),
     }
+}
+
+fn global_basis_branch_diagnostic_lookup(
+    basis_dense: &[i64],
+    context: &ValidatedContext<'_>,
+) -> Option<MissingGvBranchDiagnostic> {
+    matching_missing_target_for_curve(basis_dense, context)
+        .ok()
+        .flatten()
+        .and_then(|(_, sample)| sample.branch_diagnostic.clone())
+        .or_else(|| {
+            matching_uncovered_source_ray_for_curve(basis_dense, context)
+                .ok()
+                .flatten()
+                .and_then(|(_, sample)| sample.branch_diagnostic.clone())
+        })
 }
 
 const STAR_UNION_LOWER_SEED_DECOMPOSITION_MAX_DEGREE: i128 = 6;
@@ -24697,6 +24772,10 @@ mod tests {
                     crossed_wall_curve_basis_nonzero: None,
                     crossed_wall_curve_ambient_nonzero: None,
                     crossed_wall_gv: None,
+                    crossed_wall_branch_q_dot_t: None,
+                    crossed_wall_parity_mod2: None,
+                    crossed_wall_positive_dilog_status: None,
+                    crossed_wall_negative_continuation_status: None,
                     target_plus_star_basis_nonzero: None,
                     target_plus_star_extremal_status: None,
                     target_plus_star_support_generator_count: None,
@@ -27420,6 +27499,7 @@ mod tests {
                 source_derived_gv: None,
                 source_class_status: None,
                 source_ray_ambient_nonzero: None,
+                source_branch_diagnostic: None,
                 extremal_ray_certificate: None,
                 lower_seed_sum_decomposition: None,
                 bounded_lower_seed_decomposition: bounded_status.map(|status| {
@@ -27455,6 +27535,7 @@ mod tests {
                 opposite_source_derived_gv: opposite_source_gv.map(str::to_string),
                 opposite_source_class_status: None,
                 opposite_source_ray_ambient_nonzero: None,
+                opposite_source_branch_diagnostic: None,
                 opposite_extremal_ray_certificate: None,
                 opposite_lower_seed_sum_decomposition: None,
                 opposite_bounded_lower_seed_decomposition: None,
@@ -27546,6 +27627,13 @@ mod tests {
         lookups[1].opposite_source_ray_ambient_nonzero =
             Some(vec![(0, -1), (55, -1), (195, 1), (212, 1)]);
         lookups[1].opposite_source_class_status = Some("source_ray_known_source_derived_gv".into());
+        lookups[1].opposite_source_branch_diagnostic = Some(MissingGvBranchDiagnostic {
+            q_dot_t: "0.5".to_string(),
+            parity: 0,
+            parity_mod2: 0,
+            q_dot_bucket: "gte_0.1".to_string(),
+            dilog_status: "real_ok".to_string(),
+        });
         lookups[2].extremal_ray_certificate = Some(target_plus_star_certificate);
 
         let summary = local_cygv_star_union_transport_decomposition_summary(&lookups, 2);
@@ -27641,6 +27729,17 @@ mod tests {
         assert_eq!(
             readiness.status,
             "wall_transport_known_wall_remainder_requires_chamber_semigroup"
+        );
+        assert_eq!(
+            readiness.crossed_wall_branch_q_dot_t.as_deref(),
+            Some("0.5")
+        );
+        assert_eq!(readiness.crossed_wall_parity_mod2, Some(0));
+        assert_eq!(
+            readiness
+                .crossed_wall_negative_continuation_status
+                .as_deref(),
+            Some("crossed_wall_negative_continuation_real_branch_cut")
         );
         assert!(
             readiness

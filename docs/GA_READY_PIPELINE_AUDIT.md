@@ -1302,6 +1302,14 @@ to make the remaining GV layer more first-principles:
    `target_plus_star_chamber_semigroup_transport`, and
    `shrinking_divisor_or_flop_certificate`. This is a blocker certificate, not
    a GV computation shortcut.
+   `/tmp/cyrus_star_union_wall_branch_smoke_all.json` now additionally records
+   the B-field branch status of the same crossed wall. The targets `7`/`8`
+   wall curve has `q.t=0.42571113815643002`, parity mod 2 equal to `0`, and
+   positive-side dilog status `real_ok`, but the negative-side continuation is
+   `crossed_wall_negative_continuation_real_branch_cut`. This rules out a
+   naive real-axis flop continuation of the known wall GV into the star-side
+   chamber; the missing handoff still has to be a certified chamber/semigroup
+   history or a source-level continuation that addresses the branch cut.
    `/tmp/cyrus_gv_context_target_plus_star_support_report.json` now reconstructs
    the point-support charge bases for that degree-6 component. Targets `7`/`8`
    are integral two-parameter relations on affine-rank-4 seven-point supports:

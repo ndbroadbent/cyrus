@@ -3522,6 +3522,16 @@ inputs `target_plus_star_qn_history`,
 `shrinking_divisor_or_flop_certificate`. This keeps the known wall component
 as certified input evidence without promoting it to a corrected-chamber GV
 value.
+`/tmp/cyrus_star_union_wall_branch_smoke_all.json` now carries the B-field
+branch diagnostic for that same crossed wall. For targets `7`/`8`, the known
+opposite-star wall curve has `q.t=0.42571113815643002`, parity mod 2 equal to
+`0`, and positive-side dilog status `real_ok`; evaluating the opposite sign
+through the existing McAllister real-axis dilog classifier gives
+`crossed_wall_negative_continuation_real_branch_cut`. Thus the known
+source-derived wall GV is not a license to perform a naive real flop
+continuation across the negative star side. The remaining certificate must
+derive the valid chamber/semigroup history, or a source-level continuation
+that resolves this branch-cut obstruction.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved
 origin-pattern buckets among the matching missing/source-ray leaves are:
