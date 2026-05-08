@@ -281,6 +281,8 @@ struct ContextReport {
     local_cygv_source_resolution_star_union_global_basis_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_global_basis_lookup_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_global_basis_lookup_height_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_chamber_coverage_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_shared_face_secondary_status_counts:
         BTreeMap<String, usize>,
@@ -809,6 +811,8 @@ struct LocalCygvStarUnionGlobalBasisLookup {
     role: String,
     basis_nonzero: Option<Vec<(usize, i64)>>,
     degree: Option<i128>,
+    global_secondary_height_status: String,
+    global_secondary_height_pairing: Option<String>,
     known_qn_history_status: String,
     toric_gv: Option<String>,
     source_derived_gv: Option<String>,
@@ -827,6 +831,8 @@ struct LocalCygvStarUnionGlobalBasisLookup {
     opposite_lower_seed_sum_decomposition: Option<CygvSeedSumDecomposition>,
     opposite_bounded_lower_seed_decomposition: Option<CygvBoundedSeedDecompositionSummary>,
     opposite_lower_seed_decomposition_error: Option<String>,
+    opposite_global_secondary_height_status: Option<String>,
+    opposite_global_secondary_height_pairing: Option<String>,
     opposite_error: Option<String>,
     error: Option<String>,
 }
@@ -14930,6 +14936,10 @@ fn build_report(
         local_cygv_source_resolution_star_union_global_regular_triangulation_status_counts(
             &local_cygv_source_resolution_hint_sample,
         );
+    let local_cygv_source_resolution_star_union_global_basis_lookup_height_status_counts =
+        local_cygv_source_resolution_star_union_global_basis_lookup_height_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
     let local_cygv_target_relation_global_secondary_height_status_counts =
         local_cygv_target_relation_global_secondary_height_status_counts(
             &local_cygv_source_resolution_hint_sample,
@@ -15873,6 +15883,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_off_height_status_counts,
         local_cygv_source_resolution_star_union_global_basis_status_counts,
         local_cygv_source_resolution_star_union_global_basis_lookup_status_counts,
+        local_cygv_source_resolution_star_union_global_basis_lookup_height_status_counts,
         local_cygv_source_resolution_star_union_chamber_coverage_status_counts,
         local_cygv_source_resolution_star_union_shared_face_secondary_status_counts,
         local_cygv_source_resolution_star_union_global_secondary_height_status_counts,
@@ -16643,6 +16654,28 @@ fn local_cygv_source_resolution_star_union_global_basis_lookup_status_counts<'a>
                 ))
                 .or_insert(0usize) += 1;
             if let Some(status) = lookup.opposite_known_qn_history_status {
+                *counts
+                    .entry(format!("{}:opposite:{status}", lookup.role))
+                    .or_insert(0usize) += 1;
+            }
+        }
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_star_union_global_basis_lookup_height_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        for lookup in &summary.shared_two_simplex_star_union_global_basis_lookup {
+            *counts
+                .entry(format!(
+                    "{}:{}",
+                    lookup.role, lookup.global_secondary_height_status
+                ))
+                .or_insert(0usize) += 1;
+            if let Some(status) = lookup.opposite_global_secondary_height_status.as_ref() {
                 *counts
                     .entry(format!("{}:opposite:{status}", lookup.role))
                     .or_insert(0usize) += 1;
@@ -18646,6 +18679,11 @@ struct LocalCygvTargetRelationGlobalSecondaryHeightHint {
     branch_match_status: String,
 }
 
+struct GlobalBasisSecondaryHeightPairingHint {
+    status: String,
+    pairing: Option<String>,
+}
+
 struct LocalCygvStarUnionGlobalRegularTriangulationHint {
     status: String,
     simplex_count: Option<usize>,
@@ -19038,6 +19076,98 @@ fn parse_f64_or_fraction(value: &str) -> Result<f64, String> {
         }
         Ok(result)
     }
+}
+
+fn global_basis_secondary_height_pairing_hint(
+    basis_dense: &[i64],
+    context: &ValidatedContext<'_>,
+) -> GlobalBasisSecondaryHeightPairingHint {
+    let empty = |status: &str| GlobalBasisSecondaryHeightPairingHint {
+        status: status.to_string(),
+        pairing: None,
+    };
+    let Some(global_secondary_heights) = context.secondary_cone_heights else {
+        return empty("global_basis_secondary_height_missing_vector");
+    };
+    match global_basis_secondary_height_pairing(
+        basis_dense,
+        context.q_matrix,
+        global_secondary_heights,
+    ) {
+        Ok(pairing) => {
+            let status = if pairing.get().abs() <= 1e-6 {
+                "global_basis_secondary_height_zero_wall"
+            } else if pairing.get() > 0.0 {
+                "global_basis_secondary_height_positive"
+            } else {
+                "global_basis_secondary_height_negative"
+            };
+            GlobalBasisSecondaryHeightPairingHint {
+                status: status.to_string(),
+                pairing: Some(pairing.get().to_string()),
+            }
+        }
+        Err(error) => GlobalBasisSecondaryHeightPairingHint {
+            status: format!(
+                "global_basis_secondary_height_error:{}",
+                status_error_fragment(&error)
+            ),
+            pairing: None,
+        },
+    }
+}
+
+fn global_basis_secondary_height_pairing(
+    basis_dense: &[i64],
+    q_matrix: &[Vec<i64>],
+    global_secondary_heights: &[f64],
+) -> Result<F64<Finite>, String> {
+    if q_matrix.len() != basis_dense.len() {
+        return Err(format!(
+            "basis dimension {} does not match q-matrix row count {}",
+            basis_dense.len(),
+            q_matrix.len()
+        ));
+    }
+    let width = q_matrix
+        .first()
+        .map(Vec::len)
+        .ok_or_else(|| "q-matrix is empty".to_string())?;
+    if q_matrix.iter().any(|row| row.len() != width) {
+        return Err("q-matrix rows have inconsistent widths".to_string());
+    }
+    if global_secondary_heights.len() != width + 1 {
+        return Err(format!(
+            "origin-included secondary height count {} does not match no-origin q-matrix width {} plus one",
+            global_secondary_heights.len(),
+            width
+        ));
+    }
+    let mut pairing = 0.0;
+    for col in 0..width {
+        let mut coefficient = 0i128;
+        for (basis_value, row) in basis_dense.iter().zip(q_matrix.iter()) {
+            let product = i128::from(*basis_value)
+                .checked_mul(i128::from(row[col]))
+                .ok_or_else(|| "global basis coefficient product overflows i128".to_string())?;
+            coefficient = coefficient
+                .checked_add(product)
+                .ok_or_else(|| "global basis coefficient sum overflows i128".to_string())?;
+        }
+        if coefficient == 0 {
+            continue;
+        }
+        let point_index = col + 1;
+        let height = global_secondary_heights[point_index];
+        if !height.is_finite() {
+            return Err(format!(
+                "point index {point_index} has non-finite origin-included secondary height"
+            ));
+        }
+        pairing += (coefficient as f64) * height;
+    }
+    F64::<Finite>::new(pairing)
+        .ok_or_else(|| "global basis secondary height pairing is not finite".to_string())
 }
 
 fn local_cygv_star_union_off_height_lookup(
@@ -19738,6 +19868,9 @@ fn local_cygv_star_union_global_basis_lookup(
             role: role.to_string(),
             basis_nonzero: None,
             degree: None,
+            global_secondary_height_status:
+                "global_basis_secondary_height_not_evaluated_missing_projection".to_string(),
+            global_secondary_height_pairing: None,
             known_qn_history_status: "missing_global_basis_projection".to_string(),
             toric_gv: None,
             source_derived_gv: None,
@@ -19756,6 +19889,8 @@ fn local_cygv_star_union_global_basis_lookup(
             opposite_lower_seed_sum_decomposition: None,
             opposite_bounded_lower_seed_decomposition: None,
             opposite_lower_seed_decomposition_error: None,
+            opposite_global_secondary_height_status: None,
+            opposite_global_secondary_height_pairing: None,
             opposite_error: None,
             error: None,
         };
@@ -19767,6 +19902,9 @@ fn local_cygv_star_union_global_basis_lookup(
                 role: role.to_string(),
                 basis_nonzero: Some(basis_nonzero.clone()),
                 degree: None,
+                global_secondary_height_status:
+                    "global_basis_secondary_height_not_evaluated_invalid_projection".to_string(),
+                global_secondary_height_pairing: None,
                 known_qn_history_status: "invalid_global_basis_projection".to_string(),
                 toric_gv: None,
                 source_derived_gv: None,
@@ -19785,6 +19923,8 @@ fn local_cygv_star_union_global_basis_lookup(
                 opposite_lower_seed_sum_decomposition: None,
                 opposite_bounded_lower_seed_decomposition: None,
                 opposite_lower_seed_decomposition_error: None,
+                opposite_global_secondary_height_status: None,
+                opposite_global_secondary_height_pairing: None,
                 opposite_error: None,
                 error: Some(error),
             };
@@ -19797,6 +19937,9 @@ fn local_cygv_star_union_global_basis_lookup(
                 role: role.to_string(),
                 basis_nonzero: Some(basis_nonzero.clone()),
                 degree: None,
+                global_secondary_height_status:
+                    "global_basis_secondary_height_not_evaluated_invalid_degree".to_string(),
+                global_secondary_height_pairing: None,
                 known_qn_history_status: "invalid_global_basis_degree".to_string(),
                 toric_gv: None,
                 source_derived_gv: None,
@@ -19815,11 +19958,14 @@ fn local_cygv_star_union_global_basis_lookup(
                 opposite_lower_seed_sum_decomposition: None,
                 opposite_bounded_lower_seed_decomposition: None,
                 opposite_lower_seed_decomposition_error: None,
+                opposite_global_secondary_height_status: None,
+                opposite_global_secondary_height_pairing: None,
                 opposite_error: None,
                 error: Some(error),
             };
         }
     };
+    let global_secondary_height = global_basis_secondary_height_pairing_hint(&basis_dense, context);
     let (known_qn_history_status, toric_gv, source_derived_gv, error) =
         global_basis_known_qn_history(&basis_dense, context);
     let (source_class_status, source_ray_ambient_nonzero) =
@@ -19840,6 +19986,8 @@ fn local_cygv_star_union_global_basis_lookup(
         opposite_lower_seed_sum_decomposition,
         opposite_bounded_lower_seed_decomposition,
         opposite_lower_seed_decomposition_error,
+        opposite_global_secondary_height_status,
+        opposite_global_secondary_height_pairing,
         opposite_error,
     ) = if degree.is_some_and(|degree| degree < 0) {
         match basis_dense
@@ -19872,6 +20020,8 @@ fn local_cygv_star_union_global_basis_lookup(
                             opposite_degree,
                             context,
                         );
+                        let opposite_global_secondary_height =
+                            global_basis_secondary_height_pairing_hint(&opposite_dense, context);
                         (
                             opposite_basis_nonzero,
                             Some(opposite_degree),
@@ -19883,11 +20033,15 @@ fn local_cygv_star_union_global_basis_lookup(
                             opposite_lower_seed_sum_decomposition,
                             opposite_bounded_lower_seed_decomposition,
                             opposite_lower_seed_decomposition_error,
+                            Some(opposite_global_secondary_height.status),
+                            opposite_global_secondary_height.pairing,
                             opposite_error,
                         )
                     }
                     Err(error) => (
                         opposite_basis_nonzero,
+                        None,
+                        None,
                         None,
                         None,
                         None,
@@ -19912,18 +20066,22 @@ fn local_cygv_star_union_global_basis_lookup(
                 None,
                 None,
                 None,
+                None,
+                None,
                 Some(error),
             ),
         }
     } else {
         (
-            None, None, None, None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None, None, None, None, None, None,
         )
     };
     LocalCygvStarUnionGlobalBasisLookup {
         role: role.to_string(),
         basis_nonzero: Some(basis_nonzero.clone()),
         degree,
+        global_secondary_height_status: global_secondary_height.status,
+        global_secondary_height_pairing: global_secondary_height.pairing,
         known_qn_history_status,
         toric_gv,
         source_derived_gv,
@@ -19942,6 +20100,8 @@ fn local_cygv_star_union_global_basis_lookup(
         opposite_lower_seed_sum_decomposition,
         opposite_bounded_lower_seed_decomposition,
         opposite_lower_seed_decomposition_error,
+        opposite_global_secondary_height_status,
+        opposite_global_secondary_height_pairing,
         opposite_error,
         error,
     }
@@ -25440,6 +25600,16 @@ mod tests {
             hint.branch_match_status,
             "target_relation_global_secondary_height_matches_branch_q_dot_t"
         );
+    }
+
+    #[test]
+    fn global_basis_secondary_height_pairing_uses_no_origin_q_matrix_columns() {
+        let q_matrix = vec![vec![1, 0, 3], vec![0, 1, 1]];
+        let pairing =
+            global_basis_secondary_height_pairing(&[2, -1], &q_matrix, &[0.0, 0.25, 0.5, 1.0])
+                .unwrap();
+
+        assert_eq!(pairing.get(), 5.0);
     }
 
     #[test]

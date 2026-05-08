@@ -1239,6 +1239,14 @@ to make the remaining GV layer more first-principles:
    chamber even when the weighted shared-face regular triangulation selects the
    star extras, so the remaining blocker is the chamber-transport/qN history
    between those data rather than a hidden zero-wall relation.
+   The same report now records corrected global-height pairings on each
+   star-union global-basis lookup row. For targets `7`/`8`, the target rows are
+   degree `10` and positive, the target-minus-star rows are degree `14` and
+   positive, the target-plus-star rows are degree `6` and positive, and the
+   shared star row is degree `-4` with pairing `-0.42571113815644424`; its
+   opposite is degree `4`, positive, and has known source-derived GV `1`. That
+   makes the remaining transport object explicit in the same rows as degree
+   and known-qN status.
    The full union-support height profile is now serialized as well. For
    targets `3`/`6`, the off-hyperplane zero-shared ray carries zero target and
    star coefficient; for targets `7`/`8`, the height `-1` zero-shared ray and

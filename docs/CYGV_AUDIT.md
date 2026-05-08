@@ -3369,6 +3369,20 @@ face, while the target relation itself has positive corrected volume rather
 than sitting on a zero wall. The remaining missing object is therefore the
 wall-crossing/chamber-transport history that relates those data, not a hidden
 zero target relation.
+The same role-height report also carries corrected global-height pairings on
+each star-union global-basis lookup row, next to degree and known-qN status. In
+aggregate, eight target rows and eight target-minus-star rows are positive, the
+one non-projecting row in each role is not evaluated, and the star rows are
+negative in all eight projected cases with positive opposite rows. For targets
+`7`/`8`, the shared star row has degree `-4` and pairing
+`-0.42571113815644424`; its opposite has degree `4`, pairing
+`0.42571113815644424`, and known source-derived GV `1`. The target rows have
+degree `10` and pairings `0.8595618181118709` / `0.8598372849096165`, while
+target-minus-star has degree `14` and target-plus-star has degree `6`, both
+positive and still unknown. This keeps the next task on the compact
+chamber-transport/qN history relating a positive target row to a negative
+star-side chamber relation with a known positive opposite, rather than on
+finding another scalar GV leaf.
 Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
 serializes a role-tagged height profile over the full union support. For
 targets `3`/`6`, the off-hyperplane zero-shared ray has height `-1` but zero
