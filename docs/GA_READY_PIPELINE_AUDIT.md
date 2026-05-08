@@ -1427,6 +1427,16 @@ to make the remaining GV layer more first-principles:
    `certify_nef_partition_cytools_style_full_dim` wrapper remains available as
    a strict diagnostic for callers that intentionally reject affine-span
    reduction.
+   The base local-cygv skeleton now runs the same codimension-two shape check
+   for origin-including corrected-chamber target supports. On the current
+   schema-4 context, targets `0`, `1`, `2`, `4`, and `5` are codimension-2 CY3
+   shape candidates with `15` bipartitions and zero zero-degree nef-partition
+   candidates. The aggregate report now counts
+   `source_derived_nef_partition:5`,
+   `complete_intersection_intersection_tensor:5`, and
+   `complete_intersection_chamber_certificate:5`, so these base supports are
+   blocked by an explicit CICY source-rule gap rather than by an unclassified
+   local skeleton.
    The local phase-membership aggregation now reports the stricter
    resolved-shared secondary-cone blocker for the integral weighted rows before
    falling back to the coarser star-union relation label. Fresh target `7` and

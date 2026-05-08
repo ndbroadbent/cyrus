@@ -3595,6 +3595,20 @@ callers that intentionally reject affine-span reduction. The local
 target-plus-star reports still do not have the source-derived nef partition,
 ambient triangulation/chamber certificate, semigroup, grading, or phase needed
 to use those pieces for a promoted GV value.
+
+Base local-cygv skeletons now expose the same codimension-two complete-
+intersection shape diagnostic, not just target-plus-star supports. Regenerating
+`/tmp/cyrus_corrected_chamber_all_cicy_gap.json` from the schema-4 corrected
+chamber context shows five of the nine remaining base origin-circuit targets
+(`0`, `1`, `2`, `4`, and `5`) are codimension-2 CY3 shape candidates with
+`15` nontrivial bipartitions and **zero** zero-degree nef-partition candidates.
+The aggregate missing-input counts therefore now include
+`source_derived_nef_partition:5`,
+`complete_intersection_intersection_tensor:5`, and
+`complete_intersection_chamber_certificate:5`, alongside the existing
+local-intersection and local-chamber blockers. This is negative evidence: it
+sharpens the source-rule gap for those base supports, but it does not promote a
+compact `cygv` value or remove the nine corrected-chamber misses.
 This is useful but still not a source rule: it proves that Cyrus must derive
 which split, if any, comes from the star-union/CICY geometry instead of choosing
 one by scalar GV agreement. Target `7` also has no nonnegative primitive

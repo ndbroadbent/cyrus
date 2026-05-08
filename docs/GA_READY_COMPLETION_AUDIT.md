@@ -185,7 +185,12 @@ and matrix-basis pipeline are no longer open.
    origin-spectator CICY check also rules out the simple "add origin back"
    repair: after excluding origin from nef parts as CYTools requires, the
    full-union support has zero zero-degree codimension-2 nef partition
-   candidates for both target rows.
+   candidates for both target rows. The same codimension-two shape check is
+   now exported by the base local-cygv skeletons: five of the nine remaining
+   corrected-chamber targets (`0`, `1`, `2`, `4`, and `5`) have 15
+   bipartitions and zero zero-degree nef candidates, so their CICY-shaped gap
+   is now an explicit missing source-derived nef-partition/tensor/chamber
+   input rather than an unclassified local support.
 2. **Exact corrected KKLT volume.** The no-replay path computes a corrected
    volume but still has a documented instanton/chamber residual.
 3. **Generic matrix-basis pipeline.** Matrix divisor-basis primitives now cover
