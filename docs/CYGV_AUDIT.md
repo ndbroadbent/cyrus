@@ -3706,6 +3706,15 @@ secondary module has a polytope-aware two-face helper that composes it with the
 native face-restriction cone. This removes another duplicated chamber
 diagnostic path, but it is not a substitute for the missing compact qN history.
 
+The first-principles runner can now dump that certificate directly with
+`--dump-corrected-chamber-2face-secondary-certificate`, and corrected-chamber
+GV context exports include `secondary_cone_2face_height_certificate`. On the
+4-214-647 corrected-Kähler checkpoint chamber, the two-face skeleton has `589`
+native hyperplanes and the corrected height is strictly inside with minimum
+pairing `0.0002917945770377628`. This is stronger chamber evidence for the
+global two-face skeleton; it still does not certify the unresolved local
+target-plus-star phase transport.
+
 The no-replay boundary around the standalone GV binary is stricter now:
 `mcallister_gv` no longer reads `dual_curves.dat` or `dual_curves_gv.dat`.
 Those files remain validation checkpoints for tests and audits only; the

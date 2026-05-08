@@ -1475,6 +1475,13 @@ to make the remaining GV layer more first-principles:
    the 4D two-face sets first and then applies the native face-restriction
    circuit cone. Focused tests pin the 4D projective-simplex facet/two-face
    counts and the polytope-two-face secondary helper.
+   `mcallister_first_principles` now exposes this as
+   `--dump-corrected-chamber-2face-secondary-certificate` and adds
+   `secondary_cone_2face_height_certificate` to corrected-chamber GV context
+   JSON. A 4-214-647 validation-only run with `--stop-after volume` writes
+   `589` two-face hyperplanes, min/max pairings
+   `0.0002917945770377628`/`11.485862078225125`, and
+   `strictly_inside=true`.
    The Stage 0 no-replay policy tests also now pass again after two policy
    cleanups: generic first-principles runs log the computed flux-coordinate
    basis separately from explicit production-basis overrides, and the opt-in

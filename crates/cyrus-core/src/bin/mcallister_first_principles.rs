@@ -52,6 +52,8 @@
 //! - `--dump-corrected-chamber-secondary-certificate path` to export only the
 //!   corrected-chamber secondary-cone height certificate as JSON without
 //!   building the full missing-GV context.
+//! - `--dump-corrected-chamber-2face-secondary-certificate path` to export the
+//!   CYTools-style 4D two-face-restricted secondary-cone certificate.
 //! - `--diagnose-chamber-updated-kklt` to run a diagnostic-only KKLT
 //!   fixed-point loop that recomputes the FRST chamber, intersections, divisor
 //!   χ, and toric-covered small-curve GV target correction at each iteration.
@@ -93,8 +95,9 @@ use cyrus_core::{
     map_basis_gv_invariants_to_ambient, project_ambient_curve_to_basis,
     prune_decomposable_curve_candidates, scale_divisor_basis_kklt_branch_initialization_to_target,
     secondary_cone_height_pairings, secondary_cone_hyperplanes_native,
-    solve_divisor_basis_path_following, solve_divisor_basis_path_following_branch_candidates,
-    solve_mixed_basis_path_following, solve_racetrack, subcutoff_toric_curve_candidates,
+    secondary_cone_hyperplanes_native_on_polytope_2faces_4d, solve_divisor_basis_path_following,
+    solve_divisor_basis_path_following_branch_candidates, solve_mixed_basis_path_following,
+    solve_racetrack, subcutoff_toric_curve_candidates,
 };
 
 const DEFAULT_MCALLISTER_GV_MIN_POINTS: u32 = 20_000;
@@ -744,6 +747,7 @@ struct ChamberGvDiagnostic {
     degree_bounded_toric_gv_diagnostic_context_for_missing:
         Option<Vec<ToricGvDiagnosticContextSample>>,
     secondary_cone_height_certificate: Option<SecondaryConeHeightCertificate>,
+    secondary_cone_2face_height_certificate: Option<SecondaryConeHeightCertificate>,
     secondary_cone_heights_for_missing: Option<Vec<f64>>,
     basis_mori_rays_for_missing_degree_bound: Option<i128>,
     basis_mori_rays_for_missing_degree_bounded: Option<Vec<Vec<i64>>>,
@@ -828,6 +832,7 @@ struct CorrectedChamberGvContextExport<'a> {
     degree_bounded_toric_gv_diagnostic_context_for_missing:
         Option<&'a Vec<ToricGvDiagnosticContextSample>>,
     secondary_cone_height_certificate: Option<&'a SecondaryConeHeightCertificate>,
+    secondary_cone_2face_height_certificate: Option<&'a SecondaryConeHeightCertificate>,
     secondary_cone_heights_for_missing: Option<&'a Vec<f64>>,
     gv_q_matrix_for_missing: Option<&'a Vec<Vec<i64>>>,
     gv_curve_basis_matrix_for_missing: Option<&'a Vec<Vec<String>>>,
@@ -1240,6 +1245,7 @@ struct PipelineArgs {
     diagnose_corrected_chamber_lp_face_gv: bool,
     dump_corrected_chamber_gv_context_path: Option<String>,
     dump_corrected_chamber_secondary_certificate_path: Option<String>,
+    dump_corrected_chamber_2face_secondary_certificate_path: Option<String>,
     diagnose_chamber_updated_kklt: bool,
     diagnose_chamber_updated_kklt_iterations: usize,
     production_primal_basis_override: Option<BasisOverride>,
@@ -1340,6 +1346,8 @@ fn parse_args() -> PipelineArgs {
         parse_arg_value::<String>("--dump-corrected-chamber-gv-context");
     let dump_corrected_chamber_secondary_certificate_path =
         parse_arg_value::<String>("--dump-corrected-chamber-secondary-certificate");
+    let dump_corrected_chamber_2face_secondary_certificate_path =
+        parse_arg_value::<String>("--dump-corrected-chamber-2face-secondary-certificate");
     let diagnose_chamber_updated_kklt = parse_flag("--diagnose-chamber-updated-kklt");
     let diagnose_chamber_updated_kklt_iterations =
         parse_arg_value::<usize>("--diagnose-chamber-updated-kklt-iterations").unwrap_or(6);
@@ -1381,6 +1389,7 @@ fn parse_args() -> PipelineArgs {
         diagnose_corrected_chamber_lp_face_gv,
         dump_corrected_chamber_gv_context_path,
         dump_corrected_chamber_secondary_certificate_path,
+        dump_corrected_chamber_2face_secondary_certificate_path,
         diagnose_chamber_updated_kklt,
         diagnose_chamber_updated_kklt_iterations,
         production_primal_basis_override,
@@ -7276,6 +7285,29 @@ fn secondary_cone_height_certificate_for_kahler(
     let heights = secondary_cone_typed_heights_for_kahler(geom, basis, kahler)?;
     let hyperplanes = secondary_cone_hyperplanes_native(&geom.triangulation_points, tri)
         .map_err(|e| format!("failed to compute secondary-cone hyperplanes: {e}"))?;
+    secondary_cone_height_certificate_from_hyperplanes(&hyperplanes, &heights)
+}
+
+fn secondary_cone_2face_height_certificate_for_kahler(
+    tri: &Triangulation,
+    geom: &PrimalGeom,
+    basis: &[usize],
+    kahler: &[F64<Finite>],
+) -> Result<SecondaryConeHeightCertificate, String> {
+    let heights = secondary_cone_typed_heights_for_kahler(geom, basis, kahler)?;
+    let hyperplanes = secondary_cone_hyperplanes_native_on_polytope_2faces_4d(
+        &geom.triangulation_points,
+        tri,
+        &geom.polytope,
+    )
+    .map_err(|e| format!("failed to compute 2-face secondary-cone hyperplanes: {e}"))?;
+    secondary_cone_height_certificate_from_hyperplanes(&hyperplanes, &heights)
+}
+
+fn secondary_cone_height_certificate_from_hyperplanes(
+    hyperplanes: &[Vec<i64>],
+    heights: &[F64<Finite>],
+) -> Result<SecondaryConeHeightCertificate, String> {
     let pairings = secondary_cone_height_pairings(&hyperplanes, &heights)
         .map_err(|e| format!("failed to pair secondary-cone hyperplanes with heights: {e}"))?;
     let epsilon = F64::<Pos>::new(1e-6).expect("CYTools secondary-cone epsilon is positive");
@@ -7449,6 +7481,9 @@ fn diagnose_chamber_gv_volume_correction(
         &intersection.basis,
         kahler,
     )?);
+    let secondary_cone_2face_height_certificate = Some(
+        secondary_cone_2face_height_certificate_for_kahler(tri, geom, &intersection.basis, kahler)?,
+    );
     let secondary_cone_heights_for_missing = Some(secondary_cone_heights_for_kahler(
         geom,
         &intersection.basis,
@@ -8269,6 +8304,7 @@ fn diagnose_chamber_gv_volume_correction(
         covered_toric_gv_context_for_missing,
         degree_bounded_toric_gv_diagnostic_context_for_missing,
         secondary_cone_height_certificate,
+        secondary_cone_2face_height_certificate,
         secondary_cone_heights_for_missing,
         gv_q_matrix_for_missing: gv_basis_data_for_missing
             .as_ref()
@@ -9156,6 +9192,9 @@ fn write_corrected_chamber_gv_context_export(
             .degree_bounded_toric_gv_diagnostic_context_for_missing
             .as_ref(),
         secondary_cone_height_certificate: diag.secondary_cone_height_certificate.as_ref(),
+        secondary_cone_2face_height_certificate: diag
+            .secondary_cone_2face_height_certificate
+            .as_ref(),
         secondary_cone_heights_for_missing: diag.secondary_cone_heights_for_missing.as_ref(),
         gv_q_matrix_for_missing: diag.gv_q_matrix_for_missing.as_ref(),
         gv_curve_basis_matrix_for_missing: diag.gv_curve_basis_matrix_for_missing.as_ref(),
@@ -10019,6 +10058,7 @@ fn stage_volume(
     diagnose_corrected_chamber_lp_face_gv: bool,
     dump_corrected_chamber_gv_context_path: Option<&str>,
     dump_corrected_chamber_secondary_certificate_path: Option<&str>,
+    dump_corrected_chamber_2face_secondary_certificate_path: Option<&str>,
     diagnose_chamber_updated_kklt: bool,
     diagnose_chamber_updated_kklt_iterations: usize,
     production_primal_basis_override: Option<&BasisOverride>,
@@ -11013,6 +11053,31 @@ fn stage_volume(
             path.display()
         );
     }
+    if let Some(path) = dump_corrected_chamber_2face_secondary_certificate_path {
+        let certificate = secondary_cone_2face_height_certificate_for_kahler(
+            &corrected_chamber,
+            geom,
+            &intersection.basis,
+            &t,
+        )
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "[ERROR] failed to compute corrected-chamber 2-face secondary certificate: {e}"
+            );
+            std::process::exit(2);
+        });
+        let path = PathBuf::from(path);
+        write_secondary_cone_height_certificate(&path, &certificate).unwrap_or_else(|e| {
+            eprintln!(
+                "[ERROR] failed to write corrected-chamber 2-face secondary certificate: {e}"
+            );
+            std::process::exit(2);
+        });
+        eprintln!(
+            "[INFO] corrected-chamber 2-face secondary certificate JSON written: {}",
+            path.display()
+        );
+    }
     if let Some(kklt_basis) = kklt_basis_for_chamber_gv.as_deref() {
         let corrected_chamber_kappa_full = chamber_intersection_full(
             &corrected_chamber,
@@ -11746,6 +11811,8 @@ fn run_pipeline(args: PipelineArgs) {
         args.dump_corrected_chamber_gv_context_path.as_deref(),
         args.dump_corrected_chamber_secondary_certificate_path
             .as_deref(),
+        args.dump_corrected_chamber_2face_secondary_certificate_path
+            .as_deref(),
         args.diagnose_chamber_updated_kklt,
         args.diagnose_chamber_updated_kklt_iterations,
         args.production_primal_basis_override.as_ref(),
@@ -12259,6 +12326,15 @@ mod tests {
                 max_pairing: Some(1.0),
                 strictly_inside: true,
             }),
+            secondary_cone_2face_height_certificate: Some(SecondaryConeHeightCertificate {
+                status: "strictly_inside_secondary_cone".to_string(),
+                epsilon: 1e-6,
+                hyperplane_count: 2,
+                pairing_count: 2,
+                min_pairing: Some(0.5),
+                max_pairing: Some(1.5),
+                strictly_inside: true,
+            }),
             secondary_cone_heights_for_missing: Some(vec![0.0, 0.0, 1.5]),
             basis_mori_rays_for_missing_degree_bound: None,
             basis_mori_rays_for_missing_degree_bounded: None,
@@ -12306,6 +12382,9 @@ mod tests {
         );
         assert_eq!(chamber_certificate["hyperplane_count"], 1);
         assert_eq!(chamber_certificate["strictly_inside"], true);
+        let twoface_chamber_certificate = &value["secondary_cone_2face_height_certificate"];
+        assert_eq!(twoface_chamber_certificate["hyperplane_count"], 2);
+        assert_eq!(twoface_chamber_certificate["strictly_inside"], true);
         assert_eq!(
             value["secondary_cone_heights_for_missing"]
                 .as_array()

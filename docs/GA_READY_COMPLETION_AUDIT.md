@@ -1033,6 +1033,16 @@ projective-simplex tests pin the public 4D face counts and the 2-face helper's
 empty-cone behavior on a single-simplex triangulation. This is still a chamber
 building block, not a promoted GV value.
 
+`mcallister_first_principles` now exports the same 4D two-face-restricted
+certificate through `--dump-corrected-chamber-2face-secondary-certificate` and
+includes it in corrected-chamber GV context JSON. On the validation-only
+4-214-647 corrected-Kähler checkpoint path with `--stop-after volume`, the
+dump writes `589` two-face hyperplanes with minimum pairing
+`0.0002917945770377628`, maximum pairing `11.485862078225125`, and
+`strictly_inside=true`. This certifies the corrected height against the
+CYTools-style two-face skeleton, while leaving the target-plus-star chamber
+transport/qN-history problem open.
+
 The Stage 0 no-replay policy gate is green for the touched paths:
 `cargo test -p cyrus-core --test mcallister_e2e stage0_data_integrity -- --nocapture`
 passes. The first-principles runner now keeps generic computed-basis flux
