@@ -314,6 +314,32 @@ pub fn expanded_secondary_face_inequality_choices_from_triangulations(
     Ok(face_inequality_choices)
 }
 
+/// Materialize one NTFE chamber from supplied per-face FRT choices.
+///
+/// This is the supplied-`face_triangs`, `require_star=False`, single-choice
+/// materialization path of CYTools `ntfe_hypers`.
+///
+/// # Errors
+///
+/// Returns an error if the supplied face triangulations are invalid, if the
+/// effective choice blocks are invalid, or if `choice_index` is out of range.
+pub fn expanded_secondary_chamber_hyperplanes_from_face_triangulation_choice_index(
+    points: &[Point],
+    face_triangulation_choices: &[Vec<Triangulation>],
+    choice_index: usize,
+    separate_boring: bool,
+) -> Result<Vec<Vec<i64>>> {
+    let face_inequality_choices = expanded_secondary_face_inequality_choices_from_triangulations(
+        points,
+        face_triangulation_choices,
+    )?;
+    expanded_secondary_chamber_hyperplanes_from_face_inequality_choice_index(
+        &face_inequality_choices,
+        choice_index,
+        separate_boring,
+    )
+}
+
 /// Compute the expanded-secondary subfan support on supplied two-faces.
 ///
 /// This ports CYTools' `Polytope.expanded_secondary_fan` support computation:
@@ -392,6 +418,53 @@ pub fn expanded_secondary_group_boring_chamber_choices(
         grouped.push(vec![boring_rows]);
     }
     grouped
+}
+
+/// Count NTFE chamber choices after optional CYTools boring-face grouping.
+///
+/// This is the `math.prod(choices_counts)` step of CYTools `ntfe_hypers` once
+/// the per-face inequality blocks are known.
+///
+/// # Errors
+///
+/// Returns an error if any effective face block has no choices or if the total
+/// number of chambers overflows `usize`.
+pub fn expanded_secondary_chamber_count_from_face_inequality_choices(
+    face_inequality_choices: &[Vec<Vec<Vec<i64>>>],
+    separate_boring: bool,
+) -> Result<usize> {
+    if separate_boring {
+        let grouped = expanded_secondary_group_boring_chamber_choices(face_inequality_choices);
+        expanded_secondary_chamber_choice_count(&grouped)
+    } else {
+        expanded_secondary_chamber_choice_count(face_inequality_choices)
+    }
+}
+
+/// Materialize one NTFE chamber from per-face inequality choices.
+///
+/// This composes the already-portable pieces of CYTools `ntfe_hypers`: optional
+/// `separate_boring=True` grouping, mixed-radix choice-index decoding, selected
+/// block stacking, and row deduplication.
+///
+/// # Errors
+///
+/// Returns an error if the effective choice blocks are invalid or if
+/// `choice_index` is out of range.
+pub fn expanded_secondary_chamber_hyperplanes_from_face_inequality_choice_index(
+    face_inequality_choices: &[Vec<Vec<Vec<i64>>>],
+    choice_index: usize,
+    separate_boring: bool,
+) -> Result<Vec<Vec<i64>>> {
+    if separate_boring {
+        let grouped = expanded_secondary_group_boring_chamber_choices(face_inequality_choices);
+        expanded_secondary_chamber_hyperplanes_from_choice_index(&grouped, choice_index)
+    } else {
+        expanded_secondary_chamber_hyperplanes_from_choice_index(
+            face_inequality_choices,
+            choice_index,
+        )
+    }
 }
 
 /// Count expanded-secondary chamber choices from per-face inequality blocks.
@@ -1705,6 +1778,33 @@ mod tests {
         );
         assert_eq!(
             expanded_secondary_chamber_hyperplanes_from_choice_index(&grouped, 1).unwrap(),
+            vec![
+                vec![0, 0, 0, 0, -1, 1, -1, 1],
+                vec![1, -1, 1, -1, 0, 0, 0, 0],
+            ]
+        );
+        assert_eq!(
+            expanded_secondary_chamber_count_from_face_inequality_choices(&choices, true).unwrap(),
+            2
+        );
+        assert_eq!(
+            expanded_secondary_chamber_hyperplanes_from_face_inequality_choice_index(
+                &choices, 1, true,
+            )
+            .unwrap(),
+            vec![
+                vec![0, 0, 0, 0, -1, 1, -1, 1],
+                vec![1, -1, 1, -1, 0, 0, 0, 0],
+            ]
+        );
+        assert_eq!(
+            expanded_secondary_chamber_hyperplanes_from_face_triangulation_choice_index(
+                &points,
+                &face_triangulation_choices,
+                1,
+                true,
+            )
+            .unwrap(),
             vec![
                 vec![0, 0, 0, 0, -1, 1, -1, 1],
                 vec![1, -1, 1, -1, 0, 0, 0, 0],

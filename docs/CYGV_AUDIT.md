@@ -3856,6 +3856,13 @@ regression realizes a selected square diagonal and checks strict
 secondary-cone membership. This still depends on caller-supplied face FRTs;
 enumerating those FRTs and applying star-ness constraints remain separate
 steps.
+The public `ntfe_hypers` materialization layer for already-known choices is now
+available too: Cyrus can count chambers after optional boring-face grouping,
+materialize a chamber by CYTools mixed-radix index from precomputed
+`face_ineqs`, or do the same from supplied `face_triangs`. This removes local
+caller duplication of the CYTools ordering rules while keeping the boundary
+explicit: face-FRT enumeration/sampling and optional star-ness inequalities
+are still not part of this helper.
 
 The star-union chamber semigroup probe now also lifts every current/flipped
 chamber generator back through the global curve-basis projection and reports

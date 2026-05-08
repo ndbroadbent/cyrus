@@ -211,8 +211,11 @@ pub use racetrack::{
 pub use triangulation::{
     Triangulation, compute_delaunay_heights, compute_frst_heights, compute_regular_triangulation,
     expanded_secondary_chamber_choice_count, expanded_secondary_chamber_choice_digits,
+    expanded_secondary_chamber_count_from_face_inequality_choices,
     expanded_secondary_chamber_hyperplanes_from_choice,
     expanded_secondary_chamber_hyperplanes_from_choice_index,
+    expanded_secondary_chamber_hyperplanes_from_face_inequality_choice_index,
+    expanded_secondary_chamber_hyperplanes_from_face_triangulation_choice_index,
     expanded_secondary_face_inequality_choices_from_triangulations,
     expanded_secondary_fan_hyperplanes_on_faces,
     expanded_secondary_fan_hyperplanes_on_polytope_2faces_4d,

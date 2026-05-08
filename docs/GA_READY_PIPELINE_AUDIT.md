@@ -1727,6 +1727,16 @@ to make the remaining GV layer more first-principles:
    triangulation. A square-face regression verifies that the computed height
    lands strictly inside the selected secondary cone and reproduces the
    selected diagonal.
+   The top-level `ntfe_hypers` materialization logic for already-known
+   face-inequality data is now exposed through
+   `expanded_secondary_chamber_count_from_face_inequality_choices`,
+   `expanded_secondary_chamber_hyperplanes_from_face_inequality_choice_index`,
+   and
+   `expanded_secondary_chamber_hyperplanes_from_face_triangulation_choice_index`.
+   These helpers preserve CYTools' optional boring-face grouping and
+   mixed-radix chamber-index order for callers that want one expanded
+   secondary chamber by index. They still require caller-supplied face FRT
+   choices; automatic face-FRT enumeration/sampling remains unported.
    The Stage 0 no-replay policy tests also now pass again after two policy
    cleanups: generic first-principles runs log the computed flux-coordinate
    basis separately from explicit production-basis overrides, and the opt-in
