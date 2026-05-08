@@ -3578,6 +3578,16 @@ secondary pairing is `0` and the corrected global-height pairing is
 piece is a crossed wall circuit in the local star-union geometry, while the
 degree-6 target-plus-star remainder is not a finite Mori generator or support
 face in the exported context.
+The local phase-membership status now surfaces the resolved local
+secondary-cone obstruction directly. Regenerating target-specific reports as
+`/tmp/cyrus_target7_refined_local_phase_report.json` and
+`/tmp/cyrus_target8_refined_local_phase_report.json` gives
+`local_phase_chamber_blocked_weighted_p2_resolved_shared_chamber:weighted_p2_resolved_shared_chamber_outside_or_on_wall`
+for both targets. The same summaries still have
+`star_union_global_regular_shared_face_matches_serialized_star_extras`, so the
+global corrected height picks the serialized star extras, but the
+exclusive-pair resolved support is on a secondary wall. That keeps this as a
+chamber-certificate blocker, not a promotable compact `cygv` domain.
 `/tmp/cyrus_star_union_wall_transport_readiness_smoke_all.json` now aggregates
 that implication directly. The readiness buckets are
 `wall_transport_blocked_missing_known_wall_circuit:6`,

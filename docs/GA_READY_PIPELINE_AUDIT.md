@@ -1385,6 +1385,16 @@ to make the remaining GV layer more first-principles:
    `certify_nef_partition_cytools_style_full_dim` wrapper remains available as
    a strict diagnostic for callers that intentionally reject affine-span
    reduction.
+   The local phase-membership aggregation now reports the stricter
+   resolved-shared secondary-cone blocker for the integral weighted rows before
+   falling back to the coarser star-union relation label. Fresh target `7` and
+   target `8` context runs both produce
+   `local_phase_chamber_blocked_weighted_p2_resolved_shared_chamber:weighted_p2_resolved_shared_chamber_outside_or_on_wall`,
+   while their global-regular star-union hint remains
+   `star_union_global_regular_shared_face_matches_serialized_star_extras`.
+   This means the corrected global height selects the serialized star extras,
+   but the exclusive-pair resolved local chamber is still on a wall and cannot
+   certify a local `cygv` handoff.
    After recomputing the affine charge basis, every single-column omission for
    targets `7`/`8` remains Calabi-Yau charged but has `q_rows=6`, `q_cols=1`,
    and hypersurface `cy_dim=4`, so the next fix is a source-derived CICY

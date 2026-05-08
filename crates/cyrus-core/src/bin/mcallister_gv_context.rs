@@ -18714,10 +18714,41 @@ fn local_phase_chamber_membership_certificate_status_with_witness(
     let star_support_hint = local_cygv_shared_two_simplex_star_support_hint(witness);
     let star_union_relation_hint =
         local_cygv_star_union_relation_hint(witness, &star_support_hint, Some(context.q_matrix));
-    format!(
+    let star_union_status = format!(
         "local_phase_chamber_blocked_weighted_p2_star_union_chamber_history:{}",
         star_union_relation_hint.status
-    )
+    );
+    if star_union_relation_hint.status
+        != "star_union_target_and_star_integral_in_union_charge_basis"
+    {
+        return star_union_status;
+    }
+
+    let resolved_chamber = local_cygv_resolved_shared_chamber_certificate_hint(skeleton, witness);
+    if resolved_chamber.status
+        != "weighted_p2_resolved_shared_chamber_strictly_inside_exclusive_pair_secondary_cone"
+    {
+        return format!(
+            "local_phase_chamber_blocked_weighted_p2_resolved_shared_chamber:{}",
+            resolved_chamber.status
+        );
+    }
+
+    let global_regular = local_cygv_star_union_global_regular_triangulation_hint(
+        witness,
+        &star_support_hint,
+        context.secondary_cone_heights,
+    );
+    if global_regular.status
+        != "star_union_global_regular_shared_face_selects_target_exclusive_points"
+    {
+        return format!(
+            "local_phase_chamber_blocked_weighted_p2_global_regular_chamber:{}",
+            global_regular.status
+        );
+    }
+
+    "source_derived_local_phase_chamber_certificate_weighted_p2_resolved_shared_chamber".to_string()
 }
 
 fn origin_circuit_zero_relation_shared_two_simplex_points(
@@ -28350,7 +28381,7 @@ mod tests {
                 Some(&witness),
                 &validated,
             ),
-            "local_phase_chamber_blocked_weighted_p2_star_union_chamber_history:star_union_target_and_star_integral_in_union_charge_basis"
+            "local_phase_chamber_blocked_weighted_p2_resolved_shared_chamber:weighted_p2_resolved_shared_chamber_outside_or_on_wall"
         );
         let resolved_hint = local_cygv_resolved_shared_support_hint(&skeleton, Some(&witness));
         assert_eq!(

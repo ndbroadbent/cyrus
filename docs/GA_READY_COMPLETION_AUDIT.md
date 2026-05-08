@@ -899,6 +899,18 @@ does not supply that chamber. For all four weighted rows the candidate has one
 secondary hyperplane, but the affine-height pairing is exactly `0`, so the
 exclusive-pair support lies on the wall rather than strictly inside either the
 candidate chamber or its sign-flipped neighbor.
+The local phase-membership summary now uses that sharper certificate before
+leaving the blocker at the coarser integral star-union relation. Regenerating
+target `7` and target `8` reports as
+`/tmp/cyrus_target7_refined_local_phase_report.json` and
+`/tmp/cyrus_target8_refined_local_phase_report.json` gives the top-level local
+phase bucket
+`local_phase_chamber_blocked_weighted_p2_resolved_shared_chamber:weighted_p2_resolved_shared_chamber_outside_or_on_wall`
+for both targets. The same rows still record
+`star_union_global_regular_shared_face_matches_serialized_star_extras`, so the
+global corrected height selects the serialized star extras, but the
+exclusive-pair resolved local phase remains on a wall and cannot certify a
+promoted local semigroup or intersection tensor.
 A bounded supporting-face rerun for the two integral weighted rows (`target 7`
 and `target 8`) does not provide that missing certificate. With
 `--certify-origin-witness-domains`, two LP anchors, and the facet-union cap
