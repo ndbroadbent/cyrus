@@ -1182,9 +1182,13 @@ to make the remaining GV layer more first-principles:
    and reported the degree-6 `target+star` row with `463` seeds, `355`
    reduced seeds, `65538` first-layer closure elements,
    `target_in_closure=false`, `not_found_up_to_4` lower-seed decomposition,
-   and top-level status bucket `stopped_generation_limit_1`. The earlier
-   second-layer synthetic run exceeded a `180s` guard. This pushes the next
-   task back to certified chamber semigroup/history construction.
+   and top-level status bucket `stopped_generation_limit_1`. The same probe now
+   uses streaming element-limit enforcement, so the formerly timing-out
+   generation-2 run completes in 24.50s with status
+   `exceeded_element_limit_150000_during_generation_2`, `150000` retained
+   closure elements, generation-2 partial count `84462`, and
+   `target_in_closure=false`. This pushes the next task back to certified
+   chamber semigroup/history construction.
    The full union-support height profile is now serialized as well. For
    targets `3`/`6`, the off-hyperplane zero-shared ray carries zero target and
    star coefficient; for targets `7`/`8`, the height `-1` zero-shared ray and

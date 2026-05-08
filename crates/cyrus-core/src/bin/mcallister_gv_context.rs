@@ -14117,6 +14117,41 @@ fn bounded_cygv_semigroup_closure(
     element_limit: usize,
     generation_limit: Option<usize>,
 ) -> Result<BoundedCygvClosure, String> {
+    bounded_cygv_semigroup_closure_inner(
+        seeds,
+        grading_vector,
+        target_degree,
+        element_limit,
+        generation_limit,
+        false,
+    )
+}
+
+fn streaming_bounded_cygv_semigroup_closure(
+    seeds: &[Vec<i64>],
+    grading_vector: &[i64],
+    target_degree: i128,
+    element_limit: usize,
+    generation_limit: Option<usize>,
+) -> Result<BoundedCygvClosure, String> {
+    bounded_cygv_semigroup_closure_inner(
+        seeds,
+        grading_vector,
+        target_degree,
+        element_limit,
+        generation_limit,
+        true,
+    )
+}
+
+fn bounded_cygv_semigroup_closure_inner(
+    seeds: &[Vec<i64>],
+    grading_vector: &[i64],
+    target_degree: i128,
+    element_limit: usize,
+    generation_limit: Option<usize>,
+    stop_during_generation_at_limit: bool,
+) -> Result<BoundedCygvClosure, String> {
     if element_limit == 0 {
         return Err("bounded cygv closure element limit must be positive".to_string());
     }
@@ -14127,8 +14162,9 @@ fn bounded_cygv_semigroup_closure(
     if seeds.iter().any(|row| row.len() != dimension) {
         return Err("cygv closure seed dimensions do not match grading".to_string());
     }
-    let generators = cygv_pair_reduced_seed_generators(seeds)
+    let mut generators = cygv_pair_reduced_seed_generators(seeds)
         .map_err(|error| format!("cygv seed reduction failed: {error}"))?;
+    generators.sort();
     let zero = vec![0i64; dimension];
     let mut elements = HashSet::new();
     let mut starting_elements = HashSet::new();
@@ -14162,12 +14198,50 @@ fn bounded_cygv_semigroup_closure(
     loop {
         generation += 1;
         let mut new_elements = HashSet::new();
+        let mut sorted_starting_elements = starting_elements.iter().cloned().collect::<Vec<_>>();
+        sorted_starting_elements.sort();
         for generator in &generators {
-            for element in &starting_elements {
+            for element in &sorted_starting_elements {
                 let sum = checked_vector_sum(generator, element)?;
                 let degree = curve_degree(&sum, grading_vector)?;
-                if degree <= target_degree && !elements.contains(&sum) {
+                if degree <= target_degree
+                    && !elements.contains(&sum)
+                    && !new_elements.contains(&sum)
+                {
                     new_elements.insert(sum);
+                    if stop_during_generation_at_limit
+                        && elements.len().saturating_add(new_elements.len()) >= element_limit
+                    {
+                        let mut sorted_new_elements = new_elements.into_iter().collect::<Vec<_>>();
+                        sorted_new_elements.sort();
+                        let total_after_partial_generation = elements
+                            .len()
+                            .checked_add(sorted_new_elements.len())
+                            .ok_or_else(|| {
+                                "cygv closure generation count overflowed usize".to_string()
+                            })?;
+                        generation_counts.push(CygvClosureGenerationCount {
+                            generation,
+                            starting_element_count: starting_elements.len(),
+                            new_element_count: sorted_new_elements.len(),
+                            total_element_count_after_full_generation:
+                                total_after_partial_generation,
+                            truncated_at_limit: true,
+                        });
+                        for element in sorted_new_elements {
+                            elements.insert(element);
+                        }
+                        let degree_counts = cygv_closure_degree_counts(&elements, grading_vector)?;
+                        return Ok(BoundedCygvClosure {
+                            status: format!(
+                                "exceeded_element_limit_{element_limit}_during_generation_{generation}"
+                            ),
+                            elements,
+                            degree_counts,
+                            generation_counts,
+                            completed: false,
+                        });
+                    }
                 }
             }
         }
@@ -17640,7 +17714,7 @@ fn local_cygv_star_union_target_plus_star_path_history_probe(
         lower_seed_pair_limit,
         Some(context.grading),
     );
-    let closure = match bounded_cygv_semigroup_closure(
+    let closure = match streaming_bounded_cygv_semigroup_closure(
         &seeds,
         context.grading,
         target_degree,
@@ -24819,6 +24893,32 @@ mod tests {
             6
         );
         assert!(closure.generation_counts[0].truncated_at_limit);
+    }
+
+    #[test]
+    fn streaming_bounded_cygv_closure_stops_during_broad_generation() {
+        let seeds = vec![vec![1, 0], vec![0, 1]];
+        let closure =
+            streaming_bounded_cygv_semigroup_closure(&seeds, &[1, 1], 3, 7, None).unwrap();
+
+        assert_eq!(
+            closure.status,
+            "exceeded_element_limit_7_during_generation_2"
+        );
+        assert!(!closure.completed);
+        assert_eq!(closure.elements.len(), 7);
+        assert!(closure.elements.contains(&vec![0, 3]));
+        assert_eq!(closure.generation_counts.len(), 2);
+        assert_eq!(closure.generation_counts[0].generation, 1);
+        assert!(!closure.generation_counts[0].truncated_at_limit);
+        assert_eq!(closure.generation_counts[1].generation, 2);
+        assert_eq!(closure.generation_counts[1].starting_element_count, 3);
+        assert_eq!(closure.generation_counts[1].new_element_count, 1);
+        assert_eq!(
+            closure.generation_counts[1].total_element_count_after_full_generation,
+            7
+        );
+        assert!(closure.generation_counts[1].truncated_at_limit);
     }
 
     #[test]

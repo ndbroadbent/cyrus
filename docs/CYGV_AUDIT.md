@@ -3303,11 +3303,14 @@ the target `8` run with `--closure-generation-limit 1 --element-limit 150000
 `target+star` row has `463` seed rows, `355` reduced seeds, `65538`
 first-layer closure elements, and `target_in_closure=false`; the lower-seed
 decomposition remains `not_found_up_to_4`, and the top-level status bucket is
-`stopped_generation_limit_1`. The earlier synthetic closure-limit-2 run with
-the same element cap exceeded a `180s` guard before writing a report. Thus the
-degree-6 chamber row is already beyond the cheap first-layer history; resolving
-it still requires the certified corrected-chamber semigroup/history, not a
-small visible-generator shortcut.
+`stopped_generation_limit_1`. The same probe now uses streaming element-limit
+enforcement for diagnostic closure, so the generation-2 run with the same
+element cap writes a report instead of timing out: it completes in `24.50s`
+with status `exceeded_element_limit_150000_during_generation_2`, retains
+`150000` closure elements, records generation-2 partial count `84462`, and
+still has `target_in_closure=false`. Thus the degree-6 chamber row is already
+beyond the cheap first-layer history; resolving it still requires the certified
+corrected-chamber semigroup/history, not a small visible-generator shortcut.
 Regenerating as `/tmp/cyrus_gv_context_star_union_height_report.json` also
 serializes a role-tagged height profile over the full union support. For
 targets `3`/`6`, the off-hyperplane zero-shared ray has height `-1` but zero
