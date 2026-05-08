@@ -851,6 +851,16 @@ validates, and reports that certificate, including rejecting inconsistent
 hyperplane/pairing counts. This still certifies only the global exported
 chamber; candidate local phases remain unpromoted until they carry their own
 source-derived chamber/intersection certificates.
+Because the full corrected-chamber GV context export still exceeded a `300s`
+debug timeout before writing JSON, the runner also has a narrow
+`--dump-corrected-chamber-secondary-certificate` flag. On the validation-only
+`--allow-downstream-kahler` checkpoint path for 4-214-647, it writes in about
+`10.32s` and reports `1262` hyperplanes with minimum pairing
+`0.0002917945770377628`, maximum pairing `87.93218664229505`, and
+`strictly_inside=true`. The no-replay version of this light dump still exceeded
+a `180s` debug guard because it waits for the corrected Kähler solve before the
+corrected chamber exists, so this is a chamber-certificate validation check,
+not a production no-replay completion proof.
 
 ## Next Concrete Action
 

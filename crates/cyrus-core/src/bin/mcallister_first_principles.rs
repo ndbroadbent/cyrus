@@ -49,6 +49,9 @@
 //!   corrected-chamber primitive Mori generators.
 //! - `--dump-corrected-chamber-gv-context path` to export the corrected-chamber
 //!   missing-GV context as JSON for source-level CYTools/cygv reconstruction.
+//! - `--dump-corrected-chamber-secondary-certificate path` to export only the
+//!   corrected-chamber secondary-cone height certificate as JSON without
+//!   building the full missing-GV context.
 //! - `--diagnose-chamber-updated-kklt` to run a diagnostic-only KKLT
 //!   fixed-point loop that recomputes the FRST chamber, intersections, divisor
 //!   χ, and toric-covered small-curve GV target correction at each iteration.
@@ -1225,6 +1228,7 @@ struct PipelineArgs {
     diagnose_corrected_chamber_ray_gv: bool,
     diagnose_corrected_chamber_lp_face_gv: bool,
     dump_corrected_chamber_gv_context_path: Option<String>,
+    dump_corrected_chamber_secondary_certificate_path: Option<String>,
     diagnose_chamber_updated_kklt: bool,
     diagnose_chamber_updated_kklt_iterations: usize,
     production_primal_basis_override: Option<BasisOverride>,
@@ -1323,6 +1327,8 @@ fn parse_args() -> PipelineArgs {
         parse_flag("--diagnose-corrected-chamber-lp-face-gv");
     let dump_corrected_chamber_gv_context_path =
         parse_arg_value::<String>("--dump-corrected-chamber-gv-context");
+    let dump_corrected_chamber_secondary_certificate_path =
+        parse_arg_value::<String>("--dump-corrected-chamber-secondary-certificate");
     let diagnose_chamber_updated_kklt = parse_flag("--diagnose-chamber-updated-kklt");
     let diagnose_chamber_updated_kklt_iterations =
         parse_arg_value::<usize>("--diagnose-chamber-updated-kklt-iterations").unwrap_or(6);
@@ -1363,6 +1369,7 @@ fn parse_args() -> PipelineArgs {
         diagnose_corrected_chamber_ray_gv,
         diagnose_corrected_chamber_lp_face_gv,
         dump_corrected_chamber_gv_context_path,
+        dump_corrected_chamber_secondary_certificate_path,
         diagnose_chamber_updated_kklt,
         diagnose_chamber_updated_kklt_iterations,
         production_primal_basis_override,
@@ -9046,6 +9053,23 @@ fn write_corrected_chamber_gv_context_export(
     Ok(())
 }
 
+fn write_secondary_cone_height_certificate(
+    path: &Path,
+    certificate: &SecondaryConeHeightCertificate,
+) -> Result<(), String> {
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("failed to create {}: {e}", parent.display()))?;
+    }
+    let content = serde_json::to_string_pretty(certificate)
+        .map_err(|e| format!("failed to serialize secondary-cone height certificate: {e}"))?;
+    std::fs::write(path, content)
+        .map_err(|e| format!("failed to write {}: {e}", path.display()))?;
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn compare_checkpoint_t_corrected_chamber_gv_target(
     data_dir: Option<&str>,
@@ -9844,6 +9868,7 @@ fn stage_volume(
     diagnose_corrected_chamber_ray_gv: bool,
     diagnose_corrected_chamber_lp_face_gv: bool,
     dump_corrected_chamber_gv_context_path: Option<&str>,
+    dump_corrected_chamber_secondary_certificate_path: Option<&str>,
     diagnose_chamber_updated_kklt: bool,
     diagnose_chamber_updated_kklt_iterations: usize,
     production_primal_basis_override: Option<&BasisOverride>,
@@ -10817,6 +10842,27 @@ fn stage_volume(
             "[WARN] corrected Kähler point lies in a different regular chamber; flop/chamber-updated GV evaluation remains an explicit instanton-layer gap."
         );
     }
+    if let Some(path) = dump_corrected_chamber_secondary_certificate_path {
+        let certificate = secondary_cone_height_certificate_for_kahler(
+            &corrected_chamber,
+            geom,
+            &intersection.basis,
+            &t,
+        )
+        .unwrap_or_else(|e| {
+            eprintln!("[ERROR] failed to compute corrected-chamber secondary certificate: {e}");
+            std::process::exit(2);
+        });
+        let path = PathBuf::from(path);
+        write_secondary_cone_height_certificate(&path, &certificate).unwrap_or_else(|e| {
+            eprintln!("[ERROR] failed to write corrected-chamber secondary certificate: {e}");
+            std::process::exit(2);
+        });
+        eprintln!(
+            "[INFO] corrected-chamber secondary certificate JSON written: {}",
+            path.display()
+        );
+    }
     if let Some(kklt_basis) = kklt_basis_for_chamber_gv.as_deref() {
         let corrected_chamber_kappa_full = chamber_intersection_full(
             &corrected_chamber,
@@ -11547,6 +11593,8 @@ fn run_pipeline(args: PipelineArgs) {
         args.diagnose_corrected_chamber_ray_gv,
         args.diagnose_corrected_chamber_lp_face_gv,
         args.dump_corrected_chamber_gv_context_path.as_deref(),
+        args.dump_corrected_chamber_secondary_certificate_path
+            .as_deref(),
         args.diagnose_chamber_updated_kklt,
         args.diagnose_chamber_updated_kklt_iterations,
         args.production_primal_basis_override.as_ref(),
@@ -12033,6 +12081,41 @@ mod tests {
         );
         assert_eq!(chamber_certificate["hyperplane_count"], 1);
         assert_eq!(chamber_certificate["strictly_inside"], true);
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn secondary_cone_height_certificate_writer_serializes_certificate() {
+        let cache_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/cyrus-test-cache");
+        std::fs::create_dir_all(&cache_dir).expect("create cache dir");
+        let path = cache_dir.join(format!(
+            "secondary-cone-certificate-{}-{}.json",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time after epoch")
+                .as_nanos()
+        ));
+        let certificate = SecondaryConeHeightCertificate {
+            status: "strictly_inside_secondary_cone".to_string(),
+            epsilon: 1e-6,
+            hyperplane_count: 2,
+            pairing_count: 2,
+            min_pairing: Some(0.25),
+            max_pairing: Some(3.0),
+            strictly_inside: true,
+        };
+
+        write_secondary_cone_height_certificate(&path, &certificate)
+            .expect("write secondary-cone certificate");
+
+        let content = std::fs::read_to_string(&path).expect("read secondary-cone certificate");
+        let value =
+            serde_json::from_str::<serde_json::Value>(&content).expect("valid certificate JSON");
+        assert_eq!(value["status"], "strictly_inside_secondary_cone");
+        assert_eq!(value["hyperplane_count"], 2);
+        assert_eq!(value["strictly_inside"], true);
 
         let _ = std::fs::remove_file(path);
     }
