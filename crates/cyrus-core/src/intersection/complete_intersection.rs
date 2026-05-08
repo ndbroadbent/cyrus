@@ -10,11 +10,40 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use malachite::Rational as MalachiteRational;
 use malachite::num::basic::traits::Zero;
 
+use crate::Point;
 use crate::error::{Error, Result};
+use crate::triangulation::Triangulation;
 use crate::types::rational::Rational as TypedRational;
 use crate::types::tags::Finite;
 
 use super::Intersection;
+use super::cytools_algorithm::compute_ambient_intersections_cytools;
+
+/// Compute a CICY threefold triple-intersection tensor from ambient toric data.
+///
+/// This composes the CYTools generic ambient top-form solver with the CYTools
+/// complete-intersection reduction. It still requires a source-derived
+/// `nef_parts` input; it does not infer or choose a nef partition.
+///
+/// # Errors
+/// Returns an error if ambient top-form computation or CICY reduction fails.
+pub fn compute_complete_intersection_cy3_from_ambient_cytools(
+    tri: &Triangulation,
+    points: &[Point],
+    linear_relations_no_origin: &[Vec<i64>],
+    nef_parts: &[Vec<usize>],
+) -> Result<Intersection> {
+    let ambient = compute_ambient_intersections_cytools(tri, points, linear_relations_no_origin)?;
+    let ambient_entries = ambient
+        .iter()
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect::<Vec<_>>();
+    compute_complete_intersection_cy3_intersection_numbers(
+        &ambient_entries,
+        nef_parts,
+        ambient.divisor_count(),
+    )
+}
 
 /// Reduce ambient top-form intersections to a CICY threefold intersection tensor.
 ///
@@ -258,5 +287,42 @@ mod tests {
             err.to_string()
                 .contains("nef partition index 3 appears in more than one part")
         );
+    }
+
+    #[test]
+    fn cicy_from_ambient_cytools_matches_quintic_triples() {
+        let points = vec![
+            Point::new(vec![0, 0, 0, 0]),
+            Point::new(vec![-1, -1, -1, -1]),
+            Point::new(vec![1, 0, 0, 0]),
+            Point::new(vec![0, 1, 0, 0]),
+            Point::new(vec![0, 0, 1, 0]),
+            Point::new(vec![0, 0, 0, 1]),
+        ];
+        let tri = Triangulation::new(vec![
+            vec![0, 1, 2, 3, 4],
+            vec![0, 1, 2, 3, 5],
+            vec![0, 1, 2, 4, 5],
+            vec![0, 1, 3, 4, 5],
+            vec![0, 2, 3, 4, 5],
+        ]);
+        let linrels = vec![
+            vec![-1, 1, 0, 0, 0],
+            vec![-1, 0, 1, 0, 0],
+            vec![-1, 0, 0, 1, 0],
+            vec![-1, 0, 0, 0, 1],
+        ];
+
+        let quintic = compute_complete_intersection_cy3_from_ambient_cytools(
+            &tri,
+            &points,
+            &linrels,
+            &[vec![1, 2, 3, 4, 5]],
+        )
+        .unwrap();
+
+        assert_eq!(quintic.get(1, 1, 1).get(), &MalachiteRational::from(5));
+        assert_eq!(quintic.get(1, 2, 3).get(), &MalachiteRational::from(5));
+        assert_eq!(quintic.get(2, 4, 5).get(), &MalachiteRational::from(5));
     }
 }

@@ -3459,7 +3459,9 @@ so the status is
 `complete_intersection_cy3_shape_ambiguous_zero_degree_nef_partition_candidates_requires_source_rule`.
 The reusable CYTools-style ambient top-form step now exists in core as
 `compute_ambient_intersections_cytools`, and the CICY tensor-reduction step
-exists as `compute_complete_intersection_cy3_intersection_numbers`. The local
+exists as `compute_complete_intersection_cy3_intersection_numbers`. The composed
+`compute_complete_intersection_cy3_from_ambient_cytools` helper wires those two
+steps together, while still requiring a source-derived nef partition. The local
 target-plus-star reports still do not have the source-derived nef partition,
 ambient triangulation/chamber certificate, semigroup, grading, or phase needed
 to use those pieces for a promoted GV value.

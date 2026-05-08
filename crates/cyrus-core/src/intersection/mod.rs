@@ -29,7 +29,10 @@ use crate::types::tags::{Finite, IsFinite, Pos};
 use malachite::Rational;
 use std::collections::HashMap;
 
-pub use complete_intersection::compute_complete_intersection_cy3_intersection_numbers;
+pub use complete_intersection::{
+    compute_complete_intersection_cy3_from_ambient_cytools,
+    compute_complete_intersection_cy3_intersection_numbers,
+};
 pub use compute::{
     compute_intersection_numbers, compute_intersection_numbers_with_linear_relations,
     compute_intersection_numbers_with_offset,

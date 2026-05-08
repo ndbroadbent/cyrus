@@ -1167,6 +1167,7 @@ fn stage5_gv_computation_roadmap() {
             "Cyrus' direct cygv HKTY call chain is regression-tested against cygv::compute_gv_rat_threefold on the quintic degree-one GV 2875 case",
             "compute_ambient_intersections_cytools ports the generic CYTools ambient toric top-form system and returns prime plus canonical-divisor intersections for complete-intersection reductions",
             "compute_complete_intersection_cy3_intersection_numbers ports the CYTools complete-intersection reduction from ambient top intersections and nef-partition divisor classes to a CY3 triple-intersection tensor",
+            "compute_complete_intersection_cy3_from_ambient_cytools composes the generic ambient top-form solver and CICY reduction while requiring a source-derived nef partition",
             "The opt-in stage5_mirror_gv_checkpoint_matches_cygv_min_points test runs mcallister_gv --min-points 20000 and verifies the computed 4-214-647 mirror-side GV table matches all 5177 dual_curves.dat / dual_curves_gv.dat checkpoint rows",
             "McAllister 4-214-647 small toric curve classes are computed from Cyrus Mori-cap rays and verified pair-decomposable pruning",
             "McAllister 4-214-647 small toric curve GV values are computed from toric two-face/origin-circuit formulas and match small_curves_gv.dat as a checkpoint",
