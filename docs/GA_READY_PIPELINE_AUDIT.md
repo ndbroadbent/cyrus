@@ -1318,15 +1318,18 @@ to make the remaining GV layer more first-principles:
    naive real-axis flop continuation of the known wall GV into the star-side
    chamber; the missing handoff still has to be a certified chamber/semigroup
    history or a source-level continuation that addresses the branch cut.
-   `/tmp/cyrus_target7_stable_weyl_probe_report.json` now threads the crossed
+   `/tmp/cyrus_target7_stable_weyl_rank_probe_report.json` now threads the crossed
    wall through the stable-Weyl/flop-certificate gate. For target `7`, the
    report bucket is
    `stable_weyl_blocked_cms_general_divisor_no_rational_divisor_solution`:
    the crossed-wall source sample has shape candidate divisor `55`, but its
-   CMS divisor check has no rational divisor solution; the opposite-wall
-   extremal check is also still guard-skipped at `2963` generators under the
-   smoke limit. Thus the exact stable-Weyl algebra is wired into the blocker,
-   but it still has no source-derived shrinking divisor to check or promote.
+   CMS divisor check has no rational divisor solution. The exposed linear-system
+   diagnostic is exact rank obstruction, not a floating mismatch:
+   `row_count=219`, `column_count=214`, `rank=6`, `augmented_rank=7`. The
+   opposite-wall extremal check is also still guard-skipped at `2963` generators
+   under the smoke limit. Thus the exact stable-Weyl algebra is wired into the
+   blocker, but it still has no source-derived shrinking divisor to check or
+   promote.
    `/tmp/cyrus_gv_context_target_plus_star_support_report.json` now reconstructs
    the point-support charge bases for that degree-6 component. Targets `7`/`8`
    are integral two-parameter relations on affine-rank-4 seven-point supports:

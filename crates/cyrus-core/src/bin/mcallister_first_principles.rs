@@ -1044,12 +1044,21 @@ struct CmsGeneralDivisorShapeCandidate {
 struct CmsGeneralDivisorIntersectionCheck {
     shrinking_divisor_index: usize,
     has_rational_divisor_solution: bool,
+    linear_system: Option<CmsGeneralDivisorLinearSystemDiagnostic>,
     solution_basis_support_len: Option<usize>,
     solution_basis_nonzero: Option<Vec<(usize, String)>>,
     solution_ambient_basis_nonzero: Option<Vec<(usize, String)>>,
     solution_is_integral: Option<bool>,
     computed_other_normal_degree: Option<String>,
     matches_inferred_other_normal_degree: Option<bool>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+struct CmsGeneralDivisorLinearSystemDiagnostic {
+    row_count: usize,
+    column_count: usize,
+    rank: usize,
+    augmented_rank: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -3416,11 +3425,18 @@ fn cms_general_divisor_intersection_check(
     basis: &[usize],
 ) -> Result<CmsGeneralDivisorIntersectionCheck, String> {
     let i = candidate.shrinking_divisor_index;
+    let linear_system = Some(divisor_representation_linear_system_diagnostic(
+        ambient_class,
+        i,
+        kappa_full,
+        basis,
+    )?);
     let Some(solution) = divisor_representation_solution(ambient_class, i, kappa_full, basis)?
     else {
         return Ok(CmsGeneralDivisorIntersectionCheck {
             shrinking_divisor_index: i,
             has_rational_divisor_solution: false,
+            linear_system,
             solution_basis_support_len: None,
             solution_basis_nonzero: None,
             solution_ambient_basis_nonzero: None,
@@ -3454,12 +3470,71 @@ fn cms_general_divisor_intersection_check(
     Ok(CmsGeneralDivisorIntersectionCheck {
         shrinking_divisor_index: i,
         has_rational_divisor_solution: true,
+        linear_system,
         solution_basis_support_len: Some(support_len),
         solution_basis_nonzero: Some(solution_basis_nonzero),
         solution_ambient_basis_nonzero: Some(solution_ambient_basis_nonzero),
         solution_is_integral: Some(solution_is_integral),
         computed_other_normal_degree: Some(solution.other_normal_degree.to_string()),
         matches_inferred_other_normal_degree: Some(solution.other_normal_degree == inferred_m),
+    })
+}
+
+fn divisor_representation_linear_system_diagnostic(
+    ambient_class: &[i64],
+    point_idx: usize,
+    kappa_full: &cyrus_core::Intersection,
+    basis: &[usize],
+) -> Result<CmsGeneralDivisorLinearSystemDiagnostic, String> {
+    if ambient_class.len() != kappa_full.dim() {
+        return Err(format!(
+            "divisor representation curve dimension {} does not match intersection dimension {}",
+            ambient_class.len(),
+            kappa_full.dim()
+        ));
+    }
+    if point_idx >= kappa_full.dim() {
+        return Err(format!(
+            "divisor representation point index {point_idx} is out of bounds for dimension {}",
+            kappa_full.dim()
+        ));
+    }
+    for &basis_idx in basis {
+        if basis_idx >= kappa_full.dim() {
+            return Err(format!(
+                "divisor representation basis index {basis_idx} is out of bounds for dimension {}",
+                kappa_full.dim()
+            ));
+        }
+    }
+
+    let matrix: Vec<Vec<malachite::Rational>> = (0..kappa_full.dim())
+        .map(|row_idx| {
+            basis
+                .iter()
+                .map(|&basis_idx| kappa_full.get(row_idx, point_idx, basis_idx).get().clone())
+                .collect()
+        })
+        .collect();
+    let rhs: Vec<malachite::Rational> = ambient_class
+        .iter()
+        .map(|&coefficient| malachite::Rational::from(coefficient))
+        .collect();
+    let augmented = matrix
+        .iter()
+        .zip(rhs.iter())
+        .map(|(row, rhs_value)| {
+            let mut augmented_row = row.clone();
+            augmented_row.push(rhs_value.clone());
+            augmented_row
+        })
+        .collect::<Vec<_>>();
+
+    Ok(CmsGeneralDivisorLinearSystemDiagnostic {
+        row_count: matrix.len(),
+        column_count: basis.len(),
+        rank: cyrus_core::integer_math::matrix_rank(&matrix),
+        augmented_rank: cyrus_core::integer_math::matrix_rank(&augmented),
     })
 }
 
@@ -13299,6 +13374,12 @@ mod tests {
             CmsGeneralDivisorIntersectionCheck {
                 shrinking_divisor_index: 2,
                 has_rational_divisor_solution: true,
+                linear_system: Some(CmsGeneralDivisorLinearSystemDiagnostic {
+                    row_count: 3,
+                    column_count: 2,
+                    rank: 2,
+                    augmented_rank: 2,
+                }),
                 solution_basis_support_len: Some(2),
                 solution_basis_nonzero: Some(vec![(0, "1".to_string()), (1, "1".to_string()),]),
                 solution_ambient_basis_nonzero: Some(vec![

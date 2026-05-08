@@ -3546,15 +3546,19 @@ source-derived wall GV is not a license to perform a naive real flop
 continuation across the negative star side. The remaining certificate must
 derive the valid chamber/semigroup history, or a source-level continuation
 that resolves this branch-cut obstruction.
-`/tmp/cyrus_target7_stable_weyl_probe_report.json` now records the same handoff
+`/tmp/cyrus_target7_stable_weyl_rank_probe_report.json` now records the same handoff
 against the exact stable-Weyl/flop-certificate gate. The target-7 crossed wall
 has status `stable_weyl_blocked_cms_general_divisor_no_rational_divisor_solution`:
 the known GV `1` is present through the context-level source map, the matching
 source sample has shape candidate divisor `55`, and the exported CMS divisor
-check says that candidate has no rational divisor solution. The same smoke has
-the opposite-wall extremal separator guard-skipped at `2963` generators under
-the smoke limit. This keeps the stable-Weyl path blocked at concrete missing
-source certificates rather than at the earlier vague
+check says that candidate has no rational divisor solution. The refreshed
+diagnostic exposes the exact linear system behind that failure:
+`row_count=219`, `column_count=214`, `rank=6`, and `augmented_rank=7`, so the
+ambient curve class is not in the rational column span of the tested
+divisor-intersection map. The same smoke has the opposite-wall extremal
+separator guard-skipped at `2963` generators under the smoke limit. This keeps
+the stable-Weyl path blocked at concrete missing source certificates rather
+than at the earlier vague
 `shrinking_divisor_or_flop_certificate` label.
 The unresolved-leaf sample also derives an ambient origin-relation pattern
 whenever the source ray contains the origin coordinate. The current unresolved

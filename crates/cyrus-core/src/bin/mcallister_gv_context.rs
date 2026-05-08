@@ -199,6 +199,8 @@ struct CmsGeneralDivisorShapeCandidate {
 struct CmsGeneralDivisorIntersectionCheck {
     shrinking_divisor_index: usize,
     has_rational_divisor_solution: bool,
+    #[serde(default)]
+    linear_system: Option<CmsGeneralDivisorLinearSystemDiagnostic>,
     solution_basis_support_len: Option<usize>,
     #[serde(default)]
     solution_basis_nonzero: Option<Vec<(usize, String)>>,
@@ -207,6 +209,14 @@ struct CmsGeneralDivisorIntersectionCheck {
     solution_is_integral: Option<bool>,
     computed_other_normal_degree: Option<String>,
     matches_inferred_other_normal_degree: Option<bool>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct CmsGeneralDivisorLinearSystemDiagnostic {
+    row_count: usize,
+    column_count: usize,
+    rank: usize,
+    augmented_rank: usize,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -839,6 +849,7 @@ struct LocalCygvStarUnionCrossedWallStableWeylProbe {
     source_sample_status: String,
     matching_candidate_count: Option<usize>,
     shrinking_divisor_index: Option<usize>,
+    cms_divisor_linear_system: Option<CmsGeneralDivisorLinearSystemDiagnostic>,
     shrinking_divisor_basis_nonzero: Option<Vec<(usize, String)>>,
     shrinking_divisor_ambient_basis_nonzero: Option<Vec<(usize, String)>>,
     divisor_quadratic_vanishes_on_curve_facet: Option<bool>,
@@ -19529,6 +19540,7 @@ fn local_cygv_star_union_crossed_wall_stable_weyl_probe(
             source_sample_status: source_sample_status.to_string(),
             matching_candidate_count: None,
             shrinking_divisor_index: None,
+            cms_divisor_linear_system: None,
             shrinking_divisor_basis_nonzero: None,
             shrinking_divisor_ambient_basis_nonzero: None,
             divisor_quadratic_vanishes_on_curve_facet: None,
@@ -19663,6 +19675,7 @@ fn local_cygv_star_union_crossed_wall_stable_weyl_probe(
                 source_sample_status: source_sample_status.to_string(),
                 matching_candidate_count: Some(checks.len()),
                 shrinking_divisor_index: Some(first_check.shrinking_divisor_index),
+                cms_divisor_linear_system: first_check.linear_system.clone(),
                 shrinking_divisor_basis_nonzero: first_check.solution_basis_nonzero.clone(),
                 shrinking_divisor_ambient_basis_nonzero: first_check
                     .solution_ambient_basis_nonzero
@@ -19762,6 +19775,7 @@ fn local_cygv_star_union_crossed_wall_stable_weyl_candidate_probe(
         source_sample_status: source_sample_status.to_string(),
         matching_candidate_count: Some(matching_candidate_count),
         shrinking_divisor_index: Some(check.shrinking_divisor_index),
+        cms_divisor_linear_system: check.linear_system.clone(),
         shrinking_divisor_basis_nonzero: check.solution_basis_nonzero.clone(),
         shrinking_divisor_ambient_basis_nonzero: check.solution_ambient_basis_nonzero.clone(),
         divisor_quadratic_vanishes_on_curve_facet: None,
@@ -29568,6 +29582,7 @@ mod tests {
             CmsGeneralDivisorIntersectionCheck {
                 shrinking_divisor_index: 5,
                 has_rational_divisor_solution: true,
+                linear_system: None,
                 solution_basis_support_len: Some(1),
                 solution_basis_nonzero: Some(vec![(0, "1".to_string())]),
                 solution_ambient_basis_nonzero: Some(vec![(5, "1".to_string())]),
@@ -29578,6 +29593,7 @@ mod tests {
             CmsGeneralDivisorIntersectionCheck {
                 shrinking_divisor_index: 6,
                 has_rational_divisor_solution: false,
+                linear_system: None,
                 solution_basis_support_len: None,
                 solution_basis_nonzero: None,
                 solution_ambient_basis_nonzero: None,
@@ -29842,6 +29858,7 @@ mod tests {
             Some(vec![CmsGeneralDivisorIntersectionCheck {
                 shrinking_divisor_index: 5,
                 has_rational_divisor_solution: true,
+                linear_system: None,
                 solution_basis_support_len: Some(1),
                 solution_basis_nonzero: Some(vec![(1, "1".to_string())]),
                 solution_ambient_basis_nonzero: Some(vec![(54, "1".to_string())]),
@@ -31762,6 +31779,7 @@ mod tests {
         let no_solution = CmsGeneralDivisorIntersectionCheck {
             shrinking_divisor_index: 1,
             has_rational_divisor_solution: false,
+            linear_system: None,
             solution_basis_support_len: None,
             solution_basis_nonzero: None,
             solution_ambient_basis_nonzero: None,
@@ -31772,6 +31790,7 @@ mod tests {
         let matching_solution = CmsGeneralDivisorIntersectionCheck {
             shrinking_divisor_index: 2,
             has_rational_divisor_solution: true,
+            linear_system: None,
             solution_basis_support_len: Some(3),
             solution_basis_nonzero: Some(vec![(0, "1".to_string())]),
             solution_ambient_basis_nonzero: Some(vec![(4, "1".to_string())]),
@@ -31822,6 +31841,7 @@ mod tests {
         let check = CmsGeneralDivisorIntersectionCheck {
             shrinking_divisor_index: 3,
             has_rational_divisor_solution: true,
+            linear_system: None,
             solution_basis_support_len: Some(1),
             solution_basis_nonzero: Some(vec![(0, "1".to_string())]),
             solution_ambient_basis_nonzero: Some(vec![(7, "1".to_string())]),
@@ -31933,6 +31953,7 @@ mod tests {
             Some(vec![CmsGeneralDivisorIntersectionCheck {
                 shrinking_divisor_index: 4,
                 has_rational_divisor_solution: true,
+                linear_system: None,
                 solution_basis_support_len: Some(1),
                 solution_basis_nonzero: Some(vec![(0, "1".to_string())]),
                 solution_ambient_basis_nonzero: Some(vec![(4, "1".to_string())]),
@@ -32020,6 +32041,7 @@ mod tests {
             Some(vec![CmsGeneralDivisorIntersectionCheck {
                 shrinking_divisor_index: 4,
                 has_rational_divisor_solution: true,
+                linear_system: None,
                 solution_basis_support_len: Some(1),
                 solution_basis_nonzero: Some(vec![(0, "1".to_string())]),
                 solution_ambient_basis_nonzero: Some(vec![(4, "1".to_string())]),
@@ -32111,6 +32133,7 @@ mod tests {
             Some(vec![CmsGeneralDivisorIntersectionCheck {
                 shrinking_divisor_index: 1,
                 has_rational_divisor_solution: true,
+                linear_system: None,
                 solution_basis_support_len: Some(1),
                 solution_basis_nonzero: Some(vec![(0, "1".to_string())]),
                 solution_ambient_basis_nonzero: Some(vec![(1, "1".to_string())]),
@@ -32228,6 +32251,7 @@ mod tests {
             Some(vec![CmsGeneralDivisorIntersectionCheck {
                 shrinking_divisor_index: 1,
                 has_rational_divisor_solution: true,
+                linear_system: None,
                 solution_basis_support_len: Some(1),
                 solution_basis_nonzero: Some(vec![(0, "1".to_string())]),
                 solution_ambient_basis_nonzero: Some(vec![(1, "1".to_string())]),
@@ -33129,6 +33153,7 @@ mod tests {
                     CmsGeneralDivisorIntersectionCheck {
                         shrinking_divisor_index: 7,
                         has_rational_divisor_solution: true,
+                        linear_system: None,
                         solution_basis_support_len: Some(2),
                         solution_basis_nonzero: Some(vec![
                             (0, "1".to_string()),
