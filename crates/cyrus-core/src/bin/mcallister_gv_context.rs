@@ -1298,6 +1298,9 @@ struct LocalCygvStarUnionPathHistoryProbe {
     lower_seed_decomposition_status: String,
     lower_seed_decomposition_term_count: Option<usize>,
     lower_seed_decomposition_terms_nonzero: Option<Vec<Vec<(usize, i64)>>>,
+    lower_seed_decomposition_term_degree_counts: BTreeMap<String, usize>,
+    lower_seed_decomposition_term_known_qn_history_status_counts: BTreeMap<String, usize>,
+    lower_seed_decomposition_term_source_class_status_counts: BTreeMap<String, usize>,
     lower_seed_decomposition_search_stats: Option<LowerSeedDecompositionSearchStats>,
     error: Option<String>,
 }
@@ -21784,6 +21787,9 @@ fn local_cygv_star_union_target_plus_star_path_history_probe(
             lower_seed_decomposition_status: status.to_string(),
             lower_seed_decomposition_term_count: None,
             lower_seed_decomposition_terms_nonzero: None,
+            lower_seed_decomposition_term_degree_counts: BTreeMap::new(),
+            lower_seed_decomposition_term_known_qn_history_status_counts: BTreeMap::new(),
+            lower_seed_decomposition_term_source_class_status_counts: BTreeMap::new(),
             lower_seed_decomposition_search_stats: None,
             error,
         }
@@ -21892,6 +21898,20 @@ fn local_cygv_star_union_target_plus_star_path_history_probe(
         lower_seed_pair_limit,
         Some(context.grading),
     );
+    let lower_seed_decomposition_term_degree_counts = lower_seed_decomposition_term_degree_counts(
+        lower_seed_decomposition.terms.as_deref(),
+        context,
+    );
+    let lower_seed_decomposition_term_known_qn_history_status_counts =
+        lower_seed_decomposition_term_known_qn_history_status_counts(
+            lower_seed_decomposition.terms.as_deref(),
+            context,
+        );
+    let lower_seed_decomposition_term_source_class_status_counts =
+        lower_seed_decomposition_term_source_class_status_counts(
+            lower_seed_decomposition.terms.as_deref(),
+            context,
+        );
     let closure = match streaming_bounded_cygv_semigroup_closure(
         &seeds,
         context.grading,
@@ -21913,6 +21933,9 @@ fn local_cygv_star_union_target_plus_star_path_history_probe(
                 lower_seed_decomposition_status: lower_seed_decomposition.status,
                 lower_seed_decomposition_term_count: lower_seed_decomposition.term_count,
                 lower_seed_decomposition_terms_nonzero: lower_seed_decomposition.terms_nonzero,
+                lower_seed_decomposition_term_degree_counts,
+                lower_seed_decomposition_term_known_qn_history_status_counts,
+                lower_seed_decomposition_term_source_class_status_counts,
                 lower_seed_decomposition_search_stats: lower_seed_decomposition.search_stats,
                 error: Some(error),
             });
@@ -21931,9 +21954,62 @@ fn local_cygv_star_union_target_plus_star_path_history_probe(
         lower_seed_decomposition_status: lower_seed_decomposition.status,
         lower_seed_decomposition_term_count: lower_seed_decomposition.term_count,
         lower_seed_decomposition_terms_nonzero: lower_seed_decomposition.terms_nonzero,
+        lower_seed_decomposition_term_degree_counts,
+        lower_seed_decomposition_term_known_qn_history_status_counts,
+        lower_seed_decomposition_term_source_class_status_counts,
         lower_seed_decomposition_search_stats: lower_seed_decomposition.search_stats,
         error: lower_seed_decomposition.error,
     })
+}
+
+fn lower_seed_decomposition_term_degree_counts(
+    terms: Option<&[Vec<i64>]>,
+    context: &ValidatedContext<'_>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    let Some(terms) = terms else {
+        return counts;
+    };
+    for term in terms {
+        let status = match curve_degree(term, context.grading) {
+            Ok(degree) => degree.to_string(),
+            Err(error) => format!("error_{}", status_error_fragment(&error)),
+        };
+        *counts.entry(status).or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn lower_seed_decomposition_term_known_qn_history_status_counts(
+    terms: Option<&[Vec<i64>]>,
+    context: &ValidatedContext<'_>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    let Some(terms) = terms else {
+        return counts;
+    };
+    for term in terms {
+        let (status, _, _, _) = global_basis_known_qn_history(term, context);
+        *counts.entry(status).or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn lower_seed_decomposition_term_source_class_status_counts(
+    terms: Option<&[Vec<i64>]>,
+    context: &ValidatedContext<'_>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    let Some(terms) = terms else {
+        return counts;
+    };
+    for term in terms {
+        let (status, _) = global_basis_source_class_lookup(term, context);
+        *counts
+            .entry(status.unwrap_or_else(|| "source_class_missing".to_string()))
+            .or_insert(0usize) += 1;
+    }
+    counts
 }
 
 fn local_cygv_star_target_relation_hint(

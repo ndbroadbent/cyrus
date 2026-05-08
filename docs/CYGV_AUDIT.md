@@ -3658,6 +3658,12 @@ relation is not available integrally. The three current-only rows are exactly
 the compact current-chamber provided-generator calls that compute GV `0`. This
 makes the positive-degree obstruction explicit without promoting any
 target-plus-star value or counting the zero class as a target curve.
+A target-`1` rerun with `--lower-seed-pair-limit 2048` shows that this is not
+only the degree-ten weighted pair. Target `1` has target-plus-star degree `16`
+and a four-term lower decomposition into known history (`3` known toric terms
+and `1` known source-derived term, degrees `2,2,2,10`), but the bounded
+positive-degree closure still exceeds the initial `256` element limit without
+containing target-plus-star, and the compact current-chamber call reads GV `0`.
 This is useful but still not a source rule: it proves that Cyrus must derive
 which split, if any, comes from the star-union/CICY geometry instead of choosing
 one by scalar GV agreement. Target `7` also has no nonnegative primitive

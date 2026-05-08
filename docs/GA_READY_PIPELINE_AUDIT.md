@@ -1464,6 +1464,11 @@ to make the remaining GV layer more first-principles:
    `positive_degree_transport_zero_target_plus_star:2`, and
    `positive_degree_transport_not_run:4`; the three current-only rows are the
    compact current-chamber GV `0` calls.
+   A target-`1` rerun with pair limit `2048` adds term-level lower-history
+   counts for its degree-16 target-plus-star row: the lower decomposition uses
+   three known toric terms and one known source-derived term, but the bounded
+   closure still misses target-plus-star and the compact current-chamber call
+   stays at GV `0`.
    The local phase-membership aggregation now reports the stricter
    resolved-shared secondary-cone blocker for the integral weighted rows before
    falling back to the coarser star-union relation label. Fresh target `7` and

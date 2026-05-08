@@ -206,7 +206,10 @@ and matrix-basis pipeline are no longer open.
    contains target-plus-star only in the current chamber where `cygv` gives
    GV `0`. The corrected all-target aggregate now reports three current-only
    positive-degree rows, two zero target-plus-star rows, and four not-run rows
-   where the star-union relation is not integrally available.
+   where the star-union relation is not integrally available. Target `1` now
+   also records a known lower decomposition at degree `16`, but the bounded
+   closure still misses target-plus-star and the compact current-chamber call
+   returns GV `0`.
 2. **Exact corrected KKLT volume.** The no-replay path computes a corrected
    volume but still has a documented instanton/chamber residual.
 3. **Generic matrix-basis pipeline.** Matrix divisor-basis primitives now cover
