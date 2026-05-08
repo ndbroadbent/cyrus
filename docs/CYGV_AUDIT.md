@@ -3820,8 +3820,15 @@ carry aggregate chamber-generator `cygv` counts at top level, recording current
 status `computed_current_chamber_generators_qn_trace`, current `GV=0`, current
 qN status `support_overlap_qn_not_required_zero_or_absent_gv`, flipped status
 `skipped_nonpositive_chamber_generator_degree`, and flipped GV `not_computed`.
-This rules out the visible current/flipped chamber generator sets as standalone
-compact HKTY histories.
+They also aggregate the generator context itself: current chamber degrees
+`{2:2, 4:2, 6:1}` with bounded lower-seed statuses
+`found_lower_seed_decomposition:2` and `not_found_up_to_4:3`; flipped chamber
+degrees `{-4:1, 2:1, 4:1, 6:1, 8:1}` with bounded lower-seed statuses
+`found_lower_seed_decomposition:1`, `not_found_up_to_4:2`, and
+`not_run_or_not_applicable:2`. Both chambers still split as
+`known_nonzero_source_gv:1` and `unknown_not_toric_covered:4`. This rules out
+the visible current/flipped chamber generator sets as standalone compact HKTY
+histories.
 
 The no-replay boundary around the standalone GV binary is stricter now:
 `mcallister_gv` no longer reads `dual_curves.dat` or `dual_curves_gv.dat`.
