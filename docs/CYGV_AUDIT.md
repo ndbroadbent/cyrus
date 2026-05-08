@@ -3805,6 +3805,17 @@ chamber, the two-face skeleton has `589` native hyperplanes and the corrected
 height is strictly inside with minimum pairing `0.0002917945770377628`. This is
 stronger chamber evidence for the global two-face skeleton; it still does not
 certify the unresolved local target-plus-star phase transport.
+The runner now also exposes
+`--dump-corrected-chamber-expanded-secondary-fan-certificate`, which computes
+the expanded-secondary support certificate from Cyrus' two-face support
+primitive. On a validation-only 4-214-647 run with `--allow-downstream-kahler`,
+the dumped certificate has `6390` support hyperplanes, min/max pairings
+`0.04219187862736362`/`127.1571326558851`, and `strictly_inside=true`. A
+no-replay run with the same flag timed out at 600 seconds before reaching the
+dump point, so this currently validates the diagnostic plumbing and
+checkpoint chamber support, while also showing that the first-principles
+volume-stage path needs a faster/cached route before this can be a routine
+gate.
 
 The star-union chamber semigroup probe now also lifts every current/flipped
 chamber generator back through the global curve-basis projection and reports

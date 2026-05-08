@@ -1677,6 +1677,16 @@ to make the remaining GV layer more first-principles:
    two-face hyperplanes, min/max pairings
    `0.0002917945770377628`/`11.485862078225125`, and
    `strictly_inside=true`.
+   The first-principles runner also has
+   `--dump-corrected-chamber-expanded-secondary-fan-certificate` for the
+   expanded-secondary support primitive. A validation-only
+   `--allow-downstream-kahler` run on 4-214-647 writes
+   `/tmp/cyrus_corrected_chamber_expanded_secondary_fan_certificate.json` with
+   `hyperplane_count=6390`, min/max pairings
+   `0.04219187862736362`/`127.1571326558851`, and `strictly_inside=true`.
+   The corresponding no-replay `--stop-after volume` run with the same dump
+   flag timed out at 600 seconds before reaching the dump point, so this is a
+   verified diagnostic hook but not yet a fast first-principles gate.
    The Stage 0 no-replay policy tests also now pass again after two policy
    cleanups: generic first-principles runs log the computed flux-coordinate
    basis separately from explicit production-basis overrides, and the opt-in

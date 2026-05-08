@@ -54,6 +54,9 @@
 //!   building the full missing-GV context.
 //! - `--dump-corrected-chamber-2face-secondary-certificate path` to export the
 //!   CYTools-style 4D two-face-restricted secondary-cone certificate.
+//! - `--dump-corrected-chamber-expanded-secondary-fan-certificate path` to
+//!   export the CYTools-style expanded-secondary support certificate for the
+//!   corrected-chamber height vector.
 //! - `--diagnose-chamber-updated-kklt` to run a diagnostic-only KKLT
 //!   fixed-point loop that recomputes the FRST chamber, intersections, divisor
 //!   χ, and toric-covered small-curve GV target correction at each iteration.
@@ -90,6 +93,7 @@ use cyrus_core::{
     compute_origin_circuit_curve_diagnostics, compute_regular_triangulation,
     compute_toric_curve_gv_diagnostics, compute_toric_two_face_curve_gv_invariants,
     compute_w0_from_terms, divisor_basis_change_matrix, effective_prime_divisors_from_curve_basis,
+    expanded_secondary_fan_hyperplanes_on_polytope_2faces_4d,
     generate_scaled_divisor_basis_branch_initializations, gv_divisor_basis_data, heights_to_kahler,
     intersection_in_basis, intersection_in_divisor_basis, is_unimodular, kahler_to_heights,
     map_basis_gv_invariants_to_ambient, project_ambient_curve_to_basis,
@@ -1246,6 +1250,7 @@ struct PipelineArgs {
     dump_corrected_chamber_gv_context_path: Option<String>,
     dump_corrected_chamber_secondary_certificate_path: Option<String>,
     dump_corrected_chamber_2face_secondary_certificate_path: Option<String>,
+    dump_corrected_chamber_expanded_secondary_fan_certificate_path: Option<String>,
     diagnose_chamber_updated_kklt: bool,
     diagnose_chamber_updated_kklt_iterations: usize,
     production_primal_basis_override: Option<BasisOverride>,
@@ -1348,6 +1353,8 @@ fn parse_args() -> PipelineArgs {
         parse_arg_value::<String>("--dump-corrected-chamber-secondary-certificate");
     let dump_corrected_chamber_2face_secondary_certificate_path =
         parse_arg_value::<String>("--dump-corrected-chamber-2face-secondary-certificate");
+    let dump_corrected_chamber_expanded_secondary_fan_certificate_path =
+        parse_arg_value::<String>("--dump-corrected-chamber-expanded-secondary-fan-certificate");
     let diagnose_chamber_updated_kklt = parse_flag("--diagnose-chamber-updated-kklt");
     let diagnose_chamber_updated_kklt_iterations =
         parse_arg_value::<usize>("--diagnose-chamber-updated-kklt-iterations").unwrap_or(6);
@@ -1390,6 +1397,7 @@ fn parse_args() -> PipelineArgs {
         dump_corrected_chamber_gv_context_path,
         dump_corrected_chamber_secondary_certificate_path,
         dump_corrected_chamber_2face_secondary_certificate_path,
+        dump_corrected_chamber_expanded_secondary_fan_certificate_path,
         diagnose_chamber_updated_kklt,
         diagnose_chamber_updated_kklt_iterations,
         production_primal_basis_override,
@@ -7304,6 +7312,20 @@ fn secondary_cone_2face_height_certificate_for_kahler(
     secondary_cone_height_certificate_from_hyperplanes(&hyperplanes, &heights)
 }
 
+fn expanded_secondary_fan_height_certificate_for_kahler(
+    geom: &PrimalGeom,
+    basis: &[usize],
+    kahler: &[F64<Finite>],
+) -> Result<SecondaryConeHeightCertificate, String> {
+    let heights = secondary_cone_typed_heights_for_kahler(geom, basis, kahler)?;
+    let hyperplanes = expanded_secondary_fan_hyperplanes_on_polytope_2faces_4d(
+        &geom.triangulation_points,
+        &geom.polytope,
+    )
+    .map_err(|e| format!("failed to compute expanded-secondary fan hyperplanes: {e}"))?;
+    secondary_cone_height_certificate_from_hyperplanes(&hyperplanes, &heights)
+}
+
 fn secondary_cone_height_certificate_from_hyperplanes(
     hyperplanes: &[Vec<i64>],
     heights: &[F64<Finite>],
@@ -10059,6 +10081,7 @@ fn stage_volume(
     dump_corrected_chamber_gv_context_path: Option<&str>,
     dump_corrected_chamber_secondary_certificate_path: Option<&str>,
     dump_corrected_chamber_2face_secondary_certificate_path: Option<&str>,
+    dump_corrected_chamber_expanded_secondary_fan_certificate_path: Option<&str>,
     diagnose_chamber_updated_kklt: bool,
     diagnose_chamber_updated_kklt_iterations: usize,
     production_primal_basis_override: Option<&BasisOverride>,
@@ -11078,6 +11101,27 @@ fn stage_volume(
             path.display()
         );
     }
+    if let Some(path) = dump_corrected_chamber_expanded_secondary_fan_certificate_path {
+        let certificate =
+            expanded_secondary_fan_height_certificate_for_kahler(geom, &intersection.basis, &t)
+                .unwrap_or_else(|e| {
+                    eprintln!(
+                        "[ERROR] failed to compute corrected-chamber expanded-secondary fan certificate: {e}"
+                    );
+                    std::process::exit(2);
+                });
+        let path = PathBuf::from(path);
+        write_secondary_cone_height_certificate(&path, &certificate).unwrap_or_else(|e| {
+            eprintln!(
+                "[ERROR] failed to write corrected-chamber expanded-secondary fan certificate: {e}"
+            );
+            std::process::exit(2);
+        });
+        eprintln!(
+            "[INFO] corrected-chamber expanded-secondary fan certificate JSON written: {}",
+            path.display()
+        );
+    }
     if let Some(kklt_basis) = kklt_basis_for_chamber_gv.as_deref() {
         let corrected_chamber_kappa_full = chamber_intersection_full(
             &corrected_chamber,
@@ -11812,6 +11856,8 @@ fn run_pipeline(args: PipelineArgs) {
         args.dump_corrected_chamber_secondary_certificate_path
             .as_deref(),
         args.dump_corrected_chamber_2face_secondary_certificate_path
+            .as_deref(),
+        args.dump_corrected_chamber_expanded_secondary_fan_certificate_path
             .as_deref(),
         args.diagnose_chamber_updated_kklt,
         args.diagnose_chamber_updated_kklt_iterations,
