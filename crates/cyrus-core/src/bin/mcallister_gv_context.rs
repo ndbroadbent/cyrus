@@ -7333,10 +7333,13 @@ fn bounded_seed_decomposition(
         return Err("bounded seed decomposition seed dimension mismatch".to_string());
     }
 
-    let pair_sums = seed_pair_sums(seeds)?;
-    if let Some(pairs) = pair_sums.get(target)
-        && let Some(&(i, j)) = pairs.first()
-    {
+    let target_sparse = sparse_from_dense(target);
+    let seed_sparse = seeds
+        .iter()
+        .map(|seed| sparse_from_dense(seed))
+        .collect::<Vec<_>>();
+    let pair_sums = sparse_seed_pair_sums(&seed_sparse)?;
+    if let Some(&(i, j)) = pair_sums.get(&target_sparse) {
         return Ok(Some(sorted_decomposition(vec![
             seeds[i].clone(),
             seeds[j].clone(),
@@ -7346,14 +7349,11 @@ fn bounded_seed_decomposition(
         return Ok(None);
     }
 
-    for seed in seeds {
-        let remainder = checked_vector_difference(target, seed)?;
-        let Some(pairs) = pair_sums.get(&remainder) else {
-            continue;
-        };
-        if let Some(&(i, j)) = pairs.first() {
+    for (seed_index, seed) in seed_sparse.iter().enumerate() {
+        let remainder = checked_sparse_difference(&target_sparse, seed)?;
+        if let Some(&(i, j)) = pair_sums.get(&remainder) {
             return Ok(Some(sorted_decomposition(vec![
-                seed.clone(),
+                seeds[seed_index].clone(),
                 seeds[i].clone(),
                 seeds[j].clone(),
             ])));
@@ -7363,19 +7363,16 @@ fn bounded_seed_decomposition(
         return Ok(None);
     }
 
-    let mut pair_items = pair_sums.iter().collect::<Vec<_>>();
-    pair_items.sort_by(|(left, _), (right, _)| left.cmp(right));
-    for (first_sum, first_pairs) in pair_items {
-        let remainder = checked_vector_difference(target, first_sum)?;
-        let Some(second_pairs) = pair_sums.get(&remainder) else {
+    let mut pair_sums_sorted = pair_sums.keys().collect::<Vec<_>>();
+    pair_sums_sorted.sort_by(|left, right| compare_sparse_as_dense(left, right, target.len()));
+    for first_sum in pair_sums_sorted {
+        let remainder = checked_sparse_difference(&target_sparse, first_sum)?;
+        let Some(&(k, l)) = pair_sums.get(&remainder) else {
             continue;
         };
-        let Some(&(i, j)) = first_pairs.first() else {
-            continue;
-        };
-        let Some(&(k, l)) = second_pairs.first() else {
-            continue;
-        };
+        let &(i, j) = pair_sums
+            .get(first_sum)
+            .expect("first sum came from pair-sum keys");
         return Ok(Some(sorted_decomposition(vec![
             seeds[i].clone(),
             seeds[j].clone(),
@@ -7387,15 +7384,111 @@ fn bounded_seed_decomposition(
     Ok(None)
 }
 
-fn seed_pair_sums(seeds: &[Vec<i64>]) -> Result<HashMap<Vec<i64>, Vec<(usize, usize)>>, String> {
-    let mut pair_sums: HashMap<Vec<i64>, Vec<(usize, usize)>> = HashMap::new();
+fn sparse_seed_pair_sums(
+    seeds: &[Vec<(usize, i64)>],
+) -> Result<HashMap<Vec<(usize, i64)>, (usize, usize)>, String> {
+    let mut pair_sums = HashMap::new();
     for i in 0..seeds.len() {
         for j in i..seeds.len() {
-            let sum = checked_vector_sum(&seeds[i], &seeds[j])?;
-            pair_sums.entry(sum).or_default().push((i, j));
+            let sum = checked_sparse_sum(&seeds[i], &seeds[j])?;
+            pair_sums.entry(sum).or_insert((i, j));
         }
     }
     Ok(pair_sums)
+}
+
+fn checked_sparse_sum(
+    lhs: &[(usize, i64)],
+    rhs: &[(usize, i64)],
+) -> Result<Vec<(usize, i64)>, String> {
+    checked_sparse_linear_combination(lhs, 1, rhs, 1)
+}
+
+fn checked_sparse_difference(
+    lhs: &[(usize, i64)],
+    rhs: &[(usize, i64)],
+) -> Result<Vec<(usize, i64)>, String> {
+    checked_sparse_linear_combination(lhs, 1, rhs, -1)
+}
+
+fn checked_sparse_linear_combination(
+    lhs: &[(usize, i64)],
+    lhs_sign: i64,
+    rhs: &[(usize, i64)],
+    rhs_sign: i64,
+) -> Result<Vec<(usize, i64)>, String> {
+    let mut out = Vec::with_capacity(lhs.len() + rhs.len());
+    let mut lhs_idx = 0usize;
+    let mut rhs_idx = 0usize;
+    while lhs_idx < lhs.len() || rhs_idx < rhs.len() {
+        let (index, lhs_value, rhs_value) = match (lhs.get(lhs_idx), rhs.get(rhs_idx)) {
+            (Some(&(lhs_index, lhs_value)), Some(&(rhs_index, rhs_value))) => {
+                if lhs_index == rhs_index {
+                    lhs_idx += 1;
+                    rhs_idx += 1;
+                    (lhs_index, lhs_value, rhs_value)
+                } else if lhs_index < rhs_index {
+                    lhs_idx += 1;
+                    (lhs_index, lhs_value, 0)
+                } else {
+                    rhs_idx += 1;
+                    (rhs_index, 0, rhs_value)
+                }
+            }
+            (Some(&(lhs_index, lhs_value)), None) => {
+                lhs_idx += 1;
+                (lhs_index, lhs_value, 0)
+            }
+            (None, Some(&(rhs_index, rhs_value))) => {
+                rhs_idx += 1;
+                (rhs_index, 0, rhs_value)
+            }
+            (None, None) => break,
+        };
+        let signed_lhs = lhs_value
+            .checked_mul(lhs_sign)
+            .ok_or_else(|| "sparse linear-combination lhs multiplication overflowed".to_string())?;
+        let signed_rhs = rhs_value
+            .checked_mul(rhs_sign)
+            .ok_or_else(|| "sparse linear-combination rhs multiplication overflowed".to_string())?;
+        let value = signed_lhs
+            .checked_add(signed_rhs)
+            .ok_or_else(|| "sparse linear-combination addition overflowed".to_string())?;
+        if value != 0 {
+            out.push((index, value));
+        }
+    }
+    Ok(out)
+}
+
+fn compare_sparse_as_dense(
+    lhs: &[(usize, i64)],
+    rhs: &[(usize, i64)],
+    dimension: usize,
+) -> std::cmp::Ordering {
+    let mut lhs_idx = 0usize;
+    let mut rhs_idx = 0usize;
+    for index in 0..dimension {
+        let lhs_value = if lhs_idx < lhs.len() && lhs[lhs_idx].0 == index {
+            let value = lhs[lhs_idx].1;
+            lhs_idx += 1;
+            value
+        } else {
+            0
+        };
+        let rhs_value = if rhs_idx < rhs.len() && rhs[rhs_idx].0 == index {
+            let value = rhs[rhs_idx].1;
+            rhs_idx += 1;
+            value
+        } else {
+            0
+        };
+        match lhs_value.cmp(&rhs_value) {
+            std::cmp::Ordering::Equal => {}
+            ordering => return ordering,
+        }
+    }
+    std::cmp::Ordering::Equal
 }
 
 fn sorted_decomposition(mut terms: Vec<Vec<i64>>) -> Vec<Vec<i64>> {

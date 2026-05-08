@@ -303,9 +303,8 @@ run pass. Any remaining mismatch must be explicit and localizable.
    `--lower-seed-pair-limit` degree-bounded seeds. The default is `1024`, and
    the flag can be raised deliberately for single-target high-budget probes.
    This keeps oversized targets observable instead of burning the whole timeout
-   before JSON is written: target `0` timed out under 240 seconds at
-   `seed_count=1616` with a higher `2048` cap, while a guarded target-`0`
-   smoke and target-`2` generation-limited smoke now return
+   before JSON is written: a guarded target-`0` smoke and target-`2`
+   generation-limited smoke now return
    `skipped_seed_pair_limit_1024` in about four seconds. A target-`8` control
    with `seed_count=720` remains below the default cap and still runs the
    lower-seed decomposition path, so the existing target-`7`/`8` diagnostics
@@ -315,6 +314,12 @@ run pass. Any remaining mismatch must be explicit and localizable.
    `6` preserves `hkty_error` with missing target coefficient, target `7`
    preserves `hkty_error` with missing formula coefficient `3`, and target `8`
    preserves the computed path-support mismatch with missing coefficient `-3`.
+   The bounded decomposition search now uses sparse first-pair sums internally
+   rather than storing dense vectors and every duplicate pair. With an explicit
+   high-budget `--lower-seed-pair-limit 2048`, a target-`0` path-history probe
+   with `--closure-generation-limit 1` now completes in 83.15 seconds,
+   pair-reduces `1616` seeds to `702`, and finds a three-term lower-seed
+   decomposition before hitting the bounded closure element limit.
    The parent-only classifications now include parent-path-support runtime
    lookups from the same `cygv` run. On the regenerated target 7 report, the
    generated degree-10 side term is a real parent-domain nonzero object
