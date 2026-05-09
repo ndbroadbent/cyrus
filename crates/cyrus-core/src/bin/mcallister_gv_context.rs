@@ -51,6 +51,7 @@ use cyrus_core::{
     split_bundle_kp112_mirror_map_half_sector_primary_coefficients,
     split_bundle_kp112_mirror_map_primary_p_lambda_coefficients,
     utils::gcd_list_int,
+    weighted_p2_ordinary_dual_basis_p2_z_lambda_polynomials,
     weyl_reflection_matches_flop_transform,
 };
 
@@ -28237,103 +28238,11 @@ fn split_equivariant_full_hypergeometric_dual_basis_p2_z_lambda_polynomials(
     bundle_degrees: &[i64],
     degree_twice: i64,
 ) -> Option<BTreeMap<i64, Vec<String>>> {
-    if degree_twice % 2 != 0 {
-        return None;
-    }
-    let degree = degree_twice / 2;
-    if degree < 0 {
-        return None;
-    }
-    let denominator_constant =
-        integer_sector_base_denominator_constant(base_weights, degree_twice)?;
-    let denominator_z_power = base_weights
-        .iter()
-        .map(|weight| {
-            weight
-                .checked_mul(degree)
-                .expect("weighted P2 denominator z power fits i64")
-        })
-        .try_fold(0i64, |sum, count| sum.checked_add(count))
-        .expect("weighted P2 denominator total z power fits i64");
-    let mut numerator = BTreeMap::<(usize, i64), MalachiteRational>::new();
-    numerator.insert((0, 0), MalachiteRational::from(1));
-    for &line_degree in bundle_degrees {
-        let factor_count = line_degree
-            .checked_mul(degree)
-            .expect("weighted P2 split bundle factor count fits i64");
-        if factor_count < 0 {
-            return None;
-        }
-        for factor_offset in (-factor_count + 1)..=0 {
-            numerator = multiply_lambda_z_polynomial_by_factor(&numerator, 1, factor_offset);
-        }
-    }
-    let denominator = MalachiteRational::from(Integer::from(2)) * denominator_constant;
-    let mut by_inverse_z_power = BTreeMap::<i64, BTreeMap<usize, MalachiteRational>>::new();
-    for ((lambda_power, z_power), coefficient) in numerator {
-        if coefficient == MalachiteRational::from(0) {
-            continue;
-        }
-        if lambda_power == 0 {
-            return None;
-        }
-        let inverse_z_power = denominator_z_power - z_power;
-        *by_inverse_z_power
-            .entry(inverse_z_power)
-            .or_default()
-            .entry(lambda_power - 1)
-            .or_insert_with(|| MalachiteRational::from(0)) += coefficient / denominator.clone();
-    }
-    Some(
-        by_inverse_z_power
-            .into_iter()
-            .map(|(inverse_z_power, polynomial)| {
-                (
-                    inverse_z_power,
-                    lambda_polynomial_coefficients_to_strings(&polynomial),
-                )
-            })
-            .collect(),
+    weighted_p2_ordinary_dual_basis_p2_z_lambda_polynomials(
+        base_weights,
+        bundle_degrees,
+        degree_twice,
     )
-}
-
-fn multiply_lambda_z_polynomial_by_factor(
-    coefficients: &BTreeMap<(usize, i64), MalachiteRational>,
-    lambda_coefficient: i64,
-    z_coefficient: i64,
-) -> BTreeMap<(usize, i64), MalachiteRational> {
-    let mut next = BTreeMap::<(usize, i64), MalachiteRational>::new();
-    for (&(lambda_power, z_power), coefficient) in coefficients {
-        if lambda_coefficient != 0 {
-            *next
-                .entry((lambda_power + 1, z_power))
-                .or_insert_with(|| MalachiteRational::from(0)) +=
-                coefficient.clone() * MalachiteRational::from(Integer::from(lambda_coefficient));
-        }
-        if z_coefficient != 0 {
-            *next
-                .entry((lambda_power, z_power + 1))
-                .or_insert_with(|| MalachiteRational::from(0)) +=
-                coefficient.clone() * MalachiteRational::from(Integer::from(z_coefficient));
-        }
-    }
-    next.retain(|_, coefficient| *coefficient != MalachiteRational::from(0));
-    next
-}
-
-fn lambda_polynomial_coefficients_to_strings(
-    coefficients: &BTreeMap<usize, MalachiteRational>,
-) -> Vec<String> {
-    let max_lambda_power = coefficients.keys().last().copied().unwrap_or(0);
-    (0..=max_lambda_power)
-        .map(|lambda_power| {
-            coefficients
-                .get(&lambda_power)
-                .cloned()
-                .unwrap_or_else(|| MalachiteRational::from(0))
-                .to_string()
-        })
-        .collect()
 }
 
 fn lambda_polynomial_has_nonzero_coefficient(polynomial: &[String]) -> bool {

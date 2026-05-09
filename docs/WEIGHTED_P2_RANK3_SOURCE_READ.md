@@ -205,6 +205,12 @@ therefore need a source-derived twisted big-J/pairing/residue calculation or
 equivalent qN history; the small-J primary readout still does not provide a
 promotion rule.
 
+This ordinary-sector `z`-profile calculation now lives in
+`cyrus-core::local_orbifold` as reusable exact rational code rather than only
+inside the McAllister context binary. The core API exposes both a sparse
+dual-basis lambda-polynomial map and a materialized readout profile that records
+the missing `z^-2` primary as an explicit zero.
+
 The z-order convention is checked against the adjacent canonical
 `K_P(1,1,2)` first sector by using bundle degree `[4]` in the same
 hypergeometric readout. There the primary `z^-2` coefficient is nonzero and

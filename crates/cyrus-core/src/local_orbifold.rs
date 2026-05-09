@@ -32,6 +32,20 @@ pub struct HalfSectorDescendantReadout {
     pub status: String,
 }
 
+/// Ordinary-sector dual-basis `p^2` readout at one inverse power of `z`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct OrdinarySectorDualBasisP2ZReadout {
+    /// Inverse power of `z` for this readout.
+    pub inverse_z_power: String,
+    /// Raw ordinary-basis `fun_0` lambda-polynomial coefficients before
+    /// dual-basis normalization.
+    pub raw_fun0_lambda_coefficients: Vec<String>,
+    /// Lambda-polynomial coefficients after division by `2*lambda`, when valid.
+    pub dual_basis_p2_coefficients: Option<Vec<String>>,
+    /// Normalization status for this readout.
+    pub status: String,
+}
+
 /// CCIT `K_P(1,1,2)` untwisted `b_d` table through `max_degree`.
 pub fn kp112_canonical_b_table_values(max_degree: usize) -> Vec<String> {
     kp112_ordinary_p_primary_lambda_coefficients(&[4], max_degree)
@@ -76,6 +90,57 @@ pub fn split_bundle_kp112_mirror_map_primary_p_lambda_coefficients(
                 .unwrap_or_else(|| "0".to_string())
         })
         .collect()
+}
+
+/// Ordinary-sector dual-basis `p^2` readout by inverse `z` power for a
+/// weighted-`P2` direct-sum line-bundle modification.
+pub fn weighted_p2_ordinary_dual_basis_p2_z_readout_profile(
+    base_weights: &[i64],
+    bundle_degrees: &[i64],
+    degree_twice: i64,
+) -> Option<Vec<OrdinarySectorDualBasisP2ZReadout>> {
+    let raw_by_z = weighted_p2_ordinary_fun0_lambda_polynomials_by_z(
+        base_weights,
+        bundle_degrees,
+        degree_twice,
+    )?;
+    let max_inverse_z_power = raw_by_z.keys().last().copied().unwrap_or(2).max(2);
+    Some(
+        (2..=max_inverse_z_power)
+            .map(|inverse_z_power| {
+                let polynomial = raw_by_z.get(&inverse_z_power).cloned().unwrap_or_default();
+                ordinary_sector_dual_basis_p2_z_readout(inverse_z_power, &polynomial)
+            })
+            .collect(),
+    )
+}
+
+/// Ordinary-sector dual-basis `p^2` lambda-polynomial coefficients by inverse
+/// `z` power for a weighted-`P2` direct-sum line-bundle modification.
+pub fn weighted_p2_ordinary_dual_basis_p2_z_lambda_polynomials(
+    base_weights: &[i64],
+    bundle_degrees: &[i64],
+    degree_twice: i64,
+) -> Option<BTreeMap<i64, Vec<String>>> {
+    let raw_by_z = weighted_p2_ordinary_fun0_lambda_polynomials_by_z(
+        base_weights,
+        bundle_degrees,
+        degree_twice,
+    )?;
+    let mut normalized_by_z = BTreeMap::new();
+    for (inverse_z_power, polynomial) in raw_by_z {
+        let coefficients = divide_rational_lambda_polynomial_by_two_lambda_if_possible(&polynomial)
+            .map(|coefficients| {
+                let coefficients = rational_coefficients_to_strings(&coefficients);
+                if coefficients.is_empty() {
+                    vec!["0".to_string()]
+                } else {
+                    coefficients
+                }
+            })?;
+        normalized_by_z.insert(inverse_z_power, coefficients);
+    }
+    Some(normalized_by_z)
 }
 
 /// CCIT `K_P(1,1,2)` twisted half-sector `c_d` table.
@@ -240,6 +305,37 @@ fn half_sector_descendant_readout(
         inverse_z_power: inverse_z_power.to_string(),
         raw_lambda_coefficients,
         dual_basis_coefficients,
+        status: status.to_string(),
+    }
+}
+
+fn ordinary_sector_dual_basis_p2_z_readout(
+    inverse_z_power: i64,
+    polynomial: &BTreeMap<usize, Rational>,
+) -> OrdinarySectorDualBasisP2ZReadout {
+    let raw_fun0_lambda_coefficients = dense_rational_lambda_polynomial_to_strings(polynomial);
+    let dual_basis_p2_coefficients = divide_rational_lambda_polynomial_by_two_lambda_if_possible(
+        polynomial,
+    )
+    .map(|coefficients| {
+        let coefficients = rational_coefficients_to_strings(&coefficients);
+        if coefficients.is_empty() {
+            vec!["0".to_string()]
+        } else {
+            coefficients
+        }
+    });
+    let status = match &dual_basis_p2_coefficients {
+        Some(coefficients) if lambda_polynomial_has_nonzero_coefficient(coefficients) => {
+            "dual_basis_p2_normalized_nonzero"
+        }
+        Some(_) => "dual_basis_p2_normalized_zero",
+        None => "blocked_constant_lambda_term_nonzero",
+    };
+    OrdinarySectorDualBasisP2ZReadout {
+        inverse_z_power: inverse_z_power.to_string(),
+        raw_fun0_lambda_coefficients,
+        dual_basis_p2_coefficients,
         status: status.to_string(),
     }
 }
@@ -459,6 +555,61 @@ fn weighted_p2_ordinary_p_primary_after_kp112_mirror_map(
         }
     }
     primary_by_q_degree
+}
+
+fn weighted_p2_ordinary_fun0_lambda_polynomials_by_z(
+    base_weights: &[i64],
+    bundle_degrees: &[i64],
+    degree_twice: i64,
+) -> Option<BTreeMap<i64, BTreeMap<usize, Rational>>> {
+    if degree_twice % 2 != 0 {
+        return None;
+    }
+    let degree = degree_twice / 2;
+    if degree < 0 {
+        return None;
+    }
+    let denominator = integer_sector_base_denominator_constant(base_weights, degree_twice)?;
+    let denominator_z_power = base_weights
+        .iter()
+        .map(|weight| {
+            weight
+                .checked_mul(degree)
+                .expect("weighted P2 denominator z power fits i64")
+        })
+        .try_fold(0i64, |sum, count| sum.checked_add(count))
+        .expect("weighted P2 denominator total z power fits i64");
+    let mut numerator = BTreeMap::<(usize, i64), Rational>::new();
+    numerator.insert((0, 0), Rational::from(1));
+    for &line_degree in bundle_degrees {
+        let factor_count = line_degree
+            .checked_mul(degree)
+            .expect("weighted P2 split bundle factor count fits i64");
+        if factor_count < 0 {
+            return None;
+        }
+        for factor_offset in (-factor_count + 1)..=0 {
+            numerator = multiply_lambda_z_polynomial_by_rational_factor(
+                &numerator,
+                Rational::from(1),
+                rational_from_i64(factor_offset),
+            );
+        }
+    }
+
+    let mut by_inverse_z_power = BTreeMap::<i64, BTreeMap<usize, Rational>>::new();
+    for ((lambda_power, z_power), coefficient) in numerator {
+        if coefficient == Rational::from(0) {
+            continue;
+        }
+        let inverse_z_power = denominator_z_power - z_power;
+        *by_inverse_z_power
+            .entry(inverse_z_power)
+            .or_default()
+            .entry(lambda_power)
+            .or_insert_with(|| Rational::from(0)) += coefficient / denominator.clone();
+    }
+    Some(by_inverse_z_power)
 }
 
 fn weighted_p2_half_sector_primary_after_kp112_mirror_map(
@@ -725,6 +876,7 @@ mod tests {
         split_bundle_kp112_mirror_map_half_sector_first_nonzero_descendants,
         split_bundle_kp112_mirror_map_half_sector_primary_coefficients,
         split_bundle_kp112_mirror_map_primary_p_lambda_coefficients,
+        weighted_p2_ordinary_dual_basis_p2_z_readout_profile,
     };
 
     #[test]
@@ -772,6 +924,62 @@ mod tests {
         assert_eq!(
             kp112_half_sector_first_nonzero_descendants(&[1, 1, 2], 4, 4),
             split_bundle_kp112_mirror_map_half_sector_first_nonzero_descendants(4, 4)
+        );
+    }
+
+    #[test]
+    fn ordinary_sector_dual_basis_p2_z_profile_matches_split_bundle_diagnostic() {
+        let degree_one_profile =
+            weighted_p2_ordinary_dual_basis_p2_z_readout_profile(&[1, 1, 2], &[1, 1, 2], 2)
+                .expect("integer sector profile");
+        assert_eq!(
+            degree_one_profile
+                .iter()
+                .map(|entry| (
+                    entry.inverse_z_power.as_str(),
+                    entry.dual_basis_p2_coefficients.clone()
+                ))
+                .collect::<Vec<_>>(),
+            vec![
+                ("2", Some(vec!["0".to_string()])),
+                (
+                    "3",
+                    Some(vec!["0".to_string(), "0".to_string(), "-1/4".to_string()])
+                ),
+                (
+                    "4",
+                    Some(vec![
+                        "0".to_string(),
+                        "0".to_string(),
+                        "0".to_string(),
+                        "1/4".to_string()
+                    ])
+                ),
+            ]
+        );
+
+        let degree_two_profile =
+            weighted_p2_ordinary_dual_basis_p2_z_readout_profile(&[1, 1, 2], &[1, 1, 2], 4)
+                .expect("integer sector profile");
+        assert_eq!(
+            degree_two_profile
+                .iter()
+                .find(|entry| entry.inverse_z_power == "3")
+                .and_then(|entry| entry.dual_basis_p2_coefficients.clone()),
+            Some(vec!["0".to_string(), "0".to_string(), "-1/32".to_string()])
+        );
+    }
+
+    #[test]
+    fn ordinary_sector_dual_basis_p2_z_profile_matches_canonical_kp112_first_sector() {
+        let profile = weighted_p2_ordinary_dual_basis_p2_z_readout_profile(&[1, 1, 2], &[4], 2)
+            .expect("canonical sector profile");
+        assert_eq!(
+            profile
+                .iter()
+                .find(|entry| entry.inverse_z_power == "2")
+                .and_then(|entry| entry.dual_basis_p2_coefficients.clone()),
+            Some(vec!["0".to_string(), "11/4".to_string()])
         );
     }
 
