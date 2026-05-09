@@ -2590,6 +2590,12 @@ struct ProvidedGeneratorUncertifiedGeneratorSample {
     local_toric_charge_family_status: String,
     ckyz_status: String,
     bounded_lower_seed_status: String,
+    weighted_p2_phase_status: Option<String>,
+    weighted_p2_source_model_status: Option<String>,
+    weighted_p2_twisted_ifunction_readiness_status: Option<String>,
+    weighted_p2_twisted_ifunction_missing_inputs: Vec<String>,
+    weighted_p2_source_certificate_promotion_status: Option<String>,
+    weighted_p2_source_certificate_required_inputs: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -30964,22 +30970,78 @@ fn provided_generator_uncertified_generator_sample(
             !chamber_generator_qn_history_is_source_certified(&context.known_qn_history_status)
         })
         .take(8)
-        .map(|context| ProvidedGeneratorUncertifiedGeneratorSample {
-            generator_index: context.generator_index,
-            chamber_coordinate: context.chamber_coordinate.clone(),
-            basis_nonzero: context.basis_nonzero.clone(),
-            degree: context.degree,
-            known_qn_history_status: context.known_qn_history_status.clone(),
-            source_class_status: context.source_class_status.clone(),
-            local_toric_kind: context.local_toric_diagnostic.local_toric_kind.clone(),
-            local_toric_charge_family_status: context
+        .map(|context| {
+            let weighted_rank_three_applicable = context
                 .local_toric_diagnostic
                 .local_toric_charge_family_status
-                .clone(),
-            ckyz_status: context.local_toric_diagnostic.ckyz_status.clone(),
-            bounded_lower_seed_status: chamber_semigroup_generator_bounded_lower_seed_status(
-                context,
-            ),
+                .starts_with("local_toric_weighted_p2_rank_three_split_bundle_charge_family");
+            let weighted_rank_three_phase = weighted_p2_rank_three_selected_phase_summary(
+                context.point_relation_nonzero.as_deref(),
+                &context
+                    .local_toric_diagnostic
+                    .local_toric_charge_family_status,
+                context
+                    .local_toric_diagnostic
+                    .circuit_triangulation_choices
+                    .as_deref(),
+                context
+                    .circuit_global_height_choice_summary
+                    .selected_choice_index,
+            );
+            let weighted_rank_three_source_model = weighted_p2_rank_three_source_model_summary(
+                &context
+                    .local_toric_diagnostic
+                    .local_toric_charge_family_status,
+                &weighted_rank_three_phase,
+            );
+            let weighted_source_certificate = weighted_rank_three_source_model
+                .twisted_vector_bundle_ifunction_source_certificate_requirements
+                .as_ref();
+            ProvidedGeneratorUncertifiedGeneratorSample {
+                generator_index: context.generator_index,
+                chamber_coordinate: context.chamber_coordinate.clone(),
+                basis_nonzero: context.basis_nonzero.clone(),
+                degree: context.degree,
+                known_qn_history_status: context.known_qn_history_status.clone(),
+                source_class_status: context.source_class_status.clone(),
+                local_toric_kind: context.local_toric_diagnostic.local_toric_kind.clone(),
+                local_toric_charge_family_status: context
+                    .local_toric_diagnostic
+                    .local_toric_charge_family_status
+                    .clone(),
+                ckyz_status: context.local_toric_diagnostic.ckyz_status.clone(),
+                bounded_lower_seed_status: chamber_semigroup_generator_bounded_lower_seed_status(
+                    context,
+                ),
+                weighted_p2_phase_status: weighted_rank_three_applicable
+                    .then_some(weighted_rank_three_phase.status),
+                weighted_p2_source_model_status: weighted_rank_three_applicable
+                    .then_some(weighted_rank_three_source_model.status),
+                weighted_p2_twisted_ifunction_readiness_status: weighted_rank_three_applicable
+                    .then_some(
+                        weighted_rank_three_source_model
+                            .twisted_vector_bundle_ifunction_readiness_status,
+                    )
+                    .flatten(),
+                weighted_p2_twisted_ifunction_missing_inputs: if weighted_rank_three_applicable {
+                    weighted_rank_three_source_model.twisted_vector_bundle_ifunction_missing_inputs
+                } else {
+                    Vec::new()
+                },
+                weighted_p2_source_certificate_promotion_status: if weighted_rank_three_applicable {
+                    weighted_source_certificate
+                        .map(|certificate| certificate.promotion_status.clone())
+                } else {
+                    None
+                },
+                weighted_p2_source_certificate_required_inputs: if weighted_rank_three_applicable {
+                    weighted_source_certificate
+                        .map(|certificate| certificate.required_inputs.clone())
+                        .unwrap_or_default()
+                } else {
+                    Vec::new()
+                },
+            }
         })
         .collect()
 }
@@ -40065,6 +40127,90 @@ mod tests {
             missing_context
                 .promotion_missing_inputs
                 .contains(&"decomposition_generator_context".to_string())
+        );
+    }
+
+    #[test]
+    fn uncertified_generator_sample_exposes_weighted_p2_source_boundary() {
+        let mut local_toric = chamber_generator_local_toric_diagnostic_not_run("test");
+        local_toric.local_toric_charge_family_status =
+            "local_toric_weighted_p2_rank_three_split_bundle_charge_family:base=1,1,2;bundle=1,1,2;base_hyperplane_square=1/2"
+                .to_string();
+        local_toric.circuit_triangulation_choices = Some(vec![vec![
+            vec![2, 3, 4, 5, 6],
+            vec![1, 3, 4, 5, 6],
+            vec![1, 2, 4, 5, 6],
+        ]]);
+        let generator = LocalCygvChamberSemigroupGeneratorContext {
+            generator_index: 0,
+            chamber_coordinate: vec![1],
+            point_relation_status: "chamber_generator_point_relation_reconstructed".to_string(),
+            point_relation_nonzero: Some(vec![
+                (1, 1),
+                (2, 1),
+                (3, 2),
+                (4, -1),
+                (5, -1),
+                (6, -2),
+            ]),
+            global_basis_status: "chamber_generator_global_basis_projection_integral".to_string(),
+            basis_nonzero: Some(vec![(0, 1)]),
+            degree: Some(2),
+            global_secondary_height_status: "global_basis_secondary_height_positive".to_string(),
+            global_secondary_height_pairing: Some("1".to_string()),
+            known_qn_history_status: "unknown_not_toric_covered".to_string(),
+            toric_gv: None,
+            source_derived_gv: None,
+            source_class_status: Some(
+                "source_ray_weighted_p2_rank_three_split_bundle_source_import_blocked_missing_source_model_tensor_qn_history"
+                    .to_string(),
+            ),
+            source_ray_ambient_nonzero: None,
+            local_toric_diagnostic: local_toric,
+            circuit_global_height_choice_summary: LocalCygvCircuitGlobalHeightChoiceSummary {
+                status: "circuit_global_height_choice_unique_strictly_positive_choice".to_string(),
+                choice_pairings: None,
+                compatible_choice_indices: Some(vec![0]),
+                selected_choice_index: Some(0),
+            },
+            degree_bounded_support_overlap_diagnostic:
+                chamber_generator_support_overlap_diagnostic_not_run("test"),
+            lower_seed_sum_decomposition: None,
+            bounded_lower_seed_decomposition: None,
+            lower_seed_decomposition_error: None,
+            error: None,
+        };
+
+        let sample = provided_generator_uncertified_generator_sample(&[generator]);
+
+        assert_eq!(sample.len(), 1);
+        assert_eq!(
+            sample[0].weighted_p2_phase_status.as_deref(),
+            Some("weighted_p2_rank_three_split_bundle_selected_base_phase")
+        );
+        assert_eq!(
+            sample[0].weighted_p2_source_model_status.as_deref(),
+            Some(
+                "weighted_p2_rank_three_source_model_visible_phase_is_local_cy5_total_space_not_promotable_gv_source"
+            )
+        );
+        assert_eq!(
+            sample[0]
+                .weighted_p2_twisted_ifunction_readiness_status
+                .as_deref(),
+            Some(
+                "weighted_p2_rank_three_twisted_ifunction_blocked_missing_stack_normalized_codim2_insertion_qn_history"
+            )
+        );
+        assert!(
+            sample[0]
+                .weighted_p2_source_certificate_required_inputs
+                .contains(&"source_derived_chamber_qn_history_for_selected_phase".to_string())
+        );
+        assert!(
+            sample[0]
+                .weighted_p2_source_certificate_required_inputs
+                .contains(&"cy3_projection_or_codimension_two_local_model".to_string())
         );
     }
 

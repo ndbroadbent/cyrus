@@ -1650,6 +1650,19 @@ to make the remaining GV layer more first-principles:
    This sharpens the chamber-domain blocker: the target decomposition terms
    are not the missing object; the compact qN domain still contains the
    uncertified weighted-`P2` source generator.
+   The same uncertified-generator sample now carries the weighted-`P2` source
+   model boundary directly. Regenerated target `7` and target `8` reports in
+   `/tmp/cyrus_target7_weighted_source_sample_probe.json` and
+   `/tmp/cyrus_target8_weighted_source_sample_probe.json` identify the
+   blocking generator as the selected-base local CY5 split-bundle phase, with
+   readiness
+   `weighted_p2_rank_three_twisted_ifunction_blocked_missing_stack_normalized_codim2_insertion_qn_history`.
+   The serialized source-certificate inputs are now explicit:
+   source-derived codimension-two observable, orbifold-sector pairing data,
+   twisted-vector-bundle chamber certificate, twisted-vector-bundle qN
+   history, big-J/pairing reconstruction for the descendant readout,
+   source-derived chamber qN history for the selected phase, and CY3 projection
+   or an equivalent codimension-two local model.
    A decomposition-only diagnostic now reruns the actual `cygv` qN trace on
    just the positive target-plus-star decomposition generators while forcing a
    non-promotable readiness state. Regenerated target `7` and target `8`
