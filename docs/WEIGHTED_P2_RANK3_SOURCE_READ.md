@@ -246,6 +246,14 @@ descendant level later, at `z^-3`, with coefficients
 That keeps the open problem sharply on twisted big-`J`/pairing
 reconstruction, rather than on a missing primary mirror-map coefficient.
 
+The source-map report now also serializes the full checked half-sector
+descendant profile, not only the first nonzero term. Each readout records the
+inverse `z` power, the raw lambda polynomial, the dual-basis-normalized
+polynomial when division by `2*lambda` is valid, and a normalization status.
+This preserves the `z^-2` zero primary rows and the later descendant rows in
+the report, so downstream source-history work can inspect the exact structured
+evidence without re-running or reinterpreting the lossy first-nonzero summary.
+
 This does not mean the `z^-3` descendant term is useless. CCIT explicitly
 states that one-point descendants can reconstruct genus-zero Gromov-Witten
 data in the semipositive/generated-by-degree-two setting. But that is a

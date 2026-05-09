@@ -31,8 +31,8 @@ use cyrus_core::triangulation::{
 use cyrus_core::types::rational::Rational;
 use cyrus_core::types::{f64::F64, tags::Finite, tags::Pos};
 use cyrus_core::{
-    CkyzLocalSurfaceKind, CygvQnTracePolynomial, GvDilogFailure, Intersection,
-    LocalToricCircuitKind, Point, certify_nef_partition_cytools_style,
+    CkyzLocalSurfaceKind, CygvQnTracePolynomial, GvDilogFailure, HalfSectorDescendantReadout,
+    Intersection, LocalToricCircuitKind, Point, certify_nef_partition_cytools_style,
     check_stable_weyl_candidate_certificate, ckyz_local_surface_target_degrees,
     compute_ckyz_local_surface_gv_invariants_for_multiples_with_causal_domain,
     compute_gv_invariants_with_explicit_semigroup,
@@ -46,6 +46,7 @@ use cyrus_core::{
     integer_math::{integer_kernel, solve_linear_system_rational},
     kp112_canonical_b_table_values, kp112_canonical_c_table_values, rank_two_local_charge_model,
     rank_two_local_support_signature,
+    split_bundle_kp112_mirror_map_half_sector_descendant_profiles,
     split_bundle_kp112_mirror_map_half_sector_first_nonzero_descendants,
     split_bundle_kp112_mirror_map_half_sector_primary_coefficients,
     split_bundle_kp112_mirror_map_primary_p_lambda_coefficients,
@@ -1754,6 +1755,8 @@ struct WeightedP2RankThreeTwistedIfunctionChenRuanSourceMap {
     split_bundle_kp112_mirror_map_half_sector_descendant_status: String,
     split_bundle_kp112_mirror_map_half_sector_first_nonzero_inverse_z_powers: Vec<String>,
     split_bundle_kp112_mirror_map_half_sector_first_nonzero_coefficients: Vec<Vec<String>>,
+    split_bundle_kp112_mirror_map_half_sector_descendant_profiles:
+        Vec<Vec<HalfSectorDescendantReadout>>,
     split_bundle_gw_extraction_status: String,
     twisted_sector_divisor_equation_status: String,
     split_bundle_required_source_data_status: String,
@@ -27269,6 +27272,8 @@ fn weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
             .into_iter()
             .map(|entry| entry.coefficients)
             .collect::<Vec<_>>();
+    let split_bundle_kp112_mirror_map_half_sector_descendant_profiles =
+        split_bundle_kp112_mirror_map_half_sector_descendant_profiles(4, 4);
     // CCIT/wallcrossings2 Example II gives the Chen-Ruan basis and
     // adjacent K_{P(1,1,2)} crepant map.  The target here is the split
     // bundle O(-1)+O(-1)+O(-2), so these facts constrain the missing
@@ -27323,6 +27328,7 @@ fn weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
             split_bundle_kp112_mirror_map_half_sector_descendant_status.to_string(),
         split_bundle_kp112_mirror_map_half_sector_first_nonzero_inverse_z_powers,
         split_bundle_kp112_mirror_map_half_sector_first_nonzero_coefficients,
+        split_bundle_kp112_mirror_map_half_sector_descendant_profiles,
         split_bundle_gw_extraction_status:
             "rank_three_split_requires_own_j_or_big_j_coefficient_extraction_before_qn_history"
                 .to_string(),
@@ -41587,6 +41593,8 @@ mod tests {
                     vec!["-11744/375".to_string()],
                     vec!["-22221448/25725".to_string()],
                 ],
+                split_bundle_kp112_mirror_map_half_sector_descendant_profiles:
+                    split_bundle_kp112_mirror_map_half_sector_descendant_profiles(4, 4),
                 split_bundle_gw_extraction_status:
                     "rank_three_split_requires_own_j_or_big_j_coefficient_extraction_before_qn_history"
                         .to_string(),
@@ -41671,6 +41679,11 @@ mod tests {
             0,
         )
         .expect("weighted P2 split bundle source map");
+        assert_eq!(
+            source_map.split_bundle_kp112_mirror_map_half_sector_descendant_profiles[0][1]
+                .dual_basis_coefficients,
+            Some(vec!["2".to_string()])
+        );
 
         let counts = weighted_p2_rank_three_chen_ruan_source_map_status_counts(
             [Some(&source_map), None, Some(&source_map)],

@@ -8,6 +8,7 @@
 use std::collections::BTreeMap;
 
 use malachite::{Integer, Rational};
+use serde::Serialize;
 
 /// First nonzero half-sector descendant readout for one half-integer degree.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -16,6 +17,19 @@ pub struct HalfSectorFirstNonzeroDescendant {
     pub inverse_z_power: Option<String>,
     /// Lambda-polynomial coefficients after dual-basis normalization.
     pub coefficients: Vec<String>,
+}
+
+/// Dual-basis-normalized half-sector readout at one inverse power of `z`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct HalfSectorDescendantReadout {
+    /// Inverse power of `z` for this readout.
+    pub inverse_z_power: String,
+    /// Raw lambda-polynomial coefficients before dual-basis normalization.
+    pub raw_lambda_coefficients: Vec<String>,
+    /// Lambda-polynomial coefficients after division by `2*lambda`, when valid.
+    pub dual_basis_coefficients: Option<Vec<String>>,
+    /// Normalization status for this readout.
+    pub status: String,
 }
 
 /// CCIT `K_P(1,1,2)` untwisted `b_d` table through `max_degree`.
@@ -120,6 +134,44 @@ pub fn split_bundle_kp112_mirror_map_half_sector_first_nonzero_descendants(
     kp112_half_sector_first_nonzero_descendants(&[1, 1, 2], half_sector_count, max_inverse_z_power)
 }
 
+/// Full split-bundle `[1,1,2]` half-sector descendant profile after the
+/// adjacent `K_P(1,1,2)` mirror map, grouped by half-integer degree.
+pub fn split_bundle_kp112_mirror_map_half_sector_descendant_profiles(
+    half_sector_count: usize,
+    max_inverse_z_power: i64,
+) -> Vec<Vec<HalfSectorDescendantReadout>> {
+    kp112_half_sector_dual_basis_descendant_profiles(
+        &[1, 1, 2],
+        half_sector_count,
+        max_inverse_z_power,
+    )
+}
+
+/// Full half-sector descendant profiles after the adjacent `K_P(1,1,2)`
+/// mirror map for a direct-sum line-bundle modification, grouped by
+/// half-integer degree.
+pub fn kp112_half_sector_dual_basis_descendant_profiles(
+    bundle_degrees: &[i64],
+    half_sector_count: usize,
+    max_inverse_z_power: i64,
+) -> Vec<Vec<HalfSectorDescendantReadout>> {
+    weighted_p2_half_sector_fun_component_after_kp112_mirror_map_by_z(
+        bundle_degrees,
+        half_sector_count,
+        max_inverse_z_power,
+    )
+    .into_iter()
+    .map(|by_z| {
+        (2..=max_inverse_z_power)
+            .map(|inverse_z_power| {
+                let polynomial = by_z.get(&inverse_z_power).cloned().unwrap_or_default();
+                half_sector_descendant_readout(inverse_z_power, &polynomial)
+            })
+            .collect()
+    })
+    .collect()
+}
+
 /// First nonzero half-sector descendant readouts after the adjacent
 /// `K_P(1,1,2)` mirror map for a direct-sum line-bundle modification.
 pub fn kp112_half_sector_first_nonzero_descendants(
@@ -161,12 +213,58 @@ pub fn kp112_half_sector_first_nonzero_descendants(
     .collect()
 }
 
+fn half_sector_descendant_readout(
+    inverse_z_power: i64,
+    polynomial: &BTreeMap<usize, Rational>,
+) -> HalfSectorDescendantReadout {
+    let raw_lambda_coefficients = dense_rational_lambda_polynomial_to_strings(polynomial);
+    let dual_basis_coefficients = divide_rational_lambda_polynomial_by_two_lambda_if_possible(
+        polynomial,
+    )
+    .map(|coefficients| {
+        let coefficients = rational_coefficients_to_strings(&coefficients);
+        if coefficients.is_empty() {
+            vec!["0".to_string()]
+        } else {
+            coefficients
+        }
+    });
+    let status = match &dual_basis_coefficients {
+        Some(coefficients) if lambda_polynomial_has_nonzero_coefficient(coefficients) => {
+            "dual_basis_normalized_nonzero"
+        }
+        Some(_) => "dual_basis_normalized_zero",
+        None => "blocked_constant_lambda_term_nonzero",
+    };
+    HalfSectorDescendantReadout {
+        inverse_z_power: inverse_z_power.to_string(),
+        raw_lambda_coefficients,
+        dual_basis_coefficients,
+        status: status.to_string(),
+    }
+}
+
 fn rational_lambda_polynomial_to_strings(
     polynomial: &BTreeMap<usize, Rational>,
 ) -> BTreeMap<usize, String> {
     polynomial
         .iter()
         .map(|(&lambda_power, coefficient)| (lambda_power, coefficient.to_string()))
+        .collect()
+}
+
+fn dense_rational_lambda_polynomial_to_strings(
+    polynomial: &BTreeMap<usize, Rational>,
+) -> Vec<String> {
+    let max_lambda_power = polynomial.keys().last().copied().unwrap_or(0);
+    (0..=max_lambda_power)
+        .map(|lambda_power| {
+            polynomial
+                .get(&lambda_power)
+                .cloned()
+                .unwrap_or_else(|| Rational::from(0))
+                .to_string()
+        })
         .collect()
 }
 
@@ -623,6 +721,7 @@ mod tests {
         kp112_canonical_b_table_values, kp112_canonical_c_table_values,
         kp112_half_sector_first_nonzero_descendants, kp112_half_sector_primary_lambda_coefficients,
         kp112_ordinary_p_primary_lambda_coefficients,
+        split_bundle_kp112_mirror_map_half_sector_descendant_profiles,
         split_bundle_kp112_mirror_map_half_sector_first_nonzero_descendants,
         split_bundle_kp112_mirror_map_half_sector_primary_coefficients,
         split_bundle_kp112_mirror_map_primary_p_lambda_coefficients,
@@ -724,6 +823,33 @@ mod tests {
                 vec!["-11744/375".to_string()],
                 vec!["-22221448/25725".to_string()],
             ]
+        );
+    }
+
+    #[test]
+    fn split_bundle_half_sector_descendant_profile_preserves_z_levels() {
+        let profiles = split_bundle_kp112_mirror_map_half_sector_descendant_profiles(2, 4);
+        assert_eq!(profiles.len(), 2);
+        assert_eq!(
+            profiles[0]
+                .iter()
+                .map(|entry| entry.inverse_z_power.as_str())
+                .collect::<Vec<_>>(),
+            vec!["2", "3", "4"]
+        );
+        assert_eq!(profiles[0][0].status, "dual_basis_normalized_zero");
+        assert_eq!(
+            profiles[0][0].dual_basis_coefficients,
+            Some(vec!["0".to_string()])
+        );
+        assert_eq!(profiles[0][1].status, "dual_basis_normalized_nonzero");
+        assert_eq!(
+            profiles[0][1].dual_basis_coefficients,
+            Some(vec!["2".to_string()])
+        );
+        assert_eq!(
+            profiles[1][1].dual_basis_coefficients,
+            Some(vec!["-322/27".to_string()])
         );
     }
 }
