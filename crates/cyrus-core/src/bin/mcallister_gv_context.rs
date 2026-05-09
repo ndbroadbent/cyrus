@@ -514,6 +514,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_missing_input_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_vs_adjacent_canonical_factor_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_origin_split_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_nearest_support_best_candidate_count_counts:
@@ -17938,6 +17940,10 @@ fn build_report(
         unresolved_generator_weighted_p2_twisted_ifunction_missing_input_counts(
             &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
         );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_vs_adjacent_canonical_factor_status_counts =
+        unresolved_generator_weighted_p2_twisted_ifunction_split_vs_adjacent_canonical_factor_status_counts(
+            &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
+        );
     let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_origin_split_status_counts =
         unresolved_generator_weighted_p2_origin_split_status_counts(
             &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
@@ -19414,6 +19420,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_readiness_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_missing_input_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_vs_adjacent_canonical_factor_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_origin_split_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_nearest_support_best_candidate_count_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_nearest_support_best_known_qn_history_status_counts,
@@ -21673,6 +21680,22 @@ fn unresolved_generator_weighted_p2_twisted_ifunction_missing_input_counts(
             .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_missing_inputs
         {
             *counts.entry(input.clone()).or_insert(0) += 1;
+        }
+    }
+    counts
+}
+
+fn unresolved_generator_weighted_p2_twisted_ifunction_split_vs_adjacent_canonical_factor_status_counts(
+    summaries: &[LocalCygvUnresolvedChamberGeneratorSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        for profile in &summary
+            .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_degree_profile_sample
+        {
+            *counts
+                .entry(profile.split_vs_adjacent_canonical_factor_status.clone())
+                .or_insert(0) += 1;
         }
     }
     counts
