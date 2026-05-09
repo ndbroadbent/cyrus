@@ -4471,6 +4471,13 @@ the same conclusion at top level for unique current-chamber unresolved
 generators:
 `local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_origin_split_status_counts =
 {"weighted_p2_rank_three_origin_included_zero_degree_splits_mix_base_bundle_and_violate_origin_contract":1}`.
+The aggregate now also serializes the corresponding top-level blocker counts
+for support-reflexivity, selected weighted-`P2` phase, source-model status,
+base-tensor status, and numerical-GV status. These fields make the remaining
+rank-three obstruction explicit as a visible local CY5 phase requiring a
+codimension-2/twisted/qN source history, fractional `H^2=1/2` tensor
+normalization, and non-reflexive six-point support, rather than just a failed
+origin-included split.
 A direct CYTools/PALP check of the same six support coordinates is negative
 too: `Polytope(pts)` is four-dimensional with six points but
 `is_reflexive=False`, and `nef_partitions(codim=2)` stops with

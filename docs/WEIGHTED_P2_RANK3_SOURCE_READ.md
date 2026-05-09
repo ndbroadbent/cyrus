@@ -114,6 +114,16 @@ So the zero-degree balanced splits are not clean base-vs-bundle phase
 separations. They mix base and bundle roles and still include the origin in a
 nef part, which keeps them diagnostic-only.
 
+The current-chamber unresolved-generator report now promotes the important
+blocker classifications to top-level unique-generator aggregate counts, not
+just sample fields. In addition to the origin-split status, the report counts
+the selected weighted-`P2` phase, visible source-model status, fractional
+base-tensor status, numerical-GV status, and support-reflexivity precondition.
+For this row those aggregates should expose the same obstruction in one place:
+selected base phase, visible local CY5 rather than CY3, required codimension
+`2`, fractional `H^2=1/2` tensor normalization, and non-reflexive support with
+the origin as a hull vertex.
+
 A direct CYTools/PALP probe of the same six support coordinates is also
 negative. With experimental CYTools features enabled, `Polytope(pts)` reports
 dimension `4`, point count `6`, and `is_reflexive=False`; calling

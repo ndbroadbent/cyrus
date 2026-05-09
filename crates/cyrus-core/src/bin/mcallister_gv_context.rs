@@ -490,6 +490,16 @@ struct ContextReport {
         usize,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_occurrence_count:
         usize,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_support_reflexivity_precondition_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_phase_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_source_model_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_base_tensor_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_numerical_gv_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_origin_split_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample:
@@ -17574,6 +17584,43 @@ fn build_report(
             .iter()
             .map(|summary| summary.occurrence_count)
             .sum();
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_support_reflexivity_precondition_status_counts =
+        unresolved_generator_optional_status_counts(
+            &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
+            |summary| {
+                summary
+                    .local_toric_complete_intersection_support_polytope_reflexivity_precondition_status
+                    .as_deref()
+            },
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_phase_status_counts =
+        unresolved_generator_status_counts(
+            &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
+            |summary| &summary.local_toric_weighted_p2_rank_three_phase_status,
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_source_model_status_counts =
+        unresolved_generator_status_counts(
+            &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
+            |summary| &summary.local_toric_weighted_p2_rank_three_source_model_status,
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_base_tensor_status_counts =
+        unresolved_generator_optional_status_counts(
+            &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
+            |summary| {
+                summary
+                    .local_toric_weighted_p2_rank_three_base_tensor_status
+                    .as_deref()
+            },
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_numerical_gv_status_counts =
+        unresolved_generator_optional_status_counts(
+            &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
+            |summary| {
+                summary
+                    .local_toric_weighted_p2_rank_three_numerical_gv_status
+                    .as_deref()
+            },
+        );
     let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_origin_split_status_counts =
         unresolved_generator_weighted_p2_origin_split_status_counts(
             &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
@@ -19012,6 +19059,11 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_generator_ckyz_kind_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_unique_count,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_occurrence_count,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_support_reflexivity_precondition_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_phase_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_source_model_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_base_tensor_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_numerical_gv_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_origin_split_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
         local_cygv_source_resolution_star_union_current_chamber_decomposition_term_context_status_counts,
@@ -21117,17 +21169,44 @@ fn unresolved_chamber_generator_summaries(
     summaries
 }
 
+fn unresolved_generator_status_counts<F>(
+    summaries: &[LocalCygvUnresolvedChamberGeneratorSummary],
+    status: F,
+) -> BTreeMap<String, usize>
+where
+    F: Fn(&LocalCygvUnresolvedChamberGeneratorSummary) -> &str,
+{
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts.entry(status(summary).to_string()).or_insert(0) += 1;
+    }
+    counts
+}
+
+fn unresolved_generator_optional_status_counts<F>(
+    summaries: &[LocalCygvUnresolvedChamberGeneratorSummary],
+    status: F,
+) -> BTreeMap<String, usize>
+where
+    F: Fn(&LocalCygvUnresolvedChamberGeneratorSummary) -> Option<&str>,
+{
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        if let Some(status) = status(summary) {
+            *counts.entry(status.to_string()).or_insert(0) += 1;
+        }
+    }
+    counts
+}
+
 fn unresolved_generator_weighted_p2_origin_split_status_counts(
     summaries: &[LocalCygvUnresolvedChamberGeneratorSummary],
 ) -> BTreeMap<String, usize> {
-    let mut counts = BTreeMap::new();
-    for summary in summaries {
-        let status = &summary
+    unresolved_generator_status_counts(summaries, |summary| {
+        &summary
             .local_toric_weighted_p2_rank_three_origin_included_zero_degree_split_summary
-            .status;
-        *counts.entry(status.clone()).or_insert(0) += 1;
-    }
-    counts
+            .status
+    })
 }
 
 fn chamber_decomposition_term_contexts(

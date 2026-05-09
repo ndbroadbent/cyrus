@@ -1370,6 +1370,13 @@ selected weighted-`P2` base/bundle phase: all are
 so they are not clean base-vs-bundle phase factors. The current-chamber
 unresolved-generator aggregate now exposes this as a top-level unique-generator
 status count.
+The same unresolved-generator aggregate now also counts the selected
+weighted-`P2` phase, visible source-model status, fractional base-tensor
+status, numerical-GV status, and support-reflexivity precondition, so the
+remaining blocker is visible without mining sample rows: selected base phase,
+local CY5 source model not promotable as a CY3 GV source, required codimension
+`2`/insertion history, stack/source tensor normalization for `H^2=1/2`, and
+`support_polytope_not_reflexive_origin_is_hull_vertex`.
 The direct CYTools/PALP probe is negative as well: the visible six-point
 support is not reflexive, so PALP refuses codimension-2 nef partitions on that
 polytope.
