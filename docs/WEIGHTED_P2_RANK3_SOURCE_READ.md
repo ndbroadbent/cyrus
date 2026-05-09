@@ -159,6 +159,7 @@ Relevant file:
 
 ```text
 cygv-0.1.2/src/fundamental_period.rs
+cygv-0.1.2/src/hkty.rs
 ```
 
 `compute_omega` infers
@@ -172,6 +173,9 @@ cy_dim      = ambient_dim - cy_codim
 and rejects `cy_dim < 3`. Cyrus' compact wrapper also converts intersection
 numbers to `i32`, so the current compact `cygv` path cannot accept a fractional
 one-parameter tensor such as the naive `P(1,1,2)` hyperplane square `1/2`.
+The regression `cygv_explicit_semigroup_rejects_fractional_intersection_tensor`
+pins this boundary: fractional `H^2` is rejected before HKTY handoff as a
+non-integral intersection tensor.
 
 For the six-point rank-one visible charge row, the no-nefpart compact wrapper
 sees `ambient_dim = 5` and `cy_dim = 4`, not a CY3. A codimension-2 nef

@@ -13601,6 +13601,32 @@ mod tests {
     }
 
     #[test]
+    fn cygv_explicit_semigroup_rejects_fractional_intersection_tensor() {
+        let mut intnums = Intersection::new(1);
+        intnums.set(
+            0,
+            0,
+            0,
+            crate::types::rational::Rational::<crate::types::Finite>::new(Rational::from_signeds(
+                1, 2,
+            )),
+        );
+
+        let err = compute_gv_invariants_with_explicit_semigroup_qn_trace(
+            &[vec![0], vec![1]],
+            &[1],
+            &[vec![1, 1, 1, 1, 1]],
+            &intnums,
+        )
+        .unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains("intersection number is not integral")
+        );
+    }
+
+    #[test]
     fn provided_generator_gv_path_converts_cygv_semigroup_errors_to_result() {
         let mut intnums = Intersection::new(1);
         set_intersection_i64(&mut intnums, 0, 0, 0, 1);

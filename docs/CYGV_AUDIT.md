@@ -59,7 +59,11 @@ and compact qN history. The twisted route now has a computed readiness surface:
 CY5 virtual dimension requires a complex codimension-`2` insertion, the visible
 candidate is the weighted-base `H^2` class, and promotion is blocked on
 stack-normalized `H^2`/orbifold-sector pairing data, a chamber certificate, and
-source qN history.
+source qN history. The core regression
+`cygv_explicit_semigroup_rejects_fractional_intersection_tensor` also pins the
+current wrapper boundary: the upstream HKTY API takes integral `i32`
+intersection numbers, so the fractional `H^2=1/2` tensor cannot be silently
+fed to compact `cygv`.
 
 ## CYTools Contract
 
