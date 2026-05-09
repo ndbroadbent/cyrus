@@ -502,6 +502,14 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_origin_split_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_nearest_support_best_candidate_count_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_nearest_support_best_known_qn_history_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_nearest_support_best_source_class_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_nearest_support_best_global_secondary_height_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample:
         Vec<LocalCygvUnresolvedChamberGeneratorSummary>,
     local_cygv_source_resolution_star_union_current_chamber_decomposition_term_context_status_counts:
@@ -1430,16 +1438,25 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
     nearest_support_best_overlap_count: Option<usize>,
     nearest_support_best_missing_point_count: Option<usize>,
     nearest_support_best_extra_point_count: Option<usize>,
+    nearest_support_best_candidate_count: Option<usize>,
+    nearest_support_best_known_qn_history_status_counts: BTreeMap<String, usize>,
+    nearest_support_best_source_class_status_counts: BTreeMap<String, usize>,
+    nearest_support_best_global_secondary_height_status_counts: BTreeMap<String, usize>,
 }
 
 #[derive(Clone, Debug, Serialize)]
 struct LocalCygvChamberGeneratorSupportOverlapDiagnostic {
     status: String,
     sample_limit: usize,
+    candidate_count: usize,
     best_overlap_count: Option<usize>,
     best_missing_point_count: Option<usize>,
     best_extra_point_count: Option<usize>,
     best_symmetric_difference_count: Option<usize>,
+    best_candidate_count: Option<usize>,
+    best_candidate_known_qn_history_status_counts: BTreeMap<String, usize>,
+    best_candidate_source_class_status_counts: BTreeMap<String, usize>,
+    best_candidate_global_secondary_height_status_counts: BTreeMap<String, usize>,
     sample: Vec<LocalCygvChamberGeneratorSupportOverlapSample>,
 }
 
@@ -17625,6 +17642,31 @@ fn build_report(
         unresolved_generator_weighted_p2_origin_split_status_counts(
             &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
         );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_nearest_support_best_candidate_count_counts =
+        optional_usize_count_counts(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| summary.nearest_support_best_candidate_count),
+            "nearest_support_best_candidate_count_missing",
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_nearest_support_best_known_qn_history_status_counts =
+        merge_count_maps(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| &summary.nearest_support_best_known_qn_history_status_counts),
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_nearest_support_best_source_class_status_counts =
+        merge_count_maps(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| &summary.nearest_support_best_source_class_status_counts),
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_nearest_support_best_global_secondary_height_status_counts =
+        merge_count_maps(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| &summary.nearest_support_best_global_secondary_height_status_counts),
+        );
     let local_cygv_source_resolution_star_union_current_chamber_decomposition_term_context_status_counts =
         chamber_decomposition_term_context_status_counts(chamber_decomposition_term_contexts(
             &local_cygv_source_resolution_hint_sample,
@@ -19065,6 +19107,10 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_base_tensor_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_numerical_gv_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_origin_split_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_nearest_support_best_candidate_count_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_nearest_support_best_known_qn_history_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_nearest_support_best_source_class_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_nearest_support_best_global_secondary_height_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
         local_cygv_source_resolution_star_union_current_chamber_decomposition_term_context_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_decomposition_term_degree_counts,
@@ -21139,6 +21185,21 @@ fn unresolved_chamber_generator_summaries(
                     nearest_support_best_extra_point_count: context
                         .degree_bounded_support_overlap_diagnostic
                         .best_extra_point_count,
+                    nearest_support_best_candidate_count: context
+                        .degree_bounded_support_overlap_diagnostic
+                        .best_candidate_count,
+                    nearest_support_best_known_qn_history_status_counts: context
+                        .degree_bounded_support_overlap_diagnostic
+                        .best_candidate_known_qn_history_status_counts
+                        .clone(),
+                    nearest_support_best_source_class_status_counts: context
+                        .degree_bounded_support_overlap_diagnostic
+                        .best_candidate_source_class_status_counts
+                        .clone(),
+                    nearest_support_best_global_secondary_height_status_counts: context
+                        .degree_bounded_support_overlap_diagnostic
+                        .best_candidate_global_secondary_height_status_counts
+                        .clone(),
                 }
             });
             entry.occurrence_count += 1;
@@ -26670,12 +26731,27 @@ fn chamber_generator_support_overlap_diagnostic_not_run(
     LocalCygvChamberGeneratorSupportOverlapDiagnostic {
         status: format!("not_run_{reason}"),
         sample_limit: CHAMBER_GENERATOR_SUPPORT_OVERLAP_SAMPLE_LIMIT,
+        candidate_count: 0,
         best_overlap_count: None,
         best_missing_point_count: None,
         best_extra_point_count: None,
         best_symmetric_difference_count: None,
+        best_candidate_count: None,
+        best_candidate_known_qn_history_status_counts: BTreeMap::new(),
+        best_candidate_source_class_status_counts: BTreeMap::new(),
+        best_candidate_global_secondary_height_status_counts: BTreeMap::new(),
         sample: Vec::new(),
     }
+}
+
+fn support_overlap_sample_status_counts<'a>(
+    statuses: impl IntoIterator<Item = &'a str>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for status in statuses {
+        *counts.entry(status.to_string()).or_insert(0usize) += 1;
+    }
+    counts
 }
 
 fn chamber_generator_degree_bounded_support_overlap_diagnostic(
@@ -26687,10 +26763,15 @@ fn chamber_generator_degree_bounded_support_overlap_diagnostic(
     let blocked = |status: String| LocalCygvChamberGeneratorSupportOverlapDiagnostic {
         status,
         sample_limit,
+        candidate_count: 0,
         best_overlap_count: None,
         best_missing_point_count: None,
         best_extra_point_count: None,
         best_symmetric_difference_count: None,
+        best_candidate_count: None,
+        best_candidate_known_qn_history_status_counts: BTreeMap::new(),
+        best_candidate_source_class_status_counts: BTreeMap::new(),
+        best_candidate_global_secondary_height_status_counts: BTreeMap::new(),
         sample: Vec::new(),
     };
     if point_relation_nonzero.is_empty() {
@@ -26803,15 +26884,47 @@ fn chamber_generator_degree_bounded_support_overlap_diagnostic(
     let best_missing_point_count = Some(best.missing_point_count);
     let best_extra_point_count = Some(best.extra_point_count);
     let best_symmetric_difference_count = Some(best.symmetric_difference_count);
+    let best_candidates = candidates
+        .iter()
+        .take_while(|candidate| {
+            candidate.symmetric_difference_count == best.symmetric_difference_count
+                && candidate.missing_point_count == best.missing_point_count
+                && candidate.extra_point_count == best.extra_point_count
+                && candidate.overlap_count == best.overlap_count
+        })
+        .collect::<Vec<_>>();
+    let best_candidate_count = Some(best_candidates.len());
+    let best_candidate_known_qn_history_status_counts = support_overlap_sample_status_counts(
+        best_candidates
+            .iter()
+            .map(|candidate| candidate.known_qn_history_status.as_str()),
+    );
+    let best_candidate_source_class_status_counts = optional_status_counts(
+        best_candidates
+            .iter()
+            .map(|candidate| candidate.source_class_status.as_deref()),
+        "missing_source_class_status",
+    );
+    let best_candidate_global_secondary_height_status_counts = support_overlap_sample_status_counts(
+        best_candidates
+            .iter()
+            .map(|candidate| candidate.global_secondary_height_status.as_str()),
+    );
+    let candidate_count = candidates.len();
     candidates.truncate(sample_limit);
 
     LocalCygvChamberGeneratorSupportOverlapDiagnostic {
         status: "support_overlap_nearest_degree_bounded_candidates_sampled".to_string(),
         sample_limit,
+        candidate_count,
         best_overlap_count,
         best_missing_point_count,
         best_extra_point_count,
         best_symmetric_difference_count,
+        best_candidate_count,
+        best_candidate_known_qn_history_status_counts,
+        best_candidate_source_class_status_counts,
+        best_candidate_global_secondary_height_status_counts,
         sample: candidates,
     }
 }
@@ -31212,6 +31325,18 @@ fn optional_status_counts<'a>(
         *counts
             .entry(status.unwrap_or(missing_status).to_string())
             .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn merge_count_maps<'a>(
+    maps: impl IntoIterator<Item = &'a BTreeMap<String, usize>>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for map in maps {
+        for (key, value) in map {
+            *counts.entry(key.clone()).or_insert(0usize) += value;
+        }
     }
     counts
 }
@@ -35684,6 +35809,29 @@ mod tests {
         assert_eq!(diagnostic.best_missing_point_count, Some(0));
         assert_eq!(diagnostic.best_extra_point_count, Some(0));
         assert_eq!(diagnostic.best_symmetric_difference_count, Some(0));
+        assert_eq!(diagnostic.candidate_count, 2);
+        assert_eq!(diagnostic.best_candidate_count, Some(1));
+        assert_eq!(
+            diagnostic
+                .best_candidate_known_qn_history_status_counts
+                .get("unknown_not_toric_covered")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(
+            diagnostic
+                .best_candidate_source_class_status_counts
+                .get("source_ray_not_toric_covered")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(
+            diagnostic
+                .best_candidate_global_secondary_height_status_counts
+                .get("global_basis_secondary_height_missing_vector")
+                .copied(),
+            Some(1)
+        );
         assert_eq!(diagnostic.sample.len(), 2);
         assert_eq!(diagnostic.sample[0].missing_points, Vec::<usize>::new());
         assert_eq!(diagnostic.sample[0].extra_points, Vec::<usize>::new());

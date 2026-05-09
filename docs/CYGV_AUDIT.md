@@ -4499,3 +4499,14 @@ with toric/source GV `1` and are also on the positive height side. The closest
 candidate still misses three six-point support points and adds point `56`, so
 these known toric rows are useful wall-neighborhood evidence but not an exact
 source-domain replacement.
+The target-filtered v2 reports
+`/tmp/cyrus_six_point_overlap_annotations_target7_v2.json` and
+`/tmp/cyrus_six_point_overlap_annotations_target8_v2.json` now count all best
+support-overlap candidates before truncating the displayed sample. For each
+target the best-candidate count is exactly `1`, with support
+overlap/missing/extra counts `3/3/1`; the best-candidate status maps are
+`known_nonzero_toric_gv:1`, `source_ray_known_toric_covered:1`, and
+`global_basis_secondary_height_positive:1`. This rules out a hidden exact
+degree-`2` support-overlap replacement in the best layer: the nearest toric
+neighbor is unique and positive-height, but it is still only a wall-neighborhood
+row, not the missing six-point source/chamber qN history.

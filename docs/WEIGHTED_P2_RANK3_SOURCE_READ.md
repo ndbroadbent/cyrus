@@ -223,6 +223,10 @@ source model or insertion history is specified.
   history.
 - Do not use the McAllister saved GV row to choose the missing tensor or branch.
   That would be downstream replay.
+- Do not replace the six-point source by the nearest degree-2 toric overlap
+  row. The target-filtered overlap reports show a unique best toric neighbor on
+  the positive height side for targets 7 and 8, but it still misses three of
+  the six support points and adds an external point.
 
 ## Next Source Task
 

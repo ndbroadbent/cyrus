@@ -1394,6 +1394,15 @@ six-point row, all five sampled nearest degree-`2` neighbors are known toric
 GV `1` rows on the positive height side, but the closest still misses three
 target support points and adds point `56`. They are wall-neighborhood
 evidence, not source-domain replacements.
+The follow-up target-filtered reports
+`/tmp/cyrus_six_point_overlap_annotations_target7_v2.json` and
+`/tmp/cyrus_six_point_overlap_annotations_target8_v2.json` make the best
+overlap layer exact rather than sample-limited: each target has exactly one
+best candidate, with overlap/missing/extra counts `3/3/1`; that candidate is
+`known_nonzero_toric_gv`, `source_ray_known_toric_covered`, and
+`global_basis_secondary_height_positive`. Thus the nearest toric wall
+neighbor is unique on both sides, but it still omits half of the six-point
+rank-three support and cannot be promoted into the missing source domain.
 
 ## Next Concrete Action
 
