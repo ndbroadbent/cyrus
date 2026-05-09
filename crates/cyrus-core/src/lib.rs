@@ -185,7 +185,8 @@ pub use intersection::{compute_ambient_intersections_cytools, compute_intersecti
 pub use local_orbifold::{
     HalfSectorDescendantReadout, HalfSectorFirstNonzeroDescendant,
     OrdinarySectorDualBasisP2ZReadout, WeightedP2RankThreeChenRuanSourceBasisReadout,
-    WeightedP2RankThreeSplitBundleSourceReadiness, kp112_canonical_b_table_values,
+    WeightedP2RankThreeSplitBundleSourceReadiness,
+    WeightedP2RankThreeTwistedIfunctionDegreeProfile, kp112_canonical_b_table_values,
     kp112_canonical_c_table_values, kp112_half_sector_dual_basis_descendant_profiles,
     kp112_half_sector_first_nonzero_descendants, kp112_half_sector_primary_lambda_coefficients,
     kp112_ordinary_p_primary_lambda_coefficients,
@@ -197,6 +198,7 @@ pub use local_orbifold::{
     weighted_p2_ordinary_dual_basis_p2_z_readout_profile,
     weighted_p2_rank_three_split_bundle_chen_ruan_source_basis_readout,
     weighted_p2_rank_three_split_bundle_source_readiness,
+    weighted_p2_rank_three_twisted_ifunction_degree_profiles,
 };
 pub mod kklt;
 

@@ -141,6 +141,92 @@ pub struct WeightedP2RankThreeSplitBundleSourceReadiness {
     pub twisted_vector_bundle_ifunction_missing_inputs: Vec<String>,
 }
 
+/// Exact degree-by-degree CCIT I-function diagnostic for the weighted-`P2`
+/// rank-three split bundle.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct WeightedP2RankThreeTwistedIfunctionDegreeProfile {
+    /// Twice the curve degree. Odd values are half-degree twisted sectors.
+    pub degree_twice: i64,
+    /// Sector classification for this degree.
+    pub sector_status: String,
+    /// Weighted-base denominator factor counts.
+    pub base_denominator_factor_counts: Vec<i64>,
+    /// Split-bundle numerator factor counts.
+    pub bundle_numerator_factor_counts: Vec<i64>,
+    /// Number of non-equivariant zero factors in the split-bundle numerator.
+    pub numerator_zero_factor_order: i64,
+    /// Numerator factor count in the adjacent canonical `K_P(1,1,2)` model.
+    pub adjacent_canonical_numerator_factor_count: i64,
+    /// Zero-factor order in the adjacent canonical model.
+    pub adjacent_canonical_numerator_zero_factor_order: i64,
+    /// Comparison against the adjacent canonical source.
+    pub split_vs_adjacent_canonical_factor_status: String,
+    /// Naive non-equivariant insertion coefficient, when meaningful.
+    pub split_non_equivariant_candidate_insertion_coefficient: Option<String>,
+    /// Status for the naive non-equivariant insertion coefficient.
+    pub split_non_equivariant_candidate_insertion_coefficient_status: String,
+    /// Truncated non-equivariant numerator coefficients.
+    pub split_non_equivariant_bundle_numerator_truncated_coefficients: Option<Vec<String>>,
+    /// Status for the truncated non-equivariant numerator.
+    pub split_non_equivariant_bundle_numerator_truncation_status: String,
+    /// Equivariant candidate insertion lambda-polynomial.
+    pub split_equivariant_candidate_insertion_lambda_polynomial: Option<Vec<String>>,
+    /// First nonzero lambda order of the equivariant candidate insertion.
+    pub split_equivariant_candidate_insertion_lambda_order: Option<i64>,
+    /// Status for the equivariant candidate insertion.
+    pub split_equivariant_candidate_insertion_status: String,
+    /// Numerator-only dual-basis `p^2` lambda-polynomial.
+    pub split_equivariant_dual_basis_p2_numerator_lambda_polynomial: Option<Vec<String>>,
+    /// First nonzero lambda order of the numerator-only dual-basis readout.
+    pub split_equivariant_dual_basis_p2_numerator_lambda_order: Option<i64>,
+    /// Status for the numerator-only dual-basis readout.
+    pub split_equivariant_dual_basis_p2_readout_status: String,
+    /// Weighted-base denominator constant for the scalar hypergeometric readout.
+    pub split_equivariant_dual_basis_p2_hypergeometric_denominator_constant: Option<String>,
+    /// Scalar-denominator hypergeometric lambda-polynomial.
+    pub split_equivariant_dual_basis_p2_hypergeometric_lambda_polynomial: Option<Vec<String>>,
+    /// First nonzero lambda order after scalar denominator division.
+    pub split_equivariant_dual_basis_p2_hypergeometric_lambda_order: Option<i64>,
+    /// Status for the scalar-denominator hypergeometric readout.
+    pub split_equivariant_dual_basis_p2_hypergeometric_status: String,
+    /// Full weighted-base denominator truncated through the requested `p` power.
+    pub split_equivariant_full_hypergeometric_denominator_truncated_coefficients:
+        Option<Vec<String>>,
+    /// Truncated inverse of the full weighted-base denominator.
+    pub split_equivariant_full_hypergeometric_inverse_denominator_truncated_coefficients:
+        Option<Vec<String>>,
+    /// Full truncated quotient grouped by `p` power, then lambda power.
+    pub split_equivariant_full_hypergeometric_truncated_coefficients: Option<Vec<Vec<String>>>,
+    /// Full-denominator dual-basis `p^2` lambda-polynomial.
+    pub split_equivariant_full_hypergeometric_dual_basis_p2_lambda_polynomial: Option<Vec<String>>,
+    /// First nonzero lambda order of the full-denominator dual-basis readout.
+    pub split_equivariant_full_hypergeometric_dual_basis_p2_lambda_order: Option<i64>,
+    /// Status for the full-denominator dual-basis readout.
+    pub split_equivariant_full_hypergeometric_status: String,
+    /// Primary `z^-2` full-denominator dual-basis readout.
+    pub split_equivariant_full_hypergeometric_dual_basis_p2_primary_z2_lambda_polynomial:
+        Option<Vec<String>>,
+    /// First nonzero inverse `z` power in the full-denominator dual-basis readout.
+    pub split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_inverse_power:
+        Option<i64>,
+    /// First nonzero lambda-polynomial in the full-denominator `z` readout.
+    pub split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_polynomial:
+        Option<Vec<String>>,
+    /// First nonzero lambda order in the full-denominator `z` readout.
+    pub split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_order:
+        Option<i64>,
+    /// Non-equivariant-limit status for the first nonzero `z` readout.
+    pub split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_non_equivariant_limit_status:
+        String,
+    /// Status for the full-denominator `z` readout.
+    pub split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status: String,
+    /// Whether scalar mirror-map reparametrization can promote a primary.
+    pub split_equivariant_full_hypergeometric_dual_basis_p2_scalar_mirror_map_primary_status:
+        String,
+    /// Visibility status of the natural codimension-two insertion.
+    pub candidate_insertion_visibility_status: String,
+}
+
 /// Compute the reusable source-readiness boundary for a weighted-`P2`
 /// rank-three split bundle.
 pub fn weighted_p2_rank_three_split_bundle_source_readiness(
@@ -281,6 +367,213 @@ pub fn weighted_p2_rank_three_split_bundle_source_readiness(
         twisted_vector_bundle_ifunction_readiness_status,
         twisted_vector_bundle_ifunction_missing_inputs,
     })
+}
+
+/// Compute exact degree profiles for the weighted-`P2` rank-three split-bundle
+/// I-function diagnostic.
+pub fn weighted_p2_rank_three_twisted_ifunction_degree_profiles(
+    base_weights: &[i64],
+    bundle_degrees: &[i64],
+    max_degree_twice: i64,
+    required_insertion_complex_codimension: Option<i64>,
+) -> Vec<WeightedP2RankThreeTwistedIfunctionDegreeProfile> {
+    let adjacent_canonical_degree = base_weights.iter().sum::<i64>();
+    (1..=max_degree_twice)
+        .map(|degree_twice| {
+            let base_denominator_factor_counts = base_weights
+                .iter()
+                .map(|&weight| ceil_positive_half_product(weight, degree_twice))
+                .collect::<Vec<_>>();
+            let bundle_numerator_factor_counts = bundle_degrees
+                .iter()
+                .map(|&degree| floor_positive_half_product(degree, degree_twice))
+                .collect::<Vec<_>>();
+            let numerator_zero_factor_order = bundle_degrees
+                .iter()
+                .filter(|&&degree| degree * degree_twice > 0 && (degree * degree_twice) % 2 == 0)
+                .count() as i64;
+            let adjacent_canonical_numerator_factor_count =
+                floor_positive_half_product(adjacent_canonical_degree, degree_twice);
+            let adjacent_canonical_numerator_zero_factor_order =
+                i64::from(adjacent_canonical_degree * degree_twice > 0
+                    && (adjacent_canonical_degree * degree_twice) % 2 == 0);
+            let sector_status = if degree_twice % 2 == 0 {
+                "weighted_p2_rank_three_twisted_ifunction_untwisted_integer_degree_sector"
+            } else {
+                "weighted_p2_rank_three_twisted_ifunction_half_degree_twisted_sector"
+            }
+            .to_string();
+            let split_vs_adjacent_canonical_factor_status = match (
+                degree_twice % 2 == 0,
+                numerator_zero_factor_order.cmp(&adjacent_canonical_numerator_zero_factor_order),
+            ) {
+                (false, std::cmp::Ordering::Equal) => {
+                    "weighted_p2_rank_three_split_matches_adjacent_canonical_zero_order_but_twisted_sector_needs_pairing"
+                }
+                (true, std::cmp::Ordering::Greater) => {
+                    "weighted_p2_rank_three_split_integer_zero_order_exceeds_adjacent_canonical_kp112_so_p2_table_not_reusable"
+                }
+                (_, std::cmp::Ordering::Equal) => {
+                    "weighted_p2_rank_three_split_zero_order_matches_adjacent_canonical"
+                }
+                (_, std::cmp::Ordering::Less) => {
+                    "weighted_p2_rank_three_split_zero_order_below_adjacent_canonical_requires_source_check"
+                }
+                (_, std::cmp::Ordering::Greater) => {
+                    "weighted_p2_rank_three_split_zero_order_exceeds_adjacent_canonical_requires_equivariant_normalization"
+                }
+            }
+            .to_string();
+            let (
+                split_non_equivariant_candidate_insertion_coefficient,
+                split_non_equivariant_candidate_insertion_coefficient_status,
+            ) = split_non_equivariant_candidate_insertion_coefficient_status(
+                degree_twice,
+                numerator_zero_factor_order,
+                required_insertion_complex_codimension,
+            );
+            let (
+                split_non_equivariant_bundle_numerator_truncated_coefficients,
+                split_non_equivariant_bundle_numerator_truncation_status,
+            ) = split_non_equivariant_bundle_numerator_truncation_status(
+                bundle_degrees,
+                degree_twice,
+                required_insertion_complex_codimension,
+            );
+            let (
+                split_equivariant_candidate_insertion_lambda_polynomial,
+                split_equivariant_candidate_insertion_lambda_order,
+                split_equivariant_candidate_insertion_status,
+            ) = split_equivariant_candidate_insertion_status(
+                bundle_degrees,
+                degree_twice,
+                required_insertion_complex_codimension,
+            );
+            let (
+                split_equivariant_dual_basis_p2_numerator_lambda_polynomial,
+                split_equivariant_dual_basis_p2_numerator_lambda_order,
+                split_equivariant_dual_basis_p2_readout_status,
+            ) = split_equivariant_dual_basis_p2_readout_status(
+                bundle_degrees,
+                degree_twice,
+                required_insertion_complex_codimension,
+            );
+            let (
+                split_equivariant_dual_basis_p2_hypergeometric_denominator_constant,
+                split_equivariant_dual_basis_p2_hypergeometric_lambda_polynomial,
+                split_equivariant_dual_basis_p2_hypergeometric_lambda_order,
+                split_equivariant_dual_basis_p2_hypergeometric_status,
+            ) = split_equivariant_dual_basis_p2_hypergeometric_status(
+                base_weights,
+                bundle_degrees,
+                degree_twice,
+                required_insertion_complex_codimension,
+            );
+            let (
+                split_equivariant_full_hypergeometric_denominator_truncated_coefficients,
+                split_equivariant_full_hypergeometric_inverse_denominator_truncated_coefficients,
+                split_equivariant_full_hypergeometric_truncated_coefficients,
+                split_equivariant_full_hypergeometric_dual_basis_p2_lambda_polynomial,
+                split_equivariant_full_hypergeometric_dual_basis_p2_lambda_order,
+                split_equivariant_full_hypergeometric_status,
+            ) = split_equivariant_full_hypergeometric_status(
+                base_weights,
+                bundle_degrees,
+                degree_twice,
+                required_insertion_complex_codimension,
+                required_insertion_complex_codimension
+                    .and_then(|codim| usize::try_from(codim).ok())
+                    .unwrap_or(2),
+            );
+            let (
+                split_equivariant_full_hypergeometric_dual_basis_p2_primary_z2_lambda_polynomial,
+                split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_inverse_power,
+                split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_polynomial,
+                split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_order,
+                split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_non_equivariant_limit_status,
+                split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status,
+            ) = split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status(
+                base_weights,
+                bundle_degrees,
+                degree_twice,
+                required_insertion_complex_codimension,
+            );
+            let split_equivariant_full_hypergeometric_dual_basis_p2_scalar_mirror_map_primary_status =
+                split_equivariant_full_hypergeometric_dual_basis_p2_scalar_mirror_map_primary_status(
+                    base_weights,
+                    bundle_degrees,
+                    degree_twice,
+                    required_insertion_complex_codimension,
+                );
+            let candidate_insertion_visibility_status = match (
+                degree_twice % 2 == 0,
+                required_insertion_complex_codimension,
+            ) {
+                (false, _) => {
+                    "weighted_p2_rank_three_twisted_ifunction_half_degree_requires_orbifold_sector_pairing"
+                        .to_string()
+                }
+                (true, Some(required_codim))
+                    if numerator_zero_factor_order > required_codim =>
+                {
+                    "weighted_p2_rank_three_twisted_ifunction_untwisted_zero_order_exceeds_required_insertion_codim_requires_equivariant_normalization"
+                        .to_string()
+                }
+                (true, Some(required_codim))
+                    if numerator_zero_factor_order == required_codim =>
+                {
+                    "weighted_p2_rank_three_twisted_ifunction_untwisted_zero_order_matches_required_insertion_codim"
+                        .to_string()
+                }
+                (true, Some(_)) => {
+                    "weighted_p2_rank_three_twisted_ifunction_untwisted_zero_order_below_required_insertion_codim_requires_higher_series_terms"
+                        .to_string()
+                }
+                (true, None) => {
+                    "weighted_p2_rank_three_twisted_ifunction_untwisted_insertion_codim_not_applicable"
+                        .to_string()
+                }
+            };
+            WeightedP2RankThreeTwistedIfunctionDegreeProfile {
+                degree_twice,
+                sector_status,
+                base_denominator_factor_counts,
+                bundle_numerator_factor_counts,
+                numerator_zero_factor_order,
+                adjacent_canonical_numerator_factor_count,
+                adjacent_canonical_numerator_zero_factor_order,
+                split_vs_adjacent_canonical_factor_status,
+                split_non_equivariant_candidate_insertion_coefficient,
+                split_non_equivariant_candidate_insertion_coefficient_status,
+                split_non_equivariant_bundle_numerator_truncated_coefficients,
+                split_non_equivariant_bundle_numerator_truncation_status,
+                split_equivariant_candidate_insertion_lambda_polynomial,
+                split_equivariant_candidate_insertion_lambda_order,
+                split_equivariant_candidate_insertion_status,
+                split_equivariant_dual_basis_p2_numerator_lambda_polynomial,
+                split_equivariant_dual_basis_p2_numerator_lambda_order,
+                split_equivariant_dual_basis_p2_readout_status,
+                split_equivariant_dual_basis_p2_hypergeometric_denominator_constant,
+                split_equivariant_dual_basis_p2_hypergeometric_lambda_polynomial,
+                split_equivariant_dual_basis_p2_hypergeometric_lambda_order,
+                split_equivariant_dual_basis_p2_hypergeometric_status,
+                split_equivariant_full_hypergeometric_denominator_truncated_coefficients,
+                split_equivariant_full_hypergeometric_inverse_denominator_truncated_coefficients,
+                split_equivariant_full_hypergeometric_truncated_coefficients,
+                split_equivariant_full_hypergeometric_dual_basis_p2_lambda_polynomial,
+                split_equivariant_full_hypergeometric_dual_basis_p2_lambda_order,
+                split_equivariant_full_hypergeometric_status,
+                split_equivariant_full_hypergeometric_dual_basis_p2_primary_z2_lambda_polynomial,
+                split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_inverse_power,
+                split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_polynomial,
+                split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_order,
+                split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_non_equivariant_limit_status,
+                split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status,
+                split_equivariant_full_hypergeometric_dual_basis_p2_scalar_mirror_map_primary_status,
+                candidate_insertion_visibility_status,
+            }
+        })
+        .collect()
 }
 
 /// Source-basis facts for the weighted-`P2` rank-three split bundle.
@@ -1169,6 +1462,862 @@ fn lambda_polynomial_has_nonzero_coefficient(polynomial: &[String]) -> bool {
     polynomial.iter().any(|coefficient| coefficient != "0")
 }
 
+fn split_non_equivariant_candidate_insertion_coefficient_status(
+    degree_twice: i64,
+    numerator_zero_factor_order: i64,
+    required_insertion_complex_codimension: Option<i64>,
+) -> (Option<String>, String) {
+    if degree_twice % 2 != 0 {
+        return (
+            None,
+            "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_p2_coefficient_readout"
+                .to_string(),
+        );
+    }
+    let Some(required_codimension) = required_insertion_complex_codimension else {
+        return (
+            None,
+            "weighted_p2_rank_three_split_non_equivariant_insertion_codim_not_applicable"
+                .to_string(),
+        );
+    };
+    match numerator_zero_factor_order.cmp(&required_codimension) {
+        std::cmp::Ordering::Greater => (
+            Some("0".to_string()),
+            "weighted_p2_rank_three_split_untwisted_non_equivariant_p2_coefficient_zero_before_mirror_map_due_to_excess_zero_order"
+                .to_string(),
+        ),
+        std::cmp::Ordering::Equal => (
+            None,
+            "weighted_p2_rank_three_split_untwisted_non_equivariant_p2_coefficient_requires_exact_factor_expansion"
+                .to_string(),
+        ),
+        std::cmp::Ordering::Less => (
+            None,
+            "weighted_p2_rank_three_split_untwisted_non_equivariant_p2_coefficient_requires_higher_series_terms"
+                .to_string(),
+        ),
+    }
+}
+
+fn split_non_equivariant_bundle_numerator_truncation_status(
+    bundle_degrees: &[i64],
+    degree_twice: i64,
+    required_insertion_complex_codimension: Option<i64>,
+) -> (Option<Vec<String>>, String) {
+    if degree_twice % 2 != 0 {
+        return (
+            None,
+            "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_bundle_numerator"
+                .to_string(),
+        );
+    }
+    let Some(required_codimension) = required_insertion_complex_codimension else {
+        return (
+            None,
+            "weighted_p2_rank_three_split_non_equivariant_bundle_numerator_codim_not_applicable"
+                .to_string(),
+        );
+    };
+    if required_codimension < 0 {
+        return (
+            None,
+            "weighted_p2_rank_three_split_non_equivariant_bundle_numerator_invalid_negative_codim"
+                .to_string(),
+        );
+    }
+    let coefficients = non_equivariant_split_bundle_numerator_truncated_coefficients(
+        bundle_degrees,
+        degree_twice,
+        required_codimension as usize,
+    );
+    let status = if coefficients[required_codimension as usize] == "0" {
+        "weighted_p2_rank_three_split_non_equivariant_bundle_numerator_candidate_codim_coefficient_zero"
+    } else {
+        "weighted_p2_rank_three_split_non_equivariant_bundle_numerator_candidate_codim_coefficient_nonzero_requires_denominator_and_mirror_map"
+    };
+    (Some(coefficients), status.to_string())
+}
+
+fn non_equivariant_split_bundle_numerator_truncated_coefficients(
+    bundle_degrees: &[i64],
+    degree_twice: i64,
+    max_power: usize,
+) -> Vec<String> {
+    assert_eq!(
+        degree_twice % 2,
+        0,
+        "non-equivariant untwisted sector has integer degree"
+    );
+    let degree = degree_twice / 2;
+    let mut coefficients = vec![Rational::from(0); max_power + 1];
+    coefficients[0] = Rational::from(1);
+    for &line_degree in bundle_degrees {
+        let factor_count = line_degree
+            .checked_mul(degree)
+            .expect("weighted P2 split bundle factor count fits i64");
+        for factor_offset in (-factor_count + 1)..=0 {
+            multiply_truncated_linear_factor(
+                &mut coefficients,
+                factor_offset,
+                -line_degree,
+                max_power,
+            );
+        }
+    }
+    rational_coefficients_to_strings(&coefficients)
+}
+
+fn multiply_truncated_linear_factor(
+    coefficients: &mut Vec<Rational>,
+    constant: i64,
+    linear: i64,
+    max_power: usize,
+) {
+    let mut next = vec![Rational::from(0); max_power + 1];
+    for power in 0..=max_power {
+        let coefficient = coefficients[power].clone();
+        if coefficient == Rational::from(0) {
+            continue;
+        }
+        next[power] += coefficient.clone() * rational_from_i64(constant);
+        if power < max_power {
+            next[power + 1] += coefficient * rational_from_i64(linear);
+        }
+    }
+    *coefficients = next;
+}
+
+fn split_equivariant_candidate_insertion_status(
+    bundle_degrees: &[i64],
+    degree_twice: i64,
+    required_insertion_complex_codimension: Option<i64>,
+) -> (Option<Vec<String>>, Option<i64>, String) {
+    if degree_twice % 2 != 0 {
+        return (
+            None,
+            None,
+            "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_equivariant_p2_readout"
+                .to_string(),
+        );
+    }
+    let Some(required_codimension) = required_insertion_complex_codimension else {
+        return (
+            None,
+            None,
+            "weighted_p2_rank_three_split_equivariant_insertion_codim_not_applicable".to_string(),
+        );
+    };
+    if required_codimension < 0 {
+        return (
+            None,
+            None,
+            "weighted_p2_rank_three_split_equivariant_insertion_invalid_negative_codim".to_string(),
+        );
+    }
+    let polynomial = equivariant_split_bundle_numerator_candidate_lambda_polynomial(
+        bundle_degrees,
+        degree_twice,
+        required_codimension as usize,
+    );
+    let order = lambda_polynomial_order(&polynomial);
+    let status = match order {
+        None => "weighted_p2_rank_three_split_equivariant_candidate_p2_coefficient_zero",
+        Some(0) => {
+            "weighted_p2_rank_three_split_equivariant_candidate_p2_has_nonzero_nonequivariant_term"
+        }
+        Some(_) => {
+            "weighted_p2_rank_three_split_equivariant_candidate_p2_positive_lambda_order_requires_pairing_or_residue"
+        }
+    };
+    (Some(polynomial), order, status.to_string())
+}
+
+fn split_equivariant_dual_basis_p2_readout_status(
+    bundle_degrees: &[i64],
+    degree_twice: i64,
+    required_insertion_complex_codimension: Option<i64>,
+) -> (Option<Vec<String>>, Option<i64>, String) {
+    if degree_twice % 2 != 0 {
+        return (
+            None,
+            None,
+            "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_dual_basis_p2_readout"
+                .to_string(),
+        );
+    }
+    let Some(required_codimension) = required_insertion_complex_codimension else {
+        return (
+            None,
+            None,
+            "weighted_p2_rank_three_split_dual_basis_p2_readout_codim_not_applicable".to_string(),
+        );
+    };
+    if required_codimension != 2 {
+        return (
+            None,
+            None,
+            "weighted_p2_rank_three_split_dual_basis_p2_readout_requires_codim2_observable"
+                .to_string(),
+        );
+    }
+    let ordinary_fun0_polynomial = equivariant_split_bundle_numerator_candidate_lambda_polynomial(
+        bundle_degrees,
+        degree_twice,
+        0,
+    );
+    let Some(quotient) =
+        divide_lambda_polynomial_by_two_lambda_if_possible(&ordinary_fun0_polynomial)
+    else {
+        return (
+            Some(ordinary_fun0_polynomial),
+            None,
+            "weighted_p2_rank_three_split_dual_basis_p2_readout_blocked_fun0_coefficient_not_divisible_by_two_lambda"
+                .to_string(),
+        );
+    };
+    let order = lambda_polynomial_order(&quotient);
+    let status = match order {
+        None => "weighted_p2_rank_three_split_dual_basis_p2_numerator_readout_zero",
+        Some(0) => {
+            "weighted_p2_rank_three_split_dual_basis_p2_numerator_readout_has_nonzero_nonequivariant_term"
+        }
+        Some(_) => {
+            "weighted_p2_rank_three_split_dual_basis_p2_numerator_readout_positive_lambda_order_requires_full_ifunction_pairing_or_residue"
+        }
+    };
+    (Some(quotient), order, status.to_string())
+}
+
+fn split_equivariant_dual_basis_p2_hypergeometric_status(
+    base_weights: &[i64],
+    bundle_degrees: &[i64],
+    degree_twice: i64,
+    required_insertion_complex_codimension: Option<i64>,
+) -> (Option<String>, Option<Vec<String>>, Option<i64>, String) {
+    if degree_twice % 2 != 0 {
+        return (
+            None,
+            None,
+            None,
+            "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_dual_basis_p2_hypergeometric_readout"
+                .to_string(),
+        );
+    }
+    let Some(required_codimension) = required_insertion_complex_codimension else {
+        return (
+            None,
+            None,
+            None,
+            "weighted_p2_rank_three_split_dual_basis_p2_hypergeometric_codim_not_applicable"
+                .to_string(),
+        );
+    };
+    if required_codimension != 2 {
+        return (
+            None,
+            None,
+            None,
+            "weighted_p2_rank_three_split_dual_basis_p2_hypergeometric_requires_codim2_observable"
+                .to_string(),
+        );
+    }
+    let (numerator_readout, _, _) = split_equivariant_dual_basis_p2_readout_status(
+        bundle_degrees,
+        degree_twice,
+        required_insertion_complex_codimension,
+    );
+    let Some(numerator_readout) = numerator_readout else {
+        return (
+            None,
+            None,
+            None,
+            "weighted_p2_rank_three_split_dual_basis_p2_hypergeometric_blocked_missing_numerator_readout"
+                .to_string(),
+        );
+    };
+    let Some(denominator) = integer_sector_base_denominator_constant(base_weights, degree_twice)
+    else {
+        return (
+            None,
+            None,
+            None,
+            "weighted_p2_rank_three_split_dual_basis_p2_hypergeometric_blocked_missing_base_denominator"
+                .to_string(),
+        );
+    };
+    let hypergeometric = divide_lambda_polynomial_by_rational(&numerator_readout, &denominator);
+    let order = lambda_polynomial_order(&hypergeometric);
+    let status = match order {
+        None => "weighted_p2_rank_three_split_dual_basis_p2_hypergeometric_readout_zero",
+        Some(0) => {
+            "weighted_p2_rank_three_split_dual_basis_p2_hypergeometric_readout_has_nonzero_nonequivariant_term"
+        }
+        Some(_) => {
+            "weighted_p2_rank_three_split_dual_basis_p2_hypergeometric_readout_positive_lambda_order_requires_mirror_map_pairing_or_residue"
+        }
+    };
+    (
+        Some(denominator.to_string()),
+        Some(hypergeometric),
+        order,
+        status.to_string(),
+    )
+}
+
+fn split_equivariant_full_hypergeometric_status(
+    base_weights: &[i64],
+    bundle_degrees: &[i64],
+    degree_twice: i64,
+    required_insertion_complex_codimension: Option<i64>,
+    max_p_power: usize,
+) -> (
+    Option<Vec<String>>,
+    Option<Vec<String>>,
+    Option<Vec<Vec<String>>>,
+    Option<Vec<String>>,
+    Option<i64>,
+    String,
+) {
+    if degree_twice % 2 != 0 {
+        return (
+            None,
+            None,
+            None,
+            None,
+            None,
+            "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_full_hypergeometric_readout"
+                .to_string(),
+        );
+    }
+    let Some(required_codimension) = required_insertion_complex_codimension else {
+        return (
+            None,
+            None,
+            None,
+            None,
+            None,
+            "weighted_p2_rank_three_split_full_hypergeometric_codim_not_applicable".to_string(),
+        );
+    };
+    if required_codimension != 2 {
+        return (
+            None,
+            None,
+            None,
+            None,
+            None,
+            "weighted_p2_rank_three_split_full_hypergeometric_requires_codim2_observable"
+                .to_string(),
+        );
+    }
+    let Some(denominator) = integer_sector_base_denominator_truncated_coefficients(
+        base_weights,
+        degree_twice,
+        max_p_power,
+    ) else {
+        return (
+            None,
+            None,
+            None,
+            None,
+            None,
+            "weighted_p2_rank_three_split_full_hypergeometric_blocked_missing_base_denominator"
+                .to_string(),
+        );
+    };
+    let Some(inverse_denominator) = invert_truncated_univariate_polynomial(&denominator) else {
+        return (
+            Some(rational_coefficients_to_strings(&denominator)),
+            None,
+            None,
+            None,
+            None,
+            "weighted_p2_rank_three_split_full_hypergeometric_blocked_noninvertible_base_denominator"
+                .to_string(),
+        );
+    };
+    let numerator = equivariant_split_bundle_numerator_bivariate_coefficients(
+        bundle_degrees,
+        degree_twice,
+        max_p_power,
+    );
+    let quotient =
+        multiply_bivariate_by_univariate_truncated(&numerator, &inverse_denominator, max_p_power);
+    let quotient_polynomials =
+        bivariate_coefficients_by_p_power_to_lambda_polynomials(&quotient, max_p_power);
+    let Some(fun0_polynomial) = quotient_polynomials.first() else {
+        return (
+            Some(rational_coefficients_to_strings(&denominator)),
+            Some(rational_coefficients_to_strings(&inverse_denominator)),
+            Some(quotient_polynomials),
+            None,
+            None,
+            "weighted_p2_rank_three_split_full_hypergeometric_blocked_missing_fun0_coefficient"
+                .to_string(),
+        );
+    };
+    let Some(readout) = divide_lambda_polynomial_by_two_lambda_if_possible(fun0_polynomial) else {
+        return (
+            Some(rational_coefficients_to_strings(&denominator)),
+            Some(rational_coefficients_to_strings(&inverse_denominator)),
+            Some(quotient_polynomials),
+            None,
+            None,
+            "weighted_p2_rank_three_split_full_hypergeometric_blocked_fun0_coefficient_not_divisible_by_two_lambda"
+                .to_string(),
+        );
+    };
+    let order = lambda_polynomial_order(&readout);
+    let status = match order {
+        None => "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_readout_zero",
+        Some(0) => {
+            "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_readout_has_nonzero_nonequivariant_term"
+        }
+        Some(_) => {
+            "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_readout_positive_lambda_order_requires_mirror_map_pairing_or_residue"
+        }
+    };
+    (
+        Some(rational_coefficients_to_strings(&denominator)),
+        Some(rational_coefficients_to_strings(&inverse_denominator)),
+        Some(quotient_polynomials),
+        Some(readout),
+        order,
+        status.to_string(),
+    )
+}
+
+fn split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status(
+    base_weights: &[i64],
+    bundle_degrees: &[i64],
+    degree_twice: i64,
+    required_insertion_complex_codimension: Option<i64>,
+) -> (
+    Option<Vec<String>>,
+    Option<i64>,
+    Option<Vec<String>>,
+    Option<i64>,
+    String,
+    String,
+) {
+    if degree_twice % 2 != 0 {
+        return (
+            None,
+            None,
+            None,
+            None,
+            "weighted_p2_rank_three_split_first_nonzero_z_readout_not_applicable_twisted_sector"
+                .to_string(),
+            "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_full_hypergeometric_z_readout"
+                .to_string(),
+        );
+    }
+    let Some(required_codimension) = required_insertion_complex_codimension else {
+        return (
+            None,
+            None,
+            None,
+            None,
+            "weighted_p2_rank_three_split_first_nonzero_z_readout_codim_not_applicable".to_string(),
+            "weighted_p2_rank_three_split_full_hypergeometric_z_readout_codim_not_applicable"
+                .to_string(),
+        );
+    };
+    if required_codimension != 2 {
+        return (
+            None,
+            None,
+            None,
+            None,
+            "weighted_p2_rank_three_split_first_nonzero_z_readout_requires_codim2_observable"
+                .to_string(),
+            "weighted_p2_rank_three_split_full_hypergeometric_z_readout_requires_codim2_observable"
+                .to_string(),
+        );
+    }
+    let Some(readout_by_z) = weighted_p2_ordinary_dual_basis_p2_z_lambda_polynomials(
+        base_weights,
+        bundle_degrees,
+        degree_twice,
+    ) else {
+        return (
+            None,
+            None,
+            None,
+            None,
+            "weighted_p2_rank_three_split_first_nonzero_z_readout_blocked_missing_z_readout"
+                .to_string(),
+            "weighted_p2_rank_three_split_full_hypergeometric_z_readout_blocked_not_divisible_by_two_lambda"
+                .to_string(),
+        );
+    };
+    let primary_z2 = readout_by_z
+        .get(&2)
+        .cloned()
+        .unwrap_or_else(|| vec!["0".to_string()]);
+    let first_nonzero = readout_by_z
+        .iter()
+        .filter(|(inverse_z_power, _)| **inverse_z_power >= 2)
+        .find(|(_, polynomial)| lambda_polynomial_has_nonzero_coefficient(polynomial))
+        .map(|(&inverse_z_power, polynomial)| (inverse_z_power, polynomial.clone()));
+    let first_nonzero_lambda_order = first_nonzero
+        .as_ref()
+        .and_then(|(_, polynomial)| lambda_polynomial_order(polynomial));
+    let first_nonzero_non_equivariant_status = match (
+        first_nonzero
+            .as_ref()
+            .map(|(inverse_z_power, _)| *inverse_z_power),
+        first_nonzero_lambda_order,
+    ) {
+        (None, _) => "weighted_p2_rank_three_split_first_nonzero_z_readout_absent",
+        (Some(2), Some(0)) => {
+            "weighted_p2_rank_three_split_first_nonzero_primary_z2_has_nonequivariant_limit"
+        }
+        (Some(2), Some(_)) => {
+            "weighted_p2_rank_three_split_first_nonzero_primary_z2_positive_lambda_order_requires_pairing_or_residue"
+        }
+        (Some(_), Some(0)) => {
+            "weighted_p2_rank_three_split_first_nonzero_descendant_has_nonequivariant_limit_requires_reconstruction"
+        }
+        (Some(_), Some(_)) => {
+            "weighted_p2_rank_three_split_first_nonzero_descendant_positive_lambda_order_equivariant_only_requires_residue_or_pairing"
+        }
+        (Some(_), None) => "weighted_p2_rank_three_split_first_nonzero_z_readout_order_unresolved",
+    };
+    let status = if lambda_polynomial_has_nonzero_coefficient(&primary_z2) {
+        "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_primary_z2_nonzero_requires_pairing_or_residue"
+    } else if first_nonzero.is_some() {
+        "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_primary_z2_zero_first_nonzero_descendant_requires_big_j_or_pairing"
+    } else {
+        "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_z_readout_zero"
+    };
+    (
+        Some(primary_z2),
+        first_nonzero
+            .as_ref()
+            .map(|(inverse_z_power, _)| *inverse_z_power),
+        first_nonzero.map(|(_, polynomial)| polynomial),
+        first_nonzero_lambda_order,
+        first_nonzero_non_equivariant_status.to_string(),
+        status.to_string(),
+    )
+}
+
+fn split_equivariant_full_hypergeometric_dual_basis_p2_scalar_mirror_map_primary_status(
+    base_weights: &[i64],
+    bundle_degrees: &[i64],
+    degree_twice: i64,
+    required_insertion_complex_codimension: Option<i64>,
+) -> String {
+    if degree_twice % 2 != 0 {
+        return "weighted_p2_rank_three_split_scalar_mirror_map_primary_not_applicable_twisted_sector"
+            .to_string();
+    }
+    let Some(required_codimension) = required_insertion_complex_codimension else {
+        return "weighted_p2_rank_three_split_scalar_mirror_map_primary_codim_not_applicable"
+            .to_string();
+    };
+    if required_codimension != 2 {
+        return "weighted_p2_rank_three_split_scalar_mirror_map_primary_requires_codim2_observable"
+            .to_string();
+    }
+    let Some(readout_by_z) = weighted_p2_ordinary_dual_basis_p2_z_lambda_polynomials(
+        base_weights,
+        bundle_degrees,
+        degree_twice,
+    ) else {
+        return "weighted_p2_rank_three_split_scalar_mirror_map_primary_blocked_missing_z_readout"
+            .to_string();
+    };
+    let current_primary = readout_by_z
+        .get(&2)
+        .cloned()
+        .unwrap_or_else(|| vec!["0".to_string()]);
+    if lambda_polynomial_has_nonzero_coefficient(&current_primary) {
+        return "weighted_p2_rank_three_split_scalar_mirror_map_primary_already_nonzero_before_reparametrization"
+            .to_string();
+    }
+    for prior_degree_twice in (2..degree_twice).step_by(2) {
+        let Some(prior_readout_by_z) = weighted_p2_ordinary_dual_basis_p2_z_lambda_polynomials(
+            base_weights,
+            bundle_degrees,
+            prior_degree_twice,
+        ) else {
+            return "weighted_p2_rank_three_split_scalar_mirror_map_primary_blocked_missing_lower_degree_z_readout"
+                .to_string();
+        };
+        let prior_primary = prior_readout_by_z
+            .get(&2)
+            .cloned()
+            .unwrap_or_else(|| vec!["0".to_string()]);
+        if lambda_polynomial_has_nonzero_coefficient(&prior_primary) {
+            return "weighted_p2_rank_three_split_scalar_mirror_map_primary_zero_but_lower_primary_terms_can_mix_by_degree_reparametrization"
+                .to_string();
+        }
+    }
+    "weighted_p2_rank_three_split_scalar_mirror_map_primary_zero_preserved_by_scalar_reparametrization_to_this_degree".to_string()
+}
+
+fn lambda_polynomial_order(polynomial: &[String]) -> Option<i64> {
+    polynomial
+        .iter()
+        .position(|coefficient| coefficient != "0")
+        .map(|order| order as i64)
+}
+
+fn divide_lambda_polynomial_by_two_lambda_if_possible(
+    polynomial: &[String],
+) -> Option<Vec<String>> {
+    let constant = polynomial
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "0".to_string());
+    if constant != "0" {
+        return None;
+    }
+    let two = Rational::from(Integer::from(2));
+    Some(
+        polynomial
+            .iter()
+            .skip(1)
+            .map(|coefficient| {
+                let coefficient = coefficient
+                    .parse::<Rational>()
+                    .expect("lambda polynomial coefficient is rational");
+                (coefficient / two.clone()).to_string()
+            })
+            .collect(),
+    )
+}
+
+fn integer_sector_base_denominator_truncated_coefficients(
+    base_weights: &[i64],
+    degree_twice: i64,
+    max_p_power: usize,
+) -> Option<Vec<Rational>> {
+    if degree_twice % 2 != 0 {
+        return None;
+    }
+    let degree = degree_twice / 2;
+    if degree < 0 {
+        return None;
+    }
+    let mut coefficients = vec![Rational::from(0); max_p_power + 1];
+    coefficients[0] = Rational::from(1);
+    for &weight in base_weights {
+        let factor_count = weight
+            .checked_mul(degree)
+            .expect("weighted P2 denominator factor count fits i64");
+        if factor_count < 0 {
+            return None;
+        }
+        for offset in 1..=factor_count {
+            multiply_univariate_truncated_linear_factor(
+                &mut coefficients,
+                offset,
+                weight,
+                max_p_power,
+            );
+        }
+    }
+    Some(coefficients)
+}
+
+fn multiply_univariate_truncated_linear_factor(
+    coefficients: &mut Vec<Rational>,
+    constant: i64,
+    linear: i64,
+    max_power: usize,
+) {
+    let mut next = vec![Rational::from(0); max_power + 1];
+    for power in 0..=max_power {
+        let coefficient = coefficients[power].clone();
+        if coefficient == Rational::from(0) {
+            continue;
+        }
+        next[power] += coefficient.clone() * rational_from_i64(constant);
+        if power < max_power {
+            next[power + 1] += coefficient * rational_from_i64(linear);
+        }
+    }
+    *coefficients = next;
+}
+
+fn invert_truncated_univariate_polynomial(coefficients: &[Rational]) -> Option<Vec<Rational>> {
+    let constant = coefficients.first()?;
+    if constant == &Rational::from(0) {
+        return None;
+    }
+    let mut inverse = vec![Rational::from(0); coefficients.len()];
+    inverse[0] = Rational::from(1) / constant.clone();
+    for power in 1..coefficients.len() {
+        let mut sum = Rational::from(0);
+        for offset in 1..=power {
+            sum += coefficients[offset].clone() * inverse[power - offset].clone();
+        }
+        inverse[power] = -sum / constant.clone();
+    }
+    Some(inverse)
+}
+
+fn divide_lambda_polynomial_by_rational(
+    polynomial: &[String],
+    denominator: &Rational,
+) -> Vec<String> {
+    polynomial
+        .iter()
+        .map(|coefficient| {
+            let coefficient = coefficient
+                .parse::<Rational>()
+                .expect("lambda polynomial coefficient is rational");
+            (coefficient / denominator.clone()).to_string()
+        })
+        .collect()
+}
+
+fn equivariant_split_bundle_numerator_candidate_lambda_polynomial(
+    bundle_degrees: &[i64],
+    degree_twice: i64,
+    candidate_p_power: usize,
+) -> Vec<String> {
+    let coefficients = equivariant_split_bundle_numerator_bivariate_coefficients(
+        bundle_degrees,
+        degree_twice,
+        candidate_p_power,
+    );
+    bivariate_coefficients_by_p_power_to_lambda_polynomials(&coefficients, candidate_p_power)
+        .into_iter()
+        .nth(candidate_p_power)
+        .expect("candidate p-power polynomial is present")
+}
+
+fn equivariant_split_bundle_numerator_bivariate_coefficients(
+    bundle_degrees: &[i64],
+    degree_twice: i64,
+    max_p_power: usize,
+) -> BTreeMap<(usize, usize), Rational> {
+    assert_eq!(
+        degree_twice % 2,
+        0,
+        "equivariant untwisted sector has integer degree"
+    );
+    let degree = degree_twice / 2;
+    let mut coefficients = BTreeMap::<(usize, usize), Rational>::new();
+    coefficients.insert((0, 0), Rational::from(1));
+    for &line_degree in bundle_degrees {
+        let factor_count = line_degree
+            .checked_mul(degree)
+            .expect("weighted P2 split bundle factor count fits i64");
+        for factor_offset in (-factor_count + 1)..=0 {
+            coefficients = multiply_bivariate_truncated_factor(
+                &coefficients,
+                factor_offset,
+                1,
+                -line_degree,
+                max_p_power,
+            );
+        }
+    }
+    coefficients
+}
+
+fn multiply_bivariate_by_univariate_truncated(
+    coefficients: &BTreeMap<(usize, usize), Rational>,
+    univariate: &[Rational],
+    max_p_power: usize,
+) -> BTreeMap<(usize, usize), Rational> {
+    let mut next = BTreeMap::<(usize, usize), Rational>::new();
+    for (&(lambda_power, p_power), coefficient) in coefficients {
+        for (factor_p_power, factor_coefficient) in univariate.iter().enumerate() {
+            let next_p_power = p_power + factor_p_power;
+            if next_p_power > max_p_power {
+                continue;
+            }
+            if factor_coefficient == &Rational::from(0) {
+                continue;
+            }
+            *next
+                .entry((lambda_power, next_p_power))
+                .or_insert_with(|| Rational::from(0)) +=
+                coefficient.clone() * factor_coefficient.clone();
+        }
+    }
+    next.retain(|_, coefficient| *coefficient != Rational::from(0));
+    next
+}
+
+fn bivariate_coefficients_by_p_power_to_lambda_polynomials(
+    coefficients: &BTreeMap<(usize, usize), Rational>,
+    max_p_power: usize,
+) -> Vec<Vec<String>> {
+    (0..=max_p_power)
+        .map(|target_p_power| {
+            let mut lambda_coefficients = BTreeMap::<usize, Rational>::new();
+            for (&(lambda_power, p_power), coefficient) in coefficients {
+                if p_power == target_p_power {
+                    *lambda_coefficients
+                        .entry(lambda_power)
+                        .or_insert_with(|| Rational::from(0)) += coefficient.clone();
+                }
+            }
+            let max_lambda_power = lambda_coefficients.keys().last().copied().unwrap_or(0);
+            (0..=max_lambda_power)
+                .map(|lambda_power| {
+                    lambda_coefficients
+                        .get(&lambda_power)
+                        .cloned()
+                        .unwrap_or_else(|| Rational::from(0))
+                        .to_string()
+                })
+                .collect()
+        })
+        .collect()
+}
+
+fn multiply_bivariate_truncated_factor(
+    coefficients: &BTreeMap<(usize, usize), Rational>,
+    constant: i64,
+    lambda: i64,
+    p: i64,
+    max_p_power: usize,
+) -> BTreeMap<(usize, usize), Rational> {
+    let factor_terms = [
+        ((0usize, 0usize), constant),
+        ((1usize, 0usize), lambda),
+        ((0usize, 1usize), p),
+    ];
+    let mut next = BTreeMap::<(usize, usize), Rational>::new();
+    for (&(lambda_power, p_power), coefficient) in coefficients {
+        for &((factor_lambda_power, factor_p_power), factor_coefficient) in &factor_terms {
+            let next_p_power = p_power + factor_p_power;
+            if next_p_power > max_p_power {
+                continue;
+            }
+            *next
+                .entry((lambda_power + factor_lambda_power, next_p_power))
+                .or_insert_with(|| Rational::from(0)) +=
+                coefficient.clone() * rational_from_i64(factor_coefficient);
+        }
+    }
+    next.retain(|_, coefficient| *coefficient != Rational::from(0));
+    next
+}
+
+fn ceil_positive_half_product(factor: i64, degree_twice: i64) -> i64 {
+    let product = factor
+        .checked_mul(degree_twice)
+        .expect("weighted P2 I-function factor product fits i64");
+    (product + 1) / 2
+}
+
+fn floor_positive_half_product(factor: i64, degree_twice: i64) -> i64 {
+    let product = factor
+        .checked_mul(degree_twice)
+        .expect("weighted P2 I-function factor product fits i64");
+    product / 2
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -1182,6 +2331,7 @@ mod tests {
         weighted_p2_ordinary_dual_basis_p2_z_readout_profile,
         weighted_p2_rank_three_split_bundle_chen_ruan_source_basis_readout,
         weighted_p2_rank_three_split_bundle_source_readiness,
+        weighted_p2_rank_three_twisted_ifunction_degree_profiles,
     };
 
     #[test]
@@ -1364,6 +2514,120 @@ mod tests {
             ]
         );
         assert!(weighted_p2_rank_three_split_bundle_source_readiness(&[1, 1, 2], &[4]).is_none());
+    }
+
+    #[test]
+    fn weighted_p2_rank_three_ifunction_profiles_pin_full_denominator_readout() {
+        let profiles = weighted_p2_rank_three_twisted_ifunction_degree_profiles(
+            &[1, 1, 2],
+            &[1, 1, 2],
+            4,
+            Some(2),
+        );
+        let degree_one = profiles
+            .iter()
+            .find(|profile| profile.degree_twice == 2)
+            .expect("degree-one profile");
+        assert_eq!(
+            degree_one.split_equivariant_full_hypergeometric_denominator_truncated_coefficients,
+            Some(vec!["2".to_string(), "10".to_string(), "18".to_string()])
+        );
+        assert_eq!(
+            degree_one
+                .split_equivariant_full_hypergeometric_inverse_denominator_truncated_coefficients,
+            Some(vec!["1/2".to_string(), "-5/2".to_string(), "8".to_string()])
+        );
+        assert_eq!(
+            degree_one.split_equivariant_full_hypergeometric_dual_basis_p2_lambda_polynomial,
+            Some(vec![
+                "0".to_string(),
+                "0".to_string(),
+                "-1/4".to_string(),
+                "1/4".to_string(),
+            ])
+        );
+        assert_eq!(
+            degree_one
+                .split_equivariant_full_hypergeometric_dual_basis_p2_primary_z2_lambda_polynomial,
+            Some(vec!["0".to_string()])
+        );
+        assert_eq!(
+            degree_one
+                .split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_inverse_power,
+            Some(3)
+        );
+        assert_eq!(
+            degree_one
+                .split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_polynomial,
+            Some(vec!["0".to_string(), "0".to_string(), "-1/4".to_string()])
+        );
+        assert_eq!(
+            degree_one.split_equivariant_full_hypergeometric_dual_basis_p2_scalar_mirror_map_primary_status,
+            "weighted_p2_rank_three_split_scalar_mirror_map_primary_zero_preserved_by_scalar_reparametrization_to_this_degree"
+        );
+
+        let degree_two = profiles
+            .iter()
+            .find(|profile| profile.degree_twice == 4)
+            .expect("degree-two profile");
+        assert_eq!(
+            degree_two.split_equivariant_full_hypergeometric_denominator_truncated_coefficients,
+            Some(vec![
+                "96".to_string(),
+                "688".to_string(),
+                "2072".to_string(),
+            ])
+        );
+        assert_eq!(
+            degree_two
+                .split_equivariant_full_hypergeometric_inverse_denominator_truncated_coefficients,
+            Some(vec![
+                "1/96".to_string(),
+                "-43/576".to_string(),
+                "67/216".to_string(),
+            ])
+        );
+        assert_eq!(
+            degree_two.split_equivariant_full_hypergeometric_dual_basis_p2_lambda_polynomial,
+            Some(vec![
+                "0".to_string(),
+                "0".to_string(),
+                "-1/32".to_string(),
+                "23/192".to_string(),
+                "-17/96".to_string(),
+                "1/8".to_string(),
+                "-1/24".to_string(),
+                "1/192".to_string(),
+            ])
+        );
+        assert_eq!(
+            degree_two
+                .split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_polynomial,
+            Some(vec!["0".to_string(), "0".to_string(), "-1/32".to_string()])
+        );
+    }
+
+    #[test]
+    fn canonical_weighted_p2_ifunction_profile_has_primary_signal() {
+        let profile =
+            weighted_p2_rank_three_twisted_ifunction_degree_profiles(&[1, 1, 2], &[4], 2, Some(2))
+                .into_iter()
+                .find(|profile| profile.degree_twice == 2)
+                .expect("canonical degree-one profile");
+        assert_eq!(
+            profile
+                .split_equivariant_full_hypergeometric_dual_basis_p2_primary_z2_lambda_polynomial,
+            Some(vec!["0".to_string(), "11/4".to_string()])
+        );
+        assert_eq!(
+            profile
+                .split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_inverse_power,
+            Some(2)
+        );
+        assert_eq!(
+            profile.split_equivariant_full_hypergeometric_dual_basis_p2_scalar_mirror_map_primary_status,
+            "weighted_p2_rank_three_split_scalar_mirror_map_primary_already_nonzero_before_reparametrization"
+        );
     }
 
     #[test]

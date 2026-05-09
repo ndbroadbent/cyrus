@@ -226,6 +226,13 @@ inside the McAllister context binary. The core API exposes both a sparse
 dual-basis lambda-polynomial map and a materialized readout profile that records
 the missing `z^-2` primary as an explicit zero.
 
+The wider rank-three split-bundle degree profile now lives there as well:
+`cyrus_core::local_orbifold::weighted_p2_rank_three_twisted_ifunction_degree_profiles`
+owns the exact numerator, denominator, full hypergeometric, primary/descendant
+`z`-readout, and scalar mirror-map blocker statuses consumed by
+`mcallister_gv_context`. The binary keeps only legacy test-only helper wrappers
+for low-level regression coverage.
+
 The z-order convention is checked against the adjacent canonical
 `K_P(1,1,2)` first sector by using bundle degree `[4]` in the same
 hypergeometric readout. There the primary `z^-2` coefficient is nonzero and
