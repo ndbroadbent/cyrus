@@ -682,6 +682,12 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_positive_degree_current_decomposition_face_certificate_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_positive_degree_current_face_cygv_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_positive_degree_current_face_cygv_promotion_readiness_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_positive_degree_current_face_cygv_promotion_missing_input_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_context_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_degree_counts:
@@ -1394,6 +1400,7 @@ struct LocalCygvStarUnionChamberSemigroupTransportProbe {
         Option<ProvidedGeneratorTargetGvProbe>,
     current_chamber_positive_degree_decomposition_face_certificate:
         LocalCygvChamberDecompositionFaceCertificate,
+    current_chamber_positive_degree_face_cygv_probe: Option<ProvidedGeneratorTargetGvProbe>,
     flipped_chamber_secondary_certificate: LocalCygvStarUnionChamberSecondaryCertificate,
     flipped_chamber_status: Option<String>,
     flipped_chamber_generator_count: Option<usize>,
@@ -18900,6 +18907,24 @@ fn build_report(
         local_cygv_source_resolution_star_union_positive_degree_current_decomposition_face_certificate_status_counts(
             &local_cygv_source_resolution_hint_sample,
         );
+    let local_cygv_source_resolution_star_union_positive_degree_current_face_cygv_status_counts =
+        provided_generator_cygv_probe_status_counts(
+            local_cygv_source_resolution_hint_sample
+                .iter()
+                .map(current_chamber_positive_degree_face_cygv_probe),
+        );
+    let local_cygv_source_resolution_star_union_positive_degree_current_face_cygv_promotion_readiness_counts =
+        provided_generator_cygv_probe_promotion_readiness_counts(
+            local_cygv_source_resolution_hint_sample
+                .iter()
+                .map(current_chamber_positive_degree_face_cygv_probe),
+        );
+    let local_cygv_source_resolution_star_union_positive_degree_current_face_cygv_promotion_missing_input_counts =
+        provided_generator_cygv_probe_promotion_missing_input_counts(
+            local_cygv_source_resolution_hint_sample
+                .iter()
+                .map(current_chamber_positive_degree_face_cygv_probe),
+        );
     let positive_degree_current_decomposition_term_contexts =
         positive_degree_current_chamber_decomposition_term_contexts(
             &local_cygv_source_resolution_hint_sample,
@@ -20225,6 +20250,9 @@ fn build_report(
         local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_nearest_support_extra_count_counts,
         local_cygv_source_resolution_star_union_positive_degree_transport_status_counts,
         local_cygv_source_resolution_star_union_positive_degree_current_decomposition_face_certificate_status_counts,
+        local_cygv_source_resolution_star_union_positive_degree_current_face_cygv_status_counts,
+        local_cygv_source_resolution_star_union_positive_degree_current_face_cygv_promotion_readiness_counts,
+        local_cygv_source_resolution_star_union_positive_degree_current_face_cygv_promotion_missing_input_counts,
         local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_context_status_counts,
         local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_degree_counts,
         local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_local_toric_kind_counts,
@@ -21962,6 +21990,15 @@ fn current_chamber_provided_generator_cygv_probe(
     summary
         .shared_two_simplex_star_union_chamber_semigroup_transport
         .current_chamber_provided_generator_cygv_probe
+        .as_ref()
+}
+
+fn current_chamber_positive_degree_face_cygv_probe(
+    summary: &LocalCygvSourceResolutionHintSummary,
+) -> Option<&ProvidedGeneratorTargetGvProbe> {
+    summary
+        .shared_two_simplex_star_union_chamber_semigroup_transport
+        .current_chamber_positive_degree_face_cygv_probe
         .as_ref()
 }
 
@@ -27034,6 +27071,7 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
                 chamber_decomposition_face_certificate_not_run(
                     "chamber_decomposition_face_not_run_blocked_transport",
                 ),
+            current_chamber_positive_degree_face_cygv_probe: None,
             flipped_chamber_secondary_certificate:
                 local_cygv_star_union_chamber_secondary_certificate_not_run(status),
             flipped_chamber_status: None,
@@ -27319,6 +27357,17 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
             flipped_chamber_positive_degree_decomposition.as_deref(),
             &face_certificate_options,
         );
+    let current_chamber_positive_degree_face_cygv_probe = context.and_then(|context| {
+        chamber_semigroup_certified_face_cygv_probe(
+            star_union.target_plus_star_basis_nonzero.as_ref(),
+            &current_chamber_generator_context,
+            current_chamber_positive_degree_decomposition.as_deref(),
+            &current_chamber_positive_degree_decomposition_face_certificate,
+            &current_chamber_secondary_certificate,
+            context,
+            "current_positive_decomposition_face_generators",
+        )
+    });
 
     LocalCygvStarUnionChamberSemigroupTransportProbe {
         status: status.to_string(),
@@ -27334,6 +27383,7 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
         current_chamber_positive_degree_decomposition,
         current_chamber_positive_degree_decomposition_cygv_probe,
         current_chamber_positive_degree_decomposition_face_certificate,
+        current_chamber_positive_degree_face_cygv_probe,
         flipped_chamber_secondary_certificate,
         flipped_chamber_status: flipped_status,
         flipped_chamber_generator_count: (!flipped_generators.is_empty())
@@ -30975,6 +31025,66 @@ fn chamber_semigroup_decomposition_only_cygv_probe(
     Some(probe)
 }
 
+fn chamber_semigroup_certified_face_cygv_probe(
+    target_basis_nonzero: Option<&Vec<(usize, i64)>>,
+    generator_contexts: &[LocalCygvChamberSemigroupGeneratorContext],
+    decomposition: Option<&[LocalCygvChamberSemigroupDecompositionTerm]>,
+    face_certificate: &LocalCygvChamberDecompositionFaceCertificate,
+    secondary_certificate: &LocalCygvStarUnionChamberSecondaryCertificate,
+    context: &ValidatedContext<'_>,
+    label: &str,
+) -> Option<ProvidedGeneratorTargetGvProbe> {
+    let decomposition = decomposition?;
+    if !face_certificate
+        .status
+        .starts_with("chamber_decomposition_face_certified_")
+    {
+        return None;
+    }
+    if decomposition.is_empty() {
+        return None;
+    }
+
+    let mut selected_contexts = Vec::new();
+    let mut seen = BTreeSet::new();
+    for term in decomposition {
+        if !seen.insert(term.generator_index) {
+            continue;
+        }
+        let Some(generator_context) = generator_contexts
+            .iter()
+            .find(|context| context.generator_index == term.generator_index)
+        else {
+            return Some(ProvidedGeneratorTargetGvProbe {
+                generator_count: selected_contexts.len(),
+                status: "skipped_missing_face_decomposition_generator_context".to_string(),
+                gv: None,
+                error: Some(format!(
+                    "missing context for certified-face generator {}",
+                    term.generator_index
+                )),
+                promotion_readiness: "blocked_missing_source_derived_chamber_qn_history"
+                    .to_string(),
+                promotion_missing_inputs: vec!["face_decomposition_generator_context".to_string()],
+                uncertified_generator_sample: Vec::new(),
+                qn_trace_polynomial_count: None,
+                target_qn_trace_status: None,
+                target_qn_trace_term_count: None,
+                qn_trace_sample: Vec::new(),
+            });
+        };
+        selected_contexts.push(generator_context.clone());
+    }
+
+    Some(chamber_semigroup_provided_generator_cygv_probe(
+        target_basis_nonzero,
+        &selected_contexts,
+        Some(secondary_certificate),
+        context,
+        label,
+    ))
+}
+
 fn annotate_provided_generator_probe_promotion(
     mut probe: ProvidedGeneratorTargetGvProbe,
     secondary_certificate: Option<&LocalCygvStarUnionChamberSecondaryCertificate>,
@@ -31025,7 +31135,8 @@ fn provided_generator_probe_promotion_missing_inputs(
             "support_overlap_qn_materialized_for_nonzero_gv"
             | "support_overlap_qn_materialized_empty_for_nonzero_gv"
             | "support_overlap_qn_materialized_for_zero_or_absent_gv"
-            | "support_overlap_qn_materialized_empty_for_zero_or_absent_gv",
+            | "support_overlap_qn_materialized_empty_for_zero_or_absent_gv"
+            | "support_overlap_qn_not_required_zero_or_absent_gv",
         ) => {}
         Some(status) => {
             missing.insert(format!("target_plus_star_qn_history:{status}"));
@@ -37800,6 +37911,7 @@ mod tests {
                         chamber_decomposition_face_certificate_not_run(
                             "chamber_decomposition_face_not_run_test",
                         ),
+                    current_chamber_positive_degree_face_cygv_probe: None,
                     flipped_chamber_secondary_certificate:
                         local_cygv_star_union_chamber_secondary_certificate_not_run("test"),
                     flipped_chamber_status: None,

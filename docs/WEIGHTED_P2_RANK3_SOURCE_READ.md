@@ -601,5 +601,9 @@ positive decomposition generators as a codimension-one supporting face of the
 visible chamber semigroup, with exact normal `[(1,-1),(2,-1)]`, two
 zero-pairing selected generators, and three positive off-face generators. This
 does not promote the split-bundle source row or convert descendant data into a
-compact GV value; it only proves that the next possible non-cheating route is a
-source-derived secondary-face/qN-domain handoff for that certified face.
+compact GV value. The follow-up face-restricted `cygv` probe uses that
+certificate and the current regular secondary certificate, has no uncertified
+generator sample, computes `GV=0`, and is marked
+`ready_for_promoted_provided_generator_cygv_call`. This shifts the next
+non-cheating route away from the weighted-`P2` source row and toward wiring the
+certified face-domain zero into the corrected-chamber GV table.

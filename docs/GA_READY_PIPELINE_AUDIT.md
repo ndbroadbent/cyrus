@@ -1712,9 +1712,15 @@ to make the remaining GV layer more first-principles:
    `[(1,-1),(2,-1)]`, with two zero-pairing selected generators and three
    positive off-face chamber generators. This is not promoted yet: the
    decomposition-only `cygv` probe still deliberately reports
-   `blocked_diagnostic_decomposition_only_domain`, and the remaining handoff is
-   to turn this exact face certificate into a source-derived secondary-face/qN
-   domain rather than ignoring the full chamber.
+   `blocked_diagnostic_decomposition_only_domain`. A separate face-restricted
+   probe now uses the exact face certificate plus the current regular secondary
+   certificate, calls actual `cygv` on the selected face generators, and reports
+   `computed_current_positive_decomposition_face_generators_qn_trace`,
+   `GV=0`, `support_overlap_qn_not_required_zero_or_absent_gv`, and
+   `ready_for_promoted_provided_generator_cygv_call` with no uncertified
+   generator sample. The remaining work is to wire this certified face-domain
+   result into the corrected-chamber GV table rather than treating the older
+   decomposition-only diagnostic as a fallback.
    Running the same aggregate over all nine missing targets narrows the
    chamber-semigroup decomposition queue further: only targets `1`, `7`, and
    `8` reach an actual current-chamber provided-generator `cygv` call, and all
