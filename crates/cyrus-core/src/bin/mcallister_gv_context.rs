@@ -26724,6 +26724,7 @@ fn weighted_p2_rank_three_source_model_summary(
                     "source_derived_codim2_insertion_or_equivalent_observable".to_string(),
                     "stack_normalized_hyperplane_square_tensor".to_string(),
                     "orbifold_sector_pairing_data".to_string(),
+                    "equivariant_residue_or_pairing_normalization".to_string(),
                     "twisted_vector_bundle_ifunction_chamber_certificate".to_string(),
                     "twisted_vector_bundle_ifunction_qn_history".to_string(),
                 ],
@@ -39735,6 +39736,7 @@ mod tests {
                 "source_derived_codim2_insertion_or_equivalent_observable".to_string(),
                 "stack_normalized_hyperplane_square_tensor".to_string(),
                 "orbifold_sector_pairing_data".to_string(),
+                "equivariant_residue_or_pairing_normalization".to_string(),
                 "twisted_vector_bundle_ifunction_chamber_certificate".to_string(),
                 "twisted_vector_bundle_ifunction_qn_history".to_string(),
             ]
