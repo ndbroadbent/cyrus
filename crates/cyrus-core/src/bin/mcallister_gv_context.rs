@@ -756,6 +756,19 @@ struct ContextReport {
     cygv_path_support_gw_coefficient_trace_error_counts: BTreeMap<String, usize>,
     cygv_path_support_target_pre_subtraction_formula_status_counts: BTreeMap<String, usize>,
     cygv_path_support_target_gw_formula_instanton_balance_status_counts: BTreeMap<String, usize>,
+    cygv_path_support_target_monomial_qn_source_semigroup_status_counts: BTreeMap<String, usize>,
+    cygv_path_support_target_monomial_qn_source_seed_expanded_semigroup_status_counts:
+        BTreeMap<String, usize>,
+    cygv_path_support_target_monomial_qn_source_offset_generator_status_counts:
+        BTreeMap<String, usize>,
+    cygv_path_support_target_monomial_qn_source_offset_generator_face_certificate_status_counts:
+        BTreeMap<String, usize>,
+    cygv_path_support_target_monomial_qn_source_offset_generator_lp_full_status_counts:
+        BTreeMap<String, usize>,
+    cygv_path_support_target_monomial_qn_source_offset_generator_lp_aggregate_status_counts:
+        BTreeMap<String, usize>,
+    cygv_path_support_target_monomial_qn_source_offset_generator_gw_noninteger_candidate_count_counts:
+        BTreeMap<String, usize>,
     cygv_lower_seed_decomposition_status_counts: BTreeMap<String, usize>,
     cygv_lower_seed_decomposition_direct_pair_seed_scan_count_counts: BTreeMap<String, usize>,
     cygv_lower_seed_decomposition_pair_sum_degree_bound_counts: BTreeMap<String, usize>,
@@ -7079,6 +7092,217 @@ fn source_qn_term_offset_generators(
         max_degree = max_degree.max(term_context.degree);
     }
     Ok((generators, max_degree))
+}
+
+#[derive(Clone, Copy)]
+enum TargetMonomialQnSourceProbeKind {
+    QnTermSemigroup,
+    SeedExpandedSemigroup,
+    OffsetGenerator,
+}
+
+fn target_monomial_qn_source_probe<'a>(
+    source: &'a CygvPathSupportTargetMonomialQnSource,
+    kind: TargetMonomialQnSourceProbeKind,
+) -> Option<&'a CygvSourceQnTermSemigroupProbe> {
+    match kind {
+        TargetMonomialQnSourceProbeKind::QnTermSemigroup => {
+            source.source_parent_qn_term_semigroup_probe.as_ref()
+        }
+        TargetMonomialQnSourceProbeKind::SeedExpandedSemigroup => source
+            .source_parent_qn_term_seed_expanded_semigroup_probe
+            .as_ref(),
+        TargetMonomialQnSourceProbeKind::OffsetGenerator => {
+            source.source_parent_qn_term_offset_generator_probe.as_ref()
+        }
+    }
+}
+
+fn target_monomial_qn_source_probe_status_counts<'a>(
+    sources: impl IntoIterator<Item = &'a CygvPathSupportTargetMonomialQnSource>,
+    kind: TargetMonomialQnSourceProbeKind,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for source in sources {
+        let status = target_monomial_qn_source_probe(source, kind)
+            .map_or("not_run", |probe| probe.status.as_str());
+        *counts.entry(status.to_string()).or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn cygv_path_support_target_monomial_qn_source_probe_status_counts<'a>(
+    probes: impl IntoIterator<Item = Option<&'a CygvPathHistoryProbe>>,
+    kind: TargetMonomialQnSourceProbeKind,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes {
+        let Some(probe) = probe else {
+            *counts.entry("not_run".to_string()).or_insert(0usize) += 1;
+            continue;
+        };
+        if probe
+            .path_support_target_monomial_qn_source_sample
+            .is_empty()
+        {
+            *counts
+                .entry("no_target_monomial_qn_sources".to_string())
+                .or_insert(0usize) += 1;
+            continue;
+        }
+        for (status, count) in target_monomial_qn_source_probe_status_counts(
+            &probe.path_support_target_monomial_qn_source_sample,
+            kind,
+        ) {
+            *counts.entry(status).or_insert(0usize) += count;
+        }
+    }
+    counts
+}
+
+fn target_monomial_qn_source_offset_generator_face_certificate_status_counts<'a>(
+    sources: impl IntoIterator<Item = &'a CygvPathSupportTargetMonomialQnSource>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for source in sources {
+        let status = source
+            .source_parent_qn_term_offset_generator_probe
+            .as_ref()
+            .and_then(|probe| probe.generator_face_certificate_status.as_deref())
+            .unwrap_or("not_run");
+        *counts.entry(status.to_string()).or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn cygv_path_support_target_monomial_qn_source_offset_generator_face_certificate_status_counts<
+    'a,
+>(
+    probes: impl IntoIterator<Item = Option<&'a CygvPathHistoryProbe>>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes {
+        let Some(probe) = probe else {
+            *counts.entry("not_run".to_string()).or_insert(0usize) += 1;
+            continue;
+        };
+        if probe
+            .path_support_target_monomial_qn_source_sample
+            .is_empty()
+        {
+            *counts
+                .entry("no_target_monomial_qn_sources".to_string())
+                .or_insert(0usize) += 1;
+            continue;
+        }
+        for (status, count) in
+            target_monomial_qn_source_offset_generator_face_certificate_status_counts(
+                &probe.path_support_target_monomial_qn_source_sample,
+            )
+        {
+            *counts.entry(status).or_insert(0usize) += count;
+        }
+    }
+    counts
+}
+
+fn cygv_path_support_target_monomial_qn_source_offset_generator_lp_full_status_counts<'a>(
+    probes: impl IntoIterator<Item = Option<&'a CygvPathHistoryProbe>>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes {
+        let Some(probe) = probe else {
+            *counts.entry("not_run".to_string()).or_insert(0usize) += 1;
+            continue;
+        };
+        if probe
+            .path_support_target_monomial_qn_source_sample
+            .is_empty()
+        {
+            *counts
+                .entry("no_target_monomial_qn_sources".to_string())
+                .or_insert(0usize) += 1;
+            continue;
+        }
+        for source in &probe.path_support_target_monomial_qn_source_sample {
+            let status = source
+                .source_parent_qn_term_offset_generator_probe
+                .as_ref()
+                .and_then(|probe| probe.generator_face_certificate_lp_full_status.as_deref())
+                .unwrap_or("not_run");
+            *counts.entry(status.to_string()).or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn cygv_path_support_target_monomial_qn_source_offset_generator_lp_aggregate_status_counts<'a>(
+    probes: impl IntoIterator<Item = Option<&'a CygvPathHistoryProbe>>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes {
+        let Some(probe) = probe else {
+            *counts.entry("not_run".to_string()).or_insert(0usize) += 1;
+            continue;
+        };
+        if probe
+            .path_support_target_monomial_qn_source_sample
+            .is_empty()
+        {
+            *counts
+                .entry("no_target_monomial_qn_sources".to_string())
+                .or_insert(0usize) += 1;
+            continue;
+        }
+        for source in &probe.path_support_target_monomial_qn_source_sample {
+            let status = source
+                .source_parent_qn_term_offset_generator_probe
+                .as_ref()
+                .and_then(|probe| {
+                    probe
+                        .generator_face_certificate_lp_aggregate_status
+                        .as_deref()
+                })
+                .unwrap_or("not_run");
+            *counts.entry(status.to_string()).or_insert(0usize) += 1;
+        }
+    }
+    counts
+}
+
+fn cygv_path_support_target_monomial_qn_source_offset_generator_gw_noninteger_candidate_count_counts<
+    'a,
+>(
+    probes: impl IntoIterator<Item = Option<&'a CygvPathHistoryProbe>>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for probe in probes {
+        let Some(probe) = probe else {
+            *counts.entry("not_run".to_string()).or_insert(0usize) += 1;
+            continue;
+        };
+        if probe
+            .path_support_target_monomial_qn_source_sample
+            .is_empty()
+        {
+            *counts
+                .entry("no_target_monomial_qn_sources".to_string())
+                .or_insert(0usize) += 1;
+            continue;
+        }
+        for source in &probe.path_support_target_monomial_qn_source_sample {
+            let key = source
+                .source_parent_qn_term_offset_generator_probe
+                .as_ref()
+                .and_then(|probe| probe.gw_noninteger_candidate_count)
+                .map_or_else(
+                    || "not_run".to_string(),
+                    |candidate_count| candidate_count.to_string(),
+                );
+            *counts.entry(key).or_insert(0usize) += 1;
+        }
+    }
+    counts
 }
 
 fn source_qn_term_generator_face_certificate(
@@ -18924,6 +19148,51 @@ fn build_report(
             }),
             "not_run",
         );
+    let cygv_path_support_target_monomial_qn_source_semigroup_status_counts =
+        cygv_path_support_target_monomial_qn_source_probe_status_counts(
+            targets
+                .iter()
+                .map(|target| target.cygv_path_history_probe.as_ref()),
+            TargetMonomialQnSourceProbeKind::QnTermSemigroup,
+        );
+    let cygv_path_support_target_monomial_qn_source_seed_expanded_semigroup_status_counts =
+        cygv_path_support_target_monomial_qn_source_probe_status_counts(
+            targets
+                .iter()
+                .map(|target| target.cygv_path_history_probe.as_ref()),
+            TargetMonomialQnSourceProbeKind::SeedExpandedSemigroup,
+        );
+    let cygv_path_support_target_monomial_qn_source_offset_generator_status_counts =
+        cygv_path_support_target_monomial_qn_source_probe_status_counts(
+            targets
+                .iter()
+                .map(|target| target.cygv_path_history_probe.as_ref()),
+            TargetMonomialQnSourceProbeKind::OffsetGenerator,
+        );
+    let cygv_path_support_target_monomial_qn_source_offset_generator_face_certificate_status_counts =
+        cygv_path_support_target_monomial_qn_source_offset_generator_face_certificate_status_counts(
+            targets
+                .iter()
+                .map(|target| target.cygv_path_history_probe.as_ref()),
+        );
+    let cygv_path_support_target_monomial_qn_source_offset_generator_lp_full_status_counts =
+        cygv_path_support_target_monomial_qn_source_offset_generator_lp_full_status_counts(
+            targets
+                .iter()
+                .map(|target| target.cygv_path_history_probe.as_ref()),
+        );
+    let cygv_path_support_target_monomial_qn_source_offset_generator_lp_aggregate_status_counts =
+        cygv_path_support_target_monomial_qn_source_offset_generator_lp_aggregate_status_counts(
+            targets
+                .iter()
+                .map(|target| target.cygv_path_history_probe.as_ref()),
+        );
+    let cygv_path_support_target_monomial_qn_source_offset_generator_gw_noninteger_candidate_count_counts =
+        cygv_path_support_target_monomial_qn_source_offset_generator_gw_noninteger_candidate_count_counts(
+            targets
+                .iter()
+                .map(|target| target.cygv_path_history_probe.as_ref()),
+        );
     let cygv_lower_seed_decomposition_status_counts = optional_status_counts(
         targets.iter().map(|target| {
             target
@@ -19842,6 +20111,13 @@ fn build_report(
         cygv_path_support_gw_coefficient_trace_error_counts,
         cygv_path_support_target_pre_subtraction_formula_status_counts,
         cygv_path_support_target_gw_formula_instanton_balance_status_counts,
+        cygv_path_support_target_monomial_qn_source_semigroup_status_counts,
+        cygv_path_support_target_monomial_qn_source_seed_expanded_semigroup_status_counts,
+        cygv_path_support_target_monomial_qn_source_offset_generator_status_counts,
+        cygv_path_support_target_monomial_qn_source_offset_generator_face_certificate_status_counts,
+        cygv_path_support_target_monomial_qn_source_offset_generator_lp_full_status_counts,
+        cygv_path_support_target_monomial_qn_source_offset_generator_lp_aggregate_status_counts,
+        cygv_path_support_target_monomial_qn_source_offset_generator_gw_noninteger_candidate_count_counts,
         cygv_lower_seed_decomposition_status_counts,
         cygv_lower_seed_decomposition_direct_pair_seed_scan_count_counts,
         cygv_lower_seed_decomposition_pair_sum_degree_bound_counts,
@@ -45564,6 +45840,25 @@ mod tests {
             Some("2875")
         );
         assert_eq!(offset_probe.source_gw_candidate.as_deref(), Some("2875"));
+
+        let mut counted_source = offset_source;
+        counted_source.source_parent_qn_term_offset_generator_probe = Some(offset_probe.clone());
+        assert_eq!(
+            target_monomial_qn_source_probe_status_counts(
+                [&counted_source],
+                TargetMonomialQnSourceProbeKind::OffsetGenerator
+            ),
+            BTreeMap::from([("computed_source_qn_term_offset_generators".to_string(), 1)])
+        );
+        assert_eq!(
+            target_monomial_qn_source_offset_generator_face_certificate_status_counts([
+                &counted_source
+            ]),
+            BTreeMap::from([(
+                "offset_generators_full_dimensional_rank_1_dim_1".to_string(),
+                1
+            )])
+        );
     }
 
     #[test]

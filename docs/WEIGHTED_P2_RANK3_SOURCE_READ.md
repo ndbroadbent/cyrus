@@ -480,3 +480,13 @@ non-applicable, while the first two integer sectors report
 This only rules out scalar degree reparametrization as the missing promotion
 step; it does not rule out a genuinely sourced big-`J`, pairing, residue, or
 qN-history reconstruction.
+
+The path-support report now also aggregates the candidate qN-source semigroup
+probes that explain, but do not certify, the parent-domain qN coupling. The
+top-level counts include raw qN-term semigroup status, seed-expanded semigroup
+status, offset-generator status, offset-generator supporting-face certificate
+status, LP full/aggregate statuses, and raw `FIND_GV=false` nonintegral GW
+candidate-count buckets. These fields make it mechanically visible when an
+offset-generator domain matches a qN shape but still lacks a supporting-face
+certificate, so it remains diagnostic rather than promotable compact chamber
+history.
