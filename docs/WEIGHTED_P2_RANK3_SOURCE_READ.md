@@ -213,6 +213,15 @@ subtleties enter at higher degree. The split-bundle zero is therefore a real
 feature of the visible `O(-1)+O(-1)+O(-2)` numerator, not an artifact of reading
 the wrong z coefficient.
 
+This does not mean the `z^-3` descendant term is useless. CCIT explicitly
+states that one-point descendants can reconstruct genus-zero Gromov-Witten
+data in the semipositive/generated-by-degree-two setting. But that is a
+reconstruction theorem for the relevant Givental cone/source theory, not a
+rule that lets Cyrus read a descendant coefficient as a numerical CY3 GV row.
+For the present six-point row the missing data is still the certified source
+model plus reconstruction/pairing/qN history that says how this descendant
+enters the compact corrected-chamber invariant.
+
 A direct CYTools/PALP probe of the same six support coordinates is also
 negative. With experimental CYTools features enabled, `Polytope(pts)` reports
 dimension `4`, point count `6`, and `is_reflexive=False`; calling
