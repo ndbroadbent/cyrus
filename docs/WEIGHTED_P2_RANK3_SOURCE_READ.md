@@ -212,6 +212,14 @@ Cyrus six-point object, because the visible split-bundle total space is a
 five-dimensional local Calabi-Yau phase unless an additional codimension-2
 source model or insertion history is specified.
 
+A follow-up local-paper grep for the exact model found no
+`O(-1)+O(-1)+O(-2) -> P(1,1,2)` source. The closest adjacent example in the
+same paper is the toric flop between `O(-1)+O(-2) -> P^2` and
+`O(-1)^3 -> P(1,2)`. That is useful evidence that the hypergeometric
+line-bundle-sum machinery is the right mathematical neighborhood, but it still
+has different base weights, bundle degrees, and local dimension from the Cyrus
+six-coordinate row.
+
 ## What This Rules Out
 
 - Do not reuse the canonical `K_P(1,1,2)` formula as if it were the same
@@ -227,6 +235,9 @@ source model or insertion history is specified.
   row. The target-filtered overlap reports show a unique best toric neighbor on
   the positive height side for targets 7 and 8, but it still misses three of
   the six support points and adds an external point.
+- Do not reuse the adjacent `O(-1)^3 -> P(1,2)` flop example as if it were the
+  target row. It is a rank-three bundle example, but it is not the same
+  weighted base or bundle.
 
 ## Next Source Task
 
