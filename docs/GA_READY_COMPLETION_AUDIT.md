@@ -274,8 +274,9 @@ and matrix-basis pipeline are no longer open.
    the correct nef partition/source domain/chamber history for the McAllister
    six-point row. `mcallister_gv_context` now exports
    `complete_intersection_qn_trace_readiness_status` and ready-candidate counts
-   so this handoff is explicit in reports; the six-point weighted-`P2` row
-   currently reports
+   on both local complete-intersection candidates and unresolved current-chamber
+   generator summaries, so this handoff is explicit in reports; the six-point
+   weighted-`P2` row currently reports
    `complete_intersection_qn_trace_blocked_no_zero_degree_nef_partition` with
    ready count `0`.
    The context tool now also has an opt-in exact extremal-ray probe. For the

@@ -494,6 +494,10 @@ struct ContextReport {
         usize,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_support_reflexivity_precondition_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_complete_intersection_qn_trace_readiness_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_complete_intersection_qn_trace_ready_candidate_count_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_phase_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_source_model_status_counts:
@@ -17709,6 +17713,24 @@ fn build_report(
                     .as_deref()
             },
         );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_complete_intersection_qn_trace_readiness_status_counts =
+        unresolved_generator_optional_status_counts(
+            &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
+            |summary| {
+                summary
+                    .local_toric_complete_intersection_qn_trace_readiness_status
+                    .as_deref()
+            },
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_complete_intersection_qn_trace_ready_candidate_count_counts =
+        optional_usize_count_counts(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| {
+                    summary.local_toric_complete_intersection_qn_trace_ready_candidate_count
+                }),
+            "complete_intersection_qn_trace_ready_candidate_count_missing",
+        );
     let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_phase_status_counts =
         unresolved_generator_status_counts(
             &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
@@ -19203,6 +19225,8 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_unique_count,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_occurrence_count,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_support_reflexivity_precondition_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_complete_intersection_qn_trace_readiness_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_complete_intersection_qn_trace_ready_candidate_count_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_phase_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_source_model_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_base_tensor_status_counts,
