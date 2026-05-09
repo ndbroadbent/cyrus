@@ -52,6 +52,7 @@ use cyrus_core::{
     split_bundle_kp112_mirror_map_primary_p_lambda_coefficients,
     utils::gcd_list_int,
     weighted_p2_ordinary_dual_basis_p2_z_lambda_polynomials,
+    weighted_p2_rank_three_split_bundle_chen_ruan_source_basis_readout,
     weyl_reflection_matches_flop_transform,
 };
 
@@ -27521,12 +27522,11 @@ fn weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
     bundle_degrees: &[i64],
     total_first_chern_degree: i64,
 ) -> Option<WeightedP2RankThreeTwistedIfunctionChenRuanSourceMap> {
-    if base_weights != [1, 1, 2] || bundle_degrees != [1, 1, 2] {
-        return None;
-    }
-    if total_first_chern_degree != 0 {
-        return None;
-    }
+    let source_basis = weighted_p2_rank_three_split_bundle_chen_ruan_source_basis_readout(
+        base_weights,
+        bundle_degrees,
+        total_first_chern_degree,
+    )?;
     let adjacent_canonical_mirror_map_b_table_values = kp112_canonical_b_table_values(6);
     let adjacent_canonical_mirror_map_b_table_status =
         if adjacent_canonical_mirror_map_b_table_values
@@ -27621,45 +27621,36 @@ fn weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
     // bundle O(-1)+O(-1)+O(-2), so these facts constrain the missing
     // data but do not promote a numerical invariant by themselves.
     Some(WeightedP2RankThreeTwistedIfunctionChenRuanSourceMap {
-        source_status:
-            "weighted_p2_rank_three_chern_ruan_source_basis_for_p112_identified".to_string(),
-        source_scope_status:
-            "weighted_p2_rank_three_chern_ruan_source_is_adjacent_kp112_not_split_bundle_qn_history"
-                .to_string(),
-        inertia_component_classes: vec!["fun_0".to_string(), "fun_{1/2}".to_string()],
-        untwisted_hyperplane_class: "p=c1(O(1))".to_string(),
-        untwisted_codim2_candidate_class: "p^2".to_string(),
-        twisted_half_sector_candidate_class: "fun_{1/2}".to_string(),
-        source_dual_basis_p2_class: "2*lambda*fun_0-8*p".to_string(),
-        source_dual_basis_p2_readout_status:
-            "p2_one_point_correlator_is_read_from_dual_basis_phi2_not_from_raw_p2_coefficient"
-                .to_string(),
-        source_dual_basis_half_sector_class: "2*lambda*fun_{1/2}".to_string(),
-        adjacent_canonical_crepant_resolution_status:
-            "weighted_p2_rank_three_adjacent_kp112_crepant_map_reference_only".to_string(),
-        adjacent_canonical_crepant_resolution_p2_image: "p1*p2/2".to_string(),
-        adjacent_canonical_crepant_resolution_half_sector_image: "i*(p1-2*p2)/2".to_string(),
-        adjacent_canonical_correlator_p2_label: "<p^2>_{0,1,d}^{K_P(1,1,2)}".to_string(),
-        adjacent_canonical_correlator_half_sector_label:
-            "<fun_{1/2}>_{0,1,d}^{K_P(1,1,2)}".to_string(),
-        adjacent_canonical_mirror_map_status:
-            "kp112_canonical_source_uses_q_equals_x_exp_4h_after_o_minus_4_hypergeometric_modification"
-                .to_string(),
-        adjacent_canonical_mirror_map_b_table_status:
-            adjacent_canonical_mirror_map_b_table_status.to_string(),
+        source_status: source_basis.source_status,
+        source_scope_status: source_basis.source_scope_status,
+        inertia_component_classes: source_basis.inertia_component_classes,
+        untwisted_hyperplane_class: source_basis.untwisted_hyperplane_class,
+        untwisted_codim2_candidate_class: source_basis.untwisted_codim2_candidate_class,
+        twisted_half_sector_candidate_class: source_basis.twisted_half_sector_candidate_class,
+        source_dual_basis_p2_class: source_basis.source_dual_basis_p2_class,
+        source_dual_basis_p2_readout_status: source_basis.source_dual_basis_p2_readout_status,
+        source_dual_basis_half_sector_class: source_basis.source_dual_basis_half_sector_class,
+        adjacent_canonical_crepant_resolution_status: source_basis
+            .adjacent_canonical_crepant_resolution_status,
+        adjacent_canonical_crepant_resolution_p2_image: source_basis
+            .adjacent_canonical_crepant_resolution_p2_image,
+        adjacent_canonical_crepant_resolution_half_sector_image: source_basis
+            .adjacent_canonical_crepant_resolution_half_sector_image,
+        adjacent_canonical_correlator_p2_label: source_basis.adjacent_canonical_correlator_p2_label,
+        adjacent_canonical_correlator_half_sector_label: source_basis
+            .adjacent_canonical_correlator_half_sector_label,
+        adjacent_canonical_mirror_map_status: source_basis.adjacent_canonical_mirror_map_status,
+        adjacent_canonical_mirror_map_b_table_status: adjacent_canonical_mirror_map_b_table_status
+            .to_string(),
         adjacent_canonical_mirror_map_b_table_values,
-        adjacent_canonical_mirror_map_c_table_status:
-            adjacent_canonical_mirror_map_c_table_status.to_string(),
+        adjacent_canonical_mirror_map_c_table_status: adjacent_canonical_mirror_map_c_table_status
+            .to_string(),
         adjacent_canonical_mirror_map_c_table_values,
-        split_bundle_ifunction_modification_source:
-            "ccit_smalllinebundle_smallvb_direct_sum_modification_product_over_o_minus_1_o_minus_1_o_minus_2"
-                .to_string(),
-        split_bundle_ordinary_non_equivariant_p2_readout_status:
-            "rank_three_split_ordinary_non_equivariant_p2_readout_vanishes_before_mirror_map_because_codim2_truncation_of_bundle_numerator_is_zero"
-                .to_string(),
-        split_bundle_mirror_map_status:
-            "rank_three_split_integer_terms_have_zero_order_three_so_adjacent_kp112_divisor_mirror_map_is_not_inherited"
-                .to_string(),
+        split_bundle_ifunction_modification_source: source_basis
+            .split_bundle_ifunction_modification_source,
+        split_bundle_ordinary_non_equivariant_p2_readout_status: source_basis
+            .split_bundle_ordinary_non_equivariant_p2_readout_status,
+        split_bundle_mirror_map_status: source_basis.split_bundle_mirror_map_status,
         split_bundle_kp112_mirror_map_primary_p_status:
             split_bundle_kp112_mirror_map_primary_p_status.to_string(),
         split_bundle_kp112_mirror_map_primary_p_lambda_coefficients,
@@ -27671,18 +27662,11 @@ fn weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
         split_bundle_kp112_mirror_map_half_sector_first_nonzero_inverse_z_powers,
         split_bundle_kp112_mirror_map_half_sector_first_nonzero_coefficients,
         split_bundle_kp112_mirror_map_half_sector_descendant_profiles,
-        split_bundle_gw_extraction_status:
-            "rank_three_split_requires_own_j_or_big_j_coefficient_extraction_before_qn_history"
-                .to_string(),
-        twisted_sector_divisor_equation_status:
-            "chen_ruan_twisted_sector_has_no_divisor_equation_requires_big_j_or_pairing_input"
-                .to_string(),
-        split_bundle_required_source_data_status:
-            "rank_three_split_nonzero_contribution_if_any_requires_equivariant_residue_or_twisted_big_j_pairing_not_canonical_kp112_table"
-                .to_string(),
-        split_bundle_promotion_status:
-            "weighted_p2_rank_three_split_bundle_still_requires_twisted_vector_bundle_ifunction_normalization_and_qn_history"
-                .to_string(),
+        split_bundle_gw_extraction_status: source_basis.split_bundle_gw_extraction_status,
+        twisted_sector_divisor_equation_status: source_basis.twisted_sector_divisor_equation_status,
+        split_bundle_required_source_data_status: source_basis
+            .split_bundle_required_source_data_status,
+        split_bundle_promotion_status: source_basis.split_bundle_promotion_status,
     })
 }
 

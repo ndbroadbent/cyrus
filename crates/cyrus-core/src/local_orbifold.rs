@@ -46,6 +46,128 @@ pub struct OrdinarySectorDualBasisP2ZReadout {
     pub status: String,
 }
 
+/// Chen-Ruan source-basis facts for the rank-three
+/// `O(-1)+O(-1)+O(-2) -> P(1,1,2)` split-bundle diagnostic.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct WeightedP2RankThreeChenRuanSourceBasisReadout {
+    /// Whether the source basis has been identified.
+    pub source_status: String,
+    /// Boundary between adjacent `K_P(1,1,2)` source data and the split bundle.
+    pub source_scope_status: String,
+    /// Chen-Ruan inertia-component labels used by the CCIT source.
+    pub inertia_component_classes: Vec<String>,
+    /// Untwisted hyperplane class on `P(1,1,2)`.
+    pub untwisted_hyperplane_class: String,
+    /// Stack-normalized square of the hyperplane class.
+    pub base_hyperplane_square: String,
+    /// Untwisted codimension-two insertion candidate.
+    pub untwisted_codim2_candidate_class: String,
+    /// Twisted half-sector insertion candidate.
+    pub twisted_half_sector_candidate_class: String,
+    /// Dual-basis class whose one-point correlator reads the `p^2` insertion.
+    pub source_dual_basis_p2_class: String,
+    /// Normalization divisor for the `p^2` dual-basis readout.
+    pub source_dual_basis_p2_normalization_divisor: String,
+    /// Status for reading `p^2` from the dual Chen-Ruan basis.
+    pub source_dual_basis_p2_readout_status: String,
+    /// Dual-basis half-sector class.
+    pub source_dual_basis_half_sector_class: String,
+    /// Normalization boundary for stack and orbifold-sector pairings.
+    pub stack_pairing_normalization_status: String,
+    /// Status for using the adjacent canonical crepant-resolution map.
+    pub adjacent_canonical_crepant_resolution_status: String,
+    /// Image of `p^2` in the adjacent canonical resolution coordinates.
+    pub adjacent_canonical_crepant_resolution_p2_image: String,
+    /// Image of the half-sector class in adjacent canonical resolution coordinates.
+    pub adjacent_canonical_crepant_resolution_half_sector_image: String,
+    /// Label for the adjacent canonical `p^2` correlator.
+    pub adjacent_canonical_correlator_p2_label: String,
+    /// Label for the adjacent canonical half-sector correlator.
+    pub adjacent_canonical_correlator_half_sector_label: String,
+    /// Status for the adjacent canonical mirror-map normalization.
+    pub adjacent_canonical_mirror_map_status: String,
+    /// Source of the split-bundle I-function modification.
+    pub split_bundle_ifunction_modification_source: String,
+    /// Non-equivariant `p^2` readout status before mirror-map/pairing data.
+    pub split_bundle_ordinary_non_equivariant_p2_readout_status: String,
+    /// Status for inheriting the adjacent `K_P(1,1,2)` mirror map.
+    pub split_bundle_mirror_map_status: String,
+    /// Status for extracting split-bundle GW data.
+    pub split_bundle_gw_extraction_status: String,
+    /// Status for divisor-equation use in the twisted sector.
+    pub twisted_sector_divisor_equation_status: String,
+    /// Remaining source data needed before promotion.
+    pub split_bundle_required_source_data_status: String,
+    /// Final promotion boundary for this source readout.
+    pub split_bundle_promotion_status: String,
+}
+
+/// Source-basis facts for the weighted-`P2` rank-three split bundle.
+pub fn weighted_p2_rank_three_split_bundle_chen_ruan_source_basis_readout(
+    base_weights: &[i64],
+    bundle_degrees: &[i64],
+    total_first_chern_degree: i64,
+) -> Option<WeightedP2RankThreeChenRuanSourceBasisReadout> {
+    if base_weights != [1, 1, 2] || bundle_degrees != [1, 1, 2] {
+        return None;
+    }
+    if total_first_chern_degree != 0 {
+        return None;
+    }
+    Some(WeightedP2RankThreeChenRuanSourceBasisReadout {
+        source_status: "weighted_p2_rank_three_chern_ruan_source_basis_for_p112_identified"
+            .to_string(),
+        source_scope_status:
+            "weighted_p2_rank_three_chern_ruan_source_is_adjacent_kp112_not_split_bundle_qn_history"
+                .to_string(),
+        inertia_component_classes: vec!["fun_0".to_string(), "fun_{1/2}".to_string()],
+        untwisted_hyperplane_class: "p=c1(O(1))".to_string(),
+        base_hyperplane_square: "1/2".to_string(),
+        untwisted_codim2_candidate_class: "p^2".to_string(),
+        twisted_half_sector_candidate_class: "fun_{1/2}".to_string(),
+        source_dual_basis_p2_class: "2*lambda*fun_0-8*p".to_string(),
+        source_dual_basis_p2_normalization_divisor: "2*lambda".to_string(),
+        source_dual_basis_p2_readout_status:
+            "p2_one_point_correlator_is_read_from_dual_basis_phi2_not_from_raw_p2_coefficient"
+                .to_string(),
+        source_dual_basis_half_sector_class: "2*lambda*fun_{1/2}".to_string(),
+        stack_pairing_normalization_status:
+            "weighted_p2_hyperplane_square_fractional_requires_stack_normalized_source_pairing_and_twisted_sector_pairing"
+                .to_string(),
+        adjacent_canonical_crepant_resolution_status:
+            "weighted_p2_rank_three_adjacent_kp112_crepant_map_reference_only".to_string(),
+        adjacent_canonical_crepant_resolution_p2_image: "p1*p2/2".to_string(),
+        adjacent_canonical_crepant_resolution_half_sector_image: "i*(p1-2*p2)/2".to_string(),
+        adjacent_canonical_correlator_p2_label: "<p^2>_{0,1,d}^{K_P(1,1,2)}".to_string(),
+        adjacent_canonical_correlator_half_sector_label:
+            "<fun_{1/2}>_{0,1,d}^{K_P(1,1,2)}".to_string(),
+        adjacent_canonical_mirror_map_status:
+            "kp112_canonical_source_uses_q_equals_x_exp_4h_after_o_minus_4_hypergeometric_modification"
+                .to_string(),
+        split_bundle_ifunction_modification_source:
+            "ccit_smalllinebundle_smallvb_direct_sum_modification_product_over_o_minus_1_o_minus_1_o_minus_2"
+                .to_string(),
+        split_bundle_ordinary_non_equivariant_p2_readout_status:
+            "rank_three_split_ordinary_non_equivariant_p2_readout_vanishes_before_mirror_map_because_codim2_truncation_of_bundle_numerator_is_zero"
+                .to_string(),
+        split_bundle_mirror_map_status:
+            "rank_three_split_integer_terms_have_zero_order_three_so_adjacent_kp112_divisor_mirror_map_is_not_inherited"
+                .to_string(),
+        split_bundle_gw_extraction_status:
+            "rank_three_split_requires_own_j_or_big_j_coefficient_extraction_before_qn_history"
+                .to_string(),
+        twisted_sector_divisor_equation_status:
+            "chen_ruan_twisted_sector_has_no_divisor_equation_requires_big_j_or_pairing_input"
+                .to_string(),
+        split_bundle_required_source_data_status:
+            "rank_three_split_nonzero_contribution_if_any_requires_equivariant_residue_or_twisted_big_j_pairing_not_canonical_kp112_table"
+                .to_string(),
+        split_bundle_promotion_status:
+            "weighted_p2_rank_three_split_bundle_still_requires_twisted_vector_bundle_ifunction_normalization_and_qn_history"
+                .to_string(),
+    })
+}
+
 /// CCIT `K_P(1,1,2)` untwisted `b_d` table through `max_degree`.
 pub fn kp112_canonical_b_table_values(max_degree: usize) -> Vec<String> {
     kp112_ordinary_p_primary_lambda_coefficients(&[4], max_degree)
@@ -877,6 +999,7 @@ mod tests {
         split_bundle_kp112_mirror_map_half_sector_primary_coefficients,
         split_bundle_kp112_mirror_map_primary_p_lambda_coefficients,
         weighted_p2_ordinary_dual_basis_p2_z_readout_profile,
+        weighted_p2_rank_three_split_bundle_chen_ruan_source_basis_readout,
     };
 
     #[test]
@@ -980,6 +1103,47 @@ mod tests {
                 .find(|entry| entry.inverse_z_power == "2")
                 .and_then(|entry| entry.dual_basis_p2_coefficients.clone()),
             Some(vec!["0".to_string(), "11/4".to_string()])
+        );
+    }
+
+    #[test]
+    fn weighted_p2_rank_three_chen_ruan_source_basis_is_pinned() {
+        let readout = weighted_p2_rank_three_split_bundle_chen_ruan_source_basis_readout(
+            &[1, 1, 2],
+            &[1, 1, 2],
+            0,
+        )
+        .expect("rank-three weighted P2 source basis");
+        assert_eq!(
+            readout.source_status,
+            "weighted_p2_rank_three_chern_ruan_source_basis_for_p112_identified"
+        );
+        assert_eq!(readout.inertia_component_classes, ["fun_0", "fun_{1/2}"]);
+        assert_eq!(readout.base_hyperplane_square, "1/2");
+        assert_eq!(readout.source_dual_basis_p2_class, "2*lambda*fun_0-8*p");
+        assert_eq!(
+            readout.source_dual_basis_p2_normalization_divisor,
+            "2*lambda"
+        );
+        assert_eq!(
+            readout.source_dual_basis_half_sector_class,
+            "2*lambda*fun_{1/2}"
+        );
+        assert_eq!(
+            readout.stack_pairing_normalization_status,
+            "weighted_p2_hyperplane_square_fractional_requires_stack_normalized_source_pairing_and_twisted_sector_pairing"
+        );
+        assert_eq!(
+            readout.split_bundle_promotion_status,
+            "weighted_p2_rank_three_split_bundle_still_requires_twisted_vector_bundle_ifunction_normalization_and_qn_history"
+        );
+        assert!(
+            weighted_p2_rank_three_split_bundle_chen_ruan_source_basis_readout(
+                &[1, 1, 2],
+                &[4],
+                0,
+            )
+            .is_none()
         );
     }
 

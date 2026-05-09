@@ -155,6 +155,14 @@ nonzero split-bundle contribution still requires an equivariant residue or
 twisted big-J/pairing normalization. These aggregates are report-level
 bookkeeping, not a promotion rule.
 
+The source-basis facts behind that report are now owned by
+`cyrus_core::local_orbifold::weighted_p2_rank_three_split_bundle_chen_ruan_source_basis_readout`
+rather than being hard-coded only in `mcallister_gv_context`. The core readout
+pins the `K_P(1,1,2)` Chen-Ruan basis, the class
+`2*lambda*fun_0-8*p`, the `2*lambda` normalization divisor, the fractional
+`H^2 = 1/2` stack-pairing warning, and the split-bundle promotion blocker. It
+is still source metadata, not a numerical GV promotion rule.
+
 Cyrus now traces that dual-basis readout at the numerator level. Since CCIT's
 small `J`-function is written as
 `<phi_epsilon/(z(z-psi))> phi^epsilon`, the `p^2` insertion coefficient is
