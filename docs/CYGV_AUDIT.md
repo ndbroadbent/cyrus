@@ -55,7 +55,11 @@ and the origin-included support has total degree `[0]`. The weighted-`P2`
 source summary also now records the algorithm route split: CKYZ local-surface
 extraction is marked not applicable to this visible CY5 phase, while a
 twisted/vector-bundle I-function is only a candidate after supplying insertions
-and compact qN history.
+and compact qN history. The twisted route now has a computed readiness surface:
+CY5 virtual dimension requires a complex codimension-`2` insertion, the visible
+candidate is the weighted-base `H^2` class, and promotion is blocked on
+stack-normalized `H^2`/orbifold-sector pairing data, a chamber certificate, and
+source qN history.
 
 ## CYTools Contract
 

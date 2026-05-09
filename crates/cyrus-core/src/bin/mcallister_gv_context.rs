@@ -510,6 +510,10 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_readiness_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_missing_input_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_origin_split_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_nearest_support_best_candidate_count_counts:
@@ -1443,6 +1447,15 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
     local_toric_weighted_p2_rank_three_ckyz_local_surface_source_status: Option<String>,
     local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_source_status:
         Option<String>,
+    local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_required_insertion_complex_codimension:
+        Option<i64>,
+    local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_candidate_insertion_class:
+        Option<String>,
+    local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_insertion_normalization_status:
+        Option<String>,
+    local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_readiness_status:
+        Option<String>,
+    local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_missing_inputs: Vec<String>,
     local_toric_weighted_p2_rank_three_origin_included_zero_degree_split_summary:
         WeightedP2RankThreeOriginIncludedZeroDegreeSplitSummary,
     ckyz_status: String,
@@ -1609,6 +1622,11 @@ struct WeightedP2RankThreeSourceModelSummary {
     numerical_gv_status: Option<String>,
     ckyz_local_surface_source_status: Option<String>,
     twisted_vector_bundle_ifunction_source_status: Option<String>,
+    twisted_vector_bundle_ifunction_required_insertion_complex_codimension: Option<i64>,
+    twisted_vector_bundle_ifunction_candidate_insertion_class: Option<String>,
+    twisted_vector_bundle_ifunction_insertion_normalization_status: Option<String>,
+    twisted_vector_bundle_ifunction_readiness_status: Option<String>,
+    twisted_vector_bundle_ifunction_missing_inputs: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -17867,6 +17885,19 @@ fn build_report(
                     .as_deref()
             },
         );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_readiness_status_counts =
+        unresolved_generator_optional_status_counts(
+            &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
+            |summary| {
+                summary
+                    .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_readiness_status
+                    .as_deref()
+            },
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_missing_input_counts =
+        unresolved_generator_weighted_p2_twisted_ifunction_missing_input_counts(
+            &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
+        );
     let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_origin_split_status_counts =
         unresolved_generator_weighted_p2_origin_split_status_counts(
             &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
@@ -19341,6 +19372,8 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_numerical_gv_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_ckyz_local_surface_source_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_readiness_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_missing_input_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_origin_split_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_nearest_support_best_candidate_count_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_nearest_support_best_known_qn_history_status_counts,
@@ -21433,6 +21466,21 @@ fn unresolved_chamber_generator_summaries(
                     local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_source_status:
                         weighted_rank_three_source_model
                             .twisted_vector_bundle_ifunction_source_status,
+                    local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_required_insertion_complex_codimension:
+                        weighted_rank_three_source_model
+                            .twisted_vector_bundle_ifunction_required_insertion_complex_codimension,
+                    local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_candidate_insertion_class:
+                        weighted_rank_three_source_model
+                            .twisted_vector_bundle_ifunction_candidate_insertion_class,
+                    local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_insertion_normalization_status:
+                        weighted_rank_three_source_model
+                            .twisted_vector_bundle_ifunction_insertion_normalization_status,
+                    local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_readiness_status:
+                        weighted_rank_three_source_model
+                            .twisted_vector_bundle_ifunction_readiness_status,
+                    local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_missing_inputs:
+                        weighted_rank_three_source_model
+                            .twisted_vector_bundle_ifunction_missing_inputs,
                     local_toric_weighted_p2_rank_three_origin_included_zero_degree_split_summary:
                         weighted_rank_three_origin_split_summary,
                     ckyz_status: context.local_toric_diagnostic.ckyz_status.clone(),
@@ -21568,6 +21616,20 @@ fn unresolved_generator_weighted_p2_origin_split_status_counts(
             .local_toric_weighted_p2_rank_three_origin_included_zero_degree_split_summary
             .status
     })
+}
+
+fn unresolved_generator_weighted_p2_twisted_ifunction_missing_input_counts(
+    summaries: &[LocalCygvUnresolvedChamberGeneratorSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        for input in &summary
+            .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_missing_inputs
+        {
+            *counts.entry(input.clone()).or_insert(0) += 1;
+        }
+    }
+    counts
 }
 
 fn chamber_decomposition_term_contexts(
@@ -26389,6 +26451,11 @@ fn weighted_p2_rank_three_source_model_summary(
         numerical_gv_status: None,
         ckyz_local_surface_source_status: None,
         twisted_vector_bundle_ifunction_source_status: None,
+        twisted_vector_bundle_ifunction_required_insertion_complex_codimension: None,
+        twisted_vector_bundle_ifunction_candidate_insertion_class: None,
+        twisted_vector_bundle_ifunction_insertion_normalization_status: None,
+        twisted_vector_bundle_ifunction_readiness_status: None,
+        twisted_vector_bundle_ifunction_missing_inputs: Vec::new(),
     };
     if !charge_family_status
         .starts_with("local_toric_weighted_p2_rank_three_split_bundle_charge_family")
@@ -26448,6 +26515,64 @@ fn weighted_p2_rank_three_source_model_summary(
     } else {
         "weighted_p2_rank_three_twisted_vector_bundle_ifunction_not_calabi_yau_total_space"
     };
+    // For a c1=0 genus-zero invariant, vdim_C without markings is dim_C - 3.
+    // A CY5 local phase therefore needs codimension-2 insertions before it
+    // can define a numerical CY3-style contribution.
+    let required_insertion_complex_codimension =
+        if total_first_chern_degree == 0 && total_space_complex_dimension > 3 {
+            Some(total_space_complex_dimension - 3)
+        } else {
+            None
+        };
+    let candidate_insertion_class =
+        required_insertion_complex_codimension.and_then(|required_codimension| {
+            (required_codimension == base_complex_dimension)
+                .then(|| format!("base_hyperplane_power_{required_codimension}"))
+        });
+    let insertion_normalization_status =
+        required_insertion_complex_codimension.map(|_| base_tensor_status.clone());
+    let (twisted_ifunction_readiness_status, twisted_ifunction_missing_inputs) =
+        if total_first_chern_degree != 0 {
+            (
+                "weighted_p2_rank_three_twisted_ifunction_not_calabi_yau_total_space".to_string(),
+                vec!["calabi_yau_total_first_chern_zero".to_string()],
+            )
+        } else if total_space_complex_dimension == 3 {
+            (
+                "weighted_p2_rank_three_twisted_ifunction_visible_threefold_requires_qn_history"
+                    .to_string(),
+                vec!["twisted_vector_bundle_ifunction_qn_history".to_string()],
+            )
+        } else if candidate_insertion_class.is_none() {
+            (
+                "weighted_p2_rank_three_twisted_ifunction_blocked_missing_source_insertion_class_qn_history".to_string(),
+                vec![
+                    "source_derived_numerical_insertion_class".to_string(),
+                    "twisted_vector_bundle_ifunction_chamber_certificate".to_string(),
+                    "twisted_vector_bundle_ifunction_qn_history".to_string(),
+                ],
+            )
+        } else if base_weight_product != 1 {
+            (
+                "weighted_p2_rank_three_twisted_ifunction_blocked_missing_stack_normalized_codim2_insertion_qn_history".to_string(),
+                vec![
+                    "source_derived_codim2_insertion_or_equivalent_observable".to_string(),
+                    "stack_normalized_hyperplane_square_tensor".to_string(),
+                    "orbifold_sector_pairing_data".to_string(),
+                    "twisted_vector_bundle_ifunction_chamber_certificate".to_string(),
+                    "twisted_vector_bundle_ifunction_qn_history".to_string(),
+                ],
+            )
+        } else {
+            (
+                "weighted_p2_rank_three_twisted_ifunction_blocked_missing_codim_insertion_qn_history".to_string(),
+                vec![
+                    "source_derived_codim_insertion_or_equivalent_observable".to_string(),
+                    "twisted_vector_bundle_ifunction_chamber_certificate".to_string(),
+                    "twisted_vector_bundle_ifunction_qn_history".to_string(),
+                ],
+            )
+        };
     let status = if phase_summary
         .status
         .starts_with("weighted_p2_rank_three_split_bundle_selected_")
@@ -26472,6 +26597,13 @@ fn weighted_p2_rank_three_source_model_summary(
         twisted_vector_bundle_ifunction_source_status: Some(
             twisted_vector_bundle_ifunction_source_status.to_string(),
         ),
+        twisted_vector_bundle_ifunction_required_insertion_complex_codimension:
+            required_insertion_complex_codimension,
+        twisted_vector_bundle_ifunction_candidate_insertion_class: candidate_insertion_class,
+        twisted_vector_bundle_ifunction_insertion_normalization_status:
+            insertion_normalization_status,
+        twisted_vector_bundle_ifunction_readiness_status: Some(twisted_ifunction_readiness_status),
+        twisted_vector_bundle_ifunction_missing_inputs: twisted_ifunction_missing_inputs,
     }
 }
 
@@ -38930,6 +39062,43 @@ mod tests {
             Some(
                 "weighted_p2_rank_three_twisted_vector_bundle_ifunction_candidate_requires_insertions_and_qn_history"
             )
+        );
+        assert_eq!(
+            selected_base_source_model
+                .twisted_vector_bundle_ifunction_required_insertion_complex_codimension,
+            Some(2)
+        );
+        assert_eq!(
+            selected_base_source_model
+                .twisted_vector_bundle_ifunction_candidate_insertion_class
+                .as_deref(),
+            Some("base_hyperplane_power_2")
+        );
+        assert_eq!(
+            selected_base_source_model
+                .twisted_vector_bundle_ifunction_insertion_normalization_status
+                .as_deref(),
+            Some(
+                "weighted_p2_rank_three_base_hyperplane_square_fractional_requires_stack_or_source_tensor_normalization"
+            )
+        );
+        assert_eq!(
+            selected_base_source_model
+                .twisted_vector_bundle_ifunction_readiness_status
+                .as_deref(),
+            Some(
+                "weighted_p2_rank_three_twisted_ifunction_blocked_missing_stack_normalized_codim2_insertion_qn_history"
+            )
+        );
+        assert_eq!(
+            selected_base_source_model.twisted_vector_bundle_ifunction_missing_inputs,
+            vec![
+                "source_derived_codim2_insertion_or_equivalent_observable".to_string(),
+                "stack_normalized_hyperplane_square_tensor".to_string(),
+                "orbifold_sector_pairing_data".to_string(),
+                "twisted_vector_bundle_ifunction_chamber_certificate".to_string(),
+                "twisted_vector_bundle_ifunction_qn_history".to_string(),
+            ]
         );
         let point_samples = vec![
             relation_point_sample(0, -1, &[0, 0, 0, 0], None),

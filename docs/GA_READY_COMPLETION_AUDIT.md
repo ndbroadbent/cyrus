@@ -285,7 +285,12 @@ and matrix-basis pipeline are no longer open.
    unresolved-generator aggregates now mark the CKYZ local-surface route as
    not applicable to the visible CY5 phase and leave the CCIT-style
    twisted/vector-bundle I-function as a candidate only with source-derived
-   insertions and qN history.
+   insertions and qN history. The same aggregate path now records the
+   twisted-route virtual-dimension handoff: the visible CY5 phase needs a
+   complex codimension-`2` insertion, the natural candidate is the weighted-base
+   `H^2` insertion, and the route remains blocked on stack-normalized
+   `H^2`/orbifold-sector pairing data, a chamber certificate, and source qN
+   history.
    The context tool now also has an opt-in exact extremal-ray probe. For the
    current schema-3 context it verifies that all nine remaining targets are
    non-extremal in the finite degree-bounded cone by exact decomposition

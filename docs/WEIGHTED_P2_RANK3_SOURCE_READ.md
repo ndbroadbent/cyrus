@@ -67,6 +67,10 @@ required_cygv_codim = 2
 numerical_gv = weighted_p2_rank_three_visible_phase_is_not_numerical_cy3_requires_source_codim2_or_insertion_history
 ckyz_source = weighted_p2_rank_three_ckyz_local_surface_source_not_applicable_visible_phase_not_local_surface_cy3
 twisted_ifunction_source = weighted_p2_rank_three_twisted_vector_bundle_ifunction_candidate_requires_insertions_and_qn_history
+twisted_ifunction_required_insertion_codim = 2
+twisted_ifunction_candidate_insertion = base_hyperplane_power_2
+twisted_ifunction_readiness = weighted_p2_rank_three_twisted_ifunction_blocked_missing_stack_normalized_codim2_insertion_qn_history
+twisted_ifunction_missing = source_derived_codim2_insertion_or_equivalent_observable, stack_normalized_hyperplane_square_tensor, orbifold_sector_pairing_data, twisted_vector_bundle_ifunction_chamber_certificate, twisted_vector_bundle_ifunction_qn_history
 base_anticanonical_degree = 4
 bundle_degree_sum = 4
 total_first_chern_degree = 0
@@ -128,7 +132,12 @@ the origin as a hull vertex. The same aggregate now separates the source
 algorithm route: CKYZ local-surface extraction is not applicable because the
 visible phase is not a local CY3 surface geometry, while a CCIT-style
 twisted/vector-bundle I-function remains a candidate only after specifying the
-insertions and qN history.
+insertions and qN history. The report now computes the basic virtual-dimension
+handoff for that candidate: the visible CY5 phase needs a complex codimension
+`2` insertion to produce a numerical CY3-style invariant, the natural visible
+candidate is `H^2` on the weighted base, and the fractional
+`H^2 = 1/2` pairing means the insertion cannot be promoted without
+stack/source normalization and orbifold-sector pairing data.
 
 A direct CYTools/PALP probe of the same six support coordinates is also
 negative. With experimental CYTools features enabled, `Polytope(pts)` reports
