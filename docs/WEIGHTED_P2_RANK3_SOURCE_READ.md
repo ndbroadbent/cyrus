@@ -70,7 +70,7 @@ twisted_ifunction_source = weighted_p2_rank_three_twisted_vector_bundle_ifunctio
 twisted_ifunction_required_insertion_codim = 2
 twisted_ifunction_candidate_insertion = base_hyperplane_power_2
 twisted_ifunction_readiness = weighted_p2_rank_three_twisted_ifunction_blocked_missing_stack_normalized_codim2_insertion_qn_history
-twisted_ifunction_missing = source_derived_codim2_insertion_or_equivalent_observable, stack_normalized_hyperplane_square_tensor, orbifold_sector_pairing_data, twisted_vector_bundle_ifunction_chamber_certificate, twisted_vector_bundle_ifunction_qn_history
+twisted_ifunction_missing = source_derived_codim2_insertion_or_equivalent_observable, stack_normalized_hyperplane_square_tensor, orbifold_sector_pairing_data, equivariant_residue_or_pairing_normalization, twisted_vector_bundle_ifunction_chamber_certificate, twisted_vector_bundle_ifunction_qn_history
 twisted_ifunction_degree_profile = d=1/2 half-degree twisted sector, numerator zero order 1; d=1 untwisted sector, numerator zero order 3 > codim-2 insertion
 base_anticanonical_degree = 4
 bundle_degree_sum = 4
@@ -145,6 +145,15 @@ orbifold-sector pairing, while integer untwisted terms have numerator zero
 order `3`, exceeding the codimension-`2` insertion and therefore requiring
 equivariant/source normalization rather than a naive non-equivariant `H^2`
 coefficient readout.
+
+The same report now also aggregates the Chen-Ruan source-map blockers for the
+CCIT-style route. The top-level counts expose that the `p^2` one-point
+correlator must be read through the dual basis class
+`2*lambda*fun_0-8*p`, not as the raw `p^2` coefficient; the split-bundle
+ordinary non-equivariant readout vanishes before mirror-map extraction; and any
+nonzero split-bundle contribution still requires an equivariant residue or
+twisted big-J/pairing normalization. These aggregates are report-level
+bookkeeping, not a promotion rule.
 
 A direct CYTools/PALP probe of the same six support coordinates is also
 negative. With experimental CYTools features enabled, `Polytope(pts)` reports
