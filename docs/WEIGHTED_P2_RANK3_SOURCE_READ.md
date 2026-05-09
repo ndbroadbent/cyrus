@@ -371,3 +371,31 @@ just enumerative: the CYTools-valid origin-excluded support has total degree
 `[-1]`, the origin contributes `[1]`, and the origin-included total is `[0]`.
 Thus zero-degree splits appear only after violating the CYTools rule that nef
 partition parts must exclude the origin.
+
+Fresh target-filtered context reports confirm that this is not a unit-test-only
+artifact. Running
+
+```bash
+./target/debug/mcallister_gv_context \
+  --context /tmp/cyrus_corrected_chamber_gv_context_induced_face_smoke.json \
+  --target-index 7 \
+  --skip-star-union-secondary-certificates \
+  --out /tmp/cyrus_gv_context_target7_z_readout_report.json
+
+./target/debug/mcallister_gv_context \
+  --context /tmp/cyrus_corrected_chamber_gv_context_induced_face_smoke.json \
+  --target-index 8 \
+  --skip-star-union-secondary-certificates \
+  --out /tmp/cyrus_gv_context_target8_z_readout_report.json
+```
+
+gives the same z-order profile on both rows: two half-degree sectors are marked
+as having no untwisted full-hypergeometric z-readout, and the two integer
+sectors have zero primary `z^-2` dual-basis `p^2` readout. The first nonzero
+terms are descendants at `z^-3`, with lambda-polynomial samples
+`[0, 0, -1/4]` and `[0, 0, -1/32]`. The lightweight command keeps the semigroup
+generator/decomposition readout but deliberately leaves the chamber secondary
+certificates skipped. Deeper complete-intersection source certificates,
+support-overlap diagnostics, and lower-seed diamond qN traces remain opt-in via
+their existing report flags, because they are certification paths, not
+prerequisites for this z-readout check.

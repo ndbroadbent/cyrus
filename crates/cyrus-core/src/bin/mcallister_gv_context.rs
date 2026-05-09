@@ -17544,6 +17544,7 @@ fn build_report(
     element_limit: usize,
     lower_seed_pair_limit: usize,
     closure_generation_limit: Option<usize>,
+    skip_star_union_secondary_certificates: bool,
     supporting_face_lp_options: &SupportingMoriFaceLpSearchOptions,
 ) -> ContextReport {
     let mut semigroup_measurement_cache = HashMap::new();
@@ -17661,6 +17662,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_shared_face_secondary_status_counts(&targets);
     let local_phase_chamber_membership_certificate_status_counts =
         local_phase_chamber_membership_certificate_status_counts(&targets, validated);
+    let run_chamber_support_overlap_diagnostics = support_overlap_min_for_run.is_some();
     let local_cygv_source_resolution_hint_sample = local_cygv_source_resolution_hint_summaries(
         &targets,
         validated,
@@ -17669,9 +17671,13 @@ fn build_report(
         target_extremal_generator_limit,
         target_extremal_max_degree,
         origin_support_certificate_limit,
+        certify_origin_witness_domains,
+        run_chamber_support_overlap_diagnostics,
         element_limit,
         lower_seed_pair_limit,
         closure_generation_limit,
+        run_lower_seed_diamonds,
+        skip_star_union_secondary_certificates,
     );
     let local_cygv_all_witness_source_resolution_sample =
         local_cygv_all_witness_source_resolution_summaries(
@@ -17681,6 +17687,10 @@ fn build_report(
             target_extremal_generator_limit,
             target_extremal_max_degree,
             origin_support_certificate_limit,
+            certify_origin_witness_domains,
+            run_chamber_support_overlap_diagnostics,
+            run_lower_seed_diamonds,
+            skip_star_union_secondary_certificates,
         );
     let local_cygv_all_witness_source_resolution_status_counts =
         local_cygv_all_witness_source_resolution_status_counts(
@@ -19937,9 +19947,13 @@ fn local_cygv_source_resolution_hint_summaries(
     star_union_extremal_generator_limit: usize,
     star_union_extremal_max_degree: Option<i128>,
     target_plus_star_support_certificate_limit: usize,
+    certify_complete_intersection_sources: bool,
+    run_chamber_support_overlap_diagnostics: bool,
     element_limit: usize,
     lower_seed_pair_limit: usize,
     closure_generation_limit: Option<usize>,
+    run_lower_seed_diamonds: bool,
+    skip_star_union_secondary_certificates: bool,
 ) -> Vec<LocalCygvSourceResolutionHintSummary> {
     targets
         .iter()
@@ -20042,10 +20056,12 @@ fn local_cygv_source_resolution_hint_summaries(
             let star_union_target_plus_star_local_cygv_readiness =
                 local_cygv_star_union_target_plus_star_local_cygv_readiness(
                     &star_union_target_plus_star_support,
+                    certify_complete_intersection_sources,
                 );
             let star_union_target_plus_star_origin_enlarged_local_cygv_readiness =
                 local_cygv_star_union_target_plus_star_local_cygv_readiness(
                     &star_union_target_plus_star_origin_enlarged_support,
+                    certify_complete_intersection_sources,
                 );
             let local_phase_chamber_membership_certificate_status =
                 local_phase_chamber_membership_certificate_status_with_witness(
@@ -20114,6 +20130,9 @@ fn local_cygv_source_resolution_hint_summaries(
                     &star_union_global_regular_triangulation,
                     &crossed_wall_regular_side,
                     Some(context),
+                    skip_star_union_secondary_certificates,
+                    run_lower_seed_diamonds,
+                    run_chamber_support_overlap_diagnostics,
                 );
             let compact_omission_wall_side = local_cygv_compact_omission_wall_side_summary(
                 &star_union_target_plus_star_local_cygv_readiness,
@@ -20386,6 +20405,10 @@ fn local_cygv_all_witness_source_resolution_summaries(
     star_union_extremal_generator_limit: usize,
     star_union_extremal_max_degree: Option<i128>,
     target_plus_star_support_certificate_limit: usize,
+    certify_complete_intersection_sources: bool,
+    run_chamber_support_overlap_diagnostics: bool,
+    run_lower_seed_diamonds: bool,
+    skip_star_union_secondary_certificates: bool,
 ) -> Vec<LocalCygvAllWitnessSourceResolutionSummary> {
     let mut summaries = Vec::new();
     for target in targets {
@@ -20458,6 +20481,7 @@ fn local_cygv_all_witness_source_resolution_summaries(
             let star_union_target_plus_star_local_cygv_readiness =
                 local_cygv_star_union_target_plus_star_local_cygv_readiness(
                     &star_union_target_plus_star_support,
+                    certify_complete_intersection_sources,
                 );
             let star_union_target_plus_star_local_cygv_readiness =
                 attach_local_phase_chamber_to_target_plus_star_readiness(
@@ -20513,6 +20537,9 @@ fn local_cygv_all_witness_source_resolution_summaries(
                     &star_union_global_regular_triangulation,
                     &crossed_wall_regular_side,
                     Some(context),
+                    skip_star_union_secondary_certificates,
+                    run_lower_seed_diamonds,
+                    run_chamber_support_overlap_diagnostics,
                 );
             let compact_omission_wall_side = local_cygv_compact_omission_wall_side_summary(
                 &star_union_target_plus_star_local_cygv_readiness,
@@ -26260,6 +26287,9 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
     global_regular: &LocalCygvStarUnionGlobalRegularTriangulationHint,
     regular_side: &LocalCygvStarUnionCrossedWallRegularSideHint,
     context: Option<&ValidatedContext<'_>>,
+    skip_secondary_certificates: bool,
+    run_lower_seed_diamonds: bool,
+    run_support_overlap_diagnostics: bool,
 ) -> LocalCygvStarUnionChamberSemigroupTransportProbe {
     let blocked =
         |status: &str, error: Option<String>| LocalCygvStarUnionChamberSemigroupTransportProbe {
@@ -26309,11 +26339,17 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
         );
     }
 
-    let current_chamber_secondary_certificate = local_cygv_star_union_chamber_secondary_certificate(
-        point_samples,
-        &star_union.point_indices,
-        &global_regular.simplices,
-    );
+    let current_chamber_secondary_certificate = if skip_secondary_certificates {
+        local_cygv_star_union_chamber_secondary_certificate_not_run(
+            "skipped_by_skip_star_union_secondary_certificates",
+        )
+    } else {
+        local_cygv_star_union_chamber_secondary_certificate(
+            point_samples,
+            &star_union.point_indices,
+            &global_regular.simplices,
+        )
+    };
     let current_generators = match local_cygv_star_union_chamber_generators_in_charge_basis(
         point_samples,
         &star_union.point_indices,
@@ -26347,12 +26383,17 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
         flipped_decomposition,
     ) = match flipped {
         Ok(Some(flipped_simplices)) => {
-            let flipped_chamber_secondary_certificate =
+            let flipped_chamber_secondary_certificate = if skip_secondary_certificates {
+                local_cygv_star_union_chamber_secondary_certificate_not_run(
+                    "skipped_by_skip_star_union_secondary_certificates",
+                )
+            } else {
                 local_cygv_star_union_chamber_secondary_certificate(
                     point_samples,
                     &star_union.point_indices,
                     &flipped_simplices,
-                );
+                )
+            };
             match local_cygv_star_union_chamber_generators_in_charge_basis(
                 point_samples,
                 &star_union.point_indices,
@@ -26432,6 +26473,8 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
                 &current_generators,
                 context,
                 Some(&current_chamber_secondary_certificate),
+                run_lower_seed_diamonds,
+                run_support_overlap_diagnostics,
             )
         })
         .unwrap_or_default();
@@ -26444,6 +26487,8 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
                 &flipped_generators,
                 context,
                 Some(&flipped_chamber_secondary_certificate),
+                run_lower_seed_diamonds,
+                run_support_overlap_diagnostics,
             )
         })
         .unwrap_or_default();
@@ -26617,6 +26662,8 @@ fn chamber_semigroup_generator_contexts(
     generators: &[Vec<i64>],
     context: &ValidatedContext<'_>,
     chamber_secondary_certificate: Option<&LocalCygvStarUnionChamberSecondaryCertificate>,
+    run_lower_seed_diamonds: bool,
+    run_support_overlap_diagnostics: bool,
 ) -> Vec<LocalCygvChamberSemigroupGeneratorContext> {
     generators
         .iter()
@@ -26630,6 +26677,8 @@ fn chamber_semigroup_generator_contexts(
                 charge_basis,
                 context,
                 chamber_secondary_certificate,
+                run_lower_seed_diamonds,
+                run_support_overlap_diagnostics,
             )
         })
         .collect()
@@ -28372,6 +28421,8 @@ fn chamber_semigroup_generator_context(
     charge_basis: &[Vec<i64>],
     context: &ValidatedContext<'_>,
     chamber_secondary_certificate: Option<&LocalCygvStarUnionChamberSecondaryCertificate>,
+    run_lower_seed_diamonds: bool,
+    run_support_overlap_diagnostics: bool,
 ) -> LocalCygvChamberSemigroupGeneratorContext {
     let empty = |point_relation_status: &str,
                  point_relation_nonzero: Option<Vec<(usize, i64)>>,
@@ -28514,13 +28565,18 @@ fn chamber_semigroup_generator_context(
                         .as_deref(),
                     context.secondary_cone_heights,
                 );
-            let degree_bounded_support_overlap_diagnostic =
+            let degree_bounded_support_overlap_diagnostic = if run_support_overlap_diagnostics {
                 chamber_generator_degree_bounded_support_overlap_diagnostic(
                     &point_relation_nonzero,
                     None,
                     context,
                     CHAMBER_GENERATOR_SUPPORT_OVERLAP_SAMPLE_LIMIT,
-                );
+                )
+            } else {
+                chamber_generator_support_overlap_diagnostic_not_run(
+                    "support_overlap_diagnostics_not_requested",
+                )
+            };
             return LocalCygvChamberSemigroupGeneratorContext {
                 generator_index,
                 chamber_coordinate: generator.to_vec(),
@@ -28556,7 +28612,7 @@ fn chamber_semigroup_generator_context(
         lower_seed_sum_decomposition,
         bounded_lower_seed_decomposition,
         lower_seed_decomposition_error,
-    ) = star_union_lower_seed_diagnostics(&basis_dense, degree, context, true);
+    ) = star_union_lower_seed_diagnostics(&basis_dense, degree, context, run_lower_seed_diamonds);
     let local_toric_diagnostic =
         chamber_generator_local_toric_diagnostic(&point_relation_nonzero, point_samples);
     let circuit_global_height_choice_summary =
@@ -28597,13 +28653,18 @@ fn chamber_semigroup_generator_context(
     ) {
         source_class_status = Some(local_status);
     }
-    let degree_bounded_support_overlap_diagnostic =
+    let degree_bounded_support_overlap_diagnostic = if run_support_overlap_diagnostics {
         chamber_generator_degree_bounded_support_overlap_diagnostic(
             &point_relation_nonzero,
             Some(degree),
             context,
             CHAMBER_GENERATOR_SUPPORT_OVERLAP_SAMPLE_LIMIT,
-        );
+        )
+    } else {
+        chamber_generator_support_overlap_diagnostic_not_run(
+            "support_overlap_diagnostics_not_requested",
+        )
+    };
 
     LocalCygvChamberSemigroupGeneratorContext {
         generator_index,
@@ -32294,6 +32355,7 @@ fn local_cygv_star_union_support_hint_for_relation_by_point(
 
 fn local_cygv_star_union_target_plus_star_local_cygv_readiness(
     support: &LocalCygvStarUnionTargetPlusStarSupportHint,
+    certify_complete_intersection_sources: bool,
 ) -> LocalCygvStarUnionTargetPlusStarLocalCygvReadiness {
     let Some(charge_basis) = support.charge_basis.as_ref() else {
         return blocked_target_plus_star_local_cygv_readiness(
@@ -32316,13 +32378,17 @@ fn local_cygv_star_union_target_plus_star_local_cygv_readiness(
     let relation_coordinates = support.relation_coordinates.as_deref();
     let target_relation_coefficients =
         target_relation_coefficients_in_charge_basis(charge_basis, relation_coordinates);
-    let complete_intersection_shape_candidate = local_cygv_complete_intersection_shape_candidate(
-        &shape,
-        &support.point_indices,
-        &support.point_samples,
-        charge_basis,
-        target_relation_coefficients.as_deref(),
-    );
+    let complete_intersection_shape_candidate = certify_complete_intersection_sources
+        .then(|| {
+            local_cygv_complete_intersection_shape_candidate(
+                &shape,
+                &support.point_indices,
+                &support.point_samples,
+                charge_basis,
+                target_relation_coefficients.as_deref(),
+            )
+        })
+        .flatten();
     let target_relation_status = match relation_coordinates {
         Some(coordinates) if !coordinates.is_empty() => {
             "target_relation_integral_in_target_plus_star_charge_basis"
@@ -32385,6 +32451,8 @@ fn local_cygv_star_union_target_plus_star_local_cygv_readiness(
     if !shape.is_compact_threefold_hypersurface_shape {
         if complete_intersection_shape_candidate.is_some() {
             missing_inputs.push("source_derived_nef_partition".to_string());
+        } else if !certify_complete_intersection_sources {
+            missing_inputs.push("complete_intersection_source_certification_not_run".to_string());
         } else {
             missing_inputs.push("compact_threefold_hypersurface_shape".to_string());
         }
@@ -35372,7 +35440,7 @@ fn selected_target_indices(
 fn main() {
     let Some(context_path) = parse_arg_value::<PathBuf>("--context") else {
         eprintln!(
-            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--trace-support-overlap-qn] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--certify-origin-witness-domains] [--origin-support-certificate-limit N] [--run-origin-witness-cygv] [--origin-witness-cygv-generator-limit N] [--scan-origin-witness-span-closure] [--origin-witness-span-closure-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--probe-star-union-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--supporting-face-lp-anchor-attempts N] [--supporting-face-lp-cutting-rounds N] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--cygv-degree-ladder-bounded-closure-limit N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--scan-local-integer-tensors] [--local-tensor-scan-bound N] [--element-limit N] [--lower-seed-pair-limit N] [--closure-generation-limit N] [--out path | --per-target-out-dir path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree; use --cygv-degree-ladder-bounded-closure-limit 0 to disable skipped-step closure summaries"
+            "[ERROR] usage: mcallister_gv_context --context path [--target-index N] [--run-integer-diamonds] [--run-active-support-generators] [--run-support-overlap-generators N] [--pair-reduce-support-overlap-generators] [--trace-support-overlap-qn] [--support-overlap-max-target-degree N] [--certify-origin-support-domains] [--certify-origin-witness-domains] [--origin-support-certificate-limit N] [--run-origin-witness-cygv] [--origin-witness-cygv-generator-limit N] [--scan-origin-witness-span-closure] [--origin-witness-span-closure-limit N] [--certify-target-extremal-rays] [--target-extremal-generator-limit N] [--target-extremal-max-degree N] [--measure-cygv-semigroups] [--probe-cygv-path-history] [--probe-star-union-path-history] [--run-lower-seed-diamonds] [--run-path-support-generators] [--skip-star-union-secondary-certificates] [--supporting-face-lp-anchor-attempts N] [--supporting-face-lp-cutting-rounds N] [--measure-cygv-degree-ladder --cygv-degree-ladder-max-degree N] [--cygv-degree-ladder-bounded-closure-limit N] [--semigroup-measure-max-target-degree N] [--semigroup-measure-max-seeds N] [--scan-local-integer-tensors] [--local-tensor-scan-bound N] [--element-limit N] [--lower-seed-pair-limit N] [--closure-generation-limit N] [--out path | --per-target-out-dir path]\n       use --run-support-overlap-generators 0 to try all degree-bounded generators up to each target degree; use --cygv-degree-ladder-bounded-closure-limit 0 to disable skipped-step closure summaries"
         );
         std::process::exit(2);
     };
@@ -35403,6 +35471,8 @@ fn main() {
     let probe_star_union_path_history = parse_flag("--probe-star-union-path-history");
     let run_lower_seed_diamonds = parse_flag("--run-lower-seed-diamonds");
     let run_path_support_generators = parse_flag("--run-path-support-generators");
+    let skip_star_union_secondary_certificates =
+        parse_flag("--skip-star-union-secondary-certificates");
     let supporting_face_lp_defaults = SupportingMoriFaceLpSearchOptions::default();
     let supporting_face_lp_options = SupportingMoriFaceLpSearchOptions {
         anchor_attempts: parse_arg_value::<usize>("--supporting-face-lp-anchor-attempts")
@@ -35495,6 +35565,7 @@ fn main() {
                 element_limit,
                 lower_seed_pair_limit,
                 closure_generation_limit,
+                skip_star_union_secondary_certificates,
                 &supporting_face_lp_options,
             );
             let content = serde_json::to_string_pretty(&report).unwrap_or_else(|e| {
@@ -35544,6 +35615,7 @@ fn main() {
         element_limit,
         lower_seed_pair_limit,
         closure_generation_limit,
+        skip_star_union_secondary_certificates,
         &supporting_face_lp_options,
     );
     let content = serde_json::to_string_pretty(&report).unwrap_or_else(|e| {
@@ -36157,6 +36229,8 @@ mod tests {
             &[vec![2, 3]],
             &context,
             None,
+            true,
+            true,
         );
 
         assert_eq!(contexts.len(), 1);
@@ -37112,6 +37186,7 @@ mod tests {
             64,
             DEFAULT_CYGV_LOWER_SEED_PAIR_LIMIT,
             None,
+            false,
             &SupportingMoriFaceLpSearchOptions::default(),
         );
 
@@ -37216,6 +37291,7 @@ mod tests {
             64,
             DEFAULT_CYGV_LOWER_SEED_PAIR_LIMIT,
             None,
+            false,
             &SupportingMoriFaceLpSearchOptions::default(),
         );
 
@@ -42058,6 +42134,9 @@ mod tests {
             &global_regular,
             &regular_side,
             None,
+            false,
+            true,
+            true,
         );
 
         assert_eq!(
@@ -42142,6 +42221,74 @@ mod tests {
         assert_eq!(
             probe.positive_degree_transport_status,
             "positive_degree_transport_not_run_without_global_degree_context"
+        );
+
+        let skipped_certificate_probe = local_cygv_star_union_chamber_semigroup_transport_probe(
+            &point_samples,
+            &star_union,
+            &global_regular,
+            &regular_side,
+            None,
+            true,
+            true,
+            true,
+        );
+
+        assert_eq!(
+            skipped_certificate_probe.status,
+            "star_union_chamber_semigroup_candidate_current_and_flipped_contain_target_plus_star"
+        );
+        assert_eq!(
+            skipped_certificate_probe
+                .current_chamber_secondary_certificate
+                .status,
+            "chamber_secondary_certificate_not_run:skipped_by_skip_star_union_secondary_certificates"
+        );
+        assert_eq!(
+            skipped_certificate_probe
+                .flipped_chamber_secondary_certificate
+                .status,
+            "chamber_secondary_certificate_not_run:skipped_by_skip_star_union_secondary_certificates"
+        );
+        assert_eq!(
+            skipped_certificate_probe.current_chamber_generator_count,
+            Some(5)
+        );
+        assert_eq!(
+            skipped_certificate_probe.current_chamber_generators,
+            probe.current_chamber_generators
+        );
+        assert_eq!(
+            skipped_certificate_probe
+                .current_chamber_decomposition
+                .as_ref()
+                .map(|terms| {
+                    terms
+                        .iter()
+                        .map(|term| (term.generator_index, term.coefficient))
+                        .collect::<Vec<_>>()
+                }),
+            Some(vec![(3, 1), (4, 1)])
+        );
+        assert_eq!(
+            skipped_certificate_probe.flipped_chamber_generator_count,
+            Some(5)
+        );
+        assert_eq!(
+            skipped_certificate_probe.flipped_chamber_generators,
+            probe.flipped_chamber_generators
+        );
+        assert_eq!(
+            skipped_certificate_probe
+                .flipped_chamber_decomposition
+                .as_ref()
+                .map(|terms| {
+                    terms
+                        .iter()
+                        .map(|term| (term.generator_index, term.coefficient))
+                        .collect::<Vec<_>>()
+                }),
+            Some(vec![(0, 1), (1, 3), (3, 2)])
         );
     }
 
@@ -42322,7 +42469,7 @@ mod tests {
             relation_rational_denominators: Some(vec!["1".to_string(), "1".to_string()]),
         };
 
-        let readiness = local_cygv_star_union_target_plus_star_local_cygv_readiness(&support);
+        let readiness = local_cygv_star_union_target_plus_star_local_cygv_readiness(&support, true);
 
         assert_eq!(
             readiness.status,
@@ -42506,7 +42653,7 @@ mod tests {
             relation_rational_denominators: Some(vec!["1".to_string(), "1".to_string()]),
         };
 
-        let readiness = local_cygv_star_union_target_plus_star_local_cygv_readiness(&support);
+        let readiness = local_cygv_star_union_target_plus_star_local_cygv_readiness(&support, true);
 
         assert_eq!(
             readiness.status,
