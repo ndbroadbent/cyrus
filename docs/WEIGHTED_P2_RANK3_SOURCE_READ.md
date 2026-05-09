@@ -65,6 +65,8 @@ source_model = weighted_p2_rank_three_source_model_visible_phase_is_local_cy5_to
 total_dim    = 5
 required_cygv_codim = 2
 numerical_gv = weighted_p2_rank_three_visible_phase_is_not_numerical_cy3_requires_source_codim2_or_insertion_history
+ckyz_source = weighted_p2_rank_three_ckyz_local_surface_source_not_applicable_visible_phase_not_local_surface_cy3
+twisted_ifunction_source = weighted_p2_rank_three_twisted_vector_bundle_ifunction_candidate_requires_insertions_and_qn_history
 base_anticanonical_degree = 4
 bundle_degree_sum = 4
 total_first_chern_degree = 0
@@ -122,7 +124,11 @@ base-tensor status, numerical-GV status, and support-reflexivity precondition.
 For this row those aggregates should expose the same obstruction in one place:
 selected base phase, visible local CY5 rather than CY3, required codimension
 `2`, fractional `H^2=1/2` tensor normalization, and non-reflexive support with
-the origin as a hull vertex.
+the origin as a hull vertex. The same aggregate now separates the source
+algorithm route: CKYZ local-surface extraction is not applicable because the
+visible phase is not a local CY3 surface geometry, while a CCIT-style
+twisted/vector-bundle I-function remains a candidate only after specifying the
+insertions and qN history.
 
 A direct CYTools/PALP probe of the same six support coordinates is also
 negative. With experimental CYTools features enabled, `Polytope(pts)` reports

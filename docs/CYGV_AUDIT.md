@@ -51,7 +51,11 @@ trace boundary as
 `complete_intersection_qn_trace_blocked_origin_exclusion_total_degree_nonzero`.
 The same report exports the degree totals behind this obstruction: the
 origin-excluded support has total degree `[-1]`, the origin has degree `[1]`,
-and the origin-included support has total degree `[0]`.
+and the origin-included support has total degree `[0]`. The weighted-`P2`
+source summary also now records the algorithm route split: CKYZ local-surface
+extraction is marked not applicable to this visible CY5 phase, while a
+twisted/vector-bundle I-function is only a candidate after supplying insertions
+and compact qN history.
 
 ## CYTools Contract
 

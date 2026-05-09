@@ -281,7 +281,11 @@ and matrix-basis pipeline are no longer open.
    ready count `0`. Its exported degree totals show why this is not merely a
    search miss: the origin-excluded support totals to `[-1]`, the origin
    contributes `[1]`, and the origin-included total is `[0]`, so the apparent
-   zero-degree repair depends on putting the origin into a nef part.
+   zero-degree repair depends on putting the origin into a nef part. The same
+   unresolved-generator aggregates now mark the CKYZ local-surface route as
+   not applicable to the visible CY5 phase and leave the CCIT-style
+   twisted/vector-bundle I-function as a candidate only with source-derived
+   insertions and qN history.
    The context tool now also has an opt-in exact extremal-ray probe. For the
    current schema-3 context it verifies that all nine remaining targets are
    non-extremal in the finite degree-bounded cone by exact decomposition
