@@ -213,6 +213,18 @@ subtleties enter at higher degree. The split-bundle zero is therefore a real
 feature of the visible `O(-1)+O(-1)+O(-2)` numerator, not an artifact of reading
 the wrong z coefficient.
 
+Cyrus now also has a stronger adjacent-source regression for the canonical
+model. The test `canonical_weighted_p2_mirror_map_matches_ccit_b_table`
+implements the CCIT mirror map `q = x exp(4 h(x))` and recovers the published
+`K_P(1,1,2)` table
+`b_d = 11/4, 525/16, 6152/9, 1146765/64, 53305261/100, 51550873/3` for
+`d <= 6` from the ordinary-`p` primary coefficient. The companion
+`split_bundle_kp112_mirror_map_diagnostic_has_zero_primary_p_signal` applies
+the same adjacent diagnostic to bundle degrees `[1,1,2]` and still finds zero
+primary ordinary-`p` signal through the checked integer sectors. Thus the
+canonical mirror-map/pairing benchmark is now pinned in Rust, and it reinforces
+rather than removes the split-bundle primary obstruction.
+
 This does not mean the `z^-3` descendant term is useless. CCIT explicitly
 states that one-point descendants can reconstruct genus-zero Gromov-Witten
 data in the semipositive/generated-by-degree-two setting. But that is a
