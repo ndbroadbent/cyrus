@@ -218,19 +218,28 @@ model. The test `canonical_weighted_p2_mirror_map_matches_ccit_b_table`
 implements the CCIT mirror map `q = x exp(4 h(x))` and recovers the published
 `K_P(1,1,2)` table
 `b_d = 11/4, 525/16, 6152/9, 1146765/64, 53305261/100, 51550873/3` for
-`d <= 6` from the ordinary-`p` primary coefficient. The companion
+`d <= 6` from the ordinary-`p` primary coefficient. The companion test
+`canonical_weighted_p2_mirror_map_matches_ccit_c_table` now also checks the
+twisted half-sector primary readout and reproduces
+`c_d = -2, -52/9, -2002/25, -83004/49, -3554552/81, -154984300/121,
+-6835086702/169` through half-degree `13/2`. The companion
 `split_bundle_kp112_mirror_map_diagnostic_has_zero_primary_p_signal` applies
 the same adjacent diagnostic to bundle degrees `[1,1,2]` and still finds zero
-primary ordinary-`p` signal through the checked integer sectors. Thus the
-canonical mirror-map/pairing benchmark is now pinned in Rust, and it reinforces
-rather than removes the split-bundle primary obstruction. The same computed
-diagnostic is now serialized in the target-filtered reports. For both targets
-`7` and `8`, the adjacent-canonical status count is
-`kp112_canonical_mirror_map_reproduces_ccit_b_table_to_degree_6`, while the
-split-bundle status count is
-`rank_three_split_kp112_mirror_map_primary_p_signal_zero_to_degree_4`; the
-sample source map carries the six canonical `b_d` values and the four split
-primary coefficients `[0, 0, 0, 0]`.
+primary ordinary-`p` signal through the checked integer sectors; the companion
+`split_bundle_kp112_mirror_map_diagnostic_has_zero_half_sector_primary_signal`
+does the same for the half-sector primary through half-degree `7/2` and also
+finds `[0, 0, 0, 0]`. Thus the canonical mirror-map/pairing benchmark is now
+pinned in Rust for both untwisted and twisted primary sectors, and it
+reinforces rather than removes the split-bundle primary obstruction. The same
+computed diagnostics are now serialized in the target-filtered reports. For
+both targets `7` and `8`, the adjacent-canonical status counts are
+`kp112_canonical_mirror_map_reproduces_ccit_b_table_to_degree_6` and
+`kp112_canonical_mirror_map_reproduces_ccit_c_table_to_half_degree_13_over_2`,
+while the split-bundle status counts are
+`rank_three_split_kp112_mirror_map_primary_p_signal_zero_to_degree_4` and
+`rank_three_split_kp112_mirror_map_half_sector_primary_signal_zero_to_half_degree_7_over_2`;
+the sample source map carries the canonical `b_d`/`c_d` values and split
+primary coefficients `[0, 0, 0, 0]` in both checked sectors.
 
 This does not mean the `z^-3` descendant term is useless. CCIT explicitly
 states that one-point descendants can reconstruct genus-zero Gromov-Witten

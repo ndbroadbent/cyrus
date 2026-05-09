@@ -538,7 +538,11 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_adjacent_canonical_mirror_map_b_table_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_adjacent_canonical_mirror_map_c_table_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_primary_p_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_half_sector_primary_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_gw_extraction_status_counts:
         BTreeMap<String, usize>,
@@ -1732,11 +1736,15 @@ struct WeightedP2RankThreeTwistedIfunctionChenRuanSourceMap {
     adjacent_canonical_mirror_map_status: String,
     adjacent_canonical_mirror_map_b_table_status: String,
     adjacent_canonical_mirror_map_b_table_values: Vec<String>,
+    adjacent_canonical_mirror_map_c_table_status: String,
+    adjacent_canonical_mirror_map_c_table_values: Vec<String>,
     split_bundle_ifunction_modification_source: String,
     split_bundle_ordinary_non_equivariant_p2_readout_status: String,
     split_bundle_mirror_map_status: String,
     split_bundle_kp112_mirror_map_primary_p_status: String,
     split_bundle_kp112_mirror_map_primary_p_lambda_coefficients: Vec<String>,
+    split_bundle_kp112_mirror_map_half_sector_primary_status: String,
+    split_bundle_kp112_mirror_map_half_sector_primary_coefficients: Vec<String>,
     split_bundle_gw_extraction_status: String,
     twisted_sector_divisor_equation_status: String,
     split_bundle_required_source_data_status: String,
@@ -18094,6 +18102,17 @@ fn build_report(
                 }),
             |source_map| source_map.adjacent_canonical_mirror_map_b_table_status.as_str(),
         );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_adjacent_canonical_mirror_map_c_table_status_counts =
+        weighted_p2_rank_three_chen_ruan_source_map_status_counts(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| {
+                    summary
+                        .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_chen_ruan_source_map
+                        .as_ref()
+                }),
+            |source_map| source_map.adjacent_canonical_mirror_map_c_table_status.as_str(),
+        );
     let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_primary_p_status_counts =
         weighted_p2_rank_three_chen_ruan_source_map_status_counts(
             local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
@@ -18104,6 +18123,17 @@ fn build_report(
                         .as_ref()
                 }),
             |source_map| source_map.split_bundle_kp112_mirror_map_primary_p_status.as_str(),
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_half_sector_primary_status_counts =
+        weighted_p2_rank_three_chen_ruan_source_map_status_counts(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| {
+                    summary
+                        .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_chen_ruan_source_map
+                        .as_ref()
+                }),
+            |source_map| source_map.split_bundle_kp112_mirror_map_half_sector_primary_status.as_str(),
         );
     let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_gw_extraction_status_counts =
         weighted_p2_rank_three_chen_ruan_source_map_status_counts(
@@ -19626,7 +19656,9 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_non_equivariant_limit_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_p2_readout_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_adjacent_canonical_mirror_map_b_table_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_adjacent_canonical_mirror_map_c_table_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_primary_p_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_half_sector_primary_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_gw_extraction_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_required_source_data_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_promotion_status_counts,
@@ -27145,6 +27177,23 @@ fn weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
         } else {
             "kp112_canonical_mirror_map_mismatch_against_ccit_b_table"
         };
+    let adjacent_canonical_mirror_map_c_table_values = kp112_canonical_c_table_values(7);
+    let adjacent_canonical_mirror_map_c_table_status =
+        if adjacent_canonical_mirror_map_c_table_values
+            == [
+                "-2",
+                "-52/9",
+                "-2002/25",
+                "-83004/49",
+                "-3554552/81",
+                "-154984300/121",
+                "-6835086702/169",
+            ]
+        {
+            "kp112_canonical_mirror_map_reproduces_ccit_c_table_to_half_degree_13_over_2"
+        } else {
+            "kp112_canonical_mirror_map_mismatch_against_ccit_c_table"
+        };
     let split_bundle_kp112_mirror_map_primary_p_lambda_coefficients =
         split_bundle_kp112_mirror_map_primary_p_lambda_coefficients(4);
     let split_bundle_kp112_mirror_map_primary_p_status =
@@ -27155,6 +27204,17 @@ fn weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
             "rank_three_split_kp112_mirror_map_primary_p_signal_zero_to_degree_4"
         } else {
             "rank_three_split_kp112_mirror_map_primary_p_signal_nonzero_requires_source_extraction"
+        };
+    let split_bundle_kp112_mirror_map_half_sector_primary_coefficients =
+        split_bundle_kp112_mirror_map_half_sector_primary_coefficients(4);
+    let split_bundle_kp112_mirror_map_half_sector_primary_status =
+        if split_bundle_kp112_mirror_map_half_sector_primary_coefficients
+            .iter()
+            .all(|coefficient| coefficient == "0")
+        {
+            "rank_three_split_kp112_mirror_map_half_sector_primary_signal_zero_to_half_degree_7_over_2"
+        } else {
+            "rank_three_split_kp112_mirror_map_half_sector_primary_signal_nonzero_requires_source_extraction"
         };
     // CCIT/wallcrossings2 Example II gives the Chen-Ruan basis and
     // adjacent K_{P(1,1,2)} crepant map.  The target here is the split
@@ -27188,6 +27248,9 @@ fn weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
         adjacent_canonical_mirror_map_b_table_status:
             adjacent_canonical_mirror_map_b_table_status.to_string(),
         adjacent_canonical_mirror_map_b_table_values,
+        adjacent_canonical_mirror_map_c_table_status:
+            adjacent_canonical_mirror_map_c_table_status.to_string(),
+        adjacent_canonical_mirror_map_c_table_values,
         split_bundle_ifunction_modification_source:
             "ccit_smalllinebundle_smallvb_direct_sum_modification_product_over_o_minus_1_o_minus_1_o_minus_2"
                 .to_string(),
@@ -27200,6 +27263,9 @@ fn weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
         split_bundle_kp112_mirror_map_primary_p_status:
             split_bundle_kp112_mirror_map_primary_p_status.to_string(),
         split_bundle_kp112_mirror_map_primary_p_lambda_coefficients,
+        split_bundle_kp112_mirror_map_half_sector_primary_status:
+            split_bundle_kp112_mirror_map_half_sector_primary_status.to_string(),
+        split_bundle_kp112_mirror_map_half_sector_primary_coefficients,
         split_bundle_gw_extraction_status:
             "rank_three_split_requires_own_j_or_big_j_coefficient_extraction_before_qn_history"
                 .to_string(),
@@ -28662,6 +28728,205 @@ fn split_bundle_kp112_mirror_map_primary_p_lambda_coefficients(max_degree: usize
                 .cloned()
                 .unwrap_or_else(|| MalachiteRational::from(0))
                 .to_string()
+        })
+        .collect()
+}
+
+fn weighted_p2_half_sector_primary_after_kp112_mirror_map(
+    bundle_degrees: &[i64],
+    half_sector_count: usize,
+) -> Vec<BTreeMap<usize, MalachiteRational>> {
+    if half_sector_count == 0 {
+        return Vec::new();
+    }
+    let max_shift = half_sector_count - 1;
+    let x_of_q = kp112_x_of_q_series(max_shift);
+    let h_of_q = truncated_series_compose(&kp112_h_series(max_shift), &x_of_q, max_shift);
+    let mut primary_by_half_index =
+        vec![BTreeMap::<usize, MalachiteRational>::new(); half_sector_count];
+    let exp_terms = kp112_lambda_expansion_terms(&h_of_q, max_shift, 2);
+
+    for half_index in 0..half_sector_count {
+        let degree_twice = i64::try_from(2 * half_index + 1).expect("half degree fits i64");
+        let Some((denominator, denominator_z_power)) =
+            half_sector_base_denominator_constant_and_z_power(&[1, 1, 2], degree_twice)
+        else {
+            continue;
+        };
+        let raw_by_numerator_z_power =
+            half_sector_fun_component_by_numerator_z_power(bundle_degrees, degree_twice);
+        let argument = h_of_q
+            .iter()
+            .map(|coefficient| -rational_from_i64(2 * degree_twice) * coefficient.clone())
+            .collect::<Vec<_>>();
+        let x_factor = truncated_series_exp(&argument, max_shift);
+
+        for (numerator_z_power, lambda_polynomial) in raw_by_numerator_z_power {
+            let input_inverse_z_power = denominator_z_power - numerator_z_power;
+            for (extra_inverse_z_power, exp_series) in &exp_terms {
+                if input_inverse_z_power + extra_inverse_z_power != 2 {
+                    continue;
+                }
+                let q_factor = truncated_series_multiply(&x_factor, exp_series, max_shift);
+                for (lambda_power, coefficient) in &lambda_polynomial {
+                    let scaled = coefficient.clone() / denominator.clone();
+                    let output_lambda_power = lambda_power
+                        + usize::try_from(*extra_inverse_z_power).expect("power is nonnegative");
+                    for shift in 0..=max_shift {
+                        let output_half_index = half_index + shift;
+                        if output_half_index >= half_sector_count {
+                            continue;
+                        }
+                        *primary_by_half_index[output_half_index]
+                            .entry(output_lambda_power)
+                            .or_insert_with(|| MalachiteRational::from(0)) +=
+                            scaled.clone() * q_factor[shift].clone();
+                    }
+                }
+            }
+        }
+    }
+    primary_by_half_index
+}
+
+fn kp112_lambda_expansion_terms(
+    h_of_q: &[MalachiteRational],
+    max_degree: usize,
+    max_power: usize,
+) -> Vec<(i64, Vec<MalachiteRational>)> {
+    let mut exp_terms = Vec::<(i64, Vec<MalachiteRational>)>::new();
+    let mut h_power = vec![MalachiteRational::from(0); max_degree + 1];
+    h_power[0] = MalachiteRational::from(1);
+    exp_terms.push((0, h_power.clone()));
+    for power in 1..=max_power {
+        h_power = truncated_series_multiply(&h_power, h_of_q, max_degree);
+        let denominator = MalachiteRational::from(factorial_integer(power));
+        exp_terms.push((
+            i64::try_from(power).expect("power fits i64"),
+            h_power
+                .iter()
+                .map(|coefficient| coefficient.clone() / denominator.clone())
+                .collect(),
+        ));
+    }
+    exp_terms
+}
+
+fn half_sector_fun_component_by_numerator_z_power(
+    bundle_degrees: &[i64],
+    degree_twice: i64,
+) -> BTreeMap<i64, BTreeMap<usize, MalachiteRational>> {
+    let mut numerator = BTreeMap::<(usize, i64), MalachiteRational>::new();
+    numerator.insert((0, 0), MalachiteRational::from(1));
+    for &line_degree in bundle_degrees {
+        for offset_twice in half_sector_numerator_offset_twice_values(line_degree, degree_twice) {
+            numerator = multiply_lambda_z_polynomial_by_rational_factor(
+                &numerator,
+                MalachiteRational::from(1),
+                MalachiteRational::from(Integer::from(offset_twice))
+                    / MalachiteRational::from(Integer::from(2)),
+            );
+        }
+    }
+    let mut by_numerator_z_power = BTreeMap::<i64, BTreeMap<usize, MalachiteRational>>::new();
+    for ((lambda_power, z_power), coefficient) in numerator {
+        *by_numerator_z_power
+            .entry(z_power)
+            .or_default()
+            .entry(lambda_power)
+            .or_insert_with(|| MalachiteRational::from(0)) += coefficient;
+    }
+    by_numerator_z_power
+}
+
+fn half_sector_numerator_offset_twice_values(line_degree: i64, degree_twice: i64) -> Vec<i64> {
+    let lower_twice = -line_degree
+        .checked_mul(degree_twice)
+        .expect("weighted P2 half-sector numerator bound fits i64");
+    let mut offsets = Vec::new();
+    let mut offset_twice = lower_twice + 2;
+    while offset_twice <= 0 {
+        offsets.push(offset_twice);
+        offset_twice += 2;
+    }
+    offsets
+}
+
+fn half_sector_base_denominator_constant_and_z_power(
+    base_weights: &[i64],
+    degree_twice: i64,
+) -> Option<(MalachiteRational, i64)> {
+    if degree_twice % 2 == 0 || degree_twice < 0 {
+        return None;
+    }
+    let mut denominator = MalachiteRational::from(1);
+    let mut z_power = 0i64;
+    for &weight in base_weights {
+        let upper_twice = weight
+            .checked_mul(degree_twice)
+            .expect("weighted P2 half-sector denominator bound fits i64");
+        if upper_twice <= 0 {
+            return None;
+        }
+        let mut factor_twice = if upper_twice % 2 == 0 { 2 } else { 1 };
+        while factor_twice <= upper_twice {
+            denominator *= MalachiteRational::from(Integer::from(factor_twice))
+                / MalachiteRational::from(Integer::from(2));
+            z_power += 1;
+            factor_twice += 2;
+        }
+    }
+    Some((denominator, z_power))
+}
+
+fn multiply_lambda_z_polynomial_by_rational_factor(
+    coefficients: &BTreeMap<(usize, i64), MalachiteRational>,
+    lambda_coefficient: MalachiteRational,
+    z_coefficient: MalachiteRational,
+) -> BTreeMap<(usize, i64), MalachiteRational> {
+    let mut next = BTreeMap::<(usize, i64), MalachiteRational>::new();
+    for (&(lambda_power, z_power), coefficient) in coefficients {
+        if lambda_coefficient != MalachiteRational::from(0) {
+            *next
+                .entry((lambda_power + 1, z_power))
+                .or_insert_with(|| MalachiteRational::from(0)) +=
+                coefficient.clone() * lambda_coefficient.clone();
+        }
+        if z_coefficient != MalachiteRational::from(0) {
+            *next
+                .entry((lambda_power, z_power + 1))
+                .or_insert_with(|| MalachiteRational::from(0)) +=
+                coefficient.clone() * z_coefficient.clone();
+        }
+    }
+    next.retain(|_, coefficient| *coefficient != MalachiteRational::from(0));
+    next
+}
+
+fn kp112_canonical_c_table_values(half_sector_count: usize) -> Vec<String> {
+    weighted_p2_half_sector_primary_after_kp112_mirror_map(&[4], half_sector_count)
+        .iter()
+        .map(|half_sector_primary| {
+            let fun_half_lambda_coefficient = half_sector_primary
+                .get(&1)
+                .cloned()
+                .unwrap_or_else(|| MalachiteRational::from(0));
+            (fun_half_lambda_coefficient / rational_from_i64(2)).to_string()
+        })
+        .collect()
+}
+
+fn split_bundle_kp112_mirror_map_half_sector_primary_coefficients(
+    half_sector_count: usize,
+) -> Vec<String> {
+    weighted_p2_half_sector_primary_after_kp112_mirror_map(&[1, 1, 2], half_sector_count)
+        .iter()
+        .map(|half_sector_primary| {
+            let fun_half_lambda_coefficient = half_sector_primary
+                .get(&1)
+                .cloned()
+                .unwrap_or_else(|| MalachiteRational::from(0));
+            (fun_half_lambda_coefficient / rational_from_i64(2)).to_string()
         })
         .collect()
 }
@@ -41650,6 +41915,18 @@ mod tests {
                     "53305261/100".to_string(),
                     "51550873/3".to_string(),
                 ],
+                adjacent_canonical_mirror_map_c_table_status:
+                    "kp112_canonical_mirror_map_reproduces_ccit_c_table_to_half_degree_13_over_2"
+                        .to_string(),
+                adjacent_canonical_mirror_map_c_table_values: vec![
+                    "-2".to_string(),
+                    "-52/9".to_string(),
+                    "-2002/25".to_string(),
+                    "-83004/49".to_string(),
+                    "-3554552/81".to_string(),
+                    "-154984300/121".to_string(),
+                    "-6835086702/169".to_string(),
+                ],
                 split_bundle_ifunction_modification_source:
                     "ccit_smalllinebundle_smallvb_direct_sum_modification_product_over_o_minus_1_o_minus_1_o_minus_2"
                         .to_string(),
@@ -41663,6 +41940,15 @@ mod tests {
                     "rank_three_split_kp112_mirror_map_primary_p_signal_zero_to_degree_4"
                         .to_string(),
                 split_bundle_kp112_mirror_map_primary_p_lambda_coefficients: vec![
+                    "0".to_string(),
+                    "0".to_string(),
+                    "0".to_string(),
+                    "0".to_string(),
+                ],
+                split_bundle_kp112_mirror_map_half_sector_primary_status:
+                    "rank_three_split_kp112_mirror_map_half_sector_primary_signal_zero_to_half_degree_7_over_2"
+                        .to_string(),
+                split_bundle_kp112_mirror_map_half_sector_primary_coefficients: vec![
                     "0".to_string(),
                     "0".to_string(),
                     "0".to_string(),
@@ -42034,9 +42320,38 @@ mod tests {
     }
 
     #[test]
+    fn canonical_weighted_p2_mirror_map_matches_ccit_c_table() {
+        assert_eq!(
+            kp112_canonical_c_table_values(7),
+            vec![
+                "-2".to_string(),
+                "-52/9".to_string(),
+                "-2002/25".to_string(),
+                "-83004/49".to_string(),
+                "-3554552/81".to_string(),
+                "-154984300/121".to_string(),
+                "-6835086702/169".to_string(),
+            ]
+        );
+    }
+
+    #[test]
     fn split_bundle_kp112_mirror_map_diagnostic_has_zero_primary_p_signal() {
         assert_eq!(
             split_bundle_kp112_mirror_map_primary_p_lambda_coefficients(4),
+            vec![
+                "0".to_string(),
+                "0".to_string(),
+                "0".to_string(),
+                "0".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn split_bundle_kp112_mirror_map_diagnostic_has_zero_half_sector_primary_signal() {
+        assert_eq!(
+            split_bundle_kp112_mirror_map_half_sector_primary_coefficients(4),
             vec![
                 "0".to_string(),
                 "0".to_string(),
