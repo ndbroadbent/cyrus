@@ -1636,6 +1636,20 @@ to make the remaining GV layer more first-principles:
    the qN-history split remains `known_nonzero_source_gv:1` and
    `unknown_not_toric_covered:4`. Thus the visible chamber generator set is
    not the missing compact HKTY history by itself.
+   The provided-generator `cygv` probe now serializes an
+   `uncertified_generator_sample` so this blocker is visible without unpacking
+   every chamber generator. A target `7` no-skip rerun writes
+   `/tmp/cyrus_target7_uncertified_generator_probe.json`: the current chamber
+   `cygv` call still returns `GV=0`, and the positive target-plus-star
+   decomposition uses known generators `3` and `4`, but promotion is blocked by
+   a separate degree-2 generator `0` with basis support
+   `[(53,-2),(203,1),(206,1),(207,2),(209,-1)]`. That generator is the
+   weighted `P(1,1,2)` rank-three split-bundle family and remains
+   `unknown_not_toric_covered` with source status
+   `source_ray_weighted_p2_rank_three_split_bundle_source_import_blocked_missing_source_model_tensor_qn_history`.
+   This sharpens the chamber-domain blocker: the target decomposition terms
+   are not the missing object; the compact qN domain still contains the
+   uncertified weighted-`P2` source generator.
    Running the same aggregate over all nine missing targets narrows the
    chamber-semigroup decomposition queue further: only targets `1`, `7`, and
    `8` reach an actual current-chamber provided-generator `cygv` call, and all

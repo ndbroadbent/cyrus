@@ -2567,10 +2567,25 @@ struct ProvidedGeneratorTargetGvProbe {
     error: Option<String>,
     promotion_readiness: String,
     promotion_missing_inputs: Vec<String>,
+    uncertified_generator_sample: Vec<ProvidedGeneratorUncertifiedGeneratorSample>,
     qn_trace_polynomial_count: Option<usize>,
     target_qn_trace_status: Option<String>,
     target_qn_trace_term_count: Option<usize>,
     qn_trace_sample: Vec<CygvPathSupportQnTracePolynomialSample>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ProvidedGeneratorUncertifiedGeneratorSample {
+    generator_index: usize,
+    chamber_coordinate: Vec<i64>,
+    basis_nonzero: Option<Vec<(usize, i64)>>,
+    degree: Option<i128>,
+    known_qn_history_status: String,
+    source_class_status: Option<String>,
+    local_toric_kind: Option<String>,
+    local_toric_charge_family_status: String,
+    ckyz_status: String,
+    bounded_lower_seed_status: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -10140,6 +10155,7 @@ fn origin_circuit_witness_domain_cygv_probe(
                 error: Some(error),
                 promotion_readiness: "promotion_not_evaluated_origin_witness_domain".to_string(),
                 promotion_missing_inputs: Vec::new(),
+                uncertified_generator_sample: Vec::new(),
                 qn_trace_polynomial_count: None,
                 target_qn_trace_status: None,
                 target_qn_trace_term_count: None,
@@ -17518,6 +17534,7 @@ fn support_overlap_generator_gv(
             error: Some("cygv diagnostic requires a panic=unwind build".to_string()),
             promotion_readiness: "promotion_not_evaluated_support_overlap_domain".to_string(),
             promotion_missing_inputs: Vec::new(),
+            uncertified_generator_sample: Vec::new(),
             qn_trace_polynomial_count: None,
             target_qn_trace_status: None,
             target_qn_trace_term_count: None,
@@ -17624,6 +17641,7 @@ fn run_provided_generator_target_gv(
                 promotion_readiness: "promotion_not_evaluated_provided_generator_domain"
                     .to_string(),
                 promotion_missing_inputs: Vec::new(),
+                uncertified_generator_sample: Vec::new(),
                 qn_trace_polynomial_count: None,
                 target_qn_trace_status: None,
                 target_qn_trace_term_count: None,
@@ -17642,6 +17660,7 @@ fn run_provided_generator_target_gv(
                 promotion_readiness: "promotion_not_evaluated_provided_generator_domain"
                     .to_string(),
                 promotion_missing_inputs: Vec::new(),
+                uncertified_generator_sample: Vec::new(),
                 qn_trace_polynomial_count: None,
                 target_qn_trace_status: None,
                 target_qn_trace_term_count: None,
@@ -17660,6 +17679,7 @@ fn run_provided_generator_target_gv(
         error: None,
         promotion_readiness: "promotion_not_evaluated_provided_generator_domain".to_string(),
         promotion_missing_inputs: Vec::new(),
+        uncertified_generator_sample: Vec::new(),
         qn_trace_polynomial_count: None,
         target_qn_trace_status: None,
         target_qn_trace_term_count: None,
@@ -17699,6 +17719,7 @@ fn run_provided_generator_target_gv_with_qn_trace(
                 promotion_readiness: "promotion_not_evaluated_provided_generator_domain"
                     .to_string(),
                 promotion_missing_inputs: Vec::new(),
+                uncertified_generator_sample: Vec::new(),
                 qn_trace_polynomial_count: None,
                 target_qn_trace_status: None,
                 target_qn_trace_term_count: None,
@@ -17717,6 +17738,7 @@ fn run_provided_generator_target_gv_with_qn_trace(
                 promotion_readiness: "promotion_not_evaluated_provided_generator_domain"
                     .to_string(),
                 promotion_missing_inputs: Vec::new(),
+                uncertified_generator_sample: Vec::new(),
                 qn_trace_polynomial_count: None,
                 target_qn_trace_status: None,
                 target_qn_trace_term_count: None,
@@ -17746,6 +17768,7 @@ fn run_provided_generator_target_gv_with_qn_trace(
         error: None,
         promotion_readiness: "promotion_not_evaluated_provided_generator_domain".to_string(),
         promotion_missing_inputs: Vec::new(),
+        uncertified_generator_sample: Vec::new(),
         qn_trace_polynomial_count: Some(qn_trace_polynomial_count),
         target_qn_trace_status: Some(target_qn_trace_status),
         target_qn_trace_term_count,
@@ -30676,6 +30699,7 @@ fn chamber_semigroup_provided_generator_cygv_probe(
             error,
             promotion_readiness: "promotion_not_evaluated_provided_generator_domain".to_string(),
             promotion_missing_inputs: Vec::new(),
+            uncertified_generator_sample: Vec::new(),
             qn_trace_polynomial_count: None,
             target_qn_trace_status: None,
             target_qn_trace_term_count: None,
@@ -30786,6 +30810,8 @@ fn annotate_provided_generator_probe_promotion(
         "blocked_missing_source_derived_chamber_qn_history".to_string()
     };
     probe.promotion_missing_inputs = missing_inputs;
+    probe.uncertified_generator_sample =
+        provided_generator_uncertified_generator_sample(generator_contexts);
     probe
 }
 
@@ -30842,6 +30868,35 @@ fn provided_generator_probe_promotion_missing_inputs(
         ));
     }
     missing.into_iter().collect()
+}
+
+fn provided_generator_uncertified_generator_sample(
+    generator_contexts: &[LocalCygvChamberSemigroupGeneratorContext],
+) -> Vec<ProvidedGeneratorUncertifiedGeneratorSample> {
+    generator_contexts
+        .iter()
+        .filter(|context| {
+            !chamber_generator_qn_history_is_source_certified(&context.known_qn_history_status)
+        })
+        .take(8)
+        .map(|context| ProvidedGeneratorUncertifiedGeneratorSample {
+            generator_index: context.generator_index,
+            chamber_coordinate: context.chamber_coordinate.clone(),
+            basis_nonzero: context.basis_nonzero.clone(),
+            degree: context.degree,
+            known_qn_history_status: context.known_qn_history_status.clone(),
+            source_class_status: context.source_class_status.clone(),
+            local_toric_kind: context.local_toric_diagnostic.local_toric_kind.clone(),
+            local_toric_charge_family_status: context
+                .local_toric_diagnostic
+                .local_toric_charge_family_status
+                .clone(),
+            ckyz_status: context.local_toric_diagnostic.ckyz_status.clone(),
+            bounded_lower_seed_status: chamber_semigroup_generator_bounded_lower_seed_status(
+                context,
+            ),
+        })
+        .collect()
 }
 
 fn chamber_generator_qn_history_is_source_certified(status: &str) -> bool {
@@ -39714,6 +39769,7 @@ mod tests {
             error: None,
             promotion_readiness: "blocked_missing_source_derived_chamber_qn_history".to_string(),
             promotion_missing_inputs: vec!["target_plus_star_qn_history".to_string()],
+            uncertified_generator_sample: Vec::new(),
             qn_trace_polynomial_count: Some(1),
             target_qn_trace_status: Some(
                 "support_overlap_qn_not_required_zero_or_absent_gv".to_string(),
@@ -39728,6 +39784,7 @@ mod tests {
             error: Some("generator 1 has degree -4".to_string()),
             promotion_readiness: "blocked_missing_source_derived_chamber_qn_history".to_string(),
             promotion_missing_inputs: vec!["actual_compact_cygv_computation".to_string()],
+            uncertified_generator_sample: Vec::new(),
             qn_trace_polynomial_count: None,
             target_qn_trace_status: None,
             target_qn_trace_term_count: None,
@@ -39993,6 +40050,12 @@ mod tests {
             chamber_decomposition_term_relation_support_face_certificate_status_counts(
                 &term_support_probes,
             );
+        let uncertified_sample = provided_generator_uncertified_generator_sample(&[
+            known.clone(),
+            unknown.clone(),
+            invalid.clone(),
+            not_run.clone(),
+        ]);
 
         assert_eq!(
             history_counts.get("known_nonzero_source_gv").copied(),
@@ -40156,6 +40219,26 @@ mod tests {
                 .get("missing_generator_context")
                 .copied(),
             Some(1)
+        );
+        assert_eq!(uncertified_sample.len(), 2);
+        assert_eq!(uncertified_sample[0].generator_index, 1);
+        assert_eq!(
+            uncertified_sample[0].known_qn_history_status,
+            "unknown_not_toric_covered"
+        );
+        assert_eq!(uncertified_sample[0].degree, Some(6));
+        assert_eq!(
+            uncertified_sample[0].ckyz_status,
+            "ckyz_not_run_non_rank_two_support"
+        );
+        assert_eq!(
+            uncertified_sample[0].bounded_lower_seed_status,
+            "not_found_up_to_4"
+        );
+        assert_eq!(uncertified_sample[1].generator_index, 2);
+        assert_eq!(
+            uncertified_sample[1].bounded_lower_seed_status,
+            "error_degree_projection_failed"
         );
     }
 
@@ -44822,6 +44905,7 @@ mod tests {
             error: None,
             promotion_readiness: "promotion_not_evaluated_origin_witness_domain".to_string(),
             promotion_missing_inputs: Vec::new(),
+            uncertified_generator_sample: Vec::new(),
             qn_trace_polynomial_count: Some(1),
             target_qn_trace_status: Some("support_overlap_qn_materialized_for_nonzero_gv".into()),
             target_qn_trace_term_count: Some(1),
