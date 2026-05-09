@@ -33,6 +33,7 @@ use cyrus_core::types::{f64::F64, tags::Finite, tags::Pos};
 use cyrus_core::{
     CkyzLocalSurfaceKind, CygvQnTracePolynomial, GvDilogFailure, HalfSectorDescendantReadout,
     Intersection, LocalToricCircuitKind, Point, WeightedP2RankThreeTwistedIfunctionDegreeProfile,
+    WeightedP2RankThreeTwistedIfunctionSourceCertificateRequirements,
     certify_nef_partition_cytools_style, check_stable_weyl_candidate_certificate,
     ckyz_local_surface_target_degrees,
     compute_ckyz_local_surface_gv_invariants_for_multiples_with_causal_domain,
@@ -55,6 +56,7 @@ use cyrus_core::{
     weighted_p2_rank_three_split_bundle_chen_ruan_source_basis_readout,
     weighted_p2_rank_three_split_bundle_source_readiness,
     weighted_p2_rank_three_twisted_ifunction_degree_profiles as core_weighted_p2_rank_three_twisted_ifunction_degree_profiles,
+    weighted_p2_rank_three_twisted_ifunction_source_certificate_requirements,
     weyl_reflection_matches_flop_transform,
 };
 
@@ -522,6 +524,14 @@ struct ContextReport {
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_readiness_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_missing_input_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_promotion_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_primary_readout_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_pairing_or_residue_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_required_input_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_vs_adjacent_canonical_factor_status_counts:
         BTreeMap<String, usize>,
@@ -1522,6 +1532,8 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
     local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_readiness_status:
         Option<String>,
     local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_missing_inputs: Vec<String>,
+    local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_source_certificate_requirements:
+        Option<WeightedP2RankThreeTwistedIfunctionSourceCertificateRequirements>,
     local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_degree_profile_sample:
         Vec<WeightedP2RankThreeTwistedIfunctionDegreeProfile>,
     local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_chen_ruan_source_map:
@@ -1697,6 +1709,8 @@ struct WeightedP2RankThreeSourceModelSummary {
     twisted_vector_bundle_ifunction_insertion_normalization_status: Option<String>,
     twisted_vector_bundle_ifunction_readiness_status: Option<String>,
     twisted_vector_bundle_ifunction_missing_inputs: Vec<String>,
+    twisted_vector_bundle_ifunction_source_certificate_requirements:
+        Option<WeightedP2RankThreeTwistedIfunctionSourceCertificateRequirements>,
     twisted_vector_bundle_ifunction_degree_profile_sample:
         Vec<WeightedP2RankThreeTwistedIfunctionDegreeProfile>,
     twisted_vector_bundle_ifunction_chen_ruan_source_map:
@@ -18235,6 +18249,49 @@ fn build_report(
         unresolved_generator_weighted_p2_twisted_ifunction_missing_input_counts(
             &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
         );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_promotion_status_counts =
+        weighted_p2_rank_three_source_certificate_status_counts(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| {
+                    summary
+                        .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_source_certificate_requirements
+                        .as_ref()
+                }),
+            |certificate| certificate.promotion_status.as_str(),
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_primary_readout_status_counts =
+        weighted_p2_rank_three_source_certificate_status_counts(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| {
+                    summary
+                        .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_source_certificate_requirements
+                        .as_ref()
+                }),
+            |certificate| certificate.primary_readout_status.as_str(),
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_pairing_or_residue_status_counts =
+        weighted_p2_rank_three_source_certificate_status_counts(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| {
+                    summary
+                        .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_source_certificate_requirements
+                        .as_ref()
+                }),
+            |certificate| certificate.pairing_or_residue_status.as_str(),
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_required_input_counts =
+        weighted_p2_rank_three_source_certificate_required_input_counts(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| {
+                    summary
+                        .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_source_certificate_requirements
+                        .as_ref()
+                }),
+        );
     let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_vs_adjacent_canonical_factor_status_counts =
         unresolved_generator_weighted_p2_twisted_ifunction_split_vs_adjacent_canonical_factor_status_counts(
             &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
@@ -19936,6 +19993,10 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_readiness_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_missing_input_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_promotion_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_primary_readout_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_pairing_or_residue_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_required_input_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_vs_adjacent_canonical_factor_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_non_equivariant_candidate_insertion_coefficient_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_non_equivariant_bundle_numerator_truncation_status_counts,
@@ -22089,6 +22150,9 @@ fn unresolved_chamber_generator_summaries(
                     local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_missing_inputs:
                         weighted_rank_three_source_model
                             .twisted_vector_bundle_ifunction_missing_inputs,
+                    local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_source_certificate_requirements:
+                        weighted_rank_three_source_model
+                            .twisted_vector_bundle_ifunction_source_certificate_requirements,
                     local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_degree_profile_sample:
                         weighted_rank_three_source_model
                             .twisted_vector_bundle_ifunction_degree_profile_sample,
@@ -22240,6 +22304,36 @@ fn unresolved_generator_weighted_p2_twisted_ifunction_missing_input_counts(
         for input in &summary
             .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_missing_inputs
         {
+            *counts.entry(input.clone()).or_insert(0) += 1;
+        }
+    }
+    counts
+}
+
+fn weighted_p2_rank_three_source_certificate_status_counts<'a, F>(
+    certificates: impl IntoIterator<
+        Item = Option<&'a WeightedP2RankThreeTwistedIfunctionSourceCertificateRequirements>,
+    >,
+    status: F,
+) -> BTreeMap<String, usize>
+where
+    F: Fn(&WeightedP2RankThreeTwistedIfunctionSourceCertificateRequirements) -> &str,
+{
+    let mut counts = BTreeMap::new();
+    for certificate in certificates.into_iter().flatten() {
+        *counts.entry(status(certificate).to_string()).or_insert(0) += 1;
+    }
+    counts
+}
+
+fn weighted_p2_rank_three_source_certificate_required_input_counts<'a>(
+    certificates: impl IntoIterator<
+        Item = Option<&'a WeightedP2RankThreeTwistedIfunctionSourceCertificateRequirements>,
+    >,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for certificate in certificates.into_iter().flatten() {
+        for input in &certificate.required_inputs {
             *counts.entry(input.clone()).or_insert(0) += 1;
         }
     }
@@ -27321,6 +27415,7 @@ fn weighted_p2_rank_three_source_model_summary(
         twisted_vector_bundle_ifunction_insertion_normalization_status: None,
         twisted_vector_bundle_ifunction_readiness_status: None,
         twisted_vector_bundle_ifunction_missing_inputs: Vec::new(),
+        twisted_vector_bundle_ifunction_source_certificate_requirements: None,
         twisted_vector_bundle_ifunction_degree_profile_sample: Vec::new(),
         twisted_vector_bundle_ifunction_chen_ruan_source_map: None,
     };
@@ -27349,6 +27444,12 @@ fn weighted_p2_rank_three_source_model_summary(
             bundle_degrees,
             4,
             readiness.twisted_vector_bundle_ifunction_required_insertion_complex_codimension,
+        );
+    let twisted_ifunction_source_certificate_requirements =
+        weighted_p2_rank_three_twisted_ifunction_source_certificate_requirements(
+            base_weights,
+            bundle_degrees,
+            4,
         );
     let twisted_ifunction_chen_ruan_source_map =
         weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
@@ -27393,6 +27494,8 @@ fn weighted_p2_rank_three_source_model_summary(
         ),
         twisted_vector_bundle_ifunction_missing_inputs: readiness
             .twisted_vector_bundle_ifunction_missing_inputs,
+        twisted_vector_bundle_ifunction_source_certificate_requirements:
+            twisted_ifunction_source_certificate_requirements,
         twisted_vector_bundle_ifunction_degree_profile_sample:
             twisted_ifunction_degree_profile_sample,
         twisted_vector_bundle_ifunction_chen_ruan_source_map:
@@ -41234,6 +41337,29 @@ mod tests {
                 "twisted_vector_bundle_ifunction_chamber_certificate".to_string(),
                 "twisted_vector_bundle_ifunction_qn_history".to_string(),
             ]
+        );
+        let source_certificate = selected_base_source_model
+            .twisted_vector_bundle_ifunction_source_certificate_requirements
+            .as_ref()
+            .expect("source certificate requirements");
+        assert_eq!(
+            source_certificate.primary_readout_status,
+            "weighted_p2_rank_three_source_certificate_primary_z2_p2_readout_zero_to_checked_integer_degrees"
+        );
+        assert_eq!(
+            source_certificate.descendant_readout_status,
+            "weighted_p2_rank_three_source_certificate_first_nonzero_terms_are_descendant_or_equivariant_requires_big_j_pairing"
+        );
+        assert_eq!(
+            source_certificate.promotion_status,
+            "weighted_p2_rank_three_source_certificate_not_promotable_without_pairing_chamber_qn_history"
+        );
+        assert_eq!(source_certificate.checked_integer_sector_count, 2);
+        assert_eq!(source_certificate.checked_half_sector_count, 2);
+        assert!(
+            source_certificate
+                .required_inputs
+                .contains(&"source_derived_chamber_qn_history_for_selected_phase".to_string())
         );
         assert_eq!(
             selected_base_source_model

@@ -233,6 +233,20 @@ owns the exact numerator, denominator, full hypergeometric, primary/descendant
 `mcallister_gv_context`. The binary keeps only legacy test-only helper wrappers
 for low-level regression coverage.
 
+The source-certificate boundary now lives in core as well:
+`cyrus_core::local_orbifold::weighted_p2_rank_three_twisted_ifunction_source_certificate_requirements`
+combines the source-readiness facts, Chen-Ruan source basis, and checked
+degree profiles into a single promotion gate. For the selected
+`O(-1)+O(-1)+O(-2) -> P(1,1,2)` phase it records that CCIT supplies a
+Lagrangian-cone/I-function handoff, not a numerical CY3 invariant: the checked
+integer sectors have zero primary `z^-2` `p^2` readout, the first nonzero
+signals are descendant/equivariant, and promotion remains blocked on
+stack-normalized pairing or residue data, a source chamber certificate, qN
+history, and a codimension-two CY3 projection/local model. The McAllister
+context report now serializes that certificate per unresolved generator and
+aggregates the certificate promotion, primary-readout, pairing/residue, and
+required-input statuses.
+
 The z-order convention is checked against the adjacent canonical
 `K_P(1,1,2)` first sector by using bundle degree `[4]` in the same
 hypergeometric readout. There the primary `z^-2` coefficient is nonzero and

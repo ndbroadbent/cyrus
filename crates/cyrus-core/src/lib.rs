@@ -186,10 +186,11 @@ pub use local_orbifold::{
     HalfSectorDescendantReadout, HalfSectorFirstNonzeroDescendant,
     OrdinarySectorDualBasisP2ZReadout, WeightedP2RankThreeChenRuanSourceBasisReadout,
     WeightedP2RankThreeSplitBundleSourceReadiness,
-    WeightedP2RankThreeTwistedIfunctionDegreeProfile, kp112_canonical_b_table_values,
-    kp112_canonical_c_table_values, kp112_half_sector_dual_basis_descendant_profiles,
-    kp112_half_sector_first_nonzero_descendants, kp112_half_sector_primary_lambda_coefficients,
-    kp112_ordinary_p_primary_lambda_coefficients,
+    WeightedP2RankThreeTwistedIfunctionDegreeProfile,
+    WeightedP2RankThreeTwistedIfunctionSourceCertificateRequirements,
+    kp112_canonical_b_table_values, kp112_canonical_c_table_values,
+    kp112_half_sector_dual_basis_descendant_profiles, kp112_half_sector_first_nonzero_descendants,
+    kp112_half_sector_primary_lambda_coefficients, kp112_ordinary_p_primary_lambda_coefficients,
     split_bundle_kp112_mirror_map_half_sector_descendant_profiles,
     split_bundle_kp112_mirror_map_half_sector_first_nonzero_descendants,
     split_bundle_kp112_mirror_map_half_sector_primary_coefficients,
@@ -199,6 +200,7 @@ pub use local_orbifold::{
     weighted_p2_rank_three_split_bundle_chen_ruan_source_basis_readout,
     weighted_p2_rank_three_split_bundle_source_readiness,
     weighted_p2_rank_three_twisted_ifunction_degree_profiles,
+    weighted_p2_rank_three_twisted_ifunction_source_certificate_requirements,
 };
 pub mod kklt;
 

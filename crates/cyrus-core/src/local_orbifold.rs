@@ -141,6 +141,49 @@ pub struct WeightedP2RankThreeSplitBundleSourceReadiness {
     pub twisted_vector_bundle_ifunction_missing_inputs: Vec<String>,
 }
 
+/// Source-certificate requirements for promoting the weighted-`P2`
+/// rank-three split-bundle I-function diagnostic to a numerical CY3
+/// contribution.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct WeightedP2RankThreeTwistedIfunctionSourceCertificateRequirements {
+    /// Overall theorem-handoff status.
+    pub theorem_handoff_status: String,
+    /// Source status for the compact/orbifold base small-J input.
+    pub base_small_j_source_status: String,
+    /// Source status for the split-bundle hypergeometric modification.
+    pub split_bundle_modification_source_status: String,
+    /// Source status for the Chen-Ruan basis used to read insertions.
+    pub chen_ruan_source_basis_status: String,
+    /// Reconstruction boundary for small-J/big-J and degree-two generation.
+    pub chen_ruan_reconstruction_status: String,
+    /// Status for the codimension-two observable needed by the visible CY5.
+    pub required_observable_status: String,
+    /// Status of the checked primary `z^-2` readout.
+    pub primary_readout_status: String,
+    /// Status of the first nonzero descendant/equivariant readout.
+    pub descendant_readout_status: String,
+    /// Pairing/residue normalization boundary.
+    pub pairing_or_residue_status: String,
+    /// Chamber-certificate boundary.
+    pub chamber_certificate_status: String,
+    /// qN-history boundary.
+    pub qn_history_status: String,
+    /// CY3 projection boundary.
+    pub cy3_projection_status: String,
+    /// Final promotion boundary.
+    pub promotion_status: String,
+    /// Maximum profiled degree, measured as twice the curve degree.
+    pub checked_max_degree_twice: i64,
+    /// Number of checked untwisted integer sectors.
+    pub checked_integer_sector_count: usize,
+    /// Number of checked half-degree twisted sectors.
+    pub checked_half_sector_count: usize,
+    /// Source facts used to justify the boundary.
+    pub source_references: Vec<String>,
+    /// Explicit missing inputs before any numerical promotion is allowed.
+    pub required_inputs: Vec<String>,
+}
+
 /// Exact degree-by-degree CCIT I-function diagnostic for the weighted-`P2`
 /// rank-three split bundle.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -366,6 +409,122 @@ pub fn weighted_p2_rank_three_split_bundle_source_readiness(
         twisted_vector_bundle_ifunction_insertion_normalization_status,
         twisted_vector_bundle_ifunction_readiness_status,
         twisted_vector_bundle_ifunction_missing_inputs,
+    })
+}
+
+/// Compute the exact source-certificate boundary for the weighted-`P2`
+/// rank-three split-bundle I-function route.
+pub fn weighted_p2_rank_three_twisted_ifunction_source_certificate_requirements(
+    base_weights: &[i64],
+    bundle_degrees: &[i64],
+    max_degree_twice: i64,
+) -> Option<WeightedP2RankThreeTwistedIfunctionSourceCertificateRequirements> {
+    let readiness =
+        weighted_p2_rank_three_split_bundle_source_readiness(base_weights, bundle_degrees)?;
+    let source_basis = weighted_p2_rank_three_split_bundle_chen_ruan_source_basis_readout(
+        base_weights,
+        bundle_degrees,
+        readiness.total_first_chern_degree,
+    )?;
+    let profiles = weighted_p2_rank_three_twisted_ifunction_degree_profiles(
+        base_weights,
+        bundle_degrees,
+        max_degree_twice,
+        readiness.twisted_vector_bundle_ifunction_required_insertion_complex_codimension,
+    );
+    let integer_profiles = profiles
+        .iter()
+        .filter(|profile| profile.degree_twice % 2 == 0)
+        .collect::<Vec<_>>();
+    let checked_integer_sector_count = integer_profiles.len();
+    let checked_half_sector_count = profiles.len() - checked_integer_sector_count;
+    let all_integer_primary_readouts_zero = !integer_profiles.is_empty()
+        && integer_profiles.iter().all(|profile| {
+            profile
+                .split_equivariant_full_hypergeometric_dual_basis_p2_primary_z2_lambda_polynomial
+                .as_ref()
+                .is_some_and(|polynomial| !lambda_polynomial_has_nonzero_coefficient(polynomial))
+        });
+    let any_descendant_pairing_blocker = integer_profiles.iter().any(|profile| {
+        profile
+            .split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_non_equivariant_limit_status
+            .contains("requires")
+    });
+    let primary_readout_status = if checked_integer_sector_count == 0 {
+        "weighted_p2_rank_three_source_certificate_primary_readout_not_checked".to_string()
+    } else if all_integer_primary_readouts_zero {
+        "weighted_p2_rank_three_source_certificate_primary_z2_p2_readout_zero_to_checked_integer_degrees"
+            .to_string()
+    } else {
+        "weighted_p2_rank_three_source_certificate_primary_z2_p2_readout_nonzero_requires_pairing_qn_history"
+            .to_string()
+    };
+    let descendant_readout_status = if any_descendant_pairing_blocker {
+        "weighted_p2_rank_three_source_certificate_first_nonzero_terms_are_descendant_or_equivariant_requires_big_j_pairing"
+            .to_string()
+    } else {
+        "weighted_p2_rank_three_source_certificate_no_descendant_pairing_blocker_seen_in_checked_profile"
+            .to_string()
+    };
+    let required_observable_status = if readiness.required_cygv_codimension_for_threefold
+        == readiness.base_complex_dimension
+    {
+        "weighted_p2_rank_three_source_certificate_requires_base_p2_codim2_observable_or_equivalent"
+    } else {
+        "weighted_p2_rank_three_source_certificate_requires_source_derived_numerical_observable"
+    };
+    let mut required_inputs = readiness
+        .twisted_vector_bundle_ifunction_missing_inputs
+        .clone();
+    for input in [
+        "twisted_big_j_or_pairing_reconstruction_for_descendant_readout",
+        "source_derived_chamber_qn_history_for_selected_phase",
+        "cy3_projection_or_codimension_two_local_model",
+    ] {
+        if !required_inputs.iter().any(|existing| existing == input) {
+            required_inputs.push(input.to_string());
+        }
+    }
+    Some(WeightedP2RankThreeTwistedIfunctionSourceCertificateRequirements {
+        theorem_handoff_status:
+            "weighted_p2_rank_three_ccit_ifunction_lies_on_lagrangian_cone_not_yet_numerical_gv"
+                .to_string(),
+        base_small_j_source_status:
+            "weighted_p2_rank_three_base_small_j_source_required_for_p112_orbifold".to_string(),
+        split_bundle_modification_source_status: source_basis
+            .split_bundle_ifunction_modification_source
+            .clone(),
+        chen_ruan_source_basis_status: source_basis.source_status.clone(),
+        chen_ruan_reconstruction_status:
+            "weighted_p2_rank_three_chen_ruan_degree_two_reconstruction_requires_big_j_restriction_or_pairing_input"
+                .to_string(),
+        required_observable_status: required_observable_status.to_string(),
+        primary_readout_status,
+        descendant_readout_status,
+        pairing_or_residue_status:
+            "weighted_p2_rank_three_source_certificate_blocked_missing_stack_pairing_or_equivariant_residue"
+                .to_string(),
+        chamber_certificate_status:
+            "weighted_p2_rank_three_source_certificate_blocked_missing_source_chamber_certificate"
+                .to_string(),
+        qn_history_status:
+            "weighted_p2_rank_three_source_certificate_blocked_missing_source_qn_history"
+                .to_string(),
+        cy3_projection_status: readiness.numerical_gv_status,
+        promotion_status:
+            "weighted_p2_rank_three_source_certificate_not_promotable_without_pairing_chamber_qn_history"
+                .to_string(),
+        checked_max_degree_twice: max_degree_twice,
+        checked_integer_sector_count,
+        checked_half_sector_count,
+        source_references: vec![
+            "ccit_prop_small_j_reconstructs_lagrangian_cone_only_after_degree_two_or_big_j_input"
+                .to_string(),
+            "ccit_twisted_gw_total_space_uses_inverse_equivariant_euler_pairing".to_string(),
+            "ccit_smalllinebundle_hypergeometric_modification_for_line_bundle".to_string(),
+            "ccit_smallvb_direct_sum_modification_for_split_bundle".to_string(),
+        ],
+        required_inputs,
     })
 }
 
@@ -2332,6 +2491,7 @@ mod tests {
         weighted_p2_rank_three_split_bundle_chen_ruan_source_basis_readout,
         weighted_p2_rank_three_split_bundle_source_readiness,
         weighted_p2_rank_three_twisted_ifunction_degree_profiles,
+        weighted_p2_rank_three_twisted_ifunction_source_certificate_requirements,
     };
 
     #[test]
@@ -2514,6 +2674,86 @@ mod tests {
             ]
         );
         assert!(weighted_p2_rank_three_split_bundle_source_readiness(&[1, 1, 2], &[4]).is_none());
+    }
+
+    #[test]
+    fn weighted_p2_rank_three_source_certificate_pins_theorem_handoff_requirements() {
+        let certificate = weighted_p2_rank_three_twisted_ifunction_source_certificate_requirements(
+            &[1, 1, 2],
+            &[1, 1, 2],
+            4,
+        )
+        .expect("rank-three weighted P2 source certificate");
+        assert_eq!(
+            certificate.theorem_handoff_status,
+            "weighted_p2_rank_three_ccit_ifunction_lies_on_lagrangian_cone_not_yet_numerical_gv"
+        );
+        assert_eq!(
+            certificate.split_bundle_modification_source_status,
+            "ccit_smalllinebundle_smallvb_direct_sum_modification_product_over_o_minus_1_o_minus_1_o_minus_2"
+        );
+        assert_eq!(
+            certificate.chen_ruan_source_basis_status,
+            "weighted_p2_rank_three_chern_ruan_source_basis_for_p112_identified"
+        );
+        assert_eq!(
+            certificate.required_observable_status,
+            "weighted_p2_rank_three_source_certificate_requires_base_p2_codim2_observable_or_equivalent"
+        );
+        assert_eq!(
+            certificate.primary_readout_status,
+            "weighted_p2_rank_three_source_certificate_primary_z2_p2_readout_zero_to_checked_integer_degrees"
+        );
+        assert_eq!(
+            certificate.descendant_readout_status,
+            "weighted_p2_rank_three_source_certificate_first_nonzero_terms_are_descendant_or_equivariant_requires_big_j_pairing"
+        );
+        assert_eq!(
+            certificate.pairing_or_residue_status,
+            "weighted_p2_rank_three_source_certificate_blocked_missing_stack_pairing_or_equivariant_residue"
+        );
+        assert_eq!(
+            certificate.qn_history_status,
+            "weighted_p2_rank_three_source_certificate_blocked_missing_source_qn_history"
+        );
+        assert_eq!(
+            certificate.cy3_projection_status,
+            "weighted_p2_rank_three_visible_phase_is_not_numerical_cy3_requires_source_codim2_or_insertion_history"
+        );
+        assert_eq!(
+            certificate.promotion_status,
+            "weighted_p2_rank_three_source_certificate_not_promotable_without_pairing_chamber_qn_history"
+        );
+        assert_eq!(certificate.checked_max_degree_twice, 4);
+        assert_eq!(certificate.checked_integer_sector_count, 2);
+        assert_eq!(certificate.checked_half_sector_count, 2);
+        assert_eq!(
+            certificate.required_inputs,
+            vec![
+                "source_derived_codim2_insertion_or_equivalent_observable".to_string(),
+                "stack_normalized_hyperplane_square_tensor".to_string(),
+                "orbifold_sector_pairing_data".to_string(),
+                "equivariant_residue_or_pairing_normalization".to_string(),
+                "twisted_vector_bundle_ifunction_chamber_certificate".to_string(),
+                "twisted_vector_bundle_ifunction_qn_history".to_string(),
+                "twisted_big_j_or_pairing_reconstruction_for_descendant_readout".to_string(),
+                "source_derived_chamber_qn_history_for_selected_phase".to_string(),
+                "cy3_projection_or_codimension_two_local_model".to_string(),
+            ]
+        );
+        assert!(
+            certificate
+                .source_references
+                .contains(&"ccit_smallvb_direct_sum_modification_for_split_bundle".to_string())
+        );
+        assert!(
+            weighted_p2_rank_three_twisted_ifunction_source_certificate_requirements(
+                &[1, 1, 2],
+                &[4],
+                4,
+            )
+            .is_none()
+        );
     }
 
     #[test]
