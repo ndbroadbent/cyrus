@@ -41362,6 +41362,23 @@ mod tests {
     }
 
     #[test]
+    fn canonical_weighted_p2_hypergeometric_has_primary_p2_signal() {
+        let (primary, _, _, status) =
+            split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status(
+                &[1, 1, 2],
+                &[4],
+                2,
+                Some(2),
+            );
+
+        assert_eq!(primary, Some(vec!["0".to_string(), "11/4".to_string()]));
+        assert_eq!(
+            status,
+            "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_primary_z2_nonzero_requires_pairing_or_residue"
+        );
+    }
+
+    #[test]
     fn target_relation_global_secondary_height_pairing_compares_branch_q_dot_t() {
         let witness = OriginCircuitWitnessSample {
             first_facet_exclusive_point: 7,

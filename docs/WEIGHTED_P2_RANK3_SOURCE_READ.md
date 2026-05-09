@@ -205,6 +205,14 @@ therefore need a source-derived twisted big-J/pairing/residue calculation or
 equivalent qN history; the small-J primary readout still does not provide a
 promotion rule.
 
+The z-order convention is checked against the adjacent canonical
+`K_P(1,1,2)` first sector by using bundle degree `[4]` in the same
+hypergeometric readout. There the primary `z^-2` coefficient is nonzero and
+equals `11*lambda/4`, matching the first canonical benchmark before mirror-map
+subtleties enter at higher degree. The split-bundle zero is therefore a real
+feature of the visible `O(-1)+O(-1)+O(-2)` numerator, not an artifact of reading
+the wrong z coefficient.
+
 A direct CYTools/PALP probe of the same six support coordinates is also
 negative. With experimental CYTools features enabled, `Polytope(pts)` reports
 dimension `4`, point count `6`, and `is_reflexive=False`; calling
