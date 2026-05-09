@@ -1649,6 +1649,8 @@ struct WeightedP2RankThreeTwistedIfunctionDegreeProfile {
     adjacent_canonical_numerator_factor_count: i64,
     adjacent_canonical_numerator_zero_factor_order: i64,
     split_vs_adjacent_canonical_factor_status: String,
+    split_non_equivariant_candidate_insertion_coefficient: Option<String>,
+    split_non_equivariant_candidate_insertion_coefficient_status: String,
     candidate_insertion_visibility_status: String,
 }
 
@@ -26803,6 +26805,14 @@ fn weighted_p2_rank_three_twisted_ifunction_degree_profiles(
                 }
             }
             .to_string();
+            let (
+                split_non_equivariant_candidate_insertion_coefficient,
+                split_non_equivariant_candidate_insertion_coefficient_status,
+            ) = split_non_equivariant_candidate_insertion_coefficient_status(
+                degree_twice,
+                numerator_zero_factor_order,
+                required_insertion_complex_codimension,
+            );
             let candidate_insertion_visibility_status = match (
                 degree_twice % 2 == 0,
                 required_insertion_complex_codimension,
@@ -26841,10 +26851,50 @@ fn weighted_p2_rank_three_twisted_ifunction_degree_profiles(
                 adjacent_canonical_numerator_factor_count,
                 adjacent_canonical_numerator_zero_factor_order,
                 split_vs_adjacent_canonical_factor_status,
+                split_non_equivariant_candidate_insertion_coefficient,
+                split_non_equivariant_candidate_insertion_coefficient_status,
                 candidate_insertion_visibility_status,
             }
         })
         .collect()
+}
+
+fn split_non_equivariant_candidate_insertion_coefficient_status(
+    degree_twice: i64,
+    numerator_zero_factor_order: i64,
+    required_insertion_complex_codimension: Option<i64>,
+) -> (Option<String>, String) {
+    if degree_twice % 2 != 0 {
+        return (
+            None,
+            "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_p2_coefficient_readout"
+                .to_string(),
+        );
+    }
+    let Some(required_codimension) = required_insertion_complex_codimension else {
+        return (
+            None,
+            "weighted_p2_rank_three_split_non_equivariant_insertion_codim_not_applicable"
+                .to_string(),
+        );
+    };
+    match numerator_zero_factor_order.cmp(&required_codimension) {
+        std::cmp::Ordering::Greater => (
+            Some("0".to_string()),
+            "weighted_p2_rank_three_split_untwisted_non_equivariant_p2_coefficient_zero_before_mirror_map_due_to_excess_zero_order"
+                .to_string(),
+        ),
+        std::cmp::Ordering::Equal => (
+            None,
+            "weighted_p2_rank_three_split_untwisted_non_equivariant_p2_coefficient_requires_exact_factor_expansion"
+                .to_string(),
+        ),
+        std::cmp::Ordering::Less => (
+            None,
+            "weighted_p2_rank_three_split_untwisted_non_equivariant_p2_coefficient_requires_higher_series_terms"
+                .to_string(),
+        ),
+    }
 }
 
 fn ceil_positive_half_product(factor: i64, degree_twice: i64) -> i64 {
@@ -39371,6 +39421,10 @@ mod tests {
                     split_vs_adjacent_canonical_factor_status:
                         "weighted_p2_rank_three_split_matches_adjacent_canonical_zero_order_but_twisted_sector_needs_pairing"
                             .to_string(),
+                    split_non_equivariant_candidate_insertion_coefficient: None,
+                    split_non_equivariant_candidate_insertion_coefficient_status:
+                        "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_p2_coefficient_readout"
+                            .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_half_degree_requires_orbifold_sector_pairing"
                             .to_string(),
@@ -39387,6 +39441,10 @@ mod tests {
                     adjacent_canonical_numerator_zero_factor_order: 1,
                     split_vs_adjacent_canonical_factor_status:
                         "weighted_p2_rank_three_split_integer_zero_order_exceeds_adjacent_canonical_kp112_so_p2_table_not_reusable"
+                            .to_string(),
+                    split_non_equivariant_candidate_insertion_coefficient: Some("0".to_string()),
+                    split_non_equivariant_candidate_insertion_coefficient_status:
+                        "weighted_p2_rank_three_split_untwisted_non_equivariant_p2_coefficient_zero_before_mirror_map_due_to_excess_zero_order"
                             .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_untwisted_zero_order_exceeds_required_insertion_codim_requires_equivariant_normalization"
@@ -39405,6 +39463,10 @@ mod tests {
                     split_vs_adjacent_canonical_factor_status:
                         "weighted_p2_rank_three_split_matches_adjacent_canonical_zero_order_but_twisted_sector_needs_pairing"
                             .to_string(),
+                    split_non_equivariant_candidate_insertion_coefficient: None,
+                    split_non_equivariant_candidate_insertion_coefficient_status:
+                        "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_p2_coefficient_readout"
+                            .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_half_degree_requires_orbifold_sector_pairing"
                             .to_string(),
@@ -39421,6 +39483,10 @@ mod tests {
                     adjacent_canonical_numerator_zero_factor_order: 1,
                     split_vs_adjacent_canonical_factor_status:
                         "weighted_p2_rank_three_split_integer_zero_order_exceeds_adjacent_canonical_kp112_so_p2_table_not_reusable"
+                            .to_string(),
+                    split_non_equivariant_candidate_insertion_coefficient: Some("0".to_string()),
+                    split_non_equivariant_candidate_insertion_coefficient_status:
+                        "weighted_p2_rank_three_split_untwisted_non_equivariant_p2_coefficient_zero_before_mirror_map_due_to_excess_zero_order"
                             .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_untwisted_zero_order_exceeds_required_insertion_codim_requires_equivariant_normalization"
