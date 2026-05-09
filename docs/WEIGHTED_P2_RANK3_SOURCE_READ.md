@@ -397,12 +397,16 @@ terms are descendants at `z^-3`, with lambda-polynomial samples
 lambda order as `2` and labels them
 `weighted_p2_rank_three_split_first_nonzero_descendant_positive_lambda_order_equivariant_only_requires_residue_or_pairing`,
 so the report distinguishes "a descendant term exists" from "a scalar
-non-equivariant GV contribution has been extracted." The lightweight command
-keeps the semigroup generator/decomposition readout but deliberately leaves the
-chamber secondary certificates skipped. Deeper complete-intersection source
-certificates, support-overlap diagnostics, and lower-seed diamond qN traces
-remain opt-in via their existing report flags, because they are certification
-paths, not prerequisites for this z-readout check.
+non-equivariant GV contribution has been extracted." This is also a top-level
+aggregate now: both target reports have first-nonzero lambda-order counts
+`{"2": 2, "missing": 2}` and non-equivariant-limit status counts with two
+twisted-sector non-applicable rows plus two equivariant-only descendant rows.
+The lightweight command keeps the semigroup generator/decomposition readout but
+deliberately leaves the chamber secondary certificates skipped. Deeper
+complete-intersection source certificates, support-overlap diagnostics, and
+lower-seed diamond qN traces remain opt-in via their existing report flags,
+because they are certification paths, not prerequisites for this z-readout
+check.
 
 Cyrus also now records the scalar mirror-map obstruction explicitly. For both
 target-filtered reports, the half-degree sectors are marked as twisted-sector

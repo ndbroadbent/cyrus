@@ -530,6 +530,10 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_order_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_non_equivariant_limit_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_p2_readout_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_gw_extraction_status_counts:
@@ -18042,6 +18046,24 @@ fn build_report(
         unresolved_generator_weighted_p2_twisted_ifunction_split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status_counts(
             &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
         );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_order_counts =
+        unresolved_generator_weighted_p2_twisted_ifunction_degree_profile_counts(
+            &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
+            |profile| {
+                profile
+                    .split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_order
+                    .map_or_else(|| "missing".to_string(), |order| order.to_string())
+            },
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_non_equivariant_limit_status_counts =
+        unresolved_generator_weighted_p2_twisted_ifunction_degree_profile_counts(
+            &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
+            |profile| {
+                profile
+                    .split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_non_equivariant_limit_status
+                    .clone()
+            },
+        );
     let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_p2_readout_status_counts =
         weighted_p2_rank_three_chen_ruan_source_map_status_counts(
             local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
@@ -19570,6 +19592,8 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_dual_basis_p2_hypergeometric_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_full_hypergeometric_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_order_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_non_equivariant_limit_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_p2_readout_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_gw_extraction_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_required_source_data_status_counts,
@@ -22006,6 +22030,24 @@ fn unresolved_generator_weighted_p2_twisted_ifunction_split_equivariant_full_hyp
                         .clone(),
                 )
                 .or_insert(0) += 1;
+        }
+    }
+    counts
+}
+
+fn unresolved_generator_weighted_p2_twisted_ifunction_degree_profile_counts<F>(
+    summaries: &[LocalCygvUnresolvedChamberGeneratorSummary],
+    profile_key: F,
+) -> BTreeMap<String, usize>
+where
+    F: Fn(&WeightedP2RankThreeTwistedIfunctionDegreeProfile) -> String,
+{
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        for profile in &summary
+            .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_degree_profile_sample
+        {
+            *counts.entry(profile_key(profile)).or_insert(0) += 1;
         }
     }
     counts
