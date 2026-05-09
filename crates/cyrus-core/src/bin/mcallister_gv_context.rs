@@ -544,6 +544,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_half_sector_primary_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_half_sector_descendant_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_gw_extraction_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_required_source_data_status_counts:
@@ -1745,6 +1747,9 @@ struct WeightedP2RankThreeTwistedIfunctionChenRuanSourceMap {
     split_bundle_kp112_mirror_map_primary_p_lambda_coefficients: Vec<String>,
     split_bundle_kp112_mirror_map_half_sector_primary_status: String,
     split_bundle_kp112_mirror_map_half_sector_primary_coefficients: Vec<String>,
+    split_bundle_kp112_mirror_map_half_sector_descendant_status: String,
+    split_bundle_kp112_mirror_map_half_sector_first_nonzero_inverse_z_powers: Vec<String>,
+    split_bundle_kp112_mirror_map_half_sector_first_nonzero_coefficients: Vec<Vec<String>>,
     split_bundle_gw_extraction_status: String,
     twisted_sector_divisor_equation_status: String,
     split_bundle_required_source_data_status: String,
@@ -18135,6 +18140,17 @@ fn build_report(
                 }),
             |source_map| source_map.split_bundle_kp112_mirror_map_half_sector_primary_status.as_str(),
         );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_half_sector_descendant_status_counts =
+        weighted_p2_rank_three_chen_ruan_source_map_status_counts(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| {
+                    summary
+                        .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_chen_ruan_source_map
+                        .as_ref()
+                }),
+            |source_map| source_map.split_bundle_kp112_mirror_map_half_sector_descendant_status.as_str(),
+        );
     let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_gw_extraction_status_counts =
         weighted_p2_rank_three_chen_ruan_source_map_status_counts(
             local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
@@ -19659,6 +19675,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_adjacent_canonical_mirror_map_c_table_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_primary_p_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_half_sector_primary_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_half_sector_descendant_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_gw_extraction_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_required_source_data_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_promotion_status_counts,
@@ -27216,6 +27233,38 @@ fn weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
         } else {
             "rank_three_split_kp112_mirror_map_half_sector_primary_signal_nonzero_requires_source_extraction"
         };
+    let split_bundle_half_sector_descendant =
+        split_bundle_kp112_mirror_map_half_sector_first_nonzero_descendants(4, 4);
+    let split_bundle_kp112_mirror_map_half_sector_descendant_status =
+        if split_bundle_half_sector_descendant.iter().all(|entry| {
+            entry
+                .inverse_z_power
+                .as_deref()
+                .is_some_and(|power| power != "2")
+                && entry
+                    .coefficients
+                    .first()
+                    .is_some_and(|coefficient| coefficient != "0")
+        }) {
+            "rank_three_split_kp112_mirror_map_half_sector_first_nonzero_descendant_has_nonequivariant_limit_requires_twisted_big_j_pairing"
+        } else {
+            "rank_three_split_kp112_mirror_map_half_sector_descendant_profile_requires_source_check"
+        };
+    let split_bundle_kp112_mirror_map_half_sector_first_nonzero_inverse_z_powers =
+        split_bundle_half_sector_descendant
+            .iter()
+            .map(|entry| {
+                entry
+                    .inverse_z_power
+                    .clone()
+                    .unwrap_or_else(|| "missing".to_string())
+            })
+            .collect::<Vec<_>>();
+    let split_bundle_kp112_mirror_map_half_sector_first_nonzero_coefficients =
+        split_bundle_half_sector_descendant
+            .into_iter()
+            .map(|entry| entry.coefficients)
+            .collect::<Vec<_>>();
     // CCIT/wallcrossings2 Example II gives the Chen-Ruan basis and
     // adjacent K_{P(1,1,2)} crepant map.  The target here is the split
     // bundle O(-1)+O(-1)+O(-2), so these facts constrain the missing
@@ -27266,6 +27315,10 @@ fn weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
         split_bundle_kp112_mirror_map_half_sector_primary_status:
             split_bundle_kp112_mirror_map_half_sector_primary_status.to_string(),
         split_bundle_kp112_mirror_map_half_sector_primary_coefficients,
+        split_bundle_kp112_mirror_map_half_sector_descendant_status:
+            split_bundle_kp112_mirror_map_half_sector_descendant_status.to_string(),
+        split_bundle_kp112_mirror_map_half_sector_first_nonzero_inverse_z_powers,
+        split_bundle_kp112_mirror_map_half_sector_first_nonzero_coefficients,
         split_bundle_gw_extraction_status:
             "rank_three_split_requires_own_j_or_big_j_coefficient_extraction_before_qn_history"
                 .to_string(),
@@ -28736,15 +28789,34 @@ fn weighted_p2_half_sector_primary_after_kp112_mirror_map(
     bundle_degrees: &[i64],
     half_sector_count: usize,
 ) -> Vec<BTreeMap<usize, MalachiteRational>> {
+    weighted_p2_half_sector_fun_component_after_kp112_mirror_map_by_z(
+        bundle_degrees,
+        half_sector_count,
+        2,
+    )
+    .into_iter()
+    .map(|by_z| by_z.get(&2).cloned().unwrap_or_default())
+    .collect()
+}
+
+fn weighted_p2_half_sector_fun_component_after_kp112_mirror_map_by_z(
+    bundle_degrees: &[i64],
+    half_sector_count: usize,
+    max_inverse_z_power: i64,
+) -> Vec<BTreeMap<i64, BTreeMap<usize, MalachiteRational>>> {
     if half_sector_count == 0 {
         return Vec::new();
     }
     let max_shift = half_sector_count - 1;
     let x_of_q = kp112_x_of_q_series(max_shift);
     let h_of_q = truncated_series_compose(&kp112_h_series(max_shift), &x_of_q, max_shift);
-    let mut primary_by_half_index =
-        vec![BTreeMap::<usize, MalachiteRational>::new(); half_sector_count];
-    let exp_terms = kp112_lambda_expansion_terms(&h_of_q, max_shift, 2);
+    let mut by_z_by_half_index =
+        vec![BTreeMap::<i64, BTreeMap<usize, MalachiteRational>>::new(); half_sector_count];
+    let exp_terms = kp112_lambda_expansion_terms(
+        &h_of_q,
+        max_shift,
+        usize::try_from(max_inverse_z_power).expect("inverse z power is nonnegative"),
+    );
 
     for half_index in 0..half_sector_count {
         let degree_twice = i64::try_from(2 * half_index + 1).expect("half degree fits i64");
@@ -28764,7 +28836,8 @@ fn weighted_p2_half_sector_primary_after_kp112_mirror_map(
         for (numerator_z_power, lambda_polynomial) in raw_by_numerator_z_power {
             let input_inverse_z_power = denominator_z_power - numerator_z_power;
             for (extra_inverse_z_power, exp_series) in &exp_terms {
-                if input_inverse_z_power + extra_inverse_z_power != 2 {
+                let output_inverse_z_power = input_inverse_z_power + extra_inverse_z_power;
+                if output_inverse_z_power < 2 || output_inverse_z_power > max_inverse_z_power {
                     continue;
                 }
                 let q_factor = truncated_series_multiply(&x_factor, exp_series, max_shift);
@@ -28777,7 +28850,9 @@ fn weighted_p2_half_sector_primary_after_kp112_mirror_map(
                         if output_half_index >= half_sector_count {
                             continue;
                         }
-                        *primary_by_half_index[output_half_index]
+                        *by_z_by_half_index[output_half_index]
+                            .entry(output_inverse_z_power)
+                            .or_default()
                             .entry(output_lambda_power)
                             .or_insert_with(|| MalachiteRational::from(0)) +=
                             scaled.clone() * q_factor[shift].clone();
@@ -28786,7 +28861,7 @@ fn weighted_p2_half_sector_primary_after_kp112_mirror_map(
             }
         }
     }
-    primary_by_half_index
+    by_z_by_half_index
 }
 
 fn kp112_lambda_expansion_terms(
@@ -28929,6 +29004,74 @@ fn split_bundle_kp112_mirror_map_half_sector_primary_coefficients(
             (fun_half_lambda_coefficient / rational_from_i64(2)).to_string()
         })
         .collect()
+}
+
+struct HalfSectorFirstNonzeroDescendant {
+    inverse_z_power: Option<String>,
+    coefficients: Vec<String>,
+}
+
+fn split_bundle_kp112_mirror_map_half_sector_first_nonzero_descendants(
+    half_sector_count: usize,
+    max_inverse_z_power: i64,
+) -> Vec<HalfSectorFirstNonzeroDescendant> {
+    weighted_p2_half_sector_fun_component_after_kp112_mirror_map_by_z(
+        &[1, 1, 2],
+        half_sector_count,
+        max_inverse_z_power,
+    )
+    .into_iter()
+    .map(|by_z| {
+        let first_nonzero = by_z
+            .into_iter()
+            .filter_map(|(inverse_z_power, polynomial)| {
+                divide_rational_lambda_polynomial_by_two_lambda_if_possible(&polynomial).map(
+                    |coefficients| {
+                        (
+                            inverse_z_power,
+                            rational_coefficients_to_strings(&coefficients),
+                        )
+                    },
+                )
+            })
+            .find(|(_, coefficients)| lambda_polynomial_has_nonzero_coefficient(coefficients));
+        match first_nonzero {
+            Some((inverse_z_power, coefficients)) => HalfSectorFirstNonzeroDescendant {
+                inverse_z_power: Some(inverse_z_power.to_string()),
+                coefficients,
+            },
+            None => HalfSectorFirstNonzeroDescendant {
+                inverse_z_power: None,
+                coefficients: vec!["0".to_string()],
+            },
+        }
+    })
+    .collect()
+}
+
+fn divide_rational_lambda_polynomial_by_two_lambda_if_possible(
+    polynomial: &BTreeMap<usize, MalachiteRational>,
+) -> Option<Vec<MalachiteRational>> {
+    let constant = polynomial
+        .get(&0)
+        .cloned()
+        .unwrap_or_else(|| MalachiteRational::from(0));
+    if constant != MalachiteRational::from(0) {
+        return None;
+    }
+    let max_lambda_power = polynomial.keys().last().copied().unwrap_or(0);
+    let two = MalachiteRational::from(Integer::from(2));
+    Some(
+        (1..=max_lambda_power)
+            .map(|lambda_power| {
+                polynomial
+                    .get(&lambda_power)
+                    .cloned()
+                    .unwrap_or_else(|| MalachiteRational::from(0))
+                    / two.clone()
+            })
+            .collect(),
+    )
 }
 
 fn ceil_positive_half_product(factor: i64, degree_twice: i64) -> i64 {
@@ -41954,6 +42097,21 @@ mod tests {
                     "0".to_string(),
                     "0".to_string(),
                 ],
+                split_bundle_kp112_mirror_map_half_sector_descendant_status:
+                    "rank_three_split_kp112_mirror_map_half_sector_first_nonzero_descendant_has_nonequivariant_limit_requires_twisted_big_j_pairing"
+                        .to_string(),
+                split_bundle_kp112_mirror_map_half_sector_first_nonzero_inverse_z_powers: vec![
+                    "3".to_string(),
+                    "3".to_string(),
+                    "3".to_string(),
+                    "3".to_string(),
+                ],
+                split_bundle_kp112_mirror_map_half_sector_first_nonzero_coefficients: vec![
+                    vec!["2".to_string()],
+                    vec!["-322/27".to_string()],
+                    vec!["-11744/375".to_string()],
+                    vec!["-22221448/25725".to_string()],
+                ],
                 split_bundle_gw_extraction_status:
                     "rank_three_split_requires_own_j_or_big_j_coefficient_extraction_before_qn_history"
                         .to_string(),
@@ -42357,6 +42515,35 @@ mod tests {
                 "0".to_string(),
                 "0".to_string(),
                 "0".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn split_bundle_kp112_mirror_map_half_sector_signal_starts_as_descendant() {
+        let descendants = split_bundle_kp112_mirror_map_half_sector_first_nonzero_descendants(4, 4);
+        assert_eq!(
+            descendants
+                .iter()
+                .map(|entry| entry.inverse_z_power.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                Some("3".to_string()),
+                Some("3".to_string()),
+                Some("3".to_string()),
+                Some("3".to_string()),
+            ]
+        );
+        assert_eq!(
+            descendants
+                .iter()
+                .map(|entry| entry.coefficients.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                vec!["2".to_string()],
+                vec!["-322/27".to_string()],
+                vec!["-11744/375".to_string()],
+                vec!["-22221448/25725".to_string()],
             ]
         );
     }

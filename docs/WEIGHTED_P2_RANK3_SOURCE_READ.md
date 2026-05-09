@@ -239,7 +239,12 @@ while the split-bundle status counts are
 `rank_three_split_kp112_mirror_map_primary_p_signal_zero_to_degree_4` and
 `rank_three_split_kp112_mirror_map_half_sector_primary_signal_zero_to_half_degree_7_over_2`;
 the sample source map carries the canonical `b_d`/`c_d` values and split
-primary coefficients `[0, 0, 0, 0]` in both checked sectors.
+primary coefficients `[0, 0, 0, 0]` in both checked sectors. The split
+half-sector is not empty: the first nonzero dual-basis readout starts one
+descendant level later, at `z^-3`, with coefficients
+`[2, -322/27, -11744/375, -22221448/25725]` through half-degree `7/2`.
+That keeps the open problem sharply on twisted big-`J`/pairing
+reconstruction, rather than on a missing primary mirror-map coefficient.
 
 This does not mean the `z^-3` descendant term is useless. CCIT explicitly
 states that one-point descendants can reconstruct genus-zero Gromov-Witten
