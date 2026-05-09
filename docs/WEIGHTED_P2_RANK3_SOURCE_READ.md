@@ -247,6 +247,17 @@ context report now serializes that certificate per unresolved generator and
 aggregates the certificate promotion, primary-readout, pairing/residue, and
 required-input statuses.
 
+A follow-up read of the source paper cited by CCIT makes the promotion gate
+more precise. `I(q,z) in L` is only the cone-membership step. To extract
+twisted invariants one must first identify a twisted `J`-function by putting
+the `I`-function in `F(q) z 1 + G(q) + O(z^-1)` form and inverting the mirror
+map; the local examples then extract non-descendant data from the `z^-1` term
+using the twisted dual pairing. The core certificate now keeps those as
+separate blockers: split-bundle `J` normalization, mirror-map inversion,
+`z^-1` extraction, and stack-normalized twisted dual pairing. This prevents a
+descendant/equivariant coefficient from being mistaken for a numerical CY3 GV
+row.
+
 The z-order convention is checked against the adjacent canonical
 `K_P(1,1,2)` first sector by using bundle degree `[4]` in the same
 hypergeometric readout. There the primary `z^-2` coefficient is nonzero and

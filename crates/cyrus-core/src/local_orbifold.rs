@@ -162,6 +162,14 @@ pub struct WeightedP2RankThreeTwistedIfunctionSourceCertificateRequirements {
     pub primary_readout_status: String,
     /// Status of the first nonzero descendant/equivariant readout.
     pub descendant_readout_status: String,
+    /// Whether CCIT cone membership has been normalized to a twisted J-function.
+    pub twisted_j_normalization_status: String,
+    /// Whether the split-bundle mirror map needed for the twisted J-function is known.
+    pub mirror_map_inversion_status: String,
+    /// Whether the `z^-1` potential/invariant extraction step is available.
+    pub z_minus_one_extraction_status: String,
+    /// Whether the twisted dual pairing needed for coefficient extraction is known.
+    pub twisted_dual_pairing_status: String,
     /// Pairing/residue normalization boundary.
     pub pairing_or_residue_status: String,
     /// Chamber-certificate boundary.
@@ -501,6 +509,18 @@ pub fn weighted_p2_rank_three_twisted_ifunction_source_certificate_requirements(
         required_observable_status: required_observable_status.to_string(),
         primary_readout_status,
         descendant_readout_status,
+        twisted_j_normalization_status:
+            "weighted_p2_rank_three_ccit_j_function_normalization_blocked_missing_split_bundle_Fz_plus_G_mirror_map"
+                .to_string(),
+        mirror_map_inversion_status:
+            "weighted_p2_rank_three_ccit_mirror_map_inversion_blocked_primary_signals_zero_and_descendant_pairing_missing"
+                .to_string(),
+        z_minus_one_extraction_status:
+            "weighted_p2_rank_three_ccit_z_minus_one_potential_extraction_blocked_missing_twisted_j_and_dual_pairing"
+                .to_string(),
+        twisted_dual_pairing_status:
+            "weighted_p2_rank_three_ccit_twisted_dual_pairing_blocked_missing_stack_normalized_inverse_euler_pairing"
+                .to_string(),
         pairing_or_residue_status:
             "weighted_p2_rank_three_source_certificate_blocked_missing_stack_pairing_or_equivariant_residue"
                 .to_string(),
@@ -523,6 +543,9 @@ pub fn weighted_p2_rank_three_twisted_ifunction_source_certificate_requirements(
             "ccit_twisted_gw_total_space_uses_inverse_equivariant_euler_pairing".to_string(),
             "ccit_smalllinebundle_hypergeometric_modification_for_line_bundle".to_string(),
             "ccit_smallvb_direct_sum_modification_for_split_bundle".to_string(),
+            "ccit_jscale_requires_Fz_plus_G_expansion_for_twisted_j_identification".to_string(),
+            "ccit_local_invariants_extract_z_minus_one_term_using_twisted_dual_pairing"
+                .to_string(),
         ],
         required_inputs,
     })
@@ -2709,6 +2732,22 @@ mod tests {
             "weighted_p2_rank_three_source_certificate_first_nonzero_terms_are_descendant_or_equivariant_requires_big_j_pairing"
         );
         assert_eq!(
+            certificate.twisted_j_normalization_status,
+            "weighted_p2_rank_three_ccit_j_function_normalization_blocked_missing_split_bundle_Fz_plus_G_mirror_map"
+        );
+        assert_eq!(
+            certificate.mirror_map_inversion_status,
+            "weighted_p2_rank_three_ccit_mirror_map_inversion_blocked_primary_signals_zero_and_descendant_pairing_missing"
+        );
+        assert_eq!(
+            certificate.z_minus_one_extraction_status,
+            "weighted_p2_rank_three_ccit_z_minus_one_potential_extraction_blocked_missing_twisted_j_and_dual_pairing"
+        );
+        assert_eq!(
+            certificate.twisted_dual_pairing_status,
+            "weighted_p2_rank_three_ccit_twisted_dual_pairing_blocked_missing_stack_normalized_inverse_euler_pairing"
+        );
+        assert_eq!(
             certificate.pairing_or_residue_status,
             "weighted_p2_rank_three_source_certificate_blocked_missing_stack_pairing_or_equivariant_residue"
         );
@@ -2741,11 +2780,9 @@ mod tests {
                 "cy3_projection_or_codimension_two_local_model".to_string(),
             ]
         );
-        assert!(
-            certificate
-                .source_references
-                .contains(&"ccit_smallvb_direct_sum_modification_for_split_bundle".to_string())
-        );
+        assert!(certificate.source_references.contains(
+            &"ccit_jscale_requires_Fz_plus_G_expansion_for_twisted_j_identification".to_string()
+        ));
         assert!(
             weighted_p2_rank_three_twisted_ifunction_source_certificate_requirements(
                 &[1, 1, 2],
