@@ -1458,6 +1458,8 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
     local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_missing_inputs: Vec<String>,
     local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_degree_profile_sample:
         Vec<WeightedP2RankThreeTwistedIfunctionDegreeProfile>,
+    local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_chen_ruan_source_map:
+        Option<WeightedP2RankThreeTwistedIfunctionChenRuanSourceMap>,
     local_toric_weighted_p2_rank_three_origin_included_zero_degree_split_summary:
         WeightedP2RankThreeOriginIncludedZeroDegreeSplitSummary,
     ckyz_status: String,
@@ -1631,6 +1633,8 @@ struct WeightedP2RankThreeSourceModelSummary {
     twisted_vector_bundle_ifunction_missing_inputs: Vec<String>,
     twisted_vector_bundle_ifunction_degree_profile_sample:
         Vec<WeightedP2RankThreeTwistedIfunctionDegreeProfile>,
+    twisted_vector_bundle_ifunction_chen_ruan_source_map:
+        Option<WeightedP2RankThreeTwistedIfunctionChenRuanSourceMap>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -1641,6 +1645,25 @@ struct WeightedP2RankThreeTwistedIfunctionDegreeProfile {
     bundle_numerator_factor_counts: Vec<i64>,
     numerator_zero_factor_order: i64,
     candidate_insertion_visibility_status: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+struct WeightedP2RankThreeTwistedIfunctionChenRuanSourceMap {
+    source_status: String,
+    source_scope_status: String,
+    inertia_component_classes: Vec<String>,
+    untwisted_hyperplane_class: String,
+    untwisted_codim2_candidate_class: String,
+    twisted_half_sector_candidate_class: String,
+    source_dual_basis_p2_class: String,
+    source_dual_basis_half_sector_class: String,
+    adjacent_canonical_crepant_resolution_status: String,
+    adjacent_canonical_crepant_resolution_p2_image: String,
+    adjacent_canonical_crepant_resolution_half_sector_image: String,
+    adjacent_canonical_correlator_p2_label: String,
+    adjacent_canonical_correlator_half_sector_label: String,
+    twisted_sector_divisor_equation_status: String,
+    split_bundle_promotion_status: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -21498,6 +21521,9 @@ fn unresolved_chamber_generator_summaries(
                     local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_degree_profile_sample:
                         weighted_rank_three_source_model
                             .twisted_vector_bundle_ifunction_degree_profile_sample,
+                    local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_chen_ruan_source_map:
+                        weighted_rank_three_source_model
+                            .twisted_vector_bundle_ifunction_chen_ruan_source_map,
                     local_toric_weighted_p2_rank_three_origin_included_zero_degree_split_summary:
                         weighted_rank_three_origin_split_summary,
                     ckyz_status: context.local_toric_diagnostic.ckyz_status.clone(),
@@ -26474,6 +26500,7 @@ fn weighted_p2_rank_three_source_model_summary(
         twisted_vector_bundle_ifunction_readiness_status: None,
         twisted_vector_bundle_ifunction_missing_inputs: Vec::new(),
         twisted_vector_bundle_ifunction_degree_profile_sample: Vec::new(),
+        twisted_vector_bundle_ifunction_chen_ruan_source_map: None,
     };
     if !charge_family_status
         .starts_with("local_toric_weighted_p2_rank_three_split_bundle_charge_family")
@@ -26598,6 +26625,12 @@ fn weighted_p2_rank_three_source_model_summary(
             4,
             required_insertion_complex_codimension,
         );
+    let twisted_ifunction_chen_ruan_source_map =
+        weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
+            base_weights,
+            bundle_degrees,
+            total_first_chern_degree,
+        );
     let status = if phase_summary
         .status
         .starts_with("weighted_p2_rank_three_split_bundle_selected_")
@@ -26631,7 +26664,52 @@ fn weighted_p2_rank_three_source_model_summary(
         twisted_vector_bundle_ifunction_missing_inputs: twisted_ifunction_missing_inputs,
         twisted_vector_bundle_ifunction_degree_profile_sample:
             twisted_ifunction_degree_profile_sample,
+        twisted_vector_bundle_ifunction_chen_ruan_source_map:
+            twisted_ifunction_chen_ruan_source_map,
     }
+}
+
+fn weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
+    base_weights: &[i64],
+    bundle_degrees: &[i64],
+    total_first_chern_degree: i64,
+) -> Option<WeightedP2RankThreeTwistedIfunctionChenRuanSourceMap> {
+    if base_weights != [1, 1, 2] || bundle_degrees != [1, 1, 2] {
+        return None;
+    }
+    if total_first_chern_degree != 0 {
+        return None;
+    }
+    // CCIT/wallcrossings2 Example II gives the Chen-Ruan basis and
+    // adjacent K_{P(1,1,2)} crepant map.  The target here is the split
+    // bundle O(-1)+O(-1)+O(-2), so these facts constrain the missing
+    // data but do not promote a numerical invariant by themselves.
+    Some(WeightedP2RankThreeTwistedIfunctionChenRuanSourceMap {
+        source_status:
+            "weighted_p2_rank_three_chern_ruan_source_basis_for_p112_identified".to_string(),
+        source_scope_status:
+            "weighted_p2_rank_three_chern_ruan_source_is_adjacent_kp112_not_split_bundle_qn_history"
+                .to_string(),
+        inertia_component_classes: vec!["fun_0".to_string(), "fun_{1/2}".to_string()],
+        untwisted_hyperplane_class: "p=c1(O(1))".to_string(),
+        untwisted_codim2_candidate_class: "p^2".to_string(),
+        twisted_half_sector_candidate_class: "fun_{1/2}".to_string(),
+        source_dual_basis_p2_class: "2*lambda*fun_0-8*p".to_string(),
+        source_dual_basis_half_sector_class: "2*lambda*fun_{1/2}".to_string(),
+        adjacent_canonical_crepant_resolution_status:
+            "weighted_p2_rank_three_adjacent_kp112_crepant_map_reference_only".to_string(),
+        adjacent_canonical_crepant_resolution_p2_image: "p1*p2/2".to_string(),
+        adjacent_canonical_crepant_resolution_half_sector_image: "i*(p1-2*p2)/2".to_string(),
+        adjacent_canonical_correlator_p2_label: "<p^2>_{0,1,d}^{K_P(1,1,2)}".to_string(),
+        adjacent_canonical_correlator_half_sector_label:
+            "<fun_{1/2}>_{0,1,d}^{K_P(1,1,2)}".to_string(),
+        twisted_sector_divisor_equation_status:
+            "chen_ruan_twisted_sector_has_no_divisor_equation_requires_big_j_or_pairing_input"
+                .to_string(),
+        split_bundle_promotion_status:
+            "weighted_p2_rank_three_split_bundle_still_requires_twisted_vector_bundle_ifunction_normalization_and_qn_history"
+                .to_string(),
+    })
 }
 
 fn weighted_p2_rank_three_twisted_ifunction_degree_profiles(
@@ -39261,6 +39339,40 @@ mod tests {
                             .to_string(),
                 },
             ]
+        );
+        assert_eq!(
+            selected_base_source_model
+                .twisted_vector_bundle_ifunction_chen_ruan_source_map,
+            Some(WeightedP2RankThreeTwistedIfunctionChenRuanSourceMap {
+                source_status:
+                    "weighted_p2_rank_three_chern_ruan_source_basis_for_p112_identified"
+                        .to_string(),
+                source_scope_status:
+                    "weighted_p2_rank_three_chern_ruan_source_is_adjacent_kp112_not_split_bundle_qn_history"
+                        .to_string(),
+                inertia_component_classes: vec!["fun_0".to_string(), "fun_{1/2}".to_string()],
+                untwisted_hyperplane_class: "p=c1(O(1))".to_string(),
+                untwisted_codim2_candidate_class: "p^2".to_string(),
+                twisted_half_sector_candidate_class: "fun_{1/2}".to_string(),
+                source_dual_basis_p2_class: "2*lambda*fun_0-8*p".to_string(),
+                source_dual_basis_half_sector_class: "2*lambda*fun_{1/2}".to_string(),
+                adjacent_canonical_crepant_resolution_status:
+                    "weighted_p2_rank_three_adjacent_kp112_crepant_map_reference_only"
+                        .to_string(),
+                adjacent_canonical_crepant_resolution_p2_image: "p1*p2/2".to_string(),
+                adjacent_canonical_crepant_resolution_half_sector_image:
+                    "i*(p1-2*p2)/2".to_string(),
+                adjacent_canonical_correlator_p2_label:
+                    "<p^2>_{0,1,d}^{K_P(1,1,2)}".to_string(),
+                adjacent_canonical_correlator_half_sector_label:
+                    "<fun_{1/2}>_{0,1,d}^{K_P(1,1,2)}".to_string(),
+                twisted_sector_divisor_equation_status:
+                    "chen_ruan_twisted_sector_has_no_divisor_equation_requires_big_j_or_pairing_input"
+                        .to_string(),
+                split_bundle_promotion_status:
+                    "weighted_p2_rank_three_split_bundle_still_requires_twisted_vector_bundle_ifunction_normalization_and_qn_history"
+                        .to_string(),
+            })
         );
         let point_samples = vec![
             relation_point_sample(0, -1, &[0, 0, 0, 0], None),
