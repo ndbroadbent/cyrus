@@ -189,6 +189,22 @@ the missing extraction, but still does not promote a GV value: mirror-map
 normalization, pairing data, and equivariant residue or twisted big-J pairing
 data remain required.
 
+The same full-denominator diagnostic now keeps the `z` order instead of
+collapsing to a pre-mirror lambda polynomial. For the first two integer sectors
+the small-J primary `p^2` readout at `z^-2` vanishes:
+
+```text
+d=1: primary z^-2 p^2 readout = 0; first nonzero at z^-3 is -lambda^2/4
+d=2: primary z^-2 p^2 readout = 0; first nonzero at z^-3 is -lambda^2/32
+```
+
+This is a stronger obstruction than the positive-lambda-order scalar readout:
+the naive primary one-point `p^2` insertion is zero in these sectors, and the
+first nonzero terms are descendant-order data. A numerical contribution would
+therefore need a source-derived twisted big-J/pairing/residue calculation or
+equivalent qN history; the small-J primary readout still does not provide a
+promotion rule.
+
 A direct CYTools/PALP probe of the same six support coordinates is also
 negative. With experimental CYTools features enabled, `Polytope(pts)` reports
 dimension `4`, point count `6`, and `is_reflexive=False`; calling

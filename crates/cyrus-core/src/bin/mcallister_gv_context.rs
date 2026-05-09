@@ -528,6 +528,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_full_hypergeometric_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_p2_readout_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_gw_extraction_status_counts:
@@ -1690,6 +1692,12 @@ struct WeightedP2RankThreeTwistedIfunctionDegreeProfile {
     split_equivariant_full_hypergeometric_dual_basis_p2_lambda_polynomial: Option<Vec<String>>,
     split_equivariant_full_hypergeometric_dual_basis_p2_lambda_order: Option<i64>,
     split_equivariant_full_hypergeometric_status: String,
+    split_equivariant_full_hypergeometric_dual_basis_p2_primary_z2_lambda_polynomial:
+        Option<Vec<String>>,
+    split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_inverse_power: Option<i64>,
+    split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_polynomial:
+        Option<Vec<String>>,
+    split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status: String,
     candidate_insertion_visibility_status: String,
 }
 
@@ -18016,6 +18024,10 @@ fn build_report(
         unresolved_generator_weighted_p2_twisted_ifunction_split_equivariant_full_hypergeometric_status_counts(
             &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
         );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status_counts =
+        unresolved_generator_weighted_p2_twisted_ifunction_split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status_counts(
+            &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
+        );
     let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_p2_readout_status_counts =
         weighted_p2_rank_three_chen_ruan_source_map_status_counts(
             local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
@@ -19543,6 +19555,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_dual_basis_p2_readout_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_dual_basis_p2_hypergeometric_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_full_hypergeometric_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_p2_readout_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_gw_extraction_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_required_source_data_status_counts,
@@ -21939,6 +21952,26 @@ fn unresolved_generator_weighted_p2_twisted_ifunction_split_equivariant_full_hyp
                 .entry(
                     profile
                         .split_equivariant_full_hypergeometric_status
+                        .clone(),
+                )
+                .or_insert(0) += 1;
+        }
+    }
+    counts
+}
+
+fn unresolved_generator_weighted_p2_twisted_ifunction_split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status_counts(
+    summaries: &[LocalCygvUnresolvedChamberGeneratorSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        for profile in &summary
+            .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_degree_profile_sample
+        {
+            *counts
+                .entry(
+                    profile
+                        .split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status
                         .clone(),
                 )
                 .or_insert(0) += 1;
@@ -27136,6 +27169,17 @@ fn weighted_p2_rank_three_twisted_ifunction_degree_profiles(
                     .and_then(|codim| usize::try_from(codim).ok())
                     .unwrap_or(2),
             );
+            let (
+                split_equivariant_full_hypergeometric_dual_basis_p2_primary_z2_lambda_polynomial,
+                split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_inverse_power,
+                split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_polynomial,
+                split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status,
+            ) = split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status(
+                base_weights,
+                bundle_degrees,
+                degree_twice,
+                required_insertion_complex_codimension,
+            );
             let candidate_insertion_visibility_status = match (
                 degree_twice % 2 == 0,
                 required_insertion_complex_codimension,
@@ -27194,6 +27238,10 @@ fn weighted_p2_rank_three_twisted_ifunction_degree_profiles(
                 split_equivariant_full_hypergeometric_dual_basis_p2_lambda_polynomial,
                 split_equivariant_full_hypergeometric_dual_basis_p2_lambda_order,
                 split_equivariant_full_hypergeometric_status,
+                split_equivariant_full_hypergeometric_dual_basis_p2_primary_z2_lambda_polynomial,
+                split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_inverse_power,
+                split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_polynomial,
+                split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status,
                 candidate_insertion_visibility_status,
             }
         })
@@ -27639,6 +27687,192 @@ fn split_equivariant_full_hypergeometric_status(
         order,
         status.to_string(),
     )
+}
+
+fn split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status(
+    base_weights: &[i64],
+    bundle_degrees: &[i64],
+    degree_twice: i64,
+    required_insertion_complex_codimension: Option<i64>,
+) -> (
+    Option<Vec<String>>,
+    Option<i64>,
+    Option<Vec<String>>,
+    String,
+) {
+    if degree_twice % 2 != 0 {
+        return (
+            None,
+            None,
+            None,
+            "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_full_hypergeometric_z_readout"
+                .to_string(),
+        );
+    }
+    let Some(required_codimension) = required_insertion_complex_codimension else {
+        return (
+            None,
+            None,
+            None,
+            "weighted_p2_rank_three_split_full_hypergeometric_z_readout_codim_not_applicable"
+                .to_string(),
+        );
+    };
+    if required_codimension != 2 {
+        return (
+            None,
+            None,
+            None,
+            "weighted_p2_rank_three_split_full_hypergeometric_z_readout_requires_codim2_observable"
+                .to_string(),
+        );
+    }
+    let Some(readout_by_z) =
+        split_equivariant_full_hypergeometric_dual_basis_p2_z_lambda_polynomials(
+            base_weights,
+            bundle_degrees,
+            degree_twice,
+        )
+    else {
+        return (
+            None,
+            None,
+            None,
+            "weighted_p2_rank_three_split_full_hypergeometric_z_readout_blocked_not_divisible_by_two_lambda"
+                .to_string(),
+        );
+    };
+    let primary_z2 = readout_by_z
+        .get(&2)
+        .cloned()
+        .unwrap_or_else(|| vec!["0".to_string()]);
+    let first_nonzero = readout_by_z
+        .iter()
+        .find(|(_, polynomial)| lambda_polynomial_has_nonzero_coefficient(polynomial))
+        .map(|(&inverse_z_power, polynomial)| (inverse_z_power, polynomial.clone()));
+    let status = if lambda_polynomial_has_nonzero_coefficient(&primary_z2) {
+        "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_primary_z2_nonzero_requires_pairing_or_residue"
+    } else if first_nonzero.is_some() {
+        "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_primary_z2_zero_first_nonzero_descendant_requires_big_j_or_pairing"
+    } else {
+        "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_z_readout_zero"
+    };
+    (
+        Some(primary_z2),
+        first_nonzero
+            .as_ref()
+            .map(|(inverse_z_power, _)| *inverse_z_power),
+        first_nonzero.map(|(_, polynomial)| polynomial),
+        status.to_string(),
+    )
+}
+
+fn split_equivariant_full_hypergeometric_dual_basis_p2_z_lambda_polynomials(
+    base_weights: &[i64],
+    bundle_degrees: &[i64],
+    degree_twice: i64,
+) -> Option<BTreeMap<i64, Vec<String>>> {
+    if degree_twice % 2 != 0 {
+        return None;
+    }
+    let degree = degree_twice / 2;
+    if degree < 0 {
+        return None;
+    }
+    let denominator_constant =
+        integer_sector_base_denominator_constant(base_weights, degree_twice)?;
+    let denominator_z_power = base_weights
+        .iter()
+        .map(|weight| {
+            weight
+                .checked_mul(degree)
+                .expect("weighted P2 denominator z power fits i64")
+        })
+        .try_fold(0i64, |sum, count| sum.checked_add(count))
+        .expect("weighted P2 denominator total z power fits i64");
+    let mut numerator = BTreeMap::<(usize, i64), MalachiteRational>::new();
+    numerator.insert((0, 0), MalachiteRational::from(1));
+    for &line_degree in bundle_degrees {
+        let factor_count = line_degree
+            .checked_mul(degree)
+            .expect("weighted P2 split bundle factor count fits i64");
+        if factor_count < 0 {
+            return None;
+        }
+        for factor_offset in (-factor_count + 1)..=0 {
+            numerator = multiply_lambda_z_polynomial_by_factor(&numerator, 1, factor_offset);
+        }
+    }
+    let denominator = MalachiteRational::from(Integer::from(2)) * denominator_constant;
+    let mut by_inverse_z_power = BTreeMap::<i64, BTreeMap<usize, MalachiteRational>>::new();
+    for ((lambda_power, z_power), coefficient) in numerator {
+        if coefficient == MalachiteRational::from(0) {
+            continue;
+        }
+        if lambda_power == 0 {
+            return None;
+        }
+        let inverse_z_power = denominator_z_power - z_power;
+        *by_inverse_z_power
+            .entry(inverse_z_power)
+            .or_default()
+            .entry(lambda_power - 1)
+            .or_insert_with(|| MalachiteRational::from(0)) += coefficient / denominator.clone();
+    }
+    Some(
+        by_inverse_z_power
+            .into_iter()
+            .map(|(inverse_z_power, polynomial)| {
+                (
+                    inverse_z_power,
+                    lambda_polynomial_coefficients_to_strings(&polynomial),
+                )
+            })
+            .collect(),
+    )
+}
+
+fn multiply_lambda_z_polynomial_by_factor(
+    coefficients: &BTreeMap<(usize, i64), MalachiteRational>,
+    lambda_coefficient: i64,
+    z_coefficient: i64,
+) -> BTreeMap<(usize, i64), MalachiteRational> {
+    let mut next = BTreeMap::<(usize, i64), MalachiteRational>::new();
+    for (&(lambda_power, z_power), coefficient) in coefficients {
+        if lambda_coefficient != 0 {
+            *next
+                .entry((lambda_power + 1, z_power))
+                .or_insert_with(|| MalachiteRational::from(0)) +=
+                coefficient.clone() * MalachiteRational::from(Integer::from(lambda_coefficient));
+        }
+        if z_coefficient != 0 {
+            *next
+                .entry((lambda_power, z_power + 1))
+                .or_insert_with(|| MalachiteRational::from(0)) +=
+                coefficient.clone() * MalachiteRational::from(Integer::from(z_coefficient));
+        }
+    }
+    next.retain(|_, coefficient| *coefficient != MalachiteRational::from(0));
+    next
+}
+
+fn lambda_polynomial_coefficients_to_strings(
+    coefficients: &BTreeMap<usize, MalachiteRational>,
+) -> Vec<String> {
+    let max_lambda_power = coefficients.keys().last().copied().unwrap_or(0);
+    (0..=max_lambda_power)
+        .map(|lambda_power| {
+            coefficients
+                .get(&lambda_power)
+                .cloned()
+                .unwrap_or_else(|| MalachiteRational::from(0))
+                .to_string()
+        })
+        .collect()
+}
+
+fn lambda_polynomial_has_nonzero_coefficient(polynomial: &[String]) -> bool {
+    polynomial.iter().any(|coefficient| coefficient != "0")
 }
 
 fn divide_lambda_polynomial_by_two_lambda_if_possible(
@@ -40471,6 +40705,12 @@ mod tests {
                     split_equivariant_full_hypergeometric_status:
                         "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_full_hypergeometric_readout"
                             .to_string(),
+                    split_equivariant_full_hypergeometric_dual_basis_p2_primary_z2_lambda_polynomial: None,
+                    split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_inverse_power: None,
+                    split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_polynomial: None,
+                    split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status:
+                        "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_full_hypergeometric_z_readout"
+                            .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_half_degree_requires_orbifold_sector_pairing"
                             .to_string(),
@@ -40576,6 +40816,18 @@ mod tests {
                     split_equivariant_full_hypergeometric_status:
                         "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_readout_positive_lambda_order_requires_mirror_map_pairing_or_residue"
                             .to_string(),
+                    split_equivariant_full_hypergeometric_dual_basis_p2_primary_z2_lambda_polynomial: Some(vec![
+                        "0".to_string()
+                    ]),
+                    split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_inverse_power: Some(3),
+                    split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_polynomial: Some(vec![
+                        "0".to_string(),
+                        "0".to_string(),
+                        "-1/4".to_string()
+                    ]),
+                    split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status:
+                        "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_primary_z2_zero_first_nonzero_descendant_requires_big_j_or_pairing"
+                            .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_untwisted_zero_order_exceeds_required_insertion_codim_requires_equivariant_normalization"
                             .to_string(),
@@ -40624,6 +40876,12 @@ mod tests {
                     split_equivariant_full_hypergeometric_dual_basis_p2_lambda_order: None,
                     split_equivariant_full_hypergeometric_status:
                         "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_full_hypergeometric_readout"
+                            .to_string(),
+                    split_equivariant_full_hypergeometric_dual_basis_p2_primary_z2_lambda_polynomial: None,
+                    split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_inverse_power: None,
+                    split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_polynomial: None,
+                    split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status:
+                        "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_full_hypergeometric_z_readout"
                             .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_half_degree_requires_orbifold_sector_pairing"
@@ -40757,6 +41015,18 @@ mod tests {
                     split_equivariant_full_hypergeometric_dual_basis_p2_lambda_order: Some(2),
                     split_equivariant_full_hypergeometric_status:
                         "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_readout_positive_lambda_order_requires_mirror_map_pairing_or_residue"
+                            .to_string(),
+                    split_equivariant_full_hypergeometric_dual_basis_p2_primary_z2_lambda_polynomial: Some(vec![
+                        "0".to_string()
+                    ]),
+                    split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_inverse_power: Some(3),
+                    split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_polynomial: Some(vec![
+                        "0".to_string(),
+                        "0".to_string(),
+                        "-1/32".to_string()
+                    ]),
+                    split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status:
+                        "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_primary_z2_zero_first_nonzero_descendant_requires_big_j_or_pairing"
                             .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_untwisted_zero_order_exceeds_required_insertion_codim_requires_equivariant_normalization"
@@ -41053,6 +41323,42 @@ mod tests {
             ])
         );
         assert_eq!(order, Some(2));
+    }
+
+    #[test]
+    fn weighted_p2_full_hypergeometric_z_readout_has_zero_primary_p2() {
+        let (primary, first_power, first_polynomial, status) =
+            split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status(
+                &[1, 1, 2],
+                &[1, 1, 2],
+                2,
+                Some(2),
+            );
+
+        assert_eq!(primary, Some(vec!["0".to_string()]));
+        assert_eq!(first_power, Some(3));
+        assert_eq!(
+            first_polynomial,
+            Some(vec!["0".to_string(), "0".to_string(), "-1/4".to_string()])
+        );
+        assert_eq!(
+            status,
+            "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_primary_z2_zero_first_nonzero_descendant_requires_big_j_or_pairing"
+        );
+
+        let (primary, first_power, first_polynomial, _) =
+            split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status(
+                &[1, 1, 2],
+                &[1, 1, 2],
+                4,
+                Some(2),
+            );
+        assert_eq!(primary, Some(vec!["0".to_string()]));
+        assert_eq!(first_power, Some(3));
+        assert_eq!(
+            first_polynomial,
+            Some(vec!["0".to_string(), "0".to_string(), "-1/32".to_string()])
+        );
     }
 
     #[test]
