@@ -1650,6 +1650,17 @@ to make the remaining GV layer more first-principles:
    This sharpens the chamber-domain blocker: the target decomposition terms
    are not the missing object; the compact qN domain still contains the
    uncertified weighted-`P2` source generator.
+   A decomposition-only diagnostic now reruns the actual `cygv` qN trace on
+   just the positive target-plus-star decomposition generators while forcing a
+   non-promotable readiness state. Regenerated target `7` and target `8`
+   reports in `/tmp/cyrus_target7_decomposition_only_probe.json` and
+   `/tmp/cyrus_target8_decomposition_only_probe.json` both use two selected
+   generators, have no uncertified generator sample, compute `GV=0`, and
+   report zero materialized qN polynomials for the target. The probe is marked
+   `blocked_diagnostic_decomposition_only_domain` with
+   `diagnostic_decomposition_only_not_full_chamber_domain`, so it distinguishes
+   the decomposition subset from the full chamber domain without creating a
+   fallback path.
    Running the same aggregate over all nine missing targets narrows the
    chamber-semigroup decomposition queue further: only targets `1`, `7`, and
    `8` reach an actual current-chamber provided-generator `cygv` call, and all

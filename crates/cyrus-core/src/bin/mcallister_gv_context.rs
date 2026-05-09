@@ -1388,6 +1388,8 @@ struct LocalCygvStarUnionChamberSemigroupTransportProbe {
     current_chamber_positive_degree_status: String,
     current_chamber_positive_degree_decomposition:
         Option<Vec<LocalCygvChamberSemigroupDecompositionTerm>>,
+    current_chamber_positive_degree_decomposition_cygv_probe:
+        Option<ProvidedGeneratorTargetGvProbe>,
     flipped_chamber_secondary_certificate: LocalCygvStarUnionChamberSecondaryCertificate,
     flipped_chamber_status: Option<String>,
     flipped_chamber_generator_count: Option<usize>,
@@ -1399,6 +1401,8 @@ struct LocalCygvStarUnionChamberSemigroupTransportProbe {
     flipped_chamber_positive_degree_status: String,
     flipped_chamber_positive_degree_decomposition:
         Option<Vec<LocalCygvChamberSemigroupDecompositionTerm>>,
+    flipped_chamber_positive_degree_decomposition_cygv_probe:
+        Option<ProvidedGeneratorTargetGvProbe>,
     positive_degree_transport_status: String,
     error: Option<String>,
 }
@@ -26961,6 +26965,7 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
             current_chamber_decomposition: None,
             current_chamber_positive_degree_status: "positive_degree_chamber_not_run".to_string(),
             current_chamber_positive_degree_decomposition: None,
+            current_chamber_positive_degree_decomposition_cygv_probe: None,
             flipped_chamber_secondary_certificate:
                 local_cygv_star_union_chamber_secondary_certificate_not_run(status),
             flipped_chamber_status: None,
@@ -26972,6 +26977,7 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
             flipped_chamber_decomposition: None,
             flipped_chamber_positive_degree_status: "positive_degree_chamber_not_run".to_string(),
             flipped_chamber_positive_degree_decomposition: None,
+            flipped_chamber_positive_degree_decomposition_cygv_probe: None,
             positive_degree_transport_status: "positive_degree_transport_not_run".to_string(),
             error,
         };
@@ -27210,6 +27216,24 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
             "positive_degree_transport_not_run_without_global_degree_context".to_string(),
         )
     };
+    let current_chamber_positive_degree_decomposition_cygv_probe = context.and_then(|context| {
+        chamber_semigroup_decomposition_only_cygv_probe(
+            star_union.target_plus_star_basis_nonzero.as_ref(),
+            &current_chamber_generator_context,
+            current_chamber_positive_degree_decomposition.as_deref(),
+            context,
+            "current_positive_decomposition_generators",
+        )
+    });
+    let flipped_chamber_positive_degree_decomposition_cygv_probe = context.and_then(|context| {
+        chamber_semigroup_decomposition_only_cygv_probe(
+            star_union.target_plus_star_basis_nonzero.as_ref(),
+            &flipped_chamber_generator_context,
+            flipped_chamber_positive_degree_decomposition.as_deref(),
+            context,
+            "flipped_positive_decomposition_generators",
+        )
+    });
 
     LocalCygvStarUnionChamberSemigroupTransportProbe {
         status: status.to_string(),
@@ -27223,6 +27247,7 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
         current_chamber_decomposition: current_decomposition,
         current_chamber_positive_degree_status,
         current_chamber_positive_degree_decomposition,
+        current_chamber_positive_degree_decomposition_cygv_probe,
         flipped_chamber_secondary_certificate,
         flipped_chamber_status: flipped_status,
         flipped_chamber_generator_count: (!flipped_generators.is_empty())
@@ -27234,6 +27259,7 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
         flipped_chamber_decomposition: flipped_decomposition,
         flipped_chamber_positive_degree_status,
         flipped_chamber_positive_degree_decomposition,
+        flipped_chamber_positive_degree_decomposition_cygv_probe,
         positive_degree_transport_status,
         error: None,
     }
@@ -30792,6 +30818,65 @@ fn chamber_semigroup_provided_generator_cygv_probe(
         Ok(probe) => annotate(probe),
         Err(error) => empty("error", Some(error)),
     }
+}
+
+fn chamber_semigroup_decomposition_only_cygv_probe(
+    target_basis_nonzero: Option<&Vec<(usize, i64)>>,
+    generator_contexts: &[LocalCygvChamberSemigroupGeneratorContext],
+    decomposition: Option<&[LocalCygvChamberSemigroupDecompositionTerm]>,
+    context: &ValidatedContext<'_>,
+    label: &str,
+) -> Option<ProvidedGeneratorTargetGvProbe> {
+    let decomposition = decomposition?;
+    if decomposition.is_empty() {
+        return None;
+    }
+    let mut selected_contexts = Vec::new();
+    let mut seen = BTreeSet::new();
+    for term in decomposition {
+        if !seen.insert(term.generator_index) {
+            continue;
+        }
+        let Some(generator_context) = generator_contexts
+            .iter()
+            .find(|context| context.generator_index == term.generator_index)
+        else {
+            return Some(ProvidedGeneratorTargetGvProbe {
+                generator_count: selected_contexts.len(),
+                status: "skipped_missing_decomposition_generator_context".to_string(),
+                gv: None,
+                error: Some(format!(
+                    "missing context for decomposition generator {}",
+                    term.generator_index
+                )),
+                promotion_readiness: "blocked_diagnostic_decomposition_only_domain".to_string(),
+                promotion_missing_inputs: vec![
+                    "decomposition_generator_context".to_string(),
+                    "diagnostic_decomposition_only_not_full_chamber_domain".to_string(),
+                ],
+                uncertified_generator_sample: Vec::new(),
+                qn_trace_polynomial_count: None,
+                target_qn_trace_status: None,
+                target_qn_trace_term_count: None,
+                qn_trace_sample: Vec::new(),
+            });
+        };
+        selected_contexts.push(generator_context.clone());
+    }
+    let mut probe = chamber_semigroup_provided_generator_cygv_probe(
+        target_basis_nonzero,
+        &selected_contexts,
+        None,
+        context,
+        label,
+    );
+    probe
+        .promotion_missing_inputs
+        .push("diagnostic_decomposition_only_not_full_chamber_domain".to_string());
+    probe.promotion_missing_inputs.sort();
+    probe.promotion_missing_inputs.dedup();
+    probe.promotion_readiness = "blocked_diagnostic_decomposition_only_domain".to_string();
+    Some(probe)
 }
 
 fn annotate_provided_generator_probe_promotion(
@@ -37331,6 +37416,7 @@ mod tests {
                     current_chamber_positive_degree_status: "positive_degree_chamber_not_run"
                         .to_string(),
                     current_chamber_positive_degree_decomposition: None,
+                    current_chamber_positive_degree_decomposition_cygv_probe: None,
                     flipped_chamber_secondary_certificate:
                         local_cygv_star_union_chamber_secondary_certificate_not_run("test"),
                     flipped_chamber_status: None,
@@ -37343,6 +37429,7 @@ mod tests {
                     flipped_chamber_positive_degree_status: "positive_degree_chamber_not_run"
                         .to_string(),
                     flipped_chamber_positive_degree_decomposition: None,
+                    flipped_chamber_positive_degree_decomposition_cygv_probe: None,
                     positive_degree_transport_status: "positive_degree_transport_not_run"
                         .to_string(),
                     error: None,
@@ -39851,6 +39938,134 @@ mod tests {
             Some(1)
         );
         assert_eq!(promotion_missing_counts.get("not_run").copied(), Some(1));
+    }
+
+    #[test]
+    fn decomposition_only_cygv_probe_is_diagnostic_not_promotable() {
+        let stats = MissingGvTargetStats {
+            target_count: 0,
+            real_cone_decomposition_exact_kind_counts: HashMap::new(),
+            sample: Vec::new(),
+        };
+        let grading = vec![1];
+        let q_matrix = vec![vec![1]];
+        let degree_bounded_rays = vec![vec![1]];
+        let context = ValidatedContext {
+            dimension: 1,
+            degree_bound: 1,
+            q_cols: 1,
+            grading: &grading,
+            q_matrix: &q_matrix,
+            degree_bounded_rays: &degree_bounded_rays,
+            degree_bounded_ray_context: None,
+            covered_toric_gv_by_basis: HashMap::new(),
+            source_derived_gv_by_basis: HashMap::new(),
+            intersection: Intersection::new(1),
+            stats: &stats,
+            uncovered_source_ray_stats: None,
+            shared_facet_unresolved_source_ray_stats: None,
+            secondary_cone_height_certificate: None,
+            secondary_cone_2face_height_certificate: None,
+            secondary_cone_heights: None,
+        };
+        let generator = LocalCygvChamberSemigroupGeneratorContext {
+            generator_index: 3,
+            chamber_coordinate: vec![1],
+            point_relation_status: "chamber_generator_point_relation_reconstructed".to_string(),
+            point_relation_nonzero: Some(vec![(10, 1)]),
+            global_basis_status: "chamber_generator_global_basis_projection_integral".to_string(),
+            basis_nonzero: Some(vec![(0, 1)]),
+            degree: Some(1),
+            global_secondary_height_status: "global_basis_secondary_height_positive".to_string(),
+            global_secondary_height_pairing: Some("1".to_string()),
+            known_qn_history_status: "known_nonzero_source_gv".to_string(),
+            toric_gv: None,
+            source_derived_gv: Some("-2".to_string()),
+            source_class_status: None,
+            source_ray_ambient_nonzero: None,
+            local_toric_diagnostic: chamber_generator_local_toric_diagnostic_not_run("test"),
+            circuit_global_height_choice_summary: circuit_global_height_choice_summary_not_run(
+                "test",
+            ),
+            degree_bounded_support_overlap_diagnostic:
+                chamber_generator_support_overlap_diagnostic_not_run("test"),
+            lower_seed_sum_decomposition: None,
+            bounded_lower_seed_decomposition: None,
+            lower_seed_decomposition_error: None,
+            error: None,
+        };
+        let decomposition = vec![
+            LocalCygvChamberSemigroupDecompositionTerm {
+                generator_index: 3,
+                coefficient: 2,
+                generator: vec![1],
+            },
+            LocalCygvChamberSemigroupDecompositionTerm {
+                generator_index: 3,
+                coefficient: 1,
+                generator: vec![1],
+            },
+        ];
+        let target_basis_nonzero = vec![(0, 1)];
+
+        assert!(
+            chamber_semigroup_decomposition_only_cygv_probe(
+                Some(&target_basis_nonzero),
+                std::slice::from_ref(&generator),
+                None,
+                &context,
+                "test",
+            )
+            .is_none()
+        );
+
+        let probe = chamber_semigroup_decomposition_only_cygv_probe(
+            None,
+            std::slice::from_ref(&generator),
+            Some(&decomposition),
+            &context,
+            "test",
+        )
+        .expect("nonempty decomposition should produce a diagnostic probe");
+
+        assert_eq!(probe.generator_count, 1);
+        assert_eq!(
+            probe.status,
+            "skipped_missing_target_plus_star_global_basis"
+        );
+        assert_eq!(
+            probe.promotion_readiness,
+            "blocked_diagnostic_decomposition_only_domain"
+        );
+        assert!(
+            probe
+                .promotion_missing_inputs
+                .contains(&"diagnostic_decomposition_only_not_full_chamber_domain".to_string())
+        );
+        assert!(probe.uncertified_generator_sample.is_empty());
+
+        let missing_context = chamber_semigroup_decomposition_only_cygv_probe(
+            Some(&target_basis_nonzero),
+            &[],
+            Some(&decomposition),
+            &context,
+            "test",
+        )
+        .expect("missing generator context should be reported as a blocked diagnostic probe");
+
+        assert_eq!(
+            missing_context.status,
+            "skipped_missing_decomposition_generator_context"
+        );
+        assert_eq!(
+            missing_context.promotion_readiness,
+            "blocked_diagnostic_decomposition_only_domain"
+        );
+        assert!(
+            missing_context
+                .promotion_missing_inputs
+                .contains(&"decomposition_generator_context".to_string())
+        );
     }
 
     #[test]
