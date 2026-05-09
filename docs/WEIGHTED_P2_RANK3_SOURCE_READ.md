@@ -147,22 +147,26 @@ equivariant/source normalization rather than a naive non-equivariant `H^2`
 coefficient readout.
 
 The same report now also aggregates the Chen-Ruan source-map blockers for the
-CCIT-style route. The top-level counts expose that the `p^2` one-point
-correlator must be read through the dual basis class
-`2*lambda*fun_0-8*p`, not as the raw `p^2` coefficient; the split-bundle
-ordinary non-equivariant readout vanishes before mirror-map extraction; and any
-nonzero split-bundle contribution still requires an equivariant residue or
-twisted big-J/pairing normalization. These aggregates are report-level
+CCIT-style route. The top-level counts expose two separate pairings: the
+adjacent canonical `K_P(1,1,2)` reference reads the `p^2` one-point correlator
+through the dual basis class `2*lambda*fun_0-8*p`, while the actual rank-three
+split bundle uses the inverse-Euler twisted pairing and reads the untwisted
+`p^2` insertion through
+`2*(lambda-p)^2*(lambda-2*p)*fun_0`. The split-bundle ordinary
+non-equivariant readout still vanishes before mirror-map extraction, and any
+nonzero split-bundle contribution still requires a sourced big-J/pairing
+reconstruction before numerical promotion. These aggregates are report-level
 bookkeeping, not a promotion rule.
 
 The source-basis facts behind that report are now owned by
 `cyrus_core::local_orbifold::weighted_p2_rank_three_split_bundle_chen_ruan_source_basis_readout`
 rather than being hard-coded only in `mcallister_gv_context`. The core readout
-pins the `K_P(1,1,2)` Chen-Ruan basis, the class
-`2*lambda*fun_0-8*p`, the `2*lambda` normalization divisor, the fractional
-`H^2 = 1/2` stack-pairing warning, and the split-bundle promotion blocker. It
-is still source metadata, not a numerical GV promotion rule. The context report
-now also exports
+pins the `K_P(1,1,2)` Chen-Ruan basis, the adjacent canonical class
+`2*lambda*fun_0-8*p`, and the split-bundle twisted dual class
+`2*(lambda-p)^2*(lambda-2*p)*fun_0 =
+2*lambda^3*fun_0-8*lambda^2*p+10*lambda*p^2`, with normalization divisor
+`2*lambda^3`. It is still source metadata, not a numerical GV promotion rule.
+The context report now also exports
 `local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_stack_pairing_normalization_status_counts`
 so this blocker is visible at the aggregate level.
 The dimension, first-Chern, required-insertion, and missing-input readiness
@@ -175,11 +179,13 @@ small `J`-function is written as
 `<phi_epsilon/(z(z-psi))> phi^epsilon`, the `p^2` insertion coefficient is
 the coefficient of `phi^2`, not the ordinary-basis `p^2` component. In the
 `K_P(1,1,2)` Chen-Ruan basis,
-`phi^2 = 2*lambda*fun_0 - 8*p`, so the numerator-only diagnostic reads the
-candidate `p^2` insertion from the ordinary `fun_0` coefficient divided by
-`2*lambda`. For the first integer split-bundle sectors this gives positive
-lambda-order polynomials, e.g. `d=1` gives `[0,0,-1/2,1/2]` and `d=2` gives
-`[0,0,-3,23/2,-17,12,-4,1/2]`.
+`phi^2 = 2*lambda*fun_0 - 8*p`. For the selected split bundle the CCIT local
+inverse-Euler pairing replaces that adjacent canonical divisor by
+`2*lambda^3`, so the numerator-only diagnostic reads the candidate `p^2`
+insertion from the ordinary `fun_0` coefficient divided by `2*lambda^3`. For
+the first integer split-bundle sectors this gives finite non-equivariant
+lambda-polynomials: `d=1` gives `[-1/2,1/2]` and `d=2` gives
+`[-3,23/2,-17,12,-4,1/2]`.
 
 The diagnostic also divides by the weighted-base denominator constants from
 the same integer-sector hypergeometric factor. For `d=1` and `d=2`, those
@@ -198,25 +204,25 @@ d=2: D(p) = 96 + 688p + 2072p^2
 
 The truncated quotient changes the ordinary-basis `p` and `p^2` coefficients,
 but the dual-basis `p^2` readout still comes from the `fun_0` coefficient
-divided by `2*lambda`, so it remains the same positive-lambda-order readout
-above. This rules out the raw `p^2` coefficient and denominator `p`-terms as
-the missing extraction, but still does not promote a GV value: mirror-map
-normalization, pairing data, and equivariant residue or twisted big-J pairing
-data remain required.
+divided by the split-bundle `2*lambda^3` normalization, so it remains the same
+finite readout above. This rules out the raw `p^2` coefficient, denominator
+`p`-terms, and the adjacent canonical `2*lambda` normalization as the missing
+extraction, but still does not promote a GV value: the nonzero terms are not at
+the primary extraction layer.
 
 The same full-denominator diagnostic now keeps the `z` order instead of
 collapsing to a pre-mirror lambda polynomial. For the first two integer sectors
 the small-J primary `p^2` readout at `z^-2` vanishes:
 
 ```text
-d=1: primary z^-2 p^2 readout = 0; first nonzero at z^-3 is -lambda^2/4
-d=2: primary z^-2 p^2 readout = 0; first nonzero at z^-3 is -lambda^2/32
+d=1: primary z^-2 p^2 readout = 0; first nonzero at z^-3 is -1/4
+d=2: primary z^-2 p^2 readout = 0; first nonzero at z^-3 is -1/32
 ```
 
-This is a stronger obstruction than the positive-lambda-order scalar readout:
-the naive primary one-point `p^2` insertion is zero in these sectors, and the
-first nonzero terms are descendant-order data. A numerical contribution would
-therefore need a source-derived twisted big-J/pairing/residue calculation or
+This is the remaining obstruction after the split-bundle pairing normalization:
+the first descendant terms have a non-equivariant limit, but the naive primary
+one-point `p^2` insertion is zero in these sectors. A numerical contribution
+therefore needs a source-derived twisted big-J/pairing reconstruction or
 equivalent qN history; the small-J primary readout still does not provide a
 promotion rule.
 
@@ -240,12 +246,13 @@ degree profiles into a single promotion gate. For the selected
 `O(-1)+O(-1)+O(-2) -> P(1,1,2)` phase it records that CCIT supplies a
 Lagrangian-cone/I-function handoff, not a numerical CY3 invariant: the checked
 integer sectors have zero primary `z^-2` `p^2` readout, the first nonzero
-signals are descendant/equivariant, and promotion remains blocked on
-stack-normalized pairing or residue data, a source chamber certificate, qN
-history, and a codimension-two CY3 projection/local model. The McAllister
-context report now serializes that certificate per unresolved generator and
-aggregates the certificate promotion, primary-readout, pairing/residue, and
-required-input statuses.
+signals are descendant-layer data with a finite non-equivariant limit, and
+promotion remains blocked on a source chamber certificate, qN history,
+codimension-two CY3 projection/local model, and big-J/pairing reconstruction for
+descendant readout. The McAllister context report now serializes that
+certificate per unresolved generator and
+aggregates the certificate promotion, primary-readout, pairing/residue,
+twisted-dual-pairing, and required-input statuses.
 
 A follow-up read of the source paper cited by CCIT makes the promotion gate
 more precise. `I(q,z) in L` is only the cone-membership step. To extract
@@ -516,16 +523,17 @@ artifact. Running
 
 gives the same z-order profile on both rows: two half-degree sectors are marked
 as having no untwisted full-hypergeometric z-readout, and the two integer
-sectors have zero primary `z^-2` dual-basis `p^2` readout. The first nonzero
-terms are descendants at `z^-3`, with lambda-polynomial samples
-`[0, 0, -1/4]` and `[0, 0, -1/32]`. The serialized report now records their
-lambda order as `2` and labels them
-`weighted_p2_rank_three_split_first_nonzero_descendant_positive_lambda_order_equivariant_only_requires_residue_or_pairing`,
-so the report distinguishes "a descendant term exists" from "a scalar
+sectors have zero primary `z^-2` dual-basis `p^2` readout. After applying the
+split-bundle inverse-Euler pairing normalization, the first nonzero terms are
+descendants at `z^-3`, with lambda-polynomial samples `[-1/4]` and `[-1/32]`.
+The serialized report now records their lambda order as `0` and labels them
+`weighted_p2_rank_three_split_first_nonzero_descendant_has_nonequivariant_limit_requires_reconstruction`,
+so the report distinguishes "a finite descendant term exists" from "a primary
 non-equivariant GV contribution has been extracted." This is also a top-level
 aggregate now: both target reports have first-nonzero lambda-order counts
-`{"2": 2, "missing": 2}` and non-equivariant-limit status counts with two
-twisted-sector non-applicable rows plus two equivariant-only descendant rows.
+`{"0": 2, "missing": 2}` and non-equivariant-limit status counts with two
+twisted-sector non-applicable rows plus two finite descendant rows requiring
+reconstruction.
 The lightweight command keeps the semigroup generator/decomposition readout but
 deliberately leaves the chamber secondary certificates skipped. Deeper
 complete-intersection source certificates, support-overlap diagnostics, and

@@ -539,6 +539,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_z_minus_one_extraction_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_twisted_dual_pairing_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_required_input_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_vs_adjacent_canonical_factor_status_counts:
@@ -562,6 +564,8 @@ struct ContextReport {
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_non_equivariant_limit_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_p2_readout_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_twisted_p2_pairing_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_stack_pairing_normalization_status_counts:
         BTreeMap<String, usize>,
@@ -1737,6 +1741,9 @@ struct WeightedP2RankThreeTwistedIfunctionChenRuanSourceMap {
     source_dual_basis_p2_class: String,
     source_dual_basis_p2_normalization_divisor: String,
     source_dual_basis_p2_readout_status: String,
+    split_bundle_twisted_dual_basis_p2_class: String,
+    split_bundle_twisted_dual_basis_p2_normalization_divisor: String,
+    split_bundle_twisted_dual_basis_p2_pairing_status: String,
     source_dual_basis_half_sector_class: String,
     stack_pairing_normalization_status: String,
     adjacent_canonical_crepant_resolution_status: String,
@@ -18334,6 +18341,17 @@ fn build_report(
                 }),
             |certificate| certificate.z_minus_one_extraction_status.as_str(),
         );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_twisted_dual_pairing_status_counts =
+        weighted_p2_rank_three_source_certificate_status_counts(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| {
+                    summary
+                        .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_source_certificate_requirements
+                        .as_ref()
+                }),
+            |certificate| certificate.twisted_dual_pairing_status.as_str(),
+        );
     let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_required_input_counts =
         weighted_p2_rank_three_source_certificate_required_input_counts(
             local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
@@ -18404,6 +18422,17 @@ fn build_report(
                         .as_ref()
                 }),
             |source_map| source_map.source_dual_basis_p2_readout_status.as_str(),
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_twisted_p2_pairing_status_counts =
+        weighted_p2_rank_three_chen_ruan_source_map_status_counts(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| {
+                    summary
+                        .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_chen_ruan_source_map
+                        .as_ref()
+                }),
+            |source_map| source_map.split_bundle_twisted_dual_basis_p2_pairing_status.as_str(),
         );
     let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_stack_pairing_normalization_status_counts =
         weighted_p2_rank_three_chen_ruan_source_map_status_counts(
@@ -20052,6 +20081,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_twisted_j_normalization_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_mirror_map_inversion_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_z_minus_one_extraction_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_twisted_dual_pairing_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_required_input_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_vs_adjacent_canonical_factor_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_non_equivariant_candidate_insertion_coefficient_status_counts,
@@ -20064,6 +20094,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_order_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_non_equivariant_limit_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_p2_readout_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_twisted_p2_pairing_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_stack_pairing_normalization_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_adjacent_canonical_mirror_map_b_table_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_adjacent_canonical_mirror_map_c_table_status_counts,
@@ -27674,6 +27705,12 @@ fn weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
         source_dual_basis_p2_normalization_divisor: source_basis
             .source_dual_basis_p2_normalization_divisor,
         source_dual_basis_p2_readout_status: source_basis.source_dual_basis_p2_readout_status,
+        split_bundle_twisted_dual_basis_p2_class: source_basis
+            .split_bundle_twisted_dual_basis_p2_class,
+        split_bundle_twisted_dual_basis_p2_normalization_divisor: source_basis
+            .split_bundle_twisted_dual_basis_p2_normalization_divisor,
+        split_bundle_twisted_dual_basis_p2_pairing_status: source_basis
+            .split_bundle_twisted_dual_basis_p2_pairing_status,
         source_dual_basis_half_sector_class: source_basis.source_dual_basis_half_sector_class,
         stack_pairing_normalization_status: source_basis.stack_pairing_normalization_status,
         adjacent_canonical_crepant_resolution_status: source_basis
@@ -28145,9 +28182,10 @@ mod legacy_weighted_p2_rank_three_ifunction_helpers {
                 degree_twice,
                 0,
             );
-        let Some(quotient) =
-            divide_lambda_polynomial_by_two_lambda_if_possible(&ordinary_fun0_polynomial)
-        else {
+        let Some(quotient) = divide_lambda_polynomial_by_two_lambda_power_if_possible(
+            &ordinary_fun0_polynomial,
+            bundle_degrees.len(),
+        ) else {
             return (
             Some(ordinary_fun0_polynomial),
             None,
@@ -28346,8 +28384,10 @@ mod legacy_weighted_p2_rank_three_ifunction_helpers {
                     .to_string(),
             );
         };
-        let Some(readout) = divide_lambda_polynomial_by_two_lambda_if_possible(fun0_polynomial)
-        else {
+        let Some(readout) = divide_lambda_polynomial_by_two_lambda_power_if_possible(
+            fun0_polynomial,
+            bundle_degrees.len(),
+        ) else {
             return (
             Some(rational_coefficients_to_strings(&denominator)),
             Some(rational_coefficients_to_strings(&inverse_denominator)),
@@ -28587,18 +28627,23 @@ mod legacy_weighted_p2_rank_three_ifunction_helpers {
     pub(super) fn divide_lambda_polynomial_by_two_lambda_if_possible(
         polynomial: &[String],
     ) -> Option<Vec<String>> {
-        let constant = polynomial
-            .first()
-            .cloned()
-            .unwrap_or_else(|| "0".to_string());
-        if constant != "0" {
-            return None;
+        divide_lambda_polynomial_by_two_lambda_power_if_possible(polynomial, 1)
+    }
+
+    pub(super) fn divide_lambda_polynomial_by_two_lambda_power_if_possible(
+        polynomial: &[String],
+        lambda_power: usize,
+    ) -> Option<Vec<String>> {
+        for coefficient in polynomial.iter().take(lambda_power) {
+            if coefficient != "0" {
+                return None;
+            }
         }
         let two = MalachiteRational::from(Integer::from(2));
         Some(
             polynomial
                 .iter()
-                .skip(1)
+                .skip(lambda_power)
                 .map(|coefficient| {
                     let coefficient = coefficient
                         .parse::<MalachiteRational>()
@@ -41530,27 +41575,23 @@ mod tests {
                         "weighted_p2_rank_three_split_equivariant_candidate_p2_positive_lambda_order_requires_pairing_or_residue"
                             .to_string(),
                     split_equivariant_dual_basis_p2_numerator_lambda_polynomial: Some(vec![
-                        "0".to_string(),
-                        "0".to_string(),
                         "-1/2".to_string(),
                         "1/2".to_string()
                     ]),
-                    split_equivariant_dual_basis_p2_numerator_lambda_order: Some(2),
+                    split_equivariant_dual_basis_p2_numerator_lambda_order: Some(0),
                     split_equivariant_dual_basis_p2_readout_status:
-                        "weighted_p2_rank_three_split_dual_basis_p2_numerator_readout_positive_lambda_order_requires_full_ifunction_pairing_or_residue"
+                        "weighted_p2_rank_three_split_dual_basis_p2_numerator_readout_has_nonzero_nonequivariant_term"
                             .to_string(),
                     split_equivariant_dual_basis_p2_hypergeometric_denominator_constant: Some(
                         "2".to_string()
                     ),
                     split_equivariant_dual_basis_p2_hypergeometric_lambda_polynomial: Some(vec![
-                        "0".to_string(),
-                        "0".to_string(),
                         "-1/4".to_string(),
                         "1/4".to_string()
                     ]),
-                    split_equivariant_dual_basis_p2_hypergeometric_lambda_order: Some(2),
+                    split_equivariant_dual_basis_p2_hypergeometric_lambda_order: Some(0),
                     split_equivariant_dual_basis_p2_hypergeometric_status:
-                        "weighted_p2_rank_three_split_dual_basis_p2_hypergeometric_readout_positive_lambda_order_requires_mirror_map_pairing_or_residue"
+                        "weighted_p2_rank_three_split_dual_basis_p2_hypergeometric_readout_has_nonzero_nonequivariant_term"
                             .to_string(),
                     split_equivariant_full_hypergeometric_denominator_truncated_coefficients: Some(vec![
                         "2".to_string(),
@@ -41586,28 +41627,21 @@ mod tests {
                         ]
                     ]),
                     split_equivariant_full_hypergeometric_dual_basis_p2_lambda_polynomial:
-                        Some(vec![
-                            "0".to_string(),
-                            "0".to_string(),
-                            "-1/4".to_string(),
-                            "1/4".to_string()
-                        ]),
-                    split_equivariant_full_hypergeometric_dual_basis_p2_lambda_order: Some(2),
+                        Some(vec!["-1/4".to_string(), "1/4".to_string()]),
+                    split_equivariant_full_hypergeometric_dual_basis_p2_lambda_order: Some(0),
                     split_equivariant_full_hypergeometric_status:
-                        "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_readout_positive_lambda_order_requires_mirror_map_pairing_or_residue"
+                        "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_readout_has_nonzero_nonequivariant_term"
                             .to_string(),
                     split_equivariant_full_hypergeometric_dual_basis_p2_primary_z2_lambda_polynomial: Some(vec![
                         "0".to_string()
                     ]),
                     split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_inverse_power: Some(3),
                     split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_polynomial: Some(vec![
-                        "0".to_string(),
-                        "0".to_string(),
                         "-1/4".to_string()
                     ]),
-                    split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_order: Some(2),
+                    split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_order: Some(0),
                     split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_non_equivariant_limit_status:
-                        "weighted_p2_rank_three_split_first_nonzero_descendant_positive_lambda_order_equivariant_only_requires_residue_or_pairing"
+                        "weighted_p2_rank_three_split_first_nonzero_descendant_has_nonequivariant_limit_requires_reconstruction"
                             .to_string(),
                     split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status:
                         "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_primary_z2_zero_first_nonzero_descendant_requires_big_j_or_pairing"
@@ -41720,8 +41754,6 @@ mod tests {
                         "weighted_p2_rank_three_split_equivariant_candidate_p2_positive_lambda_order_requires_pairing_or_residue"
                             .to_string(),
                     split_equivariant_dual_basis_p2_numerator_lambda_polynomial: Some(vec![
-                        "0".to_string(),
-                        "0".to_string(),
                         "-3".to_string(),
                         "23/2".to_string(),
                         "-17".to_string(),
@@ -41729,16 +41761,14 @@ mod tests {
                         "-4".to_string(),
                         "1/2".to_string()
                     ]),
-                    split_equivariant_dual_basis_p2_numerator_lambda_order: Some(2),
+                    split_equivariant_dual_basis_p2_numerator_lambda_order: Some(0),
                     split_equivariant_dual_basis_p2_readout_status:
-                        "weighted_p2_rank_three_split_dual_basis_p2_numerator_readout_positive_lambda_order_requires_full_ifunction_pairing_or_residue"
+                        "weighted_p2_rank_three_split_dual_basis_p2_numerator_readout_has_nonzero_nonequivariant_term"
                             .to_string(),
                     split_equivariant_dual_basis_p2_hypergeometric_denominator_constant: Some(
                         "96".to_string()
                     ),
                     split_equivariant_dual_basis_p2_hypergeometric_lambda_polynomial: Some(vec![
-                        "0".to_string(),
-                        "0".to_string(),
                         "-1/32".to_string(),
                         "23/192".to_string(),
                         "-17/96".to_string(),
@@ -41746,9 +41776,9 @@ mod tests {
                         "-1/24".to_string(),
                         "1/192".to_string()
                     ]),
-                    split_equivariant_dual_basis_p2_hypergeometric_lambda_order: Some(2),
+                    split_equivariant_dual_basis_p2_hypergeometric_lambda_order: Some(0),
                     split_equivariant_dual_basis_p2_hypergeometric_status:
-                        "weighted_p2_rank_three_split_dual_basis_p2_hypergeometric_readout_positive_lambda_order_requires_mirror_map_pairing_or_residue"
+                        "weighted_p2_rank_three_split_dual_basis_p2_hypergeometric_readout_has_nonzero_nonequivariant_term"
                             .to_string(),
                     split_equivariant_full_hypergeometric_denominator_truncated_coefficients: Some(vec![
                         "96".to_string(),
@@ -41797,8 +41827,6 @@ mod tests {
                     ]),
                     split_equivariant_full_hypergeometric_dual_basis_p2_lambda_polynomial:
                         Some(vec![
-                            "0".to_string(),
-                            "0".to_string(),
                             "-1/32".to_string(),
                             "23/192".to_string(),
                             "-17/96".to_string(),
@@ -41806,22 +41834,20 @@ mod tests {
                             "-1/24".to_string(),
                             "1/192".to_string()
                         ]),
-                    split_equivariant_full_hypergeometric_dual_basis_p2_lambda_order: Some(2),
+                    split_equivariant_full_hypergeometric_dual_basis_p2_lambda_order: Some(0),
                     split_equivariant_full_hypergeometric_status:
-                        "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_readout_positive_lambda_order_requires_mirror_map_pairing_or_residue"
+                        "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_readout_has_nonzero_nonequivariant_term"
                             .to_string(),
                     split_equivariant_full_hypergeometric_dual_basis_p2_primary_z2_lambda_polynomial: Some(vec![
                         "0".to_string()
                     ]),
                     split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_inverse_power: Some(3),
                     split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_polynomial: Some(vec![
-                        "0".to_string(),
-                        "0".to_string(),
                         "-1/32".to_string()
                     ]),
-                    split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_order: Some(2),
+                    split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_order: Some(0),
                     split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_non_equivariant_limit_status:
-                        "weighted_p2_rank_three_split_first_nonzero_descendant_positive_lambda_order_equivariant_only_requires_residue_or_pairing"
+                        "weighted_p2_rank_three_split_first_nonzero_descendant_has_nonequivariant_limit_requires_reconstruction"
                             .to_string(),
                     split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status:
                         "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_primary_z2_zero_first_nonzero_descendant_requires_big_j_or_pairing"
@@ -41854,6 +41880,14 @@ mod tests {
                 source_dual_basis_p2_normalization_divisor: "2*lambda".to_string(),
                 source_dual_basis_p2_readout_status:
                     "p2_one_point_correlator_is_read_from_dual_basis_phi2_not_from_raw_p2_coefficient"
+                        .to_string(),
+                split_bundle_twisted_dual_basis_p2_class:
+                    "2*(lambda-p)^2*(lambda-2*p)*fun_0=2*lambda^3*fun_0-8*lambda^2*p+10*lambda*p^2"
+                        .to_string(),
+                split_bundle_twisted_dual_basis_p2_normalization_divisor:
+                    "2*lambda^3".to_string(),
+                split_bundle_twisted_dual_basis_p2_pairing_status:
+                    "weighted_p2_rank_three_split_bundle_untwisted_p2_dual_pairing_computed_from_ccit_inverse_euler_twist"
                         .to_string(),
                 source_dual_basis_half_sector_class: "2*lambda*fun_{1/2}".to_string(),
                 stack_pairing_normalization_status:
@@ -42029,6 +42063,14 @@ mod tests {
             "2*lambda"
         );
         assert_eq!(
+            source_map.split_bundle_twisted_dual_basis_p2_normalization_divisor,
+            "2*lambda^3"
+        );
+        assert_eq!(
+            source_map.split_bundle_twisted_dual_basis_p2_pairing_status,
+            "weighted_p2_rank_three_split_bundle_untwisted_p2_dual_pairing_computed_from_ccit_inverse_euler_twist"
+        );
+        assert_eq!(
             source_map.stack_pairing_normalization_status,
             "weighted_p2_hyperplane_square_fractional_requires_stack_normalized_source_pairing_and_twisted_sector_pairing"
         );
@@ -42078,6 +42120,22 @@ mod tests {
                 2
             )])
         );
+        let split_pairing_counts = weighted_p2_rank_three_chen_ruan_source_map_status_counts(
+            [Some(&source_map), None, Some(&source_map)],
+            |source_map| {
+                source_map
+                    .split_bundle_twisted_dual_basis_p2_pairing_status
+                    .as_str()
+            },
+        );
+        assert_eq!(
+            split_pairing_counts,
+            BTreeMap::from([(
+                "weighted_p2_rank_three_split_bundle_untwisted_p2_dual_pairing_computed_from_ccit_inverse_euler_twist"
+                    .to_string(),
+                2
+            )])
+        );
     }
 
     #[test]
@@ -42094,6 +42152,19 @@ mod tests {
         assert_eq!(
             divide_lambda_polynomial_by_two_lambda_if_possible(&["1".to_string(), "0".to_string()]),
             None
+        );
+        assert_eq!(
+            divide_lambda_polynomial_by_two_lambda_power_if_possible(
+                &[
+                    "0".to_string(),
+                    "0".to_string(),
+                    "0".to_string(),
+                    "-1".to_string(),
+                    "1".to_string()
+                ],
+                3
+            ),
+            Some(vec!["-1/2".to_string(), "1/2".to_string()])
         );
     }
 
@@ -42167,17 +42238,12 @@ mod tests {
         );
         assert_eq!(
             dual_basis_readout,
-            Some(vec![
-                "0".to_string(),
-                "0".to_string(),
-                "-1/4".to_string(),
-                "1/4".to_string()
-            ])
+            Some(vec!["-1/4".to_string(), "1/4".to_string()])
         );
-        assert_eq!(order, Some(2));
+        assert_eq!(order, Some(0));
         assert_eq!(
             status,
-            "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_readout_positive_lambda_order_requires_mirror_map_pairing_or_residue"
+            "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_readout_has_nonzero_nonequivariant_term"
         );
 
         let (denominator, inverse_denominator, quotient, dual_basis_readout, order, _) =
@@ -42217,8 +42283,6 @@ mod tests {
         assert_eq!(
             dual_basis_readout,
             Some(vec![
-                "0".to_string(),
-                "0".to_string(),
                 "-1/32".to_string(),
                 "23/192".to_string(),
                 "-17/96".to_string(),
@@ -42227,7 +42291,7 @@ mod tests {
                 "1/192".to_string()
             ])
         );
-        assert_eq!(order, Some(2));
+        assert_eq!(order, Some(0));
     }
 
     #[test]
@@ -42242,14 +42306,11 @@ mod tests {
 
         assert_eq!(primary, Some(vec!["0".to_string()]));
         assert_eq!(first_power, Some(3));
-        assert_eq!(
-            first_polynomial,
-            Some(vec!["0".to_string(), "0".to_string(), "-1/4".to_string()])
-        );
-        assert_eq!(first_order, Some(2));
+        assert_eq!(first_polynomial, Some(vec!["-1/4".to_string()]));
+        assert_eq!(first_order, Some(0));
         assert_eq!(
             limit_status,
-            "weighted_p2_rank_three_split_first_nonzero_descendant_positive_lambda_order_equivariant_only_requires_residue_or_pairing"
+            "weighted_p2_rank_three_split_first_nonzero_descendant_has_nonequivariant_limit_requires_reconstruction"
         );
         assert_eq!(
             status,
@@ -42265,14 +42326,11 @@ mod tests {
             );
         assert_eq!(primary, Some(vec!["0".to_string()]));
         assert_eq!(first_power, Some(3));
-        assert_eq!(
-            first_polynomial,
-            Some(vec!["0".to_string(), "0".to_string(), "-1/32".to_string()])
-        );
-        assert_eq!(first_order, Some(2));
+        assert_eq!(first_polynomial, Some(vec!["-1/32".to_string()]));
+        assert_eq!(first_order, Some(0));
         assert_eq!(
             limit_status,
-            "weighted_p2_rank_three_split_first_nonzero_descendant_positive_lambda_order_equivariant_only_requires_residue_or_pairing"
+            "weighted_p2_rank_three_split_first_nonzero_descendant_has_nonequivariant_limit_requires_reconstruction"
         );
     }
 

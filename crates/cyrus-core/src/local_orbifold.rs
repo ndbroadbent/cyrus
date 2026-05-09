@@ -70,6 +70,13 @@ pub struct WeightedP2RankThreeChenRuanSourceBasisReadout {
     pub source_dual_basis_p2_normalization_divisor: String,
     /// Status for reading `p^2` from the dual Chen-Ruan basis.
     pub source_dual_basis_p2_readout_status: String,
+    /// Split-bundle twisted dual-basis class for the untwisted `p^2`
+    /// insertion, using the inverse equivariant Euler twist.
+    pub split_bundle_twisted_dual_basis_p2_class: String,
+    /// Fun_0 coefficient divisor for the split-bundle twisted `p^2` dual.
+    pub split_bundle_twisted_dual_basis_p2_normalization_divisor: String,
+    /// Status for the split-bundle twisted `p^2` pairing normalization.
+    pub split_bundle_twisted_dual_basis_p2_pairing_status: String,
     /// Dual-basis half-sector class.
     pub source_dual_basis_half_sector_class: String,
     /// Normalization boundary for stack and orbifold-sector pairings.
@@ -514,6 +521,10 @@ pub fn weighted_p2_rank_three_twisted_ifunction_source_certificate_requirements(
     let mut required_inputs = readiness
         .twisted_vector_bundle_ifunction_missing_inputs
         .clone();
+    required_inputs.retain(|input| {
+        input != "stack_normalized_hyperplane_square_tensor"
+            && input != "equivariant_residue_or_pairing_normalization"
+    });
     for input in [
         "twisted_big_j_or_pairing_reconstruction_for_descendant_readout",
         "source_derived_chamber_qn_history_for_selected_phase",
@@ -569,10 +580,10 @@ pub fn weighted_p2_rank_three_twisted_ifunction_source_certificate_requirements(
         }
         .to_string(),
         twisted_dual_pairing_status:
-            "weighted_p2_rank_three_ccit_twisted_dual_pairing_blocked_missing_stack_normalized_inverse_euler_pairing"
+            "weighted_p2_rank_three_ccit_untwisted_p2_dual_pairing_computed_but_big_j_pairing_reconstruction_missing"
                 .to_string(),
         pairing_or_residue_status:
-            "weighted_p2_rank_three_source_certificate_blocked_missing_stack_pairing_or_equivariant_residue"
+            "weighted_p2_rank_three_source_certificate_pairing_normalization_computed_for_untwisted_p2_but_descendant_reconstruction_missing"
                 .to_string(),
         chamber_certificate_status:
             "weighted_p2_rank_three_source_certificate_blocked_missing_source_chamber_certificate"
@@ -844,6 +855,13 @@ pub fn weighted_p2_rank_three_split_bundle_chen_ruan_source_basis_readout(
         source_dual_basis_p2_readout_status:
             "p2_one_point_correlator_is_read_from_dual_basis_phi2_not_from_raw_p2_coefficient"
                 .to_string(),
+        split_bundle_twisted_dual_basis_p2_class:
+            "2*(lambda-p)^2*(lambda-2*p)*fun_0=2*lambda^3*fun_0-8*lambda^2*p+10*lambda*p^2"
+                .to_string(),
+        split_bundle_twisted_dual_basis_p2_normalization_divisor: "2*lambda^3".to_string(),
+        split_bundle_twisted_dual_basis_p2_pairing_status:
+            "weighted_p2_rank_three_split_bundle_untwisted_p2_dual_pairing_computed_from_ccit_inverse_euler_twist"
+                .to_string(),
         source_dual_basis_half_sector_class: "2*lambda*fun_{1/2}".to_string(),
         stack_pairing_normalization_status:
             "weighted_p2_hyperplane_square_fractional_requires_stack_normalized_source_pairing_and_twisted_sector_pairing"
@@ -945,7 +963,11 @@ pub fn weighted_p2_ordinary_dual_basis_p2_z_readout_profile(
         (2..=max_inverse_z_power)
             .map(|inverse_z_power| {
                 let polynomial = raw_by_z.get(&inverse_z_power).cloned().unwrap_or_default();
-                ordinary_sector_dual_basis_p2_z_readout(inverse_z_power, &polynomial)
+                ordinary_sector_dual_basis_p2_z_readout(
+                    inverse_z_power,
+                    &polynomial,
+                    bundle_degrees.len(),
+                )
             })
             .collect(),
     )
@@ -965,15 +987,18 @@ pub fn weighted_p2_ordinary_dual_basis_p2_z_lambda_polynomials(
     )?;
     let mut normalized_by_z = BTreeMap::new();
     for (inverse_z_power, polynomial) in raw_by_z {
-        let coefficients = divide_rational_lambda_polynomial_by_two_lambda_if_possible(&polynomial)
-            .map(|coefficients| {
-                let coefficients = rational_coefficients_to_strings(&coefficients);
-                if coefficients.is_empty() {
-                    vec!["0".to_string()]
-                } else {
-                    coefficients
-                }
-            })?;
+        let coefficients = divide_rational_lambda_polynomial_by_two_lambda_power_if_possible(
+            &polynomial,
+            bundle_degrees.len(),
+        )
+        .map(|coefficients| {
+            let coefficients = rational_coefficients_to_strings(&coefficients);
+            if coefficients.is_empty() {
+                vec!["0".to_string()]
+            } else {
+                coefficients
+            }
+        })?;
         normalized_by_z.insert(inverse_z_power, coefficients);
     }
     Some(normalized_by_z)
@@ -1148,19 +1173,19 @@ fn half_sector_descendant_readout(
 fn ordinary_sector_dual_basis_p2_z_readout(
     inverse_z_power: i64,
     polynomial: &BTreeMap<usize, Rational>,
+    lambda_power: usize,
 ) -> OrdinarySectorDualBasisP2ZReadout {
     let raw_fun0_lambda_coefficients = dense_rational_lambda_polynomial_to_strings(polynomial);
-    let dual_basis_p2_coefficients = divide_rational_lambda_polynomial_by_two_lambda_if_possible(
-        polynomial,
-    )
-    .map(|coefficients| {
-        let coefficients = rational_coefficients_to_strings(&coefficients);
-        if coefficients.is_empty() {
-            vec!["0".to_string()]
-        } else {
-            coefficients
-        }
-    });
+    let dual_basis_p2_coefficients =
+        divide_rational_lambda_polynomial_by_two_lambda_power_if_possible(polynomial, lambda_power)
+            .map(|coefficients| {
+                let coefficients = rational_coefficients_to_strings(&coefficients);
+                if coefficients.is_empty() {
+                    vec!["0".to_string()]
+                } else {
+                    coefficients
+                }
+            });
     let status = match &dual_basis_p2_coefficients {
         Some(coefficients) if lambda_polynomial_has_nonzero_coefficient(coefficients) => {
             "dual_basis_p2_normalized_nonzero"
@@ -1669,17 +1694,26 @@ fn multiply_lambda_z_polynomial_by_rational_factor(
 fn divide_rational_lambda_polynomial_by_two_lambda_if_possible(
     polynomial: &BTreeMap<usize, Rational>,
 ) -> Option<Vec<Rational>> {
-    let constant = polynomial
-        .get(&0)
-        .cloned()
-        .unwrap_or_else(|| Rational::from(0));
-    if constant != Rational::from(0) {
-        return None;
+    divide_rational_lambda_polynomial_by_two_lambda_power_if_possible(polynomial, 1)
+}
+
+fn divide_rational_lambda_polynomial_by_two_lambda_power_if_possible(
+    polynomial: &BTreeMap<usize, Rational>,
+    lambda_power: usize,
+) -> Option<Vec<Rational>> {
+    for lower_power in 0..lambda_power {
+        let coefficient = polynomial
+            .get(&lower_power)
+            .cloned()
+            .unwrap_or_else(|| Rational::from(0));
+        if coefficient != Rational::from(0) {
+            return None;
+        }
     }
     let max_lambda_power = polynomial.keys().last().copied().unwrap_or(0);
     let two = Rational::from(Integer::from(2));
     Some(
-        (1..=max_lambda_power)
+        (lambda_power..=max_lambda_power)
             .map(|lambda_power| {
                 polynomial
                     .get(&lambda_power)
@@ -1906,9 +1940,10 @@ fn split_equivariant_dual_basis_p2_readout_status(
         degree_twice,
         0,
     );
-    let Some(quotient) =
-        divide_lambda_polynomial_by_two_lambda_if_possible(&ordinary_fun0_polynomial)
-    else {
+    let Some(quotient) = divide_lambda_polynomial_by_two_lambda_power_if_possible(
+        &ordinary_fun0_polynomial,
+        bundle_degrees.len(),
+    ) else {
         return (
             Some(ordinary_fun0_polynomial),
             None,
@@ -2097,7 +2132,10 @@ fn split_equivariant_full_hypergeometric_status(
                 .to_string(),
         );
     };
-    let Some(readout) = divide_lambda_polynomial_by_two_lambda_if_possible(fun0_polynomial) else {
+    let Some(readout) = divide_lambda_polynomial_by_two_lambda_power_if_possible(
+        fun0_polynomial,
+        bundle_degrees.len(),
+    ) else {
         return (
             Some(rational_coefficients_to_strings(&denominator)),
             Some(rational_coefficients_to_strings(&inverse_denominator)),
@@ -2306,21 +2344,20 @@ fn lambda_polynomial_order(polynomial: &[String]) -> Option<i64> {
         .map(|order| order as i64)
 }
 
-fn divide_lambda_polynomial_by_two_lambda_if_possible(
+fn divide_lambda_polynomial_by_two_lambda_power_if_possible(
     polynomial: &[String],
+    lambda_power: usize,
 ) -> Option<Vec<String>> {
-    let constant = polynomial
-        .first()
-        .cloned()
-        .unwrap_or_else(|| "0".to_string());
-    if constant != "0" {
-        return None;
+    for coefficient in polynomial.iter().take(lambda_power) {
+        if coefficient != "0" {
+            return None;
+        }
     }
     let two = Rational::from(Integer::from(2));
     Some(
         polynomial
             .iter()
-            .skip(1)
+            .skip(lambda_power)
             .map(|coefficient| {
                 let coefficient = coefficient
                     .parse::<Rational>()
@@ -2638,19 +2675,8 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![
                 ("2", Some(vec!["0".to_string()])),
-                (
-                    "3",
-                    Some(vec!["0".to_string(), "0".to_string(), "-1/4".to_string()])
-                ),
-                (
-                    "4",
-                    Some(vec![
-                        "0".to_string(),
-                        "0".to_string(),
-                        "0".to_string(),
-                        "1/4".to_string()
-                    ])
-                ),
+                ("3", Some(vec!["-1/4".to_string()])),
+                ("4", Some(vec!["0".to_string(), "1/4".to_string()])),
             ]
         );
 
@@ -2662,7 +2688,7 @@ mod tests {
                 .iter()
                 .find(|entry| entry.inverse_z_power == "3")
                 .and_then(|entry| entry.dual_basis_p2_coefficients.clone()),
-            Some(vec!["0".to_string(), "0".to_string(), "-1/32".to_string()])
+            Some(vec!["-1/32".to_string()])
         );
     }
 
@@ -2697,6 +2723,18 @@ mod tests {
         assert_eq!(
             readout.source_dual_basis_p2_normalization_divisor,
             "2*lambda"
+        );
+        assert_eq!(
+            readout.split_bundle_twisted_dual_basis_p2_class,
+            "2*(lambda-p)^2*(lambda-2*p)*fun_0=2*lambda^3*fun_0-8*lambda^2*p+10*lambda*p^2"
+        );
+        assert_eq!(
+            readout.split_bundle_twisted_dual_basis_p2_normalization_divisor,
+            "2*lambda^3"
+        );
+        assert_eq!(
+            readout.split_bundle_twisted_dual_basis_p2_pairing_status,
+            "weighted_p2_rank_three_split_bundle_untwisted_p2_dual_pairing_computed_from_ccit_inverse_euler_twist"
         );
         assert_eq!(
             readout.source_dual_basis_half_sector_class,
@@ -2815,11 +2853,11 @@ mod tests {
         );
         assert_eq!(
             certificate.twisted_dual_pairing_status,
-            "weighted_p2_rank_three_ccit_twisted_dual_pairing_blocked_missing_stack_normalized_inverse_euler_pairing"
+            "weighted_p2_rank_three_ccit_untwisted_p2_dual_pairing_computed_but_big_j_pairing_reconstruction_missing"
         );
         assert_eq!(
             certificate.pairing_or_residue_status,
-            "weighted_p2_rank_three_source_certificate_blocked_missing_stack_pairing_or_equivariant_residue"
+            "weighted_p2_rank_three_source_certificate_pairing_normalization_computed_for_untwisted_p2_but_descendant_reconstruction_missing"
         );
         assert_eq!(
             certificate.qn_history_status,
@@ -2840,9 +2878,7 @@ mod tests {
             certificate.required_inputs,
             vec![
                 "source_derived_codim2_insertion_or_equivalent_observable".to_string(),
-                "stack_normalized_hyperplane_square_tensor".to_string(),
                 "orbifold_sector_pairing_data".to_string(),
-                "equivariant_residue_or_pairing_normalization".to_string(),
                 "twisted_vector_bundle_ifunction_chamber_certificate".to_string(),
                 "twisted_vector_bundle_ifunction_qn_history".to_string(),
                 "twisted_big_j_or_pairing_reconstruction_for_descendant_readout".to_string(),
@@ -2886,12 +2922,7 @@ mod tests {
         );
         assert_eq!(
             degree_one.split_equivariant_full_hypergeometric_dual_basis_p2_lambda_polynomial,
-            Some(vec![
-                "0".to_string(),
-                "0".to_string(),
-                "-1/4".to_string(),
-                "1/4".to_string(),
-            ])
+            Some(vec!["-1/4".to_string(), "1/4".to_string()])
         );
         assert_eq!(
             degree_one
@@ -2906,7 +2937,7 @@ mod tests {
         assert_eq!(
             degree_one
                 .split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_polynomial,
-            Some(vec!["0".to_string(), "0".to_string(), "-1/4".to_string()])
+            Some(vec!["-1/4".to_string()])
         );
         assert_eq!(
             degree_one.split_equivariant_full_hypergeometric_dual_basis_p2_scalar_mirror_map_primary_status,
@@ -2937,8 +2968,6 @@ mod tests {
         assert_eq!(
             degree_two.split_equivariant_full_hypergeometric_dual_basis_p2_lambda_polynomial,
             Some(vec![
-                "0".to_string(),
-                "0".to_string(),
                 "-1/32".to_string(),
                 "23/192".to_string(),
                 "-17/96".to_string(),
@@ -2950,7 +2979,7 @@ mod tests {
         assert_eq!(
             degree_two
                 .split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_polynomial,
-            Some(vec!["0".to_string(), "0".to_string(), "-1/32".to_string()])
+            Some(vec!["-1/32".to_string()])
         );
     }
 
