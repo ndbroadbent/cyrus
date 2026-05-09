@@ -71,6 +71,7 @@ twisted_ifunction_required_insertion_codim = 2
 twisted_ifunction_candidate_insertion = base_hyperplane_power_2
 twisted_ifunction_readiness = weighted_p2_rank_three_twisted_ifunction_blocked_missing_stack_normalized_codim2_insertion_qn_history
 twisted_ifunction_missing = source_derived_codim2_insertion_or_equivalent_observable, stack_normalized_hyperplane_square_tensor, orbifold_sector_pairing_data, twisted_vector_bundle_ifunction_chamber_certificate, twisted_vector_bundle_ifunction_qn_history
+twisted_ifunction_degree_profile = d=1/2 half-degree twisted sector, numerator zero order 1; d=1 untwisted sector, numerator zero order 3 > codim-2 insertion
 base_anticanonical_degree = 4
 bundle_degree_sum = 4
 total_first_chern_degree = 0
@@ -137,7 +138,13 @@ handoff for that candidate: the visible CY5 phase needs a complex codimension
 `2` insertion to produce a numerical CY3-style invariant, the natural visible
 candidate is `H^2` on the weighted base, and the fractional
 `H^2 = 1/2` pairing means the insertion cannot be promoted without
-stack/source normalization and orbifold-sector pairing data.
+stack/source normalization and orbifold-sector pairing data. Cyrus also now
+profiles the first CCIT hypergeometric factor ranges for the selected bundle
+degrees `[1,1,2]`: half-degree terms land in the twisted sector and require
+orbifold-sector pairing, while integer untwisted terms have numerator zero
+order `3`, exceeding the codimension-`2` insertion and therefore requiring
+equivariant/source normalization rather than a naive non-equivariant `H^2`
+coefficient readout.
 
 A direct CYTools/PALP probe of the same six support coordinates is also
 negative. With experimental CYTools features enabled, `Polytope(pts)` reports

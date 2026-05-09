@@ -290,9 +290,12 @@ and matrix-basis pipeline are no longer open.
    complex codimension-`2` insertion, the natural candidate is the weighted-base
    `H^2` insertion, and the route remains blocked on stack-normalized
    `H^2`/orbifold-sector pairing data, a chamber certificate, and source qN
-   history. A core regression now verifies that fractional intersection tensors
-   are rejected before compact `cygv` handoff, matching the upstream HKTY
-   `i32` intersection-number API.
+   history. The context export also profiles the first CCIT hypergeometric
+   factor ranges for bundle degrees `[1,1,2]`: half-degree terms require
+   twisted-sector pairing, and integer untwisted terms have numerator zero
+   order `3`, exceeding the codimension-`2` insertion. A core regression now
+   verifies that fractional intersection tensors are rejected before compact
+   `cygv` handoff, matching the upstream HKTY `i32` intersection-number API.
    The context tool now also has an opt-in exact extremal-ray probe. For the
    current schema-3 context it verifies that all nine remaining targets are
    non-extremal in the finite degree-bounded cone by exact decomposition

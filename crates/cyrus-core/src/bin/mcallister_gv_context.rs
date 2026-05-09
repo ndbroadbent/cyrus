@@ -1456,6 +1456,8 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
     local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_readiness_status:
         Option<String>,
     local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_missing_inputs: Vec<String>,
+    local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_degree_profile_sample:
+        Vec<WeightedP2RankThreeTwistedIfunctionDegreeProfile>,
     local_toric_weighted_p2_rank_three_origin_included_zero_degree_split_summary:
         WeightedP2RankThreeOriginIncludedZeroDegreeSplitSummary,
     ckyz_status: String,
@@ -1627,6 +1629,18 @@ struct WeightedP2RankThreeSourceModelSummary {
     twisted_vector_bundle_ifunction_insertion_normalization_status: Option<String>,
     twisted_vector_bundle_ifunction_readiness_status: Option<String>,
     twisted_vector_bundle_ifunction_missing_inputs: Vec<String>,
+    twisted_vector_bundle_ifunction_degree_profile_sample:
+        Vec<WeightedP2RankThreeTwistedIfunctionDegreeProfile>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+struct WeightedP2RankThreeTwistedIfunctionDegreeProfile {
+    degree_twice: i64,
+    sector_status: String,
+    base_denominator_factor_counts: Vec<i64>,
+    bundle_numerator_factor_counts: Vec<i64>,
+    numerator_zero_factor_order: i64,
+    candidate_insertion_visibility_status: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -21481,6 +21495,9 @@ fn unresolved_chamber_generator_summaries(
                     local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_missing_inputs:
                         weighted_rank_three_source_model
                             .twisted_vector_bundle_ifunction_missing_inputs,
+                    local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_degree_profile_sample:
+                        weighted_rank_three_source_model
+                            .twisted_vector_bundle_ifunction_degree_profile_sample,
                     local_toric_weighted_p2_rank_three_origin_included_zero_degree_split_summary:
                         weighted_rank_three_origin_split_summary,
                     ckyz_status: context.local_toric_diagnostic.ckyz_status.clone(),
@@ -26456,6 +26473,7 @@ fn weighted_p2_rank_three_source_model_summary(
         twisted_vector_bundle_ifunction_insertion_normalization_status: None,
         twisted_vector_bundle_ifunction_readiness_status: None,
         twisted_vector_bundle_ifunction_missing_inputs: Vec::new(),
+        twisted_vector_bundle_ifunction_degree_profile_sample: Vec::new(),
     };
     if !charge_family_status
         .starts_with("local_toric_weighted_p2_rank_three_split_bundle_charge_family")
@@ -26573,6 +26591,13 @@ fn weighted_p2_rank_three_source_model_summary(
                 ],
             )
         };
+    let twisted_ifunction_degree_profile_sample =
+        weighted_p2_rank_three_twisted_ifunction_degree_profiles(
+            base_weights,
+            bundle_degrees,
+            4,
+            required_insertion_complex_codimension,
+        );
     let status = if phase_summary
         .status
         .starts_with("weighted_p2_rank_three_split_bundle_selected_")
@@ -26604,7 +26629,90 @@ fn weighted_p2_rank_three_source_model_summary(
             insertion_normalization_status,
         twisted_vector_bundle_ifunction_readiness_status: Some(twisted_ifunction_readiness_status),
         twisted_vector_bundle_ifunction_missing_inputs: twisted_ifunction_missing_inputs,
+        twisted_vector_bundle_ifunction_degree_profile_sample:
+            twisted_ifunction_degree_profile_sample,
     }
+}
+
+fn weighted_p2_rank_three_twisted_ifunction_degree_profiles(
+    base_weights: &[i64],
+    bundle_degrees: &[i64],
+    max_degree_twice: i64,
+    required_insertion_complex_codimension: Option<i64>,
+) -> Vec<WeightedP2RankThreeTwistedIfunctionDegreeProfile> {
+    (1..=max_degree_twice)
+        .map(|degree_twice| {
+            let base_denominator_factor_counts = base_weights
+                .iter()
+                .map(|&weight| ceil_positive_half_product(weight, degree_twice))
+                .collect::<Vec<_>>();
+            let bundle_numerator_factor_counts = bundle_degrees
+                .iter()
+                .map(|&degree| floor_positive_half_product(degree, degree_twice))
+                .collect::<Vec<_>>();
+            let numerator_zero_factor_order = bundle_degrees
+                .iter()
+                .filter(|&&degree| degree * degree_twice > 0 && (degree * degree_twice) % 2 == 0)
+                .count() as i64;
+            let sector_status = if degree_twice % 2 == 0 {
+                "weighted_p2_rank_three_twisted_ifunction_untwisted_integer_degree_sector"
+            } else {
+                "weighted_p2_rank_three_twisted_ifunction_half_degree_twisted_sector"
+            }
+            .to_string();
+            let candidate_insertion_visibility_status = match (
+                degree_twice % 2 == 0,
+                required_insertion_complex_codimension,
+            ) {
+                (false, _) => {
+                    "weighted_p2_rank_three_twisted_ifunction_half_degree_requires_orbifold_sector_pairing"
+                        .to_string()
+                }
+                (true, Some(required_codim))
+                    if numerator_zero_factor_order > required_codim =>
+                {
+                    "weighted_p2_rank_three_twisted_ifunction_untwisted_zero_order_exceeds_required_insertion_codim_requires_equivariant_normalization"
+                        .to_string()
+                }
+                (true, Some(required_codim))
+                    if numerator_zero_factor_order == required_codim =>
+                {
+                    "weighted_p2_rank_three_twisted_ifunction_untwisted_zero_order_matches_required_insertion_codim"
+                        .to_string()
+                }
+                (true, Some(_)) => {
+                    "weighted_p2_rank_three_twisted_ifunction_untwisted_zero_order_below_required_insertion_codim_requires_higher_series_terms"
+                        .to_string()
+                }
+                (true, None) => {
+                    "weighted_p2_rank_three_twisted_ifunction_untwisted_insertion_codim_not_applicable"
+                        .to_string()
+                }
+            };
+            WeightedP2RankThreeTwistedIfunctionDegreeProfile {
+                degree_twice,
+                sector_status,
+                base_denominator_factor_counts,
+                bundle_numerator_factor_counts,
+                numerator_zero_factor_order,
+                candidate_insertion_visibility_status,
+            }
+        })
+        .collect()
+}
+
+fn ceil_positive_half_product(factor: i64, degree_twice: i64) -> i64 {
+    let product = factor
+        .checked_mul(degree_twice)
+        .expect("weighted P2 I-function factor product fits i64");
+    (product + 1) / 2
+}
+
+fn floor_positive_half_product(factor: i64, degree_twice: i64) -> i64 {
+    let product = factor
+        .checked_mul(degree_twice)
+        .expect("weighted P2 I-function factor product fits i64");
+    product / 2
 }
 
 fn weighted_p2_rank_three_origin_included_zero_degree_split_summary(
@@ -39098,6 +39206,60 @@ mod tests {
                 "orbifold_sector_pairing_data".to_string(),
                 "twisted_vector_bundle_ifunction_chamber_certificate".to_string(),
                 "twisted_vector_bundle_ifunction_qn_history".to_string(),
+            ]
+        );
+        assert_eq!(
+            selected_base_source_model
+                .twisted_vector_bundle_ifunction_degree_profile_sample,
+            vec![
+                WeightedP2RankThreeTwistedIfunctionDegreeProfile {
+                    degree_twice: 1,
+                    sector_status:
+                        "weighted_p2_rank_three_twisted_ifunction_half_degree_twisted_sector"
+                            .to_string(),
+                    base_denominator_factor_counts: vec![1, 1, 1],
+                    bundle_numerator_factor_counts: vec![0, 0, 1],
+                    numerator_zero_factor_order: 1,
+                    candidate_insertion_visibility_status:
+                        "weighted_p2_rank_three_twisted_ifunction_half_degree_requires_orbifold_sector_pairing"
+                            .to_string(),
+                },
+                WeightedP2RankThreeTwistedIfunctionDegreeProfile {
+                    degree_twice: 2,
+                    sector_status:
+                        "weighted_p2_rank_three_twisted_ifunction_untwisted_integer_degree_sector"
+                            .to_string(),
+                    base_denominator_factor_counts: vec![1, 1, 2],
+                    bundle_numerator_factor_counts: vec![1, 1, 2],
+                    numerator_zero_factor_order: 3,
+                    candidate_insertion_visibility_status:
+                        "weighted_p2_rank_three_twisted_ifunction_untwisted_zero_order_exceeds_required_insertion_codim_requires_equivariant_normalization"
+                            .to_string(),
+                },
+                WeightedP2RankThreeTwistedIfunctionDegreeProfile {
+                    degree_twice: 3,
+                    sector_status:
+                        "weighted_p2_rank_three_twisted_ifunction_half_degree_twisted_sector"
+                            .to_string(),
+                    base_denominator_factor_counts: vec![2, 2, 3],
+                    bundle_numerator_factor_counts: vec![1, 1, 3],
+                    numerator_zero_factor_order: 1,
+                    candidate_insertion_visibility_status:
+                        "weighted_p2_rank_three_twisted_ifunction_half_degree_requires_orbifold_sector_pairing"
+                            .to_string(),
+                },
+                WeightedP2RankThreeTwistedIfunctionDegreeProfile {
+                    degree_twice: 4,
+                    sector_status:
+                        "weighted_p2_rank_three_twisted_ifunction_untwisted_integer_degree_sector"
+                            .to_string(),
+                    base_denominator_factor_counts: vec![2, 2, 4],
+                    bundle_numerator_factor_counts: vec![2, 2, 4],
+                    numerator_zero_factor_order: 3,
+                    candidate_insertion_visibility_status:
+                        "weighted_p2_rank_three_twisted_ifunction_untwisted_zero_order_exceeds_required_insertion_codim_requires_equivariant_normalization"
+                            .to_string(),
+                },
             ]
         );
         let point_samples = vec![
