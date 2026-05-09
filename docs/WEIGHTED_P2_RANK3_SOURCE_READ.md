@@ -170,10 +170,24 @@ The diagnostic also divides by the weighted-base denominator constants from
 the same integer-sector hypergeometric factor. For `d=1` and `d=2`, those
 constants are `2` and `96`, giving pre-mirror readouts
 `[0,0,-1/4,1/4]` and
-`[0,0,-1/32,23/192,-17/96,1/8,-1/24,1/192]`. This rules out the raw
-`p^2` coefficient as the missing extraction, but still does not promote a GV
-value: mirror-map normalization, full denominator/pairing data, and
-equivariant residue or twisted big-J pairing data remain required.
+`[0,0,-1/32,23/192,-17/96,1/8,-1/24,1/192]`.
+
+Cyrus now also expands the full weighted-base denominator through `p^2`
+instead of only using its constant term. For the first two integer sectors,
+the denominator polynomials are
+
+```text
+d=1: D(p) = 2 + 10p + 18p^2
+d=2: D(p) = 96 + 688p + 2072p^2
+```
+
+The truncated quotient changes the ordinary-basis `p` and `p^2` coefficients,
+but the dual-basis `p^2` readout still comes from the `fun_0` coefficient
+divided by `2*lambda`, so it remains the same positive-lambda-order readout
+above. This rules out the raw `p^2` coefficient and denominator `p`-terms as
+the missing extraction, but still does not promote a GV value: mirror-map
+normalization, pairing data, and equivariant residue or twisted big-J pairing
+data remain required.
 
 A direct CYTools/PALP probe of the same six support coordinates is also
 negative. With experimental CYTools features enabled, `Polytope(pts)` reports
