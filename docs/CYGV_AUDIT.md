@@ -3889,7 +3889,7 @@ reports `/tmp/cyrus_target7_branch_cut_source_continuation_report.json` and
 `/tmp/cyrus_target8_branch_cut_source_continuation_report.json` now serialize
 `crossed_wall_source_continuation_status =
 source_continuation_blocked_bfield_zero_real_branch_cut_requires_resummation_certificate`
-and list missing inputs
+at both row level and top-level aggregate, and list missing inputs
 `target_plus_star_wall_crossing_chamber_transport` plus
 `n1_branch_cut_resummation_transport_certificate`. Thus the known
 source-derived wall GV is not a license to perform a naive real flop

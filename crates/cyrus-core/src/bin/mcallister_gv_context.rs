@@ -451,6 +451,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_wall_transport_missing_input_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_crossed_wall_source_continuation_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_crossed_wall_stable_weyl_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_global_secondary_height_status_counts:
@@ -18069,6 +18071,10 @@ fn build_report(
         local_cygv_source_resolution_star_union_wall_transport_missing_input_counts(
             &local_cygv_source_resolution_hint_sample,
         );
+    let local_cygv_source_resolution_star_union_crossed_wall_source_continuation_status_counts =
+        local_cygv_source_resolution_star_union_crossed_wall_source_continuation_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
     let local_cygv_source_resolution_star_union_crossed_wall_stable_weyl_status_counts =
         local_cygv_source_resolution_star_union_crossed_wall_stable_weyl_status_counts(
             &local_cygv_source_resolution_hint_sample,
@@ -20137,6 +20143,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_opposite_star_wall_circuit_status_counts,
         local_cygv_source_resolution_star_union_wall_transport_readiness_status_counts,
         local_cygv_source_resolution_star_union_wall_transport_missing_input_counts,
+        local_cygv_source_resolution_star_union_crossed_wall_source_continuation_status_counts,
         local_cygv_source_resolution_star_union_crossed_wall_stable_weyl_status_counts,
         local_cygv_source_resolution_star_union_global_secondary_height_status_counts,
         local_cygv_source_resolution_star_union_global_regular_triangulation_status_counts,
@@ -23424,6 +23431,20 @@ fn local_cygv_source_resolution_star_union_wall_transport_missing_input_counts(
         }
     }
     counts
+}
+
+fn local_cygv_source_resolution_star_union_crossed_wall_source_continuation_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        summaries.iter().map(|summary| {
+            summary
+                .shared_two_simplex_star_union_wall_transport_readiness
+                .crossed_wall_source_continuation_status
+                .as_deref()
+        }),
+        "not_run",
+    )
 }
 
 fn local_cygv_source_resolution_star_union_crossed_wall_stable_weyl_status_counts(

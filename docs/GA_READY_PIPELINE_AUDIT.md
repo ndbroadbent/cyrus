@@ -1354,7 +1354,9 @@ to make the remaining GV layer more first-principles:
    reports `/tmp/cyrus_target7_branch_cut_source_continuation_report.json` and
    `/tmp/cyrus_target8_branch_cut_source_continuation_report.json` now serialize
    `crossed_wall_source_continuation_status =
-   source_continuation_blocked_bfield_zero_real_branch_cut_requires_resummation_certificate`.
+   source_continuation_blocked_bfield_zero_real_branch_cut_requires_resummation_certificate`
+   and aggregate that status at top level under
+   `local_cygv_source_resolution_star_union_crossed_wall_source_continuation_status_counts`.
    This rules out a naive real-axis flop continuation of the known wall GV into
    the star-side chamber; the missing handoff still has to be a certified
    chamber/semigroup history or a source-level continuation that addresses the
