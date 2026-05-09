@@ -1644,6 +1644,9 @@ struct WeightedP2RankThreeTwistedIfunctionDegreeProfile {
     base_denominator_factor_counts: Vec<i64>,
     bundle_numerator_factor_counts: Vec<i64>,
     numerator_zero_factor_order: i64,
+    adjacent_canonical_numerator_factor_count: i64,
+    adjacent_canonical_numerator_zero_factor_order: i64,
+    split_vs_adjacent_canonical_factor_status: String,
     candidate_insertion_visibility_status: String,
 }
 
@@ -26718,6 +26721,7 @@ fn weighted_p2_rank_three_twisted_ifunction_degree_profiles(
     max_degree_twice: i64,
     required_insertion_complex_codimension: Option<i64>,
 ) -> Vec<WeightedP2RankThreeTwistedIfunctionDegreeProfile> {
+    let adjacent_canonical_degree = base_weights.iter().sum::<i64>();
     (1..=max_degree_twice)
         .map(|degree_twice| {
             let base_denominator_factor_counts = base_weights
@@ -26732,10 +26736,36 @@ fn weighted_p2_rank_three_twisted_ifunction_degree_profiles(
                 .iter()
                 .filter(|&&degree| degree * degree_twice > 0 && (degree * degree_twice) % 2 == 0)
                 .count() as i64;
+            let adjacent_canonical_numerator_factor_count =
+                floor_positive_half_product(adjacent_canonical_degree, degree_twice);
+            let adjacent_canonical_numerator_zero_factor_order =
+                i64::from(adjacent_canonical_degree * degree_twice > 0
+                    && (adjacent_canonical_degree * degree_twice) % 2 == 0);
             let sector_status = if degree_twice % 2 == 0 {
                 "weighted_p2_rank_three_twisted_ifunction_untwisted_integer_degree_sector"
             } else {
                 "weighted_p2_rank_three_twisted_ifunction_half_degree_twisted_sector"
+            }
+            .to_string();
+            let split_vs_adjacent_canonical_factor_status = match (
+                degree_twice % 2 == 0,
+                numerator_zero_factor_order.cmp(&adjacent_canonical_numerator_zero_factor_order),
+            ) {
+                (false, std::cmp::Ordering::Equal) => {
+                    "weighted_p2_rank_three_split_matches_adjacent_canonical_zero_order_but_twisted_sector_needs_pairing"
+                }
+                (true, std::cmp::Ordering::Greater) => {
+                    "weighted_p2_rank_three_split_integer_zero_order_exceeds_adjacent_canonical_kp112_so_p2_table_not_reusable"
+                }
+                (_, std::cmp::Ordering::Equal) => {
+                    "weighted_p2_rank_three_split_zero_order_matches_adjacent_canonical"
+                }
+                (_, std::cmp::Ordering::Less) => {
+                    "weighted_p2_rank_three_split_zero_order_below_adjacent_canonical_requires_source_check"
+                }
+                (_, std::cmp::Ordering::Greater) => {
+                    "weighted_p2_rank_three_split_zero_order_exceeds_adjacent_canonical_requires_equivariant_normalization"
+                }
             }
             .to_string();
             let candidate_insertion_visibility_status = match (
@@ -26773,6 +26803,9 @@ fn weighted_p2_rank_three_twisted_ifunction_degree_profiles(
                 base_denominator_factor_counts,
                 bundle_numerator_factor_counts,
                 numerator_zero_factor_order,
+                adjacent_canonical_numerator_factor_count,
+                adjacent_canonical_numerator_zero_factor_order,
+                split_vs_adjacent_canonical_factor_status,
                 candidate_insertion_visibility_status,
             }
         })
@@ -39298,6 +39331,11 @@ mod tests {
                     base_denominator_factor_counts: vec![1, 1, 1],
                     bundle_numerator_factor_counts: vec![0, 0, 1],
                     numerator_zero_factor_order: 1,
+                    adjacent_canonical_numerator_factor_count: 2,
+                    adjacent_canonical_numerator_zero_factor_order: 1,
+                    split_vs_adjacent_canonical_factor_status:
+                        "weighted_p2_rank_three_split_matches_adjacent_canonical_zero_order_but_twisted_sector_needs_pairing"
+                            .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_half_degree_requires_orbifold_sector_pairing"
                             .to_string(),
@@ -39310,6 +39348,11 @@ mod tests {
                     base_denominator_factor_counts: vec![1, 1, 2],
                     bundle_numerator_factor_counts: vec![1, 1, 2],
                     numerator_zero_factor_order: 3,
+                    adjacent_canonical_numerator_factor_count: 4,
+                    adjacent_canonical_numerator_zero_factor_order: 1,
+                    split_vs_adjacent_canonical_factor_status:
+                        "weighted_p2_rank_three_split_integer_zero_order_exceeds_adjacent_canonical_kp112_so_p2_table_not_reusable"
+                            .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_untwisted_zero_order_exceeds_required_insertion_codim_requires_equivariant_normalization"
                             .to_string(),
@@ -39322,6 +39365,11 @@ mod tests {
                     base_denominator_factor_counts: vec![2, 2, 3],
                     bundle_numerator_factor_counts: vec![1, 1, 3],
                     numerator_zero_factor_order: 1,
+                    adjacent_canonical_numerator_factor_count: 6,
+                    adjacent_canonical_numerator_zero_factor_order: 1,
+                    split_vs_adjacent_canonical_factor_status:
+                        "weighted_p2_rank_three_split_matches_adjacent_canonical_zero_order_but_twisted_sector_needs_pairing"
+                            .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_half_degree_requires_orbifold_sector_pairing"
                             .to_string(),
@@ -39334,6 +39382,11 @@ mod tests {
                     base_denominator_factor_counts: vec![2, 2, 4],
                     bundle_numerator_factor_counts: vec![2, 2, 4],
                     numerator_zero_factor_order: 3,
+                    adjacent_canonical_numerator_factor_count: 8,
+                    adjacent_canonical_numerator_zero_factor_order: 1,
+                    split_vs_adjacent_canonical_factor_status:
+                        "weighted_p2_rank_three_split_integer_zero_order_exceeds_adjacent_canonical_kp112_so_p2_table_not_reusable"
+                            .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_untwisted_zero_order_exceeds_required_insertion_codim_requires_equivariant_normalization"
                             .to_string(),
