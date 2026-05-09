@@ -162,6 +162,15 @@ pub struct WeightedP2RankThreeTwistedIfunctionSourceCertificateRequirements {
     pub primary_readout_status: String,
     /// Status of the first nonzero descendant/equivariant readout.
     pub descendant_readout_status: String,
+    /// Minimum inverse `z` power in the checked positive-degree hypergeometric
+    /// terms before multiplying by the leading outer `z`.
+    pub j_scale_min_checked_hypergeometric_inverse_z_power: Option<i64>,
+    /// Minimum inverse `z` power in the checked positive-degree terms after
+    /// multiplying by the leading outer `z`.
+    pub j_scale_min_checked_after_outer_z_inverse_power: Option<i64>,
+    /// Whether checked positive-degree terms can modify the CCIT `F z + G`
+    /// normalization data.
+    pub j_scale_positive_degree_f_or_g_correction_status: String,
     /// Whether CCIT cone membership has been normalized to a twisted J-function.
     pub twisted_j_normalization_status: String,
     /// Whether the split-bundle mirror map needed for the twisted J-function is known.
@@ -458,6 +467,27 @@ pub fn weighted_p2_rank_three_twisted_ifunction_source_certificate_requirements(
             .split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_non_equivariant_limit_status
             .contains("requires")
     });
+    let j_scale_min_checked_hypergeometric_inverse_z_power = profiles
+        .iter()
+        .map(checked_hypergeometric_inverse_z_power_bound)
+        .min();
+    let j_scale_min_checked_after_outer_z_inverse_power =
+        j_scale_min_checked_hypergeometric_inverse_z_power
+            .map(|inverse_z_power| inverse_z_power - 1);
+    let j_scale_positive_degree_f_or_g_correction_status =
+        match j_scale_min_checked_hypergeometric_inverse_z_power {
+            None => {
+                "weighted_p2_rank_three_ccit_j_scale_no_positive_degree_terms_checked".to_string()
+            }
+            Some(inverse_z_power) if inverse_z_power >= 2 => {
+                "weighted_p2_rank_three_ccit_j_scale_checked_positive_degrees_cannot_modify_F_or_G_by_zero_order_bound"
+                    .to_string()
+            }
+            Some(_) => {
+                "weighted_p2_rank_three_ccit_j_scale_checked_positive_degrees_may_modify_F_or_G_requires_mirror_map"
+                    .to_string()
+            }
+        };
     let primary_readout_status = if checked_integer_sector_count == 0 {
         "weighted_p2_rank_three_source_certificate_primary_readout_not_checked".to_string()
     } else if all_integer_primary_readouts_zero {
@@ -509,15 +539,35 @@ pub fn weighted_p2_rank_three_twisted_ifunction_source_certificate_requirements(
         required_observable_status: required_observable_status.to_string(),
         primary_readout_status,
         descendant_readout_status,
-        twisted_j_normalization_status:
+        j_scale_min_checked_hypergeometric_inverse_z_power,
+        j_scale_min_checked_after_outer_z_inverse_power,
+        j_scale_positive_degree_f_or_g_correction_status:
+            j_scale_positive_degree_f_or_g_correction_status.clone(),
+        twisted_j_normalization_status: if j_scale_positive_degree_f_or_g_correction_status
+            .contains("cannot_modify_F_or_G")
+        {
+            "weighted_p2_rank_three_ccit_j_function_normalization_trivial_to_checked_positive_degrees"
+        } else {
             "weighted_p2_rank_three_ccit_j_function_normalization_blocked_missing_split_bundle_Fz_plus_G_mirror_map"
-                .to_string(),
-        mirror_map_inversion_status:
+        }
+        .to_string(),
+        mirror_map_inversion_status: if j_scale_positive_degree_f_or_g_correction_status
+            .contains("cannot_modify_F_or_G")
+        {
+            "weighted_p2_rank_three_ccit_mirror_map_has_no_checked_positive_degree_F_or_G_correction"
+        } else {
             "weighted_p2_rank_three_ccit_mirror_map_inversion_blocked_primary_signals_zero_and_descendant_pairing_missing"
-                .to_string(),
-        z_minus_one_extraction_status:
-            "weighted_p2_rank_three_ccit_z_minus_one_potential_extraction_blocked_missing_twisted_j_and_dual_pairing"
-                .to_string(),
+        }
+        .to_string(),
+        z_minus_one_extraction_status: match j_scale_min_checked_hypergeometric_inverse_z_power {
+            Some(inverse_z_power) if inverse_z_power > 2 => {
+                "weighted_p2_rank_three_ccit_checked_positive_degrees_have_no_z_minus_one_primary_terms_first_nonzero_is_descendant_layer"
+            }
+            _ => {
+                "weighted_p2_rank_three_ccit_z_minus_one_potential_extraction_blocked_missing_twisted_j_and_dual_pairing"
+            }
+        }
+        .to_string(),
         twisted_dual_pairing_status:
             "weighted_p2_rank_three_ccit_twisted_dual_pairing_blocked_missing_stack_normalized_inverse_euler_pairing"
                 .to_string(),
@@ -756,6 +806,14 @@ pub fn weighted_p2_rank_three_twisted_ifunction_degree_profiles(
             }
         })
         .collect()
+}
+
+fn checked_hypergeometric_inverse_z_power_bound(
+    profile: &WeightedP2RankThreeTwistedIfunctionDegreeProfile,
+) -> i64 {
+    let denominator_z_power = profile.base_denominator_factor_counts.iter().sum::<i64>();
+    let numerator_factor_count = profile.bundle_numerator_factor_counts.iter().sum::<i64>();
+    denominator_z_power - (numerator_factor_count - profile.numerator_zero_factor_order)
 }
 
 /// Source-basis facts for the weighted-`P2` rank-three split bundle.
@@ -2732,16 +2790,28 @@ mod tests {
             "weighted_p2_rank_three_source_certificate_first_nonzero_terms_are_descendant_or_equivariant_requires_big_j_pairing"
         );
         assert_eq!(
+            certificate.j_scale_min_checked_hypergeometric_inverse_z_power,
+            Some(3)
+        );
+        assert_eq!(
+            certificate.j_scale_min_checked_after_outer_z_inverse_power,
+            Some(2)
+        );
+        assert_eq!(
+            certificate.j_scale_positive_degree_f_or_g_correction_status,
+            "weighted_p2_rank_three_ccit_j_scale_checked_positive_degrees_cannot_modify_F_or_G_by_zero_order_bound"
+        );
+        assert_eq!(
             certificate.twisted_j_normalization_status,
-            "weighted_p2_rank_three_ccit_j_function_normalization_blocked_missing_split_bundle_Fz_plus_G_mirror_map"
+            "weighted_p2_rank_three_ccit_j_function_normalization_trivial_to_checked_positive_degrees"
         );
         assert_eq!(
             certificate.mirror_map_inversion_status,
-            "weighted_p2_rank_three_ccit_mirror_map_inversion_blocked_primary_signals_zero_and_descendant_pairing_missing"
+            "weighted_p2_rank_three_ccit_mirror_map_has_no_checked_positive_degree_F_or_G_correction"
         );
         assert_eq!(
             certificate.z_minus_one_extraction_status,
-            "weighted_p2_rank_three_ccit_z_minus_one_potential_extraction_blocked_missing_twisted_j_and_dual_pairing"
+            "weighted_p2_rank_three_ccit_checked_positive_degrees_have_no_z_minus_one_primary_terms_first_nonzero_is_descendant_layer"
         );
         assert_eq!(
             certificate.twisted_dual_pairing_status,

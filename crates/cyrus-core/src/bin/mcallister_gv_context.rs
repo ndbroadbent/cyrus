@@ -531,6 +531,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_pairing_or_residue_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_j_scale_positive_degree_f_or_g_correction_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_twisted_j_normalization_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_mirror_map_inversion_status_counts:
@@ -18288,6 +18290,17 @@ fn build_report(
                 }),
             |certificate| certificate.pairing_or_residue_status.as_str(),
         );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_j_scale_positive_degree_f_or_g_correction_status_counts =
+        weighted_p2_rank_three_source_certificate_status_counts(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| {
+                    summary
+                        .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_source_certificate_requirements
+                        .as_ref()
+                }),
+            |certificate| certificate.j_scale_positive_degree_f_or_g_correction_status.as_str(),
+        );
     let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_twisted_j_normalization_status_counts =
         weighted_p2_rank_three_source_certificate_status_counts(
             local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
@@ -20035,6 +20048,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_promotion_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_primary_readout_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_pairing_or_residue_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_j_scale_positive_degree_f_or_g_correction_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_twisted_j_normalization_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_mirror_map_inversion_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_source_certificate_z_minus_one_extraction_status_counts,
@@ -41398,15 +41412,15 @@ mod tests {
         );
         assert_eq!(
             source_certificate.twisted_j_normalization_status,
-            "weighted_p2_rank_three_ccit_j_function_normalization_blocked_missing_split_bundle_Fz_plus_G_mirror_map"
+            "weighted_p2_rank_three_ccit_j_function_normalization_trivial_to_checked_positive_degrees"
         );
         assert_eq!(
             source_certificate.mirror_map_inversion_status,
-            "weighted_p2_rank_three_ccit_mirror_map_inversion_blocked_primary_signals_zero_and_descendant_pairing_missing"
+            "weighted_p2_rank_three_ccit_mirror_map_has_no_checked_positive_degree_F_or_G_correction"
         );
         assert_eq!(
             source_certificate.z_minus_one_extraction_status,
-            "weighted_p2_rank_three_ccit_z_minus_one_potential_extraction_blocked_missing_twisted_j_and_dual_pairing"
+            "weighted_p2_rank_three_ccit_checked_positive_degrees_have_no_z_minus_one_primary_terms_first_nonzero_is_descendant_layer"
         );
         assert_eq!(source_certificate.checked_integer_sector_count, 2);
         assert_eq!(source_certificate.checked_half_sector_count, 2);

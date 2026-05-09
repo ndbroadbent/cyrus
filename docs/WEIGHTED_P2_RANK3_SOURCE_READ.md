@@ -258,6 +258,19 @@ separate blockers: split-bundle `J` normalization, mirror-map inversion,
 descendant/equivariant coefficient from being mistaken for a numerical CY3 GV
 row.
 
+The split-bundle `J`-normalization gate is now computed rather than assumed.
+For each checked degree Cyrus bounds the leading hypergeometric inverse
+`z`-power by
+`sum(base denominator factors) - (sum(bundle numerator factors) - zero factors)`.
+For the selected `[1,1,2]` bundle this minimum is `3`, hence after the outer
+leading `z` every positive-degree term starts at inverse power at least `2`.
+The checked positive-degree terms therefore cannot modify the CCIT `F z + G`
+normalization or mirror map. The remaining obstruction is sharper: the
+positive-degree `z^-1` primary layer is absent, while the first nonzero
+positive-degree terms are descendant/equivariant and still require the
+twisted pairing/big-`J`/qN history before any numerical contribution can be
+used.
+
 The z-order convention is checked against the adjacent canonical
 `K_P(1,1,2)` first sector by using bundle degree `[4]` in the same
 hypergeometric readout. There the primary `z^-2` coefficient is nonzero and
