@@ -246,7 +246,11 @@ and matrix-basis pipeline are no longer open.
    transform production Kähler coordinates back to the computed CYTools index
    basis before selecting curves or exporting traces, so matrix-basis diagnostic
    cleanup remains, but the reusable KKLT production solve is no longer
-   vector-only.
+   vector-only. The corrected-chamber GV context export now at least
+   self-declares this boundary through diagnostic coordinate-basis metadata:
+   basis rows, `q` matrices, Mori rays, κ tensors, and Kähler heights in that
+   export are in the computed CYTools index divisor basis after any production
+   basis transform, not in a matrix-native diagnostic basis.
 4. **Compact GV semigroup/face certification.** Missing corrected-chamber GV
    classes need a source-derived compact or certified face semigroup that can
    be handed to `cygv`, not an unproven local CKYZ substitute. Cyrus now has an

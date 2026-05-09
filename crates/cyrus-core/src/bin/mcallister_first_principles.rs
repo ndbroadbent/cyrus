@@ -779,6 +779,10 @@ struct ChamberGvDiagnostic {
     basis_mori_rays_for_missing_degree_bounded: Option<Vec<Vec<i64>>>,
     degree_bounded_mori_ray_context_for_missing: Option<Vec<DegreeBoundedMoriRayContextSample>>,
     covered_toric_gv_context_for_missing: Option<Vec<CoveredToricGvContextSample>>,
+    diagnostic_coordinate_basis_status: String,
+    diagnostic_divisor_basis_kind: String,
+    diagnostic_divisor_basis_indices: Vec<usize>,
+    diagnostic_kahler_coordinate_basis_status: String,
     gv_q_matrix_for_missing: Option<Vec<Vec<i64>>>,
     gv_curve_basis_matrix_for_missing: Option<Vec<Vec<String>>>,
     grading_for_missing: Option<Vec<i64>>,
@@ -902,6 +906,10 @@ struct CorrectedChamberGvContextExport<'a> {
     covered_toric_gv_context_for_missing: Option<&'a Vec<CoveredToricGvContextSample>>,
     degree_bounded_toric_gv_diagnostic_context_for_missing:
         Option<&'a Vec<ToricGvDiagnosticContextSample>>,
+    diagnostic_coordinate_basis_status: &'a str,
+    diagnostic_divisor_basis_kind: &'a str,
+    diagnostic_divisor_basis_indices: &'a Vec<usize>,
+    diagnostic_kahler_coordinate_basis_status: &'a str,
     corrected_chamber_face_triangulation_choice_summary: Option<&'a FaceTriangulationChoiceSummary>,
     induced_face_triangulation_chamber_certificate:
         Option<&'a InducedFaceTriangulationChamberCertificate>,
@@ -8684,6 +8692,12 @@ fn diagnose_chamber_gv_volume_correction(
         degree_bounded_mori_ray_context_for_missing,
         covered_toric_gv_context_for_missing,
         degree_bounded_toric_gv_diagnostic_context_for_missing,
+        diagnostic_coordinate_basis_status:
+            "computed_cytools_index_basis_for_corrected_chamber_diagnostics".to_string(),
+        diagnostic_divisor_basis_kind: "index divisor basis".to_string(),
+        diagnostic_divisor_basis_indices: intersection.basis.clone(),
+        diagnostic_kahler_coordinate_basis_status:
+            "computed_cytools_index_basis_after_optional_production_basis_transform".to_string(),
         secondary_cone_height_certificate,
         secondary_cone_2face_height_certificate,
         expanded_secondary_fan_height_certificate,
@@ -9573,6 +9587,10 @@ fn write_corrected_chamber_gv_context_export(
         degree_bounded_toric_gv_diagnostic_context_for_missing: diag
             .degree_bounded_toric_gv_diagnostic_context_for_missing
             .as_ref(),
+        diagnostic_coordinate_basis_status: &diag.diagnostic_coordinate_basis_status,
+        diagnostic_divisor_basis_kind: &diag.diagnostic_divisor_basis_kind,
+        diagnostic_divisor_basis_indices: &diag.diagnostic_divisor_basis_indices,
+        diagnostic_kahler_coordinate_basis_status: &diag.diagnostic_kahler_coordinate_basis_status,
         corrected_chamber_face_triangulation_choice_summary: diag
             .corrected_chamber_face_triangulation_choice_summary
             .as_ref(),
@@ -12919,6 +12937,12 @@ mod tests {
             basis_mori_rays_for_missing_degree_bounded: None,
             degree_bounded_mori_ray_context_for_missing: None,
             covered_toric_gv_context_for_missing: None,
+            diagnostic_coordinate_basis_status:
+                "computed_cytools_index_basis_for_corrected_chamber_diagnostics".to_string(),
+            diagnostic_divisor_basis_kind: "index divisor basis".to_string(),
+            diagnostic_divisor_basis_indices: vec![0],
+            diagnostic_kahler_coordinate_basis_status:
+                "computed_cytools_index_basis_after_optional_production_basis_transform".to_string(),
             gv_q_matrix_for_missing: None,
             gv_curve_basis_matrix_for_missing: None,
             grading_for_missing: None,
@@ -12941,6 +12965,27 @@ mod tests {
         let content = std::fs::read_to_string(&path).expect("read corrected chamber context");
         let value =
             serde_json::from_str::<serde_json::Value>(&content).expect("valid context JSON");
+        assert_eq!(
+            value["diagnostic_coordinate_basis_status"],
+            "computed_cytools_index_basis_for_corrected_chamber_diagnostics"
+        );
+        assert_eq!(
+            value["diagnostic_divisor_basis_kind"],
+            "index divisor basis"
+        );
+        assert_eq!(
+            value["diagnostic_divisor_basis_indices"]
+                .as_array()
+                .expect("diagnostic divisor basis indices should be exported")
+                .iter()
+                .map(|entry| entry.as_u64().expect("basis index should be integer"))
+                .collect::<Vec<_>>(),
+            vec![0]
+        );
+        assert_eq!(
+            value["diagnostic_kahler_coordinate_basis_status"],
+            "computed_cytools_index_basis_after_optional_production_basis_transform"
+        );
         let sample = value["uncovered_source_ray_toric_diagnostic_sample"]
             .as_array()
             .expect("source toric diagnostic sample should be exported");

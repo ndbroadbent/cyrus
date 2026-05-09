@@ -525,7 +525,11 @@ to make the remaining GV layer more first-principles:
    into the first-principles KKLT solve and branch search. The remaining basis
    work is to make corrected-chamber diagnostic exports matrix-native instead
    of transforming solved production Kähler coordinates back to the computed
-   CYTools index basis for existing curve-selection and trace code.
+   CYTools index basis for existing curve-selection and trace code. The
+   corrected-chamber GV context export now serializes explicit diagnostic
+   coordinate-basis metadata so downstream consumers can see that the exported
+   curve rows, `q` matrix, κ tensor, and Kähler heights are in the computed
+   CYTools index basis after any optional production-basis transform.
    The compact 4-214-647 dual-polytope handoff has been compared directly
    against CYTools latest at the cygv boundary: grading vector, no-origin
    q-matrix, and in-basis intersection numbers match exactly, and the unique
