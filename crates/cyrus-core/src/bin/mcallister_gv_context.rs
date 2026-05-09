@@ -2596,6 +2596,11 @@ struct ProvidedGeneratorUncertifiedGeneratorSample {
     weighted_p2_twisted_ifunction_missing_inputs: Vec<String>,
     weighted_p2_source_certificate_promotion_status: Option<String>,
     weighted_p2_source_certificate_required_inputs: Vec<String>,
+    zero_coefficient_enlargement_status: String,
+    zero_coefficient_enlargement_candidate_count: Option<usize>,
+    zero_coefficient_enlargement_reflexivity_status_counts: BTreeMap<String, usize>,
+    zero_coefficient_enlargement_compact_omission_relation_status_counts: BTreeMap<String, usize>,
+    zero_coefficient_enlargement_zero_degree_nef_candidate_count_counts: BTreeMap<String, usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -30997,6 +31002,34 @@ fn provided_generator_uncertified_generator_sample(
             let weighted_source_certificate = weighted_rank_three_source_model
                 .twisted_vector_bundle_ifunction_source_certificate_requirements
                 .as_ref();
+            let mut zero_enlargement_reflexivity_counts = BTreeMap::new();
+            let mut zero_enlargement_compact_omission_counts = BTreeMap::new();
+            let mut zero_enlargement_zero_degree_counts = BTreeMap::new();
+            for candidate in &context
+                .local_toric_diagnostic
+                .local_toric_zero_coefficient_enlargement_sample
+            {
+                *zero_enlargement_reflexivity_counts
+                    .entry(
+                        candidate
+                            .support_polytope_reflexivity_precondition_status
+                            .clone(),
+                    )
+                    .or_insert(0usize) += 1;
+                let compact_omission_status = candidate
+                    .compact_threefold_omission_relation_status
+                    .clone()
+                    .unwrap_or_else(|| "not_available".to_string());
+                *zero_enlargement_compact_omission_counts
+                    .entry(compact_omission_status)
+                    .or_insert(0usize) += 1;
+                let zero_degree_count = candidate
+                    .zero_degree_nef_partition_candidate_count
+                    .map_or_else(|| "not_available".to_string(), |count| count.to_string());
+                *zero_enlargement_zero_degree_counts
+                    .entry(zero_degree_count)
+                    .or_insert(0usize) += 1;
+            }
             ProvidedGeneratorUncertifiedGeneratorSample {
                 generator_index: context.generator_index,
                 chamber_coordinate: context.chamber_coordinate.clone(),
@@ -31041,6 +31074,19 @@ fn provided_generator_uncertified_generator_sample(
                 } else {
                     Vec::new()
                 },
+                zero_coefficient_enlargement_status: context
+                    .local_toric_diagnostic
+                    .local_toric_zero_coefficient_enlargement_status
+                    .clone(),
+                zero_coefficient_enlargement_candidate_count: context
+                    .local_toric_diagnostic
+                    .local_toric_zero_coefficient_enlargement_candidate_count,
+                zero_coefficient_enlargement_reflexivity_status_counts:
+                    zero_enlargement_reflexivity_counts,
+                zero_coefficient_enlargement_compact_omission_relation_status_counts:
+                    zero_enlargement_compact_omission_counts,
+                zero_coefficient_enlargement_zero_degree_nef_candidate_count_counts:
+                    zero_enlargement_zero_degree_counts,
             }
         })
         .collect()
@@ -40211,6 +40257,90 @@ mod tests {
             sample[0]
                 .weighted_p2_source_certificate_required_inputs
                 .contains(&"cy3_projection_or_codimension_two_local_model".to_string())
+        );
+    }
+
+    #[test]
+    fn uncertified_generator_sample_exposes_zero_enlargement_blocker() {
+        let point_relation_nonzero =
+            vec![(0, -1), (55, -2), (208, 1), (211, 1), (212, 2), (214, -1)];
+        let point_samples = vec![
+            relation_point_sample(0, -1, &[0, 0, 0, 0], None),
+            relation_point_sample(46, 0, &[1, 2, 0, 2], None),
+            relation_point_sample(55, -2, &[3, 4, 1, 5], None),
+            relation_point_sample(195, 0, &[1, 1, 0, 1], None),
+            relation_point_sample(208, 1, &[2, 2, 1, 2], None),
+            relation_point_sample(211, 1, &[2, 3, 1, 3], None),
+            relation_point_sample(212, 2, &[2, 3, 1, 4], None),
+            relation_point_sample(214, -1, &[2, 3, 2, 3], None),
+        ];
+        let local_toric =
+            chamber_generator_local_toric_diagnostic(&point_relation_nonzero, &point_samples);
+        let generator = LocalCygvChamberSemigroupGeneratorContext {
+            generator_index: 0,
+            chamber_coordinate: vec![1],
+            point_relation_status: "chamber_generator_point_relation_reconstructed".to_string(),
+            point_relation_nonzero: Some(point_relation_nonzero),
+            global_basis_status: "chamber_generator_global_basis_projection_integral".to_string(),
+            basis_nonzero: Some(vec![(0, 1)]),
+            degree: Some(2),
+            global_secondary_height_status: "global_basis_secondary_height_positive".to_string(),
+            global_secondary_height_pairing: Some("1".to_string()),
+            known_qn_history_status: "unknown_not_toric_covered".to_string(),
+            toric_gv: None,
+            source_derived_gv: None,
+            source_class_status: None,
+            source_ray_ambient_nonzero: None,
+            local_toric_diagnostic: local_toric,
+            circuit_global_height_choice_summary: circuit_global_height_choice_summary_not_run(
+                "test",
+            ),
+            degree_bounded_support_overlap_diagnostic:
+                chamber_generator_support_overlap_diagnostic_not_run("test"),
+            lower_seed_sum_decomposition: None,
+            bounded_lower_seed_decomposition: None,
+            lower_seed_decomposition_error: None,
+            error: None,
+        };
+
+        let sample = provided_generator_uncertified_generator_sample(&[generator]);
+
+        assert_eq!(sample.len(), 1);
+        assert_eq!(
+            sample[0].zero_coefficient_enlargement_status,
+            "zero_coefficient_enlargements_sampled_compact_omissions_delete_target_relation_terms"
+        );
+        assert_eq!(
+            sample[0].zero_coefficient_enlargement_candidate_count,
+            Some(3)
+        );
+        assert_eq!(
+            sample[0]
+                .zero_coefficient_enlargement_reflexivity_status_counts
+                .get("support_polytope_not_reflexive_origin_is_hull_vertex")
+                .copied(),
+            Some(3)
+        );
+        assert_eq!(
+            sample[0]
+                .zero_coefficient_enlargement_compact_omission_relation_status_counts
+                .get("compact_threefold_omissions_delete_target_relation_terms")
+                .copied(),
+            Some(2)
+        );
+        assert_eq!(
+            sample[0]
+                .zero_coefficient_enlargement_compact_omission_relation_status_counts
+                .get("no_compact_threefold_omission_candidates")
+                .copied(),
+            Some(1)
+        );
+        assert_eq!(
+            sample[0]
+                .zero_coefficient_enlargement_zero_degree_nef_candidate_count_counts
+                .get("0")
+                .copied(),
+            Some(3)
         );
     }
 
