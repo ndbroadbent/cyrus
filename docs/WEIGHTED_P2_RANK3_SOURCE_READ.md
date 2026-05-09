@@ -399,3 +399,11 @@ certificates skipped. Deeper complete-intersection source certificates,
 support-overlap diagnostics, and lower-seed diamond qN traces remain opt-in via
 their existing report flags, because they are certification paths, not
 prerequisites for this z-readout check.
+
+Cyrus also now records the scalar mirror-map obstruction explicitly. For both
+target-filtered reports, the half-degree sectors are marked as twisted-sector
+non-applicable, while the first two integer sectors report
+`weighted_p2_rank_three_split_scalar_mirror_map_primary_zero_preserved_by_scalar_reparametrization_to_this_degree`.
+This only rules out scalar degree reparametrization as the missing promotion
+step; it does not rule out a genuinely sourced big-`J`, pairing, residue, or
+qN-history reconstruction.

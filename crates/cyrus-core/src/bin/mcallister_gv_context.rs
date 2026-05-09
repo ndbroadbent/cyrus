@@ -1698,6 +1698,7 @@ struct WeightedP2RankThreeTwistedIfunctionDegreeProfile {
     split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_polynomial:
         Option<Vec<String>>,
     split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status: String,
+    split_equivariant_full_hypergeometric_dual_basis_p2_scalar_mirror_map_primary_status: String,
     candidate_insertion_visibility_status: String,
 }
 
@@ -27229,6 +27230,13 @@ fn weighted_p2_rank_three_twisted_ifunction_degree_profiles(
                 degree_twice,
                 required_insertion_complex_codimension,
             );
+            let split_equivariant_full_hypergeometric_dual_basis_p2_scalar_mirror_map_primary_status =
+                split_equivariant_full_hypergeometric_dual_basis_p2_scalar_mirror_map_primary_status(
+                    base_weights,
+                    bundle_degrees,
+                    degree_twice,
+                    required_insertion_complex_codimension,
+                );
             let candidate_insertion_visibility_status = match (
                 degree_twice % 2 == 0,
                 required_insertion_complex_codimension,
@@ -27291,6 +27299,7 @@ fn weighted_p2_rank_three_twisted_ifunction_degree_profiles(
                 split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_inverse_power,
                 split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_polynomial,
                 split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status,
+                split_equivariant_full_hypergeometric_dual_basis_p2_scalar_mirror_map_primary_status,
                 candidate_insertion_visibility_status,
             }
         })
@@ -27814,6 +27823,65 @@ fn split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status(
         first_nonzero.map(|(_, polynomial)| polynomial),
         status.to_string(),
     )
+}
+
+fn split_equivariant_full_hypergeometric_dual_basis_p2_scalar_mirror_map_primary_status(
+    base_weights: &[i64],
+    bundle_degrees: &[i64],
+    degree_twice: i64,
+    required_insertion_complex_codimension: Option<i64>,
+) -> String {
+    if degree_twice % 2 != 0 {
+        return "weighted_p2_rank_three_split_scalar_mirror_map_primary_not_applicable_twisted_sector"
+            .to_string();
+    }
+    let Some(required_codimension) = required_insertion_complex_codimension else {
+        return "weighted_p2_rank_three_split_scalar_mirror_map_primary_codim_not_applicable"
+            .to_string();
+    };
+    if required_codimension != 2 {
+        return "weighted_p2_rank_three_split_scalar_mirror_map_primary_requires_codim2_observable"
+            .to_string();
+    }
+    let Some(readout_by_z) =
+        split_equivariant_full_hypergeometric_dual_basis_p2_z_lambda_polynomials(
+            base_weights,
+            bundle_degrees,
+            degree_twice,
+        )
+    else {
+        return "weighted_p2_rank_three_split_scalar_mirror_map_primary_blocked_missing_z_readout"
+            .to_string();
+    };
+    let current_primary = readout_by_z
+        .get(&2)
+        .cloned()
+        .unwrap_or_else(|| vec!["0".to_string()]);
+    if lambda_polynomial_has_nonzero_coefficient(&current_primary) {
+        return "weighted_p2_rank_three_split_scalar_mirror_map_primary_already_nonzero_before_reparametrization"
+            .to_string();
+    }
+    for prior_degree_twice in (2..degree_twice).step_by(2) {
+        let Some(prior_readout_by_z) =
+            split_equivariant_full_hypergeometric_dual_basis_p2_z_lambda_polynomials(
+                base_weights,
+                bundle_degrees,
+                prior_degree_twice,
+            )
+        else {
+            return "weighted_p2_rank_three_split_scalar_mirror_map_primary_blocked_missing_lower_degree_z_readout"
+                .to_string();
+        };
+        let prior_primary = prior_readout_by_z
+            .get(&2)
+            .cloned()
+            .unwrap_or_else(|| vec!["0".to_string()]);
+        if lambda_polynomial_has_nonzero_coefficient(&prior_primary) {
+            return "weighted_p2_rank_three_split_scalar_mirror_map_primary_zero_but_lower_primary_terms_can_mix_by_degree_reparametrization"
+                .to_string();
+        }
+    }
+    "weighted_p2_rank_three_split_scalar_mirror_map_primary_zero_preserved_by_scalar_reparametrization_to_this_degree".to_string()
 }
 
 fn split_equivariant_full_hypergeometric_dual_basis_p2_z_lambda_polynomials(
@@ -40787,6 +40855,9 @@ mod tests {
                     split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status:
                         "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_full_hypergeometric_z_readout"
                             .to_string(),
+                    split_equivariant_full_hypergeometric_dual_basis_p2_scalar_mirror_map_primary_status:
+                        "weighted_p2_rank_three_split_scalar_mirror_map_primary_not_applicable_twisted_sector"
+                            .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_half_degree_requires_orbifold_sector_pairing"
                             .to_string(),
@@ -40904,6 +40975,9 @@ mod tests {
                     split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status:
                         "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_primary_z2_zero_first_nonzero_descendant_requires_big_j_or_pairing"
                             .to_string(),
+                    split_equivariant_full_hypergeometric_dual_basis_p2_scalar_mirror_map_primary_status:
+                        "weighted_p2_rank_three_split_scalar_mirror_map_primary_zero_preserved_by_scalar_reparametrization_to_this_degree"
+                            .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_untwisted_zero_order_exceeds_required_insertion_codim_requires_equivariant_normalization"
                             .to_string(),
@@ -40958,6 +41032,9 @@ mod tests {
                     split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_polynomial: None,
                     split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status:
                         "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_full_hypergeometric_z_readout"
+                            .to_string(),
+                    split_equivariant_full_hypergeometric_dual_basis_p2_scalar_mirror_map_primary_status:
+                        "weighted_p2_rank_three_split_scalar_mirror_map_primary_not_applicable_twisted_sector"
                             .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_half_degree_requires_orbifold_sector_pairing"
@@ -41103,6 +41180,9 @@ mod tests {
                     ]),
                     split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status:
                         "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_primary_z2_zero_first_nonzero_descendant_requires_big_j_or_pairing"
+                            .to_string(),
+                    split_equivariant_full_hypergeometric_dual_basis_p2_scalar_mirror_map_primary_status:
+                        "weighted_p2_rank_three_split_scalar_mirror_map_primary_zero_preserved_by_scalar_reparametrization_to_this_degree"
                             .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_untwisted_zero_order_exceeds_required_insertion_codim_requires_equivariant_normalization"
@@ -41438,6 +41518,28 @@ mod tests {
     }
 
     #[test]
+    fn split_bundle_scalar_mirror_map_cannot_promote_descendant_to_primary() {
+        assert_eq!(
+            split_equivariant_full_hypergeometric_dual_basis_p2_scalar_mirror_map_primary_status(
+                &[1, 1, 2],
+                &[1, 1, 2],
+                2,
+                Some(2),
+            ),
+            "weighted_p2_rank_three_split_scalar_mirror_map_primary_zero_preserved_by_scalar_reparametrization_to_this_degree"
+        );
+        assert_eq!(
+            split_equivariant_full_hypergeometric_dual_basis_p2_scalar_mirror_map_primary_status(
+                &[1, 1, 2],
+                &[1, 1, 2],
+                4,
+                Some(2),
+            ),
+            "weighted_p2_rank_three_split_scalar_mirror_map_primary_zero_preserved_by_scalar_reparametrization_to_this_degree"
+        );
+    }
+
+    #[test]
     fn canonical_weighted_p2_hypergeometric_has_primary_p2_signal() {
         let (primary, _, _, status) =
             split_equivariant_full_hypergeometric_dual_basis_p2_z_readout_status(
@@ -41451,6 +41553,15 @@ mod tests {
         assert_eq!(
             status,
             "weighted_p2_rank_three_split_full_hypergeometric_dual_basis_p2_primary_z2_nonzero_requires_pairing_or_residue"
+        );
+        assert_eq!(
+            split_equivariant_full_hypergeometric_dual_basis_p2_scalar_mirror_map_primary_status(
+                &[1, 1, 2],
+                &[4],
+                2,
+                Some(2),
+            ),
+            "weighted_p2_rank_three_split_scalar_mirror_map_primary_already_nonzero_before_reparametrization"
         );
     }
 
