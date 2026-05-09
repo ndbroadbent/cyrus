@@ -164,10 +164,16 @@ the coefficient of `phi^2`, not the ordinary-basis `p^2` component. In the
 candidate `p^2` insertion from the ordinary `fun_0` coefficient divided by
 `2*lambda`. For the first integer split-bundle sectors this gives positive
 lambda-order polynomials, e.g. `d=1` gives `[0,0,-1/2,1/2]` and `d=2` gives
-`[0,0,-3,23/2,-17,12,-4,1/2]`. This rules out the raw `p^2` coefficient as
-the missing extraction, but still does not promote a GV value: denominator
-terms, mirror-map normalization, and equivariant residue or twisted big-J
-pairing data remain required.
+`[0,0,-3,23/2,-17,12,-4,1/2]`.
+
+The diagnostic also divides by the weighted-base denominator constants from
+the same integer-sector hypergeometric factor. For `d=1` and `d=2`, those
+constants are `2` and `96`, giving pre-mirror readouts
+`[0,0,-1/4,1/4]` and
+`[0,0,-1/32,23/192,-17/96,1/8,-1/24,1/192]`. This rules out the raw
+`p^2` coefficient as the missing extraction, but still does not promote a GV
+value: mirror-map normalization, full denominator/pairing data, and
+equivariant residue or twisted big-J pairing data remain required.
 
 A direct CYTools/PALP probe of the same six support coordinates is also
 negative. With experimental CYTools features enabled, `Polytope(pts)` reports
