@@ -1653,6 +1653,8 @@ struct WeightedP2RankThreeTwistedIfunctionDegreeProfile {
     split_vs_adjacent_canonical_factor_status: String,
     split_non_equivariant_candidate_insertion_coefficient: Option<String>,
     split_non_equivariant_candidate_insertion_coefficient_status: String,
+    split_non_equivariant_bundle_numerator_truncated_coefficients: Option<Vec<String>>,
+    split_non_equivariant_bundle_numerator_truncation_status: String,
     candidate_insertion_visibility_status: String,
 }
 
@@ -26840,6 +26842,14 @@ fn weighted_p2_rank_three_twisted_ifunction_degree_profiles(
                 numerator_zero_factor_order,
                 required_insertion_complex_codimension,
             );
+            let (
+                split_non_equivariant_bundle_numerator_truncated_coefficients,
+                split_non_equivariant_bundle_numerator_truncation_status,
+            ) = split_non_equivariant_bundle_numerator_truncation_status(
+                bundle_degrees,
+                degree_twice,
+                required_insertion_complex_codimension,
+            );
             let candidate_insertion_visibility_status = match (
                 degree_twice % 2 == 0,
                 required_insertion_complex_codimension,
@@ -26880,6 +26890,8 @@ fn weighted_p2_rank_three_twisted_ifunction_degree_profiles(
                 split_vs_adjacent_canonical_factor_status,
                 split_non_equivariant_candidate_insertion_coefficient,
                 split_non_equivariant_candidate_insertion_coefficient_status,
+                split_non_equivariant_bundle_numerator_truncated_coefficients,
+                split_non_equivariant_bundle_numerator_truncation_status,
                 candidate_insertion_visibility_status,
             }
         })
@@ -26922,6 +26934,97 @@ fn split_non_equivariant_candidate_insertion_coefficient_status(
                 .to_string(),
         ),
     }
+}
+
+fn split_non_equivariant_bundle_numerator_truncation_status(
+    bundle_degrees: &[i64],
+    degree_twice: i64,
+    required_insertion_complex_codimension: Option<i64>,
+) -> (Option<Vec<String>>, String) {
+    if degree_twice % 2 != 0 {
+        return (
+            None,
+            "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_bundle_numerator"
+                .to_string(),
+        );
+    }
+    let Some(required_codimension) = required_insertion_complex_codimension else {
+        return (
+            None,
+            "weighted_p2_rank_three_split_non_equivariant_bundle_numerator_codim_not_applicable"
+                .to_string(),
+        );
+    };
+    if required_codimension < 0 {
+        return (
+            None,
+            "weighted_p2_rank_three_split_non_equivariant_bundle_numerator_invalid_negative_codim"
+                .to_string(),
+        );
+    }
+    let coefficients = non_equivariant_split_bundle_numerator_truncated_coefficients(
+        bundle_degrees,
+        degree_twice,
+        required_codimension as usize,
+    );
+    let status = if coefficients[required_codimension as usize] == "0" {
+        "weighted_p2_rank_three_split_non_equivariant_bundle_numerator_candidate_codim_coefficient_zero"
+    } else {
+        "weighted_p2_rank_three_split_non_equivariant_bundle_numerator_candidate_codim_coefficient_nonzero_requires_denominator_and_mirror_map"
+    };
+    (Some(coefficients), status.to_string())
+}
+
+fn non_equivariant_split_bundle_numerator_truncated_coefficients(
+    bundle_degrees: &[i64],
+    degree_twice: i64,
+    max_power: usize,
+) -> Vec<String> {
+    assert_eq!(
+        degree_twice % 2,
+        0,
+        "non-equivariant untwisted sector has integer degree"
+    );
+    let degree = degree_twice / 2;
+    let mut coefficients = vec![MalachiteRational::from(0); max_power + 1];
+    coefficients[0] = MalachiteRational::from(1);
+    for &line_degree in bundle_degrees {
+        let factor_count = line_degree
+            .checked_mul(degree)
+            .expect("weighted P2 split bundle factor count fits i64");
+        for factor_offset in (-factor_count + 1)..=0 {
+            multiply_truncated_linear_factor(
+                &mut coefficients,
+                factor_offset,
+                -line_degree,
+                max_power,
+            );
+        }
+    }
+    coefficients
+        .into_iter()
+        .map(|coefficient| coefficient.to_string())
+        .collect()
+}
+
+fn multiply_truncated_linear_factor(
+    coefficients: &mut Vec<MalachiteRational>,
+    constant: i64,
+    linear: i64,
+    max_power: usize,
+) {
+    let mut next = vec![MalachiteRational::from(0); max_power + 1];
+    for power in 0..=max_power {
+        let coefficient = coefficients[power].clone();
+        if coefficient == MalachiteRational::from(0) {
+            continue;
+        }
+        next[power] += coefficient.clone() * MalachiteRational::from(Integer::from(constant));
+        if power < max_power {
+            next[power + 1] += coefficient * MalachiteRational::from(Integer::from(linear));
+        }
+    }
+    *coefficients = next;
 }
 
 fn ceil_positive_half_product(factor: i64, degree_twice: i64) -> i64 {
@@ -39452,6 +39555,10 @@ mod tests {
                     split_non_equivariant_candidate_insertion_coefficient_status:
                         "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_p2_coefficient_readout"
                             .to_string(),
+                    split_non_equivariant_bundle_numerator_truncated_coefficients: None,
+                    split_non_equivariant_bundle_numerator_truncation_status:
+                        "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_bundle_numerator"
+                            .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_half_degree_requires_orbifold_sector_pairing"
                             .to_string(),
@@ -39472,6 +39579,14 @@ mod tests {
                     split_non_equivariant_candidate_insertion_coefficient: Some("0".to_string()),
                     split_non_equivariant_candidate_insertion_coefficient_status:
                         "weighted_p2_rank_three_split_untwisted_non_equivariant_p2_coefficient_zero_before_mirror_map_due_to_excess_zero_order"
+                            .to_string(),
+                    split_non_equivariant_bundle_numerator_truncated_coefficients: Some(vec![
+                        "0".to_string(),
+                        "0".to_string(),
+                        "0".to_string()
+                    ]),
+                    split_non_equivariant_bundle_numerator_truncation_status:
+                        "weighted_p2_rank_three_split_non_equivariant_bundle_numerator_candidate_codim_coefficient_zero"
                             .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_untwisted_zero_order_exceeds_required_insertion_codim_requires_equivariant_normalization"
@@ -39494,6 +39609,10 @@ mod tests {
                     split_non_equivariant_candidate_insertion_coefficient_status:
                         "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_p2_coefficient_readout"
                             .to_string(),
+                    split_non_equivariant_bundle_numerator_truncated_coefficients: None,
+                    split_non_equivariant_bundle_numerator_truncation_status:
+                        "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_bundle_numerator"
+                            .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_half_degree_requires_orbifold_sector_pairing"
                             .to_string(),
@@ -39514,6 +39633,14 @@ mod tests {
                     split_non_equivariant_candidate_insertion_coefficient: Some("0".to_string()),
                     split_non_equivariant_candidate_insertion_coefficient_status:
                         "weighted_p2_rank_three_split_untwisted_non_equivariant_p2_coefficient_zero_before_mirror_map_due_to_excess_zero_order"
+                            .to_string(),
+                    split_non_equivariant_bundle_numerator_truncated_coefficients: Some(vec![
+                        "0".to_string(),
+                        "0".to_string(),
+                        "0".to_string()
+                    ]),
+                    split_non_equivariant_bundle_numerator_truncation_status:
+                        "weighted_p2_rank_three_split_non_equivariant_bundle_numerator_candidate_codim_coefficient_zero"
                             .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_untwisted_zero_order_exceeds_required_insertion_codim_requires_equivariant_normalization"
