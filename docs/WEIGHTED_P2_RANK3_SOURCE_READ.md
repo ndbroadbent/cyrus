@@ -161,7 +161,10 @@ rather than being hard-coded only in `mcallister_gv_context`. The core readout
 pins the `K_P(1,1,2)` Chen-Ruan basis, the class
 `2*lambda*fun_0-8*p`, the `2*lambda` normalization divisor, the fractional
 `H^2 = 1/2` stack-pairing warning, and the split-bundle promotion blocker. It
-is still source metadata, not a numerical GV promotion rule.
+is still source metadata, not a numerical GV promotion rule. The context report
+now also exports
+`local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_stack_pairing_normalization_status_counts`
+so this blocker is visible at the aggregate level.
 
 Cyrus now traces that dual-basis readout at the numerator level. Since CCIT's
 small `J`-function is written as

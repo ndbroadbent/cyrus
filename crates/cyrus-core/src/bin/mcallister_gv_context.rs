@@ -543,6 +543,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_p2_readout_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_stack_pairing_normalization_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_adjacent_canonical_mirror_map_b_table_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_adjacent_canonical_mirror_map_c_table_status_counts:
@@ -1749,11 +1751,14 @@ struct WeightedP2RankThreeTwistedIfunctionChenRuanSourceMap {
     source_scope_status: String,
     inertia_component_classes: Vec<String>,
     untwisted_hyperplane_class: String,
+    base_hyperplane_square: String,
     untwisted_codim2_candidate_class: String,
     twisted_half_sector_candidate_class: String,
     source_dual_basis_p2_class: String,
+    source_dual_basis_p2_normalization_divisor: String,
     source_dual_basis_p2_readout_status: String,
     source_dual_basis_half_sector_class: String,
+    stack_pairing_normalization_status: String,
     adjacent_canonical_crepant_resolution_status: String,
     adjacent_canonical_crepant_resolution_p2_image: String,
     adjacent_canonical_crepant_resolution_half_sector_image: String,
@@ -18333,6 +18338,17 @@ fn build_report(
                 }),
             |source_map| source_map.source_dual_basis_p2_readout_status.as_str(),
         );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_stack_pairing_normalization_status_counts =
+        weighted_p2_rank_three_chen_ruan_source_map_status_counts(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| {
+                    summary
+                        .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_chen_ruan_source_map
+                        .as_ref()
+                }),
+            |source_map| source_map.stack_pairing_normalization_status.as_str(),
+        );
     let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_adjacent_canonical_mirror_map_b_table_status_counts =
         weighted_p2_rank_three_chen_ruan_source_map_status_counts(
             local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
@@ -19973,6 +19989,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_order_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_non_equivariant_limit_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_p2_readout_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_stack_pairing_normalization_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_adjacent_canonical_mirror_map_b_table_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_adjacent_canonical_mirror_map_c_table_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_primary_p_status_counts,
@@ -27625,11 +27642,15 @@ fn weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
         source_scope_status: source_basis.source_scope_status,
         inertia_component_classes: source_basis.inertia_component_classes,
         untwisted_hyperplane_class: source_basis.untwisted_hyperplane_class,
+        base_hyperplane_square: source_basis.base_hyperplane_square,
         untwisted_codim2_candidate_class: source_basis.untwisted_codim2_candidate_class,
         twisted_half_sector_candidate_class: source_basis.twisted_half_sector_candidate_class,
         source_dual_basis_p2_class: source_basis.source_dual_basis_p2_class,
+        source_dual_basis_p2_normalization_divisor: source_basis
+            .source_dual_basis_p2_normalization_divisor,
         source_dual_basis_p2_readout_status: source_basis.source_dual_basis_p2_readout_status,
         source_dual_basis_half_sector_class: source_basis.source_dual_basis_half_sector_class,
+        stack_pairing_normalization_status: source_basis.stack_pairing_normalization_status,
         adjacent_canonical_crepant_resolution_status: source_basis
             .adjacent_canonical_crepant_resolution_status,
         adjacent_canonical_crepant_resolution_p2_image: source_basis
@@ -41742,13 +41763,18 @@ mod tests {
                         .to_string(),
                 inertia_component_classes: vec!["fun_0".to_string(), "fun_{1/2}".to_string()],
                 untwisted_hyperplane_class: "p=c1(O(1))".to_string(),
+                base_hyperplane_square: "1/2".to_string(),
                 untwisted_codim2_candidate_class: "p^2".to_string(),
                 twisted_half_sector_candidate_class: "fun_{1/2}".to_string(),
                 source_dual_basis_p2_class: "2*lambda*fun_0-8*p".to_string(),
+                source_dual_basis_p2_normalization_divisor: "2*lambda".to_string(),
                 source_dual_basis_p2_readout_status:
                     "p2_one_point_correlator_is_read_from_dual_basis_phi2_not_from_raw_p2_coefficient"
                         .to_string(),
                 source_dual_basis_half_sector_class: "2*lambda*fun_{1/2}".to_string(),
+                stack_pairing_normalization_status:
+                    "weighted_p2_hyperplane_square_fractional_requires_stack_normalized_source_pairing_and_twisted_sector_pairing"
+                        .to_string(),
                 adjacent_canonical_crepant_resolution_status:
                     "weighted_p2_rank_three_adjacent_kp112_crepant_map_reference_only"
                         .to_string(),
@@ -41913,6 +41939,15 @@ mod tests {
             0,
         )
         .expect("weighted P2 split bundle source map");
+        assert_eq!(source_map.base_hyperplane_square, "1/2");
+        assert_eq!(
+            source_map.source_dual_basis_p2_normalization_divisor,
+            "2*lambda"
+        );
+        assert_eq!(
+            source_map.stack_pairing_normalization_status,
+            "weighted_p2_hyperplane_square_fractional_requires_stack_normalized_source_pairing_and_twisted_sector_pairing"
+        );
         assert_eq!(
             source_map.split_bundle_kp112_mirror_map_half_sector_descendant_profiles[0][1]
                 .dual_basis_coefficients,
@@ -41943,6 +41978,18 @@ mod tests {
             counts,
             BTreeMap::from([(
                 "rank_three_split_nonzero_contribution_if_any_requires_equivariant_residue_or_twisted_big_j_pairing_not_canonical_kp112_table"
+                    .to_string(),
+                2
+            )])
+        );
+        let stack_pairing_counts = weighted_p2_rank_three_chen_ruan_source_map_status_counts(
+            [Some(&source_map), None, Some(&source_map)],
+            |source_map| source_map.stack_pairing_normalization_status.as_str(),
+        );
+        assert_eq!(
+            stack_pairing_counts,
+            BTreeMap::from([(
+                "weighted_p2_hyperplane_square_fractional_requires_stack_normalized_source_pairing_and_twisted_sector_pairing"
                     .to_string(),
                 2
             )])
