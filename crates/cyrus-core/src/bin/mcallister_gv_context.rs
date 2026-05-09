@@ -2595,6 +2595,12 @@ struct ProvidedGeneratorUncertifiedGeneratorSample {
     weighted_p2_twisted_ifunction_readiness_status: Option<String>,
     weighted_p2_twisted_ifunction_missing_inputs: Vec<String>,
     weighted_p2_source_certificate_promotion_status: Option<String>,
+    weighted_p2_source_certificate_primary_readout_status: Option<String>,
+    weighted_p2_source_certificate_descendant_readout_status: Option<String>,
+    weighted_p2_source_certificate_z_minus_one_extraction_status: Option<String>,
+    weighted_p2_source_certificate_checked_max_degree_twice: Option<i64>,
+    weighted_p2_source_certificate_checked_integer_sector_count: Option<usize>,
+    weighted_p2_source_certificate_checked_half_sector_count: Option<usize>,
     weighted_p2_source_certificate_required_inputs: Vec<String>,
     zero_coefficient_enlargement_status: String,
     zero_coefficient_enlargement_candidate_count: Option<usize>,
@@ -31076,6 +31082,48 @@ fn provided_generator_uncertified_generator_sample(
                 } else {
                     None
                 },
+                weighted_p2_source_certificate_primary_readout_status:
+                    if weighted_rank_three_applicable {
+                        weighted_source_certificate
+                            .map(|certificate| certificate.primary_readout_status.clone())
+                    } else {
+                        None
+                    },
+                weighted_p2_source_certificate_descendant_readout_status:
+                    if weighted_rank_three_applicable {
+                        weighted_source_certificate
+                            .map(|certificate| certificate.descendant_readout_status.clone())
+                    } else {
+                        None
+                    },
+                weighted_p2_source_certificate_z_minus_one_extraction_status:
+                    if weighted_rank_three_applicable {
+                        weighted_source_certificate
+                            .map(|certificate| certificate.z_minus_one_extraction_status.clone())
+                    } else {
+                        None
+                    },
+                weighted_p2_source_certificate_checked_max_degree_twice:
+                    if weighted_rank_three_applicable {
+                        weighted_source_certificate
+                            .map(|certificate| certificate.checked_max_degree_twice)
+                    } else {
+                        None
+                    },
+                weighted_p2_source_certificate_checked_integer_sector_count:
+                    if weighted_rank_three_applicable {
+                        weighted_source_certificate
+                            .map(|certificate| certificate.checked_integer_sector_count)
+                    } else {
+                        None
+                    },
+                weighted_p2_source_certificate_checked_half_sector_count:
+                    if weighted_rank_three_applicable {
+                        weighted_source_certificate
+                            .map(|certificate| certificate.checked_half_sector_count)
+                    } else {
+                        None
+                    },
                 weighted_p2_source_certificate_required_inputs: if weighted_rank_three_applicable {
                     weighted_source_certificate
                         .map(|certificate| certificate.required_inputs.clone())
@@ -40261,6 +40309,42 @@ mod tests {
             sample[0]
                 .weighted_p2_source_certificate_required_inputs
                 .contains(&"source_derived_chamber_qn_history_for_selected_phase".to_string())
+        );
+        assert_eq!(
+            sample[0]
+                .weighted_p2_source_certificate_primary_readout_status
+                .as_deref(),
+            Some(
+                "weighted_p2_rank_three_source_certificate_primary_z2_p2_readout_zero_to_checked_integer_degrees"
+            )
+        );
+        assert_eq!(
+            sample[0]
+                .weighted_p2_source_certificate_descendant_readout_status
+                .as_deref(),
+            Some(
+                "weighted_p2_rank_three_source_certificate_first_nonzero_terms_are_descendant_or_equivariant_requires_big_j_pairing"
+            )
+        );
+        assert_eq!(
+            sample[0]
+                .weighted_p2_source_certificate_z_minus_one_extraction_status
+                .as_deref(),
+            Some(
+                "weighted_p2_rank_three_ccit_checked_positive_degrees_have_no_z_minus_one_primary_terms_first_nonzero_is_descendant_layer"
+            )
+        );
+        assert_eq!(
+            sample[0].weighted_p2_source_certificate_checked_max_degree_twice,
+            Some(4)
+        );
+        assert_eq!(
+            sample[0].weighted_p2_source_certificate_checked_integer_sector_count,
+            Some(2)
+        );
+        assert_eq!(
+            sample[0].weighted_p2_source_certificate_checked_half_sector_count,
+            Some(2)
         );
         assert!(
             sample[0]

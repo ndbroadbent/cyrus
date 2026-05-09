@@ -1668,6 +1668,12 @@ to make the remaining GV layer more first-principles:
    `/tmp/cyrus_target7_source_no_divisor_equation_probe.json` and
    `/tmp/cyrus_target8_source_no_divisor_equation_probe.json` carry the new
    blocker in the uncertified-generator sample.
+   The same compact sample now also carries the source-certificate readout
+   statuses themselves: zero checked primary `z^-2` `p^2` readout,
+   first-nonzero descendant/equivariant blocker, missing `z^-1` primary
+   extraction, and the checked sector counts. This keeps the visible
+   obstruction attached to the actual blocking chamber generator without
+   promoting any descendant coefficient to a compact GV value.
    The same sample now also carries the nearest zero-coefficient enlargement
    blocker. Regenerated target `7` and target `8` reports in
    `/tmp/cyrus_target7_enlargement_exhaustive_probe.json` and
