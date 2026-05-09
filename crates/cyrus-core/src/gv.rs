@@ -11547,6 +11547,47 @@ pub fn compute_gv_invariants_with_provided_generators_and_nef_partition(
     )
 }
 
+/// Compute GV invariants and compact `q_N` polynomial history using exactly
+/// the caller-provided semigroup generators and an explicit `cygv` nef
+/// partition.
+///
+/// This is the trace-producing complete-intersection analogue of
+/// [`compute_gv_invariants_with_provided_generators_and_nef_partition`]. It is
+/// intended for source-certified chamber domains where Cyrus must inspect
+/// `cygv`'s degree-ordered subtraction history, not just the final scalar GV
+/// table.
+///
+/// # Errors
+/// Returns an error if the input shapes or numeric ranges are invalid, if
+/// `cygv` cannot construct the semigroup, if the nef partition is inconsistent
+/// with the supplied charge matrix, or if HKTY finds non-integral output.
+pub fn compute_gv_invariants_with_provided_generators_and_nef_partition_qn_trace(
+    generators: &[Vec<i64>],
+    grading_vector: &[i64],
+    q_matrix: &[Vec<i64>],
+    nef_partition: &[Vec<usize>],
+    intnums: &Intersection,
+    min_points: Option<u32>,
+    max_deg: Option<u32>,
+) -> Result<GvInvariantsWithQnTrace> {
+    let (semigroup, q, intnums_map) = provided_cygv_semigroup_inputs(
+        generators,
+        grading_vector,
+        q_matrix,
+        intnums,
+        min_points,
+        max_deg,
+    )?;
+    let nefpart = cygv_nef_partition(nef_partition, q.nrows())?;
+    compute_cygv_rat_threefold_from_semigroup_with_nefpart_qn_trace(
+        semigroup,
+        &q,
+        &nefpart,
+        intnums_map,
+        "provided-generator complete-intersection GV qN trace",
+    )
+}
+
 /// Compute GV invariants and compact `q_N` polynomial history from
 /// caller-provided semigroup generators.
 ///
@@ -11739,6 +11780,38 @@ pub fn compute_gv_invariants_with_explicit_semigroup_and_nef_partition(
         &nefpart,
         intnums_map,
         "explicit complete-intersection GV semigroup",
+    )
+}
+
+/// Compute GV invariants and compact `q_N` polynomial history using an
+/// explicitly truncated semigroup and an explicit `cygv` nef partition.
+///
+/// This is the complete-intersection analogue of
+/// [`compute_gv_invariants_with_explicit_semigroup_qn_trace`]. It does not
+/// close the supplied elements under addition; it passes the exact semigroup
+/// and nef partition to upstream `cygv`.
+///
+/// # Errors
+/// Returns an error if the semigroup, grading, GLSM charge matrix, nef
+/// partition, or intersection numbers are inconsistent, or if HKTY finds
+/// non-integral GV output for the supplied truncation.
+#[allow(clippy::too_many_lines)]
+pub fn compute_gv_invariants_with_explicit_semigroup_and_nef_partition_qn_trace(
+    elements: &[Vec<i64>],
+    grading_vector: &[i64],
+    q_matrix: &[Vec<i64>],
+    nef_partition: &[Vec<usize>],
+    intnums: &Intersection,
+) -> Result<GvInvariantsWithQnTrace> {
+    let (semigroup, q, intnums_map) =
+        explicit_cygv_semigroup_inputs(elements, grading_vector, q_matrix, intnums)?;
+    let nefpart = cygv_nef_partition(nef_partition, q.nrows())?;
+    compute_cygv_rat_threefold_from_semigroup_with_nefpart_qn_trace(
+        semigroup,
+        &q,
+        &nefpart,
+        intnums_map,
+        "explicit complete-intersection GV qN trace",
     )
 }
 
@@ -12428,6 +12501,23 @@ fn compute_cygv_rat_threefold_from_semigroup_with_qn_trace(
     intnums_map: HashMap<(usize, usize, usize), i32>,
     context: &str,
 ) -> Result<GvInvariantsWithQnTrace> {
+    let nefpart: Vec<DVector<i32>> = Vec::new();
+    compute_cygv_rat_threefold_from_semigroup_with_nefpart_qn_trace(
+        semigroup,
+        q,
+        &nefpart,
+        intnums_map,
+        context,
+    )
+}
+
+fn compute_cygv_rat_threefold_from_semigroup_with_nefpart_qn_trace(
+    semigroup: cygv::Semigroup,
+    q: &DMatrix<i32>,
+    nefpart: &[DVector<i32>],
+    intnums_map: HashMap<(usize, usize, usize), i32>,
+    context: &str,
+) -> Result<GvInvariantsWithQnTrace> {
     if cfg!(panic = "abort") {
         return Err(Error::InvalidInput(format!(
             "{context}: cygv HKTY execution requires a panic=unwind build because upstream cygv can still panic internally"
@@ -12440,6 +12530,7 @@ fn compute_cygv_rat_threefold_from_semigroup_with_qn_trace(
         compute_cygv_rat_threefold_from_semigroup_with_qn_trace_unchecked(
             semigroup,
             q,
+            nefpart,
             intnums_map,
             context,
         )
@@ -12509,14 +12600,14 @@ fn compute_cygv_rat_threefold_from_semigroup_unchecked(
 fn compute_cygv_rat_threefold_from_semigroup_with_qn_trace_unchecked(
     semigroup: cygv::Semigroup,
     q: &DMatrix<i32>,
+    nefpart: &[DVector<i32>],
     intnums_map: HashMap<(usize, usize, usize), i32>,
     context: &str,
 ) -> Result<GvInvariantsWithQnTrace> {
-    let nefpart: Vec<DVector<i32>> = Vec::new();
     compute_cygv_rat_threefold_raw_from_semigroup_unchecked(
         semigroup,
         q,
-        &nefpart,
+        nefpart,
         intnums_map,
         context,
         true,
@@ -13352,9 +13443,11 @@ mod tests {
         compute_grading_vector, compute_gv_invariants_inner,
         compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_explicit_semigroup_and_nef_partition,
+        compute_gv_invariants_with_explicit_semigroup_and_nef_partition_qn_trace,
         compute_gv_invariants_with_explicit_semigroup_qn_trace,
         compute_gv_invariants_with_provided_generators,
         compute_gv_invariants_with_provided_generators_and_nef_partition,
+        compute_gv_invariants_with_provided_generators_and_nef_partition_qn_trace,
         compute_gv_invariants_with_provided_generators_qn_trace,
         compute_gw_coefficient_trace_with_explicit_semigroup,
         compute_gw_coefficient_trace_with_provided_generators,
@@ -13567,6 +13660,76 @@ mod tests {
         assert!(
             err.to_string().contains("cygv fundamental period failed"),
             "expected a cygv-stage error after nef partition conversion, got {err}"
+        );
+    }
+
+    #[test]
+    fn provided_generator_complete_intersection_qn_trace_validates_nef_partition() {
+        let mut intnums = Intersection::new(1);
+        set_intersection_i64(&mut intnums, 0, 0, 0, 1);
+
+        let err = compute_gv_invariants_with_provided_generators_and_nef_partition_qn_trace(
+            &[vec![1]],
+            &[1],
+            &[vec![1, 1, 1, 1, 1, 1]],
+            &[vec![0, 1], vec![1, 2]],
+            &intnums,
+            None,
+            Some(1),
+        )
+        .unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains("nef partition index 1 appears in more than one part")
+        );
+    }
+
+    #[test]
+    fn explicit_complete_intersection_qn_trace_passes_nef_partition_to_cygv() {
+        let mut intnums = Intersection::new(1);
+        set_intersection_i64(&mut intnums, 0, 0, 0, 1);
+
+        let err = compute_gv_invariants_with_explicit_semigroup_and_nef_partition_qn_trace(
+            &[vec![0], vec![1]],
+            &[1],
+            &[vec![1, 1, 1, 1, 1, 1]],
+            &[vec![0], vec![1], vec![2]],
+            &intnums,
+        )
+        .unwrap_err();
+
+        assert!(
+            err.to_string().contains("cygv fundamental period failed"),
+            "expected a cygv-stage error after nef partition conversion, got {err}"
+        );
+    }
+
+    #[test]
+    fn explicit_complete_intersection_qn_trace_computes_bicubic_lines() {
+        let mut intnums = Intersection::new(1);
+        set_intersection_i64(&mut intnums, 0, 0, 0, 9);
+
+        let traced = compute_gv_invariants_with_explicit_semigroup_and_nef_partition_qn_trace(
+            &[vec![0], vec![1]],
+            &[1],
+            &[vec![1, 1, 1, 1, 1, 1]],
+            &[vec![0, 1, 2], vec![3, 4, 5]],
+            &intnums,
+        )
+        .expect("bicubic complete intersection should compute through cygv qN trace");
+        let invariants = traced
+            .invariants
+            .into_iter()
+            .map(|(charge, value)| (charge, value.to_string()))
+            .collect::<BTreeMap<_, _>>();
+
+        assert_eq!(invariants.get(&vec![1]).map(String::as_str), Some("1053"));
+        assert!(
+            traced
+                .gv_coefficient_trace
+                .iter()
+                .any(|trace| trace.element == vec![1])
         );
     }
 

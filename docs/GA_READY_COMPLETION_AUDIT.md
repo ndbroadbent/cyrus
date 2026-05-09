@@ -265,6 +265,14 @@ and matrix-basis pipeline are no longer open.
    has relation/shared/union ranks `1/13/194`, target `8` has ranks
    `1/9/177`, and all checked domains return
    `origin_support_lp_no_certificate_*`.
+   Cyrus also now exposes complete-intersection `cygv` qN-trace wrappers for
+   both provided-generator and explicit-semigroup domains with an explicit
+   nef partition. The positive regression uses the bicubic in `P^5` with
+   nef parts `[0,1,2]` and `[3,4,5]`, computes the degree-one GV value `1053`,
+   and preserves the upstream coefficient trace. Thus the remaining blocker is
+   not qN-trace plumbing for codimension-2 inputs; it is still certification of
+   the correct nef partition/source domain/chamber history for the McAllister
+   six-point row.
    The context tool now also has an opt-in exact extremal-ray probe. For the
    current schema-3 context it verifies that all nine remaining targets are
    non-extremal in the finite degree-bounded cone by exact decomposition

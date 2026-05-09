@@ -4510,3 +4510,15 @@ overlap/missing/extra counts `3/3/1`; the best-candidate status maps are
 degree-`2` support-overlap replacement in the best layer: the nearest toric
 neighbor is unique and positive-height, but it is still only a wall-neighborhood
 row, not the missing six-point source/chamber qN history.
+
+The Cyrus complete-intersection `cygv` boundary now has qN-trace parity with
+the hypersurface diagnostic path. `compute_gv_invariants_*_and_nef_partition`
+already delegated scalar GV computation to upstream `cygv`; the new
+`*_and_nef_partition_qn_trace` variants pass the same explicit nef partition
+into `cygv`'s series-inversion trace path. The regression
+`explicit_complete_intersection_qn_trace_computes_bicubic_lines` uses the
+bicubic complete intersection in `P^5`, nef parts `[0,1,2]` and `[3,4,5]`,
+and verifies degree-one GV `1053` while preserving coefficient-trace output.
+This closes the plumbing gap for a future certified codimension-2 source
+domain. It does not promote the weighted-`P2` rank-three row, because that row
+still lacks the certified nef partition/source tensor/chamber history.

@@ -253,3 +253,10 @@ The missing object is one of:
 
 Until one of those exists, this row must remain blocked at
 `source_ray_weighted_p2_rank_three_split_bundle_source_import_blocked_missing_source_model_tensor_qn_history`.
+
+Implementation note: Cyrus now has `cygv` qN-trace wrappers that accept an
+explicit nef partition for both provided-generator and explicit-semigroup
+domains. The blocker here is therefore not the ability to call upstream `cygv`
+with codimension-2 qN tracing; it is the absence of a source-certified
+codimension-2 model/nef partition/tensor/chamber history for this specific
+rank-three weighted-`P2` row.
