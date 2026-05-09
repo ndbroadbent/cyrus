@@ -592,3 +592,14 @@ classes do not satisfy a divisor equation. Regenerated reports
 `/tmp/cyrus_target8_source_no_divisor_equation_probe.json` therefore include
 `twisted_sector_no_divisor_equation_big_j_reconstruction` next to the existing
 big-`J`/pairing, qN-history, chamber, and CY3-projection blockers.
+
+The current-chamber target decomposition has also been separated from the
+weighted-`P2` full-chamber blocker by an exact face diagnostic. Regenerated
+reports `/tmp/cyrus_target7_face_certificate_global_heights.json` and
+`/tmp/cyrus_target8_face_certificate_global_heights.json` certify the selected
+positive decomposition generators as a codimension-one supporting face of the
+visible chamber semigroup, with exact normal `[(1,-1),(2,-1)]`, two
+zero-pairing selected generators, and three positive off-face generators. This
+does not promote the split-bundle source row or convert descendant data into a
+compact GV value; it only proves that the next possible non-cheating route is a
+source-derived secondary-face/qN-domain handoff for that certified face.

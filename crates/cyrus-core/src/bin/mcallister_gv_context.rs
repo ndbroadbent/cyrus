@@ -680,6 +680,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_positive_degree_transport_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_positive_degree_current_decomposition_face_certificate_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_context_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_degree_counts:
@@ -1390,6 +1392,8 @@ struct LocalCygvStarUnionChamberSemigroupTransportProbe {
         Option<Vec<LocalCygvChamberSemigroupDecompositionTerm>>,
     current_chamber_positive_degree_decomposition_cygv_probe:
         Option<ProvidedGeneratorTargetGvProbe>,
+    current_chamber_positive_degree_decomposition_face_certificate:
+        LocalCygvChamberDecompositionFaceCertificate,
     flipped_chamber_secondary_certificate: LocalCygvStarUnionChamberSecondaryCertificate,
     flipped_chamber_status: Option<String>,
     flipped_chamber_generator_count: Option<usize>,
@@ -1403,6 +1407,8 @@ struct LocalCygvStarUnionChamberSemigroupTransportProbe {
         Option<Vec<LocalCygvChamberSemigroupDecompositionTerm>>,
     flipped_chamber_positive_degree_decomposition_cygv_probe:
         Option<ProvidedGeneratorTargetGvProbe>,
+    flipped_chamber_positive_degree_decomposition_face_certificate:
+        LocalCygvChamberDecompositionFaceCertificate,
     positive_degree_transport_status: String,
     error: Option<String>,
 }
@@ -1424,6 +1430,24 @@ struct LocalCygvChamberSemigroupDecompositionTerm {
     generator_index: usize,
     coefficient: i64,
     generator: Vec<i64>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LocalCygvChamberDecompositionFaceCertificate {
+    status: String,
+    selected_generator_count: Option<usize>,
+    selected_generator_indices: Vec<usize>,
+    selected_rank: Option<usize>,
+    chamber_dimension: Option<usize>,
+    normal_nonzero: Option<Vec<(usize, i64)>>,
+    zero_generator_count: Option<usize>,
+    positive_generator_count: Option<usize>,
+    lp_exact_kernel_status: Option<String>,
+    lp_full_status: Option<String>,
+    lp_aggregate_status: Option<String>,
+    lp_anchor_attempt_count: Option<usize>,
+    lp_anchor_lp_solution_count: Option<usize>,
+    lp_anchor_status_counts: BTreeMap<String, usize>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -18872,6 +18896,10 @@ fn build_report(
         local_cygv_source_resolution_star_union_positive_degree_transport_status_counts(
             &local_cygv_source_resolution_hint_sample,
         );
+    let local_cygv_source_resolution_star_union_positive_degree_current_decomposition_face_certificate_status_counts =
+        local_cygv_source_resolution_star_union_positive_degree_current_decomposition_face_certificate_status_counts(
+            &local_cygv_source_resolution_hint_sample,
+        );
     let positive_degree_current_decomposition_term_contexts =
         positive_degree_current_chamber_decomposition_term_contexts(
             &local_cygv_source_resolution_hint_sample,
@@ -20196,6 +20224,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_nearest_support_missing_count_counts,
         local_cygv_source_resolution_star_union_flipped_chamber_decomposition_term_nearest_support_extra_count_counts,
         local_cygv_source_resolution_star_union_positive_degree_transport_status_counts,
+        local_cygv_source_resolution_star_union_positive_degree_current_decomposition_face_certificate_status_counts,
         local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_context_status_counts,
         local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_degree_counts,
         local_cygv_source_resolution_star_union_positive_degree_current_decomposition_term_local_toric_kind_counts,
@@ -22954,6 +22983,24 @@ fn local_cygv_source_resolution_star_union_positive_degree_transport_status_coun
                 summary
                     .shared_two_simplex_star_union_chamber_semigroup_transport
                     .positive_degree_transport_status
+                    .clone(),
+            )
+            .or_insert(0usize) += 1;
+    }
+    counts
+}
+
+fn local_cygv_source_resolution_star_union_positive_degree_current_decomposition_face_certificate_status_counts(
+    summaries: &[LocalCygvSourceResolutionHintSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        *counts
+            .entry(
+                summary
+                    .shared_two_simplex_star_union_chamber_semigroup_transport
+                    .current_chamber_positive_degree_decomposition_face_certificate
+                    .status
                     .clone(),
             )
             .or_insert(0usize) += 1;
@@ -26983,6 +27030,10 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
             current_chamber_positive_degree_status: "positive_degree_chamber_not_run".to_string(),
             current_chamber_positive_degree_decomposition: None,
             current_chamber_positive_degree_decomposition_cygv_probe: None,
+            current_chamber_positive_degree_decomposition_face_certificate:
+                chamber_decomposition_face_certificate_not_run(
+                    "chamber_decomposition_face_not_run_blocked_transport",
+                ),
             flipped_chamber_secondary_certificate:
                 local_cygv_star_union_chamber_secondary_certificate_not_run(status),
             flipped_chamber_status: None,
@@ -26995,6 +27046,10 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
             flipped_chamber_positive_degree_status: "positive_degree_chamber_not_run".to_string(),
             flipped_chamber_positive_degree_decomposition: None,
             flipped_chamber_positive_degree_decomposition_cygv_probe: None,
+            flipped_chamber_positive_degree_decomposition_face_certificate:
+                chamber_decomposition_face_certificate_not_run(
+                    "chamber_decomposition_face_not_run_blocked_transport",
+                ),
             positive_degree_transport_status: "positive_degree_transport_not_run".to_string(),
             error,
         };
@@ -27251,6 +27306,19 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
             "flipped_positive_decomposition_generators",
         )
     });
+    let face_certificate_options = SupportingMoriFaceLpSearchOptions::default();
+    let current_chamber_positive_degree_decomposition_face_certificate =
+        chamber_decomposition_supporting_face_certificate(
+            &current_generators,
+            current_chamber_positive_degree_decomposition.as_deref(),
+            &face_certificate_options,
+        );
+    let flipped_chamber_positive_degree_decomposition_face_certificate =
+        chamber_decomposition_supporting_face_certificate(
+            &flipped_generators,
+            flipped_chamber_positive_degree_decomposition.as_deref(),
+            &face_certificate_options,
+        );
 
     LocalCygvStarUnionChamberSemigroupTransportProbe {
         status: status.to_string(),
@@ -27265,6 +27333,7 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
         current_chamber_positive_degree_status,
         current_chamber_positive_degree_decomposition,
         current_chamber_positive_degree_decomposition_cygv_probe,
+        current_chamber_positive_degree_decomposition_face_certificate,
         flipped_chamber_secondary_certificate,
         flipped_chamber_status: flipped_status,
         flipped_chamber_generator_count: (!flipped_generators.is_empty())
@@ -27277,6 +27346,7 @@ fn local_cygv_star_union_chamber_semigroup_transport_probe(
         flipped_chamber_positive_degree_status,
         flipped_chamber_positive_degree_decomposition,
         flipped_chamber_positive_degree_decomposition_cygv_probe,
+        flipped_chamber_positive_degree_decomposition_face_certificate,
         positive_degree_transport_status,
         error: None,
     }
@@ -31310,6 +31380,150 @@ fn positive_degree_chamber_decomposition_from_degrees(
             })
             .collect(),
     ))
+}
+
+fn chamber_decomposition_face_certificate_not_run(
+    status: &str,
+) -> LocalCygvChamberDecompositionFaceCertificate {
+    LocalCygvChamberDecompositionFaceCertificate {
+        status: status.to_string(),
+        selected_generator_count: None,
+        selected_generator_indices: Vec::new(),
+        selected_rank: None,
+        chamber_dimension: None,
+        normal_nonzero: None,
+        zero_generator_count: None,
+        positive_generator_count: None,
+        lp_exact_kernel_status: None,
+        lp_full_status: None,
+        lp_aggregate_status: None,
+        lp_anchor_attempt_count: None,
+        lp_anchor_lp_solution_count: None,
+        lp_anchor_status_counts: BTreeMap::new(),
+    }
+}
+
+fn chamber_decomposition_supporting_face_certificate(
+    generators: &[Vec<i64>],
+    decomposition: Option<&[LocalCygvChamberSemigroupDecompositionTerm]>,
+    options: &SupportingMoriFaceLpSearchOptions,
+) -> LocalCygvChamberDecompositionFaceCertificate {
+    let Some(decomposition) = decomposition else {
+        return chamber_decomposition_face_certificate_not_run(
+            "chamber_decomposition_face_not_run_missing_decomposition",
+        );
+    };
+    if decomposition.is_empty() {
+        return chamber_decomposition_face_certificate_not_run(
+            "chamber_decomposition_face_empty_decomposition",
+        );
+    }
+    if generators.is_empty() {
+        return chamber_decomposition_face_certificate_not_run(
+            "chamber_decomposition_face_missing_chamber_generators",
+        );
+    }
+
+    let mut selected_indices = BTreeSet::new();
+    for term in decomposition {
+        let Some(generator) = generators.get(term.generator_index) else {
+            return chamber_decomposition_face_certificate_not_run(&format!(
+                "chamber_decomposition_face_invalid_generator_index_{}",
+                term.generator_index
+            ));
+        };
+        if generator != &term.generator {
+            return chamber_decomposition_face_certificate_not_run(&format!(
+                "chamber_decomposition_face_term_generator_mismatch_index_{}",
+                term.generator_index
+            ));
+        }
+        selected_indices.insert(term.generator_index);
+    }
+
+    let selected_generator_indices = selected_indices.into_iter().collect::<Vec<_>>();
+    let selected_generators = selected_generator_indices
+        .iter()
+        .map(|&idx| generators[idx].clone())
+        .collect::<Vec<_>>();
+    let chamber_dimension = generators.first().map(Vec::len);
+    let selected_rank = curve_row_span_rank(&selected_generators).ok();
+    let base = |status: String| LocalCygvChamberDecompositionFaceCertificate {
+        status,
+        selected_generator_count: Some(selected_generators.len()),
+        selected_generator_indices: selected_generator_indices.clone(),
+        selected_rank,
+        chamber_dimension,
+        normal_nonzero: None,
+        zero_generator_count: None,
+        positive_generator_count: None,
+        lp_exact_kernel_status: None,
+        lp_full_status: None,
+        lp_aggregate_status: None,
+        lp_anchor_attempt_count: None,
+        lp_anchor_lp_solution_count: None,
+        lp_anchor_status_counts: BTreeMap::new(),
+    };
+
+    if selected_generators.len() == generators.len() {
+        return base("chamber_decomposition_face_full_chamber_domain".to_string());
+    }
+
+    match diagnose_supporting_mori_face_by_lp_search(&selected_generators, generators, options) {
+        Ok(diagnostic) => {
+            if let Some(certificate) = diagnostic.certificate {
+                let status = format!(
+                    "chamber_decomposition_face_certified_{}_rank_{}_dim_{}_zero_{}_positive_{}",
+                    diagnostic.status,
+                    diagnostic.face_rank,
+                    diagnostic.dim,
+                    certificate.zero_generator_count,
+                    certificate.positive_generator_count
+                );
+                LocalCygvChamberDecompositionFaceCertificate {
+                    status,
+                    selected_generator_count: Some(selected_generators.len()),
+                    selected_generator_indices,
+                    selected_rank: Some(diagnostic.face_rank),
+                    chamber_dimension: Some(diagnostic.dim),
+                    normal_nonzero: Some(sparse_from_dense(&certificate.normal)),
+                    zero_generator_count: Some(certificate.zero_generator_count),
+                    positive_generator_count: Some(certificate.positive_generator_count),
+                    lp_exact_kernel_status: Some(diagnostic.exact_kernel_status),
+                    lp_full_status: Some(diagnostic.full_status),
+                    lp_aggregate_status: Some(diagnostic.aggregate_status),
+                    lp_anchor_attempt_count: Some(diagnostic.anchor_attempt_count),
+                    lp_anchor_lp_solution_count: Some(diagnostic.anchor_lp_solution_count),
+                    lp_anchor_status_counts: diagnostic.anchor_status_counts,
+                }
+            } else {
+                let status = format!(
+                    "chamber_decomposition_face_no_certificate_{}_rank_{}_dim_{}",
+                    diagnostic.status, diagnostic.face_rank, diagnostic.dim
+                );
+                LocalCygvChamberDecompositionFaceCertificate {
+                    status,
+                    selected_generator_count: Some(selected_generators.len()),
+                    selected_generator_indices,
+                    selected_rank: Some(diagnostic.face_rank),
+                    chamber_dimension: Some(diagnostic.dim),
+                    normal_nonzero: None,
+                    zero_generator_count: None,
+                    positive_generator_count: None,
+                    lp_exact_kernel_status: Some(diagnostic.exact_kernel_status),
+                    lp_full_status: Some(diagnostic.full_status),
+                    lp_aggregate_status: Some(diagnostic.aggregate_status),
+                    lp_anchor_attempt_count: Some(diagnostic.anchor_attempt_count),
+                    lp_anchor_lp_solution_count: Some(diagnostic.anchor_lp_solution_count),
+                    lp_anchor_status_counts: diagnostic.anchor_status_counts,
+                }
+            }
+        }
+        Err(error) => base(format!(
+            "chamber_decomposition_face_error_{}",
+            status_error_fragment(&error.to_string())
+        )),
+    }
 }
 
 fn positive_degree_transport_status(current_status: &str, flipped_status: &str) -> String {
@@ -37582,6 +37796,10 @@ mod tests {
                         .to_string(),
                     current_chamber_positive_degree_decomposition: None,
                     current_chamber_positive_degree_decomposition_cygv_probe: None,
+                    current_chamber_positive_degree_decomposition_face_certificate:
+                        chamber_decomposition_face_certificate_not_run(
+                            "chamber_decomposition_face_not_run_test",
+                        ),
                     flipped_chamber_secondary_certificate:
                         local_cygv_star_union_chamber_secondary_certificate_not_run("test"),
                     flipped_chamber_status: None,
@@ -37595,6 +37813,10 @@ mod tests {
                         .to_string(),
                     flipped_chamber_positive_degree_decomposition: None,
                     flipped_chamber_positive_degree_decomposition_cygv_probe: None,
+                    flipped_chamber_positive_degree_decomposition_face_certificate:
+                        chamber_decomposition_face_certificate_not_run(
+                            "chamber_decomposition_face_not_run_test",
+                        ),
                     positive_degree_transport_status: "positive_degree_transport_not_run"
                         .to_string(),
                     error: None,
@@ -44011,6 +44233,68 @@ mod tests {
             positive_decomposition.is_none(),
             "the local flip only contains the target by using the negative-degree generator"
         );
+    }
+
+    #[test]
+    fn positive_degree_decomposition_face_certificate_finds_current_chamber_face() {
+        let target = [3, 1, -1];
+        let current_generators = vec![
+            vec![-1, -2, 1],
+            vec![0, -1, 0],
+            vec![1, 0, -1],
+            vec![1, 0, 0],
+            vec![2, 1, -1],
+        ];
+        let decomposition = positive_degree_chamber_decomposition_from_degrees(
+            &target,
+            &current_generators,
+            &[Some(2), Some(4), Some(6), Some(2), Some(4)],
+        )
+        .expect("positive-degree chamber should be checked")
+        .expect("current chamber contains the target");
+
+        let certificate = chamber_decomposition_supporting_face_certificate(
+            &current_generators,
+            Some(&decomposition),
+            &SupportingMoriFaceLpSearchOptions::default(),
+        );
+
+        assert_eq!(
+            certificate.status,
+            "chamber_decomposition_face_certified_certified_exact_kernel_rank_2_dim_3_zero_2_positive_3"
+        );
+        assert_eq!(certificate.selected_generator_indices, vec![3, 4]);
+        assert_eq!(certificate.selected_generator_count, Some(2));
+        assert_eq!(certificate.selected_rank, Some(2));
+        assert_eq!(certificate.chamber_dimension, Some(3));
+        assert_eq!(certificate.zero_generator_count, Some(2));
+        assert_eq!(certificate.positive_generator_count, Some(3));
+
+        let normal = certificate
+            .normal_nonzero
+            .as_ref()
+            .expect("supporting face certificate should expose a normal");
+        let normal_dense = dense_from_sparse(normal, 3).expect("normal should be denseable");
+        for term in &decomposition {
+            let pairing: i64 = normal_dense
+                .iter()
+                .zip(term.generator.iter())
+                .map(|(lhs, rhs)| lhs * rhs)
+                .sum();
+            assert_eq!(pairing, 0, "selected generators must lie on the face");
+        }
+        for (idx, generator) in current_generators.iter().enumerate() {
+            let pairing: i64 = normal_dense
+                .iter()
+                .zip(generator.iter())
+                .map(|(lhs, rhs)| lhs * rhs)
+                .sum();
+            if [3, 4].contains(&idx) {
+                assert_eq!(pairing, 0);
+            } else {
+                assert!(pairing > 0);
+            }
+        }
     }
 
     #[test]

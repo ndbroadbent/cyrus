@@ -1701,6 +1701,20 @@ to make the remaining GV layer more first-principles:
    `diagnostic_decomposition_only_not_full_chamber_domain`, so it distinguishes
    the decomposition subset from the full chamber domain without creating a
    fallback path.
+   The same current positive decomposition now has an exact chamber-coordinate
+   supporting-face certificate. Regenerated target reports
+   `/tmp/cyrus_target7_face_certificate_global_heights.json` and
+   `/tmp/cyrus_target8_face_certificate_global_heights.json` each record
+   `chamber_decomposition_face_certified_certified_exact_kernel_rank_2_dim_3_zero_2_positive_3`.
+   For target `7`, the selected face generators are indices `3` and `4`
+   (`[1,0,0]` and `[2,1,-1]`); for target `8`, they are indices `2` and `4`
+   (`[0,1,-1]` and `[1,0,0]`). In both cases the exact normal is
+   `[(1,-1),(2,-1)]`, with two zero-pairing selected generators and three
+   positive off-face chamber generators. This is not promoted yet: the
+   decomposition-only `cygv` probe still deliberately reports
+   `blocked_diagnostic_decomposition_only_domain`, and the remaining handoff is
+   to turn this exact face certificate into a source-derived secondary-face/qN
+   domain rather than ignoring the full chamber.
    Running the same aggregate over all nine missing targets narrows the
    chamber-semigroup decomposition queue further: only targets `1`, `7`, and
    `8` reach an actual current-chamber provided-generator `cygv` call, and all
