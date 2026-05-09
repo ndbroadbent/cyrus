@@ -53,7 +53,7 @@ use cyrus_core::{
     utils::gcd_list_int,
     weighted_p2_ordinary_dual_basis_p2_z_lambda_polynomials,
     weighted_p2_rank_three_split_bundle_chen_ruan_source_basis_readout,
-    weyl_reflection_matches_flop_transform,
+    weighted_p2_rank_three_split_bundle_source_readiness, weyl_reflection_matches_flop_transform,
 };
 
 const CYGV_PATH_PREDECESSOR_SAMPLE_LIMIT: usize = 32;
@@ -27380,121 +27380,23 @@ fn weighted_p2_rank_three_source_model_summary(
     if base_weights.is_empty() || bundle_degrees.is_empty() {
         return empty("weighted_p2_rank_three_source_model_blocked_empty_phase_split");
     }
-    let base_complex_dimension =
-        i64::try_from(base_weights.len() - 1).expect("weighted P2 base weight count fits i64");
-    let base_anticanonical_degree = base_weights.iter().sum::<i64>();
-    let bundle_degree_sum = bundle_degrees.iter().sum::<i64>();
-    let total_first_chern_degree = base_anticanonical_degree - bundle_degree_sum;
-    let base_weight_product = base_weights
-        .iter()
-        .try_fold(1i64, |product, &weight| product.checked_mul(weight))
-        .expect("weighted P2 base weight product fits i64");
-    let base_hyperplane_square = if base_weight_product == 1 {
-        "1".to_string()
-    } else {
-        format!("1/{base_weight_product}")
+    let Some(readiness) =
+        weighted_p2_rank_three_split_bundle_source_readiness(base_weights, bundle_degrees)
+    else {
+        return empty("weighted_p2_rank_three_source_model_blocked_invalid_readiness_inputs");
     };
-    let base_tensor_status = if base_weight_product == 1 {
-        "weighted_p2_rank_three_base_hyperplane_square_integral".to_string()
-    } else {
-        "weighted_p2_rank_three_base_hyperplane_square_fractional_requires_stack_or_source_tensor_normalization"
-            .to_string()
-    };
-    let bundle_rank =
-        i64::try_from(bundle_degrees.len()).expect("weighted P2 bundle rank fits i64");
-    let total_space_complex_dimension = base_complex_dimension + bundle_rank;
-    let required_cygv_codimension_for_threefold = total_space_complex_dimension - 3;
-    let numerical_gv_status = if total_space_complex_dimension == 3 {
-        "weighted_p2_rank_three_visible_phase_is_threefold"
-    } else {
-        "weighted_p2_rank_three_visible_phase_is_not_numerical_cy3_requires_source_codim2_or_insertion_history"
-    };
-    let ckyz_local_surface_source_status = if total_space_complex_dimension == 3 && bundle_rank == 1
-    {
-        "weighted_p2_rank_three_ckyz_local_surface_source_maybe_applicable_requires_reflexive_polygon_identification"
-    } else {
-        "weighted_p2_rank_three_ckyz_local_surface_source_not_applicable_visible_phase_not_local_surface_cy3"
-    };
-    let twisted_vector_bundle_ifunction_source_status = if total_first_chern_degree == 0
-        && total_space_complex_dimension != 3
-    {
-        "weighted_p2_rank_three_twisted_vector_bundle_ifunction_candidate_requires_insertions_and_qn_history"
-    } else if total_first_chern_degree == 0 {
-        "weighted_p2_rank_three_twisted_vector_bundle_ifunction_candidate_visible_threefold"
-    } else {
-        "weighted_p2_rank_three_twisted_vector_bundle_ifunction_not_calabi_yau_total_space"
-    };
-    // For a c1=0 genus-zero invariant, vdim_C without markings is dim_C - 3.
-    // A CY5 local phase therefore needs codimension-2 insertions before it
-    // can define a numerical CY3-style contribution.
-    let required_insertion_complex_codimension =
-        if total_first_chern_degree == 0 && total_space_complex_dimension > 3 {
-            Some(total_space_complex_dimension - 3)
-        } else {
-            None
-        };
-    let candidate_insertion_class =
-        required_insertion_complex_codimension.and_then(|required_codimension| {
-            (required_codimension == base_complex_dimension)
-                .then(|| format!("base_hyperplane_power_{required_codimension}"))
-        });
-    let insertion_normalization_status =
-        required_insertion_complex_codimension.map(|_| base_tensor_status.clone());
-    let (twisted_ifunction_readiness_status, twisted_ifunction_missing_inputs) =
-        if total_first_chern_degree != 0 {
-            (
-                "weighted_p2_rank_three_twisted_ifunction_not_calabi_yau_total_space".to_string(),
-                vec!["calabi_yau_total_first_chern_zero".to_string()],
-            )
-        } else if total_space_complex_dimension == 3 {
-            (
-                "weighted_p2_rank_three_twisted_ifunction_visible_threefold_requires_qn_history"
-                    .to_string(),
-                vec!["twisted_vector_bundle_ifunction_qn_history".to_string()],
-            )
-        } else if candidate_insertion_class.is_none() {
-            (
-                "weighted_p2_rank_three_twisted_ifunction_blocked_missing_source_insertion_class_qn_history".to_string(),
-                vec![
-                    "source_derived_numerical_insertion_class".to_string(),
-                    "twisted_vector_bundle_ifunction_chamber_certificate".to_string(),
-                    "twisted_vector_bundle_ifunction_qn_history".to_string(),
-                ],
-            )
-        } else if base_weight_product != 1 {
-            (
-                "weighted_p2_rank_three_twisted_ifunction_blocked_missing_stack_normalized_codim2_insertion_qn_history".to_string(),
-                vec![
-                    "source_derived_codim2_insertion_or_equivalent_observable".to_string(),
-                    "stack_normalized_hyperplane_square_tensor".to_string(),
-                    "orbifold_sector_pairing_data".to_string(),
-                    "equivariant_residue_or_pairing_normalization".to_string(),
-                    "twisted_vector_bundle_ifunction_chamber_certificate".to_string(),
-                    "twisted_vector_bundle_ifunction_qn_history".to_string(),
-                ],
-            )
-        } else {
-            (
-                "weighted_p2_rank_three_twisted_ifunction_blocked_missing_codim_insertion_qn_history".to_string(),
-                vec![
-                    "source_derived_codim_insertion_or_equivalent_observable".to_string(),
-                    "twisted_vector_bundle_ifunction_chamber_certificate".to_string(),
-                    "twisted_vector_bundle_ifunction_qn_history".to_string(),
-                ],
-            )
-        };
     let twisted_ifunction_degree_profile_sample =
         weighted_p2_rank_three_twisted_ifunction_degree_profiles(
             base_weights,
             bundle_degrees,
             4,
-            required_insertion_complex_codimension,
+            readiness.twisted_vector_bundle_ifunction_required_insertion_complex_codimension,
         );
     let twisted_ifunction_chen_ruan_source_map =
         weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
             base_weights,
             bundle_degrees,
-            total_first_chern_degree,
+            readiness.total_first_chern_degree,
         );
     let status = if phase_summary
         .status
@@ -27506,27 +27408,33 @@ fn weighted_p2_rank_three_source_model_summary(
     };
     WeightedP2RankThreeSourceModelSummary {
         status: status.to_string(),
-        base_complex_dimension: Some(base_complex_dimension),
-        base_anticanonical_degree: Some(base_anticanonical_degree),
-        bundle_degree_sum: Some(bundle_degree_sum),
-        total_first_chern_degree: Some(total_first_chern_degree),
-        base_hyperplane_square: Some(base_hyperplane_square),
-        base_tensor_status: Some(base_tensor_status),
-        bundle_rank: Some(bundle_rank),
-        total_space_complex_dimension: Some(total_space_complex_dimension),
-        required_cygv_codimension_for_threefold: Some(required_cygv_codimension_for_threefold),
-        numerical_gv_status: Some(numerical_gv_status.to_string()),
-        ckyz_local_surface_source_status: Some(ckyz_local_surface_source_status.to_string()),
-        twisted_vector_bundle_ifunction_source_status: Some(
-            twisted_vector_bundle_ifunction_source_status.to_string(),
+        base_complex_dimension: Some(readiness.base_complex_dimension),
+        base_anticanonical_degree: Some(readiness.base_anticanonical_degree),
+        bundle_degree_sum: Some(readiness.bundle_degree_sum),
+        total_first_chern_degree: Some(readiness.total_first_chern_degree),
+        base_hyperplane_square: Some(readiness.base_hyperplane_square),
+        base_tensor_status: Some(readiness.base_tensor_status),
+        bundle_rank: Some(readiness.bundle_rank),
+        total_space_complex_dimension: Some(readiness.total_space_complex_dimension),
+        required_cygv_codimension_for_threefold: Some(
+            readiness.required_cygv_codimension_for_threefold,
         ),
-        twisted_vector_bundle_ifunction_required_insertion_complex_codimension:
-            required_insertion_complex_codimension,
-        twisted_vector_bundle_ifunction_candidate_insertion_class: candidate_insertion_class,
-        twisted_vector_bundle_ifunction_insertion_normalization_status:
-            insertion_normalization_status,
-        twisted_vector_bundle_ifunction_readiness_status: Some(twisted_ifunction_readiness_status),
-        twisted_vector_bundle_ifunction_missing_inputs: twisted_ifunction_missing_inputs,
+        numerical_gv_status: Some(readiness.numerical_gv_status),
+        ckyz_local_surface_source_status: Some(readiness.ckyz_local_surface_source_status),
+        twisted_vector_bundle_ifunction_source_status: Some(
+            readiness.twisted_vector_bundle_ifunction_source_status,
+        ),
+        twisted_vector_bundle_ifunction_required_insertion_complex_codimension: readiness
+            .twisted_vector_bundle_ifunction_required_insertion_complex_codimension,
+        twisted_vector_bundle_ifunction_candidate_insertion_class: readiness
+            .twisted_vector_bundle_ifunction_candidate_insertion_class,
+        twisted_vector_bundle_ifunction_insertion_normalization_status: readiness
+            .twisted_vector_bundle_ifunction_insertion_normalization_status,
+        twisted_vector_bundle_ifunction_readiness_status: Some(
+            readiness.twisted_vector_bundle_ifunction_readiness_status,
+        ),
+        twisted_vector_bundle_ifunction_missing_inputs: readiness
+            .twisted_vector_bundle_ifunction_missing_inputs,
         twisted_vector_bundle_ifunction_degree_profile_sample:
             twisted_ifunction_degree_profile_sample,
         twisted_vector_bundle_ifunction_chen_ruan_source_map:

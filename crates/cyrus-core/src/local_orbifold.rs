@@ -102,6 +102,187 @@ pub struct WeightedP2RankThreeChenRuanSourceBasisReadout {
     pub split_bundle_promotion_status: String,
 }
 
+/// Source-readiness boundary for a weighted-`P2` rank-three split bundle.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct WeightedP2RankThreeSplitBundleSourceReadiness {
+    /// Complex dimension of the weighted-projective base.
+    pub base_complex_dimension: i64,
+    /// Sum of base weights, the anticanonical degree of the base.
+    pub base_anticanonical_degree: i64,
+    /// Sum of line-bundle degrees.
+    pub bundle_degree_sum: i64,
+    /// Total first Chern degree of the split-bundle total space.
+    pub total_first_chern_degree: i64,
+    /// Stack-normalized square of the base hyperplane class.
+    pub base_hyperplane_square: String,
+    /// Whether the base tensor is integral in the naive compact CY3 handoff.
+    pub base_tensor_status: String,
+    /// Rank of the direct-sum bundle.
+    pub bundle_rank: i64,
+    /// Complex dimension of the visible total-space phase.
+    pub total_space_complex_dimension: i64,
+    /// Codimension needed to reduce the visible phase to a CY3 invariant.
+    pub required_cygv_codimension_for_threefold: i64,
+    /// Whether the visible phase is already a numerical CY3 target.
+    pub numerical_gv_status: String,
+    /// Whether rank-two CKYZ local-surface formulas are applicable.
+    pub ckyz_local_surface_source_status: String,
+    /// Status for the twisted/vector-bundle I-function source route.
+    pub twisted_vector_bundle_ifunction_source_status: String,
+    /// Required insertion codimension for the twisted/vector-bundle route.
+    pub twisted_vector_bundle_ifunction_required_insertion_complex_codimension: Option<i64>,
+    /// Natural candidate insertion class, when the base dimension matches.
+    pub twisted_vector_bundle_ifunction_candidate_insertion_class: Option<String>,
+    /// Normalization status for the candidate insertion.
+    pub twisted_vector_bundle_ifunction_insertion_normalization_status: Option<String>,
+    /// Readiness status for promoting the twisted/vector-bundle source route.
+    pub twisted_vector_bundle_ifunction_readiness_status: String,
+    /// Explicit missing inputs before any numerical GV promotion is allowed.
+    pub twisted_vector_bundle_ifunction_missing_inputs: Vec<String>,
+}
+
+/// Compute the reusable source-readiness boundary for a weighted-`P2`
+/// rank-three split bundle.
+pub fn weighted_p2_rank_three_split_bundle_source_readiness(
+    base_weights: &[i64],
+    bundle_degrees: &[i64],
+) -> Option<WeightedP2RankThreeSplitBundleSourceReadiness> {
+    if base_weights.len() != 3 || bundle_degrees.len() != 3 {
+        return None;
+    }
+    if base_weights.iter().any(|&weight| weight <= 0)
+        || bundle_degrees.iter().any(|&degree| degree <= 0)
+    {
+        return None;
+    }
+    let base_complex_dimension =
+        i64::try_from(base_weights.len() - 1).expect("weighted P2 base weight count fits i64");
+    let base_anticanonical_degree = base_weights.iter().sum::<i64>();
+    let bundle_degree_sum = bundle_degrees.iter().sum::<i64>();
+    let total_first_chern_degree = base_anticanonical_degree - bundle_degree_sum;
+    let base_weight_product = base_weights
+        .iter()
+        .try_fold(1i64, |product, &weight| product.checked_mul(weight))
+        .expect("weighted P2 base weight product fits i64");
+    let base_hyperplane_square = if base_weight_product == 1 {
+        "1".to_string()
+    } else {
+        format!("1/{base_weight_product}")
+    };
+    let base_tensor_status = if base_weight_product == 1 {
+        "weighted_p2_rank_three_base_hyperplane_square_integral".to_string()
+    } else {
+        "weighted_p2_rank_three_base_hyperplane_square_fractional_requires_stack_or_source_tensor_normalization"
+            .to_string()
+    };
+    let bundle_rank =
+        i64::try_from(bundle_degrees.len()).expect("weighted P2 bundle rank fits i64");
+    let total_space_complex_dimension = base_complex_dimension + bundle_rank;
+    let required_cygv_codimension_for_threefold = total_space_complex_dimension - 3;
+    let numerical_gv_status = if total_space_complex_dimension == 3 {
+        "weighted_p2_rank_three_visible_phase_is_threefold"
+    } else {
+        "weighted_p2_rank_three_visible_phase_is_not_numerical_cy3_requires_source_codim2_or_insertion_history"
+    };
+    let ckyz_local_surface_source_status = if total_space_complex_dimension == 3 && bundle_rank == 1
+    {
+        "weighted_p2_rank_three_ckyz_local_surface_source_maybe_applicable_requires_reflexive_polygon_identification"
+    } else {
+        "weighted_p2_rank_three_ckyz_local_surface_source_not_applicable_visible_phase_not_local_surface_cy3"
+    };
+    let twisted_vector_bundle_ifunction_source_status = if total_first_chern_degree == 0
+        && total_space_complex_dimension != 3
+    {
+        "weighted_p2_rank_three_twisted_vector_bundle_ifunction_candidate_requires_insertions_and_qn_history"
+    } else if total_first_chern_degree == 0 {
+        "weighted_p2_rank_three_twisted_vector_bundle_ifunction_candidate_visible_threefold"
+    } else {
+        "weighted_p2_rank_three_twisted_vector_bundle_ifunction_not_calabi_yau_total_space"
+    };
+    let twisted_vector_bundle_ifunction_required_insertion_complex_codimension =
+        if total_first_chern_degree == 0 && total_space_complex_dimension > 3 {
+            Some(total_space_complex_dimension - 3)
+        } else {
+            None
+        };
+    let twisted_vector_bundle_ifunction_candidate_insertion_class =
+        twisted_vector_bundle_ifunction_required_insertion_complex_codimension.and_then(
+            |required_codimension| {
+                (required_codimension == base_complex_dimension)
+                    .then(|| format!("base_hyperplane_power_{required_codimension}"))
+            },
+        );
+    let twisted_vector_bundle_ifunction_insertion_normalization_status =
+        twisted_vector_bundle_ifunction_required_insertion_complex_codimension
+            .map(|_| base_tensor_status.clone());
+    let (
+        twisted_vector_bundle_ifunction_readiness_status,
+        twisted_vector_bundle_ifunction_missing_inputs,
+    ) = if total_first_chern_degree != 0 {
+        (
+            "weighted_p2_rank_three_twisted_ifunction_not_calabi_yau_total_space".to_string(),
+            vec!["calabi_yau_total_first_chern_zero".to_string()],
+        )
+    } else if total_space_complex_dimension == 3 {
+        (
+            "weighted_p2_rank_three_twisted_ifunction_visible_threefold_requires_qn_history"
+                .to_string(),
+            vec!["twisted_vector_bundle_ifunction_qn_history".to_string()],
+        )
+    } else if twisted_vector_bundle_ifunction_candidate_insertion_class.is_none() {
+        (
+            "weighted_p2_rank_three_twisted_ifunction_blocked_missing_source_insertion_class_qn_history".to_string(),
+            vec![
+                "source_derived_numerical_insertion_class".to_string(),
+                "twisted_vector_bundle_ifunction_chamber_certificate".to_string(),
+                "twisted_vector_bundle_ifunction_qn_history".to_string(),
+            ],
+        )
+    } else if base_weight_product != 1 {
+        (
+            "weighted_p2_rank_three_twisted_ifunction_blocked_missing_stack_normalized_codim2_insertion_qn_history".to_string(),
+            vec![
+                "source_derived_codim2_insertion_or_equivalent_observable".to_string(),
+                "stack_normalized_hyperplane_square_tensor".to_string(),
+                "orbifold_sector_pairing_data".to_string(),
+                "equivariant_residue_or_pairing_normalization".to_string(),
+                "twisted_vector_bundle_ifunction_chamber_certificate".to_string(),
+                "twisted_vector_bundle_ifunction_qn_history".to_string(),
+            ],
+        )
+    } else {
+        (
+            "weighted_p2_rank_three_twisted_ifunction_blocked_missing_codim_insertion_qn_history"
+                .to_string(),
+            vec![
+                "source_derived_codim_insertion_or_equivalent_observable".to_string(),
+                "twisted_vector_bundle_ifunction_chamber_certificate".to_string(),
+                "twisted_vector_bundle_ifunction_qn_history".to_string(),
+            ],
+        )
+    };
+    Some(WeightedP2RankThreeSplitBundleSourceReadiness {
+        base_complex_dimension,
+        base_anticanonical_degree,
+        bundle_degree_sum,
+        total_first_chern_degree,
+        base_hyperplane_square,
+        base_tensor_status,
+        bundle_rank,
+        total_space_complex_dimension,
+        required_cygv_codimension_for_threefold,
+        numerical_gv_status: numerical_gv_status.to_string(),
+        ckyz_local_surface_source_status: ckyz_local_surface_source_status.to_string(),
+        twisted_vector_bundle_ifunction_source_status:
+            twisted_vector_bundle_ifunction_source_status.to_string(),
+        twisted_vector_bundle_ifunction_required_insertion_complex_codimension,
+        twisted_vector_bundle_ifunction_candidate_insertion_class,
+        twisted_vector_bundle_ifunction_insertion_normalization_status,
+        twisted_vector_bundle_ifunction_readiness_status,
+        twisted_vector_bundle_ifunction_missing_inputs,
+    })
+}
+
 /// Source-basis facts for the weighted-`P2` rank-three split bundle.
 pub fn weighted_p2_rank_three_split_bundle_chen_ruan_source_basis_readout(
     base_weights: &[i64],
@@ -1000,6 +1181,7 @@ mod tests {
         split_bundle_kp112_mirror_map_primary_p_lambda_coefficients,
         weighted_p2_ordinary_dual_basis_p2_z_readout_profile,
         weighted_p2_rank_three_split_bundle_chen_ruan_source_basis_readout,
+        weighted_p2_rank_three_split_bundle_source_readiness,
     };
 
     #[test]
@@ -1145,6 +1327,43 @@ mod tests {
             )
             .is_none()
         );
+    }
+
+    #[test]
+    fn weighted_p2_rank_three_source_readiness_keeps_stack_pairing_blocker_explicit() {
+        let readiness =
+            weighted_p2_rank_three_split_bundle_source_readiness(&[1, 1, 2], &[1, 1, 2])
+                .expect("rank-three weighted P2 source readiness");
+        assert_eq!(readiness.base_complex_dimension, 2);
+        assert_eq!(readiness.bundle_rank, 3);
+        assert_eq!(readiness.total_first_chern_degree, 0);
+        assert_eq!(readiness.total_space_complex_dimension, 5);
+        assert_eq!(readiness.required_cygv_codimension_for_threefold, 2);
+        assert_eq!(readiness.base_hyperplane_square, "1/2");
+        assert_eq!(
+            readiness.base_tensor_status,
+            "weighted_p2_rank_three_base_hyperplane_square_fractional_requires_stack_or_source_tensor_normalization"
+        );
+        assert_eq!(
+            readiness.twisted_vector_bundle_ifunction_candidate_insertion_class,
+            Some("base_hyperplane_power_2".to_string())
+        );
+        assert_eq!(
+            readiness.twisted_vector_bundle_ifunction_readiness_status,
+            "weighted_p2_rank_three_twisted_ifunction_blocked_missing_stack_normalized_codim2_insertion_qn_history"
+        );
+        assert_eq!(
+            readiness.twisted_vector_bundle_ifunction_missing_inputs,
+            vec![
+                "source_derived_codim2_insertion_or_equivalent_observable".to_string(),
+                "stack_normalized_hyperplane_square_tensor".to_string(),
+                "orbifold_sector_pairing_data".to_string(),
+                "equivariant_residue_or_pairing_normalization".to_string(),
+                "twisted_vector_bundle_ifunction_chamber_certificate".to_string(),
+                "twisted_vector_bundle_ifunction_qn_history".to_string(),
+            ]
+        );
+        assert!(weighted_p2_rank_three_split_bundle_source_readiness(&[1, 1, 2], &[4]).is_none());
     }
 
     #[test]

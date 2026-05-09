@@ -165,6 +165,10 @@ is still source metadata, not a numerical GV promotion rule. The context report
 now also exports
 `local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_stack_pairing_normalization_status_counts`
 so this blocker is visible at the aggregate level.
+The dimension, first-Chern, required-insertion, and missing-input readiness
+calculation is likewise owned by
+`cyrus_core::local_orbifold::weighted_p2_rank_three_split_bundle_source_readiness`,
+so the report no longer has to derive this source boundary locally.
 
 Cyrus now traces that dual-basis readout at the numerator level. Since CCIT's
 small `J`-function is written as
