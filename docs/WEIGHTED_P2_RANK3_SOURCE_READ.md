@@ -223,7 +223,14 @@ implements the CCIT mirror map `q = x exp(4 h(x))` and recovers the published
 the same adjacent diagnostic to bundle degrees `[1,1,2]` and still finds zero
 primary ordinary-`p` signal through the checked integer sectors. Thus the
 canonical mirror-map/pairing benchmark is now pinned in Rust, and it reinforces
-rather than removes the split-bundle primary obstruction.
+rather than removes the split-bundle primary obstruction. The same computed
+diagnostic is now serialized in the target-filtered reports. For both targets
+`7` and `8`, the adjacent-canonical status count is
+`kp112_canonical_mirror_map_reproduces_ccit_b_table_to_degree_6`, while the
+split-bundle status count is
+`rank_three_split_kp112_mirror_map_primary_p_signal_zero_to_degree_4`; the
+sample source map carries the six canonical `b_d` values and the four split
+primary coefficients `[0, 0, 0, 0]`.
 
 This does not mean the `z^-3` descendant term is useless. CCIT explicitly
 states that one-point descendants can reconstruct genus-zero Gromov-Witten

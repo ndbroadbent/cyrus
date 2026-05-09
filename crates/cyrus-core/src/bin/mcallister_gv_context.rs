@@ -536,6 +536,10 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_p2_readout_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_adjacent_canonical_mirror_map_b_table_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_primary_p_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_gw_extraction_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_required_source_data_status_counts:
@@ -1726,9 +1730,13 @@ struct WeightedP2RankThreeTwistedIfunctionChenRuanSourceMap {
     adjacent_canonical_correlator_p2_label: String,
     adjacent_canonical_correlator_half_sector_label: String,
     adjacent_canonical_mirror_map_status: String,
+    adjacent_canonical_mirror_map_b_table_status: String,
+    adjacent_canonical_mirror_map_b_table_values: Vec<String>,
     split_bundle_ifunction_modification_source: String,
     split_bundle_ordinary_non_equivariant_p2_readout_status: String,
     split_bundle_mirror_map_status: String,
+    split_bundle_kp112_mirror_map_primary_p_status: String,
+    split_bundle_kp112_mirror_map_primary_p_lambda_coefficients: Vec<String>,
     split_bundle_gw_extraction_status: String,
     twisted_sector_divisor_equation_status: String,
     split_bundle_required_source_data_status: String,
@@ -18075,6 +18083,28 @@ fn build_report(
                 }),
             |source_map| source_map.source_dual_basis_p2_readout_status.as_str(),
         );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_adjacent_canonical_mirror_map_b_table_status_counts =
+        weighted_p2_rank_three_chen_ruan_source_map_status_counts(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| {
+                    summary
+                        .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_chen_ruan_source_map
+                        .as_ref()
+                }),
+            |source_map| source_map.adjacent_canonical_mirror_map_b_table_status.as_str(),
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_primary_p_status_counts =
+        weighted_p2_rank_three_chen_ruan_source_map_status_counts(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| {
+                    summary
+                        .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_chen_ruan_source_map
+                        .as_ref()
+                }),
+            |source_map| source_map.split_bundle_kp112_mirror_map_primary_p_status.as_str(),
+        );
     let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_gw_extraction_status_counts =
         weighted_p2_rank_three_chen_ruan_source_map_status_counts(
             local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
@@ -19595,6 +19625,8 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_lambda_order_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_full_hypergeometric_dual_basis_p2_first_nonzero_z_non_equivariant_limit_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_p2_readout_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_adjacent_canonical_mirror_map_b_table_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_primary_p_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_gw_extraction_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_required_source_data_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_promotion_status_counts,
@@ -27097,6 +27129,33 @@ fn weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
     if total_first_chern_degree != 0 {
         return None;
     }
+    let adjacent_canonical_mirror_map_b_table_values = kp112_canonical_b_table_values(6);
+    let adjacent_canonical_mirror_map_b_table_status =
+        if adjacent_canonical_mirror_map_b_table_values
+            == [
+                "11/4",
+                "525/16",
+                "6152/9",
+                "1146765/64",
+                "53305261/100",
+                "51550873/3",
+            ]
+        {
+            "kp112_canonical_mirror_map_reproduces_ccit_b_table_to_degree_6"
+        } else {
+            "kp112_canonical_mirror_map_mismatch_against_ccit_b_table"
+        };
+    let split_bundle_kp112_mirror_map_primary_p_lambda_coefficients =
+        split_bundle_kp112_mirror_map_primary_p_lambda_coefficients(4);
+    let split_bundle_kp112_mirror_map_primary_p_status =
+        if split_bundle_kp112_mirror_map_primary_p_lambda_coefficients
+            .iter()
+            .all(|coefficient| coefficient == "0")
+        {
+            "rank_three_split_kp112_mirror_map_primary_p_signal_zero_to_degree_4"
+        } else {
+            "rank_three_split_kp112_mirror_map_primary_p_signal_nonzero_requires_source_extraction"
+        };
     // CCIT/wallcrossings2 Example II gives the Chen-Ruan basis and
     // adjacent K_{P(1,1,2)} crepant map.  The target here is the split
     // bundle O(-1)+O(-1)+O(-2), so these facts constrain the missing
@@ -27126,6 +27185,9 @@ fn weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
         adjacent_canonical_mirror_map_status:
             "kp112_canonical_source_uses_q_equals_x_exp_4h_after_o_minus_4_hypergeometric_modification"
                 .to_string(),
+        adjacent_canonical_mirror_map_b_table_status:
+            adjacent_canonical_mirror_map_b_table_status.to_string(),
+        adjacent_canonical_mirror_map_b_table_values,
         split_bundle_ifunction_modification_source:
             "ccit_smalllinebundle_smallvb_direct_sum_modification_product_over_o_minus_1_o_minus_1_o_minus_2"
                 .to_string(),
@@ -27135,6 +27197,9 @@ fn weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
         split_bundle_mirror_map_status:
             "rank_three_split_integer_terms_have_zero_order_three_so_adjacent_kp112_divisor_mirror_map_is_not_inherited"
                 .to_string(),
+        split_bundle_kp112_mirror_map_primary_p_status:
+            split_bundle_kp112_mirror_map_primary_p_status.to_string(),
+        split_bundle_kp112_mirror_map_primary_p_lambda_coefficients,
         split_bundle_gw_extraction_status:
             "rank_three_split_requires_own_j_or_big_j_coefficient_extraction_before_qn_history"
                 .to_string(),
@@ -28359,6 +28424,246 @@ fn multiply_bivariate_truncated_factor(
     }
     next.retain(|_, coefficient| *coefficient != MalachiteRational::from(0));
     next
+}
+
+fn rational_from_i64(value: i64) -> MalachiteRational {
+    MalachiteRational::from(Integer::from(value))
+}
+
+fn factorial_integer(value: usize) -> Integer {
+    (1..=value).fold(Integer::from(1), |product, factor| {
+        product * Integer::from(factor)
+    })
+}
+
+fn truncated_series_multiply(
+    lhs: &[MalachiteRational],
+    rhs: &[MalachiteRational],
+    max_degree: usize,
+) -> Vec<MalachiteRational> {
+    let mut product = vec![MalachiteRational::from(0); max_degree + 1];
+    for (lhs_degree, lhs_coefficient) in lhs.iter().enumerate() {
+        if lhs_coefficient == &MalachiteRational::from(0) {
+            continue;
+        }
+        for (rhs_degree, rhs_coefficient) in rhs.iter().enumerate() {
+            let total_degree = lhs_degree + rhs_degree;
+            if total_degree > max_degree || rhs_coefficient == &MalachiteRational::from(0) {
+                continue;
+            }
+            product[total_degree] += lhs_coefficient.clone() * rhs_coefficient.clone();
+        }
+    }
+    product
+}
+
+fn truncated_series_compose(
+    series: &[MalachiteRational],
+    argument: &[MalachiteRational],
+    max_degree: usize,
+) -> Vec<MalachiteRational> {
+    let mut result = vec![MalachiteRational::from(0); max_degree + 1];
+    let mut argument_power = vec![MalachiteRational::from(0); max_degree + 1];
+    argument_power[0] = MalachiteRational::from(1);
+    for (degree, coefficient) in series.iter().enumerate().take(max_degree + 1) {
+        if degree > 0 {
+            argument_power = truncated_series_multiply(&argument_power, argument, max_degree);
+        }
+        if coefficient == &MalachiteRational::from(0) {
+            continue;
+        }
+        for output_degree in 0..=max_degree {
+            result[output_degree] += coefficient.clone() * argument_power[output_degree].clone();
+        }
+    }
+    result
+}
+
+fn truncated_series_exp(
+    argument: &[MalachiteRational],
+    max_degree: usize,
+) -> Vec<MalachiteRational> {
+    let mut result = vec![MalachiteRational::from(0); max_degree + 1];
+    result[0] = MalachiteRational::from(1);
+    let mut argument_power = vec![MalachiteRational::from(0); max_degree + 1];
+    argument_power[0] = MalachiteRational::from(1);
+    for power in 1..=max_degree {
+        argument_power = truncated_series_multiply(&argument_power, argument, max_degree);
+        let denominator = MalachiteRational::from(factorial_integer(power));
+        for degree in 0..=max_degree {
+            result[degree] += argument_power[degree].clone() / denominator.clone();
+        }
+    }
+    result
+}
+
+fn truncated_series_power(
+    series: &[MalachiteRational],
+    exponent: usize,
+    max_degree: usize,
+) -> Vec<MalachiteRational> {
+    let mut result = vec![MalachiteRational::from(0); max_degree + 1];
+    result[0] = MalachiteRational::from(1);
+    for _ in 0..exponent {
+        result = truncated_series_multiply(&result, series, max_degree);
+    }
+    result
+}
+
+fn kp112_h_series(max_degree: usize) -> Vec<MalachiteRational> {
+    let mut series = vec![MalachiteRational::from(0); max_degree + 1];
+    for (degree, coefficient) in series.iter_mut().enumerate().take(max_degree + 1).skip(1) {
+        let numerator = factorial_integer(4 * degree - 1);
+        let denominator =
+            factorial_integer(degree) * factorial_integer(degree) * factorial_integer(2 * degree);
+        *coefficient = MalachiteRational::from(numerator) / MalachiteRational::from(denominator);
+    }
+    series
+}
+
+fn kp112_x_of_q_series(max_degree: usize) -> Vec<MalachiteRational> {
+    let h_series = kp112_h_series(max_degree);
+    let mut q_series = vec![MalachiteRational::from(0); max_degree + 1];
+    q_series[1] = MalachiteRational::from(1);
+    let mut x_series = q_series.clone();
+    for _ in 0..max_degree {
+        let h_of_x = truncated_series_compose(&h_series, &x_series, max_degree);
+        let argument = h_of_x
+            .into_iter()
+            .map(|coefficient| -rational_from_i64(4) * coefficient)
+            .collect::<Vec<_>>();
+        let exponential = truncated_series_exp(&argument, max_degree);
+        x_series = truncated_series_multiply(&q_series, &exponential, max_degree);
+    }
+    x_series
+}
+
+fn weighted_p2_ordinary_p_primary_after_kp112_mirror_map(
+    bundle_degrees: &[i64],
+    max_degree: usize,
+) -> Vec<BTreeMap<usize, MalachiteRational>> {
+    let x_of_q = kp112_x_of_q_series(max_degree);
+    let h_of_q = truncated_series_compose(&kp112_h_series(max_degree), &x_of_q, max_degree);
+    let mut raw_by_inverse_z_power =
+        BTreeMap::<i64, BTreeMap<usize, Vec<MalachiteRational>>>::new();
+    for degree in 1..=max_degree {
+        let degree_twice = i64::try_from(2 * degree).expect("degree fits i64");
+        let denominator = integer_sector_base_denominator_constant(&[1, 1, 2], degree_twice)
+            .expect("integer weighted P2 denominator exists");
+        let denominator_z_power = i64::try_from(4 * degree).expect("degree fits i64");
+        let mut numerator = BTreeMap::<(usize, usize, i64), MalachiteRational>::new();
+        numerator.insert((0, 0, 0), MalachiteRational::from(1));
+        for &line_degree in bundle_degrees {
+            let factor_count = line_degree
+                .checked_mul(i64::try_from(degree).expect("degree fits i64"))
+                .expect("factor count fits i64");
+            for factor_offset in (-factor_count + 1)..=0 {
+                let mut next = BTreeMap::<(usize, usize, i64), MalachiteRational>::new();
+                for (&(p_power, lambda_power, z_power), coefficient) in &numerator {
+                    *next
+                        .entry((p_power, lambda_power + 1, z_power))
+                        .or_insert_with(|| MalachiteRational::from(0)) += coefficient.clone();
+                    if p_power < 1 {
+                        *next
+                            .entry((p_power + 1, lambda_power, z_power))
+                            .or_insert_with(|| MalachiteRational::from(0)) +=
+                            -rational_from_i64(line_degree) * coefficient.clone();
+                    }
+                    if factor_offset != 0 {
+                        *next
+                            .entry((p_power, lambda_power, z_power + 1))
+                            .or_insert_with(|| MalachiteRational::from(0)) +=
+                            rational_from_i64(factor_offset) * coefficient.clone();
+                    }
+                }
+                next.retain(|_, coefficient| *coefficient != MalachiteRational::from(0));
+                numerator = next;
+            }
+        }
+
+        let x_power = truncated_series_power(&x_of_q, degree, max_degree);
+        for ((p_power, lambda_power, z_power), coefficient) in numerator {
+            if p_power != 1 {
+                continue;
+            }
+            let inverse_z_power = denominator_z_power - z_power;
+            let q_series = raw_by_inverse_z_power
+                .entry(inverse_z_power)
+                .or_default()
+                .entry(lambda_power)
+                .or_insert_with(|| vec![MalachiteRational::from(0); max_degree + 1]);
+            let scaled = coefficient / denominator.clone();
+            for q_degree in 0..=max_degree {
+                q_series[q_degree] += scaled.clone() * x_power[q_degree].clone();
+            }
+        }
+    }
+
+    let mut exp_terms = Vec::<(i64, Vec<MalachiteRational>)>::new();
+    let mut h_power = vec![MalachiteRational::from(0); max_degree + 1];
+    h_power[0] = MalachiteRational::from(1);
+    exp_terms.push((0, h_power.clone()));
+    for power in 1..=2 {
+        h_power = truncated_series_multiply(&h_power, &h_of_q, max_degree);
+        let denominator = MalachiteRational::from(factorial_integer(power));
+        exp_terms.push((
+            i64::try_from(power).expect("power fits i64"),
+            h_power
+                .iter()
+                .map(|coefficient| coefficient.clone() / denominator.clone())
+                .collect(),
+        ));
+    }
+
+    let mut primary_by_q_degree = vec![BTreeMap::<usize, MalachiteRational>::new(); max_degree + 1];
+    for (inverse_z_power, lambda_series_by_power) in raw_by_inverse_z_power {
+        for (extra_inverse_z_power, exp_series) in &exp_terms {
+            if inverse_z_power + extra_inverse_z_power != 2 {
+                continue;
+            }
+            for (lambda_power, q_series) in &lambda_series_by_power {
+                let product = truncated_series_multiply(q_series, exp_series, max_degree);
+                let output_lambda_power = lambda_power
+                    + usize::try_from(*extra_inverse_z_power).expect("power is nonnegative");
+                for q_degree in 0..=max_degree {
+                    *primary_by_q_degree[q_degree]
+                        .entry(output_lambda_power)
+                        .or_insert_with(|| MalachiteRational::from(0)) += product[q_degree].clone();
+                }
+            }
+        }
+    }
+    primary_by_q_degree
+}
+
+fn kp112_canonical_b_table_values(max_degree: usize) -> Vec<String> {
+    weighted_p2_ordinary_p_primary_after_kp112_mirror_map(&[4], max_degree)
+        .iter()
+        .take(max_degree + 1)
+        .skip(1)
+        .map(|degree_primary| {
+            let ordinary_p_lambda_coefficient = degree_primary
+                .get(&1)
+                .cloned()
+                .unwrap_or_else(|| MalachiteRational::from(0));
+            (-ordinary_p_lambda_coefficient / rational_from_i64(16)).to_string()
+        })
+        .collect()
+}
+
+fn split_bundle_kp112_mirror_map_primary_p_lambda_coefficients(max_degree: usize) -> Vec<String> {
+    weighted_p2_ordinary_p_primary_after_kp112_mirror_map(&[1, 1, 2], max_degree)
+        .iter()
+        .take(max_degree + 1)
+        .skip(1)
+        .map(|degree_primary| {
+            degree_primary
+                .get(&1)
+                .cloned()
+                .unwrap_or_else(|| MalachiteRational::from(0))
+                .to_string()
+        })
+        .collect()
 }
 
 fn ceil_positive_half_product(factor: i64, degree_twice: i64) -> i64 {
@@ -41334,6 +41639,17 @@ mod tests {
                 adjacent_canonical_mirror_map_status:
                     "kp112_canonical_source_uses_q_equals_x_exp_4h_after_o_minus_4_hypergeometric_modification"
                         .to_string(),
+                adjacent_canonical_mirror_map_b_table_status:
+                    "kp112_canonical_mirror_map_reproduces_ccit_b_table_to_degree_6"
+                        .to_string(),
+                adjacent_canonical_mirror_map_b_table_values: vec![
+                    "11/4".to_string(),
+                    "525/16".to_string(),
+                    "6152/9".to_string(),
+                    "1146765/64".to_string(),
+                    "53305261/100".to_string(),
+                    "51550873/3".to_string(),
+                ],
                 split_bundle_ifunction_modification_source:
                     "ccit_smalllinebundle_smallvb_direct_sum_modification_product_over_o_minus_1_o_minus_1_o_minus_2"
                         .to_string(),
@@ -41343,6 +41659,15 @@ mod tests {
                 split_bundle_mirror_map_status:
                     "rank_three_split_integer_terms_have_zero_order_three_so_adjacent_kp112_divisor_mirror_map_is_not_inherited"
                         .to_string(),
+                split_bundle_kp112_mirror_map_primary_p_status:
+                    "rank_three_split_kp112_mirror_map_primary_p_signal_zero_to_degree_4"
+                        .to_string(),
+                split_bundle_kp112_mirror_map_primary_p_lambda_coefficients: vec![
+                    "0".to_string(),
+                    "0".to_string(),
+                    "0".to_string(),
+                    "0".to_string(),
+                ],
                 split_bundle_gw_extraction_status:
                     "rank_three_split_requires_own_j_or_big_j_coefficient_extraction_before_qn_history"
                         .to_string(),
@@ -41693,253 +42018,32 @@ mod tests {
         );
     }
 
-    fn test_rational(value: i64) -> MalachiteRational {
-        MalachiteRational::from(Integer::from(value))
-    }
-
-    fn test_factorial(value: usize) -> Integer {
-        (1..=value).fold(Integer::from(1), |product, factor| {
-            product * Integer::from(factor)
-        })
-    }
-
-    fn test_series_multiply(
-        lhs: &[MalachiteRational],
-        rhs: &[MalachiteRational],
-        max_degree: usize,
-    ) -> Vec<MalachiteRational> {
-        let mut product = vec![MalachiteRational::from(0); max_degree + 1];
-        for (lhs_degree, lhs_coefficient) in lhs.iter().enumerate() {
-            if lhs_coefficient == &MalachiteRational::from(0) {
-                continue;
-            }
-            for (rhs_degree, rhs_coefficient) in rhs.iter().enumerate() {
-                let total_degree = lhs_degree + rhs_degree;
-                if total_degree > max_degree || rhs_coefficient == &MalachiteRational::from(0) {
-                    continue;
-                }
-                product[total_degree] += lhs_coefficient.clone() * rhs_coefficient.clone();
-            }
-        }
-        product
-    }
-
-    fn test_series_compose(
-        series: &[MalachiteRational],
-        argument: &[MalachiteRational],
-        max_degree: usize,
-    ) -> Vec<MalachiteRational> {
-        let mut result = vec![MalachiteRational::from(0); max_degree + 1];
-        let mut argument_power = vec![MalachiteRational::from(0); max_degree + 1];
-        argument_power[0] = MalachiteRational::from(1);
-        for (degree, coefficient) in series.iter().enumerate().take(max_degree + 1) {
-            if degree > 0 {
-                argument_power = test_series_multiply(&argument_power, argument, max_degree);
-            }
-            if coefficient == &MalachiteRational::from(0) {
-                continue;
-            }
-            for output_degree in 0..=max_degree {
-                result[output_degree] +=
-                    coefficient.clone() * argument_power[output_degree].clone();
-            }
-        }
-        result
-    }
-
-    fn test_series_exp(
-        argument: &[MalachiteRational],
-        max_degree: usize,
-    ) -> Vec<MalachiteRational> {
-        let mut result = vec![MalachiteRational::from(0); max_degree + 1];
-        result[0] = MalachiteRational::from(1);
-        let mut argument_power = vec![MalachiteRational::from(0); max_degree + 1];
-        argument_power[0] = MalachiteRational::from(1);
-        for power in 1..=max_degree {
-            argument_power = test_series_multiply(&argument_power, argument, max_degree);
-            let denominator = MalachiteRational::from(test_factorial(power));
-            for degree in 0..=max_degree {
-                result[degree] += argument_power[degree].clone() / denominator.clone();
-            }
-        }
-        result
-    }
-
-    fn test_series_power(
-        series: &[MalachiteRational],
-        exponent: usize,
-        max_degree: usize,
-    ) -> Vec<MalachiteRational> {
-        let mut result = vec![MalachiteRational::from(0); max_degree + 1];
-        result[0] = MalachiteRational::from(1);
-        for _ in 0..exponent {
-            result = test_series_multiply(&result, series, max_degree);
-        }
-        result
-    }
-
-    fn test_kp112_h_series(max_degree: usize) -> Vec<MalachiteRational> {
-        let mut series = vec![MalachiteRational::from(0); max_degree + 1];
-        for (degree, coefficient) in series.iter_mut().enumerate().take(max_degree + 1).skip(1) {
-            let numerator = test_factorial(4 * degree - 1);
-            let denominator =
-                test_factorial(degree) * test_factorial(degree) * test_factorial(2 * degree);
-            *coefficient =
-                MalachiteRational::from(numerator) / MalachiteRational::from(denominator);
-        }
-        series
-    }
-
-    fn test_kp112_x_of_q_series(max_degree: usize) -> Vec<MalachiteRational> {
-        let h_series = test_kp112_h_series(max_degree);
-        let mut q_series = vec![MalachiteRational::from(0); max_degree + 1];
-        q_series[1] = MalachiteRational::from(1);
-        let mut x_series = q_series.clone();
-        for _ in 0..max_degree {
-            let h_of_x = test_series_compose(&h_series, &x_series, max_degree);
-            let argument = h_of_x
-                .into_iter()
-                .map(|coefficient| -test_rational(4) * coefficient)
-                .collect::<Vec<_>>();
-            let exponential = test_series_exp(&argument, max_degree);
-            x_series = test_series_multiply(&q_series, &exponential, max_degree);
-        }
-        x_series
-    }
-
-    fn test_weighted_p2_ordinary_p_primary_after_kp112_mirror_map(
-        bundle_degrees: &[i64],
-        max_degree: usize,
-    ) -> Vec<BTreeMap<usize, MalachiteRational>> {
-        let x_of_q = test_kp112_x_of_q_series(max_degree);
-        let h_of_q = test_series_compose(&test_kp112_h_series(max_degree), &x_of_q, max_degree);
-        let mut raw_by_inverse_z_power =
-            BTreeMap::<i64, BTreeMap<usize, Vec<MalachiteRational>>>::new();
-        for degree in 1..=max_degree {
-            let denominator = integer_sector_base_denominator_constant(
-                &[1, 1, 2],
-                i64::try_from(2 * degree).expect("degree fits i64"),
-            )
-            .expect("integer weighted P2 denominator exists");
-            let denominator_z_power = i64::try_from(4 * degree).expect("degree fits i64");
-            let mut numerator = BTreeMap::<(usize, usize, i64), MalachiteRational>::new();
-            numerator.insert((0, 0, 0), MalachiteRational::from(1));
-            for &line_degree in bundle_degrees {
-                let factor_count = line_degree
-                    .checked_mul(i64::try_from(degree).expect("degree fits i64"))
-                    .expect("factor count fits i64");
-                for factor_offset in (-factor_count + 1)..=0 {
-                    let mut next = BTreeMap::<(usize, usize, i64), MalachiteRational>::new();
-                    for (&(p_power, lambda_power, z_power), coefficient) in &numerator {
-                        *next
-                            .entry((p_power, lambda_power + 1, z_power))
-                            .or_insert_with(|| MalachiteRational::from(0)) += coefficient.clone();
-                        if p_power < 1 {
-                            *next
-                                .entry((p_power + 1, lambda_power, z_power))
-                                .or_insert_with(|| MalachiteRational::from(0)) +=
-                                -test_rational(line_degree) * coefficient.clone();
-                        }
-                        if factor_offset != 0 {
-                            *next
-                                .entry((p_power, lambda_power, z_power + 1))
-                                .or_insert_with(|| MalachiteRational::from(0)) +=
-                                test_rational(factor_offset) * coefficient.clone();
-                        }
-                    }
-                    next.retain(|_, coefficient| *coefficient != MalachiteRational::from(0));
-                    numerator = next;
-                }
-            }
-
-            let x_power = test_series_power(&x_of_q, degree, max_degree);
-            for ((p_power, lambda_power, z_power), coefficient) in numerator {
-                if p_power != 1 {
-                    continue;
-                }
-                let inverse_z_power = denominator_z_power - z_power;
-                let q_series = raw_by_inverse_z_power
-                    .entry(inverse_z_power)
-                    .or_default()
-                    .entry(lambda_power)
-                    .or_insert_with(|| vec![MalachiteRational::from(0); max_degree + 1]);
-                let scaled = coefficient / denominator.clone();
-                for q_degree in 0..=max_degree {
-                    q_series[q_degree] += scaled.clone() * x_power[q_degree].clone();
-                }
-            }
-        }
-
-        let mut exp_terms = Vec::<(i64, Vec<MalachiteRational>)>::new();
-        let mut h_power = vec![MalachiteRational::from(0); max_degree + 1];
-        h_power[0] = MalachiteRational::from(1);
-        exp_terms.push((0, h_power.clone()));
-        for power in 1..=2 {
-            h_power = test_series_multiply(&h_power, &h_of_q, max_degree);
-            let denominator = MalachiteRational::from(test_factorial(power));
-            exp_terms.push((
-                i64::try_from(power).expect("power fits i64"),
-                h_power
-                    .iter()
-                    .map(|coefficient| coefficient.clone() / denominator.clone())
-                    .collect(),
-            ));
-        }
-
-        let mut primary_by_q_degree =
-            vec![BTreeMap::<usize, MalachiteRational>::new(); max_degree + 1];
-        for (inverse_z_power, lambda_series_by_power) in raw_by_inverse_z_power {
-            for (extra_inverse_z_power, exp_series) in &exp_terms {
-                if inverse_z_power + extra_inverse_z_power != 2 {
-                    continue;
-                }
-                for (lambda_power, q_series) in &lambda_series_by_power {
-                    let product = test_series_multiply(q_series, exp_series, max_degree);
-                    let output_lambda_power = lambda_power
-                        + usize::try_from(*extra_inverse_z_power).expect("power is nonnegative");
-                    for q_degree in 0..=max_degree {
-                        *primary_by_q_degree[q_degree]
-                            .entry(output_lambda_power)
-                            .or_insert_with(|| MalachiteRational::from(0)) +=
-                            product[q_degree].clone();
-                    }
-                }
-            }
-        }
-        primary_by_q_degree
-    }
-
     #[test]
     fn canonical_weighted_p2_mirror_map_matches_ccit_b_table() {
-        let ordinary_p_primary =
-            test_weighted_p2_ordinary_p_primary_after_kp112_mirror_map(&[4], 6);
-        let expected = [
-            "11/4",
-            "525/16",
-            "6152/9",
-            "1146765/64",
-            "53305261/100",
-            "51550873/3",
-        ];
-        for (degree, expected_value) in expected.iter().enumerate() {
-            let ordinary_p_lambda_coefficient = ordinary_p_primary[degree + 1]
-                .get(&1)
-                .expect("canonical primary ordinary-p lambda coefficient exists");
-            let extracted_b = -ordinary_p_lambda_coefficient.clone() / test_rational(16);
-            assert_eq!(extracted_b.to_string(), *expected_value);
-        }
+        assert_eq!(
+            kp112_canonical_b_table_values(6),
+            vec![
+                "11/4".to_string(),
+                "525/16".to_string(),
+                "6152/9".to_string(),
+                "1146765/64".to_string(),
+                "53305261/100".to_string(),
+                "51550873/3".to_string(),
+            ]
+        );
     }
 
     #[test]
     fn split_bundle_kp112_mirror_map_diagnostic_has_zero_primary_p_signal() {
-        let ordinary_p_primary =
-            test_weighted_p2_ordinary_p_primary_after_kp112_mirror_map(&[1, 1, 2], 4);
-        for degree_primary in ordinary_p_primary.iter().take(5).skip(1) {
-            assert!(
-                degree_primary.is_empty(),
-                "split-bundle primary ordinary-p signal should vanish in the checked diagnostic"
-            );
-        }
+        assert_eq!(
+            split_bundle_kp112_mirror_map_primary_p_lambda_coefficients(4),
+            vec![
+                "0".to_string(),
+                "0".to_string(),
+                "0".to_string(),
+                "0".to_string(),
+            ]
+        );
     }
 
     #[test]
