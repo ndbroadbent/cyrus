@@ -48,7 +48,9 @@ than a shape probe. The context diagnostics now report this as an explicit
 on both local CICY candidates and unresolved current-chamber generator
 summaries: the six-point weighted-`P2` row is blocked before the `cygv` qN
 trace boundary because it has zero certified zero-degree CYTools-style nef
-partitions.
+partitions. The same report exports the degree totals behind this obstruction:
+the origin-excluded support has total degree `[-1]`, the origin has degree
+`[1]`, and the origin-included support has total degree `[0]`.
 
 ## CYTools Contract
 

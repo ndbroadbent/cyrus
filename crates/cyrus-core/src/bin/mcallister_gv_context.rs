@@ -947,6 +947,9 @@ struct LocalCygvCompleteIntersectionShapeCandidate {
     support_polytope_origin_is_hull_vertex: Option<bool>,
     support_polytope_hull_vertex_point_indices: Vec<usize>,
     nef_partition_part_count: usize,
+    nef_partition_total_degree_excluding_origin: Vec<i64>,
+    nef_partition_origin_degree: Option<Vec<i64>>,
+    nef_partition_total_degree_including_origin: Vec<i64>,
     nef_partition_candidate_count: Option<usize>,
     nef_partition_degree_status_counts: Option<BTreeMap<String, usize>>,
     nef_partition_cytools_nef_certificate_status_counts: Option<BTreeMap<String, usize>>,
@@ -1369,6 +1372,9 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
         Option<String>,
     local_toric_complete_intersection_support_polytope_origin_is_hull_vertex: Option<bool>,
     local_toric_complete_intersection_support_polytope_hull_vertex_point_indices: Vec<usize>,
+    local_toric_complete_intersection_nef_partition_total_degree_excluding_origin: Vec<i64>,
+    local_toric_complete_intersection_nef_partition_origin_degree: Option<Vec<i64>>,
+    local_toric_complete_intersection_nef_partition_total_degree_including_origin: Vec<i64>,
     local_toric_complete_intersection_nef_partition_candidate_count: Option<usize>,
     local_toric_complete_intersection_nef_partition_degree_status_counts:
         Option<BTreeMap<String, usize>>,
@@ -1508,6 +1514,9 @@ struct LocalCygvChamberGeneratorLocalToricDiagnostic {
         Option<String>,
     local_toric_complete_intersection_support_polytope_origin_is_hull_vertex: Option<bool>,
     local_toric_complete_intersection_support_polytope_hull_vertex_point_indices: Vec<usize>,
+    local_toric_complete_intersection_nef_partition_total_degree_excluding_origin: Vec<i64>,
+    local_toric_complete_intersection_nef_partition_origin_degree: Option<Vec<i64>>,
+    local_toric_complete_intersection_nef_partition_total_degree_including_origin: Vec<i64>,
     local_toric_complete_intersection_nef_partition_candidate_count: Option<usize>,
     local_toric_complete_intersection_nef_partition_degree_status_counts:
         Option<BTreeMap<String, usize>>,
@@ -10856,6 +10865,13 @@ fn local_cygv_complete_intersection_shape_candidate(
     }
     let support_reflexivity_precondition =
         local_cygv_support_polytope_reflexivity_precondition(support_point_samples);
+    let local_q_matrix_rows = transpose_local_charge_basis(local_charge_basis);
+    let nef_partition_total_degree_excluding_origin =
+        local_cygv_support_total_degree(support_point_indices, &local_q_matrix_rows, false).ok()?;
+    let nef_partition_origin_degree =
+        local_cygv_origin_point_degree(support_point_indices, &local_q_matrix_rows).ok()?;
+    let nef_partition_total_degree_including_origin =
+        local_cygv_support_total_degree(support_point_indices, &local_q_matrix_rows, true).ok()?;
     let nef_partition_candidates = if cy_codim == 2 {
         local_cygv_codim_two_nef_partition_candidates(
             support_point_indices,
@@ -11075,6 +11091,9 @@ fn local_cygv_complete_intersection_shape_candidate(
         support_polytope_hull_vertex_point_indices: support_reflexivity_precondition
             .hull_vertex_point_indices,
         nef_partition_part_count: cy_codim,
+        nef_partition_total_degree_excluding_origin,
+        nef_partition_origin_degree,
+        nef_partition_total_degree_including_origin,
         nef_partition_candidate_count,
         nef_partition_degree_status_counts,
         nef_partition_cytools_nef_certificate_status_counts,
@@ -11158,6 +11177,50 @@ fn local_cygv_complete_intersection_qn_trace_readiness_status(
         }
     }
     (status.to_string(), missing_inputs)
+}
+
+fn local_cygv_support_total_degree(
+    support_point_indices: &[usize],
+    local_q_matrix_rows: &[Vec<i64>],
+    include_origin: bool,
+) -> Result<Vec<i64>, String> {
+    if local_q_matrix_rows.len() != support_point_indices.len() {
+        return Err("support point count does not match local q row count".to_string());
+    }
+    let row_width = local_q_matrix_rows
+        .first()
+        .map_or(0usize, std::vec::Vec::len);
+    let mut total = vec![0i64; row_width];
+    for (&point_index, row) in support_point_indices.iter().zip(local_q_matrix_rows) {
+        if row.len() != row_width {
+            return Err("local q rows have inconsistent lengths".to_string());
+        }
+        if include_origin || point_index != 0 {
+            for (slot, &charge) in total.iter_mut().zip(row) {
+                *slot += charge;
+            }
+        }
+    }
+    Ok(total)
+}
+
+fn local_cygv_origin_point_degree(
+    support_point_indices: &[usize],
+    local_q_matrix_rows: &[Vec<i64>],
+) -> Result<Option<Vec<i64>>, String> {
+    if local_q_matrix_rows.len() != support_point_indices.len() {
+        return Err("support point count does not match local q row count".to_string());
+    }
+    let mut origin_degree = None;
+    for (&point_index, row) in support_point_indices.iter().zip(local_q_matrix_rows) {
+        if point_index == 0 {
+            if origin_degree.is_some() {
+                return Err("support contains duplicate origin point".to_string());
+            }
+            origin_degree = Some(row.clone());
+        }
+    }
+    Ok(origin_degree)
 }
 
 fn local_cygv_codim_two_nef_partition_candidates(
@@ -21135,6 +21198,21 @@ fn unresolved_chamber_generator_summaries(
                             .local_toric_diagnostic
                             .local_toric_complete_intersection_support_polytope_hull_vertex_point_indices
                             .clone(),
+                    local_toric_complete_intersection_nef_partition_total_degree_excluding_origin:
+                        context
+                            .local_toric_diagnostic
+                            .local_toric_complete_intersection_nef_partition_total_degree_excluding_origin
+                            .clone(),
+                    local_toric_complete_intersection_nef_partition_origin_degree:
+                        context
+                            .local_toric_diagnostic
+                            .local_toric_complete_intersection_nef_partition_origin_degree
+                            .clone(),
+                    local_toric_complete_intersection_nef_partition_total_degree_including_origin:
+                        context
+                            .local_toric_diagnostic
+                            .local_toric_complete_intersection_nef_partition_total_degree_including_origin
+                            .clone(),
                     local_toric_complete_intersection_nef_partition_candidate_count: context
                         .local_toric_diagnostic
                         .local_toric_complete_intersection_nef_partition_candidate_count,
@@ -26848,6 +26926,9 @@ fn chamber_generator_local_toric_diagnostic_not_run(
         local_toric_complete_intersection_support_polytope_reflexivity_precondition_status: None,
         local_toric_complete_intersection_support_polytope_origin_is_hull_vertex: None,
         local_toric_complete_intersection_support_polytope_hull_vertex_point_indices: Vec::new(),
+        local_toric_complete_intersection_nef_partition_total_degree_excluding_origin: Vec::new(),
+        local_toric_complete_intersection_nef_partition_origin_degree: None,
+        local_toric_complete_intersection_nef_partition_total_degree_including_origin: Vec::new(),
         local_toric_complete_intersection_nef_partition_candidate_count: None,
         local_toric_complete_intersection_nef_partition_degree_status_counts: None,
         local_toric_complete_intersection_cytools_nef_partition_candidate_count: None,
@@ -27127,6 +27208,11 @@ fn chamber_generator_local_toric_diagnostic(
             local_toric_complete_intersection_support_polytope_origin_is_hull_vertex: None,
             local_toric_complete_intersection_support_polytope_hull_vertex_point_indices:
                 Vec::new(),
+            local_toric_complete_intersection_nef_partition_total_degree_excluding_origin:
+                Vec::new(),
+            local_toric_complete_intersection_nef_partition_origin_degree: None,
+            local_toric_complete_intersection_nef_partition_total_degree_including_origin:
+                Vec::new(),
             local_toric_complete_intersection_nef_partition_candidate_count: None,
             local_toric_complete_intersection_nef_partition_degree_status_counts: None,
             local_toric_complete_intersection_cytools_nef_partition_candidate_count: None,
@@ -27333,6 +27419,22 @@ fn chamber_generator_local_toric_diagnostic(
                     candidate
                         .support_polytope_hull_vertex_point_indices
                         .clone()
+                }),
+        local_toric_complete_intersection_nef_partition_total_degree_excluding_origin:
+            complete_intersection_shape_candidate
+                .as_ref()
+                .map_or_else(Vec::new, |candidate| {
+                    candidate.nef_partition_total_degree_excluding_origin.clone()
+                }),
+        local_toric_complete_intersection_nef_partition_origin_degree:
+            complete_intersection_shape_candidate
+                .as_ref()
+                .and_then(|candidate| candidate.nef_partition_origin_degree.clone()),
+        local_toric_complete_intersection_nef_partition_total_degree_including_origin:
+            complete_intersection_shape_candidate
+                .as_ref()
+                .map_or_else(Vec::new, |candidate| {
+                    candidate.nef_partition_total_degree_including_origin.clone()
                 }),
         local_toric_complete_intersection_nef_partition_candidate_count:
             complete_intersection_shape_candidate
@@ -33977,6 +34079,20 @@ mod tests {
             vec![0, 55, 208, 211, 212, 214]
         );
         assert_eq!(
+            diagnostic
+                .local_toric_complete_intersection_nef_partition_total_degree_excluding_origin,
+            vec![-1]
+        );
+        assert_eq!(
+            diagnostic.local_toric_complete_intersection_nef_partition_origin_degree,
+            Some(vec![1])
+        );
+        assert_eq!(
+            diagnostic
+                .local_toric_complete_intersection_nef_partition_total_degree_including_origin,
+            vec![0]
+        );
+        assert_eq!(
             diagnostic.local_toric_complete_intersection_nef_partition_candidate_count,
             Some(15)
         );
@@ -36601,6 +36717,15 @@ mod tests {
 
         assert_eq!((candidate.cy_codim, candidate.cy_dim), (2, 3));
         assert_eq!(candidate.nef_partition_part_count, 2);
+        assert_eq!(
+            candidate.nef_partition_total_degree_excluding_origin,
+            vec![2]
+        );
+        assert_eq!(candidate.nef_partition_origin_degree, Some(vec![-2]));
+        assert_eq!(
+            candidate.nef_partition_total_degree_including_origin,
+            vec![0]
+        );
         assert_eq!(candidate.nef_partition_candidate_count, Some(15));
         assert_eq!(candidate.cytools_nef_partition_candidate_count, Some(0));
         assert_eq!(

@@ -264,3 +264,8 @@ as a direct qN-trace readiness blocker on both the local CICY candidate and
 the unresolved current-chamber generator summary: the current six-point row
 has `complete_intersection_qn_trace_blocked_no_zero_degree_nef_partition` and
 ready count `0`, so no complete-intersection `cygv` call is legitimate yet.
+The newly exported degree totals make the obstruction algebraic rather than
+just enumerative: the CYTools-valid origin-excluded support has total degree
+`[-1]`, the origin contributes `[1]`, and the origin-included total is `[0]`.
+Thus zero-degree splits appear only after violating the CYTools rule that nef
+partition parts must exclude the origin.

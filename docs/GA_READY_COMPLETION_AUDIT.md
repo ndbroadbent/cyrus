@@ -278,7 +278,10 @@ and matrix-basis pipeline are no longer open.
    generator summaries, so this handoff is explicit in reports; the six-point
    weighted-`P2` row currently reports
    `complete_intersection_qn_trace_blocked_no_zero_degree_nef_partition` with
-   ready count `0`.
+   ready count `0`. Its exported degree totals show why this is not merely a
+   search miss: the origin-excluded support totals to `[-1]`, the origin
+   contributes `[1]`, and the origin-included total is `[0]`, so the apparent
+   zero-degree repair depends on putting the origin into a nef part.
    The context tool now also has an opt-in exact extremal-ray probe. For the
    current schema-3 context it verifies that all nine remaining targets are
    non-extremal in the finite degree-bounded cone by exact decomposition
