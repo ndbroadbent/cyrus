@@ -155,6 +155,20 @@ nonzero split-bundle contribution still requires an equivariant residue or
 twisted big-J/pairing normalization. These aggregates are report-level
 bookkeeping, not a promotion rule.
 
+Cyrus now traces that dual-basis readout at the numerator level. Since CCIT's
+small `J`-function is written as
+`<phi_epsilon/(z(z-psi))> phi^epsilon`, the `p^2` insertion coefficient is
+the coefficient of `phi^2`, not the ordinary-basis `p^2` component. In the
+`K_P(1,1,2)` Chen-Ruan basis,
+`phi^2 = 2*lambda*fun_0 - 8*p`, so the numerator-only diagnostic reads the
+candidate `p^2` insertion from the ordinary `fun_0` coefficient divided by
+`2*lambda`. For the first integer split-bundle sectors this gives positive
+lambda-order polynomials, e.g. `d=1` gives `[0,0,-1/2,1/2]` and `d=2` gives
+`[0,0,-3,23/2,-17,12,-4,1/2]`. This rules out the raw `p^2` coefficient as
+the missing extraction, but still does not promote a GV value: denominator
+terms, mirror-map normalization, and equivariant residue or twisted big-J
+pairing data remain required.
+
 A direct CYTools/PALP probe of the same six support coordinates is also
 negative. With experimental CYTools features enabled, `Polytope(pts)` reports
 dimension `4`, point count `6`, and `is_reflexive=False`; calling
