@@ -551,6 +551,10 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_half_sector_descendant_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_half_sector_descendant_profile_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_half_sector_descendant_profile_nonzero_inverse_z_power_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_gw_extraction_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_required_source_data_status_counts:
@@ -18158,6 +18162,26 @@ fn build_report(
                 }),
             |source_map| source_map.split_bundle_kp112_mirror_map_half_sector_descendant_status.as_str(),
         );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_half_sector_descendant_profile_status_counts =
+        weighted_p2_rank_three_chen_ruan_source_map_descendant_profile_status_counts(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| {
+                    summary
+                        .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_chen_ruan_source_map
+                        .as_ref()
+                }),
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_half_sector_descendant_profile_nonzero_inverse_z_power_counts =
+        weighted_p2_rank_three_chen_ruan_source_map_descendant_profile_nonzero_inverse_z_power_counts(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| {
+                    summary
+                        .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_chen_ruan_source_map
+                        .as_ref()
+                }),
+        );
     let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_gw_extraction_status_counts =
         weighted_p2_rank_three_chen_ruan_source_map_status_counts(
             local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
@@ -19683,6 +19707,8 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_primary_p_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_half_sector_primary_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_half_sector_descendant_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_half_sector_descendant_profile_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_split_bundle_kp112_mirror_map_half_sector_descendant_profile_nonzero_inverse_z_power_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_gw_extraction_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_required_source_data_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_promotion_status_counts,
@@ -22153,6 +22179,45 @@ where
     let mut counts = BTreeMap::new();
     for source_map in source_maps.into_iter().flatten() {
         *counts.entry(status(source_map).to_string()).or_insert(0) += 1;
+    }
+    counts
+}
+
+fn weighted_p2_rank_three_chen_ruan_source_map_descendant_profile_status_counts<'a>(
+    source_maps: impl IntoIterator<
+        Item = Option<&'a WeightedP2RankThreeTwistedIfunctionChenRuanSourceMap>,
+    >,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for source_map in source_maps.into_iter().flatten() {
+        for profile in &source_map.split_bundle_kp112_mirror_map_half_sector_descendant_profiles {
+            for readout in profile {
+                *counts.entry(readout.status.clone()).or_insert(0) += 1;
+            }
+        }
+    }
+    counts
+}
+
+fn weighted_p2_rank_three_chen_ruan_source_map_descendant_profile_nonzero_inverse_z_power_counts<
+    'a,
+>(
+    source_maps: impl IntoIterator<
+        Item = Option<&'a WeightedP2RankThreeTwistedIfunctionChenRuanSourceMap>,
+    >,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for source_map in source_maps.into_iter().flatten() {
+        for profile in &source_map.split_bundle_kp112_mirror_map_half_sector_descendant_profiles {
+            for readout in profile {
+                let Some(coefficients) = readout.dual_basis_coefficients.as_ref() else {
+                    continue;
+                };
+                if lambda_polynomial_has_nonzero_coefficient(coefficients) {
+                    *counts.entry(readout.inverse_z_power.clone()).or_insert(0) += 1;
+                }
+            }
+        }
     }
     counts
 }
@@ -41683,6 +41748,21 @@ mod tests {
             source_map.split_bundle_kp112_mirror_map_half_sector_descendant_profiles[0][1]
                 .dual_basis_coefficients,
             Some(vec!["2".to_string()])
+        );
+        assert_eq!(
+            weighted_p2_rank_three_chen_ruan_source_map_descendant_profile_status_counts([Some(
+                &source_map
+            )]),
+            BTreeMap::from([
+                ("dual_basis_normalized_nonzero".to_string(), 7),
+                ("dual_basis_normalized_zero".to_string(), 5),
+            ])
+        );
+        assert_eq!(
+            weighted_p2_rank_three_chen_ruan_source_map_descendant_profile_nonzero_inverse_z_power_counts([
+                Some(&source_map)
+            ]),
+            BTreeMap::from([("3".to_string(), 4), ("4".to_string(), 3)])
         );
 
         let counts = weighted_p2_rank_three_chen_ruan_source_map_status_counts(

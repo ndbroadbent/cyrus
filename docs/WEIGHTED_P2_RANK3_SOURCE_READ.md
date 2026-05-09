@@ -253,6 +253,10 @@ polynomial when division by `2*lambda` is valid, and a normalization status.
 This preserves the `z^-2` zero primary rows and the later descendant rows in
 the report, so downstream source-history work can inspect the exact structured
 evidence without re-running or reinterpreting the lossy first-nonzero summary.
+The report also aggregates the profile statuses and nonzero inverse-`z` powers:
+for the checked split-bundle source map this gives five normalized-zero
+readouts and seven normalized-nonzero readouts, with four nonzero readouts at
+`z^-3` and three additional checked descendant readouts at `z^-4`.
 
 This does not mean the `z^-3` descendant term is useless. CCIT explicitly
 states that one-point descendants can reconstruct genus-zero Gromov-Witten
