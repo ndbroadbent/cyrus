@@ -1670,9 +1670,9 @@ to make the remaining GV layer more first-principles:
    blocker in the uncertified-generator sample.
    The same sample now also carries the nearest zero-coefficient enlargement
    blocker. Regenerated target `7` and target `8` reports in
-   `/tmp/cyrus_target7_enlargement_blocker_sample_probe.json` and
-   `/tmp/cyrus_target8_enlargement_blocker_sample_probe.json` each find three
-   sampled enlargement candidates, all with
+   `/tmp/cyrus_target7_enlargement_exhaustive_probe.json` and
+   `/tmp/cyrus_target8_enlargement_exhaustive_probe.json` each exhaustively
+   enumerate three enlargement candidates, all with
    `support_polytope_not_reflexive_origin_is_hull_vertex`, zero zero-degree nef
    candidates, and compact threefold omission statuses split as two
    `compact_threefold_omissions_delete_target_relation_terms` plus one

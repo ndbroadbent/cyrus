@@ -30220,14 +30220,23 @@ fn local_toric_zero_coefficient_enlargement_diagnostic(
             .compact_threefold_omission_candidate_count
             .is_some_and(|count| count > 0)
     });
-    let status = if has_relation_preserving_candidate_shape {
-        "zero_coefficient_enlargements_sampled_with_relation_preserving_cygv_shape_candidates"
-    } else if has_non_preserving_compact_omission {
-        "zero_coefficient_enlargements_sampled_compact_omissions_delete_target_relation_terms"
+    let enumeration_scope = if candidates.len() == candidate_count {
+        "exhaustive"
     } else {
-        "zero_coefficient_enlargements_sampled_no_cygv_shape_candidates"
+        "sampled"
     };
-    (status.to_string(), Some(candidate_count), candidates)
+    let outcome = if has_relation_preserving_candidate_shape {
+        "with_relation_preserving_cygv_shape_candidates"
+    } else if has_non_preserving_compact_omission {
+        "compact_omissions_delete_target_relation_terms"
+    } else {
+        "no_cygv_shape_candidates"
+    };
+    (
+        format!("zero_coefficient_enlargements_{enumeration_scope}_{outcome}"),
+        Some(candidate_count),
+        candidates,
+    )
 }
 
 fn local_toric_zero_coefficient_enlargement_candidate(
@@ -37072,7 +37081,7 @@ mod tests {
 
         assert_eq!(
             diagnostic.local_toric_zero_coefficient_enlargement_status,
-            "zero_coefficient_enlargements_sampled_compact_omissions_delete_target_relation_terms"
+            "zero_coefficient_enlargements_exhaustive_compact_omissions_delete_target_relation_terms"
         );
         assert_eq!(
             diagnostic.local_toric_zero_coefficient_enlargement_candidate_count,
@@ -40308,7 +40317,7 @@ mod tests {
         assert_eq!(sample.len(), 1);
         assert_eq!(
             sample[0].zero_coefficient_enlargement_status,
-            "zero_coefficient_enlargements_sampled_compact_omissions_delete_target_relation_terms"
+            "zero_coefficient_enlargements_exhaustive_compact_omissions_delete_target_relation_terms"
         );
         assert_eq!(
             sample[0].zero_coefficient_enlargement_candidate_count,

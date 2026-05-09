@@ -561,15 +561,15 @@ history.
 
 The current-chamber provided-generator sample now carries the same source
 blocker in the small full-chamber report row. Regenerated target reports
-`/tmp/cyrus_target7_enlargement_blocker_sample_probe.json` and
-`/tmp/cyrus_target8_enlargement_blocker_sample_probe.json` show that the
-weighted-`P2` blocker has three sampled zero-coefficient support enlargements
-in each target. All three remain non-reflexive with the origin as a hull
-vertex, all have zero zero-degree nef candidates, and the compact threefold
-omission scan either deletes the target relation terms or has no compact
-omission candidate. This keeps support enlargement in the ruled-out diagnostic
-bucket unless a new source-certified enlargement/chamber construction is
-supplied.
+`/tmp/cyrus_target7_enlargement_exhaustive_probe.json` and
+`/tmp/cyrus_target8_enlargement_exhaustive_probe.json` show that the
+weighted-`P2` blocker has three exhaustively enumerated zero-coefficient support
+enlargements in each target. All three remain non-reflexive with the origin as
+a hull vertex, all have zero zero-degree nef candidates, and the compact
+threefold omission scan either deletes the target relation terms or has no
+compact omission candidate. This keeps support enlargement in the ruled-out
+diagnostic bucket unless a new source-certified enlargement/chamber
+construction is supplied.
 
 The core source-certificate required-input list now also names the source-level
 reason the descendant readout cannot be converted by a scalar mirror-map
