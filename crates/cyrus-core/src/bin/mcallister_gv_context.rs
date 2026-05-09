@@ -1674,6 +1674,7 @@ struct WeightedP2RankThreeTwistedIfunctionChenRuanSourceMap {
     untwisted_codim2_candidate_class: String,
     twisted_half_sector_candidate_class: String,
     source_dual_basis_p2_class: String,
+    source_dual_basis_p2_readout_status: String,
     source_dual_basis_half_sector_class: String,
     adjacent_canonical_crepant_resolution_status: String,
     adjacent_canonical_crepant_resolution_p2_image: String,
@@ -26816,6 +26817,9 @@ fn weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
         untwisted_codim2_candidate_class: "p^2".to_string(),
         twisted_half_sector_candidate_class: "fun_{1/2}".to_string(),
         source_dual_basis_p2_class: "2*lambda*fun_0-8*p".to_string(),
+        source_dual_basis_p2_readout_status:
+            "p2_one_point_correlator_is_read_from_dual_basis_phi2_not_from_raw_p2_coefficient"
+                .to_string(),
         source_dual_basis_half_sector_class: "2*lambda*fun_{1/2}".to_string(),
         adjacent_canonical_crepant_resolution_status:
             "weighted_p2_rank_three_adjacent_kp112_crepant_map_reference_only".to_string(),
@@ -39902,6 +39906,9 @@ mod tests {
                 untwisted_codim2_candidate_class: "p^2".to_string(),
                 twisted_half_sector_candidate_class: "fun_{1/2}".to_string(),
                 source_dual_basis_p2_class: "2*lambda*fun_0-8*p".to_string(),
+                source_dual_basis_p2_readout_status:
+                    "p2_one_point_correlator_is_read_from_dual_basis_phi2_not_from_raw_p2_coefficient"
+                        .to_string(),
                 source_dual_basis_half_sector_class: "2*lambda*fun_{1/2}".to_string(),
                 adjacent_canonical_crepant_resolution_status:
                     "weighted_p2_rank_three_adjacent_kp112_crepant_map_reference_only"
