@@ -1676,9 +1676,12 @@ struct WeightedP2RankThreeTwistedIfunctionChenRuanSourceMap {
     adjacent_canonical_correlator_p2_label: String,
     adjacent_canonical_correlator_half_sector_label: String,
     adjacent_canonical_mirror_map_status: String,
+    split_bundle_ifunction_modification_source: String,
+    split_bundle_ordinary_non_equivariant_p2_readout_status: String,
     split_bundle_mirror_map_status: String,
     split_bundle_gw_extraction_status: String,
     twisted_sector_divisor_equation_status: String,
+    split_bundle_required_source_data_status: String,
     split_bundle_promotion_status: String,
 }
 
@@ -26793,6 +26796,12 @@ fn weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
         adjacent_canonical_mirror_map_status:
             "kp112_canonical_source_uses_q_equals_x_exp_4h_after_o_minus_4_hypergeometric_modification"
                 .to_string(),
+        split_bundle_ifunction_modification_source:
+            "ccit_smalllinebundle_smallvb_direct_sum_modification_product_over_o_minus_1_o_minus_1_o_minus_2"
+                .to_string(),
+        split_bundle_ordinary_non_equivariant_p2_readout_status:
+            "rank_three_split_ordinary_non_equivariant_p2_readout_vanishes_before_mirror_map_because_codim2_truncation_of_bundle_numerator_is_zero"
+                .to_string(),
         split_bundle_mirror_map_status:
             "rank_three_split_integer_terms_have_zero_order_three_so_adjacent_kp112_divisor_mirror_map_is_not_inherited"
                 .to_string(),
@@ -26801,6 +26810,9 @@ fn weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
                 .to_string(),
         twisted_sector_divisor_equation_status:
             "chen_ruan_twisted_sector_has_no_divisor_equation_requires_big_j_or_pairing_input"
+                .to_string(),
+        split_bundle_required_source_data_status:
+            "rank_three_split_nonzero_contribution_if_any_requires_equivariant_residue_or_twisted_big_j_pairing_not_canonical_kp112_table"
                 .to_string(),
         split_bundle_promotion_status:
             "weighted_p2_rank_three_split_bundle_still_requires_twisted_vector_bundle_ifunction_normalization_and_qn_history"
@@ -39704,6 +39716,12 @@ mod tests {
                 adjacent_canonical_mirror_map_status:
                     "kp112_canonical_source_uses_q_equals_x_exp_4h_after_o_minus_4_hypergeometric_modification"
                         .to_string(),
+                split_bundle_ifunction_modification_source:
+                    "ccit_smalllinebundle_smallvb_direct_sum_modification_product_over_o_minus_1_o_minus_1_o_minus_2"
+                        .to_string(),
+                split_bundle_ordinary_non_equivariant_p2_readout_status:
+                    "rank_three_split_ordinary_non_equivariant_p2_readout_vanishes_before_mirror_map_because_codim2_truncation_of_bundle_numerator_is_zero"
+                        .to_string(),
                 split_bundle_mirror_map_status:
                     "rank_three_split_integer_terms_have_zero_order_three_so_adjacent_kp112_divisor_mirror_map_is_not_inherited"
                         .to_string(),
@@ -39712,6 +39730,9 @@ mod tests {
                         .to_string(),
                 twisted_sector_divisor_equation_status:
                     "chen_ruan_twisted_sector_has_no_divisor_equation_requires_big_j_or_pairing_input"
+                        .to_string(),
+                split_bundle_required_source_data_status:
+                    "rank_three_split_nonzero_contribution_if_any_requires_equivariant_residue_or_twisted_big_j_pairing_not_canonical_kp112_table"
                         .to_string(),
                 split_bundle_promotion_status:
                     "weighted_p2_rank_three_split_bundle_still_requires_twisted_vector_bundle_ifunction_normalization_and_qn_history"
