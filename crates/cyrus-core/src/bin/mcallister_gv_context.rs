@@ -1363,6 +1363,11 @@ struct LocalCygvStarUnionWallTransportReadiness {
     target_plus_star_face_cygv_status: Option<String>,
     target_plus_star_face_cygv_gv: Option<String>,
     target_plus_star_face_cygv_promotion_readiness: Option<String>,
+    target_plus_star_positive_degree_transport_status: Option<String>,
+    target_plus_star_current_positive_degree_status: Option<String>,
+    target_plus_star_flipped_positive_degree_status: Option<String>,
+    target_plus_star_current_chamber_secondary_status: Option<String>,
+    target_plus_star_flipped_chamber_secondary_status: Option<String>,
     crossed_wall_stable_weyl_certificate: Option<LocalCygvStarUnionCrossedWallStableWeylProbe>,
 }
 
@@ -26401,6 +26406,11 @@ fn local_cygv_star_union_wall_transport_readiness(
         target_plus_star_face_cygv_status: None,
         target_plus_star_face_cygv_gv: None,
         target_plus_star_face_cygv_promotion_readiness: None,
+        target_plus_star_positive_degree_transport_status: None,
+        target_plus_star_current_positive_degree_status: None,
+        target_plus_star_flipped_positive_degree_status: None,
+        target_plus_star_current_chamber_secondary_status: None,
+        target_plus_star_flipped_chamber_secondary_status: None,
         crossed_wall_stable_weyl_certificate,
     }
 }
@@ -26470,6 +26480,31 @@ fn attach_current_face_cygv_to_wall_transport_readiness(
     mut readiness: LocalCygvStarUnionWallTransportReadiness,
     chamber_transport: &LocalCygvStarUnionChamberSemigroupTransportProbe,
 ) -> LocalCygvStarUnionWallTransportReadiness {
+    readiness.target_plus_star_positive_degree_transport_status =
+        Some(chamber_transport.positive_degree_transport_status.clone());
+    readiness.target_plus_star_current_positive_degree_status = Some(
+        chamber_transport
+            .current_chamber_positive_degree_status
+            .clone(),
+    );
+    readiness.target_plus_star_flipped_positive_degree_status = Some(
+        chamber_transport
+            .flipped_chamber_positive_degree_status
+            .clone(),
+    );
+    readiness.target_plus_star_current_chamber_secondary_status = Some(
+        chamber_transport
+            .current_chamber_secondary_certificate
+            .status
+            .clone(),
+    );
+    readiness.target_plus_star_flipped_chamber_secondary_status = Some(
+        chamber_transport
+            .flipped_chamber_secondary_certificate
+            .status
+            .clone(),
+    );
+
     let Some(face_probe) = chamber_transport
         .current_chamber_positive_degree_face_cygv_probe
         .as_ref()
@@ -37982,6 +38017,11 @@ mod tests {
                     target_plus_star_face_cygv_status: None,
                     target_plus_star_face_cygv_gv: None,
                     target_plus_star_face_cygv_promotion_readiness: None,
+                    target_plus_star_positive_degree_transport_status: None,
+                    target_plus_star_current_positive_degree_status: None,
+                    target_plus_star_flipped_positive_degree_status: None,
+                    target_plus_star_current_chamber_secondary_status: None,
+                    target_plus_star_flipped_chamber_secondary_status: None,
                     crossed_wall_stable_weyl_certificate: None,
                 },
             shared_two_simplex_star_union_crossed_wall_regular_side:
@@ -44362,6 +44402,58 @@ mod tests {
         assert_eq!(
             probe.positive_degree_transport_status,
             "positive_degree_transport_not_run_without_global_degree_context"
+        );
+        let attached_readiness = attach_current_face_cygv_to_wall_transport_readiness(
+            LocalCygvStarUnionWallTransportReadiness {
+                status: "test".to_string(),
+                missing_inputs: Vec::new(),
+                local_shared_face_secondary_status: None,
+                local_shared_face_secondary_strictly_inside: None,
+                local_shared_face_secondary_global_height_status: None,
+                crossed_wall_curve_basis_nonzero: None,
+                crossed_wall_curve_ambient_nonzero: None,
+                crossed_wall_global_height_orientation: None,
+                crossed_wall_role_counts: None,
+                crossed_wall_role_signed_sums: None,
+                crossed_wall_gv: None,
+                crossed_wall_branch_q_dot_t: None,
+                crossed_wall_parity_mod2: None,
+                crossed_wall_positive_dilog_status: None,
+                crossed_wall_negative_continuation_status: None,
+                crossed_wall_source_continuation_status: None,
+                target_plus_star_basis_nonzero: None,
+                target_plus_star_extremal_status: None,
+                target_plus_star_support_generator_count: None,
+                target_plus_star_support_face_certificate_status: None,
+                target_plus_star_face_cygv_status: None,
+                target_plus_star_face_cygv_gv: None,
+                target_plus_star_face_cygv_promotion_readiness: None,
+                target_plus_star_positive_degree_transport_status: None,
+                target_plus_star_current_positive_degree_status: None,
+                target_plus_star_flipped_positive_degree_status: None,
+                target_plus_star_current_chamber_secondary_status: None,
+                target_plus_star_flipped_chamber_secondary_status: None,
+                crossed_wall_stable_weyl_certificate: None,
+            },
+            &probe,
+        );
+        assert_eq!(
+            attached_readiness
+                .target_plus_star_positive_degree_transport_status
+                .as_deref(),
+            Some("positive_degree_transport_not_run_without_global_degree_context")
+        );
+        assert_eq!(
+            attached_readiness
+                .target_plus_star_current_chamber_secondary_status
+                .as_deref(),
+            Some("chamber_secondary_certificate_regular_strictly_inside_secondary_cone")
+        );
+        assert_eq!(
+            attached_readiness
+                .target_plus_star_flipped_chamber_secondary_status
+                .as_deref(),
+            Some("chamber_secondary_certificate_no_strict_interior_point")
         );
 
         let skipped_certificate_probe = local_cygv_star_union_chamber_semigroup_transport_probe(
