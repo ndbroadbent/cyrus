@@ -1657,6 +1657,9 @@ struct WeightedP2RankThreeTwistedIfunctionDegreeProfile {
     split_non_equivariant_candidate_insertion_coefficient_status: String,
     split_non_equivariant_bundle_numerator_truncated_coefficients: Option<Vec<String>>,
     split_non_equivariant_bundle_numerator_truncation_status: String,
+    split_equivariant_candidate_insertion_lambda_polynomial: Option<Vec<String>>,
+    split_equivariant_candidate_insertion_lambda_order: Option<i64>,
+    split_equivariant_candidate_insertion_status: String,
     candidate_insertion_visibility_status: String,
 }
 
@@ -26889,6 +26892,15 @@ fn weighted_p2_rank_three_twisted_ifunction_degree_profiles(
                 degree_twice,
                 required_insertion_complex_codimension,
             );
+            let (
+                split_equivariant_candidate_insertion_lambda_polynomial,
+                split_equivariant_candidate_insertion_lambda_order,
+                split_equivariant_candidate_insertion_status,
+            ) = split_equivariant_candidate_insertion_status(
+                bundle_degrees,
+                degree_twice,
+                required_insertion_complex_codimension,
+            );
             let candidate_insertion_visibility_status = match (
                 degree_twice % 2 == 0,
                 required_insertion_complex_codimension,
@@ -26931,6 +26943,9 @@ fn weighted_p2_rank_three_twisted_ifunction_degree_profiles(
                 split_non_equivariant_candidate_insertion_coefficient_status,
                 split_non_equivariant_bundle_numerator_truncated_coefficients,
                 split_non_equivariant_bundle_numerator_truncation_status,
+                split_equivariant_candidate_insertion_lambda_polynomial,
+                split_equivariant_candidate_insertion_lambda_order,
+                split_equivariant_candidate_insertion_status,
                 candidate_insertion_visibility_status,
             }
         })
@@ -27064,6 +27079,130 @@ fn multiply_truncated_linear_factor(
         }
     }
     *coefficients = next;
+}
+
+fn split_equivariant_candidate_insertion_status(
+    bundle_degrees: &[i64],
+    degree_twice: i64,
+    required_insertion_complex_codimension: Option<i64>,
+) -> (Option<Vec<String>>, Option<i64>, String) {
+    if degree_twice % 2 != 0 {
+        return (
+            None,
+            None,
+            "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_equivariant_p2_readout"
+                .to_string(),
+        );
+    }
+    let Some(required_codimension) = required_insertion_complex_codimension else {
+        return (
+            None,
+            None,
+            "weighted_p2_rank_three_split_equivariant_insertion_codim_not_applicable".to_string(),
+        );
+    };
+    if required_codimension < 0 {
+        return (
+            None,
+            None,
+            "weighted_p2_rank_three_split_equivariant_insertion_invalid_negative_codim".to_string(),
+        );
+    }
+    let polynomial = equivariant_split_bundle_numerator_candidate_lambda_polynomial(
+        bundle_degrees,
+        degree_twice,
+        required_codimension as usize,
+    );
+    let order = polynomial
+        .iter()
+        .position(|coefficient| coefficient != "0")
+        .map(|order| order as i64);
+    let status = match order {
+        None => "weighted_p2_rank_three_split_equivariant_candidate_p2_coefficient_zero",
+        Some(0) => {
+            "weighted_p2_rank_three_split_equivariant_candidate_p2_has_nonzero_nonequivariant_term"
+        }
+        Some(_) => {
+            "weighted_p2_rank_three_split_equivariant_candidate_p2_positive_lambda_order_requires_pairing_or_residue"
+        }
+    };
+    (Some(polynomial), order, status.to_string())
+}
+
+fn equivariant_split_bundle_numerator_candidate_lambda_polynomial(
+    bundle_degrees: &[i64],
+    degree_twice: i64,
+    candidate_p_power: usize,
+) -> Vec<String> {
+    assert_eq!(
+        degree_twice % 2,
+        0,
+        "equivariant untwisted sector has integer degree"
+    );
+    let degree = degree_twice / 2;
+    let mut coefficients = BTreeMap::<(usize, usize), MalachiteRational>::new();
+    coefficients.insert((0, 0), MalachiteRational::from(1));
+    for &line_degree in bundle_degrees {
+        let factor_count = line_degree
+            .checked_mul(degree)
+            .expect("weighted P2 split bundle factor count fits i64");
+        for factor_offset in (-factor_count + 1)..=0 {
+            coefficients = multiply_bivariate_truncated_factor(
+                &coefficients,
+                factor_offset,
+                1,
+                -line_degree,
+                candidate_p_power,
+            );
+        }
+    }
+    let mut lambda_coefficients = BTreeMap::<usize, MalachiteRational>::new();
+    for ((lambda_power, p_power), coefficient) in coefficients {
+        if p_power == candidate_p_power {
+            *lambda_coefficients
+                .entry(lambda_power)
+                .or_insert_with(|| MalachiteRational::from(0)) += coefficient;
+        }
+    }
+    let max_lambda_power = lambda_coefficients.keys().last().copied().unwrap_or(0);
+    (0..=max_lambda_power)
+        .map(|lambda_power| {
+            lambda_coefficients
+                .get(&lambda_power)
+                .cloned()
+                .unwrap_or_else(|| MalachiteRational::from(0))
+                .to_string()
+        })
+        .collect()
+}
+
+fn multiply_bivariate_truncated_factor(
+    coefficients: &BTreeMap<(usize, usize), MalachiteRational>,
+    constant: i64,
+    lambda: i64,
+    p: i64,
+    max_p_power: usize,
+) -> BTreeMap<(usize, usize), MalachiteRational> {
+    let factor_terms = [
+        ((0usize, 0usize), constant),
+        ((1usize, 0usize), lambda),
+        ((0usize, 1usize), p),
+    ];
+    let mut next = BTreeMap::<(usize, usize), MalachiteRational>::new();
+    for (&(lambda_power, p_power), coefficient) in coefficients {
+        for &((factor_lambda_power, factor_p_power), factor_coefficient) in &factor_terms {
+            let next_p_power = p_power + factor_p_power;
+            if next_p_power > max_p_power {
+                continue;
+            }
+            *next
+                .entry((lambda_power + factor_lambda_power, next_p_power))
+                .or_insert_with(|| MalachiteRational::from(0)) +=
+                coefficient.clone() * MalachiteRational::from(Integer::from(factor_coefficient));
+        }
+    }
+    next.retain(|_, coefficient| *coefficient != MalachiteRational::from(0));
+    next
 }
 
 fn ceil_positive_half_product(factor: i64, degree_twice: i64) -> i64 {
@@ -39598,6 +39737,11 @@ mod tests {
                     split_non_equivariant_bundle_numerator_truncation_status:
                         "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_bundle_numerator"
                             .to_string(),
+                    split_equivariant_candidate_insertion_lambda_polynomial: None,
+                    split_equivariant_candidate_insertion_lambda_order: None,
+                    split_equivariant_candidate_insertion_status:
+                        "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_equivariant_p2_readout"
+                            .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_half_degree_requires_orbifold_sector_pairing"
                             .to_string(),
@@ -39627,6 +39771,15 @@ mod tests {
                     split_non_equivariant_bundle_numerator_truncation_status:
                         "weighted_p2_rank_three_split_non_equivariant_bundle_numerator_candidate_codim_coefficient_zero"
                             .to_string(),
+                    split_equivariant_candidate_insertion_lambda_polynomial: Some(vec![
+                        "0".to_string(),
+                        "-5".to_string(),
+                        "13".to_string()
+                    ]),
+                    split_equivariant_candidate_insertion_lambda_order: Some(1),
+                    split_equivariant_candidate_insertion_status:
+                        "weighted_p2_rank_three_split_equivariant_candidate_p2_positive_lambda_order_requires_pairing_or_residue"
+                            .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_untwisted_zero_order_exceeds_required_insertion_codim_requires_equivariant_normalization"
                             .to_string(),
@@ -39651,6 +39804,11 @@ mod tests {
                     split_non_equivariant_bundle_numerator_truncated_coefficients: None,
                     split_non_equivariant_bundle_numerator_truncation_status:
                         "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_bundle_numerator"
+                            .to_string(),
+                    split_equivariant_candidate_insertion_lambda_polynomial: None,
+                    split_equivariant_candidate_insertion_lambda_order: None,
+                    split_equivariant_candidate_insertion_status:
+                        "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_equivariant_p2_readout"
                             .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_half_degree_requires_orbifold_sector_pairing"
@@ -39680,6 +39838,19 @@ mod tests {
                     ]),
                     split_non_equivariant_bundle_numerator_truncation_status:
                         "weighted_p2_rank_three_split_non_equivariant_bundle_numerator_candidate_codim_coefficient_zero"
+                            .to_string(),
+                    split_equivariant_candidate_insertion_lambda_polynomial: Some(vec![
+                        "0".to_string(),
+                        "-30".to_string(),
+                        "251".to_string(),
+                        "-652".to_string(),
+                        "723".to_string(),
+                        "-354".to_string(),
+                        "62".to_string()
+                    ]),
+                    split_equivariant_candidate_insertion_lambda_order: Some(1),
+                    split_equivariant_candidate_insertion_status:
+                        "weighted_p2_rank_three_split_equivariant_candidate_p2_positive_lambda_order_requires_pairing_or_residue"
                             .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_untwisted_zero_order_exceeds_required_insertion_codim_requires_equivariant_normalization"
