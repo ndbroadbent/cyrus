@@ -605,5 +605,9 @@ compact GV value. The follow-up face-restricted `cygv` probe uses that
 certificate and the current regular secondary certificate, has no uncertified
 generator sample, computes `GV=0`, and is marked
 `ready_for_promoted_provided_generator_cygv_call`. This shifts the next
-non-cheating route away from the weighted-`P2` source row and toward wiring the
-certified face-domain zero into the corrected-chamber GV table.
+non-cheating route away from the weighted-`P2` source row. The wall-transport
+readiness now consumes the certified face-domain zero, so
+`target_plus_star_qn_history` is no longer a missing input for targets `7`/`8`;
+the remaining blockers are the target-plus-star wall-crossing chamber transport
+and the non-Weyl wall-crossing certificate for the known opposite-star
+component.

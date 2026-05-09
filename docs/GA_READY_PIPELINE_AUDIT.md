@@ -1718,9 +1718,13 @@ to make the remaining GV layer more first-principles:
    `computed_current_positive_decomposition_face_generators_qn_trace`,
    `GV=0`, `support_overlap_qn_not_required_zero_or_absent_gv`, and
    `ready_for_promoted_provided_generator_cygv_call` with no uncertified
-   generator sample. The remaining work is to wire this certified face-domain
-   result into the corrected-chamber GV table rather than treating the older
-   decomposition-only diagnostic as a fallback.
+   generator sample. The wall-transport readiness now consumes that face result
+   too: `target_plus_star_qn_history` is no longer listed as missing for
+   targets `7` or `8`; the remaining wall inputs are
+   `target_plus_star_wall_crossing_chamber_transport` and
+   `non_weyl_wall_crossing_transport_certificate`. This moves the blocker from
+   the weighted-`P2` target-plus-star source row to the actual wall-crossing
+   continuation of the known opposite-star component.
    Running the same aggregate over all nine missing targets narrows the
    chamber-semigroup decomposition queue further: only targets `1`, `7`, and
    `8` reach an actual current-chamber provided-generator `cygv` call, and all

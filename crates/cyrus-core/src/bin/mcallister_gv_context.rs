@@ -1357,6 +1357,9 @@ struct LocalCygvStarUnionWallTransportReadiness {
     target_plus_star_extremal_status: Option<String>,
     target_plus_star_support_generator_count: Option<usize>,
     target_plus_star_support_face_certificate_status: Option<String>,
+    target_plus_star_face_cygv_status: Option<String>,
+    target_plus_star_face_cygv_gv: Option<String>,
+    target_plus_star_face_cygv_promotion_readiness: Option<String>,
     crossed_wall_stable_weyl_certificate: Option<LocalCygvStarUnionCrossedWallStableWeylProbe>,
 }
 
@@ -20752,11 +20755,6 @@ fn local_cygv_source_resolution_hint_summaries(
                 target_plus_star_support_face_certificate_status.as_deref(),
                 Some(crossed_wall_stable_weyl_certificate),
             );
-            let star_union_target_plus_star_local_cygv_readiness =
-                attach_wall_transport_to_target_plus_star_readiness(
-                    star_union_target_plus_star_local_cygv_readiness,
-                    &wall_transport_readiness,
-                );
             let star_union_global_regular_triangulation =
                 local_cygv_star_union_global_regular_triangulation_hint(
                     target.origin_circuit_first_witness.as_ref(),
@@ -20777,6 +20775,15 @@ fn local_cygv_source_resolution_hint_summaries(
                     skip_star_union_secondary_certificates,
                     run_lower_seed_diamonds,
                     run_chamber_support_overlap_diagnostics,
+                );
+            let wall_transport_readiness = attach_current_face_cygv_to_wall_transport_readiness(
+                wall_transport_readiness,
+                &chamber_semigroup_transport,
+            );
+            let star_union_target_plus_star_local_cygv_readiness =
+                attach_wall_transport_to_target_plus_star_readiness(
+                    star_union_target_plus_star_local_cygv_readiness,
+                    &wall_transport_readiness,
                 );
             let compact_omission_wall_side = local_cygv_compact_omission_wall_side_summary(
                 &star_union_target_plus_star_local_cygv_readiness,
@@ -21159,11 +21166,6 @@ fn local_cygv_all_witness_source_resolution_summaries(
                 target_plus_star_support_face_certificate_status.as_deref(),
                 Some(crossed_wall_stable_weyl_certificate),
             );
-            let star_union_target_plus_star_local_cygv_readiness =
-                attach_wall_transport_to_target_plus_star_readiness(
-                    star_union_target_plus_star_local_cygv_readiness,
-                    &wall_transport_readiness,
-                );
             let star_union_global_regular_triangulation =
                 local_cygv_star_union_global_regular_triangulation_hint(
                     Some(witness),
@@ -21184,6 +21186,15 @@ fn local_cygv_all_witness_source_resolution_summaries(
                     skip_star_union_secondary_certificates,
                     run_lower_seed_diamonds,
                     run_chamber_support_overlap_diagnostics,
+                );
+            let wall_transport_readiness = attach_current_face_cygv_to_wall_transport_readiness(
+                wall_transport_readiness,
+                &chamber_semigroup_transport,
+            );
+            let star_union_target_plus_star_local_cygv_readiness =
+                attach_wall_transport_to_target_plus_star_readiness(
+                    star_union_target_plus_star_local_cygv_readiness,
+                    &wall_transport_readiness,
                 );
             let compact_omission_wall_side = local_cygv_compact_omission_wall_side_summary(
                 &star_union_target_plus_star_local_cygv_readiness,
@@ -26359,6 +26370,9 @@ fn local_cygv_star_union_wall_transport_readiness(
         target_plus_star_support_generator_count,
         target_plus_star_support_face_certificate_status:
             target_plus_star_support_face_certificate_status.map(str::to_string),
+        target_plus_star_face_cygv_status: None,
+        target_plus_star_face_cygv_gv: None,
+        target_plus_star_face_cygv_promotion_readiness: None,
         crossed_wall_stable_weyl_certificate,
     }
 }
@@ -26382,6 +26396,34 @@ fn wall_transport_flop_certificate_missing_input(
         }
         _ => Some("shrinking_divisor_or_flop_certificate"),
     }
+}
+
+fn attach_current_face_cygv_to_wall_transport_readiness(
+    mut readiness: LocalCygvStarUnionWallTransportReadiness,
+    chamber_transport: &LocalCygvStarUnionChamberSemigroupTransportProbe,
+) -> LocalCygvStarUnionWallTransportReadiness {
+    let Some(face_probe) = chamber_transport
+        .current_chamber_positive_degree_face_cygv_probe
+        .as_ref()
+    else {
+        return readiness;
+    };
+    readiness.target_plus_star_face_cygv_status = Some(face_probe.status.clone());
+    readiness.target_plus_star_face_cygv_gv = face_probe.gv.clone();
+    readiness.target_plus_star_face_cygv_promotion_readiness =
+        Some(face_probe.promotion_readiness.clone());
+
+    if face_probe.promotion_readiness != "ready_for_promoted_provided_generator_cygv_call" {
+        return readiness;
+    }
+
+    readiness
+        .missing_inputs
+        .retain(|input| input != "target_plus_star_qn_history");
+    if readiness.status == "wall_transport_known_wall_remainder_qn_history_missing" {
+        readiness.status = "wall_transport_components_known_needs_flop_certificate".to_string();
+    }
+    readiness
 }
 
 fn crossed_wall_negative_continuation_status(
@@ -37868,6 +37910,9 @@ mod tests {
                     target_plus_star_extremal_status: None,
                     target_plus_star_support_generator_count: None,
                     target_plus_star_support_face_certificate_status: None,
+                    target_plus_star_face_cygv_status: None,
+                    target_plus_star_face_cygv_gv: None,
+                    target_plus_star_face_cygv_promotion_readiness: None,
                     crossed_wall_stable_weyl_certificate: None,
                 },
             shared_two_simplex_star_union_crossed_wall_regular_side:
