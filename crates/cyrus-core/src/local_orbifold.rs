@@ -20,17 +20,31 @@ pub struct HalfSectorFirstNonzeroDescendant {
 
 /// CCIT `K_P(1,1,2)` untwisted `b_d` table through `max_degree`.
 pub fn kp112_canonical_b_table_values(max_degree: usize) -> Vec<String> {
-    weighted_p2_ordinary_p_primary_after_kp112_mirror_map(&[4], max_degree)
+    kp112_ordinary_p_primary_lambda_coefficients(&[4], max_degree)
         .iter()
-        .take(max_degree + 1)
-        .skip(1)
         .map(|degree_primary| {
             let ordinary_p_lambda_coefficient = degree_primary
                 .get(&1)
                 .cloned()
-                .unwrap_or_else(|| Rational::from(0));
+                .unwrap_or_else(|| "0".to_string())
+                .parse::<Rational>()
+                .expect("ordinary p coefficient is rational");
             (-ordinary_p_lambda_coefficient / rational_from_i64(16)).to_string()
         })
+        .collect()
+}
+
+/// Ordinary-`p` primary lambda-polynomial coefficients after the adjacent
+/// `K_P(1,1,2)` mirror map for a direct-sum line-bundle modification.
+pub fn kp112_ordinary_p_primary_lambda_coefficients(
+    bundle_degrees: &[i64],
+    max_degree: usize,
+) -> Vec<BTreeMap<usize, String>> {
+    weighted_p2_ordinary_p_primary_after_kp112_mirror_map(bundle_degrees, max_degree)
+        .iter()
+        .take(max_degree + 1)
+        .skip(1)
+        .map(rational_lambda_polynomial_to_strings)
         .collect()
 }
 
@@ -39,31 +53,42 @@ pub fn kp112_canonical_b_table_values(max_degree: usize) -> Vec<String> {
 pub fn split_bundle_kp112_mirror_map_primary_p_lambda_coefficients(
     max_degree: usize,
 ) -> Vec<String> {
-    weighted_p2_ordinary_p_primary_after_kp112_mirror_map(&[1, 1, 2], max_degree)
-        .iter()
-        .take(max_degree + 1)
-        .skip(1)
+    kp112_ordinary_p_primary_lambda_coefficients(&[1, 1, 2], max_degree)
+        .into_iter()
         .map(|degree_primary| {
             degree_primary
                 .get(&1)
                 .cloned()
-                .unwrap_or_else(|| Rational::from(0))
-                .to_string()
+                .unwrap_or_else(|| "0".to_string())
         })
         .collect()
 }
 
 /// CCIT `K_P(1,1,2)` twisted half-sector `c_d` table.
 pub fn kp112_canonical_c_table_values(half_sector_count: usize) -> Vec<String> {
-    weighted_p2_half_sector_primary_after_kp112_mirror_map(&[4], half_sector_count)
+    kp112_half_sector_primary_lambda_coefficients(&[4], half_sector_count)
         .iter()
         .map(|half_sector_primary| {
             let fun_half_lambda_coefficient = half_sector_primary
                 .get(&1)
                 .cloned()
-                .unwrap_or_else(|| Rational::from(0));
+                .unwrap_or_else(|| "0".to_string())
+                .parse::<Rational>()
+                .expect("half-sector coefficient is rational");
             (fun_half_lambda_coefficient / rational_from_i64(2)).to_string()
         })
+        .collect()
+}
+
+/// Half-sector primary lambda-polynomial coefficients after the adjacent
+/// `K_P(1,1,2)` mirror map for a direct-sum line-bundle modification.
+pub fn kp112_half_sector_primary_lambda_coefficients(
+    bundle_degrees: &[i64],
+    half_sector_count: usize,
+) -> Vec<BTreeMap<usize, String>> {
+    weighted_p2_half_sector_primary_after_kp112_mirror_map(bundle_degrees, half_sector_count)
+        .iter()
+        .map(rational_lambda_polynomial_to_strings)
         .collect()
 }
 
@@ -72,13 +97,15 @@ pub fn kp112_canonical_c_table_values(half_sector_count: usize) -> Vec<String> {
 pub fn split_bundle_kp112_mirror_map_half_sector_primary_coefficients(
     half_sector_count: usize,
 ) -> Vec<String> {
-    weighted_p2_half_sector_primary_after_kp112_mirror_map(&[1, 1, 2], half_sector_count)
-        .iter()
+    kp112_half_sector_primary_lambda_coefficients(&[1, 1, 2], half_sector_count)
+        .into_iter()
         .map(|half_sector_primary| {
             let fun_half_lambda_coefficient = half_sector_primary
                 .get(&1)
                 .cloned()
-                .unwrap_or_else(|| Rational::from(0));
+                .unwrap_or_else(|| "0".to_string())
+                .parse::<Rational>()
+                .expect("half-sector coefficient is rational");
             (fun_half_lambda_coefficient / rational_from_i64(2)).to_string()
         })
         .collect()
@@ -90,8 +117,18 @@ pub fn split_bundle_kp112_mirror_map_half_sector_first_nonzero_descendants(
     half_sector_count: usize,
     max_inverse_z_power: i64,
 ) -> Vec<HalfSectorFirstNonzeroDescendant> {
+    kp112_half_sector_first_nonzero_descendants(&[1, 1, 2], half_sector_count, max_inverse_z_power)
+}
+
+/// First nonzero half-sector descendant readouts after the adjacent
+/// `K_P(1,1,2)` mirror map for a direct-sum line-bundle modification.
+pub fn kp112_half_sector_first_nonzero_descendants(
+    bundle_degrees: &[i64],
+    half_sector_count: usize,
+    max_inverse_z_power: i64,
+) -> Vec<HalfSectorFirstNonzeroDescendant> {
     weighted_p2_half_sector_fun_component_after_kp112_mirror_map_by_z(
-        &[1, 1, 2],
+        bundle_degrees,
         half_sector_count,
         max_inverse_z_power,
     )
@@ -122,6 +159,15 @@ pub fn split_bundle_kp112_mirror_map_half_sector_first_nonzero_descendants(
         }
     })
     .collect()
+}
+
+fn rational_lambda_polynomial_to_strings(
+    polynomial: &BTreeMap<usize, Rational>,
+) -> BTreeMap<usize, String> {
+    polynomial
+        .iter()
+        .map(|(&lambda_power, coefficient)| (lambda_power, coefficient.to_string()))
+        .collect()
 }
 
 fn rational_from_i64(value: i64) -> Rational {
@@ -219,7 +265,9 @@ fn kp112_h_series(max_degree: usize) -> Vec<Rational> {
 fn kp112_x_of_q_series(max_degree: usize) -> Vec<Rational> {
     let h_series = kp112_h_series(max_degree);
     let mut q_series = vec![Rational::from(0); max_degree + 1];
-    q_series[1] = Rational::from(1);
+    if max_degree >= 1 {
+        q_series[1] = Rational::from(1);
+    }
     let mut x_series = q_series.clone();
     for _ in 0..max_degree {
         let h_of_x = truncated_series_compose(&h_series, &x_series, max_degree);
@@ -573,6 +621,8 @@ fn lambda_polynomial_has_nonzero_coefficient(polynomial: &[String]) -> bool {
 mod tests {
     use super::{
         kp112_canonical_b_table_values, kp112_canonical_c_table_values,
+        kp112_half_sector_first_nonzero_descendants, kp112_half_sector_primary_lambda_coefficients,
+        kp112_ordinary_p_primary_lambda_coefficients,
         split_bundle_kp112_mirror_map_half_sector_first_nonzero_descendants,
         split_bundle_kp112_mirror_map_half_sector_primary_coefficients,
         split_bundle_kp112_mirror_map_primary_p_lambda_coefficients,
@@ -606,6 +656,23 @@ mod tests {
                 "-154984300/121".to_string(),
                 "-6835086702/169".to_string(),
             ]
+        );
+    }
+
+    #[test]
+    fn generic_weighted_p2_line_bundle_api_exposes_primary_coefficients() {
+        let ordinary_primary = kp112_ordinary_p_primary_lambda_coefficients(&[4], 1);
+        assert_eq!(ordinary_primary[0].get(&1).map(String::as_str), Some("-44"));
+
+        let half_primary = kp112_half_sector_primary_lambda_coefficients(&[4], 1);
+        assert_eq!(half_primary[0].get(&1).map(String::as_str), Some("-4"));
+    }
+
+    #[test]
+    fn generic_weighted_p2_split_bundle_api_matches_mcallister_wrappers() {
+        assert_eq!(
+            kp112_half_sector_first_nonzero_descendants(&[1, 1, 2], 4, 4),
+            split_bundle_kp112_mirror_map_half_sector_first_nonzero_descendants(4, 4)
         );
     }
 
