@@ -380,6 +380,8 @@ struct ContextReport {
     local_cygv_complete_intersection_nef_partition_candidate_count_counts: BTreeMap<String, usize>,
     local_cygv_complete_intersection_zero_degree_nef_partition_candidate_count_counts:
         BTreeMap<String, usize>,
+    local_cygv_complete_intersection_qn_trace_readiness_status_counts: BTreeMap<String, usize>,
+    local_cygv_complete_intersection_qn_trace_ready_candidate_count_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_hint_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_resolved_support_status_counts: BTreeMap<String, usize>,
     local_cygv_source_resolution_resolved_shared_chamber_certificate_status_counts:
@@ -948,6 +950,9 @@ struct LocalCygvCompleteIntersectionShapeCandidate {
     zero_degree_nef_partition_candidate_count: Option<usize>,
     zero_degree_target_relation_balance_status_counts: Option<BTreeMap<String, usize>>,
     zero_degree_cytools_nef_certificate_status_counts: Option<BTreeMap<String, usize>>,
+    complete_intersection_qn_trace_readiness_status: String,
+    complete_intersection_qn_trace_ready_candidate_count: Option<usize>,
+    complete_intersection_qn_trace_missing_inputs: Vec<String>,
     nef_partition_candidate_sample: Vec<LocalCygvNefPartitionCandidate>,
     cytools_nef_partition_candidate_sample: Vec<LocalCygvNefPartitionCandidate>,
     zero_degree_nef_partition_candidate_sample: Vec<LocalCygvNefPartitionCandidate>,
@@ -1371,6 +1376,9 @@ struct LocalCygvUnresolvedChamberGeneratorSummary {
     local_toric_complete_intersection_zero_degree_nef_partition_candidate_count: Option<usize>,
     local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts:
         Option<BTreeMap<String, usize>>,
+    local_toric_complete_intersection_qn_trace_readiness_status: Option<String>,
+    local_toric_complete_intersection_qn_trace_ready_candidate_count: Option<usize>,
+    local_toric_complete_intersection_qn_trace_missing_inputs: Vec<String>,
     local_toric_complete_intersection_origin_included_nef_partition_candidate_count: Option<usize>,
     local_toric_complete_intersection_origin_included_nef_partition_degree_status_counts:
         Option<BTreeMap<String, usize>>,
@@ -1507,6 +1515,9 @@ struct LocalCygvChamberGeneratorLocalToricDiagnostic {
     local_toric_complete_intersection_zero_degree_nef_partition_candidate_count: Option<usize>,
     local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts:
         Option<BTreeMap<String, usize>>,
+    local_toric_complete_intersection_qn_trace_readiness_status: Option<String>,
+    local_toric_complete_intersection_qn_trace_ready_candidate_count: Option<usize>,
+    local_toric_complete_intersection_qn_trace_missing_inputs: Vec<String>,
     local_toric_complete_intersection_origin_included_nef_partition_candidate_count: Option<usize>,
     local_toric_complete_intersection_origin_included_nef_partition_degree_status_counts:
         Option<BTreeMap<String, usize>>,
@@ -11019,6 +11030,23 @@ fn local_cygv_complete_intersection_shape_candidate(
     let origin_included_nef_partition_candidate_count = origin_included_nef_partition_candidates
         .as_ref()
         .map(std::vec::Vec::len);
+    let complete_intersection_qn_trace_ready_candidate_count =
+        nef_partition_candidates.as_ref().map(|candidates| {
+            candidates
+                .iter()
+                .filter(|candidate| local_cygv_nef_partition_is_cygv_qn_trace_ready(candidate))
+                .count()
+        });
+    let (
+        complete_intersection_qn_trace_readiness_status,
+        complete_intersection_qn_trace_missing_inputs,
+    ) = local_cygv_complete_intersection_qn_trace_readiness_status(
+        cy_codim,
+        nef_partition_candidate_count,
+        zero_degree_nef_partition_candidate_count,
+        cytools_nef_partition_candidate_count,
+        complete_intersection_qn_trace_ready_candidate_count,
+    );
     let status = match zero_degree_nef_partition_candidate_count {
         Some(0) => {
             "complete_intersection_cy3_shape_no_zero_degree_nef_partition_candidate_requires_source_rule"
@@ -11050,6 +11078,10 @@ fn local_cygv_complete_intersection_shape_candidate(
         zero_degree_nef_partition_candidate_count,
         zero_degree_target_relation_balance_status_counts,
         zero_degree_cytools_nef_certificate_status_counts,
+        complete_intersection_qn_trace_readiness_status,
+        complete_intersection_qn_trace_ready_candidate_count,
+        complete_intersection_qn_trace_missing_inputs:
+            complete_intersection_qn_trace_missing_inputs.clone(),
         nef_partition_candidate_sample,
         cytools_nef_partition_candidate_sample,
         zero_degree_nef_partition_candidate_sample,
@@ -11061,12 +11093,67 @@ fn local_cygv_complete_intersection_shape_candidate(
         origin_included_zero_degree_cytools_nef_certificate_status_counts,
         origin_included_nef_partition_candidate_sample,
         status: status.to_string(),
-        missing_inputs: vec![
-            "source_derived_nef_partition".to_string(),
-            "complete_intersection_intersection_tensor".to_string(),
-            "complete_intersection_chamber_certificate".to_string(),
-        ],
+        missing_inputs: complete_intersection_qn_trace_missing_inputs.clone(),
     })
+}
+
+fn local_cygv_nef_partition_is_cygv_qn_trace_ready(
+    candidate: &LocalCygvNefPartitionCandidate,
+) -> bool {
+    candidate.degree_status == "both_parts_zero_degree"
+        && candidate.cytools_nef_certificate_status.as_deref()
+            == Some("support_polytope_cytools_nef_certificate_passed")
+}
+
+fn local_cygv_complete_intersection_qn_trace_readiness_status(
+    cy_codim: usize,
+    nef_partition_candidate_count: Option<usize>,
+    zero_degree_nef_partition_candidate_count: Option<usize>,
+    cytools_nef_partition_candidate_count: Option<usize>,
+    ready_candidate_count: Option<usize>,
+) -> (String, Vec<String>) {
+    let status = match ready_candidate_count {
+        Some(1) => "complete_intersection_qn_trace_ready_certified_zero_degree_nef_partition",
+        Some(2..) => {
+            "complete_intersection_qn_trace_ambiguous_multiple_certified_zero_degree_nef_partitions"
+        }
+        Some(0) if zero_degree_nef_partition_candidate_count == Some(0) => {
+            "complete_intersection_qn_trace_blocked_no_zero_degree_nef_partition"
+        }
+        Some(0) if cytools_nef_partition_candidate_count == Some(0) => {
+            "complete_intersection_qn_trace_blocked_no_cytools_nef_certificate"
+        }
+        Some(0) => "complete_intersection_qn_trace_blocked_no_certified_zero_degree_nef_partition",
+        None if cy_codim != 2 => {
+            "complete_intersection_qn_trace_blocked_non_codim_two_nef_partition_search_not_implemented"
+        }
+        None if nef_partition_candidate_count.is_none() => {
+            "complete_intersection_qn_trace_blocked_nef_partition_search_unavailable"
+        }
+        None => "complete_intersection_qn_trace_blocked_unknown_nef_partition_status",
+    };
+    let mut missing_inputs = Vec::new();
+    match status {
+        "complete_intersection_qn_trace_ready_certified_zero_degree_nef_partition" => {
+            missing_inputs.push("complete_intersection_intersection_tensor".to_string());
+            missing_inputs.push("complete_intersection_chamber_certificate".to_string());
+            missing_inputs.push("complete_intersection_semigroup_generators".to_string());
+            missing_inputs.push("complete_intersection_grading_vector".to_string());
+        }
+        "complete_intersection_qn_trace_ambiguous_multiple_certified_zero_degree_nef_partitions" => {
+            missing_inputs.push("source_derived_nef_partition_choice".to_string());
+            missing_inputs.push("complete_intersection_intersection_tensor".to_string());
+            missing_inputs.push("complete_intersection_chamber_certificate".to_string());
+        }
+        _ => {
+            missing_inputs.push("source_derived_nef_partition".to_string());
+            missing_inputs.push("complete_intersection_intersection_tensor".to_string());
+            missing_inputs.push("complete_intersection_chamber_certificate".to_string());
+            missing_inputs.push("complete_intersection_semigroup_generators".to_string());
+            missing_inputs.push("complete_intersection_grading_vector".to_string());
+        }
+    }
+    (status.to_string(), missing_inputs)
 }
 
 fn local_cygv_codim_two_nef_partition_candidates(
@@ -17324,6 +17411,18 @@ fn build_report(
                 .iter()
                 .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
         );
+    let local_cygv_complete_intersection_qn_trace_readiness_status_counts =
+        local_cygv_complete_intersection_qn_trace_readiness_status_counts(
+            targets
+                .iter()
+                .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
+        );
+    let local_cygv_complete_intersection_qn_trace_ready_candidate_count_counts =
+        local_cygv_complete_intersection_qn_trace_ready_candidate_count_counts(
+            targets
+                .iter()
+                .filter_map(|target| target.local_cygv_input_skeleton.as_ref()),
+        );
     let local_cygv_source_resolution_hint_status_counts =
         local_cygv_source_resolution_hint_status_counts(&targets);
     let local_cygv_source_resolution_resolved_support_status_counts =
@@ -19040,6 +19139,8 @@ fn build_report(
         local_cygv_complete_intersection_shape_status_counts,
         local_cygv_complete_intersection_nef_partition_candidate_count_counts,
         local_cygv_complete_intersection_zero_degree_nef_partition_candidate_count_counts,
+        local_cygv_complete_intersection_qn_trace_readiness_status_counts,
+        local_cygv_complete_intersection_qn_trace_ready_candidate_count_counts,
         local_cygv_source_resolution_hint_status_counts,
         local_cygv_source_resolution_resolved_support_status_counts,
         local_cygv_source_resolution_resolved_shared_chamber_certificate_status_counts,
@@ -19436,6 +19537,40 @@ fn local_cygv_complete_intersection_zero_degree_nef_partition_candidate_count_co
                 .complete_intersection_shape_candidate
                 .as_ref()
                 .and_then(|candidate| candidate.zero_degree_nef_partition_candidate_count)
+        }),
+        "not_complete_intersection_cy3_shape",
+    )
+}
+
+fn local_cygv_complete_intersection_qn_trace_readiness_status_counts<'a>(
+    skeletons: impl IntoIterator<Item = &'a LocalCygvInputSkeleton>,
+) -> BTreeMap<String, usize> {
+    optional_status_counts(
+        skeletons.into_iter().map(|skeleton| {
+            skeleton
+                .complete_intersection_shape_candidate
+                .as_ref()
+                .map(|candidate| {
+                    candidate
+                        .complete_intersection_qn_trace_readiness_status
+                        .as_str()
+                })
+        }),
+        "not_complete_intersection_cy3_shape",
+    )
+}
+
+fn local_cygv_complete_intersection_qn_trace_ready_candidate_count_counts<'a>(
+    skeletons: impl IntoIterator<Item = &'a LocalCygvInputSkeleton>,
+) -> BTreeMap<String, usize> {
+    optional_usize_count_counts(
+        skeletons.into_iter().map(|skeleton| {
+            skeleton
+                .complete_intersection_shape_candidate
+                .as_ref()
+                .and_then(|candidate| {
+                    candidate.complete_intersection_qn_trace_ready_candidate_count
+                })
         }),
         "not_complete_intersection_cy3_shape",
     )
@@ -21005,6 +21140,17 @@ fn unresolved_chamber_generator_summaries(
                             .local_toric_diagnostic
                             .local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts
                             .clone(),
+                    local_toric_complete_intersection_qn_trace_readiness_status: context
+                        .local_toric_diagnostic
+                        .local_toric_complete_intersection_qn_trace_readiness_status
+                        .clone(),
+                    local_toric_complete_intersection_qn_trace_ready_candidate_count: context
+                        .local_toric_diagnostic
+                        .local_toric_complete_intersection_qn_trace_ready_candidate_count,
+                    local_toric_complete_intersection_qn_trace_missing_inputs: context
+                        .local_toric_diagnostic
+                        .local_toric_complete_intersection_qn_trace_missing_inputs
+                        .clone(),
                     local_toric_complete_intersection_origin_included_nef_partition_candidate_count:
                         context
                             .local_toric_diagnostic
@@ -26685,6 +26831,9 @@ fn chamber_generator_local_toric_diagnostic_not_run(
         local_toric_complete_intersection_nef_partition_candidate_sample: Vec::new(),
         local_toric_complete_intersection_zero_degree_nef_partition_candidate_count: None,
         local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts: None,
+        local_toric_complete_intersection_qn_trace_readiness_status: None,
+        local_toric_complete_intersection_qn_trace_ready_candidate_count: None,
+        local_toric_complete_intersection_qn_trace_missing_inputs: Vec::new(),
         local_toric_complete_intersection_origin_included_nef_partition_candidate_count: None,
         local_toric_complete_intersection_origin_included_nef_partition_degree_status_counts: None,
         local_toric_complete_intersection_origin_included_cytools_nef_partition_candidate_count:
@@ -26963,6 +27112,9 @@ fn chamber_generator_local_toric_diagnostic(
             local_toric_complete_intersection_zero_degree_nef_partition_candidate_count: None,
             local_toric_complete_intersection_zero_degree_cytools_nef_certificate_status_counts:
                 None,
+            local_toric_complete_intersection_qn_trace_readiness_status: None,
+            local_toric_complete_intersection_qn_trace_ready_candidate_count: None,
+            local_toric_complete_intersection_qn_trace_missing_inputs: Vec::new(),
             local_toric_complete_intersection_origin_included_nef_partition_candidate_count: None,
             local_toric_complete_intersection_origin_included_nef_partition_degree_status_counts:
                 None,
@@ -27194,6 +27346,22 @@ fn chamber_generator_local_toric_diagnostic(
                 .and_then(|candidate| {
                     candidate
                         .zero_degree_cytools_nef_certificate_status_counts
+                        .clone()
+                }),
+        local_toric_complete_intersection_qn_trace_readiness_status:
+            complete_intersection_shape_candidate
+                .as_ref()
+                .map(|candidate| candidate.complete_intersection_qn_trace_readiness_status.clone()),
+        local_toric_complete_intersection_qn_trace_ready_candidate_count:
+            complete_intersection_shape_candidate.as_ref().and_then(|candidate| {
+                candidate.complete_intersection_qn_trace_ready_candidate_count
+            }),
+        local_toric_complete_intersection_qn_trace_missing_inputs:
+            complete_intersection_shape_candidate
+                .as_ref()
+                .map_or_else(Vec::new, |candidate| {
+                    candidate
+                        .complete_intersection_qn_trace_missing_inputs
                         .clone()
                 }),
         local_toric_complete_intersection_origin_included_nef_partition_candidate_count:
@@ -33836,6 +34004,26 @@ mod tests {
         );
         assert_eq!(
             diagnostic
+                .local_toric_complete_intersection_qn_trace_readiness_status
+                .as_deref(),
+            Some("complete_intersection_qn_trace_blocked_no_zero_degree_nef_partition")
+        );
+        assert_eq!(
+            diagnostic.local_toric_complete_intersection_qn_trace_ready_candidate_count,
+            Some(0)
+        );
+        assert_eq!(
+            diagnostic.local_toric_complete_intersection_qn_trace_missing_inputs,
+            vec![
+                "source_derived_nef_partition".to_string(),
+                "complete_intersection_intersection_tensor".to_string(),
+                "complete_intersection_chamber_certificate".to_string(),
+                "complete_intersection_semigroup_generators".to_string(),
+                "complete_intersection_grading_vector".to_string(),
+            ]
+        );
+        assert_eq!(
+            diagnostic
                 .local_toric_complete_intersection_origin_included_nef_partition_candidate_count,
             Some(31)
         );
@@ -36403,6 +36591,24 @@ mod tests {
             candidate.status,
             "complete_intersection_cy3_shape_no_zero_degree_nef_partition_candidate_requires_source_rule"
         );
+        assert_eq!(
+            candidate.complete_intersection_qn_trace_readiness_status,
+            "complete_intersection_qn_trace_blocked_no_zero_degree_nef_partition"
+        );
+        assert_eq!(
+            candidate.complete_intersection_qn_trace_ready_candidate_count,
+            Some(0)
+        );
+        assert_eq!(
+            candidate.complete_intersection_qn_trace_missing_inputs,
+            vec![
+                "source_derived_nef_partition".to_string(),
+                "complete_intersection_intersection_tensor".to_string(),
+                "complete_intersection_chamber_certificate".to_string(),
+                "complete_intersection_semigroup_generators".to_string(),
+                "complete_intersection_grading_vector".to_string(),
+            ]
+        );
         for missing_input in [
             "source_derived_nef_partition",
             "complete_intersection_intersection_tensor",
@@ -36427,6 +36633,30 @@ mod tests {
                     1
                 ),
                 ("not_complete_intersection_cy3_shape".to_string(), 1)
+            ])
+        );
+        assert_eq!(
+            local_cygv_complete_intersection_qn_trace_readiness_status_counts([
+                &skeleton,
+                &no_ci_skeleton
+            ]),
+            BTreeMap::from([
+                (
+                    "complete_intersection_qn_trace_blocked_no_zero_degree_nef_partition"
+                        .to_string(),
+                    1
+                ),
+                ("not_complete_intersection_cy3_shape".to_string(), 1),
+            ])
+        );
+        assert_eq!(
+            local_cygv_complete_intersection_qn_trace_ready_candidate_count_counts([
+                &skeleton,
+                &no_ci_skeleton
+            ]),
+            BTreeMap::from([
+                ("0".to_string(), 1),
+                ("not_complete_intersection_cy3_shape".to_string(), 1),
             ])
         );
         assert_eq!(

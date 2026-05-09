@@ -43,7 +43,10 @@ tensor remains. This removes one mechanical missing piece, but it does not
 certify any McAllister target-plus-star split: a source-derived nef partition,
 ambient top intersections, chamber data, semigroup, and grading are still
 required before any codimension-two `cygv` call is a physics computation rather
-than a shape probe.
+than a shape probe. The context diagnostics now report this as an explicit
+`complete_intersection_qn_trace_readiness_status` with a ready-candidate count:
+the six-point weighted-`P2` row is blocked before the `cygv` qN trace boundary
+because it has zero certified zero-degree CYTools-style nef partitions.
 
 ## CYTools Contract
 

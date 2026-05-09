@@ -259,4 +259,7 @@ explicit nef partition for both provided-generator and explicit-semigroup
 domains. The blocker here is therefore not the ability to call upstream `cygv`
 with codimension-2 qN tracing; it is the absence of a source-certified
 codimension-2 model/nef partition/tensor/chamber history for this specific
-rank-three weighted-`P2` row.
+rank-three weighted-`P2` row. The local context diagnostics now surface this
+as a direct qN-trace readiness blocker: the current six-point row has
+`complete_intersection_qn_trace_blocked_no_zero_degree_nef_partition` and
+ready count `0`, so no complete-intersection `cygv` call is legitimate yet.
