@@ -527,6 +527,7 @@ pub fn weighted_p2_rank_three_twisted_ifunction_source_certificate_requirements(
     });
     for input in [
         "twisted_big_j_or_pairing_reconstruction_for_descendant_readout",
+        "twisted_sector_no_divisor_equation_big_j_reconstruction",
         "source_derived_chamber_qn_history_for_selected_phase",
         "cy3_projection_or_codimension_two_local_model",
     ] {
@@ -606,6 +607,8 @@ pub fn weighted_p2_rank_three_twisted_ifunction_source_certificate_requirements(
             "ccit_smallvb_direct_sum_modification_for_split_bundle".to_string(),
             "ccit_jscale_requires_Fz_plus_G_expansion_for_twisted_j_identification".to_string(),
             "ccit_local_invariants_extract_z_minus_one_term_using_twisted_dual_pairing"
+                .to_string(),
+            "ccit_twisted_sector_classes_have_no_divisor_equation_so_big_j_data_cannot_be_specialized_to_small_q"
                 .to_string(),
         ],
         required_inputs,
@@ -2882,12 +2885,17 @@ mod tests {
                 "twisted_vector_bundle_ifunction_chamber_certificate".to_string(),
                 "twisted_vector_bundle_ifunction_qn_history".to_string(),
                 "twisted_big_j_or_pairing_reconstruction_for_descendant_readout".to_string(),
+                "twisted_sector_no_divisor_equation_big_j_reconstruction".to_string(),
                 "source_derived_chamber_qn_history_for_selected_phase".to_string(),
                 "cy3_projection_or_codimension_two_local_model".to_string(),
             ]
         );
         assert!(certificate.source_references.contains(
             &"ccit_jscale_requires_Fz_plus_G_expansion_for_twisted_j_identification".to_string()
+        ));
+        assert!(certificate.source_references.contains(
+            &"ccit_twisted_sector_classes_have_no_divisor_equation_so_big_j_data_cannot_be_specialized_to_small_q"
+                .to_string()
         ));
         assert!(
             weighted_p2_rank_three_twisted_ifunction_source_certificate_requirements(

@@ -1661,8 +1661,13 @@ to make the remaining GV layer more first-principles:
    source-derived codimension-two observable, orbifold-sector pairing data,
    twisted-vector-bundle chamber certificate, twisted-vector-bundle qN
    history, big-J/pairing reconstruction for the descendant readout,
-   source-derived chamber qN history for the selected phase, and CY3 projection
-   or an equivalent codimension-two local model.
+   twisted-sector big-J reconstruction because there is no divisor equation
+   specialization for Chen-Ruan twisted-sector classes, source-derived chamber
+   qN history for the selected phase, and CY3 projection or an equivalent
+   codimension-two local model. Regenerated
+   `/tmp/cyrus_target7_source_no_divisor_equation_probe.json` and
+   `/tmp/cyrus_target8_source_no_divisor_equation_probe.json` carry the new
+   blocker in the uncertified-generator sample.
    The same sample now also carries the nearest zero-coefficient enlargement
    blocker. Regenerated target `7` and target `8` reports in
    `/tmp/cyrus_target7_enlargement_blocker_sample_probe.json` and

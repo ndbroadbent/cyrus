@@ -570,3 +570,12 @@ omission scan either deletes the target relation terms or has no compact
 omission candidate. This keeps support enlargement in the ruled-out diagnostic
 bucket unless a new source-certified enlargement/chamber construction is
 supplied.
+
+The core source-certificate required-input list now also names the source-level
+reason the descendant readout cannot be converted by a scalar mirror-map
+specialization: CCIT's twisted-sector discussion says Chen-Ruan twisted-sector
+classes do not satisfy a divisor equation. Regenerated reports
+`/tmp/cyrus_target7_source_no_divisor_equation_probe.json` and
+`/tmp/cyrus_target8_source_no_divisor_equation_probe.json` therefore include
+`twisted_sector_no_divisor_equation_big_j_reconstruction` next to the existing
+big-`J`/pairing, qN-history, chamber, and CY3-projection blockers.
