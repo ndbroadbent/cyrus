@@ -1674,6 +1674,11 @@ to make the remaining GV layer more first-principles:
    extraction, and the checked sector counts. This keeps the visible
    obstruction attached to the actual blocking chamber generator without
    promoting any descendant coefficient to a compact GV value.
+   The core source certificate now separately records the CCIT reconstruction
+   theorem gates: one-point descendants need the source `J`/big-`J` function
+   and pairing before they reconstruct genus-zero data, and twisted
+   Chen-Ruan sector classes have no divisor-equation specialization to a
+   scalar quantum parameter.
    The same sample now also carries the nearest zero-coefficient enlargement
    blocker. Regenerated target `7` and target `8` reports in
    `/tmp/cyrus_target7_enlargement_exhaustive_probe.json` and

@@ -361,6 +361,11 @@ degree `[4]`, mirror map `q = x exp(4 h(x))`, and reports
 `<p^2>_{0,1,1} = 11 lambda / 4`. Our split bundle has degrees `[1,1,2]` and a
 zero primary readout, so the canonical benchmark verifies the z convention but
 does not supply the missing reconstruction for the split-bundle row.
+Cyrus now records the two key theorem gates in the source certificate itself:
+one-point descendants are reconstruction data only after the correct source
+`J`/big-`J` function and pairing are known, and Chen-Ruan twisted-sector
+classes have no divisor-equation shortcut to a scalar quantum-parameter
+specialization.
 
 A direct CYTools/PALP probe of the same six support coordinates is also
 negative. With experimental CYTools features enabled, `Polytope(pts)` reports

@@ -163,6 +163,10 @@ pub struct WeightedP2RankThreeTwistedIfunctionSourceCertificateRequirements {
     pub chen_ruan_source_basis_status: String,
     /// Reconstruction boundary for small-J/big-J and degree-two generation.
     pub chen_ruan_reconstruction_status: String,
+    /// Boundary for using one-point descendants as genus-zero reconstruction data.
+    pub one_point_descendant_reconstruction_status: String,
+    /// Boundary for divisor-equation shortcuts in twisted Chen-Ruan sectors.
+    pub twisted_sector_divisor_equation_status: String,
     /// Status for the codimension-two observable needed by the visible CY5.
     pub required_observable_status: String,
     /// Status of the checked primary `z^-2` readout.
@@ -548,6 +552,12 @@ pub fn weighted_p2_rank_three_twisted_ifunction_source_certificate_requirements(
         chen_ruan_reconstruction_status:
             "weighted_p2_rank_three_chen_ruan_degree_two_reconstruction_requires_big_j_restriction_or_pairing_input"
                 .to_string(),
+        one_point_descendant_reconstruction_status:
+            "weighted_p2_rank_three_ccit_one_point_descendants_reconstruct_genus_zero_only_after_source_j_function_and_pairing"
+                .to_string(),
+        twisted_sector_divisor_equation_status: source_basis
+            .twisted_sector_divisor_equation_status
+            .clone(),
         required_observable_status: required_observable_status.to_string(),
         primary_readout_status,
         descendant_readout_status,
@@ -602,6 +612,7 @@ pub fn weighted_p2_rank_three_twisted_ifunction_source_certificate_requirements(
         source_references: vec![
             "ccit_prop_small_j_reconstructs_lagrangian_cone_only_after_degree_two_or_big_j_input"
                 .to_string(),
+            "ccit_prop_one_point_descendants_reconstruct_genus_zero_via_wdvv_and_trr".to_string(),
             "ccit_twisted_gw_total_space_uses_inverse_equivariant_euler_pairing".to_string(),
             "ccit_smalllinebundle_hypergeometric_modification_for_line_bundle".to_string(),
             "ccit_smallvb_direct_sum_modification_for_split_bundle".to_string(),
@@ -2831,6 +2842,14 @@ mod tests {
             "weighted_p2_rank_three_source_certificate_first_nonzero_terms_are_descendant_or_equivariant_requires_big_j_pairing"
         );
         assert_eq!(
+            certificate.one_point_descendant_reconstruction_status,
+            "weighted_p2_rank_three_ccit_one_point_descendants_reconstruct_genus_zero_only_after_source_j_function_and_pairing"
+        );
+        assert_eq!(
+            certificate.twisted_sector_divisor_equation_status,
+            "chen_ruan_twisted_sector_has_no_divisor_equation_requires_big_j_or_pairing_input"
+        );
+        assert_eq!(
             certificate.j_scale_min_checked_hypergeometric_inverse_z_power,
             Some(3)
         );
@@ -2892,6 +2911,9 @@ mod tests {
         );
         assert!(certificate.source_references.contains(
             &"ccit_jscale_requires_Fz_plus_G_expansion_for_twisted_j_identification".to_string()
+        ));
+        assert!(certificate.source_references.contains(
+            &"ccit_prop_one_point_descendants_reconstruct_genus_zero_via_wdvv_and_trr".to_string()
         ));
         assert!(certificate.source_references.contains(
             &"ccit_twisted_sector_classes_have_no_divisor_equation_so_big_j_data_cannot_be_specialized_to_small_q"
