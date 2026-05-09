@@ -522,6 +522,14 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_candidate_insertion_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_p2_readout_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_gw_extraction_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_required_source_data_status_counts:
+        BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_promotion_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_origin_split_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_nearest_support_best_candidate_count_counts:
@@ -17976,6 +17984,50 @@ fn build_report(
         unresolved_generator_weighted_p2_twisted_ifunction_split_equivariant_candidate_insertion_status_counts(
             &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
         );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_p2_readout_status_counts =
+        weighted_p2_rank_three_chen_ruan_source_map_status_counts(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| {
+                    summary
+                        .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_chen_ruan_source_map
+                        .as_ref()
+                }),
+            |source_map| source_map.source_dual_basis_p2_readout_status.as_str(),
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_gw_extraction_status_counts =
+        weighted_p2_rank_three_chen_ruan_source_map_status_counts(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| {
+                    summary
+                        .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_chen_ruan_source_map
+                        .as_ref()
+                }),
+            |source_map| source_map.split_bundle_gw_extraction_status.as_str(),
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_required_source_data_status_counts =
+        weighted_p2_rank_three_chen_ruan_source_map_status_counts(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| {
+                    summary
+                        .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_chen_ruan_source_map
+                        .as_ref()
+                }),
+            |source_map| source_map.split_bundle_required_source_data_status.as_str(),
+        );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_promotion_status_counts =
+        weighted_p2_rank_three_chen_ruan_source_map_status_counts(
+            local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
+                .iter()
+                .map(|summary| {
+                    summary
+                        .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_chen_ruan_source_map
+                        .as_ref()
+                }),
+            |source_map| source_map.split_bundle_promotion_status.as_str(),
+        );
     let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_origin_split_status_counts =
         unresolved_generator_weighted_p2_origin_split_status_counts(
             &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
@@ -19456,6 +19508,10 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_non_equivariant_candidate_insertion_coefficient_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_non_equivariant_bundle_numerator_truncation_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_candidate_insertion_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_p2_readout_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_gw_extraction_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_required_source_data_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_promotion_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_origin_split_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_nearest_support_best_candidate_count_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_nearest_support_best_known_qn_history_status_counts,
@@ -21792,6 +21848,22 @@ fn unresolved_generator_weighted_p2_twisted_ifunction_split_equivariant_candidat
                 )
                 .or_insert(0) += 1;
         }
+    }
+    counts
+}
+
+fn weighted_p2_rank_three_chen_ruan_source_map_status_counts<'a, F>(
+    source_maps: impl IntoIterator<
+        Item = Option<&'a WeightedP2RankThreeTwistedIfunctionChenRuanSourceMap>,
+    >,
+    status: F,
+) -> BTreeMap<String, usize>
+where
+    F: Fn(&WeightedP2RankThreeTwistedIfunctionChenRuanSourceMap) -> &str,
+{
+    let mut counts = BTreeMap::new();
+    for source_map in source_maps.into_iter().flatten() {
+        *counts.entry(status(source_map).to_string()).or_insert(0) += 1;
     }
     counts
 }
@@ -40005,6 +40077,30 @@ mod tests {
         assert_eq!(
             selected_bundle.status,
             "weighted_p2_rank_three_split_bundle_selected_bundle_phase"
+        );
+    }
+
+    #[test]
+    fn weighted_p2_chen_ruan_source_map_status_counts_skip_absent_maps() {
+        let source_map = weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
+            &[1, 1, 2],
+            &[1, 1, 2],
+            0,
+        )
+        .expect("weighted P2 split bundle source map");
+
+        let counts = weighted_p2_rank_three_chen_ruan_source_map_status_counts(
+            [Some(&source_map), None, Some(&source_map)],
+            |source_map| source_map.split_bundle_required_source_data_status.as_str(),
+        );
+
+        assert_eq!(
+            counts,
+            BTreeMap::from([(
+                "rank_three_split_nonzero_contribution_if_any_requires_equivariant_residue_or_twisted_big_j_pairing_not_canonical_kp112_table"
+                    .to_string(),
+                2
+            )])
         );
     }
 
