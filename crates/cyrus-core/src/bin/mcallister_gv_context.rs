@@ -1667,6 +1667,9 @@ struct WeightedP2RankThreeTwistedIfunctionChenRuanSourceMap {
     adjacent_canonical_crepant_resolution_half_sector_image: String,
     adjacent_canonical_correlator_p2_label: String,
     adjacent_canonical_correlator_half_sector_label: String,
+    adjacent_canonical_mirror_map_status: String,
+    split_bundle_mirror_map_status: String,
+    split_bundle_gw_extraction_status: String,
     twisted_sector_divisor_equation_status: String,
     split_bundle_promotion_status: String,
 }
@@ -26729,6 +26732,15 @@ fn weighted_p2_rank_three_twisted_ifunction_chen_ruan_source_map(
         adjacent_canonical_correlator_p2_label: "<p^2>_{0,1,d}^{K_P(1,1,2)}".to_string(),
         adjacent_canonical_correlator_half_sector_label:
             "<fun_{1/2}>_{0,1,d}^{K_P(1,1,2)}".to_string(),
+        adjacent_canonical_mirror_map_status:
+            "kp112_canonical_source_uses_q_equals_x_exp_4h_after_o_minus_4_hypergeometric_modification"
+                .to_string(),
+        split_bundle_mirror_map_status:
+            "rank_three_split_integer_terms_have_zero_order_three_so_adjacent_kp112_divisor_mirror_map_is_not_inherited"
+                .to_string(),
+        split_bundle_gw_extraction_status:
+            "rank_three_split_requires_own_j_or_big_j_coefficient_extraction_before_qn_history"
+                .to_string(),
         twisted_sector_divisor_equation_status:
             "chen_ruan_twisted_sector_has_no_divisor_equation_requires_big_j_or_pairing_input"
                 .to_string(),
@@ -39442,6 +39454,15 @@ mod tests {
                     "<p^2>_{0,1,d}^{K_P(1,1,2)}".to_string(),
                 adjacent_canonical_correlator_half_sector_label:
                     "<fun_{1/2}>_{0,1,d}^{K_P(1,1,2)}".to_string(),
+                adjacent_canonical_mirror_map_status:
+                    "kp112_canonical_source_uses_q_equals_x_exp_4h_after_o_minus_4_hypergeometric_modification"
+                        .to_string(),
+                split_bundle_mirror_map_status:
+                    "rank_three_split_integer_terms_have_zero_order_three_so_adjacent_kp112_divisor_mirror_map_is_not_inherited"
+                        .to_string(),
+                split_bundle_gw_extraction_status:
+                    "rank_three_split_requires_own_j_or_big_j_coefficient_extraction_before_qn_history"
+                        .to_string(),
                 twisted_sector_divisor_equation_status:
                     "chen_ruan_twisted_sector_has_no_divisor_equation_requires_big_j_or_pairing_input"
                         .to_string(),
