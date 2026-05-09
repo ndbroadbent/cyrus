@@ -3872,20 +3872,26 @@ corrected global-height status
 `star_union_shared_face_secondary_global_height_crosses_oriented_walls`. The
 missing-input aggregate now counts `target_plus_star_qn_history:9`,
 `target_plus_star_chamber_semigroup_transport:8`,
-`target_plus_star_wall_crossing_chamber_transport:2`, and
-`non_weyl_wall_crossing_transport_certificate:2`. The target-plus-star
-promotion readiness now stores this wall-transport status directly, and its
-promotion missing-input aggregate includes both
-`target_plus_star_wall_crossing_chamber_transport:2` and
-`non_weyl_wall_crossing_transport_certificate:2`. This keeps the known wall
-component as certified input evidence without promoting it to a
-corrected-chamber GV value.
+`target_plus_star_wall_crossing_chamber_transport:2`, and a wall-continuation
+certificate gap. The later face-restricted target-plus-star probe removes the
+target-plus-star qN-history blocker for targets `7`/`8`; the current focused
+branch-cut reports refine the remaining certificate to
+`n1_branch_cut_resummation_transport_certificate:2` rather than the older
+generic non-Weyl label. This keeps the known wall component as certified input
+evidence without promoting it to a corrected-chamber GV value.
 `/tmp/cyrus_star_union_wall_branch_smoke_all.json` now carries the B-field
 branch diagnostic for that same crossed wall. For targets `7`/`8`, the known
 opposite-star wall curve has `q.t=0.42571113815643002`, parity mod 2 equal to
 `0`, and positive-side dilog status `real_ok`; evaluating the opposite sign
 through the existing McAllister real-axis dilog classifier gives
-`crossed_wall_negative_continuation_real_branch_cut`. Thus the known
+`crossed_wall_negative_continuation_real_branch_cut`. Regenerated focused
+reports `/tmp/cyrus_target7_branch_cut_source_continuation_report.json` and
+`/tmp/cyrus_target8_branch_cut_source_continuation_report.json` now serialize
+`crossed_wall_source_continuation_status =
+source_continuation_blocked_bfield_zero_real_branch_cut_requires_resummation_certificate`
+and list missing inputs
+`target_plus_star_wall_crossing_chamber_transport` plus
+`n1_branch_cut_resummation_transport_certificate`. Thus the known
 source-derived wall GV is not a license to perform a naive real flop
 continuation across the negative star side. The remaining certificate must
 derive the valid chamber/semigroup history, or a source-level continuation

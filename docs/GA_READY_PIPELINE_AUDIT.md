@@ -1337,23 +1337,28 @@ to make the remaining GV layer more first-principles:
    `star_union_shared_face_secondary_global_height_crosses_oriented_walls`,
    and missing inputs `target_plus_star_qn_history`,
    `target_plus_star_chamber_semigroup_transport`,
-   `target_plus_star_wall_crossing_chamber_transport`, and
-   `non_weyl_wall_crossing_transport_certificate`. The top-level missing-input
-   aggregate records the new wall-crossing transport gap twice and the
-   non-Weyl transport blocker twice. The target-plus-star promotion readiness
-   object now also carries the same wall-transport status and missing inputs,
-   so its promotion-missing aggregate includes
-   `target_plus_star_wall_crossing_chamber_transport:2` and
-   `non_weyl_wall_crossing_transport_certificate:2`. This is a blocker
-   certificate, not a GV computation shortcut.
+   `target_plus_star_wall_crossing_chamber_transport`, and a wall-continuation
+   certificate. After the face-restricted target-plus-star probe below, the
+   remaining continuation certificate is refined from the generic non-Weyl
+   label to the source-backed
+   `n1_branch_cut_resummation_transport_certificate`: the crossed wall has
+   parity mod 2 equal to `0`, and McAllister eq. (4.12) plus the discussion
+   around the flop-continuation polylog identities only gives the clean
+   no-branch-cut continuation in the half-integer B-field case. This is a
+   blocker certificate, not a GV computation shortcut.
    `/tmp/cyrus_star_union_wall_branch_smoke_all.json` now additionally records
    the B-field branch status of the same crossed wall. The targets `7`/`8`
    wall curve has `q.t=0.42571113815643002`, parity mod 2 equal to `0`, and
    positive-side dilog status `real_ok`, but the negative-side continuation is
-   `crossed_wall_negative_continuation_real_branch_cut`. This rules out a
-   naive real-axis flop continuation of the known wall GV into the star-side
-   chamber; the missing handoff still has to be a certified chamber/semigroup
-   history or a source-level continuation that addresses the branch cut.
+   `crossed_wall_negative_continuation_real_branch_cut`. Regenerated focused
+   reports `/tmp/cyrus_target7_branch_cut_source_continuation_report.json` and
+   `/tmp/cyrus_target8_branch_cut_source_continuation_report.json` now serialize
+   `crossed_wall_source_continuation_status =
+   source_continuation_blocked_bfield_zero_real_branch_cut_requires_resummation_certificate`.
+   This rules out a naive real-axis flop continuation of the known wall GV into
+   the star-side chamber; the missing handoff still has to be a certified
+   chamber/semigroup history or a source-level continuation that addresses the
+   branch cut.
    `/tmp/cyrus_target7_stable_weyl_rank_probe_report.json` and
    `/tmp/cyrus_target8_stable_weyl_rank_probe_report.json` now thread the crossed
    wall through the stable-Weyl/flop-certificate gate. For both targets, the
@@ -1720,11 +1725,13 @@ to make the remaining GV layer more first-principles:
    `ready_for_promoted_provided_generator_cygv_call` with no uncertified
    generator sample. The wall-transport readiness now consumes that face result
    too: `target_plus_star_qn_history` is no longer listed as missing for
-   targets `7` or `8`; the remaining wall inputs are
+   targets `7` or `8`; the remaining wall inputs in the regenerated
+   branch-cut source-continuation reports are
    `target_plus_star_wall_crossing_chamber_transport` and
-   `non_weyl_wall_crossing_transport_certificate`. This moves the blocker from
-   the weighted-`P2` target-plus-star source row to the actual wall-crossing
-   continuation of the known opposite-star component.
+   `n1_branch_cut_resummation_transport_certificate`. This moves the blocker
+   from the weighted-`P2` target-plus-star source row to the actual
+   wall-crossing continuation of the known opposite-star component, and it
+   names why the ordinary non-Weyl flop shortcut is not currently valid.
    Running the same aggregate over all nine missing targets narrows the
    chamber-semigroup decomposition queue further: only targets `1`, `7`, and
    `8` reach an actual current-chamber provided-generator `cygv` call, and all

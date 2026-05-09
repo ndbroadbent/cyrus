@@ -1353,6 +1353,7 @@ struct LocalCygvStarUnionWallTransportReadiness {
     crossed_wall_parity_mod2: Option<i128>,
     crossed_wall_positive_dilog_status: Option<String>,
     crossed_wall_negative_continuation_status: Option<String>,
+    crossed_wall_source_continuation_status: Option<String>,
     target_plus_star_basis_nonzero: Option<Vec<(usize, i64)>>,
     target_plus_star_extremal_status: Option<String>,
     target_plus_star_support_generator_count: Option<usize>,
@@ -26264,6 +26265,12 @@ fn local_cygv_star_union_wall_transport_readiness(
     let star = star_union_lookup_by_role(lookups, "star");
     let crossed_wall_branch =
         star.and_then(|lookup| lookup.opposite_source_branch_diagnostic.as_ref());
+    let crossed_wall_negative_continuation =
+        crossed_wall_negative_continuation_status(crossed_wall_branch);
+    let crossed_wall_source_continuation = crossed_wall_source_continuation_status(
+        crossed_wall_branch,
+        crossed_wall_negative_continuation.as_deref(),
+    );
     let target_plus_star_extremal_status = transport
         .target_plus_star_extremal_ray_certificate
         .as_ref()
@@ -26316,9 +26323,10 @@ fn local_cygv_star_union_wall_transport_readiness(
         missing_inputs.push("target_plus_star_wall_crossing_chamber_transport".to_string());
     }
     if wall_known {
-        if let Some(missing_input) =
-            wall_transport_flop_certificate_missing_input(&crossed_wall_stable_weyl_certificate)
-        {
+        if let Some(missing_input) = wall_transport_flop_certificate_missing_input(
+            &crossed_wall_stable_weyl_certificate,
+            crossed_wall_source_continuation.as_deref(),
+        ) {
             missing_inputs.push(missing_input.to_string());
         }
     }
@@ -26361,9 +26369,8 @@ fn local_cygv_star_union_wall_transport_readiness(
         crossed_wall_parity_mod2: crossed_wall_branch.map(|branch| branch.parity_mod2),
         crossed_wall_positive_dilog_status: crossed_wall_branch
             .map(|branch| branch.dilog_status.clone()),
-        crossed_wall_negative_continuation_status: crossed_wall_negative_continuation_status(
-            crossed_wall_branch,
-        ),
+        crossed_wall_negative_continuation_status: crossed_wall_negative_continuation,
+        crossed_wall_source_continuation_status: crossed_wall_source_continuation,
         target_plus_star_basis_nonzero: target_plus_star
             .and_then(|lookup| lookup.basis_nonzero.clone()),
         target_plus_star_extremal_status,
@@ -26379,6 +26386,7 @@ fn local_cygv_star_union_wall_transport_readiness(
 
 fn wall_transport_flop_certificate_missing_input(
     stable_weyl_certificate: &Option<LocalCygvStarUnionCrossedWallStableWeylProbe>,
+    source_continuation_status: Option<&str>,
 ) -> Option<&'static str> {
     match stable_weyl_certificate
         .as_ref()
@@ -26386,7 +26394,15 @@ fn wall_transport_flop_certificate_missing_input(
     {
         Some("stable_weyl_certified_exact_checks") => None,
         Some("stable_weyl_blocked_cms_general_divisor_no_rational_divisor_solution") => {
-            Some("non_weyl_wall_crossing_transport_certificate")
+            if source_continuation_status
+                == Some(
+                    "source_continuation_blocked_bfield_zero_real_branch_cut_requires_resummation_certificate",
+                )
+            {
+                Some("n1_branch_cut_resummation_transport_certificate")
+            } else {
+                Some("non_weyl_wall_crossing_transport_certificate")
+            }
         }
         Some(status) if status.starts_with("stable_weyl_blocked_") => {
             Some("shrinking_divisor_or_flop_certificate")
@@ -26395,6 +26411,37 @@ fn wall_transport_flop_certificate_missing_input(
             Some("shrinking_divisor_or_flop_certificate")
         }
         _ => Some("shrinking_divisor_or_flop_certificate"),
+    }
+}
+
+fn crossed_wall_source_continuation_status(
+    branch: Option<&MissingGvBranchDiagnostic>,
+    negative_continuation_status: Option<&str>,
+) -> Option<String> {
+    let branch = branch?;
+    let parity_is_odd = branch.parity_mod2.rem_euclid(2) == 1;
+    match (parity_is_odd, negative_continuation_status) {
+        (false, Some("crossed_wall_negative_continuation_real_branch_cut")) => Some(
+            "source_continuation_blocked_bfield_zero_real_branch_cut_requires_resummation_certificate"
+                .to_string(),
+        ),
+        (false, Some("crossed_wall_negative_continuation_real_axis_ok")) => Some(
+            "source_continuation_unexpected_bfield_zero_real_axis_ok_requires_source_check"
+                .to_string(),
+        ),
+        (false, Some(status)) => Some(format!("source_continuation_blocked_bfield_zero_{status}")),
+        (false, None) => {
+            Some("source_continuation_blocked_bfield_zero_missing_negative_continuation".to_string())
+        }
+        (true, Some("crossed_wall_negative_continuation_real_axis_ok")) => Some(
+            "source_continuation_half_integer_bfield_flop_identity_real_axis_ok".to_string(),
+        ),
+        (true, Some(status)) => Some(format!(
+            "source_continuation_half_integer_bfield_needs_source_check_{status}"
+        )),
+        (true, None) => {
+            Some("source_continuation_half_integer_bfield_missing_negative_continuation".to_string())
+        }
     }
 }
 
@@ -37906,6 +37953,7 @@ mod tests {
                     crossed_wall_parity_mod2: None,
                     crossed_wall_positive_dilog_status: None,
                     crossed_wall_negative_continuation_status: None,
+                    crossed_wall_source_continuation_status: None,
                     target_plus_star_basis_nonzero: None,
                     target_plus_star_extremal_status: None,
                     target_plus_star_support_generator_count: None,
@@ -43997,6 +44045,12 @@ mod tests {
                 .as_deref(),
             Some("crossed_wall_negative_continuation_real_branch_cut")
         );
+        assert_eq!(
+            readiness.crossed_wall_source_continuation_status.as_deref(),
+            Some(
+                "source_continuation_blocked_bfield_zero_real_branch_cut_requires_resummation_certificate"
+            )
+        );
         assert!(
             readiness
                 .missing_inputs
@@ -44041,7 +44095,7 @@ mod tests {
         assert!(
             non_weyl_readiness
                 .missing_inputs
-                .contains(&"non_weyl_wall_crossing_transport_certificate".to_string())
+                .contains(&"n1_branch_cut_resummation_transport_certificate".to_string())
         );
         assert!(
             !non_weyl_readiness

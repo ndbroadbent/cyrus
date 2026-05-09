@@ -609,5 +609,10 @@ non-cheating route away from the weighted-`P2` source row. The wall-transport
 readiness now consumes the certified face-domain zero, so
 `target_plus_star_qn_history` is no longer a missing input for targets `7`/`8`;
 the remaining blockers are the target-plus-star wall-crossing chamber transport
-and the non-Weyl wall-crossing certificate for the known opposite-star
-component.
+and the source-level branch-cut continuation certificate for the known
+opposite-star component. Regenerated branch-cut reports for targets `7`/`8`
+record parity mod 2 equal to `0`,
+`crossed_wall_negative_continuation_real_branch_cut`, and
+`source_continuation_blocked_bfield_zero_real_branch_cut_requires_resummation_certificate`,
+so the old generic non-Weyl certificate is now sharpened to
+`n1_branch_cut_resummation_transport_certificate`.
