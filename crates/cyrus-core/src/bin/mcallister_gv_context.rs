@@ -522,6 +522,8 @@ struct ContextReport {
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_candidate_insertion_status_counts:
         BTreeMap<String, usize>,
+    local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_dual_basis_p2_readout_status_counts:
+        BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_p2_readout_status_counts:
         BTreeMap<String, usize>,
     local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_gw_extraction_status_counts:
@@ -1670,6 +1672,9 @@ struct WeightedP2RankThreeTwistedIfunctionDegreeProfile {
     split_equivariant_candidate_insertion_lambda_polynomial: Option<Vec<String>>,
     split_equivariant_candidate_insertion_lambda_order: Option<i64>,
     split_equivariant_candidate_insertion_status: String,
+    split_equivariant_dual_basis_p2_numerator_lambda_polynomial: Option<Vec<String>>,
+    split_equivariant_dual_basis_p2_numerator_lambda_order: Option<i64>,
+    split_equivariant_dual_basis_p2_readout_status: String,
     candidate_insertion_visibility_status: String,
 }
 
@@ -17984,6 +17989,10 @@ fn build_report(
         unresolved_generator_weighted_p2_twisted_ifunction_split_equivariant_candidate_insertion_status_counts(
             &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
         );
+    let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_dual_basis_p2_readout_status_counts =
+        unresolved_generator_weighted_p2_twisted_ifunction_split_equivariant_dual_basis_p2_readout_status_counts(
+            &local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample,
+        );
     let local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_p2_readout_status_counts =
         weighted_p2_rank_three_chen_ruan_source_map_status_counts(
             local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_sample
@@ -19508,6 +19517,7 @@ fn build_report(
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_non_equivariant_candidate_insertion_coefficient_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_non_equivariant_bundle_numerator_truncation_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_candidate_insertion_status_counts,
+        local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_split_equivariant_dual_basis_p2_readout_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_p2_readout_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_gw_extraction_status_counts,
         local_cygv_source_resolution_star_union_current_chamber_unresolved_generator_weighted_p2_twisted_vector_bundle_ifunction_chen_ruan_required_source_data_status_counts,
@@ -21844,6 +21854,26 @@ fn unresolved_generator_weighted_p2_twisted_ifunction_split_equivariant_candidat
                 .entry(
                     profile
                         .split_equivariant_candidate_insertion_status
+                        .clone(),
+                )
+                .or_insert(0) += 1;
+        }
+    }
+    counts
+}
+
+fn unresolved_generator_weighted_p2_twisted_ifunction_split_equivariant_dual_basis_p2_readout_status_counts(
+    summaries: &[LocalCygvUnresolvedChamberGeneratorSummary],
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for summary in summaries {
+        for profile in &summary
+            .local_toric_weighted_p2_rank_three_twisted_vector_bundle_ifunction_degree_profile_sample
+        {
+            *counts
+                .entry(
+                    profile
+                        .split_equivariant_dual_basis_p2_readout_status
                         .clone(),
                 )
                 .or_insert(0) += 1;
@@ -27005,6 +27035,15 @@ fn weighted_p2_rank_three_twisted_ifunction_degree_profiles(
                 degree_twice,
                 required_insertion_complex_codimension,
             );
+            let (
+                split_equivariant_dual_basis_p2_numerator_lambda_polynomial,
+                split_equivariant_dual_basis_p2_numerator_lambda_order,
+                split_equivariant_dual_basis_p2_readout_status,
+            ) = split_equivariant_dual_basis_p2_readout_status(
+                bundle_degrees,
+                degree_twice,
+                required_insertion_complex_codimension,
+            );
             let candidate_insertion_visibility_status = match (
                 degree_twice % 2 == 0,
                 required_insertion_complex_codimension,
@@ -27050,6 +27089,9 @@ fn weighted_p2_rank_three_twisted_ifunction_degree_profiles(
                 split_equivariant_candidate_insertion_lambda_polynomial,
                 split_equivariant_candidate_insertion_lambda_order,
                 split_equivariant_candidate_insertion_status,
+                split_equivariant_dual_basis_p2_numerator_lambda_polynomial,
+                split_equivariant_dual_basis_p2_numerator_lambda_order,
+                split_equivariant_dual_basis_p2_readout_status,
                 candidate_insertion_visibility_status,
             }
         })
@@ -27231,6 +27273,90 @@ fn split_equivariant_candidate_insertion_status(
         }
     };
     (Some(polynomial), order, status.to_string())
+}
+
+fn split_equivariant_dual_basis_p2_readout_status(
+    bundle_degrees: &[i64],
+    degree_twice: i64,
+    required_insertion_complex_codimension: Option<i64>,
+) -> (Option<Vec<String>>, Option<i64>, String) {
+    if degree_twice % 2 != 0 {
+        return (
+            None,
+            None,
+            "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_dual_basis_p2_readout"
+                .to_string(),
+        );
+    }
+    let Some(required_codimension) = required_insertion_complex_codimension else {
+        return (
+            None,
+            None,
+            "weighted_p2_rank_three_split_dual_basis_p2_readout_codim_not_applicable".to_string(),
+        );
+    };
+    if required_codimension != 2 {
+        return (
+            None,
+            None,
+            "weighted_p2_rank_three_split_dual_basis_p2_readout_requires_codim2_observable"
+                .to_string(),
+        );
+    }
+    let ordinary_fun0_polynomial = equivariant_split_bundle_numerator_candidate_lambda_polynomial(
+        bundle_degrees,
+        degree_twice,
+        0,
+    );
+    let Some(quotient) =
+        divide_lambda_polynomial_by_two_lambda_if_possible(&ordinary_fun0_polynomial)
+    else {
+        return (
+            Some(ordinary_fun0_polynomial),
+            None,
+            "weighted_p2_rank_three_split_dual_basis_p2_readout_blocked_fun0_coefficient_not_divisible_by_two_lambda"
+                .to_string(),
+        );
+    };
+    let order = quotient
+        .iter()
+        .position(|coefficient| coefficient != "0")
+        .map(|order| order as i64);
+    let status = match order {
+        None => "weighted_p2_rank_three_split_dual_basis_p2_numerator_readout_zero",
+        Some(0) => {
+            "weighted_p2_rank_three_split_dual_basis_p2_numerator_readout_has_nonzero_nonequivariant_term"
+        }
+        Some(_) => {
+            "weighted_p2_rank_three_split_dual_basis_p2_numerator_readout_positive_lambda_order_requires_full_ifunction_pairing_or_residue"
+        }
+    };
+    (Some(quotient), order, status.to_string())
+}
+
+fn divide_lambda_polynomial_by_two_lambda_if_possible(
+    polynomial: &[String],
+) -> Option<Vec<String>> {
+    let constant = polynomial
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "0".to_string());
+    if constant != "0" {
+        return None;
+    }
+    let two = MalachiteRational::from(Integer::from(2));
+    Some(
+        polynomial
+            .iter()
+            .skip(1)
+            .map(|coefficient| {
+                let coefficient = coefficient
+                    .parse::<MalachiteRational>()
+                    .expect("lambda polynomial coefficient is rational");
+                (coefficient / two.clone()).to_string()
+            })
+            .collect(),
+    )
 }
 
 fn equivariant_split_bundle_numerator_candidate_lambda_polynomial(
@@ -39847,6 +39973,11 @@ mod tests {
                     split_equivariant_candidate_insertion_status:
                         "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_equivariant_p2_readout"
                             .to_string(),
+                    split_equivariant_dual_basis_p2_numerator_lambda_polynomial: None,
+                    split_equivariant_dual_basis_p2_numerator_lambda_order: None,
+                    split_equivariant_dual_basis_p2_readout_status:
+                        "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_dual_basis_p2_readout"
+                            .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_half_degree_requires_orbifold_sector_pairing"
                             .to_string(),
@@ -39885,6 +40016,16 @@ mod tests {
                     split_equivariant_candidate_insertion_status:
                         "weighted_p2_rank_three_split_equivariant_candidate_p2_positive_lambda_order_requires_pairing_or_residue"
                             .to_string(),
+                    split_equivariant_dual_basis_p2_numerator_lambda_polynomial: Some(vec![
+                        "0".to_string(),
+                        "0".to_string(),
+                        "-1/2".to_string(),
+                        "1/2".to_string()
+                    ]),
+                    split_equivariant_dual_basis_p2_numerator_lambda_order: Some(2),
+                    split_equivariant_dual_basis_p2_readout_status:
+                        "weighted_p2_rank_three_split_dual_basis_p2_numerator_readout_positive_lambda_order_requires_full_ifunction_pairing_or_residue"
+                            .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_untwisted_zero_order_exceeds_required_insertion_codim_requires_equivariant_normalization"
                             .to_string(),
@@ -39914,6 +40055,11 @@ mod tests {
                     split_equivariant_candidate_insertion_lambda_order: None,
                     split_equivariant_candidate_insertion_status:
                         "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_equivariant_p2_readout"
+                            .to_string(),
+                    split_equivariant_dual_basis_p2_numerator_lambda_polynomial: None,
+                    split_equivariant_dual_basis_p2_numerator_lambda_order: None,
+                    split_equivariant_dual_basis_p2_readout_status:
+                        "weighted_p2_rank_three_split_half_degree_twisted_sector_no_untwisted_dual_basis_p2_readout"
                             .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_half_degree_requires_orbifold_sector_pairing"
@@ -39956,6 +40102,20 @@ mod tests {
                     split_equivariant_candidate_insertion_lambda_order: Some(1),
                     split_equivariant_candidate_insertion_status:
                         "weighted_p2_rank_three_split_equivariant_candidate_p2_positive_lambda_order_requires_pairing_or_residue"
+                            .to_string(),
+                    split_equivariant_dual_basis_p2_numerator_lambda_polynomial: Some(vec![
+                        "0".to_string(),
+                        "0".to_string(),
+                        "-3".to_string(),
+                        "23/2".to_string(),
+                        "-17".to_string(),
+                        "12".to_string(),
+                        "-4".to_string(),
+                        "1/2".to_string()
+                    ]),
+                    split_equivariant_dual_basis_p2_numerator_lambda_order: Some(2),
+                    split_equivariant_dual_basis_p2_readout_status:
+                        "weighted_p2_rank_three_split_dual_basis_p2_numerator_readout_positive_lambda_order_requires_full_ifunction_pairing_or_residue"
                             .to_string(),
                     candidate_insertion_visibility_status:
                         "weighted_p2_rank_three_twisted_ifunction_untwisted_zero_order_exceeds_required_insertion_codim_requires_equivariant_normalization"
@@ -40101,6 +40261,23 @@ mod tests {
                     .to_string(),
                 2
             )])
+        );
+    }
+
+    #[test]
+    fn dual_basis_p2_readout_divides_fun0_coefficient_by_two_lambda() {
+        assert_eq!(
+            divide_lambda_polynomial_by_two_lambda_if_possible(&[
+                "0".to_string(),
+                "0".to_string(),
+                "-1".to_string(),
+                "1".to_string()
+            ]),
+            Some(vec!["0".to_string(), "-1/2".to_string(), "1/2".to_string()])
+        );
+        assert_eq!(
+            divide_lambda_polynomial_by_two_lambda_if_possible(&["1".to_string(), "0".to_string()]),
+            None
         );
     }
 
