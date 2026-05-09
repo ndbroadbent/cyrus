@@ -277,7 +277,7 @@ and matrix-basis pipeline are no longer open.
    on both local complete-intersection candidates and unresolved current-chamber
    generator summaries, so this handoff is explicit in reports; the six-point
    weighted-`P2` row currently reports
-   `complete_intersection_qn_trace_blocked_no_zero_degree_nef_partition` with
+   `complete_intersection_qn_trace_blocked_origin_exclusion_total_degree_nonzero` with
    ready count `0`. Its exported degree totals show why this is not merely a
    search miss: the origin-excluded support totals to `[-1]`, the origin
    contributes `[1]`, and the origin-included total is `[0]`, so the apparent

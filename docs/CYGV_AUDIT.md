@@ -47,10 +47,11 @@ than a shape probe. The context diagnostics now report this as an explicit
 `complete_intersection_qn_trace_readiness_status` with a ready-candidate count
 on both local CICY candidates and unresolved current-chamber generator
 summaries: the six-point weighted-`P2` row is blocked before the `cygv` qN
-trace boundary because it has zero certified zero-degree CYTools-style nef
-partitions. The same report exports the degree totals behind this obstruction:
-the origin-excluded support has total degree `[-1]`, the origin has degree
-`[1]`, and the origin-included support has total degree `[0]`.
+trace boundary as
+`complete_intersection_qn_trace_blocked_origin_exclusion_total_degree_nonzero`.
+The same report exports the degree totals behind this obstruction: the
+origin-excluded support has total degree `[-1]`, the origin has degree `[1]`,
+and the origin-included support has total degree `[0]`.
 
 ## CYTools Contract
 

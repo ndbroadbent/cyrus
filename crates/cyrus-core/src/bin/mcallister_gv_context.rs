@@ -11066,6 +11066,9 @@ fn local_cygv_complete_intersection_shape_candidate(
         zero_degree_nef_partition_candidate_count,
         cytools_nef_partition_candidate_count,
         complete_intersection_qn_trace_ready_candidate_count,
+        &nef_partition_total_degree_excluding_origin,
+        nef_partition_origin_degree.as_deref(),
+        &nef_partition_total_degree_including_origin,
     );
     let status = match zero_degree_nef_partition_candidate_count {
         Some(0) => {
@@ -11134,11 +11137,22 @@ fn local_cygv_complete_intersection_qn_trace_readiness_status(
     zero_degree_nef_partition_candidate_count: Option<usize>,
     cytools_nef_partition_candidate_count: Option<usize>,
     ready_candidate_count: Option<usize>,
+    total_degree_excluding_origin: &[i64],
+    origin_degree: Option<&[i64]>,
+    total_degree_including_origin: &[i64],
 ) -> (String, Vec<String>) {
     let status = match ready_candidate_count {
         Some(1) => "complete_intersection_qn_trace_ready_certified_zero_degree_nef_partition",
         Some(2..) => {
             "complete_intersection_qn_trace_ambiguous_multiple_certified_zero_degree_nef_partitions"
+        }
+        Some(0)
+            if zero_degree_nef_partition_candidate_count == Some(0)
+                && origin_degree.is_some()
+                && !local_cygv_degree_vector_is_zero(total_degree_excluding_origin)
+                && local_cygv_degree_vector_is_zero(total_degree_including_origin) =>
+        {
+            "complete_intersection_qn_trace_blocked_origin_exclusion_total_degree_nonzero"
         }
         Some(0) if zero_degree_nef_partition_candidate_count == Some(0) => {
             "complete_intersection_qn_trace_blocked_no_zero_degree_nef_partition"
@@ -11177,6 +11191,10 @@ fn local_cygv_complete_intersection_qn_trace_readiness_status(
         }
     }
     (status.to_string(), missing_inputs)
+}
+
+fn local_cygv_degree_vector_is_zero(degree: &[i64]) -> bool {
+    degree.iter().all(|&entry| entry == 0)
 }
 
 fn local_cygv_support_total_degree(
@@ -34146,7 +34164,7 @@ mod tests {
             diagnostic
                 .local_toric_complete_intersection_qn_trace_readiness_status
                 .as_deref(),
-            Some("complete_intersection_qn_trace_blocked_no_zero_degree_nef_partition")
+            Some("complete_intersection_qn_trace_blocked_origin_exclusion_total_degree_nonzero")
         );
         assert_eq!(
             diagnostic.local_toric_complete_intersection_qn_trace_ready_candidate_count,
@@ -36742,7 +36760,7 @@ mod tests {
         );
         assert_eq!(
             candidate.complete_intersection_qn_trace_readiness_status,
-            "complete_intersection_qn_trace_blocked_no_zero_degree_nef_partition"
+            "complete_intersection_qn_trace_blocked_origin_exclusion_total_degree_nonzero"
         );
         assert_eq!(
             candidate.complete_intersection_qn_trace_ready_candidate_count,
@@ -36791,7 +36809,7 @@ mod tests {
             ]),
             BTreeMap::from([
                 (
-                    "complete_intersection_qn_trace_blocked_no_zero_degree_nef_partition"
+                    "complete_intersection_qn_trace_blocked_origin_exclusion_total_degree_nonzero"
                         .to_string(),
                     1
                 ),

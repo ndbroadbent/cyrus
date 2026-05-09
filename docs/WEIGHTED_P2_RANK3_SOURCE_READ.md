@@ -262,7 +262,7 @@ codimension-2 model/nef partition/tensor/chamber history for this specific
 rank-three weighted-`P2` row. The local context diagnostics now surface this
 as a direct qN-trace readiness blocker on both the local CICY candidate and
 the unresolved current-chamber generator summary: the current six-point row
-has `complete_intersection_qn_trace_blocked_no_zero_degree_nef_partition` and
+has `complete_intersection_qn_trace_blocked_origin_exclusion_total_degree_nonzero` and
 ready count `0`, so no complete-intersection `cygv` call is legitimate yet.
 The newly exported degree totals make the obstruction algebraic rather than
 just enumerative: the CYTools-valid origin-excluded support has total degree
