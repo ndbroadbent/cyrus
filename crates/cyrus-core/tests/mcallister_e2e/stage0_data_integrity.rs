@@ -524,8 +524,13 @@ fn stage0_first_principles_runner_does_not_silently_replay_downstream_outputs() 
         "g_s.dat, W_0.dat, and corrected_cy_vol.dat must be optional validation checkpoints, not required inputs"
     );
     assert!(
-        compare.contains("corrected V_string comparison is not exact"),
-        "non-exact corrected-volume comparisons must be logged as unresolved discrepancies"
+        compare.contains("corrected V_string differs from the checkpoint")
+            && compare.contains("docs/CORRECTED_CHAMBER_RESOLUTION.md"),
+        "non-exact corrected-volume comparisons must be logged with the checkpoint-consistency explanation"
+    );
+    assert!(
+        compare.contains("beyond checkpoint-consistency tolerance"),
+        "corrected-volume comparison must keep a hard error gate"
     );
 
     for gv_artifact in [
@@ -817,12 +822,16 @@ fn stage0_first_principles_runner_accepts_declared_inputs_only_data_dir() {
         );
     }
     assert!(
-        stderr.contains("[RESULT] V_string = 4711.504666573377"),
+        stderr.contains("[RESULT] V_string = 4711.426470024974"),
         "declared-input run should reach the current no-replay V_string result:\n{stderr}"
     );
     assert!(
-        stderr.contains("[RESULT] log10(|V0|) = -202.26279591106547"),
+        stderr.contains("[RESULT] log10(|V0|) = -202.262781495031"),
         "declared-input run should reach the current no-replay V0 result:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("O7 divisors=51 (beyond KKLT basis: [2, 46])"),
+        "declared-input run should derive the orientifold B-field gamma from the involution parity:\n{stderr}"
     );
 }
 

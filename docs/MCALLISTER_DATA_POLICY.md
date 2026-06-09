@@ -119,16 +119,18 @@ This policy is not a completion certificate. The remaining known gaps are:
   matching `small_curves.dat`. Cyrus exposes both rules explicitly via
   `CurvePruningStrategy` and
   `mcallister_first_principles --small-curve-pruning <pair|finite-semigroup>`;
-- corrected-chamber/flop continuation for the Kähler-coordinate instanton terms
-  remains unresolved, especially for even-parity branch-cut cases;
-- corrected-chamber GV coverage still has a checkpoint-implied target residual;
 - potent-ray checkpoints are now validated for rank, volumes, convergence
   slopes, and first-four source-derived CKYZ GV entries for the 395 rank-two
   CKYZ rows, but Cyrus does not yet generate the low-dimensional-face ray
   sample, reproduce all ten saved entries efficiently, or handle the rank-four
-  local charge contexts;
-- the final McAllister corrected volume is close but not reproduced exactly by
-  the no-replay path.
+  local charge contexts.
 
-Until those gaps are resolved, McAllister 4-214-647 is a validation target with
-documented discrepancies, not a completed reproduction.
+The previously listed corrected-chamber gaps (flop continuation, the
+checkpoint-implied GV target residual, and the inexact corrected volume) are
+**resolved**: the residual was caused by the B-field parity vector `gamma`
+omitting the O7 divisors outside the KKLT basis (points 2 and 46 for
+4-214-647). With `gamma` derived from the orientifold involution parity, the
+input-chamber formulas analytically continue through the ten odd-parity
+conifold flops separating the chambers and reproduce
+`corrected_target_volumes.dat` and `corrected_cy_vol.dat`. See
+`docs/CORRECTED_CHAMBER_RESOLUTION.md` for the certificates.

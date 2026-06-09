@@ -37,7 +37,27 @@ run pass. Any remaining mismatch must be explicit and localizable.
 
 ## Current Blocking Gaps
 
-1. Corrected-chamber GV target correction still does not reproduce the
+> **RESOLUTION (2026-06-10):** Gap 1 below (and the gap-4 volume residual) is
+> **resolved**; the long history that follows is retained as a record. The
+> corrected-chamber residual was caused by the B-field parity vector `gamma`
+> omitting the O7 divisors that sit outside the KKLT basis (points 2 and 46
+> for 4-214-647). `gamma` is now derived from the orientifold involution
+> parity (the unique common `p mod 2` class of the declared so(8) divisors,
+> applied to every lattice point). With that fix, the corrected chamber is
+> reached by analytic continuation of the input-chamber formulas through ten
+> odd-parity GV=1 conifold flops (certified exactly at the kappa-tensor
+> level), `corrected_target_volumes.dat` and `corrected_cy_vol.dat` are
+> reproduced to ~1e-8 at the checkpoint Kahler point, and the no-replay solve
+> lands within the checkpoint's own internal tolerance (the stored
+> target/Kahler pair is self-inconsistent at ~5.6e-4; Cyrus converges the
+> same fixed point to 1e-10, giving |V_string - checkpoint| ~ 6e-3). The nine
+> "missing GV targets" contribute only ~2e-4 to any tau target and are not
+> part of the checkpoint's curve set; the weighted-P2/orbifold-GW program is
+> unnecessary for this reproduction. See
+> `docs/CORRECTED_CHAMBER_RESOLUTION.md` for derivations and certificates.
+
+1. (Resolved — see above. Historical record follows.)
+   Corrected-chamber GV target correction still does not reproduce the
    checkpoint-implied vector. The leading residual has been ruled out as a
    simple issue with divisor `chi`, gamma indexing, `q.t` branch aggregation,
    local toric formulas, or checkpoint-file semantics.

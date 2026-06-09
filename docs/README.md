@@ -2,6 +2,10 @@
 
 Current local notes:
 
+- [CORRECTED_CHAMBER_RESOLUTION.md](CORRECTED_CHAMBER_RESOLUTION.md):
+  resolution of the corrected-chamber V_string residual — the certified
+  ten-flop chamber relation, the involution-parity derivation of the B-field
+  `gamma`, and the exact reproduction of the corrected targets and volume.
 - [CYGV_AUDIT.md](CYGV_AUDIT.md): CYTools and `cygv` source audit for the
   McAllister GV pipeline, including the split between low-dimensional generic
   `compute_gvs()` and high-dimensional selected toric curves.

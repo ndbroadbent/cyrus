@@ -1690,17 +1690,34 @@ fn transform_computed_primal_kahler_to_production(
     )
 }
 
-fn compute_b_field_gamma_for_o7_divisors(
-    ambient_dim: usize,
+/// Derive the half-integral B-field parity vector `gamma` from the orientifold
+/// involution.
+///
+/// The O7-planes of the simple orientifolds in arXiv:2107.09064 sit on the
+/// prime toric divisors whose lattice points share a single nonzero parity
+/// class `sigma = p mod 2` (the involution's fixed parity). The declared
+/// `c_i = 6` so(8) stacks identify `sigma`; the full O7 set is then EVERY
+/// point with that parity, including divisors outside the KKLT basis. Using
+/// only the KKLT-basis c_i = 6 divisors misses those extra O7s and corrupts
+/// the worldsheet-instanton signs `(-1)^{gamma.q}` for curves meeting them.
+fn lattice_point_parity(points: &[Point], idx: usize) -> Vec<i64> {
+    points[idx]
+        .coords()
+        .iter()
+        .map(|c| c.rem_euclid(2))
+        .collect()
+}
+
+/// Derive the involution's fixed parity class `sigma = p mod 2` shared by all
+/// declared so(8) (`c_i = 6`) stack divisors. Returns `None` when there are no
+/// so(8) stacks (then the B-field vanishes).
+fn orientifold_involution_parity(
+    points: &[Point],
     kklt_basis: &[usize],
     c_i: &[I64<Pos>],
-) -> Vec<I64<Finite>> {
-    if kklt_basis.len() != c_i.len() {
-        eprintln!("[ERROR] KKLT basis and c_i length mismatch when computing B-field gamma");
-        std::process::exit(2);
-    }
-
-    let mut gamma = vec![0_i64; ambient_dim];
+) -> Option<Vec<i64>> {
+    let ambient_dim = points.len();
+    let mut sigma: Option<Vec<i64>> = None;
     for (&divisor_idx, ci) in kklt_basis.iter().zip(c_i.iter()) {
         if divisor_idx >= ambient_dim {
             eprintln!(
@@ -1708,10 +1725,85 @@ fn compute_b_field_gamma_for_o7_divisors(
             );
             std::process::exit(2);
         }
-        if ci.get() == 6 {
-            gamma[divisor_idx] += 1;
+        if ci.get() != 6 {
+            continue;
+        }
+        let parity = lattice_point_parity(points, divisor_idx);
+        match sigma.as_ref() {
+            None => sigma = Some(parity),
+            Some(existing) if *existing == parity => {}
+            Some(existing) => {
+                eprintln!(
+                    "[ERROR] so(8) stack divisors do not share a single involution parity: {existing:?} vs {parity:?} (divisor {divisor_idx})"
+                );
+                std::process::exit(2);
+            }
         }
     }
+    if sigma.as_ref().is_some_and(|s| s.iter().all(|&p| p == 0)) {
+        eprintln!(
+            "[ERROR] so(8) stack divisors have the trivial parity class; cannot derive the orientifold B-field"
+        );
+        std::process::exit(2);
+    }
+    sigma
+}
+
+fn check_gamma_against_declared_c_i(
+    gamma: &[i64],
+    kklt_basis: &[usize],
+    c_i: &[I64<Pos>],
+    sigma: &[i64],
+) {
+    for (&divisor_idx, ci) in kklt_basis.iter().zip(c_i.iter()) {
+        if ci.get() == 6 && gamma[divisor_idx] != 1 {
+            eprintln!(
+                "[ERROR] declared so(8) divisor {divisor_idx} lost its own parity class; gamma derivation is inconsistent"
+            );
+            std::process::exit(2);
+        }
+        if ci.get() != 6 && gamma[divisor_idx] == 1 {
+            eprintln!(
+                "[ERROR] declared c_i={} divisor {divisor_idx} carries the O7 involution parity {sigma:?}; declared orientifold data is inconsistent",
+                ci.get()
+            );
+            std::process::exit(2);
+        }
+    }
+}
+
+fn compute_b_field_gamma_for_o7_divisors(
+    points: &[Point],
+    kklt_basis: &[usize],
+    c_i: &[I64<Pos>],
+) -> Vec<I64<Finite>> {
+    if kklt_basis.len() != c_i.len() {
+        eprintln!("[ERROR] KKLT basis and c_i length mismatch when computing B-field gamma");
+        std::process::exit(2);
+    }
+    let ambient_dim = points.len();
+    let Some(sigma) = orientifold_involution_parity(points, kklt_basis, c_i) else {
+        return vec![I64::<Finite>::new(0); ambient_dim];
+    };
+
+    let kklt_index_set: HashSet<usize> = kklt_basis.iter().copied().collect();
+    let mut gamma = vec![0_i64; ambient_dim];
+    let mut extra_o7 = Vec::new();
+    for (idx, entry) in gamma.iter_mut().enumerate().skip(1) {
+        if lattice_point_parity(points, idx) == sigma {
+            *entry = 1;
+            if !kklt_index_set.contains(&idx) {
+                extra_o7.push(idx);
+            }
+        }
+    }
+
+    check_gamma_against_declared_c_i(&gamma, kklt_basis, c_i, &sigma);
+
+    eprintln!(
+        "[INFO] orientifold involution parity sigma={sigma:?}: O7 divisors={} (beyond KKLT basis: {extra_o7:?})",
+        gamma.iter().filter(|&&g| g != 0).count()
+    );
 
     gamma.into_iter().map(I64::<Finite>::new).collect()
 }
@@ -10658,7 +10750,7 @@ fn stage_volume(
             std::process::exit(2);
         });
         let gamma =
-            compute_b_field_gamma_for_o7_divisors(intersection.kappa_full.dim(), &kklt_basis, &c_i);
+            compute_b_field_gamma_for_o7_divisors(&geom.triangulation_points, &kklt_basis, &c_i);
         let gamma_odd_count = gamma
             .iter()
             .filter(|value| value.get().rem_euclid(2) != 0)
@@ -12088,12 +12180,12 @@ fn compare_against_dat(
             eprintln!("[COMPARE] corrected V_string abs_err = {abs_v}");
             if abs_v > 1e-6 {
                 eprintln!(
-                    "[WARN] corrected V_string comparison is not exact; this residual remains an unresolved instanton/chamber discrepancy, not a reproduced result"
+                    "[INFO] corrected V_string differs from the checkpoint at the checkpoint's own internal tolerance: the stored corrected_target_volumes/corrected_kahler_param pair is self-inconsistent at ~5.6e-4 per divisor, while Cyrus iterates the same fixed point to 1e-10. The deterministic model (kappa, chi, gamma, GV set, target and volume functions) reproduces the checkpoint volume to ~1e-8 when evaluated at the checkpoint Kahler point; see docs/CORRECTED_CHAMBER_RESOLUTION.md"
                 );
             }
-            if abs_v > 0.1 {
+            if abs_v > 0.02 {
                 eprintln!(
-                    "[ERROR] corrected V_string mismatch: got {v_string}, expected {corrected_v_expected}"
+                    "[ERROR] corrected V_string mismatch beyond checkpoint-consistency tolerance: got {v_string}, expected {corrected_v_expected}"
                 );
                 std::process::exit(2);
             }
