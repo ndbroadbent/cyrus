@@ -39,9 +39,10 @@ pub(crate) fn first_principles_enabled() -> bool {
 
 pub(crate) fn fixtures_enabled() -> bool {
     let enabled = std::env::var_os("CYRUS_ALLOW_FIXTURES").is_some();
-    if enabled && first_principles_enabled() {
-        panic!("CYRUS_ALLOW_FIXTURES cannot be used with CYRUS_FIRST_PRINCIPLES");
-    }
+    assert!(
+        !(enabled && first_principles_enabled()),
+        "CYRUS_ALLOW_FIXTURES cannot be used with CYRUS_FIRST_PRINCIPLES"
+    );
     enabled
 }
 

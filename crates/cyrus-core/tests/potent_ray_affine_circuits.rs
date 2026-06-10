@@ -187,7 +187,7 @@ fn rank_two_signature_coefficient_pattern(signature: &RankTwoLocalSupportSignatu
     coefficients
 }
 
-fn ckyz_kind_index(kind: &CkyzLocalSurfaceKind) -> usize {
+const fn ckyz_kind_index(kind: &CkyzLocalSurfaceKind) -> usize {
     match kind {
         CkyzLocalSurfaceKind::LocalP2 => 0,
         CkyzLocalSurfaceKind::HirzebruchF0 => 1,
@@ -203,7 +203,7 @@ fn scale_ckyz_degree(direction: &[usize], multiple: usize) -> Vec<usize> {
         .collect::<Vec<_>>()
 }
 
-fn gcd_abs(mut a: i64, mut b: i64) -> i64 {
+const fn gcd_abs(mut a: i64, mut b: i64) -> i64 {
     a = a.abs();
     b = b.abs();
     while b != 0 {
@@ -214,7 +214,7 @@ fn gcd_abs(mut a: i64, mut b: i64) -> i64 {
     a
 }
 
-fn cross(origin: [i64; 2], lhs: [i64; 2], rhs: [i64; 2]) -> i64 {
+const fn cross(origin: [i64; 2], lhs: [i64; 2], rhs: [i64; 2]) -> i64 {
     (lhs[0] - origin[0]) * (rhs[1] - origin[1]) - (lhs[1] - origin[1]) * (rhs[0] - origin[0])
 }
 
@@ -956,10 +956,10 @@ fn assert_mcallister_rank_two_ckyz_potent_ray_gvs_are_reconstructed(
                 usize::try_from(entry).expect("CKYZ source target direction should be nonnegative")
             })
             .collect::<Vec<_>>();
-        if let Some(filter) = &target_direction_filter {
-            if *filter != identification.source_target_direction {
-                continue;
-            }
+        if let Some(filter) = &target_direction_filter
+            && *filter != identification.source_target_direction
+        {
+            continue;
         }
         let multiples_to_check = expected_gvs.len().min(requested_multiples);
         assert!(
@@ -1064,10 +1064,10 @@ fn mcallister_rank_two_ckyz_domain_profiles_are_inventoried() {
                 usize::try_from(entry).expect("CKYZ source target direction should be nonnegative")
             })
             .collect::<Vec<_>>();
-        if let Some(filter) = &target_direction_filter {
-            if *filter != identification.source_target_direction {
-                continue;
-            }
+        if let Some(filter) = &target_direction_filter
+            && *filter != identification.source_target_direction
+        {
+            continue;
         }
         let key = (
             ckyz_kind_index(&identification.kind),

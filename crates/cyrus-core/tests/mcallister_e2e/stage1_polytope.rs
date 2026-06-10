@@ -53,16 +53,18 @@ fn load_polytope() -> PolytopeFixture {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
     let data_dir = crate::mcallister_data_dir();
-    if crate::first_principles_enabled() && data_dir.is_none() {
-        panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
-    }
+    assert!(
+        !(crate::first_principles_enabled() && data_dir.is_none()),
+        "CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests"
+    );
 
     let primal_points = if let Some(dir) = data_dir {
         read_csv_rows_i64(&dir.join("points.dat"))
     } else {
-        if !crate::fixtures_enabled() {
-            panic!("Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures");
-        }
+        assert!(
+            crate::fixtures_enabled(),
+            "Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures"
+        );
         let input_path = manifest_dir.join("tests/mcallister_e2e/inputs/polytope.json");
         let content = std::fs::read_to_string(&input_path)
             .unwrap_or_else(|e| panic!("Failed to read {}: {e}", input_path.display()));
@@ -189,9 +191,10 @@ fn stage1_dual_matches_expected() {
     let expected_points = if let Some(dir) = crate::mcallister_data_dir() {
         read_csv_rows_i64(&dir.join("dual_points.dat"))
     } else {
-        if !crate::fixtures_enabled() {
-            panic!("Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures");
-        }
+        assert!(
+            crate::fixtures_enabled(),
+            "Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures"
+        );
         let assertion_path = manifest_dir.join("tests/mcallister_e2e/assertions/dual_points.json");
         let content = std::fs::read_to_string(&assertion_path)
             .unwrap_or_else(|e| panic!("Failed to read {}: {e}", assertion_path.display()));

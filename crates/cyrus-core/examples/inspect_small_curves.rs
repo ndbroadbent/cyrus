@@ -73,13 +73,14 @@ fn read_csv_pos(path: &Path) -> Vec<F64<Pos>> {
 }
 
 fn main() {
-    let data_dir = std::env::var("CYRUS_MCALLISTER_DATA_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
+    let data_dir = std::env::var("CYRUS_MCALLISTER_DATA_DIR").map_or_else(
+        |_| {
             PathBuf::from(
                 "/Users/ndbroadbent/code/string_theory/resources/small_cc_2107.09064_source/anc/paper_data/4-214-647",
             )
-        });
+        },
+        PathBuf::from,
+    );
     let t0 = Instant::now();
 
     let points_raw = read_points(&data_dir.join("points.dat"));
@@ -179,8 +180,7 @@ fn main() {
         })
         .count();
     println!(
-        "pair_decomposable={} expected_decomposable={} extra_decomposable={}",
-        pair_decomposable, pair_decomposable_expected, pair_decomposable_extra
+        "pair_decomposable={pair_decomposable} expected_decomposable={pair_decomposable_expected} extra_decomposable={pair_decomposable_extra}"
     );
 
     let volume_by_class: HashMap<Vec<i64>, _> = selected

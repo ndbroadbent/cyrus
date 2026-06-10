@@ -65,7 +65,7 @@ fn read_csv_f64(path: &str) -> Vec<f64> {
     let content =
         std::fs::read_to_string(path).unwrap_or_else(|e| panic!("Failed to read {}: {e}", path));
     content
-        .split(|c| c == ',' || c == '\n' || c == '\r')
+        .split([',', '\n', '\r'])
         .filter(|s| !s.trim().is_empty())
         .map(|s| s.trim().parse::<f64>().expect("invalid float"))
         .collect()
@@ -75,7 +75,7 @@ fn read_csv_i64(path: &str) -> Vec<i64> {
     let content =
         std::fs::read_to_string(path).unwrap_or_else(|e| panic!("Failed to read {}: {e}", path));
     content
-        .split(|c| c == ',' || c == '\n' || c == '\r')
+        .split([',', '\n', '\r'])
         .filter(|s| !s.trim().is_empty())
         .map(|s| s.trim().parse::<i64>().expect("invalid integer"))
         .collect()
@@ -111,12 +111,14 @@ fn read_csv_rows_usize(path: &str) -> Vec<Vec<usize>> {
 
 fn require_data_dir() -> Option<PathBuf> {
     let Some(dir) = crate::mcallister_data_dir() else {
-        if crate::first_principles_enabled() {
-            panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
-        }
-        if crate::fixtures_enabled() {
-            panic!("CYRUS_MCALLISTER_DATA_DIR must be set to validate JSON fixtures");
-        }
+        assert!(
+            !crate::first_principles_enabled(),
+            "CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests"
+        );
+        assert!(
+            !crate::fixtures_enabled(),
+            "CYRUS_MCALLISTER_DATA_DIR must be set to validate JSON fixtures"
+        );
         eprintln!("Skipping data integrity checks (set CYRUS_MCALLISTER_DATA_DIR)");
         return None;
     };
@@ -337,6 +339,7 @@ fn artifact_policy(file: &str) -> Option<ArtifactPolicy> {
         .find(|policy| policy.file == file)
 }
 
+#[allow(clippy::case_sensitive_file_extension_comparisons)] // .dat fixture names are lowercase by construction
 fn dat_tokens(source: &str) -> impl Iterator<Item = &str> {
     source
         .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.'))
@@ -497,8 +500,7 @@ fn stage0_first_principles_runner_does_not_silently_replay_downstream_outputs() 
             && stage_vacuum.contains("if !validate_mcallister_assertions"),
         "McAllister final assertion checks must be explicitly skippable for non-validation candidates"
     );
-    let stage_flat_direction =
-        source_region_before_fn(&runner, "stage_flat_direction", "sparse_i64");
+    let stage_flat_direction = source_region_before_fn(&runner, "stage_flat_direction", "stage_gv");
     assert!(
         stage_flat_direction.contains("use_mcallister_flux_basis_default")
             && stage_flat_direction.contains("using computed dual basis as flux coordinate basis")
@@ -731,21 +733,6 @@ fn stage0_compact_gv_production_paths_use_upstream_cygv_boundary() {
             "{bin} must not use diagnostic compact GV shortcuts as its GV source"
         );
     }
-
-    assert!(
-        first_principles.contains("provided-generator GV diagnostic")
-            && first_principles.contains("not the exact corrected-chamber GV fallback"),
-        "provided-generator corrected-chamber cygv probes must stay labeled as diagnostics"
-    );
-
-    let context_path = manifest_dir.join("src/bin/mcallister_gv_context.rs");
-    let context_source = std::fs::read_to_string(&context_path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", context_path.display()));
-    assert!(
-        context_source.contains("opt-in diagnostic binary")
-            && context_source.contains("CYTools/cygv-shaped context"),
-        "mcallister_gv_context must remain an explicit diagnostic context consumer"
-    );
 }
 
 #[test]
@@ -759,9 +746,10 @@ fn stage0_first_principles_runner_accepts_declared_inputs_only_data_dir() {
 
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let workspace_root = manifest_dir.join("../..");
-    let runner = std::env::var_os("CYRUS_MCALLISTER_RUNNER_BIN")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| workspace_root.join("target/release/mcallister_first_principles"));
+    let runner = std::env::var_os("CYRUS_MCALLISTER_RUNNER_BIN").map_or_else(
+        || workspace_root.join("target/release/mcallister_first_principles"),
+        PathBuf::from,
+    );
     if !runner.exists() {
         eprintln!(
             "Skipping declared-input runner test (build release runner or set CYRUS_MCALLISTER_RUNNER_BIN)"

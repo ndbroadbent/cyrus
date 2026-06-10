@@ -12,7 +12,7 @@
 #![allow(clippy::cast_possible_truncation)] // Exponent values from log10 are small
 
 use serde::Deserialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Round a float to N decimal places
@@ -23,9 +23,10 @@ fn round_to_decimals(value: f64, decimals: u32) -> f64 {
 
 fn require_data_dir() -> Option<PathBuf> {
     let Some(dir) = crate::mcallister_data_dir() else {
-        if crate::first_principles_enabled() {
-            panic!("CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests");
-        }
+        assert!(
+            !crate::first_principles_enabled(),
+            "CYRUS_MCALLISTER_DATA_DIR must be set for first-principles tests"
+        );
         eprintln!("Skipping volume checks (set CYRUS_MCALLISTER_DATA_DIR)");
         return None;
     };
@@ -54,7 +55,7 @@ fn read_csv_i64(path: &PathBuf) -> Vec<i64> {
     let content = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
     content
-        .split(|c| c == ',' || c == '\n' || c == '\r')
+        .split([',', '\n', '\r'])
         .filter(|s| !s.trim().is_empty())
         .map(|s| s.trim().parse::<i64>().expect("invalid integer"))
         .collect()
@@ -99,7 +100,7 @@ fn load_racetrack_assertion() -> RacetrackAssertion {
 }
 
 /// Load McAllister's Kähler parameters (t^i values)
-fn load_kahler_params(data_dir: &PathBuf) -> (Vec<f64>, Vec<f64>) {
+fn load_kahler_params(data_dir: &Path) -> (Vec<f64>, Vec<f64>) {
     use std::fs;
 
     // Load uncorrected Kähler parameters
@@ -223,9 +224,10 @@ fn stage10_compute_v_string() {
             })
             .collect::<Vec<Vec<i64>>>()
     } else {
-        if !crate::fixtures_enabled() {
-            panic!("Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures");
-        }
+        assert!(
+            crate::fixtures_enabled(),
+            "Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures"
+        );
         let input_path = manifest_dir.join("tests/mcallister_e2e/inputs/polytope.json");
         let content = std::fs::read_to_string(&input_path).expect("Failed to read polytope.json");
         let input: PolytopeInput =
@@ -247,14 +249,15 @@ fn stage10_compute_v_string() {
         let content =
             std::fs::read_to_string(dir.join("heights.dat")).expect("Failed to read heights.dat");
         content
-            .split(|c| c == ',' || c == '\n' || c == '\r')
+            .split([',', '\n', '\r'])
             .filter(|s| !s.trim().is_empty())
             .map(|s| s.trim().parse::<f64>().expect("Invalid height value"))
             .collect::<Vec<f64>>()
     } else {
-        if !crate::fixtures_enabled() {
-            panic!("Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures");
-        }
+        assert!(
+            crate::fixtures_enabled(),
+            "Set CYRUS_ALLOW_FIXTURES=1 to use JSON fixtures"
+        );
         let heights_path = manifest_dir.join("tests/mcallister_e2e/inputs/heights.json");
         let heights_content =
             std::fs::read_to_string(&heights_path).expect("Failed to read heights.json");
@@ -550,9 +553,10 @@ fn stage11_first_principles_runner_reaches_corrected_volume_and_v0() {
     };
 
     let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let runner = std::env::var_os("CYRUS_MCALLISTER_RUNNER_BIN")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| workspace_root.join("target/release/mcallister_first_principles"));
+    let runner = std::env::var_os("CYRUS_MCALLISTER_RUNNER_BIN").map_or_else(
+        || workspace_root.join("target/release/mcallister_first_principles"),
+        PathBuf::from,
+    );
     if !runner.exists() {
         eprintln!(
             "Skipping full first-principles runner test (build release runner or set CYRUS_MCALLISTER_RUNNER_BIN)"

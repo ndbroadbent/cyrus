@@ -681,13 +681,13 @@ pub fn fine_regular_triangulation_choices_on_polytope_2faces_4d(
     let faces = polytope.faces_4d_for_points(points)?;
     let mut choices = Vec::with_capacity(faces.twofaces.len());
     for (face_idx, face) in faces.twofaces.iter().enumerate() {
-        if let Some(max_points) = max_face_points {
-            if face.len() > max_points {
-                return Err(Error::InvalidInput(format!(
-                    "2-face {face_idx} has {} points, exceeding exact enumeration limit {max_points}",
-                    face.len()
-                )));
-            }
+        if let Some(max_points) = max_face_points
+            && face.len() > max_points
+        {
+            return Err(Error::InvalidInput(format!(
+                "2-face {face_idx} has {} points, exceeding exact enumeration limit {max_points}",
+                face.len()
+            )));
         }
         choices.push(fine_regular_triangulations_of_face_2d(points, face)?);
     }
@@ -2490,7 +2490,7 @@ fn boundary_edges_2d(local_points: &[LocalFacePoint2D]) -> Result<BTreeSet<[usiz
     Ok(edges)
 }
 
-fn triangle_local_edges(simplex: [usize; 3]) -> [[usize; 2]; 3] {
+const fn triangle_local_edges(simplex: [usize; 3]) -> [[usize; 2]; 3] {
     [
         sorted_pair(simplex[0], simplex[1]),
         sorted_pair(simplex[0], simplex[2]),
@@ -2509,7 +2509,7 @@ fn local_triangle_points(
     ]
 }
 
-fn sorted_pair(first: usize, second: usize) -> [usize; 2] {
+const fn sorted_pair(first: usize, second: usize) -> [usize; 2] {
     if first <= second {
         [first, second]
     } else {
@@ -2728,7 +2728,7 @@ fn triangles_are_compatible_2d(
     true
 }
 
-fn triangle_edges_2d(vertices: [[i64; 2]; 3]) -> [([i64; 2], [i64; 2]); 3] {
+const fn triangle_edges_2d(vertices: [[i64; 2]; 3]) -> [([i64; 2], [i64; 2]); 3] {
     [
         (vertices[0], vertices[1]),
         (vertices[1], vertices[2]),
@@ -2822,15 +2822,15 @@ fn consecutive_collinear_site_ordering(points: [[i64; 2]; 3]) -> Option<[usize; 
     None
 }
 
-fn primitive_2d(vector: [i64; 2]) -> bool {
+const fn primitive_2d(vector: [i64; 2]) -> bool {
     gcd_int(vector[0], vector[1]) == 1
 }
 
-fn coordinate_difference_2d(lhs: [i64; 2], rhs: [i64; 2]) -> [i64; 2] {
+const fn coordinate_difference_2d(lhs: [i64; 2], rhs: [i64; 2]) -> [i64; 2] {
     [lhs[0] - rhs[0], lhs[1] - rhs[1]]
 }
 
-fn double_2d(vector: [i64; 2]) -> [i64; 2] {
+const fn double_2d(vector: [i64; 2]) -> [i64; 2] {
     [2 * vector[0], 2 * vector[1]]
 }
 
@@ -3146,7 +3146,7 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(
             secondary_cone_strictly_contains_height_vector(
-                &vec![vec![-1, 1, -1, 1]],
+                &[vec![-1, 1, -1, 1]],
                 &typed_heights,
                 positive(1e-10),
             )
@@ -3204,7 +3204,7 @@ mod tests {
 
         assert!(
             secondary_cone_strictly_contains_height_vector(
-                &vec![vec![-1, 1, -1, 1]],
+                &[vec![-1, 1, -1, 1]],
                 &typed_heights,
                 positive(1e-10),
             )
@@ -3519,9 +3519,9 @@ mod tests {
             ]
         );
         assert_eq!(
-            expanded_secondary_chamber_choice_count(&vec![
+            expanded_secondary_chamber_choice_count(&[
                 vec![vec![vec![1, 0]], vec![vec![0, 1]]],
-                vec![vec![vec![0, 0]], vec![vec![1, 1]], vec![vec![-1, -1]]],
+                vec![vec![vec![0, 0]], vec![vec![1, 1]], vec![vec![-1, -1]]]
             ])
             .unwrap(),
             6

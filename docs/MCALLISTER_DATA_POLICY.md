@@ -11,22 +11,34 @@ first-principles runner:
 
 - `points.dat`: primal polytope points for the validation target.
 - `heights.dat`: selected regular triangulation heights.
+- `dual_simplices.dat`: the selected mirror (dual) FRST chamber. Only
+  4-214-647 happens to use the default Delaunay/CGAL chamber of the dual
+  polytope; the other four examples use deliberately chosen mirror
+  triangulations (verified directly with CYTools: the default chamber
+  disagrees with `dual_simplices.dat` for all of them). The mirror chamber
+  is therefore a modeling choice on the same footing as `heights.dat`. The
+  runner must still verify the loaded simplices form a fine regular star
+  triangulation of the dual polytope it computed itself (via the secondary
+  cone), and must still compute the dual polytope and its points from
+  `points.dat` — only the chamber choice is input.
 - `K_vec.dat`, `M_vec.dat`: integer flux vectors.
 - `kklt_basis.dat`: declared non-perturbative divisor set.
 - `target_volumes.dat`: declared `c_i` values from the orientifold/KKLT model
   choice.
 
 For a generic GA search, these inputs are replaced by the candidate polytope,
-triangulation, flux vector, divisor selection, and orientifold data. They are
-not downstream physics outputs.
+triangulation (primal and mirror chambers), flux vector, divisor selection,
+and orientifold data. They are not downstream physics outputs.
 
 ## Validation Checkpoints
 
 These files may be read by tests or comparison code after Cyrus computes the
 corresponding object:
 
-- `dual_points.dat`, `dual_simplices.dat`: dual polytope and dual FRST
-  checkpoints.
+- `dual_points.dat`: dual polytope checkpoint (the dual polytope itself is
+  always computed from `points.dat`; `dual_simplices.dat` is a declared
+  model input, see above, but when the computed default chamber coincides
+  with it — as for 4-214-647 — that agreement is still checked and logged).
 - `basis.dat`: primal divisor basis checkpoint.
 - `dual_curves.dat`, `dual_curves_gv.dat`: low-dimensional mirror/racetrack
   curve and GV checkpoints.

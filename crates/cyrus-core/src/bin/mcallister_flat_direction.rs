@@ -1,3 +1,5 @@
+#![allow(dead_code)] // diagnostic helpers are retained for ad-hoc investigation runs
+
 //! Flat-direction diagnostics for McAllister data.
 //!
 //! Computes the dual intersection numbers, builds the N matrix,
@@ -17,7 +19,7 @@
 
 use serde::Deserialize;
 use serde_json::json;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use cyrus_core::flat_direction::{
@@ -306,7 +308,7 @@ fn enforce_modes(data_dir: Option<&str>, allow_fixtures: bool) {
     }
 }
 
-fn load_primal_points(data_dir: Option<&str>, manifest_dir: &PathBuf) -> Vec<Vec<i64>> {
+fn load_primal_points(data_dir: Option<&str>, manifest_dir: &Path) -> Vec<Vec<i64>> {
     data_dir.map_or_else(
         || {
             let poly_path = manifest_dir.join("tests/mcallister_e2e/inputs/polytope.json");
@@ -422,13 +424,13 @@ fn compute_dual_kappa_full(
 }
 
 fn resolve_basis_indices(
-    basis_indices_arg: &Option<String>,
-    basis_file_arg: &Option<String>,
+    basis_indices_arg: Option<&String>,
+    basis_file_arg: Option<&String>,
     dual_points_vec: &[Point],
 ) -> Vec<usize> {
-    basis_indices_arg.as_ref().map_or_else(
+    basis_indices_arg.map_or_else(
         || {
-            if let Some(file) = basis_file_arg.as_ref() {
+            if let Some(file) = basis_file_arg {
                 read_csv_usize(&PathBuf::from(file))
             } else {
                 let (_glsm, _linrel, basis) =
@@ -442,7 +444,7 @@ fn resolve_basis_indices(
 
 fn load_flux_vectors(
     data_dir: Option<&str>,
-    manifest_dir: &PathBuf,
+    manifest_dir: &Path,
 ) -> (Vec<I64<Finite>>, Vec<I64<Finite>>) {
     let (k_raw, m_raw) = data_dir.map_or_else(
         || {
@@ -566,7 +568,9 @@ fn main() {
         let kappa_cmp = intersection_in_basis(&dual_kappa_full, basis);
         let n_cmp = compute_n_matrix(&kappa_cmp, &m_flux);
         let p_cmp = solve_linear_system_faer(&n_cmp, &k_flux)?;
-        kappa_cmp.contract_triple_finite(&p_cmp).map(|v| v.get())
+        kappa_cmp
+            .contract_triple_finite(&p_cmp)
+            .map(cyrus_core::F64::get)
     };
 
     let n_mat = compute_n_matrix(&dual_kappa, &m_flux);
@@ -576,24 +580,22 @@ fn main() {
 
     let kappa_ppp = dual_kappa
         .contract_triple_finite(&p)
-        .map(|v| v.get())
-        .unwrap_or(0.0);
+        .map_or(0.0, cyrus_core::F64::get);
 
     let kappa_ppp_alt = dual_kappa
         .contract_triple_finite(&p_alt)
-        .map(|v| v.get())
-        .unwrap_or(0.0);
+        .map_or(0.0, cyrus_core::F64::get);
 
     eprintln!("[TIME] flat-direction diagnostics: {:.2?}", t0.elapsed());
-    eprintln!("[INFO] basis indices: {:?}", basis_indices);
+    eprintln!("[INFO] basis indices: {basis_indices:?}");
     eprintln!("[INFO] kappa dim: {}", dual_kappa.dim());
     eprintln!("[INFO] kappa nonzero: {}", dual_kappa.num_nonzero());
     eprintln!(
         "[INFO] p (first 4): {:?}",
         &p.iter().take(4).map(|v| v.get()).collect::<Vec<_>>()
     );
-    eprintln!("[INFO] kappa ppp: {}", kappa_ppp);
-    eprintln!("[INFO] kappa ppp alt: {}", kappa_ppp_alt);
+    eprintln!("[INFO] kappa ppp: {kappa_ppp}");
+    eprintln!("[INFO] kappa ppp alt: {kappa_ppp_alt}");
 
     let summary_p = summarize_terms(&dual_kappa, &p);
     let summary_p_alt = summarize_terms(&dual_kappa, &p_alt);
@@ -617,10 +619,10 @@ fn main() {
     // Optional basis comparison
     let compare_basis = if let Some(indices) = compare_basis_indices_arg.as_ref() {
         Some(parse_basis_indices(indices))
-    } else if let Some(file) = compare_basis_file_arg.as_ref() {
-        Some(read_csv_usize(&PathBuf::from(file)))
     } else {
-        None
+        compare_basis_file_arg
+            .as_ref()
+            .map(|file| read_csv_usize(&PathBuf::from(file)))
     };
 
     if let Some(compare_indices) = compare_basis {
@@ -638,10 +640,9 @@ fn main() {
             solve_linear_system_faer(&n_cmp, &k_flux).expect("N matrix solve failed (compare)");
         let kappa_ppp_cmp = kappa_cmp
             .contract_triple_finite(&p_cmp)
-            .map(|v| v.get())
-            .unwrap_or(0.0);
-        eprintln!("[INFO] compare basis indices: {:?}", compare_indices);
-        eprintln!("[INFO] compare kappa ppp: {}", kappa_ppp_cmp);
+            .map_or(0.0, cyrus_core::F64::get);
+        eprintln!("[INFO] compare basis indices: {compare_indices:?}");
+        eprintln!("[INFO] compare kappa ppp: {kappa_ppp_cmp}");
 
         let summary_cmp = summarize_terms(&kappa_cmp, &p_cmp);
         print_terms("compare", &summary_cmp, top_terms);
@@ -652,19 +653,13 @@ fn main() {
                 .terms
                 .iter()
                 .find(|(_, k)| k == key)
-                .map(|(v, _)| *v)
-                .unwrap_or(0.0);
+                .map_or(0.0, |(v, _)| *v);
             diffs.push((contrib - cmp_val, *key));
         }
         diffs.sort_by(|a, b| b.0.abs().partial_cmp(&a.0.abs()).unwrap());
         eprintln!("[INFO] top term diffs (primary - compare):");
         for (idx, (diff, key)) in diffs.iter().take(top_terms).enumerate() {
-            eprintln!(
-                "  {:>2}. Δκ_{} = {:>14.6e}",
-                idx + 1,
-                format!("{:?}", key),
-                diff
-            );
+            eprintln!("  {:>2}. Δκ_{:?} = {:>14.6e}", idx + 1, key, diff);
         }
 
         compare_report = Some(json!({
@@ -692,7 +687,7 @@ fn main() {
                 eprintln!("[ERROR] sweep pairs: N matrix solve failed");
                 std::process::exit(2);
             };
-            eprintln!("[INFO] sweep pairs: kappa ppp = {}", kappa_ppp_cmp);
+            eprintln!("[INFO] sweep pairs: kappa ppp = {kappa_ppp_cmp}");
             if kappa_ppp_cmp > 0.0 {
                 eprintln!("[FOUND] sweep pairs yield positive kappa p^3");
             }
@@ -706,12 +701,10 @@ fn main() {
     if sweep_swaps > 0 {
         let replace_from = sweep_replace_from
             .as_ref()
-            .map(|s| parse_usize_list(s))
-            .unwrap_or_else(|| basis_indices.clone());
+            .map_or_else(|| basis_indices.clone(), |s| parse_usize_list(s));
         let replace_to = sweep_replace_to
             .as_ref()
-            .map(|s| parse_usize_list(s))
-            .unwrap_or_else(|| basis_indices.clone());
+            .map_or_else(|| basis_indices.clone(), |s| parse_usize_list(s));
 
         if replace_from.is_empty() || replace_to.is_empty() {
             eprintln!("[ERROR] sweep replace lists cannot be empty");
@@ -748,8 +741,7 @@ fn main() {
                 };
                 if kappa_ppp_cmp > 0.0 {
                     eprintln!(
-                        "[FOUND] swap {} -> {} yields kappa ppp = {} (attempt {})",
-                        out_idx, in_idx, kappa_ppp_cmp, attempts
+                        "[FOUND] swap {out_idx} -> {in_idx} yields kappa ppp = {kappa_ppp_cmp} (attempt {attempts})"
                     );
                     found_swap = Some((out_idx, in_idx, kappa_ppp_cmp, attempts));
                     if let Some(path) = sweep_report_path.as_ref() {
@@ -759,13 +751,13 @@ fn main() {
                             "attempts": attempts,
                         });
                         std::fs::write(path, report.to_string())
-                            .unwrap_or_else(|e| panic!("Failed to write {}: {e}", path));
+                            .unwrap_or_else(|e| panic!("Failed to write {path}: {e}"));
                     }
                     found = true;
                     break;
                 }
                 if attempts >= sweep_max_attempts {
-                    eprintln!("[INFO] sweep max attempts reached ({})", sweep_max_attempts);
+                    eprintln!("[INFO] sweep max attempts reached ({sweep_max_attempts})");
                     break;
                 }
             }
@@ -777,10 +769,7 @@ fn main() {
             }
         }
         if !found {
-            eprintln!(
-                "[INFO] sweep completed: no positive kappa p^3 found (attempts={})",
-                attempts
-            );
+            eprintln!("[INFO] sweep completed: no positive kappa p^3 found (attempts={attempts})");
         }
 
         sweep_report = Some(json!({
@@ -799,12 +788,10 @@ fn main() {
     if sweep_two {
         let replace_from = sweep_replace_from
             .as_ref()
-            .map(|s| parse_usize_list(s))
-            .unwrap_or_else(|| basis_indices.clone());
+            .map_or_else(|| basis_indices.clone(), |s| parse_usize_list(s));
         let replace_to = sweep_replace_to
             .as_ref()
-            .map(|s| parse_usize_list(s))
-            .unwrap_or_else(|| basis_indices.clone());
+            .map_or_else(|| basis_indices.clone(), |s| parse_usize_list(s));
         if replace_from.is_empty() || replace_to.is_empty() {
             eprintln!("[ERROR] sweep-two replace lists cannot be empty");
             std::process::exit(2);
@@ -869,10 +856,7 @@ fn main() {
                 best.swap1, best.swap2, best.kappa_ppp, attempts
             );
         } else {
-            eprintln!(
-                "[INFO] sweep-two: no viable candidates (attempts={})",
-                attempts
-            );
+            eprintln!("[INFO] sweep-two: no viable candidates (attempts={attempts})");
         }
         if let Some(path) = sweep_two_report_path.as_ref() {
             let report = json!({
@@ -889,7 +873,7 @@ fn main() {
                 })).collect::<Vec<_>>(),
             });
             std::fs::write(path, report.to_string())
-                .unwrap_or_else(|e| panic!("Failed to write {}: {e}", path));
+                .unwrap_or_else(|e| panic!("Failed to write {path}: {e}"));
         }
         sweep_two_report = Some(json!({
             "attempts": attempts,
@@ -921,6 +905,6 @@ fn main() {
             "sweep_two": sweep_two_report,
         });
         std::fs::write(path, report.to_string())
-            .unwrap_or_else(|e| panic!("Failed to write {}: {e}", path));
+            .unwrap_or_else(|e| panic!("Failed to write {path}: {e}"));
     }
 }

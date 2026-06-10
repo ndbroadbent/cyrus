@@ -1008,9 +1008,11 @@ fn compute_hyperplanes_from_rays_ppl_lcdd(
 }
 
 fn cdd_v_representation(rays_ref: &[Vec<i128>], ambient_dim: usize) -> String {
+    use std::fmt::Write as _;
     let mut out = String::new();
     out.push_str("V-representation\nbegin\n");
-    out.push_str(&format!("{} {} integer\n", rays_ref.len(), ambient_dim + 1));
+    writeln!(out, "{} {} integer", rays_ref.len(), ambient_dim + 1)
+        .expect("writing to a String cannot fail");
     for ray in rays_ref {
         out.push('0');
         for value in ray {

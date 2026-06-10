@@ -2,90 +2,59 @@
 
 **High-performance Calabi-Yau manifold computations for string theory research.**
 
-Cyrus is a Rust toolkit for evaluating Calabi-Yau compactifications, computing moduli stabilization, and searching the string theory landscape for configurations matching observed physics.
+Cyrus is a Rust toolkit for evaluating Calabi-Yau compactifications, computing
+moduli stabilization, and searching the string theory landscape for
+configurations matching observed physics. It reimplements the algorithms of
+[CYTools](https://cy.tools) (polytopes, triangulations, intersection numbers,
+cones) plus the KKLT/racetrack stabilization pipeline of
+Demirtas–Kim–McAllister–Moritz–Rios-Tascon (arXiv:2107.09064), validated by
+reproducing the published results from first principles.
 
-## Crates
+## Status
 
-| Crate | Description |
-|-------|-------------|
-| `cyrus-core` | Lattice polytopes, triangulations, intersection numbers, Kähler geometry |
-| `cyrus-moduli` | KKLT and LVS moduli stabilization, racetrack mechanism |
-| `cyrus-cosmology` | Friedmann equations, quintessence evolution, CPL fitting |
-| `cyrus-cache` | Intelligent tiered caching with self-optimization |
-| `cyrus-ga` | Genetic algorithm for landscape search |
-| `cyrus-verify` | Formally verified core algorithms (via Aeneas) |
+- Single crate: `cyrus-core` (polytopes, FRSTs, intersection numbers,
+  GLSM/bases, cones, GV invariants via [cygv], racetrack, KKLT solve,
+  volumes, vacuum energy, quintessence/cosmology utilities).
+- **Validation**: the no-replay pipeline reproduces McAllister et al.
+  example 4-214-647 end-to-end — polytope points + heights + fluxes +
+  orientifold data in, `V₀ ≈ -5.5×10⁻²⁰³ M_pl⁴` out, with every published
+  intermediate checkpoint matched at its own precision. See
+  `docs/CORRECTED_CHAMBER_RESOLUTION.md` and
+  `crates/cyrus-core/tests/mcallister_e2e/`.
+- The other four published examples are work in progress.
 
-## Goals
-
-1. **Reproduce published results** - Validate against McAllister et al. (arXiv:2107.09064) and Cicoli et al. (arXiv:2407.03405)
-2. **Performance** - 10-100× faster than Python implementations
-3. **Correctness** - 100% test coverage, including some formal verification (with [aeneas](https://github.com/AeneasVerif/aeneas))
-4. **Usability** - Clean API, thorough documentation
-
-## Installation
-
-```bash
-cargo add cyrus-core cyrus-moduli cyrus-cosmology
-```
-
-## Quick Example
-
-```rust
-use cyrus_core::{Polytope, Triangulation};
-use cyrus_moduli::{KkltSolver, Racetrack};
-
-// Load a polytope from vertices
-let polytope = Polytope::from_vertices(&vertices)?;
-
-// Get a fine regular star triangulation
-let triangulation = polytope.triangulate()?;
-
-// Compute intersection numbers
-let kappa = triangulation.intersection_numbers();
-
-// Solve KKLT stabilization
-let solver = KkltSolver::new(&kappa, &c_values);
-let solution = solver.solve()?;
-
-println!("V_string = {}", solution.volume);
-println!("V₀ = {}", solution.vacuum_energy);
-```
-
-## Validation
+## Running the validation
 
 ```bash
-# Validate against McAllister's KKLT examples
-cargo run --bin cyrus-validate -- mcallister
+cargo build --release -p cyrus-core --bin mcallister_first_principles
 
-# Validate against Cicoli's quintessence example
-cargo run --bin cyrus-validate -- cicoli
+CYRUS_FIRST_PRINCIPLES=1 \
+CYRUS_MCALLISTER_DATA_DIR=path/to/paper_data/4-214-647 \
+./target/release/mcallister_first_principles
 ```
 
-## License
+Test suites:
 
-Licensed under the Apache License, Version 2.0 ([LICENSE](LICENSE) or http://www.apache.org/licenses/LICENSE-2.0).
-
-Apache-2.0 was chosen to provide maximum reuse with an explicit patent grant, making this project easy to adopt in both academia and industry.
-
-## Contributing
-
-Contributions are welcome! Please read the [architecture document](docs/ARCHITECTURE.md) first.
-
-## Citation
-
-If you use Cyrus in your research, please cite:
-
-```bibtex
-@software{cyrus,
-  author = {Broadbent, Nathan},
-  title = {Cyrus: High-Performance Calabi-Yau Computations},
-  url = {https://github.com/ndbroadbent/cyrus},
-  year = {2026}
-}
+```bash
+cargo test -p cyrus-core                       # unit + light e2e tests
+CYRUS_FIRST_PRINCIPLES=1 \
+CYRUS_MCALLISTER_RUNNER_HEAVY=1 \
+CYRUS_MCALLISTER_DATA_DIR=... \
+cargo test --release -p cyrus-core --test mcallister_e2e  # heavy validation
 ```
+
+## Documentation
+
+- `CLAUDE.md` / `AGENTS.md` — project philosophy, data policy, type system.
+- `docs/` — working notes; start with `docs/README.md`.
+- `docs/MCALLISTER_DATA_POLICY.md` — what counts as input vs. checkpoint
+  (the "no cheating" contract for the reproduction).
 
 ## Key References
 
-- Demirtas, Kim, McAllister, Moritz, Rios-Tascon, "Small Cosmological Constants in String Theory" (arXiv:2107.09064)
+- Demirtas, Kim, McAllister, Moritz, Rios-Tascon, "Small Cosmological
+  Constants in String Theory" (arXiv:2107.09064)
+- Demirtas, Rios-Tascon, McAllister, "CYTools" (arXiv:2211.03823)
 - Cicoli et al., "From Inflation to Quintessence" (arXiv:2407.03405)
-- Demirtas et al., "Computational Mirror Symmetry" (arXiv:2303.00757)
+
+[cygv]: https://crates.io/crates/cygv

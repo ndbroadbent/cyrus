@@ -51,66 +51,6 @@ const CKYZ_ABSENT_ADDITION_INDEX: usize = usize::MAX;
 const CKYZ_DENSE_DEGREE_INDEX_MAX_ENTRIES: usize = 5_000_000;
 const CKYZ_ABSENT_DEGREE_INDEX: usize = usize::MAX;
 
-/// One term in a compact `q_N` polynomial materialized by cygv.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CygvQnTraceTerm {
-    /// Index of the monomial in cygv's finite semigroup.
-    pub monomial_index: usize,
-    /// Semigroup exponent vector for this monomial.
-    pub exponent: Vec<i32>,
-    /// Exact coefficient, serialized with rug's rational display format.
-    pub coefficient: String,
-}
-
-/// Compact `q_N` polynomial history exported from cygv series inversion.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CygvQnTracePolynomial {
-    /// Index of the curve element whose `q_N` polynomial was computed.
-    pub element_index: usize,
-    /// Grading degree of the curve element.
-    pub degree: u32,
-    /// Semigroup exponent vector of the curve element.
-    pub element: Vec<i32>,
-    /// Nonzero terms of the `q_N` polynomial.
-    pub terms: Vec<CygvQnTraceTerm>,
-    /// Nonzero terms of `Li2(q_N)` after cygv's finite monomial-map truncation.
-    pub li2_terms: Vec<CygvQnTraceTerm>,
-}
-
-/// Inverse-series GV candidate read from cygv's mutable instanton polynomial.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CygvGvCoefficientTrace {
-    /// Index of the curve element whose coefficient was read.
-    pub element_index: usize,
-    /// Grading degree of the curve element.
-    pub degree: u32,
-    /// Semigroup exponent vector of the curve element.
-    pub element: Vec<i32>,
-    /// Instanton polynomial coordinate used by cygv to read the coefficient.
-    pub insertion_index: usize,
-    /// First nonzero component of `element`, used as the divisor.
-    pub pivot_component: i32,
-    /// Exact mutable instanton coefficient at this element, if present.
-    pub instanton_coefficient: Option<String>,
-    /// Exact GV candidate before rounding/filtering, if present.
-    pub gv_candidate: Option<String>,
-    /// Rounded GV candidate used by cygv's integrality check, if present.
-    pub rounded_gv_candidate: Option<String>,
-    /// cygv decision status for this candidate.
-    pub status: String,
-}
-
-/// GV output together with the compact `q_N` polynomials cygv materialized.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GvInvariantsWithQnTrace {
-    /// Integral GV invariants returned by cygv.
-    pub invariants: Vec<(Vec<i32>, Integer)>,
-    /// Compact `q_N` polynomials materialized while computing those invariants.
-    pub qn_trace: Vec<CygvQnTracePolynomial>,
-    /// GV coefficient candidates read before `q_N` materialization.
-    pub gv_coefficient_trace: Vec<CygvGvCoefficientTrace>,
-}
-
 /// Compute the Mori cone cap generators (rays) using the CYTools algorithm.
 ///
 /// Returns a matrix where each row is a generator (ray) expressed in the
@@ -649,7 +589,7 @@ pub struct ToricCurveCandidate {
 }
 
 /// Convergence data for the instanton series along one potent ray.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PotentRayConvergence {
     /// `log(|N_{nq}| exp(-2π n q.t))` for `n = 1..`.
     ///
@@ -1597,7 +1537,9 @@ pub fn identify_ckyz_local_surface(
 /// coefficients: for example `F1` uses `[2, 1]`, and polygon 5 uses
 /// `[1, 1, 1]`.
 #[must_use]
-pub fn ckyz_local_surface_cover_weight_coefficients(kind: &CkyzLocalSurfaceKind) -> &'static [i64] {
+pub const fn ckyz_local_surface_cover_weight_coefficients(
+    kind: &CkyzLocalSurfaceKind,
+) -> &'static [i64] {
     match kind {
         CkyzLocalSurfaceKind::LocalP2 => &[3],
         CkyzLocalSurfaceKind::HirzebruchF0 => &[2, 2],
@@ -1960,9 +1902,8 @@ fn ckyz_z_residual_coefficient_work_profile(
             let max_multiple = degree
                 .iter()
                 .zip(target.iter())
-                .filter_map(|(&degree_entry, &target_entry)| {
-                    (degree_entry != 0).then(|| target_entry / degree_entry)
-                })
+                .filter(|&(&degree_entry, _)| degree_entry != 0)
+                .map(|(&degree_entry, &target_entry)| target_entry / degree_entry)
                 .min()
                 .ok_or_else(|| {
                     Error::InvalidInput("CKYZ residual profile degree must be nonzero".into())
@@ -2124,7 +2065,7 @@ fn ckyz_q_delta_domain_profile(
     let shiftable_exp_degree_count = output_exp_indices.len();
 
     let mut closure_indices = output_exp_indices;
-    let mut queue = VecDeque::from_iter(closure_indices.iter().copied());
+    let mut queue: VecDeque<_> = closure_indices.iter().copied().collect();
     while let Some(exp_index) = queue.pop_front() {
         let exp_degree = &domain.degrees[exp_index];
         for alpha_degree in alpha_support_degrees {
@@ -3336,13 +3277,10 @@ impl CkyzMonomialDomain {
         if let (Some(strides), Some(dense_indices)) =
             (&self.dense_degree_strides, &self.dense_degree_indices)
         {
-            let Some(dense_index) =
+            let dense_index =
                 ckyz_dense_degree_index(degree, self.rank, &self.max_coordinate_degrees, strides)
                     .ok()
-                    .flatten()
-            else {
-                return None;
-            };
+                    .flatten()?;
             let index = dense_indices[dense_index];
             return (index != CKYZ_ABSENT_DEGREE_INDEX).then_some(index);
         }
@@ -3465,14 +3403,12 @@ impl CkyzIndexedSeries {
     fn to_btree(&self, domain: &CkyzMonomialDomain) -> BTreeMap<Vec<usize>, Rational> {
         self.terms
             .iter()
-            .filter_map(|(index, coefficient)| {
-                (coefficient != &Rational::from(0))
-                    .then(|| (domain.degrees[*index].clone(), coefficient.clone()))
-            })
+            .filter(|&(_, coefficient)| coefficient != &Rational::from(0))
+            .map(|(index, coefficient)| (domain.degrees[*index].clone(), coefficient.clone()))
             .collect()
     }
 
-    fn is_empty(&self) -> bool {
+    const fn is_empty(&self) -> bool {
         self.terms.is_empty()
     }
 
@@ -3500,6 +3436,7 @@ impl CkyzIndexedSeries {
         Ok(min_degree)
     }
 
+    #[allow(clippy::comparison_chain)] // explicit three-way merge branches are clearer than match on Ordering here
     fn add_scaled_assign(&mut self, rhs: &Self, scalar: Rational) {
         if scalar == 0 || rhs.terms.is_empty() {
             return;
@@ -4133,17 +4070,17 @@ fn ckyz_support_additive_closure_domain(
         let base_closure = closure.iter().copied().collect::<Vec<_>>();
         let mut frontier = VecDeque::new();
         for base in base_closure {
-            if let Some(sum_index) = domain.sum_index(base, generator)? {
-                if closure.insert(sum_index) {
-                    frontier.push_back(sum_index);
-                }
+            if let Some(sum_index) = domain.sum_index(base, generator)?
+                && closure.insert(sum_index)
+            {
+                frontier.push_back(sum_index);
             }
         }
         while let Some(current) = frontier.pop_front() {
-            if let Some(sum_index) = domain.sum_index(current, generator)? {
-                if closure.insert(sum_index) {
-                    frontier.push_back(sum_index);
-                }
+            if let Some(sum_index) = domain.sum_index(current, generator)?
+                && closure.insert(sum_index)
+            {
+                frontier.push_back(sum_index);
             }
         }
     }
@@ -5042,7 +4979,7 @@ fn ckyz_sort_degrees_for_extraction_with_grading(
     Ok(())
 }
 
-fn ckyz_cygv_previous_qn_level_count(rank: usize) -> usize {
+const fn ckyz_cygv_previous_qn_level_count(rank: usize) -> usize {
     if rank < 4 {
         2
     } else if rank < 10 {
@@ -5722,9 +5659,8 @@ fn ckyz_q_degree_li2_support_intersects_indices_in_z_domain(
         let max_multiple = degree
             .iter()
             .zip(target.iter())
-            .filter_map(|(&degree_entry, &target_entry)| {
-                (degree_entry != 0).then(|| target_entry / degree_entry)
-            })
+            .filter(|&(&degree_entry, _)| degree_entry != 0)
+            .map(|(&degree_entry, &target_entry)| target_entry / degree_entry)
             .min()
             .expect("candidate degree is nonzero");
         for multiple in 1..=max_multiple {
@@ -6005,9 +5941,8 @@ fn ckyz_q_degree_li2_coefficient_and_support_in_z_domain(
     let max_multiple = degree
         .iter()
         .zip(target.iter())
-        .filter_map(|(&degree_entry, &target_entry)| {
-            (degree_entry != 0).then(|| target_entry / degree_entry)
-        })
+        .filter(|&(&degree_entry, _)| degree_entry != 0)
+        .map(|(&degree_entry, &target_entry)| target_entry / degree_entry)
         .min()
         .ok_or_else(|| Error::InvalidInput("CKYZ Li2 degree must be nonzero".into()))?;
 
@@ -6220,8 +6155,7 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
             let degree = &extraction_degrees[position];
             let domain_degree_index = extraction_indices[position];
             let coefficient = residual_by_index[domain_degree_index]
-                .as_ref()
-                .cloned()
+                .clone()
                 .unwrap_or_else(|| Rational::from(0));
             if coefficient == 0 {
                 continue;
@@ -6279,7 +6213,7 @@ fn extract_ckyz_local_gv_invariants_from_z_potential_for_degrees(
                     || extraction_gradings[target_position] <= batch_grading
                 {
                     continue;
-                };
+                }
                 li2_coefficient_probes =
                     li2_coefficient_probes.checked_add(1).ok_or_else(|| {
                         Error::InvalidInput("CKYZ Li2 coefficient probe count overflowed".into())
@@ -6428,6 +6362,7 @@ fn ckyz_integral_gv_from_residual(
     Ok((gv != 0).then_some(gv))
 }
 
+#[allow(clippy::unnecessary_wraps)] // Result kept for uniform error handling with sibling basis helpers
 fn integer_row_transform_between_bases(
     target_rows: &[Vec<i64>],
     source_rows: &[Vec<i64>],
@@ -6690,7 +6625,7 @@ fn push_rank_two_signature_candidate(
     candidates.push(normalize_rank_two_signature_entries(entries, -1));
 }
 
-fn coordinate_2d_difference(lhs: &[i64; 2], rhs: &[i64; 2]) -> [i64; 2] {
+const fn coordinate_2d_difference(lhs: &[i64; 2], rhs: &[i64; 2]) -> [i64; 2] {
     [lhs[0] - rhs[0], lhs[1] - rhs[1]]
 }
 
@@ -8341,6 +8276,7 @@ pub fn potent_ray_log_xi_terms(
 }
 
 /// Compute a least-squares slope for finite potent-ray log-xi terms.
+#[allow(clippy::suspicious_operation_groupings)] // least-squares denominator n*Σx² − (Σx)² is correct
 pub fn potent_ray_log_xi_slope(log_xi_terms: &[Option<F64<Finite>>]) -> Option<F64<Finite>> {
     let mut n = 0.0;
     let mut sum_x = 0.0;
@@ -11547,119 +11483,6 @@ pub fn compute_gv_invariants_with_provided_generators_and_nef_partition(
     )
 }
 
-/// Compute GV invariants and compact `q_N` polynomial history using exactly
-/// the caller-provided semigroup generators and an explicit `cygv` nef
-/// partition.
-///
-/// This is the trace-producing complete-intersection analogue of
-/// [`compute_gv_invariants_with_provided_generators_and_nef_partition`]. It is
-/// intended for source-certified chamber domains where Cyrus must inspect
-/// `cygv`'s degree-ordered subtraction history, not just the final scalar GV
-/// table.
-///
-/// # Errors
-/// Returns an error if the input shapes or numeric ranges are invalid, if
-/// `cygv` cannot construct the semigroup, if the nef partition is inconsistent
-/// with the supplied charge matrix, or if HKTY finds non-integral output.
-pub fn compute_gv_invariants_with_provided_generators_and_nef_partition_qn_trace(
-    generators: &[Vec<i64>],
-    grading_vector: &[i64],
-    q_matrix: &[Vec<i64>],
-    nef_partition: &[Vec<usize>],
-    intnums: &Intersection,
-    min_points: Option<u32>,
-    max_deg: Option<u32>,
-) -> Result<GvInvariantsWithQnTrace> {
-    let (semigroup, q, intnums_map) = provided_cygv_semigroup_inputs(
-        generators,
-        grading_vector,
-        q_matrix,
-        intnums,
-        min_points,
-        max_deg,
-    )?;
-    let nefpart = cygv_nef_partition(nef_partition, q.nrows())?;
-    compute_cygv_rat_threefold_from_semigroup_with_nefpart_qn_trace(
-        semigroup,
-        &q,
-        &nefpart,
-        intnums_map,
-        "provided-generator complete-intersection GV qN trace",
-    )
-}
-
-/// Compute GV invariants and compact `q_N` polynomial history from
-/// caller-provided semigroup generators.
-///
-/// This mirrors [`compute_gv_invariants_with_provided_generators`] at the
-/// `cygv` boundary, but returns the `q_N` polynomials materialized by cygv's
-/// series inversion. It intentionally bypasses the normal GV cache because the
-/// trace is diagnostic state, not just the final invariant table.
-///
-/// # Errors
-/// Returns an error if the input shapes or numeric ranges are invalid, if cygv
-/// cannot construct the semigroup, or if HKTY finds non-integral output.
-pub fn compute_gv_invariants_with_provided_generators_qn_trace(
-    generators: &[Vec<i64>],
-    grading_vector: &[i64],
-    q_matrix: &[Vec<i64>],
-    intnums: &Intersection,
-    min_points: Option<u32>,
-    max_deg: Option<u32>,
-) -> Result<GvInvariantsWithQnTrace> {
-    let (semigroup, q, intnums_map) = provided_cygv_semigroup_inputs(
-        generators,
-        grading_vector,
-        q_matrix,
-        intnums,
-        min_points,
-        max_deg,
-    )?;
-    compute_cygv_rat_threefold_from_semigroup_with_qn_trace(
-        semigroup,
-        &q,
-        intnums_map,
-        "provided-generator GV qN trace",
-    )
-}
-
-/// Compute raw GW/GV coefficient candidates for caller-provided semigroup
-/// generators without enforcing GV integrality.
-///
-/// This is a diagnostic escape hatch for upstream `cygv` failures: when
-/// `FIND_GV=true` rejects a non-integral candidate, the vendored `cygv`
-/// diagnostic identifies the first failing candidate. Running the same input
-/// with `FIND_GV=false` exposes the surrounding coefficient candidates read
-/// from the instanton polynomial.
-///
-/// # Errors
-/// Returns an error if input construction, fundamental-period computation, or
-/// instanton-data computation fails.
-#[doc(hidden)]
-pub fn compute_gw_coefficient_trace_with_provided_generators(
-    generators: &[Vec<i64>],
-    grading_vector: &[i64],
-    q_matrix: &[Vec<i64>],
-    intnums: &Intersection,
-    min_points: Option<u32>,
-    max_deg: Option<u32>,
-) -> Result<Vec<CygvGvCoefficientTrace>> {
-    let (semigroup, q, intnums_map) = provided_cygv_semigroup_inputs(
-        generators,
-        grading_vector,
-        q_matrix,
-        intnums,
-        min_points,
-        max_deg,
-    )?;
-    compute_cygv_rat_threefold_gw_coefficient_trace_from_semigroup(
-        semigroup,
-        &q,
-        intnums_map,
-        "provided-generator GW coefficient trace",
-    )
-}
-
 /// Source-audit helper for the private `cygv::Semigroup::with_max_degree`
 /// seed-reduction step.
 ///
@@ -11780,95 +11603,6 @@ pub fn compute_gv_invariants_with_explicit_semigroup_and_nef_partition(
         &nefpart,
         intnums_map,
         "explicit complete-intersection GV semigroup",
-    )
-}
-
-/// Compute GV invariants and compact `q_N` polynomial history using an
-/// explicitly truncated semigroup and an explicit `cygv` nef partition.
-///
-/// This is the complete-intersection analogue of
-/// [`compute_gv_invariants_with_explicit_semigroup_qn_trace`]. It does not
-/// close the supplied elements under addition; it passes the exact semigroup
-/// and nef partition to upstream `cygv`.
-///
-/// # Errors
-/// Returns an error if the semigroup, grading, GLSM charge matrix, nef
-/// partition, or intersection numbers are inconsistent, or if HKTY finds
-/// non-integral GV output for the supplied truncation.
-#[allow(clippy::too_many_lines)]
-pub fn compute_gv_invariants_with_explicit_semigroup_and_nef_partition_qn_trace(
-    elements: &[Vec<i64>],
-    grading_vector: &[i64],
-    q_matrix: &[Vec<i64>],
-    nef_partition: &[Vec<usize>],
-    intnums: &Intersection,
-) -> Result<GvInvariantsWithQnTrace> {
-    let (semigroup, q, intnums_map) =
-        explicit_cygv_semigroup_inputs(elements, grading_vector, q_matrix, intnums)?;
-    let nefpart = cygv_nef_partition(nef_partition, q.nrows())?;
-    compute_cygv_rat_threefold_from_semigroup_with_nefpart_qn_trace(
-        semigroup,
-        &q,
-        &nefpart,
-        intnums_map,
-        "explicit complete-intersection GV qN trace",
-    )
-}
-
-/// Compute GV invariants and compact `q_N` polynomial history using an
-/// explicitly truncated semigroup.
-///
-/// This is a diagnostic entry point for understanding cygv's degree-ordered
-/// subtraction history. It still runs the upstream cygv HKTY implementation;
-/// Cyrus only exports the qN polynomials that cygv materializes internally.
-///
-/// # Errors
-/// Returns an error under the same conditions as
-/// [`compute_gv_invariants_with_explicit_semigroup`].
-#[allow(clippy::too_many_lines)]
-pub fn compute_gv_invariants_with_explicit_semigroup_qn_trace(
-    elements: &[Vec<i64>],
-    grading_vector: &[i64],
-    q_matrix: &[Vec<i64>],
-    intnums: &Intersection,
-) -> Result<GvInvariantsWithQnTrace> {
-    let (semigroup, q, intnums_map) =
-        explicit_cygv_semigroup_inputs(elements, grading_vector, q_matrix, intnums)?;
-    compute_cygv_rat_threefold_from_semigroup_with_qn_trace(
-        semigroup,
-        &q,
-        intnums_map,
-        "explicit GV semigroup qN trace",
-    )
-}
-
-/// Compute raw GW/GV coefficient candidates using an explicitly truncated
-/// semigroup without enforcing GV integrality.
-///
-/// This is the explicit-semigroup analogue of
-/// [`compute_gw_coefficient_trace_with_provided_generators`]. It is intended
-/// for diagnostics of small source/chamber candidate domains where the normal
-/// integral GV path fails with a non-integer candidate.
-///
-/// # Errors
-/// Returns an error if the explicit semigroup, grading, GLSM charge matrix, or
-/// intersection numbers are inconsistent, or if cygv fails before coefficient
-/// readout.
-#[doc(hidden)]
-#[allow(clippy::too_many_lines)]
-pub fn compute_gw_coefficient_trace_with_explicit_semigroup(
-    elements: &[Vec<i64>],
-    grading_vector: &[i64],
-    q_matrix: &[Vec<i64>],
-    intnums: &Intersection,
-) -> Result<Vec<CygvGvCoefficientTrace>> {
-    let (semigroup, q, intnums_map) =
-        explicit_cygv_semigroup_inputs(elements, grading_vector, q_matrix, intnums)?;
-    compute_cygv_rat_threefold_gw_coefficient_trace_from_semigroup(
-        semigroup,
-        &q,
-        intnums_map,
-        "explicit GW semigroup coefficient trace",
     )
 }
 
@@ -12142,11 +11876,13 @@ fn compute_gv_invariants_inner(
     let (lattice_min_points, lattice_max_deg) =
         gv_lattice_search_request(gen_min_points, max_deg, lattice_augmentation);
     eprintln!(
-        "[DEBUG] gv lattice request: min_points={:?} max_deg={:?}",
-        lattice_min_points, lattice_max_deg
+        "[DEBUG] gv lattice request: min_points={lattice_min_points:?} max_deg={lattice_max_deg:?}"
     );
 
-    let lattice_pts = if lattice_augmentation != GvLatticeAugmentation::None {
+    let lattice_pts = if lattice_augmentation == GvLatticeAugmentation::None {
+        eprintln!("[DEBUG] gv lattice points: skipped (using caller-provided generators only)");
+        Vec::new()
+    } else {
         let lattice_cache = LatticeCacheControls::from_env(1000, 0);
         let lattice_grading =
             gv_lattice_augmentation_grading(rays, grading_vector, lattice_augmentation)?;
@@ -12159,8 +11895,7 @@ fn compute_gv_invariants_inner(
             && lattice_grading != grading_vector
         {
             eprintln!(
-                "[DEBUG] gv lattice grading differs from cygv semigroup grading: lattice={:?} semigroup={:?}",
-                lattice_grading, grading_vector
+                "[DEBUG] gv lattice grading differs from cygv semigroup grading: lattice={lattice_grading:?} semigroup={grading_vector:?}"
             );
         }
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -12242,9 +11977,6 @@ fn compute_gv_invariants_inner(
             }
             pts
         }
-    } else {
-        eprintln!("[DEBUG] gv lattice points: skipped (using caller-provided generators only)");
-        Vec::new()
     };
 
     let mut all_generators: Vec<Vec<i64>> = Vec::new();
@@ -12495,90 +12227,6 @@ fn compute_cygv_rat_threefold_from_semigroup_with_nefpart(
     }
 }
 
-fn compute_cygv_rat_threefold_from_semigroup_with_qn_trace(
-    semigroup: cygv::Semigroup,
-    q: &DMatrix<i32>,
-    intnums_map: HashMap<(usize, usize, usize), i32>,
-    context: &str,
-) -> Result<GvInvariantsWithQnTrace> {
-    let nefpart: Vec<DVector<i32>> = Vec::new();
-    compute_cygv_rat_threefold_from_semigroup_with_nefpart_qn_trace(
-        semigroup,
-        q,
-        &nefpart,
-        intnums_map,
-        context,
-    )
-}
-
-fn compute_cygv_rat_threefold_from_semigroup_with_nefpart_qn_trace(
-    semigroup: cygv::Semigroup,
-    q: &DMatrix<i32>,
-    nefpart: &[DVector<i32>],
-    intnums_map: HashMap<(usize, usize, usize), i32>,
-    context: &str,
-) -> Result<GvInvariantsWithQnTrace> {
-    if cfg!(panic = "abort") {
-        return Err(Error::InvalidInput(format!(
-            "{context}: cygv HKTY execution requires a panic=unwind build because upstream cygv can still panic internally"
-        )));
-    }
-
-    let previous_panic_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(|_| {}));
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        compute_cygv_rat_threefold_from_semigroup_with_qn_trace_unchecked(
-            semigroup,
-            q,
-            nefpart,
-            intnums_map,
-            context,
-        )
-    }));
-    std::panic::set_hook(previous_panic_hook);
-
-    match result {
-        Ok(result) => result,
-        Err(payload) => Err(Error::InvalidInput(format!(
-            "{context}: cygv HKTY execution panicked: {}",
-            panic_payload_message(payload.as_ref())
-        ))),
-    }
-}
-
-fn compute_cygv_rat_threefold_gw_coefficient_trace_from_semigroup(
-    semigroup: cygv::Semigroup,
-    q: &DMatrix<i32>,
-    intnums_map: HashMap<(usize, usize, usize), i32>,
-    context: &str,
-) -> Result<Vec<CygvGvCoefficientTrace>> {
-    if cfg!(panic = "abort") {
-        return Err(Error::InvalidInput(format!(
-            "{context}: cygv HKTY execution requires a panic=unwind build because upstream cygv can still panic internally"
-        )));
-    }
-
-    let previous_panic_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(|_| {}));
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        compute_cygv_rat_threefold_gw_coefficient_trace_from_semigroup_unchecked(
-            semigroup,
-            q,
-            intnums_map,
-            context,
-        )
-    }));
-    std::panic::set_hook(previous_panic_hook);
-
-    match result {
-        Ok(result) => result,
-        Err(payload) => Err(Error::InvalidInput(format!(
-            "{context}: cygv HKTY execution panicked: {}",
-            panic_payload_message(payload.as_ref())
-        ))),
-    }
-}
-
 fn compute_cygv_rat_threefold_from_semigroup_unchecked(
     semigroup: cygv::Semigroup,
     q: &DMatrix<i32>,
@@ -12586,122 +12234,6 @@ fn compute_cygv_rat_threefold_from_semigroup_unchecked(
     intnums_map: HashMap<(usize, usize, usize), i32>,
     context: &str,
 ) -> Result<Vec<(Vec<i32>, Integer)>> {
-    compute_cygv_rat_threefold_raw_from_semigroup_unchecked(
-        semigroup,
-        q,
-        nefpart,
-        intnums_map,
-        context,
-        false,
-    )
-    .map(|output| output.invariants)
-}
-
-fn compute_cygv_rat_threefold_from_semigroup_with_qn_trace_unchecked(
-    semigroup: cygv::Semigroup,
-    q: &DMatrix<i32>,
-    nefpart: &[DVector<i32>],
-    intnums_map: HashMap<(usize, usize, usize), i32>,
-    context: &str,
-) -> Result<GvInvariantsWithQnTrace> {
-    compute_cygv_rat_threefold_raw_from_semigroup_unchecked(
-        semigroup,
-        q,
-        nefpart,
-        intnums_map,
-        context,
-        true,
-    )
-}
-
-fn compute_cygv_rat_threefold_gw_coefficient_trace_from_semigroup_unchecked(
-    semigroup: cygv::Semigroup,
-    q: &DMatrix<i32>,
-    intnums_map: HashMap<(usize, usize, usize), i32>,
-    context: &str,
-) -> Result<Vec<CygvGvCoefficientTrace>> {
-    let zero_cutoff = RugRational::new();
-    let poly_props = cygv::PolynomialProperties::new(&semigroup, &zero_cutoff);
-    let (intnum_dict, intnum_idxpairs, n_indices) = cygv::misc::process_int_nums(intnums_map, true)
-        .map_err(|e| {
-            Error::InvalidInput(format!(
-                "{context}: cygv intersection preprocessing failed: {e}"
-            ))
-        })?;
-
-    let n_threads = cygv_thread_count_from_env();
-    let pool_size = cygv_pool_size_from_env();
-    let main_pool = cygv::NumberPool::new(poly_props.zero_cutoff.clone(), pool_size);
-    let thread_pools: Vec<_> = (0..n_threads)
-        .map(|_| cygv::NumberPool::new(poly_props.zero_cutoff.clone(), pool_size))
-        .collect();
-    let mut all_pools = (main_pool, thread_pools);
-    let nefpart: Vec<DVector<i32>> = Vec::new();
-
-    let fp = cygv::fundamental_period::compute_omega(
-        &poly_props,
-        &semigroup,
-        q,
-        &nefpart,
-        &intnum_idxpairs,
-        &mut all_pools,
-    )
-    .map_err(|e| Error::InvalidInput(format!("{context}: cygv fundamental period failed: {e}")))?;
-
-    let inst_data = cygv::instanton::compute_instanton_data(
-        fp,
-        &poly_props,
-        &intnum_idxpairs,
-        n_indices,
-        &intnum_dict,
-        true,
-        &mut all_pools,
-    )
-    .map_err(|e| Error::InvalidInput(format!("{context}: cygv instanton data failed: {e}")))?;
-
-    let (_, _, raw_gv_coefficient_trace) = cygv::series_inversion::invert_series_with_qn_trace::<
-        RugRational,
-        false,
-        true,
-    >(inst_data, &poly_props, &mut all_pools)
-    .map_err(|e| Error::InvalidInput(format!("{context}: cygv series inversion failed: {e}")))?;
-
-    Ok(convert_cygv_gv_coefficient_trace(raw_gv_coefficient_trace))
-}
-
-fn convert_cygv_gv_coefficient_trace(
-    raw_gv_coefficient_trace: Vec<cygv::series_inversion::GvCoefficientTrace<RugRational>>,
-) -> Vec<CygvGvCoefficientTrace> {
-    raw_gv_coefficient_trace
-        .into_iter()
-        .map(|trace| CygvGvCoefficientTrace {
-            element_index: trace.element_index,
-            degree: trace.degree,
-            element: trace.element,
-            insertion_index: trace.insertion_index,
-            pivot_component: trace.pivot_component,
-            instanton_coefficient: trace
-                .instanton_coefficient
-                .map(|coefficient| coefficient.to_string()),
-            gv_candidate: trace
-                .gv_candidate
-                .map(|coefficient| coefficient.to_string()),
-            rounded_gv_candidate: trace
-                .rounded_gv_candidate
-                .map(|coefficient| coefficient.to_string()),
-            status: trace.status.to_string(),
-        })
-        .collect()
-}
-
-fn compute_cygv_rat_threefold_raw_from_semigroup_unchecked(
-    semigroup: cygv::Semigroup,
-    q: &DMatrix<i32>,
-    nefpart: &[DVector<i32>],
-    intnums_map: HashMap<(usize, usize, usize), i32>,
-    context: &str,
-    collect_qn_trace: bool,
-) -> Result<GvInvariantsWithQnTrace> {
     let zero_cutoff = RugRational::new();
     let poly_props = cygv::PolynomialProperties::new(&semigroup, &zero_cutoff);
     let (intnum_dict, intnum_idxpairs, n_indices) = cygv::misc::process_int_nums(intnums_map, true)
@@ -12739,20 +12271,11 @@ fn compute_cygv_rat_threefold_raw_from_semigroup_unchecked(
     )
     .map_err(|e| Error::InvalidInput(format!("{context}: cygv instanton data failed: {e}")))?;
 
-    let (gv, raw_qn_trace, raw_gv_coefficient_trace) = if collect_qn_trace {
-        cygv::series_inversion::invert_series_with_qn_trace::<RugRational, true, true>(
-            inst_data,
-            &poly_props,
-            &mut all_pools,
-        )
-    } else {
-        cygv::series_inversion::invert_series::<RugRational, true, true>(
-            inst_data,
-            &poly_props,
-            &mut all_pools,
-        )
-        .map(|gv| (gv, Vec::new(), Vec::new()))
-    }
+    let gv = cygv::series_inversion::invert_series::<RugRational, true, true>(
+        inst_data,
+        &poly_props,
+        &mut all_pools,
+    )
     .map_err(|e| Error::InvalidInput(format!("{context}: cygv series inversion failed: {e}")))?;
 
     let mut gv_sorted: Vec<_> = gv.into_iter().collect();
@@ -12776,39 +12299,8 @@ fn compute_cygv_rat_threefold_raw_from_semigroup_unchecked(
             gv_int,
         ));
     }
-    let qn_trace = raw_qn_trace
-        .into_iter()
-        .map(|poly| CygvQnTracePolynomial {
-            element_index: poly.element_index,
-            degree: poly.degree,
-            element: poly.element,
-            terms: poly
-                .terms
-                .into_iter()
-                .map(|term| CygvQnTraceTerm {
-                    monomial_index: term.monomial_index,
-                    exponent: term.exponent,
-                    coefficient: term.coefficient.to_string(),
-                })
-                .collect(),
-            li2_terms: poly
-                .li2_terms
-                .into_iter()
-                .map(|term| CygvQnTraceTerm {
-                    monomial_index: term.monomial_index,
-                    exponent: term.exponent,
-                    coefficient: term.coefficient.to_string(),
-                })
-                .collect(),
-        })
-        .collect();
-    let gv_coefficient_trace = convert_cygv_gv_coefficient_trace(raw_gv_coefficient_trace);
 
-    Ok(GvInvariantsWithQnTrace {
-        invariants: out,
-        qn_trace,
-        gv_coefficient_trace,
-    })
+    Ok(out)
 }
 
 fn cygv_thread_count_from_env() -> usize {
@@ -13052,9 +12544,10 @@ fn dump_mori_rays_cdd(path: &Path, rays: &[Vec<i64>]) -> Result<()> {
         })?;
     }
 
+    use std::fmt::Write as _;
     let mut out = String::new();
     out.push_str("V-representation\nbegin\n");
-    out.push_str(&format!("{} {} integer\n", rays.len(), dim + 1));
+    writeln!(out, "{} {} integer", rays.len(), dim + 1).expect("writing to a String cannot fail");
     for row in rays {
         out.push('0');
         for value in row {
@@ -13403,8 +12896,8 @@ mod tests {
     use super::{
         BoundedCurveDecompositionIndex, CkyzExpCoefficientCache, CkyzIndexedSeries,
         CkyzLocalIntersectionTerm, CkyzLocalSurfaceIdentification, CkyzLocalSurfaceKind,
-        CkyzMonomialDomain, CurveDecompositionTerm, CurvePruningStrategy, CygvQnTraceTerm,
-        GvCachePolicy, GvLatticeAugmentation, LocalToricCircuitKind, LocalToricCoordinate2D,
+        CkyzMonomialDomain, CurveDecompositionTerm, CurvePruningStrategy, GvCachePolicy,
+        GvLatticeAugmentation, LocalToricCircuitKind, LocalToricCoordinate2D,
         NilpotentRayCandidate, NilpotentRayDegreeSlice, NilpotentRaySliceDistance,
         OriginCircuitCurveWitness, OriginCircuitRelationPoint, SupportingMoriFaceLpSearchOptions,
         ToricCurveCandidate, certify_supporting_mori_face_by_exact_kernel,
@@ -13443,14 +12936,8 @@ mod tests {
         compute_grading_vector, compute_gv_invariants_inner,
         compute_gv_invariants_with_explicit_semigroup,
         compute_gv_invariants_with_explicit_semigroup_and_nef_partition,
-        compute_gv_invariants_with_explicit_semigroup_and_nef_partition_qn_trace,
-        compute_gv_invariants_with_explicit_semigroup_qn_trace,
         compute_gv_invariants_with_provided_generators,
         compute_gv_invariants_with_provided_generators_and_nef_partition,
-        compute_gv_invariants_with_provided_generators_and_nef_partition_qn_trace,
-        compute_gv_invariants_with_provided_generators_qn_trace,
-        compute_gw_coefficient_trace_with_explicit_semigroup,
-        compute_gw_coefficient_trace_with_provided_generators,
         compute_local_p2_genus_zero_gv_series, compute_local_toric_circuit_gv_series,
         compute_one_dimensional_ray_gv_series, compute_ray_gv_series_with_provided_generators,
         curve_in_rational_row_span, curve_row_span_rank, curve_volume_in_divisor_basis,
@@ -13612,7 +13099,7 @@ mod tests {
             )),
         );
 
-        let err = compute_gv_invariants_with_explicit_semigroup_qn_trace(
+        let err = compute_gv_invariants_with_explicit_semigroup(
             &[vec![0], vec![1]],
             &[1],
             &[vec![1, 1, 1, 1, 1]],
@@ -13690,73 +13177,23 @@ mod tests {
     }
 
     #[test]
-    fn provided_generator_complete_intersection_qn_trace_validates_nef_partition() {
-        let mut intnums = Intersection::new(1);
-        set_intersection_i64(&mut intnums, 0, 0, 0, 1);
-
-        let err = compute_gv_invariants_with_provided_generators_and_nef_partition_qn_trace(
-            &[vec![1]],
-            &[1],
-            &[vec![1, 1, 1, 1, 1, 1]],
-            &[vec![0, 1], vec![1, 2]],
-            &intnums,
-            None,
-            Some(1),
-        )
-        .unwrap_err();
-
-        assert!(
-            err.to_string()
-                .contains("nef partition index 1 appears in more than one part")
-        );
-    }
-
-    #[test]
-    fn explicit_complete_intersection_qn_trace_passes_nef_partition_to_cygv() {
-        let mut intnums = Intersection::new(1);
-        set_intersection_i64(&mut intnums, 0, 0, 0, 1);
-
-        let err = compute_gv_invariants_with_explicit_semigroup_and_nef_partition_qn_trace(
-            &[vec![0], vec![1]],
-            &[1],
-            &[vec![1, 1, 1, 1, 1, 1]],
-            &[vec![0], vec![1], vec![2]],
-            &intnums,
-        )
-        .unwrap_err();
-
-        assert!(
-            err.to_string().contains("cygv fundamental period failed"),
-            "expected a cygv-stage error after nef partition conversion, got {err}"
-        );
-    }
-
-    #[test]
-    fn explicit_complete_intersection_qn_trace_computes_bicubic_lines() {
+    fn explicit_complete_intersection_computes_bicubic_lines() {
         let mut intnums = Intersection::new(1);
         set_intersection_i64(&mut intnums, 0, 0, 0, 9);
 
-        let traced = compute_gv_invariants_with_explicit_semigroup_and_nef_partition_qn_trace(
+        let invariants = compute_gv_invariants_with_explicit_semigroup_and_nef_partition(
             &[vec![0], vec![1]],
             &[1],
             &[vec![1, 1, 1, 1, 1, 1]],
             &[vec![0, 1, 2], vec![3, 4, 5]],
             &intnums,
         )
-        .expect("bicubic complete intersection should compute through cygv qN trace");
-        let invariants = traced
-            .invariants
-            .into_iter()
-            .map(|(charge, value)| (charge, value.to_string()))
-            .collect::<BTreeMap<_, _>>();
+        .expect("bicubic complete intersection should compute through cygv")
+        .into_iter()
+        .map(|(charge, value)| (charge, value.to_string()))
+        .collect::<BTreeMap<_, _>>();
 
         assert_eq!(invariants.get(&vec![1]).map(String::as_str), Some("1053"));
-        assert!(
-            traced
-                .gv_coefficient_trace
-                .iter()
-                .any(|trace| trace.element == vec![1])
-        );
     }
 
     #[test]
@@ -17790,74 +17227,32 @@ mod tests {
     }
 
     #[test]
-    fn explicit_quintic_qn_trace_exports_cygv_materialized_polynomial() {
+    fn explicit_quintic_semigroup_computes_degree_one_gv() {
         let mut intnums = Intersection::new(1);
         set_intersection_i64(&mut intnums, 0, 0, 0, 5);
 
-        let traced = compute_gv_invariants_with_explicit_semigroup_qn_trace(
+        let invariants = compute_gv_invariants_with_explicit_semigroup(
             &[vec![0], vec![1]],
             &[1],
             &[vec![1, 1, 1, 1, 1]],
             &intnums,
         )
-        .expect("explicit quintic semigroup should compute degree-one qN trace");
+        .expect("explicit quintic semigroup should compute degree-one GV");
 
         assert!(
-            traced
-                .invariants
+            invariants
                 .iter()
                 .any(|(charge, value)| charge == &[1] && value == &Integer::from(2875)),
-            "degree-one quintic GV 2875 missing from {:?}",
-            traced.invariants
+            "degree-one quintic GV 2875 missing from {invariants:?}"
         );
-        assert_eq!(traced.qn_trace.len(), 1);
-        assert_eq!(traced.qn_trace[0].degree, 1);
-        assert_eq!(traced.qn_trace[0].element, vec![1]);
-        assert_eq!(
-            traced.qn_trace[0].terms,
-            vec![CygvQnTraceTerm {
-                monomial_index: 1,
-                exponent: vec![1],
-                coefficient: "1".to_string(),
-            }]
-        );
-        assert_eq!(
-            traced.qn_trace[0].li2_terms,
-            vec![CygvQnTraceTerm {
-                monomial_index: 1,
-                exponent: vec![1],
-                coefficient: "1".to_string(),
-            }]
-        );
-        assert_eq!(traced.gv_coefficient_trace.len(), 1);
-        assert_eq!(traced.gv_coefficient_trace[0].element, vec![1]);
-        assert_eq!(traced.gv_coefficient_trace[0].insertion_index, 0);
-        assert_eq!(traced.gv_coefficient_trace[0].pivot_component, 1);
-        assert_eq!(
-            traced.gv_coefficient_trace[0]
-                .instanton_coefficient
-                .as_deref(),
-            Some("2875")
-        );
-        assert_eq!(
-            traced.gv_coefficient_trace[0].gv_candidate.as_deref(),
-            Some("2875")
-        );
-        assert_eq!(
-            traced.gv_coefficient_trace[0]
-                .rounded_gv_candidate
-                .as_deref(),
-            Some("2875")
-        );
-        assert_eq!(traced.gv_coefficient_trace[0].status, "integer_nonzero_gv");
     }
 
     #[test]
-    fn provided_generator_quintic_qn_trace_matches_normal_wrapper() {
+    fn provided_generator_quintic_computes_degree_one_gv() {
         let mut intnums = Intersection::new(1);
         set_intersection_i64(&mut intnums, 0, 0, 0, 5);
 
-        let normal = compute_gv_invariants_with_provided_generators(
+        let invariants = compute_gv_invariants_with_provided_generators(
             &[vec![1]],
             &[1],
             &[vec![1, 1, 1, 1, 1]],
@@ -17866,78 +17261,13 @@ mod tests {
             Some(1),
         )
         .expect("provided-generator quintic should compute degree-one GV");
-        let traced = compute_gv_invariants_with_provided_generators_qn_trace(
-            &[vec![1]],
-            &[1],
-            &[vec![1, 1, 1, 1, 1]],
-            &intnums,
-            None,
-            Some(1),
-        )
-        .expect("provided-generator quintic should compute degree-one qN trace");
 
-        assert_eq!(traced.invariants, normal);
         assert!(
-            traced
-                .invariants
+            invariants
                 .iter()
-                .any(|(charge, value)| charge == &[1] && value == &Integer::from(2875))
+                .any(|(charge, value)| charge == &[1] && value == &Integer::from(2875)),
+            "degree-one quintic GV 2875 missing from {invariants:?}"
         );
-        assert_eq!(traced.qn_trace.len(), 1);
-        assert_eq!(traced.qn_trace[0].element, vec![1]);
-        assert_eq!(traced.qn_trace[0].terms.len(), 1);
-        assert_eq!(traced.qn_trace[0].li2_terms.len(), 1);
-        assert_eq!(traced.gv_coefficient_trace.len(), 1);
-        assert_eq!(traced.gv_coefficient_trace[0].element, vec![1]);
-        assert_eq!(traced.gv_coefficient_trace[0].status, "integer_nonzero_gv");
-    }
-
-    #[test]
-    fn provided_generator_gw_coefficient_trace_exposes_raw_candidate() {
-        let mut intnums = Intersection::new(1);
-        set_intersection_i64(&mut intnums, 0, 0, 0, 5);
-
-        let trace = compute_gw_coefficient_trace_with_provided_generators(
-            &[vec![1]],
-            &[1],
-            &[vec![1, 1, 1, 1, 1]],
-            &intnums,
-            None,
-            Some(1),
-        )
-        .expect("provided-generator quintic should expose raw GW coefficient trace");
-
-        assert_eq!(trace.len(), 1);
-        assert_eq!(trace[0].element, vec![1]);
-        assert_eq!(trace[0].insertion_index, 0);
-        assert_eq!(trace[0].pivot_component, 1);
-        assert_eq!(trace[0].instanton_coefficient.as_deref(), Some("2875"));
-        assert_eq!(trace[0].gv_candidate.as_deref(), Some("2875"));
-        assert_eq!(trace[0].rounded_gv_candidate, None);
-        assert_eq!(trace[0].status, "nonzero_gw");
-    }
-
-    #[test]
-    fn explicit_semigroup_gw_coefficient_trace_exposes_raw_candidate() {
-        let mut intnums = Intersection::new(1);
-        set_intersection_i64(&mut intnums, 0, 0, 0, 5);
-
-        let trace = compute_gw_coefficient_trace_with_explicit_semigroup(
-            &[vec![1]],
-            &[1],
-            &[vec![1, 1, 1, 1, 1]],
-            &intnums,
-        )
-        .expect("explicit quintic semigroup should expose raw GW coefficient trace");
-
-        assert_eq!(trace.len(), 1);
-        assert_eq!(trace[0].element, vec![1]);
-        assert_eq!(trace[0].insertion_index, 0);
-        assert_eq!(trace[0].pivot_component, 1);
-        assert_eq!(trace[0].instanton_coefficient.as_deref(), Some("2875"));
-        assert_eq!(trace[0].gv_candidate.as_deref(), Some("2875"));
-        assert_eq!(trace[0].rounded_gv_candidate, None);
-        assert_eq!(trace[0].status, "nonzero_gw");
     }
 
     #[test]

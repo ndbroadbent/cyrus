@@ -130,8 +130,7 @@ fn transform_m_flux_to_computed_basis(
         std::process::exit(2);
     }
     eprintln!(
-        "[INFO] transforming {label} from flux basis {:?} to computed basis {:?}",
-        flux_basis, computed_basis
+        "[INFO] transforming {label} from flux basis {flux_basis:?} to computed basis {computed_basis:?}"
     );
     apply_integer_basis_transform(&transform, values, label).unwrap_or_else(|e| {
         eprintln!("[ERROR] failed to apply {label} basis transform: {e}");
@@ -157,8 +156,7 @@ fn transform_k_flux_to_computed_basis(
         std::process::exit(2);
     }
     eprintln!(
-        "[INFO] transforming K from flux basis {:?} to computed basis {:?}",
-        flux_basis, computed_basis
+        "[INFO] transforming K from flux basis {flux_basis:?} to computed basis {computed_basis:?}"
     );
     apply_integer_basis_transform_transpose(&transform, values, "K").unwrap_or_else(|e| {
         eprintln!("[ERROR] failed to apply K basis transform: {e}");
@@ -454,7 +452,7 @@ fn main() {
     eprintln!("[RESULT] W0 = {}", w0.get());
 
     let compare_dir = compare_dir.or_else(|| data_dir.clone());
-    let compare = compare_dir.map_or(None, |dir| {
+    let compare = compare_dir.map(|dir| {
         let dir = PathBuf::from(dir);
         let g_s_path = dir.join("g_s.dat");
         let w0_path = dir.join("W_0.dat");
@@ -464,12 +462,12 @@ fn main() {
         let w0_rel_err = ((w0.get() - w0_expected) / w0_expected).abs();
         eprintln!("[COMPARE] g_s expected={g_s_expected}, rel_err={g_s_rel_err}");
         eprintln!("[COMPARE] W0 expected={w0_expected}, rel_err={w0_rel_err}");
-        Some(CompareOut {
+        CompareOut {
             g_s_expected,
             w0_expected,
             g_s_rel_err,
             w0_rel_err,
-        })
+        }
     });
 
     if let Some(path) = out_path {

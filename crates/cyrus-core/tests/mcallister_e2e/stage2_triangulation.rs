@@ -43,7 +43,7 @@ fn read_csv_f64(path: &PathBuf) -> Vec<f64> {
     let content = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
     content
-        .split(|c| c == ',' || c == '\n' || c == '\r')
+        .split([',', '\n', '\r'])
         .filter(|s| !s.trim().is_empty())
         .map(|s| s.trim().parse::<f64>().expect("invalid float"))
         .collect()

@@ -49,6 +49,28 @@ should_exclude() {
   return 1
 }
 
+# Legacy files grandfathered above the limits, capped near their size when the
+# exception was added so they can only shrink. Do NOT add new entries — split
+# new code into modules instead. TODO: refactor these below the normal limits.
+legacy_limit() {
+  case "${1#./}" in
+    crates/cyrus-core/src/gv.rs)                                       echo 17450 ;;
+    crates/cyrus-core/src/bin/mcallister_first_principles.rs)          echo 4400 ;;
+    crates/cyrus-core/src/kklt.rs)                                     echo 4250 ;;
+    crates/cyrus-core/src/triangulation/secondary.rs)                  echo 4150 ;;
+    crates/cyrus-core/src/cone/mod.rs)                                 echo 1450 ;;
+    crates/cyrus-core/src/intersection/complete_intersection.rs)       echo 1000 ;;
+    crates/cyrus-core/src/bin/mcallister_flat_direction.rs)            echo 950 ;;
+    crates/cyrus-core/src/curve_basis.rs)                              echo 950 ;;
+    crates/cyrus-core/src/intersection/cytools_algorithm/ambient.rs)   echo 600 ;;
+    crates/cyrus-core/src/cone/tip.rs)                                 echo 520 ;;
+    crates/cyrus-core/tests/potent_ray_affine_circuits.rs)             echo 1550 ;;
+    crates/cyrus-core/tests/mcallister_e2e/stage5_gv.rs)               echo 1350 ;;
+    crates/cyrus-core/tests/mcallister_e2e/stage0_data_integrity.rs)   echo 1200 ;;
+    *)                                                                 echo "" ;;
+  esac
+}
+
 # Check a single file
 check_file() {
   local file="$1"
@@ -71,6 +93,16 @@ check_file() {
      [[ "$file" == */tests/* ]] || \
      [[ "$file" == */benches/* ]]; then
     is_test=true
+  fi
+
+  local grandfathered
+  grandfathered=$(legacy_limit "$file")
+  if [[ -n "$grandfathered" ]]; then
+    if [ "$lines" -gt "$grandfathered" ]; then
+      echo "❌ $file has $lines lines (grandfathered cap $grandfathered; shrink it, don't grow it)"
+      exitcode=1
+    fi
+    return 0
   fi
 
   if [ "$is_test" = true ]; then

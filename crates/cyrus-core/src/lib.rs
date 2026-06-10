@@ -1,28 +1,3 @@
-// Clippy allows for intentional patterns in physics code
-#![allow(clippy::cast_precision_loss)] // i64 to f64 is intentional for floating point math
-#![allow(clippy::cast_possible_wrap)] // usize to i64 is safe for our data sizes
-#![allow(clippy::cast_possible_truncation)] // Safe truncations are checked at runtime
-#![allow(clippy::cast_sign_loss)] // Safe sign conversions are checked at runtime
-#![allow(clippy::missing_panics_doc)] // Not all panic conditions need documentation
-#![allow(clippy::missing_errors_doc)] // Not all error conditions need documentation
-#![allow(clippy::module_name_repetitions)] // Types like `ConeError` in `cone` module are fine
-#![allow(clippy::needless_range_loop)] // Matrix operations are clearer with index loops
-#![allow(clippy::branches_sharing_code)] // Sometimes clearer to repeat code in branches
-#![allow(clippy::must_use_candidate)] // Not all methods need #[must_use]
-#![allow(clippy::if_then_some_else_none)] // Pattern is fine
-#![allow(clippy::items_after_statements)] // Test helper structs in functions are fine
-#![allow(clippy::type_complexity)] // Complex types are acceptable in physics code
-#![allow(clippy::single_match_else)] // Match with single arm is sometimes clearer
-#![allow(clippy::match_same_arms)] // Sometimes clearer to be explicit about same behavior
-#![allow(clippy::option_if_let_else)] // Pattern is often clearer than map_or_else
-#![allow(clippy::needless_collect)] // Sometimes collect is clearer
-#![allow(clippy::only_used_in_recursion)] // False positives in some algorithms
-#![allow(clippy::redundant_else)] // Explicit else for clarity
-#![allow(clippy::manual_let_else)] // let...else not always clearer
-#![allow(clippy::cmp_owned)] // Owned comparison is sometimes clearer
-#![allow(clippy::return_self_not_must_use)] // Methods returning Self don't always need must_use
-#![allow(clippy::no_effect_underscore_binding)] // Debug variables are fine
-
 //! Core mathematical primitives for Calabi-Yau manifold computations.
 //!
 //! This crate provides the foundational algorithms for:
@@ -64,7 +39,6 @@ pub mod height_kahler;
 pub mod integer_math;
 pub mod intersection;
 pub mod kahler;
-pub mod local_orbifold;
 pub mod lvs;
 pub use cone::Cone;
 pub use kahler::{MoriCone, compute_mori_generators};
@@ -105,9 +79,8 @@ pub use glsm::compute_glsm_linear_relations;
 pub use gv::{
     AffineCircuitRelationPoint, AffineToricCircuitDiagnostic, CkyzLocalCausalDomainSpec,
     CkyzLocalDomainProfile, CkyzLocalIntersectionTerm, CkyzLocalSurfaceIdentification,
-    CkyzLocalSurfaceKind, CurveDecompositionTerm, CurvePruningStrategy, CygvQnTracePolynomial,
-    CygvQnTraceTerm, ExtremalMoriRayCertificate, FiniteCutoffGvChargePartition,
-    FiniteGvTableNopClassification, GvDivisorBasisData, GvInvariantsWithQnTrace,
+    CkyzLocalSurfaceKind, CurveDecompositionTerm, CurvePruningStrategy, ExtremalMoriRayCertificate,
+    FiniteCutoffGvChargePartition, FiniteGvTableNopClassification, GvDivisorBasisData,
     LocalToricCircuitKind, LocalToricCoordinate, LocalToricCoordinate2D, NilpotentRayCandidate,
     NilpotentRayDegreeSlice, NilpotentRayDivergenceCheck, NilpotentRaySliceComparisonPoint,
     NilpotentRaySliceDistance, NilpotentRayTwoPassNopClassification, OneDimensionalRayGvSeries,
@@ -134,21 +107,15 @@ pub use gv::{
     compute_gv_invariants_with_degree_bounded_lattice,
     compute_gv_invariants_with_explicit_semigroup,
     compute_gv_invariants_with_explicit_semigroup_and_nef_partition,
-    compute_gv_invariants_with_explicit_semigroup_and_nef_partition_qn_trace,
-    compute_gv_invariants_with_explicit_semigroup_qn_trace,
     compute_gv_invariants_with_provided_generators,
     compute_gv_invariants_with_provided_generators_and_nef_partition,
-    compute_gv_invariants_with_provided_generators_and_nef_partition_qn_trace,
-    compute_gv_invariants_with_provided_generators_qn_trace,
-    compute_gw_coefficient_trace_with_explicit_semigroup,
-    compute_gw_coefficient_trace_with_provided_generators, compute_local_p2_genus_zero_gv_series,
-    compute_local_toric_circuit_gv_series, compute_mori_cone_cap_rays,
-    compute_one_dimensional_ray_gv_series, compute_origin_circuit_curve_diagnostics,
-    compute_ray_gv_series_with_provided_generators, compute_toric_curve_gv_diagnostics,
-    compute_toric_two_face_curve_gv_invariants, curve_in_rational_row_span, curve_row_span_rank,
-    curve_volume_in_divisor_basis, detect_apparent_nilpotent_ray_from_gv_multiples,
-    detect_apparent_nilpotent_rays_from_gv_table, diagnose_affine_toric_circuit,
-    diagnose_extremal_mori_ray_separator_by_lp_search,
+    compute_local_p2_genus_zero_gv_series, compute_local_toric_circuit_gv_series,
+    compute_mori_cone_cap_rays, compute_one_dimensional_ray_gv_series,
+    compute_origin_circuit_curve_diagnostics, compute_ray_gv_series_with_provided_generators,
+    compute_toric_curve_gv_diagnostics, compute_toric_two_face_curve_gv_invariants,
+    curve_in_rational_row_span, curve_row_span_rank, curve_volume_in_divisor_basis,
+    detect_apparent_nilpotent_ray_from_gv_multiples, detect_apparent_nilpotent_rays_from_gv_table,
+    diagnose_affine_toric_circuit, diagnose_extremal_mori_ray_separator_by_lp_search,
     extract_ckyz_local_gv_invariants_from_potential, find_extremal_mori_ray_separator,
     find_extremal_mori_ray_separator_by_lp_search, find_pair_decomposition,
     find_semigroup_decomposition, finite_cutoff_gv_charges_excluding_primitive_rays,
@@ -182,26 +149,6 @@ pub use intersection::{
     compute_intersection_numbers_with_linear_relations, compute_intersection_numbers_with_offset,
 };
 pub use intersection::{compute_ambient_intersections_cytools, compute_intersection_cytools};
-pub use local_orbifold::{
-    HalfSectorDescendantReadout, HalfSectorFirstNonzeroDescendant,
-    OrdinarySectorDualBasisP2ZReadout, WeightedP2RankThreeChenRuanSourceBasisReadout,
-    WeightedP2RankThreeSplitBundleSourceReadiness,
-    WeightedP2RankThreeTwistedIfunctionDegreeProfile,
-    WeightedP2RankThreeTwistedIfunctionSourceCertificateRequirements,
-    kp112_canonical_b_table_values, kp112_canonical_c_table_values,
-    kp112_half_sector_dual_basis_descendant_profiles, kp112_half_sector_first_nonzero_descendants,
-    kp112_half_sector_primary_lambda_coefficients, kp112_ordinary_p_primary_lambda_coefficients,
-    split_bundle_kp112_mirror_map_half_sector_descendant_profiles,
-    split_bundle_kp112_mirror_map_half_sector_first_nonzero_descendants,
-    split_bundle_kp112_mirror_map_half_sector_primary_coefficients,
-    split_bundle_kp112_mirror_map_primary_p_lambda_coefficients,
-    weighted_p2_ordinary_dual_basis_p2_z_lambda_polynomials,
-    weighted_p2_ordinary_dual_basis_p2_z_readout_profile,
-    weighted_p2_rank_three_split_bundle_chen_ruan_source_basis_readout,
-    weighted_p2_rank_three_split_bundle_source_readiness,
-    weighted_p2_rank_three_twisted_ifunction_degree_profiles,
-    weighted_p2_rank_three_twisted_ifunction_source_certificate_requirements,
-};
 pub mod kklt;
 
 pub use kklt::{

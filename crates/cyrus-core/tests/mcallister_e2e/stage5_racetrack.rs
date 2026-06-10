@@ -19,7 +19,7 @@
 #![allow(clippy::cast_possible_truncation)] // Exponent values from log10 are small
 
 use serde::Deserialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Round a float to N decimal places
 fn round_to_decimals(value: f64, decimals: u32) -> f64 {
@@ -474,7 +474,7 @@ struct RacetrackTerm {
 }
 
 /// Build racetrack terms from dual curves
-fn build_racetrack_terms(data_dir: &PathBuf) -> Vec<RacetrackTerm> {
+fn build_racetrack_terms(data_dir: &Path) -> Vec<RacetrackTerm> {
     use std::collections::BTreeMap;
 
     let (curves, gv) = load_dual_curves(data_dir);
@@ -672,7 +672,7 @@ fn stage10_verify_mcallister_cy_vol() {
 
 /// Find the racetrack pair (two consecutive terms with opposite signs)
 /// and solve for g_s
-fn solve_racetrack_gs(data_dir: &PathBuf) -> Option<(f64, f64, f64, i64, i64)> {
+fn solve_racetrack_gs(data_dir: &Path) -> Option<(f64, f64, f64, i64, i64)> {
     let terms = build_racetrack_terms(data_dir);
 
     // Filter to non-zero coefficient terms

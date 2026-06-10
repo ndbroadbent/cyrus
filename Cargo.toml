@@ -15,8 +15,8 @@ pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 cargo = { level = "warn", priority = -1 }
 # Allow these pedantic lints
-module_name_repetitions = "allow"
-must_use_candidate = "allow"
+module_name_repetitions = "allow" # Types like `ConeError` in `cone` module are fine
+must_use_candidate = "allow" # Not all methods need #[must_use]
 similar_names = "allow"
 unreadable_literal = "allow"  # Physics constants shouldn't need underscores
 doc_markdown = "allow"  # CamelCase names (McAllister, GitHub) aren't code
@@ -24,6 +24,38 @@ doc_markdown = "allow"  # CamelCase names (McAllister, GitHub) aren't code
 cargo_common_metadata = "allow"
 # Allow multiple versions of transitive deps (out of our control)
 multiple_crate_versions = "allow"
+# Allows for intentional patterns in physics code (apply to lib, bins, and tests alike)
+cast_precision_loss = "allow" # i64 to f64 is intentional for floating point math
+cast_possible_wrap = "allow" # usize to i64 is safe for our data sizes
+cast_possible_truncation = "allow" # Safe truncations are checked at runtime
+cast_sign_loss = "allow" # Safe sign conversions are checked at runtime
+missing_panics_doc = "allow" # Not all panic conditions need documentation
+missing_errors_doc = "allow" # Not all error conditions need documentation
+needless_range_loop = "allow" # Matrix operations are clearer with index loops
+branches_sharing_code = "allow" # Sometimes clearer to repeat code in branches
+if_then_some_else_none = "allow" # Pattern is fine
+items_after_statements = "allow" # Test helper structs in functions are fine
+type_complexity = "allow" # Complex types are acceptable in physics code
+single_match_else = "allow" # Match with single arm is sometimes clearer
+match_same_arms = "allow" # Sometimes clearer to be explicit about same behavior
+option_if_let_else = "allow" # Pattern is often clearer than map_or_else
+needless_collect = "allow" # Sometimes collect is clearer
+only_used_in_recursion = "allow" # False positives in some algorithms
+redundant_else = "allow" # Explicit else for clarity
+manual_let_else = "allow" # let...else not always clearer
+cmp_owned = "allow" # Owned comparison is sometimes clearer
+return_self_not_must_use = "allow" # Methods returning Self don't always need must_use
+no_effect_underscore_binding = "allow" # Debug variables are fine
+# CRITICAL: mul_add changes floating-point results at the ULP level; this project
+# validates bit-level reproduction of published physics values, so float expression
+# rewrites are forbidden.
+suboptimal_flops = "allow"
+# Exact equality against pinned/published values is intentional in this codebase's
+# validation layers.
+float_cmp = "allow"
+# Series/scalar helpers intentionally take owned values (callers usually construct
+# them inline); rewriting every call site to borrow is deferred refactoring.
+needless_pass_by_value = "allow"
 
 [workspace.package]
 version = "0.1.0"
@@ -99,9 +131,6 @@ criterion = "0.5"
 # Error handling
 thiserror = "2"
 anyhow = "1"
-
-[patch.crates-io]
-cygv = { path = "vendor/cygv-0.1.2" }
 
 [profile.release]
 lto = "fat"

@@ -3220,6 +3220,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::excessive_precision)] // pinned reference constants keep their full published digits
     fn test_real_dilog_matches_reference_values_near_corrected_chamber_offenders() {
         // Constants generated with scipy.special.spence(1-x) and cross-checked
         // with mpmath polylog at 50 digits for the leading 4-214-647

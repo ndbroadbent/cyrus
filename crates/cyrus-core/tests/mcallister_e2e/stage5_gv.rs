@@ -141,10 +141,7 @@ fn o7_gamma_from_kklt_data(data_dir: &Path, ambient_dim: usize) -> Vec<i64> {
 }
 
 fn typed_gamma(raw: &[i64]) -> Vec<I64<Finite>> {
-    raw.iter()
-        .copied()
-        .map(|value| I64::<Finite>::new(value))
-        .collect()
+    raw.iter().copied().map(I64::<Finite>::new).collect()
 }
 
 fn ambient_parity(curve: &[i64], gamma: &[i64]) -> i128 {
@@ -332,9 +329,10 @@ fn stage5_mirror_gv_checkpoint_matches_cygv_min_points() {
     };
 
     let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let runner = std::env::var_os("CYRUS_MCALLISTER_GV_BIN")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| workspace_root.join("target/release/mcallister_gv"));
+    let runner = std::env::var_os("CYRUS_MCALLISTER_GV_BIN").map_or_else(
+        || workspace_root.join("target/release/mcallister_gv"),
+        PathBuf::from,
+    );
     if !runner.exists() {
         eprintln!(
             "Skipping mirror GV checkpoint test (build release mcallister_gv or set CYRUS_MCALLISTER_GV_BIN)"
