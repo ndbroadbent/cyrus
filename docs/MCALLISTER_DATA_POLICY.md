@@ -33,6 +33,24 @@ first-principles runner:
   5-113-4627 examples). Read as the default when present; `--small-curve-cutoff`
   overrides.
 - `kklt_basis.dat`: declared non-perturbative divisor set.
+
+### Missing-GV handling (5-113-4627)
+
+Three exotic origin-circuit curves in the 5-113-4627 examples are not
+covered by the toric GV formulas. The degree-2 one (GV = -2) is computed
+exactly by the minimal-degree one-dimensional HKTY series: its grading
+degree admits no decomposition into positive-degree effective classes, so
+no decomposition domain is needed (cross-checked against CYTools and the
+published checkpoint). The two degree-10/24 ones (GV = 3 each) are provably
+not computable by any toric-cap-based cygv call in the input phase (their
+decomposition channels involve effective classes outside the toric cap; see
+`string_theory/mcallister_2107/latest_cytools/face_restricted_gv_5113.py`),
+and McAllister's own corrected targets cannot distinguish 3 from 0 for them
+(m-integrality fit deltas ~1e-5). They are handled by the explicit
+`--max-missing-gv-impact` / `--missing-gv-abs-bound` deferral: the runner
+excludes them with a loud warning only when their maximal possible
+contribution is below the requested threshold, and re-verifies that bound
+at the solved Kahler point. Default is strict failure.
 - `target_volumes.dat`: declared `c_i` values from the orientifold/KKLT model
   choice.
 
