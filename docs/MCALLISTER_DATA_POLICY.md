@@ -21,7 +21,17 @@ first-principles runner:
   triangulation of the dual polytope it computed itself (via the secondary
   cone), and must still compute the dual polytope and its points from
   `points.dat` — only the chamber choice is input.
-- `K_vec.dat`, `M_vec.dat`: integer flux vectors.
+- `K_vec.dat`, `M_vec.dat`: integer flux vectors. These are expressed in the
+  dual divisor basis chosen by CYTools 2021 when the data was generated; that
+  basis choice is part of the declaration (the integers are meaningless
+  without it) and is recorded per example in
+  `crates/cyrus-core/tests/mcallister_e2e/inputs/flux_basis/`, passed to the
+  runner via `--dual-basis`. Only 4-214-647 works without the explicit
+  declaration.
+- `small_curves_cutoff.dat`: the declared small-curve volume cutoff for the
+  toric-curve selection (1.0 for 4-214-647, 2.0 for 5-81-3213, 1.9 for the
+  5-113-4627 examples). Read as the default when present; `--small-curve-cutoff`
+  overrides.
 - `kklt_basis.dat`: declared non-perturbative divisor set.
 - `target_volumes.dat`: declared `c_i` values from the orientifold/KKLT model
   choice.
@@ -42,10 +52,10 @@ corresponding object:
 - `basis.dat`: primal divisor basis checkpoint.
 - `dual_curves.dat`, `dual_curves_gv.dat`: low-dimensional mirror/racetrack
   curve and GV checkpoints.
-- `small_curves.dat`, `small_curves_cutoff.dat`, `small_curves_gv.dat`:
-  selected high-dimensional primal toric-curve checkpoint. These validate the
-  selected toric-curve method, not a full 214-dimensional generic
-  `compute_gvs()` call.
+- `small_curves.dat`, `small_curves_gv.dat`: selected high-dimensional primal
+  toric-curve checkpoint (`small_curves_cutoff.dat` itself is a declared
+  input, see above). These validate the selected toric-curve method, not a
+  full 214-dimensional generic `compute_gvs()` call.
 - `g_s.dat`, `W_0.dat`: racetrack outputs.
 - `c_tau.dat`: derived KKLT scalar checkpoint computed from the racetrack
   outputs, not a declared model input.

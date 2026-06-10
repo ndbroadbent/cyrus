@@ -191,8 +191,8 @@ const ARTIFACT_POLICIES: &[ArtifactPolicy] = &[
     },
     ArtifactPolicy {
         file: "dual_simplices.dat",
-        usage: ArtifactUse::ValidationCheckpoint,
-        note: "computed dual FRST checkpoint",
+        usage: ArtifactUse::DeclaredInput,
+        note: "selected mirror-chamber FRST; verified fine/star/regular against the computed dual polytope (only 4-214-647 coincides with the default chamber)",
     },
     ArtifactPolicy {
         file: "dual_points.dat",
@@ -221,8 +221,8 @@ const ARTIFACT_POLICIES: &[ArtifactPolicy] = &[
     },
     ArtifactPolicy {
         file: "small_curves_cutoff.dat",
-        usage: ArtifactUse::ValidationCheckpoint,
-        note: "checkpoint for McAllister's small-curve cutoff; production runner takes an explicit cutoff parameter",
+        usage: ArtifactUse::DeclaredInput,
+        note: "declared small-curve selection cutoff (differs per example); --small-curve-cutoff overrides",
     },
     ArtifactPolicy {
         file: "small_curves_gv.dat",
@@ -810,11 +810,11 @@ fn stage0_first_principles_runner_accepts_declared_inputs_only_data_dir() {
         );
     }
     assert!(
-        stderr.contains("[RESULT] V_string = 4711.426470024974"),
+        stderr.contains("[RESULT] V_string = 4711.426470138208"),
         "declared-input run should reach the current no-replay V_string result:\n{stderr}"
     );
     assert!(
-        stderr.contains("[RESULT] log10(|V0|) = -202.262781495031"),
+        stderr.contains("[RESULT] log10(|V0|) = -202.26278149505188"),
         "declared-input run should reach the current no-replay V0 result:\n{stderr}"
     );
     assert!(

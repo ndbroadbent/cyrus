@@ -1087,6 +1087,168 @@ pub fn compute_gv_target_correction_for_ambient_curves(
         .collect()
 }
 
+/// Jacobian of [`compute_gv_target_correction_for_ambient_curves`] with
+/// respect to the Kähler coordinates `t` (rows over `kklt_basis`, columns
+/// over the `basis` frame of `t`):
+///
+/// `d corr_i / d t_a = 1/(2π) Σ_q N_q q_i q_a ln(1 - (-1)^{γ·q} e^{-2π q·t})`.
+///
+/// Returns `None` on the same invalid inputs as the correction itself, or when
+/// a curve sits exactly on its wall (`arg = 1`, divergent logarithm).
+#[must_use]
+pub fn compute_gv_target_correction_jacobian_for_ambient_curves(
+    gv_invariants: &[(Vec<i64>, Integer)],
+    basis: &[usize],
+    kklt_basis: &[usize],
+    t: &[F64<Finite>],
+    gamma: Option<&[I64<Finite>]>,
+) -> Option<Vec<Vec<F64<Finite>>>> {
+    let dim = t.len();
+    if dim == 0 || basis.len() != dim || kklt_basis.is_empty() {
+        return None;
+    }
+
+    let ambient_dim = gv_invariants.first()?.0.len();
+    if ambient_dim == 0
+        || basis.iter().any(|&idx| idx >= ambient_dim)
+        || kklt_basis.iter().any(|&idx| idx >= ambient_dim)
+        || gamma.is_some_and(|g| g.len() != dim && g.len() != ambient_dim)
+    {
+        return None;
+    }
+
+    let mut jacobian = vec![vec![0.0f64; dim]; kklt_basis.len()];
+    for (curve, invariant) in gv_invariants {
+        if curve.len() != ambient_dim {
+            return None;
+        }
+
+        let q_dot_t = basis
+            .iter()
+            .zip(t.iter())
+            .map(|(&idx, ti)| curve[idx] as f64 * ti.get())
+            .sum::<f64>();
+        let parity = ambient_curve_b_field_parity(curve, basis, gamma)?;
+        let arg = gv_polylog_argument(q_dot_t, parity)?;
+        let log_term = (1.0 - arg).ln();
+        if !log_term.is_finite() {
+            return None;
+        }
+        let invariant_f = invariant.to_string().parse::<f64>().ok()?;
+        if !invariant_f.is_finite() {
+            return None;
+        }
+        let weight = invariant_f * log_term;
+        if weight == 0.0 {
+            continue;
+        }
+
+        for (row, &kklt_idx) in jacobian.iter_mut().zip(kklt_basis.iter()) {
+            let q_i = curve[kklt_idx] as f64;
+            if q_i == 0.0 {
+                continue;
+            }
+            let row_weight = q_i * weight;
+            for (entry, &basis_idx) in row.iter_mut().zip(basis.iter()) {
+                let q_a = curve[basis_idx] as f64;
+                if q_a != 0.0 {
+                    *entry += row_weight * q_a;
+                }
+            }
+        }
+    }
+
+    let prefactor = 1.0 / (2.0 * PI);
+    jacobian
+        .into_iter()
+        .map(|row| {
+            row.into_iter()
+                .map(|value| F64::<Finite>::new(prefactor * value))
+                .collect::<Option<Vec<_>>>()
+        })
+        .collect()
+}
+
+/// Path-following solve of the worldsheet-instanton-corrected KKLT system.
+///
+/// The supplied closures add the GV correction and its Jacobian (both in the
+/// solver's `t` frame, rows over `kklt_basis`) to the classical divisor
+/// volumes, so every Newton step linearizes the full corrected system. The
+/// alternative — freezing the correction and iterating classical solves to a
+/// fixed point — is not a contraction for every geometry (5-81-3213 cycles
+/// with steps ~0.1 regardless of update mixing), while the corrected-system
+/// Newton converges directly.
+pub fn solve_gv_corrected_divisor_basis_path_following<CorrectionFn, CorrectionJacobianFn>(
+    kappa_all: &Intersection,
+    basis: DivisorBasis<'_>,
+    kklt_basis: &[usize],
+    tau_target: &[DivisorVolume],
+    t_init: &[F64<Finite>],
+    steps: CheckedRange<usize>,
+    correction: CorrectionFn,
+    correction_jacobian: CorrectionJacobianFn,
+) -> Option<KkltResult>
+where
+    CorrectionFn: Fn(&[F64<Finite>]) -> Option<Vec<F64<Finite>>>,
+    CorrectionJacobianFn: Fn(&[F64<Finite>]) -> Option<Vec<Vec<F64<Finite>>>>,
+{
+    let basis_dim = divisor_basis_dimension(kappa_all.dim(), basis)?;
+    if t_init.len() != basis_dim
+        || tau_target.len() != kklt_basis.len()
+        || kklt_basis.iter().any(|&idx| idx >= kappa_all.dim())
+        || steps.end <= steps.start
+    {
+        return None;
+    }
+
+    solve_path_following_core(
+        tau_target,
+        t_init,
+        steps,
+        |t| {
+            let classical =
+                compute_kklt_divisor_volumes_in_divisor_basis(kappa_all, basis, kklt_basis, t)?;
+            let corr = correction(t)?;
+            if corr.len() != classical.len() {
+                return None;
+            }
+            Some(
+                classical
+                    .iter()
+                    .zip(corr.iter())
+                    .map(|(value, delta)| *value + *delta)
+                    .collect(),
+            )
+        },
+        |t| {
+            let classical =
+                compute_kklt_jacobian_in_divisor_basis(kappa_all, basis, kklt_basis, t)?;
+            let corr = correction_jacobian(t)?;
+            if corr.len() != classical.len()
+                || corr
+                    .iter()
+                    .zip(classical.iter())
+                    .any(|(c_row, j_row)| c_row.len() != j_row.len())
+            {
+                return None;
+            }
+            Some(
+                classical
+                    .iter()
+                    .zip(corr.iter())
+                    .map(|(j_row, c_row)| {
+                        j_row
+                            .iter()
+                            .zip(c_row.iter())
+                            .map(|(j, c)| *j + *c)
+                            .collect()
+                    })
+                    .collect(),
+            )
+        },
+    )
+}
+
 /// Compute the GV instanton contribution to the corrected string-frame volume:
 /// `1/(2(2π)^3) Σ_q N_q (Li_3(arg) + 2π(q·t)Li_2(arg))`.
 ///

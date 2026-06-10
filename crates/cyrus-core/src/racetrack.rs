@@ -125,6 +125,11 @@ pub fn build_racetrack_terms(
 
     // Sort by exponent (smallest first)
     let mut terms: Vec<RacetrackTerm> = grouped.into_values().collect();
+    // Terms whose grouped coefficient vanishes (M·q = 0, or exact cancellation
+    // within an exponent group) contribute nothing to W or its derivative;
+    // keeping them would let a zero-coefficient leading exponent shadow the
+    // actual racetrack pair (5-113-4627-main has one at q·p ≈ 0.12).
+    terms.retain(|term| term.coefficient.get() != 0.0);
     terms.sort_by(|a, b| a.exponent.get().total_cmp(&b.exponent.get()));
 
     terms

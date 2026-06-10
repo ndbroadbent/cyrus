@@ -55,8 +55,8 @@ should_exclude() {
 legacy_limit() {
   case "${1#./}" in
     crates/cyrus-core/src/gv.rs)                                       echo 17450 ;;
-    crates/cyrus-core/src/bin/mcallister_first_principles.rs)          echo 4400 ;;
-    crates/cyrus-core/src/kklt.rs)                                     echo 4250 ;;
+    crates/cyrus-core/src/bin/mcallister_first_principles.rs)          echo 4600 ;;
+    crates/cyrus-core/src/kklt.rs)                                     echo 4400 ;;
     crates/cyrus-core/src/triangulation/secondary.rs)                  echo 4150 ;;
     crates/cyrus-core/src/cone/mod.rs)                                 echo 1450 ;;
     crates/cyrus-core/src/intersection/complete_intersection.rs)       echo 1000 ;;

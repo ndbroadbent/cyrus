@@ -351,6 +351,99 @@ fn validate_dual_checkpoint(
     }
 }
 
+/// Load the declared mirror-chamber FRST from `dual_simplices.dat`.
+///
+/// Only 4-214-647 happens to use the default chamber of the dual polytope;
+/// the other published examples select a specific mirror triangulation, so
+/// the chamber choice is a declared model input on the same footing as
+/// `heights.dat` (see docs/MCALLISTER_DATA_POLICY.md). The loaded simplices
+/// are not trusted: they must use every dual point, be star around the dual
+/// origin, and admit strict interior secondary-cone heights that rebuild the
+/// identical triangulation through Cyrus's own regular-triangulation code.
+fn load_declared_dual_frst(
+    data_dir: &str,
+    dual_points: &[Point],
+    dual_origin_idx: usize,
+) -> Option<Triangulation> {
+    let path = PathBuf::from(data_dir).join("dual_simplices.dat");
+    if !path.exists() {
+        return None;
+    }
+    let simplices: Vec<Vec<usize>> = read_points(&path)
+        .into_iter()
+        .map(|row| {
+            row.into_iter()
+                .map(|value| {
+                    usize::try_from(value).expect("dual_simplices.dat index must be non-negative")
+                })
+                .collect()
+        })
+        .collect();
+    let candidate = Triangulation::new(simplices);
+
+    let used: HashSet<usize> = candidate.simplices().iter().flatten().copied().collect();
+    if used.len() != dual_points.len() || used.iter().any(|&idx| idx >= dual_points.len()) {
+        eprintln!(
+            "[ERROR] dual_simplices.dat is not fine: {} of {} dual points used",
+            used.len(),
+            dual_points.len()
+        );
+        std::process::exit(2);
+    }
+    if candidate
+        .simplices()
+        .iter()
+        .any(|simplex| !simplex.contains(&dual_origin_idx))
+    {
+        eprintln!("[ERROR] dual_simplices.dat is not star around the dual origin");
+        std::process::exit(2);
+    }
+    let heights = cyrus_core::triangulation::triangulation_heights_from_secondary_cone(
+        dual_points,
+        &candidate,
+    )
+    .unwrap_or_else(|e| {
+        eprintln!("[ERROR] failed to compute dual secondary cone for dual_simplices.dat: {e}");
+        std::process::exit(2);
+    })
+    .unwrap_or_else(|| {
+        eprintln!(
+            "[ERROR] dual_simplices.dat is not a regular triangulation (no strict interior point in its secondary cone)"
+        );
+        std::process::exit(2);
+    });
+    let rebuilt = compute_regular_triangulation(dual_points, &heights).unwrap_or_else(|e| {
+        eprintln!("[ERROR] failed to rebuild dual FRST from secondary-cone heights: {e}");
+        std::process::exit(2);
+    });
+    if sorted_simplices(&rebuilt) != sorted_simplices(&candidate) {
+        eprintln!(
+            "[ERROR] dual_simplices.dat secondary-cone heights rebuild a different triangulation"
+        );
+        std::process::exit(2);
+    }
+    // Prefer Cyrus's own canonical construction of the same chamber: when the
+    // declared chamber coincides with the default one, reuse the default
+    // triangulation object verbatim so downstream behavior is unchanged;
+    // otherwise use the rebuilt (canonically ordered) triangulation rather
+    // than the raw file ordering.
+    let default_frst = cyrus_core::compute_frst_heights(dual_points, dual_origin_idx).ok();
+    if let Some((_, computed)) = default_frst
+        && sorted_simplices(&computed) == sorted_simplices(&candidate)
+    {
+        eprintln!(
+            "[INFO] using declared mirror-chamber FRST from dual_simplices.dat ({} simplices; verified fine/star/regular via secondary cone; coincides with Cyrus default dual chamber)",
+            candidate.simplices().len()
+        );
+        return Some(computed);
+    }
+    eprintln!(
+        "[INFO] using declared mirror-chamber FRST from dual_simplices.dat ({} simplices; verified fine/star/regular via secondary cone; differs from Cyrus default dual chamber)",
+        candidate.simplices().len()
+    );
+    Some(rebuilt)
+}
+
 fn read_points(path: &PathBuf) -> Vec<Vec<i64>> {
     let content = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
@@ -755,7 +848,7 @@ fn parse_args() -> PipelineArgs {
         parse_arg_value::<u32>("--min-points").or(Some(DEFAULT_MCALLISTER_GV_MIN_POINTS))
     };
     let cutoff = parse_arg_value::<f64>("--cutoff").unwrap_or(1.0);
-    let small_curve_cutoff = parse_arg_value::<f64>("--small-curve-cutoff").unwrap_or(1.0);
+    let small_curve_cutoff_flag = parse_arg_value::<f64>("--small-curve-cutoff");
     let small_curve_pruning = parse_arg_value::<String>("--small-curve-pruning").map_or(
         CurvePruningStrategy::PairDecomposable,
         |value| {
@@ -771,6 +864,22 @@ fn parse_args() -> PipelineArgs {
     let compare_dir = parse_arg_value::<String>("--compare-dir");
     let data_dir = parse_arg_value::<String>("--data-dir")
         .or_else(|| std::env::var("CYRUS_MCALLISTER_DATA_DIR").ok());
+    // The small-curve volume cutoff is part of the declared model choice and
+    // differs per example (1.0 for 4-214-647, 2.0 for 5-81-3213). An explicit
+    // flag wins; otherwise the declared small_curves_cutoff.dat is used.
+    let small_curve_cutoff = small_curve_cutoff_flag.unwrap_or_else(|| {
+        data_dir
+            .as_ref()
+            .and_then(|dir| {
+                read_optional_scalar_f64(&PathBuf::from(dir).join("small_curves_cutoff.dat"))
+            })
+            .map_or(1.0, |declared| {
+                eprintln!(
+                    "[INFO] using declared small-curve cutoff {declared} from small_curves_cutoff.dat"
+                );
+                declared
+            })
+    });
     let allow_invalid_ek0 = parse_flag("--allow-invalid-ek0");
     let allow_fixtures = parse_flag("--allow-fixtures");
     let validate_mcallister_assertions = !parse_flag("--skip-mcallister-assertions");
@@ -1351,9 +1460,17 @@ fn stage_flat_direction(
         .iter()
         .position(|point| point.coords().iter().all(|&coord| coord == 0))
         .expect("dual origin not found in triangulation points");
-    let (_dual_heights, dual_triangulation) =
-        cyrus_core::compute_frst_heights(&dual_points_vec, dual_origin_idx)
-            .expect("Failed to compute dual FRST");
+    let dual_triangulation = data_dir
+        .and_then(|dir| load_declared_dual_frst(dir, &dual_points_vec, dual_origin_idx))
+        .unwrap_or_else(|| {
+            let (_dual_heights, computed) =
+                cyrus_core::compute_frst_heights(&dual_points_vec, dual_origin_idx)
+                    .expect("Failed to compute dual FRST");
+            eprintln!(
+                "[INFO] no dual_simplices.dat declared input; using Cyrus default dual FRST chamber"
+            );
+            computed
+        });
     if let Some(dir) = data_dir {
         validate_dual_checkpoint(&dual_polytope, &dual_triangulation, dir);
     }
@@ -1523,7 +1640,14 @@ fn stage_racetrack(
         std::process::exit(2);
     }
     let Some(rt_res) = solve_racetrack(&terms) else {
-        eprintln!("[ERROR] no stable racetrack solution");
+        eprintln!("[ERROR] no stable racetrack solution; leading terms (exponent, coefficient):");
+        for term in terms.iter().take(6) {
+            eprintln!(
+                "[ERROR]   exponent={} coefficient={}",
+                term.exponent.get(),
+                term.coefficient.get()
+            );
+        }
         std::process::exit(2);
     };
     let Some(w0) = compute_w0_from_terms(&rt_res, &terms) else {
@@ -2544,6 +2668,138 @@ fn compare_corrected_chamber_target_volume_checkpoint(
     );
 }
 
+#[allow(clippy::too_many_arguments)] // stage plumbing forwarded one-to-one
+fn solve_gv_corrected_kklt(
+    intersection: &PrimalIntersection,
+    production_primal_basis: &OwnedDivisorBasis,
+    kklt_basis: &[usize],
+    c_i: &[I64<Pos>],
+    chi_divisor: &[I64<Finite>],
+    c_tau: cyrus_core::types::physics::CTau,
+    small_curve_gvs: &[(Vec<i64>, malachite::Integer)],
+    gamma: &[I64<Finite>],
+    gv_iteration_source_t: &[F64<Finite>],
+    kklt_steps: usize,
+) -> Vec<F64<Finite>> {
+    // Solve the full worldsheet-instanton-corrected KKLT system with the
+    // correction inside every Newton linearization. The earlier scheme —
+    // freezing the correction at the previous iterate and re-solving the
+    // classical system to a fixed point — is not a contraction for every
+    // geometry (5-81-3213 cycles with steps ~0.1 regardless of update
+    // mixing), while the corrected-system Newton converges directly.
+    let zero_correction = vec![F64::<Finite>::ZERO; kklt_basis.len()];
+    let Some(base_tau_target) = cyrus_core::kklt::compute_gv_corrected_target_tau(
+        c_i,
+        chi_divisor,
+        c_tau,
+        &zero_correction,
+    ) else {
+        eprintln!("[ERROR] base KKLT target construction failed");
+        std::process::exit(2);
+    };
+    let production_is_computed = matches!(
+        production_primal_basis,
+        OwnedDivisorBasis::Indices(indices) if *indices == intersection.basis
+    );
+    let computed_t_for_corrections = |t_production: &[F64<Finite>]| -> Vec<F64<Finite>> {
+        if production_is_computed {
+            t_production.to_vec()
+        } else {
+            transform_production_primal_kahler_to_computed(
+                intersection,
+                production_primal_basis,
+                t_production,
+                "GV-corrected solve iterate",
+            )
+        }
+    };
+    // Columns of d(t_computed)/d(t_production) for the correction
+    // Jacobian chain rule; identity (and skipped) in the default case.
+    let correction_transform_columns: Option<Vec<Vec<F64<Finite>>>> = if production_is_computed {
+        None
+    } else {
+        let production_dim = gv_iteration_source_t.len();
+        Some(
+            (0..production_dim)
+                .map(|column| {
+                    let mut unit = vec![F64::<Finite>::ZERO; production_dim];
+                    unit[column] = cyrus_core::f64_finite!(1.0);
+                    computed_t_for_corrections(&unit)
+                })
+                .collect(),
+        )
+    };
+    let gv_correction_closure = |t_production: &[F64<Finite>]| {
+        let t_computed = computed_t_for_corrections(t_production);
+        cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
+            small_curve_gvs,
+            &intersection.basis,
+            kklt_basis,
+            &t_computed,
+            Some(gamma),
+        )
+    };
+    let gv_correction_jacobian_closure = |t_production: &[F64<Finite>]| {
+        let t_computed = computed_t_for_corrections(t_production);
+        let jac_computed =
+            cyrus_core::kklt::compute_gv_target_correction_jacobian_for_ambient_curves(
+                small_curve_gvs,
+                &intersection.basis,
+                kklt_basis,
+                &t_computed,
+                Some(gamma),
+            )?;
+        match correction_transform_columns.as_ref() {
+            None => Some(jac_computed),
+            Some(columns) => Some(
+                jac_computed
+                    .iter()
+                    .map(|row| {
+                        columns
+                            .iter()
+                            .map(|column| {
+                                row.iter()
+                                    .zip(column.iter())
+                                    .fold(F64::<Finite>::ZERO, |acc, (a, b)| acc + *a * *b)
+                            })
+                            .collect()
+                    })
+                    .collect(),
+            ),
+        }
+    };
+    let Some(gv_corrected) = cyrus_core::kklt::solve_gv_corrected_divisor_basis_path_following(
+        &intersection.kappa_full,
+        production_primal_basis.as_divisor_basis(),
+        kklt_basis,
+        &base_tau_target,
+        gv_iteration_source_t,
+        CheckedRange::new(0, kklt_steps),
+        gv_correction_closure,
+        gv_correction_jacobian_closure,
+    ) else {
+        eprintln!("[ERROR] GV-corrected KKLT solve failed");
+        std::process::exit(2);
+    };
+    if !gv_corrected.converged {
+        eprintln!(
+            "[ERROR] GV-corrected KKLT solve did not converge: rel_err={}",
+            gv_corrected.relative_error.get()
+        );
+        std::process::exit(2);
+    }
+    eprintln!(
+        "[INFO] GV-corrected KKLT solve converged: rel_err={}",
+        gv_corrected.relative_error.get()
+    );
+    transform_production_primal_kahler_to_computed(
+        intersection,
+        production_primal_basis,
+        &gv_corrected.t,
+        "GV-corrected Kähler point",
+    )
+}
+
 #[allow(clippy::fn_params_excessive_bools)] // CLI flags are forwarded one-to-one into this stage
 fn stage_volume(
     data_dir: Option<&str>,
@@ -3235,88 +3491,18 @@ fn stage_volume(
             small_curve_gvs.len()
         );
 
-        let mut correction_source_t = small_curve_selection_t;
-        let mut correction_source_t_production = gv_iteration_source_t;
-        let max_gv_iterations = 20usize;
-        let gv_tolerance = 1e-10f64;
-        let mut gv_converged = false;
-        for iter in 0..max_gv_iterations {
-            let previous_t = correction_source_t.clone();
-            let previous_t_production = correction_source_t_production.clone();
-            let Some(gv_correction) =
-                cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
-                    &small_curve_gvs,
-                    &intersection.basis,
-                    &kklt_basis,
-                    &previous_t,
-                    Some(&gamma),
-                )
-            else {
-                eprintln!(
-                    "[ERROR] failed to compute primal ambient GV target correction at iteration {iter}"
-                );
-                std::process::exit(2);
-            };
-            let Some(tau_target) = cyrus_core::kklt::compute_gv_corrected_target_tau(
-                &c_i,
-                &chi_divisor,
-                c_tau,
-                &gv_correction,
-            ) else {
-                eprintln!(
-                    "[ERROR] GV-corrected KKLT target construction failed at iteration {iter}"
-                );
-                std::process::exit(2);
-            };
-            let Some(next) = solve_divisor_basis_path_following(
-                &intersection.kappa_full,
-                production_primal_basis.as_divisor_basis(),
-                &kklt_basis,
-                &tau_target,
-                &previous_t_production,
-                CheckedRange::new(0, kklt_steps),
-            ) else {
-                eprintln!(
-                    "[ERROR] GV-corrected divisor-basis KKLT solve failed at iteration {iter}"
-                );
-                std::process::exit(2);
-            };
-            if !next.converged {
-                eprintln!(
-                    "[ERROR] GV-corrected mixed-basis KKLT solve did not converge at iteration {iter}: rel_err={}",
-                    next.relative_error.get()
-                );
-                std::process::exit(2);
-            }
-            let next_computed_t = transform_production_primal_kahler_to_computed(
-                intersection,
-                &production_primal_basis,
-                &next.t,
-                "GV-corrected Kähler point",
-            );
-            let max_relative_step = next_computed_t
-                .iter()
-                .zip(previous_t.iter())
-                .map(|(new, old)| (new.get() - old.get()).abs() / (old.get().abs() + 1e-12))
-                .fold(0.0f64, f64::max);
-            eprintln!(
-                "[INFO] GV-corrected KKLT iteration {iter}: max_relative_step={} rel_err={}",
-                max_relative_step,
-                next.relative_error.get()
-            );
-            correction_source_t_production.clone_from(&next.t);
-            correction_source_t = next_computed_t;
-            if max_relative_step <= gv_tolerance {
-                gv_converged = true;
-                break;
-            }
-        }
-        if !gv_converged {
-            eprintln!(
-                "[ERROR] GV-corrected KKLT fixed-point iteration did not converge in {max_gv_iterations} iterations"
-            );
-            std::process::exit(2);
-        }
+        let correction_source_t = solve_gv_corrected_kklt(
+            intersection,
+            &production_primal_basis,
+            &kklt_basis,
+            &c_i,
+            &chi_divisor,
+            c_tau,
+            &small_curve_gvs,
+            &gamma,
+            &gv_iteration_source_t,
+            kklt_steps,
+        );
         let Some(gv_volume_correction) =
             cyrus_core::kklt::compute_gv_volume_correction_for_ambient_curves(
                 &small_curve_gvs,
