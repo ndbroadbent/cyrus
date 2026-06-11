@@ -75,7 +75,30 @@ fn test_pipeline_tadpole_exceeded() {
 
     let res = evaluate_vacuum(&req, &k, &m).unwrap();
     assert!(!res.success);
-    assert_eq!(res.reason.unwrap(), "Tadpole bound exceeded");
+    assert_eq!(res.reason.unwrap(), "Tadpole bound violated");
+}
+
+#[test]
+fn negative_flux_charge_violates_tadpole_bound() {
+    // The constraint is two-sided: 0 <= -M.K/2 <= Q. A sign-flipped flux
+    // pair with q < 0 must fail (regression: a one-sided gate let the GA
+    // smuggle |q| = 82.5 under a bound of 21).
+    let kappa = make_simple_kappa();
+    let mori = make_simple_mori();
+    let gv = make_simple_gv();
+    let req = EvaluationRequest {
+        kappa: &kappa,
+        mori: Some(&mori),
+        gv: &gv,
+        h11: h11(),
+        h21: h21(),
+        q_max: 100.0,
+    };
+    // K.M > 0 makes -K.M/2 negative.
+    let res = evaluate_vacuum(&req, &[10], &[10]).unwrap();
+    assert!(res.q_flux < 0.0);
+    assert!(!res.success);
+    assert_eq!(res.reason.unwrap(), "Tadpole bound violated");
 }
 
 #[test]
@@ -110,8 +133,9 @@ fn test_pipeline_singular_n_matrix() {
         q_max: 1000.0,
     };
 
-    // This should produce a singular N matrix
-    let k = vec![1, 1];
+    // This should produce a singular N matrix (K sign chosen so the
+    // two-sided tadpole bound passes: q = -K.M/2 = 1/2 >= 0)
+    let k = vec![-1, -1];
     let m = vec![1, 0]; // Only one direction
 
     let res = evaluate_vacuum(&req, &k, &m).unwrap();
@@ -212,11 +236,16 @@ fn test_pipeline_no_racetrack_solution() {
     // Using 2D case with carefully chosen K,M so that K·p = 0 (orthogonality satisfied)
     // while p is in the Kähler cone, and GV has same sign coefficients (racetrack fails)
 
+    // kappa_111 < 0 (mirror intersection numbers routinely have mixed
+    // signs): with the all-positive kappa previously used here, NO flux
+    // pair satisfies the two-sided tadpole bound together with cone
+    // membership and exact orthogonality - the old test only reached the
+    // racetrack through the one-sided tadpole gate.
     let mut kappa = Intersection::new(2);
     kappa.set(0, 0, 0, pos_rat(6));
     kappa.set(0, 0, 1, pos_rat(3));
     kappa.set(0, 1, 1, pos_rat(2));
-    kappa.set(1, 1, 1, pos_rat(4));
+    kappa.set(1, 1, 1, TypedRational::<Finite>::new(Rational::from(-4)));
 
     let mori = MoriCone::new(vec![i64_vec(&[1, 0]), i64_vec(&[0, 1])]);
 
@@ -241,14 +270,13 @@ fn test_pipeline_no_racetrack_solution() {
         q_max: 1000.0,
     };
 
-    // Choose K = [29, -29], M = [11, -14] so that:
-    // - N = [[24, 5], [5, -34]]
-    // - p = [1, 1] (from N*p = K)
-    // - K·p = 29 - 29 = 0 (orthogonality satisfied!)
-    // - p = [1,1] is in Kähler cone (both components > 0)
-    // - Q_flux = -0.5 * 725 < 1000 (tadpole passes)
-    let k = vec![29, -29];
-    let m = vec![11, -14];
+    // Exact-arithmetic construction (verified by brute force):
+    // K = [1, -5], M = [-4, 8] gives
+    // - q = -K.M/2 = 22, inside [0, 1000] (two-sided tadpole passes)
+    // - p = N^{-1} K = [5/4, 1/4], inside the Kähler cone
+    // - K.p = 5/4 - 5/4 = 0 exactly (orthogonality satisfied)
+    let k = vec![1, -5];
+    let m = vec![-4, 8];
 
     let res = evaluate_vacuum(&req, &k, &m).unwrap();
     // Should reach racetrack and fail with "No stable racetrack solution"
@@ -334,7 +362,7 @@ fn test_pipeline_tadpole_boundary() {
     let res = evaluate_vacuum(&req, &k, &m).unwrap();
     // Should pass tadpole (q_flux <= q_max), fail elsewhere
     if !res.success {
-        assert_ne!(res.reason.as_deref(), Some("Tadpole bound exceeded"));
+        assert_ne!(res.reason.as_deref(), Some("Tadpole bound violated"));
     }
 
     // Just below boundary - should fail
@@ -349,7 +377,7 @@ fn test_pipeline_tadpole_boundary() {
 
     let res2 = evaluate_vacuum(&req2, &k, &m).unwrap();
     assert!(!res2.success);
-    assert_eq!(res2.reason.unwrap(), "Tadpole bound exceeded");
+    assert_eq!(res2.reason.unwrap(), "Tadpole bound violated");
 }
 
 #[test]

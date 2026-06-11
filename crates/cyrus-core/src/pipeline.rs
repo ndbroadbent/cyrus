@@ -86,9 +86,13 @@ pub fn evaluate_vacuum(
         k_dot_p: None,
     };
 
-    // 1. Filter: Tadpole Bound
-    if res.q_flux > req.q_max {
-        res.reason = Some("Tadpole bound exceeded".into());
+    // 1. Filter: Tadpole Bound. The constraint is two-sided
+    // (arXiv:2107.09064 eq. 2.x): 0 <= -M.K/2 <= chi_f/4. Negative flux
+    // charge is just as unphysical as an overshoot - and a one-sided gate
+    // here was promptly exploited by the GA (sign-flipped fluxes with
+    // |q| = 82.5 sailing under a bound of 21).
+    if res.q_flux > req.q_max || res.q_flux < 0.0 {
+        res.reason = Some("Tadpole bound violated".into());
         return Ok(res);
     }
 

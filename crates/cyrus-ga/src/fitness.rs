@@ -215,7 +215,9 @@ pub fn evaluate_fitness(geom: &GaGeometry, cfg: &FitnessConfig, genome: &Genome)
         // Graded tiers (validated prototype design): later stages score
         // higher so the GA can climb toward validity.
         report.fitness = if reason.starts_with("Tadpole") {
-            -2000.0 - (result.q_flux - cfg.q_max).max(0.0)
+            // Overshoot above the bound or below zero, graded either way.
+            let overshoot = (result.q_flux - cfg.q_max).max(-result.q_flux).max(0.0);
+            -2000.0 - overshoot
         } else if reason.starts_with("N matrix") {
             -1800.0
         } else if reason.starts_with("Flat direction") {
