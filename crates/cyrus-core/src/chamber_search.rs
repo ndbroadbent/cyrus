@@ -178,12 +178,17 @@ pub fn search_covered_chamber(
     visited.insert(canonical_key(start_simplices));
 
     // Max-heap on Reverse(uncovered, depth): fewest uncovered first, then
-    // shallowest. Entries carry their simplices.
-    type QueueEntry = (std::cmp::Reverse<(usize, usize)>, Vec<Vec<usize>>);
+    // shallowest. Entries carry their simplices and whether the expensive
+    // reachability check has run. Reachability is LAZY: scoring thousands
+    // of neighbors with a full KKLT solve each made deep searches cost
+    // hours, but only chambers we actually adopt or expand need the check
+    // - so it runs at pop time (O(expansions), not O(scored)).
+    type QueueEntry = (std::cmp::Reverse<(usize, usize)>, Vec<Vec<usize>>, bool);
     let mut queue: BinaryHeap<QueueEntry> = BinaryHeap::new();
     queue.push((
         std::cmp::Reverse((start_score.uncovered, 0)),
         start_simplices.to_vec(),
+        true, // the start chamber is where the failure happened: reachable
     ));
 
     let mut best = (
@@ -193,9 +198,20 @@ pub fn search_covered_chamber(
     );
     let mut expanded = 0usize;
 
-    while let Some((std::cmp::Reverse((uncovered, depth)), simplices)) = queue.pop() {
+    while let Some((std::cmp::Reverse((uncovered, depth)), simplices, checked)) = queue.pop() {
+        if !checked {
+            let tri = Triangulation::new(simplices.clone());
+            let Ok(Some(heights)) = triangulation_heights_from_secondary_cone(points, &tri) else {
+                continue;
+            };
+            if !reachable(&tri, &heights) {
+                continue; // unreachable chamber: drop, never adopt or expand
+            }
+        }
+        if uncovered < best.0 {
+            best = (uncovered, simplices.clone(), depth);
+        }
         if uncovered == 0 {
-            best = (uncovered, simplices, depth);
             break;
         }
         if expanded >= max_expansions {
@@ -243,14 +259,9 @@ pub fn search_covered_chamber(
             .filter_map(|neighbor| {
                 let neighbor_tri = Triangulation::new(neighbor.clone());
                 // Only certified-regular triangulations are chambers.
-                let heights = match triangulation_heights_from_secondary_cone(points, &neighbor_tri)
-                {
-                    Ok(Some(heights)) => heights,
+                match triangulation_heights_from_secondary_cone(points, &neighbor_tri) {
+                    Ok(Some(_)) => {}
                     _ => return None,
-                };
-                // Coverage is useless if the KKLT solve cannot follow.
-                if !reachable(&neighbor_tri, &heights) {
-                    return None;
                 }
                 score_chamber_two_face_coverage(
                     polytope,
@@ -266,10 +277,7 @@ pub fn search_covered_chamber(
             })
             .collect();
         for (uncovered, neighbor) in scored {
-            if uncovered < best.0 {
-                best = (uncovered, neighbor.clone(), depth + 1);
-            }
-            queue.push((std::cmp::Reverse((uncovered, depth + 1)), neighbor));
+            queue.push((std::cmp::Reverse((uncovered, depth + 1)), neighbor, false));
         }
     }
 
