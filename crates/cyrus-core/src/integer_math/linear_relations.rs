@@ -130,9 +130,8 @@ pub fn compute_linear_relations_no_origin(points: &[Vec<i64>]) -> Vec<Vec<Intege
 fn build_linear_relations_from_rref(points: &[Vec<i64>]) -> Vec<Vec<Integer>> {
     let n_pts = points.len();
     let dim = points[0].len();
-    let h11 = n_pts - (dim + 1);
 
-    if h11 == 0 {
+    if n_pts <= dim + 1 {
         return Vec::new();
     }
 
@@ -146,15 +145,23 @@ fn build_linear_relations_from_rref(points: &[Vec<i64>]) -> Vec<Vec<Integer>> {
     // For each non-origin pivot column, create a row in linear_relations
     // The row has -1 at the pivot column, and the negated RREF entries at free columns
 
-    let mut lr: Vec<Vec<Integer>> = Vec::with_capacity(h11);
+    // One relation per non-origin pivot row of the RREF. The row count is
+    // the rank of the extended point matrix restricted to non-origin
+    // columns (dim + 1 minus the origin pivot, i.e. usually dim), matching
+    // CYTools' glsm_linear_relations(include_origin=False). Capping at
+    // h11 = n - (dim + 1) here would DROP a genuine relation whenever
+    // h11 < dim (n <= 8 points in 4D), leaving the intersection-number
+    // system rank-deficient - that was the landscape-smoke h11 <= 3 failure.
+    let mut lr: Vec<Vec<Integer>> = Vec::with_capacity(pivot_cols.len());
 
     for (row_idx, &pivot_col) in pivot_cols.iter().enumerate() {
         if pivot_col == 0 {
             continue; // Skip origin column
         }
-        if lr.len() >= h11 {
-            break;
-        }
+        debug_assert!(
+            mat[row_idx][0] == Rational::from(0),
+            "non-origin pivot row must not involve the origin column"
+        );
 
         let mut row: Vec<Integer> = vec![Integer::from(0); n_pts - 1]; // Exclude origin
 

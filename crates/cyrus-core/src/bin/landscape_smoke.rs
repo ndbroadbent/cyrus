@@ -127,6 +127,12 @@ fn main() {
                 .collect()
         })
         .collect();
+    if parse_arg_value("--debug-linrels").is_some() {
+        eprintln!("[DEBUG] linrels rows={}", linrels_i64.len());
+        for row in &linrels_i64 {
+            eprintln!("[DEBUG] linrel {row:?}");
+        }
+    }
     let kappa_full =
         compute_intersection_cytools(&triangulation, &triangulation_points, &linrels_i64)
             .expect("failed intersection numbers");
