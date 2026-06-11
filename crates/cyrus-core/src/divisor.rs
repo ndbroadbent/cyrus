@@ -146,7 +146,7 @@ fn integral_rational_to_i64(
     i64::try_from(&signed).map_err(|_| Error::InvalidInput(format!("{label} does not fit in i64")))
 }
 
-fn saturated_facets(point: &Point, dual_vertices: &[Point]) -> Vec<usize> {
+pub(crate) fn saturated_facets(point: &Point, dual_vertices: &[Point]) -> Vec<usize> {
     dual_vertices
         .iter()
         .enumerate()
@@ -156,7 +156,7 @@ fn saturated_facets(point: &Point, dual_vertices: &[Point]) -> Vec<usize> {
         .collect()
 }
 
-fn dual_face_interior_lattice_points(
+pub(crate) fn dual_face_interior_lattice_points(
     points: &[Point],
     hull_vertices: &[usize],
     dual_points: &[Point],
@@ -203,7 +203,7 @@ fn dual_face_interior_lattice_points(
     Ok(count)
 }
 
-fn face_pairing_context(
+pub(crate) fn face_pairing_context(
     polytope: &Polytope,
     points: &[Point],
 ) -> Result<(ConvexHull, Vec<Point>, Vec<Point>)> {

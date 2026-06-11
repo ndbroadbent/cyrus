@@ -178,7 +178,10 @@ pub fn evaluate_fitness(geom: &GaGeometry, cfg: &FitnessConfig, genome: &Genome)
         gv: &geom.gv,
         h11: geom.mirror_h11,
         h21: geom.mirror_h21,
-        q_max: cfg.q_max,
+        // The binding tadpole is the geometry's own orientifold bound
+        // (a global config can only tighten it further). Discovered the
+        // hard way: a fixed 138 admitted candidates at 4x the true bound.
+        q_max: cfg.q_max.min(geom.q_d3),
     };
     let result = match evaluate_vacuum(&req, &genome.k, &genome.m) {
         Ok(result) => result,

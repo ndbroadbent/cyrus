@@ -41,6 +41,10 @@ pub struct GaGeometry {
     pub dual_basis: Vec<usize>,
     /// Dual GLSM charge matrix (for flux basis transforms).
     pub dual_glsm: Vec<Vec<malachite::Integer>>,
+    /// Automated D3 tadpole bound for this geometry's orientifold class:
+    /// chi_f/4 = (h11 + h21)/2 + 1 (single-coordinate involutions with
+    /// h11_- = h21_+ = 0, validated against all five published examples).
+    pub q_d3: f64,
 }
 
 fn read_points_csv(path: &std::path::Path) -> Result<Vec<Vec<i64>>, String> {
@@ -180,6 +184,7 @@ impl GaGeometry {
                 .collect(),
         );
 
+        let dual_basis_len = dual_basis.len();
         let mirror_h11 = I32::<GTEOne>::new(
             i32::try_from(dual_basis.len()).map_err(|e| format!("mirror h11 overflow: {e}"))?,
         )
@@ -198,6 +203,7 @@ impl GaGeometry {
             mirror_h21,
             dual_basis,
             dual_glsm,
+            q_d3: (primal_h11 + dual_basis_len) as f64 / 2.0 + 1.0,
         })
     }
 

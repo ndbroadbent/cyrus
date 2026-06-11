@@ -154,6 +154,7 @@ mod tests {
                 .expect("h21"),
             dual_basis: vec![0, 1],
             dual_glsm: vec![],
+            q_d3: 100.0,
         };
         let genome = sample_isotropic_genome(&geom, &mut rng, 10, 64, 256).expect("finds a sample");
         let n_inv = n_inverse_for_m(&geom.kappa_basis, &genome.m).expect("invertible");
