@@ -25,3 +25,7 @@ project
 reference/
 
 .venv/
+
+# per-crate cache/artifact dirs
+crates/*/target/
+runs/
