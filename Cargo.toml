@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/cyrus-core",
+    "crates/cyrus-ga",
 ]
 
 # Workspace-wide lints (strict by default)
@@ -74,6 +75,7 @@ num-rational = "0.4"
 num-integer = "0.1"
 num-traits = "0.2"
 rand = "0.8"
+rand_chacha = { version = "0.3", features = ["serde1"] }
 
 # Arbitrary precision (pure Rust, LGPL)
 malachite = "0.4"

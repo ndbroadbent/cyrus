@@ -5,31 +5,25 @@ use cyrus_core::{Point, Triangulation, compute_regular_triangulation};
 fn test_empty_points() {
     let points: Vec<Point> = vec![];
     let heights: Vec<f64> = vec![];
-    let tri = compute_regular_triangulation(&points, &heights).unwrap();
-    assert!(tri.simplices().is_empty());
+    // Degenerate inputs fail loudly: an empty subdivision is never a valid
+    // answer for a triangulation request (landscape-smoke lesson).
+    assert!(compute_regular_triangulation(&points, &heights).is_err());
 }
 
 #[test]
 fn test_single_point() {
     let points = vec![Point::new(vec![0, 0])];
     let heights = vec![1.0];
-    let tri = compute_regular_triangulation(&points, &heights).unwrap();
-    // Single point in 2D - convex hull produces facets but none are "lower"
-    // in the lifted dimension since there's only one point
-    // The result depends on is_lower_face logic
-    // Just verify it doesn't panic and returns valid result
-    assert!(tri.simplices().len() <= 1);
+    // Fewer than dim+1 points cannot span a full-dimensional simplex.
+    assert!(compute_regular_triangulation(&points, &heights).is_err());
 }
 
 #[test]
 fn test_two_points() {
     let points = vec![Point::new(vec![0, 0]), Point::new(vec![1, 0])];
     let heights = vec![0.0, 1.0];
-    let tri = compute_regular_triangulation(&points, &heights).unwrap();
-    // Two points in 2D lifted to 3D - may produce empty triangulation
-    // if no facet qualifies as "lower"
-    // Just verify it doesn't panic
-    let _ = tri.simplices();
+    // Fewer than dim+1 points cannot span a full-dimensional simplex.
+    assert!(compute_regular_triangulation(&points, &heights).is_err());
 }
 
 #[test]
@@ -61,10 +55,9 @@ fn test_3d_triangulation() {
     // Use more distinct heights to ensure proper lifting
     let heights = vec![0.0, 1.0, 2.0, 3.0];
     let tri = compute_regular_triangulation(&points, &heights).unwrap();
-    // 4 points in 3D -> n <= dim case in convex_hull
-    // Result depends on is_lower_face logic
-    // Just verify it doesn't panic
-    let _ = tri.simplices();
+    // dim+1 affinely independent points: the triangulation is the single
+    // full simplex.
+    assert_eq!(tri.simplices(), &[vec![0, 1, 2, 3]]);
 }
 
 #[test]
@@ -116,12 +109,8 @@ fn test_coplanar_points_2d() {
     ];
     let heights = vec![0.0, 0.0, 0.0];
 
-    let tri = compute_regular_triangulation(&points, &heights).unwrap();
-    // Lower hull of collinear points in 2D (lifted to 3D line) is just edges?
-    // In 2D triangulation, we expect triangles.
-    // Collinear points have NO triangles (dim=2).
-    // So empty simplices?
-    assert!(tri.simplices().is_empty());
+    // Collinear points admit no 2D triangles: fail loudly.
+    assert!(compute_regular_triangulation(&points, &heights).is_err());
 }
 
 #[test]
@@ -159,10 +148,10 @@ fn test_degenerate_heights() {
     ];
     let heights = vec![0.0, 0.0, 0.0, 0.0];
 
-    let tri = compute_regular_triangulation(&points, &heights).unwrap();
-    // With all same height, the "lower hull" is the entire planar set
-    // Should still produce valid triangulation
-    let _ = tri.simplices();
+    // All-equal heights lift the square to a plane: the regular subdivision
+    // is the trivial (non-simplicial) one, so no triangulation is defined
+    // and the computation must fail loudly rather than return nothing.
+    assert!(compute_regular_triangulation(&points, &heights).is_err());
 }
 
 #[test]
@@ -177,9 +166,9 @@ fn test_convex_hull_more_points() {
     ];
     let heights = vec![0.0, 0.0, 0.0, 0.0, 0.5];
 
-    let tri = compute_regular_triangulation(&points, &heights).unwrap();
-    // Edge point with higher height won't be in lower hull
-    let _ = tri.simplices();
+    // The four corners lift coplanar (trivial subdivision) and the raised
+    // edge point is not on the lower hull: degenerate, fail loudly.
+    assert!(compute_regular_triangulation(&points, &heights).is_err());
 }
 
 #[test]
@@ -195,8 +184,8 @@ fn test_high_dimensional() {
     let heights = vec![0.0, 1.0, 2.0, 3.0, 4.0];
 
     let tri = compute_regular_triangulation(&points, &heights).unwrap();
-    // 5 points in 4D - forms a simplex, just verify no panic
-    let _ = tri.simplices();
+    // dim+1 affinely independent points: the single 4-simplex.
+    assert_eq!(tri.simplices(), &[vec![0, 1, 2, 3, 4]]);
 }
 
 #[test]
@@ -212,10 +201,9 @@ fn test_point_on_facet_coplanar() {
     // Heights that make 3 coplanar with the facet formed by 0,1,2
     let heights = vec![0.0, 0.0, 0.0, 0.0];
 
-    let tri = compute_regular_triangulation(&points, &heights).unwrap();
-    // With all heights zero, all points are coplanar in lifted space
-    // Result depends on handling of degenerate cases
-    let _ = tri.simplices();
+    // All heights zero: coplanar lift, trivial subdivision, no
+    // triangulation defined - fail loudly.
+    assert!(compute_regular_triangulation(&points, &heights).is_err());
 }
 
 #[test]
@@ -245,8 +233,6 @@ fn test_fewer_points_than_dimension() {
     let points = vec![Point::new(vec![0, 0, 0]), Point::new(vec![1, 1, 1])];
     let heights = vec![0.0, 1.0];
 
-    let tri = compute_regular_triangulation(&points, &heights).unwrap();
-    // With only 2 points in 3D, can't form proper simplices
-    // convex_hull returns single "simplex" with all points
-    let _ = tri.simplices();
+    // Fewer than dim+1 points cannot span a full-dimensional simplex.
+    assert!(compute_regular_triangulation(&points, &heights).is_err());
 }

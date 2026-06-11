@@ -62,6 +62,25 @@ impl MoriCone {
     ///
     /// # Panics
     /// Panics if `p.len()` does not match the generator dimension.
+    /// Closure membership: every generator pairing is allowed to vanish
+    /// within tolerance. The Demirtas-McAllister flat direction may lie ON a
+    /// wall of the cap cone (curves orthogonal to p simply contribute no
+    /// racetrack term), so the PFV condition is closure membership, not
+    /// strict interiority - McAllister's own 4-214-647 pair sits on a wall.
+    pub fn contains_closure(&self, p: &[F64<Finite>]) -> bool {
+        const TOLERANCE: f64 = 1e-10;
+        self.generators.iter().all(|generator| {
+            let dot: F64<Finite> = generator
+                .iter()
+                .zip(p.iter())
+                .map(|(g, pi)| g.to_f64() * *pi)
+                .fold(F64::<Finite>::ZERO, |acc, x| acc + x);
+            dot.get() >= -TOLERANCE
+        })
+    }
+
+    /// Strict-interior membership: every generator pairing must be
+    /// strictly positive. Prefer [`Self::contains_closure`] for PFV checks.
     pub fn contains(&self, p: &[F64<Finite>]) -> bool {
         // Threshold for numerical stability (positive)
         let threshold = f64_pos!(1e-10);

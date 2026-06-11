@@ -61,7 +61,7 @@ fn test_pipeline_tadpole_exceeded() {
 
     let req = EvaluationRequest {
         kappa: &kappa,
-        mori: &mori,
+        mori: Some(&mori),
         gv: &gv,
         h11: h11(),
         h21: h21(),
@@ -103,7 +103,7 @@ fn test_pipeline_singular_n_matrix() {
 
     let req = EvaluationRequest {
         kappa: &kappa,
-        mori: &mori,
+        mori: Some(&mori),
         gv: &gv,
         h11: h11(),
         h21: h21(),
@@ -135,7 +135,7 @@ fn test_pipeline_outside_kahler_cone() {
 
     let req = EvaluationRequest {
         kappa: &kappa,
-        mori: &mori,
+        mori: Some(&mori),
         gv: &gv,
         h11: h11(),
         h21: h21(),
@@ -151,7 +151,10 @@ fn test_pipeline_outside_kahler_cone() {
 
     let res = evaluate_vacuum(&req, &k, &m).unwrap();
     assert!(!res.success);
-    assert_eq!(res.reason.unwrap(), "Flat direction outside Kähler cone");
+    assert_eq!(
+        res.reason.unwrap(),
+        "Flat direction outside toric Kähler cone"
+    );
 }
 
 #[test]
@@ -180,7 +183,7 @@ fn test_pipeline_orthogonality_violated() {
 
     let req = EvaluationRequest {
         kappa: &kappa,
-        mori: &mori,
+        mori: Some(&mori),
         gv: &gv,
         h11: h11(),
         h21: h21(),
@@ -231,7 +234,7 @@ fn test_pipeline_no_racetrack_solution() {
 
     let req = EvaluationRequest {
         kappa: &kappa,
-        mori: &mori,
+        mori: Some(&mori),
         gv: &gv,
         h11: h11(),
         h21: h21(),
@@ -275,7 +278,7 @@ fn test_pipeline_success_path() {
 
     let req = EvaluationRequest {
         kappa: &kappa,
-        mori: &mori,
+        mori: Some(&mori),
         gv: &gv,
         h11: h11(),
         h21: h21(),
@@ -321,7 +324,7 @@ fn test_pipeline_tadpole_boundary() {
     // Exactly at boundary - should pass tadpole check (q_flux <= q_max)
     let req = EvaluationRequest {
         kappa: &kappa,
-        mori: &mori,
+        mori: Some(&mori),
         gv: &gv,
         h11: h11(),
         h21: h21(),
@@ -337,7 +340,7 @@ fn test_pipeline_tadpole_boundary() {
     // Just below boundary - should fail
     let req2 = EvaluationRequest {
         kappa: &kappa,
-        mori: &mori,
+        mori: Some(&mori),
         gv: &gv,
         h11: h11(),
         h21: h21(),
@@ -369,7 +372,7 @@ fn test_pipeline_orthogonality_threshold() {
 
     let req = EvaluationRequest {
         kappa: &kappa,
-        mori: &mori,
+        mori: Some(&mori),
         gv: &gv,
         h11: h11(),
         h21: h21(),

@@ -1,0 +1,22 @@
+[package]
+name = "cyrus-ga"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0"
+description = "Genetic-algorithm landscape search over flux vacua using the cyrus-core pipeline"
+
+[dependencies]
+cyrus-core = { path = "../cyrus-core" }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+rayon = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+malachite = { workspace = true }
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "cyrus-ga"
+path = "src/main.rs"

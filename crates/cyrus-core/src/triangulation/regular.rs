@@ -34,6 +34,39 @@ pub fn compute_regular_triangulation(points: &[Point], heights: &[f64]) -> Resul
             "Number of points and heights must match".into(),
         ));
     }
+    let Some(first) = points.first() else {
+        return Err(Error::InvalidInput(
+            "regular triangulation requires a non-empty point set".into(),
+        ));
+    };
+    let base_dim = first.dim();
+    if points.len() <= base_dim {
+        return Err(Error::InvalidInput(format!(
+            "regular triangulation requires at least dim+1 = {} points, got {}",
+            base_dim + 1,
+            points.len()
+        )));
+    }
+    if points.len() == base_dim + 1 {
+        // The unique candidate triangulation is the single simplex; it is a
+        // valid triangulation exactly when the points span the base space.
+        let mut rows: Vec<Vec<Integer>> = points[1..]
+            .iter()
+            .map(|p| {
+                p.coords()
+                    .iter()
+                    .zip(first.coords().iter())
+                    .map(|(&a, &b)| Integer::from(a - b))
+                    .collect()
+            })
+            .collect();
+        if super::convex_hull::integer_rank(&mut rows) == base_dim {
+            return Ok(Triangulation::new(vec![(0..points.len()).collect()]));
+        }
+        return Err(Error::InvalidInput(
+            "points are affinely dependent: no full-dimensional triangulation exists".into(),
+        ));
+    }
 
     // 1. Lift points: (v_i, h_i) in Z^{d+1} using scaled Integer for exactness
     let lifted: Vec<Vec<Integer>> = points

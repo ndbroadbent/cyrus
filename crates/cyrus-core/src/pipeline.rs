@@ -22,8 +22,13 @@ use crate::volume::compute_volume_raw;
 pub struct EvaluationRequest<'a> {
     /// Triple intersection numbers.
     pub kappa: &'a Intersection,
-    /// Mori cone generators.
-    pub mori: &'a MoriCone,
+    /// Optional TORIC Mori-cone gate. The PFV condition is membership in
+    /// the Kahler cone of the CY, which is generally LARGER than the toric
+    /// ambient cone tested here: McAllister's published 4-214-647 flat
+    /// direction pairs at -0.2 with a toric cap ray (that curve flops away
+    /// on the CY). Pass None to rely on the physical gates (e^K0 positivity
+    /// and racetrack viability), like the validated McAllister runner.
+    pub mori: Option<&'a MoriCone>,
     /// GV invariants for racetrack computation.
     pub gv: &'a [GvInvariant],
     /// Hodge number h¹¹ (≥ 1 for CY3).
@@ -50,6 +55,9 @@ pub struct EvaluationResult {
     pub vacuum: Option<VacuumResult>,
     /// Flux tadpole Q_flux.
     pub q_flux: f64,
+    /// K . p (must vanish for a perturbatively flat vacuum); exposed even
+    /// on failure so search algorithms can grade orthogonality violations.
+    pub k_dot_p: Option<f64>,
 }
 
 /// Evaluate a (K, M) pair.
@@ -75,6 +83,7 @@ pub fn evaluate_vacuum(
         racetrack: None,
         vacuum: None,
         q_flux: compute_tadpole(k, m),
+        k_dot_p: None,
     };
 
     // 1. Filter: Tadpole Bound
@@ -90,9 +99,12 @@ pub fn evaluate_vacuum(
         return Ok(res);
     };
 
-    // 3. Filter: Flat Direction in Kähler Cone
-    if !req.mori.contains(&p) {
-        res.reason = Some("Flat direction outside Kähler cone".into());
+    // 3. Optional filter: flat direction in the TORIC Kahler cone
+    // (closure). See the field docs - the CY cone is generally larger.
+    if let Some(mori) = req.mori
+        && !mori.contains_closure(&p)
+    {
+        res.reason = Some("Flat direction outside toric Kähler cone".into());
         return Ok(res);
     }
 
@@ -103,6 +115,7 @@ pub fn evaluate_vacuum(
         .zip(p.iter())
         .map(|(ki, pi)| ki.to_f64() * *pi)
         .fold(F64::<Finite>::ZERO, |acc, x| acc + x);
+    res.k_dot_p = Some(k_dot_p.get());
     if k_dot_p.get().abs() > 1e-8 {
         res.reason = Some(format!(
             "Orthogonality constraint violated (K·p = {})",
@@ -196,7 +209,7 @@ mod tests {
 
         let req = EvaluationRequest {
             kappa: &kappa,
-            mori: &mori,
+            mori: Some(&mori),
             gv: &gv,
             h11: H11::new(5).unwrap(),
             h21: H21::new(3).unwrap(),

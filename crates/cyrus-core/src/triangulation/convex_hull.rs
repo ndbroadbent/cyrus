@@ -114,7 +114,8 @@ fn independent_seed(all_points: &[Vec<Integer>], dim: usize) -> Option<Vec<usize
 }
 
 /// Exact row rank by fraction-free Gaussian elimination.
-fn integer_rank(rows: &mut [Vec<Integer>]) -> usize {
+/// Exact row rank by fraction-free Gaussian elimination.
+pub fn integer_rank(rows: &mut [Vec<Integer>]) -> usize {
     let n_cols = rows.first().map_or(0, Vec::len);
     let mut rank = 0;
     for col in 0..n_cols {
