@@ -52,15 +52,27 @@ pub fn convex_hull(points: &LiftedPoints) -> Vec<Facet> {
         return vec![(0..n).collect()];
     }
 
+    // The incremental construction needs a NON-DEGENERATE initial simplex.
+    // The first dim+1 points can be affinely dependent (landscape smoke
+    // test: spiky CYTools heights), which silently makes every orientation
+    // test report "coplanar" and yields an empty hull. Select an affinely
+    // independent seed exactly and process points in the permuted order.
+    let all_points = points.as_slice();
+    let Some(seed) = independent_seed(all_points, dim) else {
+        // All points lie in a hyperplane: no full-dimensional hull exists.
+        return Vec::new();
+    };
+    let mut order: Vec<usize> = seed.clone();
+    order.extend((0..n).filter(|idx| !seed.contains(idx)));
+    let permuted: Vec<Vec<Integer>> = order.iter().map(|&idx| all_points[idx].clone()).collect();
+
     let mut current_facets = initial_facets(dim);
 
-    let all_points = points.as_slice();
-
-    // 2. Incrementally add points
+    // 2. Incrementally add points (in permuted order)
     for i in (dim + 1)..n {
-        let p = &all_points[i];
+        let p = &permuted[i];
 
-        let visibility = compute_visibility(&current_facets, p, all_points);
+        let visibility = compute_visibility(&current_facets, p, &permuted);
         let (visible_facets, horizon_ridges) = collect_horizon(visibility);
         if visible_facets.is_empty() {
             continue;
@@ -69,7 +81,64 @@ pub fn convex_hull(points: &LiftedPoints) -> Vec<Facet> {
         current_facets = rebuild_facets(&current_facets, &visible_facets, horizon_ridges, i);
     }
 
+    // Map facet indices back to the caller's point order.
     current_facets
+        .into_iter()
+        .map(|facet| facet.into_iter().map(|idx| order[idx]).collect())
+        .collect()
+}
+
+/// Greedily select `dim + 1` affinely independent points (exact integer
+/// arithmetic). Returns `None` if the point set is degenerate.
+fn independent_seed(all_points: &[Vec<Integer>], dim: usize) -> Option<Vec<usize>> {
+    let mut chosen: Vec<usize> = vec![0];
+    for candidate in 1..all_points.len() {
+        if chosen.len() == dim + 1 {
+            break;
+        }
+        let mut rows: Vec<Vec<Integer>> = Vec::with_capacity(chosen.len());
+        for &idx in chosen.iter().skip(1).chain(std::iter::once(&candidate)) {
+            rows.push(
+                all_points[idx]
+                    .iter()
+                    .zip(all_points[chosen[0]].iter())
+                    .map(|(a, b)| a - b)
+                    .collect(),
+            );
+        }
+        if integer_rank(&mut rows) == chosen.len() {
+            chosen.push(candidate);
+        }
+    }
+    (chosen.len() == dim + 1).then_some(chosen)
+}
+
+/// Exact row rank by fraction-free Gaussian elimination.
+fn integer_rank(rows: &mut [Vec<Integer>]) -> usize {
+    let n_cols = rows.first().map_or(0, Vec::len);
+    let mut rank = 0;
+    for col in 0..n_cols {
+        let Some(pivot_row) = (rank..rows.len()).find(|&r| rows[r][col] != 0) else {
+            continue;
+        };
+        rows.swap(rank, pivot_row);
+        let pivot = rows[rank][col].clone();
+        for r in (rank + 1)..rows.len() {
+            let factor = rows[r][col].clone();
+            if factor == 0 {
+                continue;
+            }
+            for c in col..n_cols {
+                let scaled = &rows[r][c] * &pivot - &rows[rank][c] * &factor;
+                rows[r][c] = scaled;
+            }
+        }
+        rank += 1;
+        if rank == rows.len() {
+            break;
+        }
+    }
+    rank
 }
 
 fn initial_facets(dim: usize) -> Vec<Facet> {

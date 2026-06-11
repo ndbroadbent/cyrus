@@ -49,9 +49,11 @@ pub fn compute_regular_triangulation(points: &[Point], heights: &[f64]) -> Resul
         })
         .collect();
 
-    // 2. Wrap in LiftedPoints - if empty, return empty triangulation
+    // 2. Wrap in LiftedPoints
     let Some(lifted) = LiftedPoints::new(lifted) else {
-        return Ok(Triangulation::new(Vec::new()));
+        return Err(Error::InvalidInput(
+            "regular triangulation requires a non-empty point set".into(),
+        ));
     };
 
     // 3. Compute Convex Hull in d+1 dimensions
@@ -65,12 +67,41 @@ pub fn compute_regular_triangulation(points: &[Point], heights: &[f64]) -> Resul
         }
     }
 
+    // An empty subdivision is never a valid answer for a genuine input;
+    // failing loudly here beats every downstream stage silently agreeing
+    // that nothing intersects anything.
+    if simplices.is_empty() {
+        return Err(Error::InvalidInput(
+            "regular triangulation produced no lower faces (degenerate lift)".into(),
+        ));
+    }
+
     Ok(Triangulation::new(simplices))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_regular_triangulation_spiky_heights_smoke_repro() {
+        // Landscape-smoke regression: CYTools default heights for a KS h11=4
+        // polytope; the lower-hull extraction silently returned no simplices.
+        let points = vec![
+            Point::new(vec![0, 0, 0, 0]),
+            Point::new(vec![-5, -1, -3, -2]),
+            Point::new(vec![0, 0, 1, 0]),
+            Point::new(vec![1, 0, 0, 0]),
+            Point::new(vec![1, 1, 1, 2]),
+            Point::new(vec![-2, 0, -1, 0]),
+            Point::new(vec![0, -1, 0, 0]),
+            Point::new(vec![0, 1, 0, 0]),
+            Point::new(vec![-1, 0, 0, 0]),
+        ];
+        let heights = vec![0.0, 39.0, 1.0, 1.0, 7.0, 5.0, 1.0, 1.0, 1.0];
+        let tri = compute_regular_triangulation(&points, &heights).unwrap();
+        assert_eq!(tri.simplices().len(), 16);
+    }
 
     #[test]
     fn test_regular_triangulation_2d_square() {

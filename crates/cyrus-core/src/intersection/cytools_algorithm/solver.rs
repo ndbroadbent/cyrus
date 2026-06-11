@@ -77,8 +77,29 @@ pub fn solve_sparse_system(
     let mtm_sparse = build_mtm_sparse(n_vars, &mtm_triplets)?;
     let mtc = build_mtc(m_triplets, c_vec, n_vars);
 
-    let sol = solve_cholesky(&mtm_sparse, &mtc, n_vars)?;
-    log_sparse_residual(&rows_data, &sol, c_vec, n_rows, n_vars);
+    // Mirror CYTools' backend="all" semantics: sparse Cholesky on the normal
+    // equations first; when that fails (small ill-conditioned systems where
+    // CHOLMOD succeeds for CYTools), fall back to a dense QR least-squares
+    // on the ORIGINAL system, which is better conditioned. The residual
+    // check below gates either result.
+    let sol = match solve_cholesky(&mtm_sparse, &mtc, n_vars) {
+        Ok(sol) => sol,
+        Err(_) if n_vars <= 4096 => {
+            eprintln!(
+                "[CYTools algo] sparse Cholesky failed ({n_vars} vars); falling back to dense QR least-squares"
+            );
+            solve_dense_qr(m_triplets, c_vec, n_rows, n_vars)
+        }
+        Err(e) => return Err(e),
+    };
+    let rel_residual = log_sparse_residual(&rows_data, &sol, c_vec, n_rows, n_vars);
+    // CYTools rejects solutions with residuals beyond backend_error_tol=1e-4.
+    // NaN must fail this gate too.
+    if rel_residual.partial_cmp(&1e-4) != Some(std::cmp::Ordering::Less) {
+        return Err(Error::SingularMatrix(format!(
+            "intersection-number least-squares residual {rel_residual:.3e} exceeds 1e-4"
+        )));
+    }
     Ok(sol)
 }
 
@@ -133,13 +154,33 @@ fn solve_cholesky(
     Ok((0..n_vars).map(|i| solution[(i, 0)]).collect())
 }
 
+fn solve_dense_qr(
+    m_triplets: &[(usize, usize, f64)],
+    c_vec: &[f64],
+    n_rows: usize,
+    n_vars: usize,
+) -> Vec<f64> {
+    let mut m = faer::Mat::<f64>::zeros(n_rows, n_vars);
+    for &(row, col, val) in m_triplets {
+        m[(row, col)] += val;
+    }
+    let mut rhs = faer::Mat::<f64>::zeros(n_rows, 1);
+    for (row, &value) in c_vec.iter().enumerate() {
+        rhs[(row, 0)] = -value;
+    }
+    use faer::prelude::SpSolverLstsq;
+    let solution = m.qr().solve_lstsq(&rhs);
+    (0..n_vars).map(|i| solution[(i, 0)]).collect()
+}
+
+#[must_use]
 fn log_sparse_residual(
     rows_data: &HashMap<usize, Vec<(usize, f64)>>,
     sol: &[f64],
     c_vec: &[f64],
     n_rows: usize,
     n_vars: usize,
-) {
+) -> f64 {
     let mut residual_sq = 0.0;
     let mut rhs_sq = 0.0;
     for row in 0..n_rows {
@@ -159,4 +200,5 @@ fn log_sparse_residual(
         residual_sq.sqrt()
     };
     eprintln!("[CYTools algo] Relative residual: {rel_residual:.6} ({n_vars} vars, {n_rows} eqns)");
+    rel_residual
 }
