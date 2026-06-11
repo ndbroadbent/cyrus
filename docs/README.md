@@ -17,6 +17,9 @@ Current local notes:
 - [CKYZ_SERIES_DOMAIN_AUDIT.md](CKYZ_SERIES_DOMAIN_AUDIT.md): focused source
   audit for the finite monomial/coefficient domain needed by local CKYZ
   potent-ray rows. (Live: supports the same potent-ray work.)
+- [GA_PIPELINE.md](GA_PIPELINE.md): the cyrus-ga landscape search - flux
+  genome, DESI quintessence fitness, resumable run directories, physics
+  conventions, and roadmap.
 - [RUST_CRATES_GUIDE.md](RUST_CRATES_GUIDE.md): notes on Rust dependency
   usage.
 
