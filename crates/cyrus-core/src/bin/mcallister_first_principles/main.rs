@@ -3942,7 +3942,10 @@ fn stage_vacuum(
         std::process::exit(2);
     };
     let g_s = racetrack.rt_res.g_s;
-    let vac = compute_vacuum(ek0, g_s, v_string_pos, racetrack.w0);
+    let vac = compute_vacuum(ek0, g_s, v_string_pos, racetrack.w0).unwrap_or_else(|| {
+        eprintln!("[ERROR] V0 underflowed f64; |W0| too small to represent");
+        std::process::exit(2);
+    });
     let v0_log10_abs = vac.v0.get().abs().log10();
     compare_against_dat(
         compare_dir,

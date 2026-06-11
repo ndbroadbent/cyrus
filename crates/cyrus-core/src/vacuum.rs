@@ -51,15 +51,25 @@ pub fn is_tadpole_canceled(k: &[i64], m: &[i64], q_max: f64) -> bool {
 /// * `v_string` - String frame volume with BBHL correction (positive)
 /// * `w0` - Flux superpotential magnitude |W₀| (positive)
 ///
-/// # Panics
-/// Panics if the formula produces a non-negative result (should not occur with valid inputs).
+/// Returns `None` when the product underflows f64 to zero: |W₀| below
+/// roughly 1e-150 drives W₀² past the smallest positive double, and a
+/// vacuum energy of literal 0.0 is not representable as `F64<Neg>`. Such
+/// candidates are deeper than anything physically interesting and the
+/// caller must fail them honestly (observed: a landscape GA population
+/// evolved |W₀| small enough to panic the old `.expect()` here and take
+/// down a 73k-polytope overnight run).
 #[must_use]
-pub fn compute_v0(ek0: F64<Pos>, g_s: F64<Pos>, v_string: F64<Pos>, w0: F64<Pos>) -> F64<Neg> {
-    // All inputs positive → product is positive → multiply by -3 → negative
+pub fn compute_v0(
+    ek0: F64<Pos>,
+    g_s: F64<Pos>,
+    v_string: F64<Pos>,
+    w0: F64<Pos>,
+) -> Option<F64<Neg>> {
+    // All inputs positive → product is positive (or underflows to zero) →
+    // multiply by -3 → negative (or -0.0).
     let value =
         -3.0 * ek0.get() * (g_s.get().powi(7) / (4.0 * v_string.get()).powi(2)) * w0.get().powi(2);
-    // SAFETY: formula guarantees negative result when all inputs are positive
-    F64::<Neg>::new(value).expect("V₀ formula with positive inputs always yields negative result")
+    F64::<Neg>::new(value)
 }
 
 /// Result of vacuum energy computation with breakdown.
@@ -78,21 +88,23 @@ pub struct VacuumResult {
 }
 
 /// Compute vacuum energy with detailed breakdown.
+///
+/// Returns `None` when V₀ underflows f64 (see [`compute_v0`]).
 #[must_use]
 pub fn compute_vacuum(
     ek0: F64<Pos>,
     g_s: F64<Pos>,
     v_string: F64<Pos>,
     w0: F64<Pos>,
-) -> VacuumResult {
-    let v0 = compute_v0(ek0, g_s, v_string, w0);
-    VacuumResult {
+) -> Option<VacuumResult> {
+    let v0 = compute_v0(ek0, g_s, v_string, w0)?;
+    Some(VacuumResult {
         ek0,
         g_s,
         v_string,
         w0,
         v0,
-    }
+    })
 }
 
 #[cfg(test)]
@@ -118,7 +130,7 @@ mod tests {
         let v_string = pos(4711.83);
         let w0 = pos(2.3e-90);
 
-        let v0 = compute_v0(ek0, g_s, v_string, w0);
+        let v0 = compute_v0(ek0, g_s, v_string, w0).expect("no underflow");
 
         // No need to assert v0 < 0 - the type F64<Neg> guarantees it!
 
@@ -135,13 +147,14 @@ mod tests {
     fn test_compute_v0_simple() {
         // Simple case with unit values
         // V₀ = -3 × 1 × (1⁷ / (4×1)²) × 1² = -3/16 = -0.1875
-        let v0 = compute_v0(pos(1.0), pos(1.0), pos(1.0), pos(1.0));
+        let v0 = compute_v0(pos(1.0), pos(1.0), pos(1.0), pos(1.0)).expect("no underflow");
         assert!((v0.get() - (-0.1875)).abs() < 1e-10);
     }
 
     #[test]
     fn test_vacuum_result() {
-        let result = compute_vacuum(pos(0.25), pos(0.01), pos(1000.0), pos(1e-50));
+        let result_opt = compute_vacuum(pos(0.25), pos(0.01), pos(1000.0), pos(1e-50));
+        let result = result_opt.expect("no underflow");
         assert!((result.ek0.get() - 0.25).abs() < 1e-14);
         assert!((result.g_s.get() - 0.01).abs() < 1e-14);
         assert!((result.v_string.get() - 1000.0).abs() < 1e-10);

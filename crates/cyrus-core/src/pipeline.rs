@@ -167,7 +167,10 @@ pub fn evaluate_vacuum(
         return Ok(res);
     };
 
-    let vac_res = compute_vacuum(ek0, g_s_pos, vol_pos, w0_pos);
+    let Some(vac_res) = compute_vacuum(ek0, g_s_pos, vol_pos, w0_pos) else {
+        res.reason = Some("V0 underflowed f64 (|W0| too small to represent)".into());
+        return Ok(res);
+    };
 
     // Success! Convert typed p back to raw for output (boundary)
     let p_raw: Vec<f64> = p.iter().map(|x| x.get()).collect();
