@@ -129,24 +129,46 @@ pub fn select_next(stats: &[PolytopeStats], total_rounds: u64) -> Option<usize> 
 /// dead-marking decision for the scheduler.
 pub fn prepare_or_mark_dead(
     record: &PolytopeRecord,
+    pool_path: &std::path::Path,
     gv_min_points: u32,
     timeout: std::time::Duration,
     stats: &mut PolytopeStats,
 ) -> Option<GaGeometry> {
     // Geometry preparation can stall on pathological mirrors (observed: a
-    // cygv closure hanging a landscape run for minutes). Run it on a worker
-    // thread with a deadline; on timeout the thread is detached and the
-    // polytope is marked dead - lost coverage, never a wrong answer.
-    let points = record.points.clone();
-    let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let result = GaGeometry::prepare_from_points(&points, gv_min_points);
-        let _ = tx.send(result);
-    });
-    let outcome = match rx.recv_timeout(timeout) {
-        Ok(result) => result,
-        Err(_) => Err(format!("geometry preparation exceeded {timeout:?}")),
+    // 5-vertex near-simplex whose dual cone dualization runs 14k
+    // hyperplanes). A detached thread cannot be killed and leaks a busy
+    // core per timeout, so the probe runs in a KILLABLE subprocess; on
+    // success the in-process re-preparation is warm (GV and lattice-point
+    // caches persist to disk).
+    let exe = std::env::current_exe().expect("current executable path");
+    let mut child = std::process::Command::new(exe)
+        .arg("--prep-probe")
+        .arg(&record.name)
+        .arg("--polytope-file")
+        .arg(pool_path)
+        .arg("--gv-min-points")
+        .arg(gv_min_points.to_string())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("spawn prep probe");
+    let deadline = std::time::Instant::now() + timeout;
+    let outcome = loop {
+        match child.try_wait().expect("poll prep probe") {
+            Some(status) if status.success() => break Ok(()),
+            Some(status) => break Err(format!("geometry preparation failed ({status})")),
+            None if std::time::Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                break Err(format!("geometry preparation exceeded {timeout:?}"));
+            }
+            None => std::thread::sleep(std::time::Duration::from_millis(100)),
+        }
     };
+    let outcome = outcome.and_then(|()| {
+        // Probe succeeded: re-prepare in-process against warm disk caches.
+        GaGeometry::prepare_from_points(&record.points, gv_min_points)
+    });
     match outcome {
         Ok(geom) => Some(geom),
         Err(reason) => {

@@ -47,6 +47,34 @@ struct ImprovementRecord<'a> {
 
 #[allow(clippy::too_many_lines)] // linear CLI orchestration
 fn main() {
+    // Hidden worker mode: prepare one polytope's geometry and exit 0/1.
+    // The landscape scheduler runs this as a KILLABLE subprocess probe so a
+    // pathological geometry cannot leak a runaway thread into the service
+    // (GV/lattice caches persist to disk, so the parent's re-prep is warm).
+    if let Some(name) = parse_arg_value::<String>("--prep-probe") {
+        let pool_path: String = parse_arg_value("--polytope-file").unwrap_or_else(|| {
+            eprintln!("[ERROR] --prep-probe requires --polytope-file");
+            std::process::exit(2);
+        });
+        let gv_min_points: u32 =
+            parse_arg_value("--gv-min-points").unwrap_or(DEFAULT_GV_MIN_POINTS);
+        let pool =
+            cyrus_ga::multi::load_pool(std::path::Path::new(&pool_path)).unwrap_or_else(|e| {
+                eprintln!("[ERROR] {e}");
+                std::process::exit(2);
+            });
+        let Some(record) = pool.iter().find(|p| p.name == name) else {
+            eprintln!("[ERROR] polytope {name} not in pool");
+            std::process::exit(2);
+        };
+        match GaGeometry::prepare_from_points(&record.points, gv_min_points) {
+            Ok(_) => std::process::exit(0),
+            Err(reason) => {
+                eprintln!("[PROBE] {name}: {reason}");
+                std::process::exit(1);
+            }
+        }
+    }
     if let Some(out_dir) = parse_arg_value::<String>("--emit-verification-dir") {
         emit_verification_dir(&PathBuf::from(out_dir));
         return;

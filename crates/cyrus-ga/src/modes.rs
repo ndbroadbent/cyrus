@@ -134,7 +134,13 @@ pub fn run_multi(pool_path: &std::path::Path) {
             let prep_timeout = std::time::Duration::from_secs(
                 parse_arg_value("--prep-timeout-secs").unwrap_or(120),
             );
-            match prepare_or_mark_dead(record, gv_min_points, prep_timeout, &mut stats[idx]) {
+            match prepare_or_mark_dead(
+                record,
+                pool_path,
+                gv_min_points,
+                prep_timeout,
+                &mut stats[idx],
+            ) {
                 Some(geom) => {
                     eprintln!(
                         "[INFO] prepared {} in {:.1?} (h21={}, {} GV curves)",
