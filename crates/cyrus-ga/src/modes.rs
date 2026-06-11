@@ -102,6 +102,13 @@ pub fn run_multi(pool_path: &std::path::Path) {
             std::process::exit(2);
         };
         let record = &pool[idx];
+        // Bound the geometry cache: an unbounded map of prepared geometries
+        // (GV tables run to thousands of curves each) grew without limit on
+        // the 73k-polytope pool and the process died around round 1000.
+        // Re-preparation is cheap (seconds, disk-cached GV), so just clear.
+        if geometries.len() >= 48 {
+            geometries.clear();
+        }
         if let std::collections::hash_map::Entry::Vacant(slot) = geometries.entry(idx) {
             let t0 = std::time::Instant::now();
             let prep_timeout = std::time::Duration::from_secs(
