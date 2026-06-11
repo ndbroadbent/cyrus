@@ -106,23 +106,23 @@ pub fn select_next(stats: &[PolytopeStats], total_rounds: u64) -> Option<usize> 
     {
         return Some(idx);
     }
+    // UCB over VISITED polytopes only: unvisited ones are the first-visit
+    // branch's job (treating them as infinity here made exploit rounds
+    // burn budget preparing far-pool geometries instead of deepening known
+    // fertile ones). Falls back to the first unvisited when nothing has
+    // been visited yet.
     let exploration = 400.0;
     stats
         .iter()
         .enumerate()
-        .filter(|(_, s)| !s.dead)
+        .filter(|(_, s)| !s.dead && s.rounds > 0)
         .map(|(idx, s)| {
-            let score = if s.rounds == 0 {
-                f64::INFINITY // every live polytope gets at least one round
-            } else {
-                let bonus =
-                    exploration * ((total_rounds.max(2) as f64).ln() / s.rounds as f64).sqrt();
-                s.best_fitness + bonus
-            };
-            (idx, score)
+            let bonus = exploration * ((total_rounds.max(2) as f64).ln() / s.rounds as f64).sqrt();
+            (idx, s.best_fitness + bonus)
         })
         .max_by(|a, b| a.1.total_cmp(&b.1))
         .map(|(idx, _)| idx)
+        .or_else(|| stats.iter().position(|s| !s.dead && s.rounds == 0))
 }
 
 /// Prepare a polytope's geometry, translating failure into a loud
