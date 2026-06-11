@@ -227,6 +227,10 @@ pub fn evaluate_fitness(geom: &GaGeometry, cfg: &FitnessConfig, genome: &Genome)
             // tier, giving the GA a slope toward the Diophantine condition.
             let violation = result.k_dot_p.map_or(f64::INFINITY, f64::abs);
             400.0f64.mul_add((-violation / 2.0).exp(), -1200.0)
+        } else if reason.starts_with("Racetrack refinement") {
+            // A two-term solution exists but the full series moves it out
+            // of control: closer to valid than no-racetrack, still failed.
+            -700.0
         } else if reason.starts_with("No stable racetrack") {
             -800.0
         } else if reason.contains("cancelled exactly") {

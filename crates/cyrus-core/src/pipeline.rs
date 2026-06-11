@@ -134,6 +134,16 @@ pub fn evaluate_vacuum(
         res.reason = Some("No stable racetrack solution".into());
         return Ok(res);
     };
+    // Full-series refinement: the two-term truncation can carry ~10%
+    // Im(tau) error (observed on a GA candidate whose "perfect" V0 was
+    // partly truncation artifact), and W0 depends exponentially on
+    // Im(tau). The refinement costs microseconds; its failure means the
+    // racetrack hierarchy is not under control and the candidate's
+    // numbers cannot be trusted.
+    let Some(rt_res) = crate::racetrack::refine_racetrack_stationary_point(&rt_res, &terms) else {
+        res.reason = Some("Racetrack refinement uncontrolled".into());
+        return Ok(res);
+    };
 
     // 6. Calculation: W₀ and V₀
     let Some(w0) = compute_w0_from_terms(&rt_res, &terms) else {
