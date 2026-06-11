@@ -183,7 +183,7 @@ fn main() {
     .expect("write config");
 
     let mut best_seen = state.best_fitness;
-    let target_generation = state.generation + generations;
+    let target_generation = state.generation.saturating_add(generations);
     while state.generation < target_generation {
         let gen_start = std::time::Instant::now();
         let reports: Vec<_> = state
@@ -343,7 +343,7 @@ fn run_multi(pool_path: &std::path::Path) {
         .map(|s| s.best_fitness)
         .fold(f64::NEG_INFINITY, f64::max);
     let mut total_rounds: u64 = stats.iter().map(|s| s.rounds).sum();
-    let target_rounds = total_rounds + rounds;
+    let target_rounds = total_rounds.saturating_add(rounds);
 
     while total_rounds < target_rounds {
         let Some(idx) = select_next(&stats, total_rounds) else {

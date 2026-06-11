@@ -96,6 +96,16 @@ pub fn load_pool(path: &std::path::Path) -> Result<Vec<PolytopeRecord>, String> 
 /// so the exploration constant is on that scale.
 #[must_use]
 pub fn select_next(stats: &[PolytopeStats], total_rounds: u64) -> Option<usize> {
+    // First visits go in pool order (pools sort by ascending h21, where the
+    // isotropic-flux lattice is densest), but every third round is reserved
+    // for UCB exploitation so a fertile polytope found early gets deepened
+    // even while the breadth sweep is still running.
+    let any_visited = stats.iter().any(|s| !s.dead && s.rounds > 0);
+    if !(any_visited && total_rounds % 3 == 2)
+        && let Some(idx) = stats.iter().position(|s| !s.dead && s.rounds == 0)
+    {
+        return Some(idx);
+    }
     let exploration = 400.0;
     stats
         .iter()
