@@ -44,6 +44,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
+mod chamber_hook;
 mod missing_gv;
 use missing_gv::{
     compute_minimal_degree_gv_by_ambient_class, defer_bounded_impact_missing_gvs,
@@ -3576,18 +3577,23 @@ fn stage_volume(
                 max_missing_gv_impact,
                 missing_gv_abs_bound,
             );
-            if !missing_gv_classes.is_empty() {
-                eprintln!(
-                    "[ERROR] missing computed GV values for {} selected primal small toric curves; first_missing={:?}",
-                    missing_gv_classes.len(),
-                    missing_gv_classes.first()
-                );
-                std::process::exit(2);
-            }
+            chamber_hook::enforce_gv_coverage(&chamber_hook::ChamberSearchContext {
+                missing_gv_classes: &missing_gv_classes,
+                geom,
+                intersection,
+                production_basis: &production_primal_basis,
+                kklt_basis: &kklt_basis,
+                c_i: &c_i,
+                kklt_steps,
+                small_curve_selection_t: &small_curve_selection_t,
+                small_curve_cutoff,
+                small_curve_pruning,
+                data_dir,
+            });
+            let n_deferred = deferred_missing_classes.len();
             eprintln!(
-                "[INFO] primal small toric curve GVs selected={} deferred_missing={}",
-                small_curve_gvs.len(),
-                deferred_missing_classes.len()
+                "[INFO] primal small-curve GVs selected={} deferred={n_deferred}",
+                small_curve_gvs.len()
             );
 
             let correction_source_t = solve_gv_corrected_kklt(

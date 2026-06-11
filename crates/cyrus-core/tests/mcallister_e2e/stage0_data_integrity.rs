@@ -170,6 +170,13 @@ const ARTIFACT_POLICIES: &[ArtifactPolicy] = &[
         note: "selected regular triangulation heights",
     },
     ArtifactPolicy {
+        file: "heights_chamber_search.dat",
+        usage: ArtifactUse::DeclaredInput,
+        note: "chamber-search OUTPUT: certified interior heights of the best \
+               GV-covered neighbor chamber; written by the runner (never \
+               read) and adopted as the next run's declared heights.dat",
+    },
+    ArtifactPolicy {
         file: "K_vec.dat",
         usage: ArtifactUse::DeclaredInput,
         note: "integer K flux vector",

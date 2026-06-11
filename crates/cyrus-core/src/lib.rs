@@ -42,6 +42,7 @@ pub mod kahler;
 pub mod lvs;
 pub use cone::Cone;
 pub use kahler::{MoriCone, compute_mori_generators};
+pub mod chamber_search;
 pub mod lattice;
 pub mod orientifold;
 pub mod pipeline;
