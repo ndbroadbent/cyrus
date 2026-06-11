@@ -14,4 +14,6 @@
 pub mod fitness;
 pub mod genome;
 pub mod geometry;
+pub mod multi;
+pub mod pfv;
 pub mod population;

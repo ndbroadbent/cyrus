@@ -12,6 +12,36 @@ use serde::{Deserialize, Serialize};
 use crate::fitness::FitnessReport;
 use crate::genome::{Genome, adaptive_mutation};
 
+/// Non-finite-safe float serialization.
+///
+/// JSON has no -Infinity: serde_json writes non-finite floats as `null`,
+/// which cannot deserialize back into `f64`. Fields that legitimately hold
+/// NEG_INFINITY sentinels (never-evaluated lineages/polytopes) round-trip
+/// through `Option<f64>` instead.
+pub mod serde_finite_or_neg_inf {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    /// Serialize non-finite values as null.
+    ///
+    /// # Errors
+    /// Propagates serializer errors.
+    pub fn serialize<S: Serializer>(value: &f64, serializer: S) -> Result<S::Ok, S::Error> {
+        if value.is_finite() {
+            serializer.serialize_some(value)
+        } else {
+            serializer.serialize_none()
+        }
+    }
+
+    /// Deserialize null back to NEG_INFINITY.
+    ///
+    /// # Errors
+    /// Propagates deserializer errors.
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f64, D::Error> {
+        Ok(Option::<f64>::deserialize(deserializer)?.unwrap_or(f64::NEG_INFINITY))
+    }
+}
+
 /// One member of the population.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Individual {
@@ -22,6 +52,7 @@ pub struct Individual {
     /// Generations since this lineage last improved.
     pub stagnation: u32,
     /// Best fitness this lineage has seen.
+    #[serde(with = "serde_finite_or_neg_inf")]
     pub lineage_best: f64,
 }
 
@@ -73,6 +104,7 @@ pub struct GaState {
     /// Best-ever individuals (deduplicated by genome).
     pub hall_of_fame: Vec<Individual>,
     /// Best fitness ever seen.
+    #[serde(with = "serde_finite_or_neg_inf")]
     pub best_fitness: f64,
     /// Generations since the global best improved.
     pub global_stagnation: u32,
@@ -160,6 +192,27 @@ impl GaState {
             }
         }
         self.population[best.expect("tournament ran")].clone()
+    }
+
+    /// Replace the worst `genomes.len()` individuals with externally
+    /// constructed genomes (e.g. exact PFV isotropic samples), resetting
+    /// their lineage so they are evaluated fresh next generation.
+    pub fn inject_genomes(&mut self, genomes: Vec<Genome>) {
+        if genomes.is_empty() {
+            return;
+        }
+        let mut order: Vec<usize> = (0..self.population.len()).collect();
+        order.sort_by(|&a, &b| {
+            Self::fitness_of(&self.population[a]).total_cmp(&Self::fitness_of(&self.population[b]))
+        });
+        for (slot, genome) in order.into_iter().zip(genomes) {
+            self.population[slot] = Individual {
+                genome,
+                report: None,
+                stagnation: 0,
+                lineage_best: f64::NEG_INFINITY,
+            };
+        }
     }
 
     /// Produce the next generation: frontier carry-over, tournament +
@@ -280,6 +333,19 @@ mod tests {
         let genomes: Vec<&Genome> = state.population.iter().map(|i| &i.genome).collect();
         let genomes_resumed: Vec<&Genome> = resumed.population.iter().map(|i| &i.genome).collect();
         assert_eq!(genomes, genomes_resumed);
+    }
+
+    #[test]
+    fn unevaluated_state_with_neg_infinity_roundtrips() {
+        // JSON null <-> NEG_INFINITY: a fresh (never-absorbed) state and
+        // post-asteroid lineages hold -inf sentinels and must survive a
+        // checkpoint/resume cycle (regression: resumed landscape runs
+        // panicked on "parse summary").
+        let state = GaState::new(GaParams::default(), 3, 1);
+        let json = serde_json::to_string(&state).expect("serialize");
+        let resumed: GaState = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(resumed.best_fitness, f64::NEG_INFINITY);
+        assert_eq!(resumed.population[0].lineage_best, f64::NEG_INFINITY);
     }
 
     #[test]
