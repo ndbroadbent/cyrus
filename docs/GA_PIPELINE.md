@@ -117,10 +117,14 @@ formulas of arXiv:1712.04946). Both fail loudly.
 
 ## Roadmap
 
-- **Chamber search for verification** (next): wire the corrected-chamber
-  flop machinery into a loop that walks neighbor chambers scoring by
-  uncovered-small-curve count at the solve point. Random height sampling
-  does not work - perturbed heights leave the valid FRST subfan.
+- **Chamber search** (landed): `--chamber-search-steps <n>` on the
+  McAllister runner walks bistellar flips from the failing chamber,
+  gating each neighbor on phase-1 KKLT reachability (with the neighbor's
+  own intersection numbers) and scoring by two-face GV coverage of the
+  selected small curves; the winner's certified heights are emitted to
+  `heights_chamber_search.dat` for adoption + re-run. Open: deeper walks
+  for curve-dense geometries (h21_4_135 descends 166 -> 138 uncovered in
+  14 flips; full coverage needs longer budgets or extended GV formulas).
 - **Purity**: port the combinatorial fourfold Hodge formulas
   (arXiv:1712.04946) so h^{2,1}(D-hat) = 0 is checked per divisor; O7
   stacks are already rigorously pure (pointwise fixed). Until then,
