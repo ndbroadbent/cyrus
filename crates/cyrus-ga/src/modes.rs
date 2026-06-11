@@ -63,6 +63,21 @@ pub fn run_multi(pool_path: &std::path::Path) {
     let gv_min_points: u32 = parse_arg_value("--gv-min-points").unwrap_or(DEFAULT_GV_MIN_POINTS);
     let (params, fitness_cfg) = parse_params_and_fitness();
 
+    fn append_jsonl(path: &std::path::Path, value: &serde_json::Value) {
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .expect("open event stream");
+        writeln!(file, "{value}").expect("append event");
+    }
+    fn unix_now() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+    }
+
     let pool = load_pool(pool_path).unwrap_or_else(|e| {
         eprintln!("[ERROR] {e}");
         std::process::exit(2);
@@ -70,6 +85,11 @@ pub fn run_multi(pool_path: &std::path::Path) {
     std::fs::create_dir_all(run_dir.join("polytopes")).expect("create run dir");
     let summary_path = run_dir.join("summary.json");
     let improvements_path = run_dir.join("improvements.jsonl");
+    // Append-only event streams for external ingestion (web dashboard):
+    // one line per round, and one line per hall-of-fame improvement on any
+    // polytope. Consumers tail these by byte offset.
+    let rounds_path = run_dir.join("rounds.jsonl");
+    let candidates_path = run_dir.join("candidates.jsonl");
 
     let mut stats: Vec<PolytopeStats> = if summary_path.exists() {
         let text = std::fs::read_to_string(&summary_path).expect("read summary");
@@ -161,6 +181,21 @@ pub fn run_multi(pool_path: &std::path::Path) {
         stats[idx].valid_seen += round_valid as u64;
         if state.best_fitness > stats[idx].best_fitness {
             stats[idx].best_fitness = state.best_fitness;
+            // Polytope-level improvement: emit the new hall leader for
+            // ingestion (the global improvements.jsonl only records global
+            // bests, which would hide most leaderboard candidates).
+            if let Some(best) = state.hall_of_fame.first() {
+                append_jsonl(
+                    &candidates_path,
+                    &serde_json::json!({
+                        "polytope": record.name,
+                        "round": total_rounds,
+                        "genome": best.genome,
+                        "report": best.report,
+                        "ts": unix_now(),
+                    }),
+                );
+            }
         }
         if state.best_fitness > global_best {
             global_best = state.best_fitness;
@@ -192,6 +227,19 @@ pub fn run_multi(pool_path: &std::path::Path) {
         std::fs::write(&summary_path, serde_json::to_string_pretty(&stats).unwrap())
             .expect("write summary");
 
+        append_jsonl(
+            &rounds_path,
+            &serde_json::json!({
+                "round": total_rounds,
+                "polytope": record.name,
+                "evals": state.evaluations,
+                "valid": round_valid,
+                "best_here": stats[idx].best_fitness,
+                "global_best": global_best,
+                "live": stats.iter().filter(|s| !s.dead).count(),
+                "ts": unix_now(),
+            }),
+        );
         eprintln!(
             "[ROUND {:>5}] {} gens+={} evals={} valid+={} best_here={:.2} global_best={:.2} live={}/{}",
             total_rounds,
