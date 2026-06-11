@@ -76,15 +76,61 @@ millions of evaluations per hour on all cores (rayon).
   `--decay-constant` (default 0.5 M_pl), initial displacement 2f, and the
   identification of the axion potential height with the candidate's |V0|.
 
+## Landscape mode (multi-polytope)
+
+`--polytope-file <jsonl>` searches a pool of geometries instead of one
+(fetcher: `string_theory/landscape_smoke/fetch_ga_polytopes.py`). A UCB
+bandit allocates inner-GA rounds: first visits sweep the pool in ascending
+h21 (densest isotropic flux lattice first) with every third round reserved
+for exploiting the best polytope found so far. Per-polytope GA state
+persists under `<run-dir>/polytopes/<name>/`; `summary.json` holds the
+bandit state and `improvements.jsonl` the global best trajectory. Geometry
+preparation runs under a deadline (`--prep-timeout-secs`) and failures
+mark the polytope dead, loudly. Each geometry's tadpole bound is computed
+automatically ((h11+h21)/2 + 1, the McAllister involution class) and caps
+the fitness gate - a global `--q-max` can only tighten it.
+
+## Constructive PFV sampling
+
+The orthogonality condition K.p = 0 is exactly the statement that K is an
+isotropic vector of the rational quadratic form N(M)^{-1} - testable
+EXACTLY in rational arithmetic (`pfv.rs`). Blind integer search never hits
+this measure-zero set (observed: 557k evaluations, zero valid vacua);
+instead, every generation re-seeds the worst slice of the population with
+exact-isotropic genomes and evolution explores along the constraint
+manifold. Result of the first 30-minute landscape run: 114 valid vacua,
+best at log10|V0| = -120.6 with CPL wa inside the DESI band.
+
+## Verifying candidates
+
+`cyrus-ga --emit-verification-dir <dir> --polytope-file <pool>
+--polytope-name <name> --k a,b,.. --m a,b,..` constructs the automated
+orientifold (involution, O7s, rigidity, c_i, tadpole - see
+`cyrus_core::orientifold`, validated against all five published examples),
+checks the candidate against the true tadpole bound, writes
+runner-compatible declared inputs, and prints the full first-principles
+verification command. Two known gates remain between an emitted candidate
+and a fully verified vacuum: chamber selection (the default chamber's
+small curves may exceed GV coverage; fix by flop-walking the secondary
+fan) and purity (Pfaffian constancy; needs the dual-fourfold Hodge
+formulas of arXiv:1712.04946). Both fail loudly.
+
 ## Roadmap
 
+- **Chamber search for verification** (next): wire the corrected-chamber
+  flop machinery into a loop that walks neighbor chambers scoring by
+  uncovered-small-curve count at the solve point. Random height sampling
+  does not work - perturbed heights leave the valid FRST subfan.
+- **Purity**: port the combinatorial fourfold Hodge formulas
+  (arXiv:1712.04946) so h^{2,1}(D-hat) = 0 is checked per divisor; O7
+  stacks are already rigorously pure (pointwise fixed). Until then,
+  verified candidates are labelled "modulo Pfaffian constancy".
+- Verification-friendliness triage: score hall-of-fame candidates by
+  uncovered-curve count before attempting the full solve, and feed it
+  back into the bandit so the search prefers verifiable geometries.
 - Compute the axion decay constant and instanton scales from the Kahler
   metric instead of a knob; multi-field (Kahler-mixing) integration for
   the DESI phantom-crossing best fit.
-- Quadric-projection mutation operator (for fixed M, K.N^{-1}K = 0 is a
-  quadric: project mutations onto it instead of random-walking).
-- Geometry-level outer loop (polytope selection), per the GA_v2 research
-  notes: the inner (K, M) landscape is near-random, so the learning
-  capacity belongs at the geometry level.
-- Full-KKLT refinement stage for hall-of-fame candidates via the
-  McAllister runner's branch-search hooks.
+- Performance: cache N(M)^{-1} per M-lineage in the isotropic sampler;
+  exhaustive exact K-enumeration per M at h21 = 4 (a 31^4 box of integer
+  tests costs milliseconds).

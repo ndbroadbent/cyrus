@@ -58,8 +58,11 @@ rank-deficient intersection systems, NaN-unsafe residual gates).
 
 ## The GA landscape search (`cyrus-ga`)
 
-A resumable genetic algorithm over integer flux pairs `(K, M)` on a fixed
-geometry, scoring candidates on vacuum-energy height, weak coupling, and a
+A resumable genetic algorithm over integer flux pairs `(K, M)` - on a
+fixed geometry (`--data-dir`) or across a whole pool of Kreuzer-Skarke
+polytopes (`--polytope-file`, with a bandit scheduler and per-geometry
+tadpole bounds) - scoring candidates on vacuum-energy height, weak
+coupling, and a
 **DESI quintessence slope** component: each candidate's energy scale is
 dressed as a thawing-axion potential, integrated through the real
 Friedmann + Klein-Gordon equations, CPL-fitted, and scored against the
@@ -163,17 +166,33 @@ See `CLAUDE.md` for the full philosophy.
 
 ## Current frontiers
 
+The search layer is now complete through candidate generation: the GA runs
+across polytope pools (UCB bandit, exact-isotropic PFV sampling,
+per-geometry tadpole bounds) and `cyrus-ga --emit-verification-dir` builds
+runner inputs for any candidate via the automated orientifold layer
+(`cyrus_core::orientifold`, validated against all five published
+examples). What stands between a scan candidate and a fully verified
+vacuum:
+
+- **Chamber search for verification**: the full KKLT solve needs the
+  candidate's Kahler point in a chamber whose small curves are covered by
+  our GV machinery; the default chamber often is not (observed: 166
+  uncovered curves on a tadpole-respecting candidate). The flop/wall-cross
+  machinery from the corrected-chamber work needs wiring into a search
+  loop scored by uncovered-curve count. Naive height sampling does NOT
+  work - valid chambers must be reached by walking the secondary fan.
+- **Purity (constant Pfaffians)**: rigidity is verified combinatorially
+  (exact census match with the paper), but h^{2,1}(D-hat) = 0 needs the
+  dual-fourfold Hodge formulas (arXiv:1712.04946, in the project library).
+  Until ported, verified candidates carry the label "modulo Pfaffian
+  constancy"; O7 stack divisors are already rigorously pure.
 - **Appropriate-phase GV invariants**: two exotic curves on 5-113-4627
   (GV = 3 each) are provably outside every toric-cap computation in the
-  input phase; their effect is below the checkpoints' own precision, but
-  the paper's phase-changing method remains to be implemented.
+  input phase - the same root problem as chamber coverage.
 - **Quintessence modelling depth**: compute axion decay constants and
   instanton scales from the Kahler metric (replacing the GA's v1 knobs);
   multi-field Kahler-mixing integration for DESI's phantom-crossing
   best fit.
-- **Geometry-level search**: a polytope-selection outer loop above the
-  per-geometry flux GA, plus full-KKLT refinement of hall-of-fame
-  candidates through the validation runner.
 
 ## Key references
 
