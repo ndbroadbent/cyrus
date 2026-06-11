@@ -449,7 +449,7 @@ fn stage0_artifact_policy_is_explicit_and_complete() {
 #[test]
 fn stage0_first_principles_runner_does_not_silently_replay_downstream_outputs() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let runner_path = manifest_dir.join("src/bin/mcallister_first_principles.rs");
+    let runner_path = manifest_dir.join("src/bin/mcallister_first_principles/main.rs");
     let runner = std::fs::read_to_string(&runner_path)
         .unwrap_or_else(|e| panic!("Failed to read {}: {e}", runner_path.display()));
     let stage_volume = source_region_before_fn(&runner, "stage_volume", "compare_against_dat");
@@ -575,7 +575,7 @@ fn stage0_mcallister_binaries_do_not_use_validation_replay_artifacts() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let bin_dir = manifest_dir.join("src/bin");
     let allowed_replay = (
-        "src/bin/mcallister_first_principles.rs",
+        "src/bin/mcallister_first_principles/main.rs",
         "corrected_kahler_param.dat",
     );
     let forbidden_computed_artifacts = [
@@ -589,13 +589,23 @@ fn stage0_mcallister_binaries_do_not_use_validation_replay_artifacts() {
         "potent_rays_vols.dat",
     ];
 
-    for entry in std::fs::read_dir(&bin_dir)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", bin_dir.display()))
-    {
-        let path = entry.expect("valid directory entry").path();
-        if path.extension().and_then(|ext| ext.to_str()) != Some("rs") {
-            continue;
+    // Walk src/bin recursively so directory-style binaries (module splits)
+    // stay covered by the replay-artifact policy.
+    let mut bin_sources = Vec::new();
+    let mut pending = vec![bin_dir.clone()];
+    while let Some(dir) = pending.pop() {
+        for entry in std::fs::read_dir(&dir)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {e}", dir.display()))
+        {
+            let path = entry.expect("valid directory entry").path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path.extension().and_then(|ext| ext.to_str()) == Some("rs") {
+                bin_sources.push(path);
+            }
         }
+    }
+    for path in bin_sources {
         let rel_path = path
             .strip_prefix(&manifest_dir)
             .unwrap_or(&path)
@@ -625,7 +635,7 @@ fn stage0_mcallister_binaries_do_not_use_validation_replay_artifacts() {
                         "{rel_path} must gate {token} behind --allow-downstream-kahler"
                     );
                 }
-                ("src/bin/mcallister_first_principles.rs", "corrected_cy_vol.dat") => {
+                ("src/bin/mcallister_first_principles/main.rs", "corrected_cy_vol.dat") => {
                     let compare =
                         source_region_before_fn(&source, "compare_against_dat", "stage_vacuum");
                     assert!(
@@ -679,7 +689,7 @@ fn stage0_compact_gv_production_paths_use_upstream_cygv_boundary() {
         );
     }
 
-    let first_principles_path = manifest_dir.join("src/bin/mcallister_first_principles.rs");
+    let first_principles_path = manifest_dir.join("src/bin/mcallister_first_principles/main.rs");
     let first_principles = std::fs::read_to_string(&first_principles_path)
         .unwrap_or_else(|e| panic!("Failed to read {}: {e}", first_principles_path.display()));
     let mirror_stage = source_region_before_fn(&first_principles, "stage_gv", "stage_racetrack");
@@ -810,11 +820,11 @@ fn stage0_first_principles_runner_accepts_declared_inputs_only_data_dir() {
         );
     }
     assert!(
-        stderr.contains("[RESULT] V_string = 4711.426470138208"),
+        stderr.contains("[RESULT] V_string = 4711.426469973247"),
         "declared-input run should reach the current no-replay V_string result:\n{stderr}"
     );
     assert!(
-        stderr.contains("[RESULT] log10(|V0|) = -202.26278149505188"),
+        stderr.contains("[RESULT] log10(|V0|) = -202.2627814950215"),
         "declared-input run should reach the current no-replay V0 result:\n{stderr}"
     );
     assert!(

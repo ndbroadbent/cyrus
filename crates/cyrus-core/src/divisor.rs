@@ -203,17 +203,58 @@ fn dual_face_interior_lattice_points(
     Ok(count)
 }
 
+fn face_pairing_context(
+    polytope: &Polytope,
+    points: &[Point],
+) -> Result<(ConvexHull, Vec<Point>, Vec<Point>)> {
+    let point_coords: Vec<Vec<i64>> = points.iter().map(|point| point.coords().to_vec()).collect();
+    let hull = ConvexHull::compute(&point_coords)
+        .ok_or_else(|| Error::InvalidInput("failed to compute primal convex hull".into()))?;
+    let dual_vertices = polytope.dual_vertices()?;
+    let dual_polytope = polytope.compute_dual()?;
+    let dual_points = dual_polytope.vertices().to_vec();
+    Ok((hull, dual_vertices, dual_points))
+}
+
+/// Count the extra divisor classes of a non-favorable polytope.
+///
+/// Batyrev's correction term beyond the toric GLSM rank:
+/// `h11 = n_toric_classes + sum over 2-faces of l*(face) * l*(dual face)`.
+/// Each point strictly interior to a 2-face whose dual 1-face has interior
+/// lattice points contributes that interior count; favorable polytopes get 0.
+pub fn batyrev_h11_extra_classes(polytope: &Polytope, points: &[Point]) -> Result<usize> {
+    if polytope.dim() != 4 {
+        return Err(Error::InvalidInput(
+            "Batyrev h11 correction is currently implemented for 4D polytopes".into(),
+        ));
+    }
+    let (hull, dual_vertices, dual_points) = face_pairing_context(polytope, points)?;
+
+    let mut extra = 0usize;
+    for point in points {
+        if point.coords().iter().all(|&coord| coord == 0) {
+            continue;
+        }
+        let sat = saturated_facets(point, &dual_vertices);
+        if sat.len() != 2 {
+            continue;
+        }
+        extra += dual_face_interior_lattice_points(
+            points,
+            &hull.vertex_indices,
+            &dual_points,
+            &dual_vertices,
+            &sat,
+        )?;
+    }
+    Ok(extra)
+}
+
 /// Compute topological divisor Euler characteristics for KKLT divisors.
 ///
-/// Uses the Braun et al. combinatorial formula used in the McAllister
-/// reproduction:
-///
-/// ```text
-/// χ(D) = 12 χ(O_D) - D³
-/// ```
-///
-/// `points` must be the CYTools-ordered divisor points used by the intersection
-/// tensor, and `kklt_basis` indexes into that point list.
+/// Braun et al. combinatorial formula: `chi(D) = 12 chi(O_D) - D^3`.
+/// `points` must be the CYTools-ordered divisor points used by the
+/// intersection tensor, and `kklt_basis` indexes into that point list.
 pub fn compute_kklt_divisor_chi(
     polytope: &Polytope,
     points: &[Point],
@@ -233,12 +274,7 @@ pub fn compute_kklt_divisor_chi(
         )));
     }
 
-    let point_coords: Vec<Vec<i64>> = points.iter().map(|point| point.coords().to_vec()).collect();
-    let hull = ConvexHull::compute(&point_coords)
-        .ok_or_else(|| Error::InvalidInput("failed to compute primal convex hull".into()))?;
-    let dual_vertices = polytope.dual_vertices()?;
-    let dual_polytope = polytope.compute_dual()?;
-    let dual_points = dual_polytope.vertices();
+    let (hull, dual_vertices, dual_points) = face_pairing_context(polytope, points)?;
 
     let mut out = Vec::with_capacity(kklt_basis.len());
     for &point_idx in kklt_basis {
@@ -262,12 +298,24 @@ pub fn compute_kklt_divisor_chi(
                 ));
             }
             1 => 1,
-            2 => 1,
+            2 => {
+                // Non-favorable case: the divisor of a point strictly interior
+                // to a 2-face splits into 1 + l*(dual face) disjoint rigid
+                // components on the CY; chi(O) adds 1 per component.
+                let split = dual_face_interior_lattice_points(
+                    points,
+                    &hull.vertex_indices,
+                    &dual_points,
+                    &dual_vertices,
+                    &sat,
+                )?;
+                1_i64 + i64::try_from(split).expect("dual-face interior count fits i64")
+            }
             3 => {
                 let g = dual_face_interior_lattice_points(
                     points,
                     &hull.vertex_indices,
-                    dual_points,
+                    &dual_points,
                     &dual_vertices,
                     &sat,
                 )?;
@@ -277,7 +325,7 @@ pub fn compute_kklt_divisor_chi(
                 let g = dual_face_interior_lattice_points(
                     points,
                     &hull.vertex_indices,
-                    dual_points,
+                    &dual_points,
                     &dual_vertices,
                     &sat,
                 )?;

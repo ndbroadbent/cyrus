@@ -246,6 +246,102 @@ fn racetrack_term_value(result: &RacetrackResult, term: &RacetrackTerm) -> Optio
     Some((coefficient * li2_re, coefficient * li2_im))
 }
 
+/// Newton-refine the axio-dilaton stationary point on the FULL term list.
+///
+/// The two-term racetrack fixes `(g_s, Re tau)` analytically from the two
+/// leading exponents. With a slow hierarchy (7-51-13590: the second term is
+/// 0.89x the first) the remaining terms shift the stationary point and
+/// `|W0|` at the percent level. McAllister's checkpoints store the TWO-TERM
+/// `g_s` but the FULL-SOLVE `W0` — their `c_tau` is consistent only with
+/// that mix (verified to 4e-7 on 7-51-13590) — so the refined result is
+/// used for the `W0` evaluation only.
+///
+/// Newton iterates `tau -> tau - W'(tau)/W''(tau)` in the complex plane on
+/// the same dilogarithm superpotential used by [`compute_w0_from_terms`]:
+/// `W'  = sum_q c_q (2 pi i a_q) (-ln(1 - z_q))`,
+/// `W'' = sum_q c_q (2 pi i a_q)^2 z_q / (1 - z_q)`, `z_q = e^{2 pi i a_q tau}`.
+#[must_use]
+pub fn refine_racetrack_stationary_point(
+    result: &RacetrackResult,
+    terms: &[RacetrackTerm],
+) -> Option<RacetrackResult> {
+    if terms.len() < 2 {
+        return None;
+    }
+    let mut re = result.re_tau.get();
+    let mut im = result.im_tau.get();
+    let seed_im = im;
+    for _ in 0..64 {
+        let (mut dre, mut dim) = (0.0f64, 0.0f64);
+        let (mut d2re, mut d2im) = (0.0f64, 0.0f64);
+        for term in terms {
+            let a = term.exponent.get();
+            let c = term.coefficient.get();
+            let magnitude = (-TWO_PI.get() * a * im).exp();
+            if magnitude == 0.0 {
+                continue;
+            }
+            let phase = TWO_PI.get() * a * re;
+            let (z_re, z_im) = (magnitude * phase.cos(), magnitude * phase.sin());
+            // 1 - z and its complex log/reciprocal. The magnitudes here are
+            // ~1e-18, far below f64 epsilon, so 1 - z_re rounds to exactly 1
+            // and a naive ln(|1-z|^2) silently evaluates to zero; ln_1p keeps
+            // the leading -z behavior exact.
+            let (w_re, w_im) = (1.0 - z_re, -z_im);
+            let w_norm2 = w_re.mul_add(w_re, w_im * w_im);
+            if w_norm2 <= 0.0 {
+                return None;
+            }
+            let z_norm2 = z_re.mul_add(z_re, z_im * z_im);
+            let ln_re = 0.5 * z_re.mul_add(-2.0, z_norm2).ln_1p();
+            let ln_im = w_im.atan2(w_re);
+            // W' term: c * (2 pi i a) * (-ln(1-z))
+            let f = TWO_PI.get() * a * c;
+            dre += f * ln_im;
+            dim -= f * ln_re;
+            // W'' term: c * (2 pi i a)^2 * z/(1-z)
+            let (q_re, q_im) = (
+                (z_re * w_re + z_im * w_im) / w_norm2,
+                (z_im * w_re - z_re * w_im) / w_norm2,
+            );
+            let f2 = -(TWO_PI.get() * a) * (TWO_PI.get() * a) * c;
+            d2re += f2 * q_re;
+            d2im += f2 * q_im;
+        }
+        let d2_norm2 = d2re.mul_add(d2re, d2im * d2im);
+        if d2_norm2 == 0.0 {
+            return None;
+        }
+        let step_re = dre.mul_add(d2re, dim * d2im) / d2_norm2;
+        let step_im = dim.mul_add(d2re, -(dre * d2im)) / d2_norm2;
+        re -= step_re;
+        im -= step_im;
+        if !(re.is_finite() && im.is_finite()) {
+            return None;
+        }
+        if step_re.abs() + step_im.abs() < 1e-14 * im.abs() {
+            break;
+        }
+    }
+    // The refinement must stay a small correction to the two-term seed;
+    // anything else means the racetrack approximation itself broke down.
+    if (im - seed_im).abs() > 0.05 * seed_im {
+        return None;
+    }
+    // Tiny negative drift of Re(tau) from rounding is clamped; a genuine
+    // negative real part would violate the NonNeg type honestly.
+    if re < 0.0 && re > -1e-9 {
+        re = 0.0;
+    }
+    Some(RacetrackResult {
+        g_s: F64::<Pos>::new(1.0 / im)?,
+        re_tau: F64::<NonNeg>::new(re)?,
+        im_tau: F64::<Pos>::new(im)?,
+        delta: result.delta,
+        epsilon: result.epsilon,
+    })
+}
+
 /// Compute W₀ from all available racetrack terms.
 ///
 /// From eq. 2.22:

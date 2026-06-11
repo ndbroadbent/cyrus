@@ -43,6 +43,12 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+
+mod missing_gv;
+use missing_gv::{
+    compute_minimal_degree_gv_by_ambient_class, defer_bounded_impact_missing_gvs,
+    verify_deferred_missing_gv_bounds,
+};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -1660,7 +1666,17 @@ fn stage_racetrack(
         }
         std::process::exit(2);
     };
-    let Some(w0) = compute_w0_from_terms(&rt_res, &terms) else {
+    let Some(refined) = cyrus_core::racetrack::refine_racetrack_stationary_point(&rt_res, &terms)
+    else {
+        eprintln!("[ERROR] full-term racetrack stationary-point refinement failed");
+        std::process::exit(2);
+    };
+    eprintln!(
+        "[INFO] racetrack refinement: two-term im_tau={} full-solve im_tau={} (g_s checkpoint convention keeps the two-term value; W0 uses the full solve)",
+        rt_res.im_tau.get(),
+        refined.im_tau.get()
+    );
+    let Some(w0) = compute_w0_from_terms(&refined, &terms) else {
         eprintln!("[ERROR] racetrack W0 computation failed or cancelled exactly");
         std::process::exit(2);
     };
@@ -1912,208 +1928,6 @@ fn select_min_required_gv_degree_rank(
         })
         .map(|(rank, _, _)| rank)
         .ok_or_else(|| "cannot select by required GV degree without positive branches".into())
-}
-
-/// Compute GV invariants for missing classes whose grading degree is below
-/// twice the minimal positive generator degree. Such classes admit no
-/// decomposition into positive-degree effective classes at all (any
-/// decomposition needs two parts of at least the minimal degree), so the
-/// HKTY inversion for them involves no lower instanton channels and the
-/// one-dimensional series on the class itself is exact regardless of the
-/// decomposition domain — the cap-vs-effective-cone caveat that blocks
-/// higher-degree exotic origin circuits cannot apply. (Verified against the
-/// published GV checkpoint and a CYTools face computation on 5-113-4627's
-/// degree-2 origin circuit: GV = -2.)
-/// Split off missing-GV classes whose maximal possible contribution
-/// (assuming `|GV| <= missing_gv_abs_bound`) stays below the explicitly
-/// requested `--max-missing-gv-impact` threshold; they are excluded from the
-/// targets and V_string with a loud warning, and re-verified at the solved
-/// Kahler point by `verify_deferred_missing_gv_bounds`.
-fn defer_bounded_impact_missing_gvs(
-    missing_gv_classes: &mut Vec<Vec<i64>>,
-    intersection: &PrimalIntersection,
-    kklt_basis: &[usize],
-    selection_t: &[F64<Finite>],
-    max_missing_gv_impact: f64,
-    missing_gv_abs_bound: u32,
-) -> Vec<Vec<i64>> {
-    let mut deferred = Vec::new();
-    if missing_gv_classes.is_empty() || max_missing_gv_impact <= 0.0 {
-        return deferred;
-    }
-    let mut still_missing = Vec::new();
-    for class in missing_gv_classes.drain(..) {
-        let impact =
-            missing_gv_unit_impact_bound(&class, &intersection.basis, kklt_basis, selection_t)
-                .map(|unit| unit * f64::from(missing_gv_abs_bound));
-        match impact {
-            Some(bound) if bound <= max_missing_gv_impact => {
-                eprintln!(
-                    "[WARN] deferring missing GV curve with bounded impact {bound:.3e} <= --max-missing-gv-impact {max_missing_gv_impact:.3e} (assuming |GV| <= {missing_gv_abs_bound}); its contribution is EXCLUDED from targets and V_string; class={class:?}"
-                );
-                deferred.push(class);
-            }
-            _ => still_missing.push(class),
-        }
-    }
-    *missing_gv_classes = still_missing;
-    deferred
-}
-
-/// Re-verify the deferral assumption at the solved Kahler point: curve
-/// volumes shrink during the corrected solve, so a bound granted at
-/// selection time must be re-established where it actually matters.
-fn verify_deferred_missing_gv_bounds(
-    deferred_missing_classes: &[Vec<i64>],
-    intersection: &PrimalIntersection,
-    kklt_basis: &[usize],
-    solved_t: &[F64<Finite>],
-    max_missing_gv_impact: f64,
-    missing_gv_abs_bound: u32,
-) {
-    for class in deferred_missing_classes {
-        let realized =
-            missing_gv_unit_impact_bound(class, &intersection.basis, kklt_basis, solved_t)
-                .map(|unit| unit * f64::from(missing_gv_abs_bound));
-        match realized {
-            Some(bound) if bound <= max_missing_gv_impact => {}
-            other => {
-                eprintln!(
-                    "[ERROR] deferred missing-GV curve exceeds the impact bound at the solved Kahler point (realized={other:?}, limit={max_missing_gv_impact:.3e}); class={class:?}"
-                );
-                std::process::exit(2);
-            }
-        }
-    }
-}
-
-/// Conservative per-unit-GV bound on a missing curve's contribution to any
-/// KKLT tau target or to V_string at the Kahler point `t` (computed basis).
-/// Uses the positive-parity dilogarithm (which dominates the odd-parity one)
-/// and Li3(x) <= Li2(x) on (0,1). Returns None when the curve volume is not
-/// positive (no bound possible without continuation data).
-fn missing_gv_unit_impact_bound(
-    class: &[i64],
-    basis: &[usize],
-    kklt_basis: &[usize],
-    t: &[F64<Finite>],
-) -> Option<f64> {
-    let volume: f64 = basis
-        .iter()
-        .zip(t.iter())
-        .map(|(&idx, ti)| class.get(idx).copied().unwrap_or(0) as f64 * ti.get())
-        .sum();
-    if volume.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
-        return None;
-    }
-    let dilog = cyrus_core::kklt::gv_dilog_from_curve_volume_checked(volume, 0).ok()?;
-    let max_kklt_coeff = kklt_basis
-        .iter()
-        .map(|&idx| class.get(idx).copied().unwrap_or(0).unsigned_abs())
-        .max()? as f64;
-    let two_pi = std::f64::consts::TAU;
-    let tau_bound = dilog * max_kklt_coeff / (2.0 * two_pi.powi(2));
-    let volume_bound = (1.0 + two_pi * volume) * dilog / (2.0 * two_pi.powi(3));
-    Some(tau_bound.max(volume_bound))
-}
-
-fn compute_minimal_degree_gv_by_ambient_class(
-    intersection: &PrimalIntersection,
-    required_ambient_classes: &[Vec<i64>],
-    ambient_rays: &[Vec<i64>],
-) -> Result<HashMap<Vec<i64>, malachite::Integer>, String> {
-    let gv_basis_data = vector_gv_basis_data(
-        ambient_rays,
-        &intersection.linrels,
-        &intersection.basis,
-        "primal",
-    )?;
-    let rays = &gv_basis_data.mori_rays;
-    let grading = compute_grading_vector(rays)
-        .ok_or_else(|| "failed to compute primal GV grading vector".to_string())?;
-    let degree_of = |basis_class: &[i64]| -> i128 {
-        basis_class
-            .iter()
-            .zip(grading.iter())
-            .map(|(&c, &g)| i128::from(c) * i128::from(g))
-            .sum()
-    };
-    let min_generator_degree = rays
-        .iter()
-        .map(|ray| degree_of(ray))
-        .filter(|&deg| deg > 0)
-        .min()
-        .ok_or_else(|| "no positive-degree Mori generators".to_string())?;
-    let minimal_degree_generators: HashSet<&Vec<i64>> = rays
-        .iter()
-        .filter(|ray| degree_of(ray) == min_generator_degree)
-        .collect();
-
-    let mut out = HashMap::new();
-    for class in required_ambient_classes {
-        let basis_class: Vec<i64> = intersection
-            .basis
-            .iter()
-            .map(|&idx| class.get(idx).copied().unwrap_or(0))
-            .collect();
-        let class_degree = degree_of(&basis_class);
-        // A class can decompose only as a sum of two semigroup elements, and
-        // any semigroup element of the minimal generator degree must be a
-        // generator itself. So for class degree < 2*min nothing decomposes,
-        // and for degree == 2*min the only candidates are exact generator
-        // pairs, checked here over integer vectors.
-        let decomposable = if class_degree <= 0 {
-            true
-        } else if class_degree < 2 * min_generator_degree {
-            false
-        } else if class_degree == 2 * min_generator_degree {
-            minimal_degree_generators.iter().any(|generator| {
-                let remainder: Vec<i64> = basis_class
-                    .iter()
-                    .zip(generator.iter())
-                    .map(|(&c, &g)| c - g)
-                    .collect();
-                minimal_degree_generators.contains(&remainder)
-            })
-        } else {
-            true
-        };
-        if decomposable {
-            eprintln!(
-                "[INFO] minimal-degree GV: missing class at grading degree {class_degree} (min generator degree {min_generator_degree}) may decompose; leaving for other methods"
-            );
-            continue;
-        }
-        let gcd = basis_class
-            .iter()
-            .fold(0u64, |acc, &c| gcd_u64(acc, c.unsigned_abs()));
-        if gcd != 1 {
-            // k-fold multiples decompose into k copies of the primitive and
-            // always fail the degree gate; reaching here would be a bug.
-            continue;
-        }
-        let series = cyrus_core::compute_ambient_one_dimensional_ray_gv_series(
-            class,
-            &intersection.basis,
-            &grading,
-            &gv_basis_data.q_matrix,
-            &intersection.kappa_basis,
-            1,
-        )
-        .map_err(|e| format!("one-dimensional minimal-degree GV series failed: {e}"))?;
-        let Some(value) = series.values.first() else {
-            return Err("one-dimensional minimal-degree GV series returned no values".to_string());
-        };
-        eprintln!(
-            "[INFO] minimal-degree GV: missing class at grading degree {class_degree} (< 2 x min generator degree {min_generator_degree}) admits no decompositions; one-dimensional HKTY series gives GV={value}"
-        );
-        out.insert(class.clone(), value.clone());
-    }
-    Ok(out)
-}
-
-fn gcd_u64(a: u64, b: u64) -> u64 {
-    if b == 0 { a } else { gcd_u64(b, a % b) }
 }
 
 fn compute_primal_general_gv_by_ambient_class(
@@ -3661,6 +3475,7 @@ fn stage_volume(
             }
             if !missing_gv_classes.is_empty() {
                 let minimal_degree_gvs = compute_minimal_degree_gv_by_ambient_class(
+                    geom,
                     intersection,
                     &missing_gv_classes,
                     &ambient_rays,
@@ -3963,7 +3778,22 @@ fn stage_volume(
     }
 
     let classical_volume = classical_volume_from_t(&intersection.kappa_basis, &t);
-    let h11_raw = i32::try_from(intersection.basis.len()).unwrap_or_else(|_| {
+    // For non-favorable polytopes the GLSM rank undercounts h11; the Euler
+    // characteristic in the BBHL correction needs the true Hodge number.
+    let h11_extra =
+        cyrus_core::divisor::batyrev_h11_extra_classes(&geom.polytope, &geom.triangulation_points)
+            .unwrap_or_else(|e| {
+                eprintln!("[ERROR] failed to compute Batyrev h11 correction: {e}");
+                std::process::exit(2);
+            });
+    if h11_extra > 0 {
+        eprintln!(
+            "[INFO] non-favorable polytope: h11 = {} toric classes + {} split-divisor classes",
+            intersection.basis.len(),
+            h11_extra
+        );
+    }
+    let h11_raw = i32::try_from(intersection.basis.len() + h11_extra).unwrap_or_else(|_| {
         eprintln!("[ERROR] h11 does not fit in i32");
         std::process::exit(2);
     });
@@ -4006,8 +3836,18 @@ fn compare_against_dat(
         if let Some(w0_expected) = read_optional_scalar_f64(&dir.join("W_0.dat")) {
             let rel_w0 = ((w0.get() - w0_expected) / w0_expected).abs();
             eprintln!("[COMPARE] W0 rel_err = {rel_w0}");
+            if rel_w0 > 1e-3 {
+                eprintln!(
+                    "[INFO] W_0.dat stores the two-term racetrack value, while Cyrus reports the full-solve W0; for 7-51-13590 the checkpoint's own c_tau.dat is consistent only with the full-solve value (4e-7), so the c_tau comparison below is the meaningful downstream check"
+                );
+            }
         } else {
             eprintln!("[COMPARE] W_0.dat checkpoint not found; skipping W0 comparison");
+        }
+        if let Some(c_tau_expected) = read_optional_scalar_f64(&dir.join("c_tau.dat")) {
+            let c_tau = cyrus_core::kklt::compute_c_tau(g_s, w0);
+            let rel_c_tau = ((c_tau.get() - c_tau_expected) / c_tau_expected).abs();
+            eprintln!("[COMPARE] c_tau rel_err = {rel_c_tau}");
         }
         let corrected_volume_path = dir.join("corrected_cy_vol.dat");
         if let Some(corrected_v_expected) = read_optional_scalar_f64(&corrected_volume_path) {

@@ -34,6 +34,19 @@ first-principles runner:
   overrides.
 - `kklt_basis.dat`: declared non-perturbative divisor set.
 
+### Non-favorable polytopes (7-51-13590)
+
+The 7-51-13590 primal polytope is non-favorable: 53 not-facet points give
+only 48 toric divisor classes while h11 = 51. McAllister's data is entirely
+expressed in the 48-class toric truncation, which the GLSM-based pipeline
+matches automatically; the two genuine corrections are (1) the divisor
+Euler characteristics of the three points strictly interior to 2-faces with
+dual-face interior points, whose divisors split into 1 + l*(dual face)
+rigid components on the CY (chi(O) adds 1 per component; verified against
+their corrected targets, which require chi(O) = 2 for both split KKLT
+divisors), and (2) the Euler characteristic of X in the BBHL correction,
+which needs the true h11 from Batyrev's formula (48 + 3 = 51).
+
 ### Missing-GV handling (5-113-4627)
 
 Three exotic origin-circuit curves in the 5-113-4627 examples are not
@@ -74,7 +87,14 @@ corresponding object:
   toric-curve checkpoint (`small_curves_cutoff.dat` itself is a declared
   input, see above). These validate the selected toric-curve method, not a
   full 214-dimensional generic `compute_gvs()` call.
-- `g_s.dat`, `W_0.dat`: racetrack outputs.
+- `g_s.dat`, `W_0.dat`: racetrack outputs. `g_s.dat` stores the two-term
+  racetrack solution; `W_0.dat` ALSO stores the two-term value even though
+  the checkpoints' own `c_tau.dat` is consistent only with the full
+  multi-term stationary point (verified to 4e-7 on 7-51-13590, where the
+  hierarchy is slow and the difference is 2.3%). Cyrus reports the
+  full-solve `W0` (Newton refinement of the dilogarithm superpotential
+  seeded at the two-term solution) and compares `c_tau` as the meaningful
+  downstream check.
 - `c_tau.dat`: derived KKLT scalar checkpoint computed from the racetrack
   outputs, not a declared model input.
 - `corrected_heights.dat`: corrected-chamber FRST checkpoint for diagnostics.

@@ -600,7 +600,11 @@ fn find_lattice_points_native(req: &LatticeRequest) -> Result<Option<Vec<Vec<i64
     }
 
     let dim = req.grading_vector.len();
-    if dim > 6 || req.hyperplanes.iter().any(|row| row.len() != dim) {
+    // Bounded depth-first enumeration with per-coordinate LP bounds; cost
+    // grows with dimension, so very high-dimensional requests still fall
+    // back to the external helper. dim 7 covers the largest mirror
+    // (h21 = 7 for 7-51-13590) and enumerates in well under a second.
+    if dim > 8 || req.hyperplanes.iter().any(|row| row.len() != dim) {
         return Ok(None);
     }
     if req.deg_window < 0 || req.max_coord < 0 {
