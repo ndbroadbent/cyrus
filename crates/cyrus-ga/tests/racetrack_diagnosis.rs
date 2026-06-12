@@ -115,6 +115,14 @@ fn diagnose_racetrack_refinement() {
 
     let terms = build_racetrack_terms(&geom.gv, &m_typed, &p, f64_pos!(1.0));
     println!("racetrack terms: {}", terms.len());
+    let mut ranked: Vec<(f64, f64)> = terms
+        .iter()
+        .map(|t| (t.exponent.get(), t.coefficient.get()))
+        .collect();
+    ranked.sort_by(|a, b| a.0.total_cmp(&b.0));
+    for (i, (a, c)) in ranked.iter().take(6).enumerate() {
+        println!("  term[{i}]: a={a:.12} c={c:.6}");
+    }
     let two_term = solve_racetrack(&terms).expect("two-term racetrack converges (GA saw it)");
     println!(
         "two-term seed: g_s={:.6} Im(tau)={:.4} Re(tau)={:.4}",

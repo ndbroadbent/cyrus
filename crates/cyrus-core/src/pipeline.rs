@@ -128,7 +128,32 @@ pub fn evaluate_vacuum(
         return Ok(res);
     }
 
-    // 5. Calculation: Racetrack Solution
+    // 5. Filter: the flat direction must be STRICTLY interior to the
+    // mirror Kahler cone, tested against the effective curves themselves
+    // (q.p > 0 for every enumerated GV curve). This is the physically
+    // correct replacement for the removed toric-cap gate: a curve with
+    // q.p ~ 0 means p sits on a cone wall, the racetrack premise fails,
+    // and the near-pole term is numerically explosive in
+    // platform-dependent ways (observed: the same candidate evaluated
+    // "valid" on x86 and diverged on aarch64 from a q.p ~ 1e-15 curve).
+    // The threshold sits far below genuine leading exponents (~1/h11 of
+    // the mirror) and far above float noise.
+    const CONE_WALL_EPS: f64 = 1e-8;
+    for gv in req.gv {
+        let q_dot_p: f64 = gv
+            .curve
+            .iter()
+            .zip(p.iter())
+            .map(|(qi, pi)| qi.to_f64().get() * pi.get())
+            .sum();
+        if q_dot_p < CONE_WALL_EPS {
+            res.reason =
+                Some("Flat direction on or outside the mirror Kahler cone wall (q.p <= 0)".into());
+            return Ok(res);
+        }
+    }
+
+    // 6. Calculation: Racetrack Solution
     let terms = build_racetrack_terms(req.gv, &m_typed, &p, f64_pos!(1.0));
     let Some(rt_res) = solve_racetrack(&terms) else {
         res.reason = Some("No stable racetrack solution".into());
