@@ -83,6 +83,23 @@ pub fn run_multi(pool_path: &std::path::Path) {
         std::process::exit(2);
     });
     cyrus_ga::multi::validate_pool_conventions(&pool);
+    // Mirror-chamber diversity: each (polytope, dual chamber) is its own
+    // bandit arm. The published scans search across the LCS cones of the
+    // dual polytope; one chamber samples only a slice of the PFV space.
+    let chambers: usize = parse_arg_value("--chambers-per-polytope").unwrap_or(1);
+    let pool: Vec<cyrus_ga::multi::PolytopeRecord> = pool
+        .into_iter()
+        .flat_map(|record| {
+            (0..chambers.max(1)).map(move |c| {
+                let mut r = record.clone();
+                if c > 0 {
+                    r.name = format!("{}#{c}", record.name);
+                    r.chamber = c;
+                }
+                r
+            })
+        })
+        .collect();
     std::fs::create_dir_all(run_dir.join("polytopes")).expect("create run dir");
     let summary_path = run_dir.join("summary.json");
     let improvements_path = run_dir.join("improvements.jsonl");
@@ -92,21 +109,34 @@ pub fn run_multi(pool_path: &std::path::Path) {
     let rounds_path = run_dir.join("rounds.jsonl");
     let candidates_path = run_dir.join("candidates.jsonl");
 
+    // Stats merge by NAME so a grown pool (new chambers, new slices)
+    // resumes cleanly: existing arms keep their history, new arms start
+    // fresh.
     let mut stats: Vec<PolytopeStats> = if summary_path.exists() {
         let text = std::fs::read_to_string(&summary_path).expect("read summary");
         let loaded: Vec<PolytopeStats> = serde_json::from_str(&text).expect("parse summary");
+        let mut by_name: std::collections::HashMap<String, PolytopeStats> =
+            loaded.into_iter().map(|s| (s.name.clone(), s)).collect();
+        let merged: Vec<PolytopeStats> = pool
+            .iter()
+            .map(|p| {
+                by_name
+                    .remove(&p.name)
+                    .unwrap_or_else(|| PolytopeStats::new(p.name.clone()))
+            })
+            .collect();
         eprintln!(
-            "[INFO] resumed landscape run: {} polytopes, {} rounds so far",
-            loaded.len(),
-            loaded.iter().map(|s| s.rounds).sum::<u64>()
+            "[INFO] resumed landscape run: {} arms ({} with history), {} rounds so far",
+            merged.len(),
+            merged.iter().filter(|s| s.rounds > 0 || s.dead).count(),
+            merged.iter().map(|s| s.rounds).sum::<u64>()
         );
-        loaded
+        merged
     } else {
         pool.iter()
             .map(|p| PolytopeStats::new(p.name.clone()))
             .collect()
     };
-    assert_eq!(stats.len(), pool.len(), "summary does not match pool file");
 
     let mut geometries: std::collections::HashMap<usize, GaGeometry> =
         std::collections::HashMap::new();
@@ -433,8 +463,24 @@ pub fn emit_verification_dir(out_dir: &std::path::Path) {
 
     // The GA generated K/M in the COMPUTED dual divisor basis; declare that
     // explicitly so the runner cannot misinterpret the coordinates.
-    let geom = GaGeometry::prepare_from_points(&record.points, DEFAULT_GV_MIN_POINTS)
-        .expect("geometry for dual basis");
+    let chamber: usize = parse_arg_value("--chamber").unwrap_or(0);
+    let geom =
+        GaGeometry::prepare_from_points_in_chamber(&record.points, DEFAULT_GV_MIN_POINTS, chamber)
+            .expect("geometry for dual basis");
+    // The candidate's fluxes live in THIS dual chamber's conventions; the
+    // runner must use the same chamber.
+    let dual_simplices_csv: String = geom
+        .dual_simplices
+        .iter()
+        .map(|s| {
+            s.iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::write(out_dir.join("dual_simplices.dat"), dual_simplices_csv).expect("dual simplices");
     std::fs::write(
         out_dir.join("flux_basis.json"),
         serde_json::to_string(&serde_json::json!({"indices": geom.dual_basis})).expect("json"),

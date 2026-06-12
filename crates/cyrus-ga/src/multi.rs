@@ -29,6 +29,10 @@ pub struct PolytopeRecord {
     pub favorable: Option<bool>,
     /// Full CYTools-ordered lattice point list.
     pub points: Vec<Vec<i64>>,
+    /// Mirror (dual) chamber index: 0 = default dual FRST, k > 0 = k wall
+    /// flips away. Different chambers have different PFV solution sets.
+    #[serde(default)]
+    pub chamber: usize,
 }
 
 /// Bandit bookkeeping for one polytope (persisted in the global summary).
@@ -146,6 +150,8 @@ pub fn prepare_or_mark_dead(
         .arg(&record.name)
         .arg("--polytope-file")
         .arg(pool_path)
+        .arg("--chamber")
+        .arg(record.chamber.to_string())
         .arg("--gv-min-points")
         .arg(gv_min_points.to_string())
         .stdout(std::process::Stdio::null())
@@ -167,7 +173,7 @@ pub fn prepare_or_mark_dead(
     };
     let outcome = outcome.and_then(|()| {
         // Probe succeeded: re-prepare in-process against warm disk caches.
-        GaGeometry::prepare_from_points(&record.points, gv_min_points)
+        GaGeometry::prepare_from_points_in_chamber(&record.points, gv_min_points, record.chamber)
     });
     match outcome {
         Ok(geom) => Some(geom),

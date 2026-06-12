@@ -332,6 +332,7 @@ mod tests {
                 .expect("h21"),
             dual_basis: vec![0, 1],
             dual_glsm: vec![],
+            dual_simplices: vec![],
             pfv_seeds: vec![],
             q_d3: 100.0,
         };

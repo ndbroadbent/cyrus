@@ -39,6 +39,8 @@ pub struct GaGeometry {
     pub mirror_h21: I32<NonNeg>,
     /// Computed dual divisor basis indices (flux coordinate convention).
     pub dual_basis: Vec<usize>,
+    /// Simplices of the selected dual chamber (for verification emission).
+    pub dual_simplices: Vec<Vec<usize>>,
     /// Dual GLSM charge matrix (for flux basis transforms).
     pub dual_glsm: Vec<Vec<malachite::Integer>>,
     /// Exact isotropic flux seeds (small-box scan at preparation time).
@@ -93,6 +95,25 @@ impl GaGeometry {
         primal_points: &[Vec<i64>],
         gv_min_points: u32,
     ) -> Result<Self, String> {
+        Self::prepare_from_points_in_chamber(primal_points, gv_min_points, 0)
+    }
+
+    /// Prepare the geometry with the mirror (dual) side in the `chamber`-th
+    /// dual FRST: chamber 0 is the default; chamber k > 0 is reached by k
+    /// deterministic wall flips from the default. Different mirror chambers
+    /// have different intersection numbers and Kahler cones, hence
+    /// different PFV solution sets - the published scans search "in any of
+    /// the LCS cones" of the dual polytope, and restricting to one chamber
+    /// samples only a slice of each polytope's flux vacua.
+    ///
+    /// # Errors
+    /// Returns an error string when any preparation stage fails, including
+    /// when no k-th distinct valid chamber exists.
+    pub fn prepare_from_points_in_chamber(
+        primal_points: &[Vec<i64>],
+        gv_min_points: u32,
+        chamber: usize,
+    ) -> Result<Self, String> {
         // Primal polytope and its true h11 (Batyrev-corrected), which is the
         // mirror's h21 for the BBHL term.
         let primal_point_objs: Vec<Point> = primal_points
@@ -132,6 +153,11 @@ impl GaGeometry {
             .ok_or("dual origin not found")?;
         let (_, dual_tri) = compute_frst_heights(&dual_points, origin_idx)
             .map_err(|e| format!("dual FRST: {e}"))?;
+        let dual_tri = if chamber == 0 {
+            dual_tri
+        } else {
+            flip_walk_chamber(&dual_points, dual_tri.simplices(), origin_idx, chamber)?
+        };
 
         let (dual_glsm, linrels, dual_basis) =
             compute_glsm_and_linrels(&dual_points).map_err(|e| format!("dual GLSM: {e}"))?;
@@ -270,6 +296,7 @@ impl GaGeometry {
             mirror_h21,
             dual_basis,
             dual_glsm,
+            dual_simplices: dual_tri.simplices().to_vec(),
             pfv_seeds,
             q_d3: (primal_h11 + dual_basis_len) as f64 / 2.0 + 1.0,
         })
@@ -306,4 +333,74 @@ impl GaGeometry {
             .map_err(|e| format!("K transform apply: {e}"))?;
         Ok((k_out, m_out))
     }
+}
+
+/// Walk `k` deterministic wall flips from the given dual FRST, keeping only
+/// fine, star, regular neighbors. Errors when no k-th distinct chamber is
+/// reachable within the attempt budget.
+fn flip_walk_chamber(
+    points: &[cyrus_core::Point],
+    start: &[Vec<usize>],
+    origin_idx: usize,
+    k: usize,
+) -> Result<cyrus_core::Triangulation, String> {
+    use cyrus_core::triangulation::{
+        flip_circuit_in_triangulation, secondary_cone_hyperplanes_native,
+        triangulation_heights_from_secondary_cone,
+    };
+    use rand::Rng as _;
+    use rand::SeedableRng as _;
+    let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0xD0A1 + k as u64);
+    let mut simplices = start.to_vec();
+    let mut done = 0usize;
+    for _attempt in 0..(k * 24).max(24) {
+        if done == k {
+            break;
+        }
+        let tri = cyrus_core::Triangulation::new(simplices.clone());
+        let circuits = secondary_cone_hyperplanes_native(points, &tri)
+            .map_err(|e| format!("dual chamber walls: {e}"))?;
+        if circuits.is_empty() {
+            return Err("dual secondary cone has no walls".into());
+        }
+        let pick = &circuits[rng.gen_range(0..circuits.len())];
+        let sparse: Vec<(usize, i64)> = pick
+            .iter()
+            .enumerate()
+            .filter(|&(_, &c)| c != 0)
+            .map(|(i, &c)| (i, c))
+            .collect();
+        let Ok(flip) = flip_circuit_in_triangulation(&simplices, &sparse) else {
+            continue;
+        };
+        let neighbor = flip.simplices;
+        let fine_star = neighbor.iter().all(|s| s.contains(&origin_idx)) && {
+            let mut used = vec![false; points.len()];
+            for s in &neighbor {
+                for &i in s {
+                    if i >= points.len() {
+                        return Err("flip produced out-of-range index".into());
+                    }
+                    used[i] = true;
+                }
+            }
+            used.iter().all(|&u| u)
+        };
+        if !fine_star {
+            continue;
+        }
+        let neighbor_tri = cyrus_core::Triangulation::new(neighbor.clone());
+        match triangulation_heights_from_secondary_cone(points, &neighbor_tri) {
+            Ok(Some(_)) => {}
+            _ => continue,
+        }
+        simplices = neighbor;
+        done += 1;
+    }
+    if done < k {
+        return Err(format!(
+            "no distinct dual chamber {k} reachable ({done} flips found)"
+        ));
+    }
+    Ok(cyrus_core::Triangulation::new(simplices))
 }
