@@ -311,7 +311,15 @@ pub fn emit_verification_dir(out_dir: &std::path::Path) {
         .iter()
         .map(|p| Point::new(p.clone()))
         .collect();
-    let polytope = Polytope::from_vertices(point_objs).expect("polytope");
+    // Canonicalize to the full lattice point set (double dualization);
+    // vertices-only pool records would otherwise lose every non-vertex
+    // point and corrupt the geometry.
+    let polytope = Polytope::from_vertices(point_objs)
+        .expect("polytope")
+        .compute_dual()
+        .expect("dual")
+        .compute_dual()
+        .expect("double dual");
     let tri_points = polytope
         .points_not_interior_to_facets()
         .expect("triangulation points");
@@ -386,10 +394,10 @@ pub fn emit_verification_dir(out_dir: &std::path::Path) {
             .collect::<Vec<_>>()
             .join(",")
     };
-    let points_csv: String = record
-        .points
+    let points_csv: String = polytope
+        .vertices()
         .iter()
-        .map(|p| csv_i64(p))
+        .map(|p| csv_i64(p.coords()))
         .collect::<Vec<_>>()
         .join("\n");
     std::fs::write(out_dir.join("points.dat"), points_csv).expect("points");

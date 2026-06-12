@@ -93,8 +93,16 @@ impl GaGeometry {
             .iter()
             .map(|p| Point::new(p.clone()))
             .collect();
+        // Canonicalize to the FULL lattice point set via double dualization
+        // (compute_dual enumerates lattice points; the input may be
+        // vertices-only, e.g. pools built from the raw KS database, and
+        // points_not_interior_to_facets only filters what it is given).
         let primal = Polytope::from_vertices(primal_point_objs)
-            .map_err(|e| format!("primal polytope: {e}"))?;
+            .map_err(|e| format!("primal polytope: {e}"))?
+            .compute_dual()
+            .map_err(|e| format!("primal dual: {e}"))?
+            .compute_dual()
+            .map_err(|e| format!("primal double-dual: {e}"))?;
         let primal_tri_points = primal
             .points_not_interior_to_facets()
             .map_err(|e| format!("primal points: {e}"))?;
