@@ -79,6 +79,51 @@ fn test_pipeline_tadpole_exceeded() {
 }
 
 #[test]
+fn wall_vacuum_is_rejected_by_mirror_cone_gate() {
+    // A GV curve orthogonal to the flat direction (q.p = 0) means p sits
+    // on a mirror Kahler cone wall; the racetrack premise fails and the
+    // near-pole term is platform-dependently explosive (regression: the
+    // same wall candidate evaluated "valid" on x86 and diverged on
+    // aarch64).
+    let mut kappa = Intersection::new(2);
+    kappa.set(0, 0, 0, pos_rat(6));
+    kappa.set(0, 0, 1, pos_rat(3));
+    kappa.set(0, 1, 1, pos_rat(2));
+    kappa.set(1, 1, 1, TypedRational::<Finite>::new(Rational::from(-4)));
+    let mori = MoriCone::new(vec![i64_vec(&[1, 0]), i64_vec(&[0, 1])]);
+    // p = [5/4, 1/4] (exact PFV pair from the no-racetrack test); the
+    // curve (1, -5) pairs to exactly zero with it.
+    let gv = vec![
+        GvInvariant {
+            curve: i64_vec(&[1, -5]),
+            value: f64_finite(540.0),
+        },
+        GvInvariant {
+            curve: i64_vec(&[0, 1]),
+            value: f64_finite(1080.0),
+        },
+    ];
+    let req = EvaluationRequest {
+        kappa: &kappa,
+        mori: Some(&mori),
+        gv: &gv,
+        h11: h11(),
+        h21: h21(),
+        q_max: 1000.0,
+    };
+    let res = evaluate_vacuum(&req, &[1, -5], &[-4, 8]).unwrap();
+    assert!(!res.success);
+    assert!(
+        res.reason
+            .as_deref()
+            .unwrap()
+            .starts_with("Flat direction on or outside the mirror Kahler cone"),
+        "got: {:?}",
+        res.reason
+    );
+}
+
+#[test]
 fn negative_flux_charge_violates_tadpole_bound() {
     // The constraint is two-sided: 0 <= -M.K/2 <= Q. A sign-flipped flux
     // pair with q < 0 must fail (regression: a one-sided gate let the GA

@@ -41,6 +41,12 @@ pub struct GaGeometry {
     pub dual_basis: Vec<usize>,
     /// Dual GLSM charge matrix (for flux basis transforms).
     pub dual_glsm: Vec<Vec<malachite::Integer>>,
+    /// Exact isotropic flux seeds (small-box scan at preparation time).
+    /// Empty means PFV-barren within the scan budget: the quadratic form
+    /// K.N(M)^{-1}.K is anisotropic (no integer solutions) for every
+    /// sampled M - measured reality on some KS geometries, where random
+    /// flux sampling provably cannot find vacua.
+    pub pfv_seeds: Vec<crate::genome::Genome>,
     /// Automated D3 tadpole bound for this geometry's orientifold class:
     /// chi_f/4 = (h11 + h21)/2 + 1 (single-coordinate involutions with
     /// h11_- = h21_+ = 0, validated against all five published examples).
@@ -202,6 +208,59 @@ impl GaGeometry {
         )
         .ok_or("mirror h21 must be >= 0")?;
 
+        // Exact PFV seed scan (deterministic; integer arithmetic), keeping
+        // only seeds that also clear the tadpole window and have a flat
+        // direction strictly interior to the mirror Kahler cone (tested
+        // against the enumerated GV curves) - the full set of cheap PFV
+        // conditions. Viable seeds are RARE (the published examples came
+        // from scanning thousands of geometries), so the M budget is large;
+        // the integer-exact test costs ~ns per K.
+        use rand::SeedableRng as _;
+        let q_d3 = (primal_h11 + dual_basis.len()) as f64 / 2.0 + 1.0;
+        let mut seed_rng = rand_chacha::ChaCha8Rng::seed_from_u64(0xC1B05);
+        let keep = |genome: &crate::genome::Genome| -> bool {
+            let q: f64 = -0.5
+                * genome
+                    .k
+                    .iter()
+                    .zip(genome.m.iter())
+                    .map(|(&ki, &mi)| (ki * mi) as f64)
+                    .sum::<f64>();
+            if !(0.0..=q_d3).contains(&q) {
+                return false;
+            }
+            // Flat direction p = N^{-1}K strictly interior: q.p > 0 for
+            // every enumerated GV curve (mirror Kahler cone test).
+            let m_typed: Vec<I64<Finite>> =
+                genome.m.iter().map(|&x| I64::<Finite>::new(x)).collect();
+            let k_typed: Vec<I64<Finite>> =
+                genome.k.iter().map(|&x| I64::<Finite>::new(x)).collect();
+            let n_mat = cyrus_core::flat_direction::compute_n_matrix(&kappa_basis, &m_typed);
+            let Some(p) = cyrus_core::flat_direction::solve_linear_system_faer(&n_mat, &k_typed)
+            else {
+                return false;
+            };
+            gv.iter().all(|inv| {
+                let a: f64 = inv
+                    .curve
+                    .iter()
+                    .zip(p.iter())
+                    .map(|(qi, pi)| qi.to_f64().get() * pi.get())
+                    .sum();
+                a > 1e-8
+            })
+        };
+        let pfv_seeds = crate::pfv::find_isotropic_seeds(
+            &kappa_basis,
+            dual_basis.len(),
+            &mut seed_rng,
+            15,
+            4,
+            1500,
+            64,
+            keep,
+        );
+
         Ok(Self {
             kappa_basis,
             mori,
@@ -211,6 +270,7 @@ impl GaGeometry {
             mirror_h21,
             dual_basis,
             dual_glsm,
+            pfv_seeds,
             q_d3: (primal_h11 + dual_basis_len) as f64 / 2.0 + 1.0,
         })
     }

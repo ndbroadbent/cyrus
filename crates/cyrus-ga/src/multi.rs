@@ -183,6 +183,68 @@ pub fn prepare_or_mark_dead(
     }
 }
 
+/// Boundary validation of pool data conventions.
+///
+/// Computes the first record's Hodge data from its geometry and compares
+/// against the declared fields. Catches lattice convention mistakes (M vs
+/// N polytope: h11/h21 swap) and incomplete point data BEFORE any compute
+/// is spent - both happened in production.
+pub fn validate_pool_conventions(pool: &[PolytopeRecord]) {
+    let Some(record) = pool.first() else { return };
+    let (Some(decl_h11), Some(decl_h21)) = (record.h11, record.h21) else {
+        eprintln!("[WARN] pool records carry no declared Hodge numbers; skipping validation");
+        return;
+    };
+    use cyrus_core::{Point, Polytope};
+    let points: Vec<Point> = record
+        .points
+        .iter()
+        .map(|p| Point::new(p.clone()))
+        .collect();
+    let computed = (|| -> Result<(usize, usize), String> {
+        let primal = Polytope::from_vertices(points)
+            .map_err(|e| e.to_string())?
+            .compute_dual()
+            .map_err(|e| e.to_string())?
+            .compute_dual()
+            .map_err(|e| e.to_string())?;
+        let tri_points = primal
+            .points_not_interior_to_facets()
+            .map_err(|e| e.to_string())?;
+        let (_, _, basis) =
+            cyrus_core::compute_glsm_and_linrels(&tri_points).map_err(|e| e.to_string())?;
+        let extra = cyrus_core::divisor::batyrev_h11_extra_classes(&primal, &tri_points)
+            .map_err(|e| e.to_string())?;
+        let h11 = basis.len() + extra;
+        let dual = primal.compute_dual().map_err(|e| e.to_string())?;
+        let dual_tri = dual
+            .points_not_interior_to_facets()
+            .map_err(|e| e.to_string())?;
+        let (_, _, dual_basis) =
+            cyrus_core::compute_glsm_and_linrels(&dual_tri).map_err(|e| e.to_string())?;
+        Ok((h11, dual_basis.len()))
+    })();
+    match computed {
+        Ok((h11, h21)) if h11 == decl_h11 && h21 == decl_h21 => {
+            eprintln!(
+                "[INFO] pool validation OK: {} computes to h11={h11} h21={h21} as declared",
+                record.name
+            );
+        }
+        Ok((h11, h21)) => {
+            eprintln!(
+                "[ERROR] pool convention mismatch: {} declares h11={decl_h11} h21={decl_h21} but computes h11={h11} h21={h21}. Wrong lattice (M vs N) or incomplete points?",
+                record.name
+            );
+            std::process::exit(2);
+        }
+        Err(e) => {
+            eprintln!("[ERROR] pool validation failed on {}: {e}", record.name);
+            std::process::exit(2);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

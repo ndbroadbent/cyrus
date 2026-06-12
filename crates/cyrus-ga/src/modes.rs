@@ -82,6 +82,7 @@ pub fn run_multi(pool_path: &std::path::Path) {
         eprintln!("[ERROR] {e}");
         std::process::exit(2);
     });
+    cyrus_ga::multi::validate_pool_conventions(&pool);
     std::fs::create_dir_all(run_dir.join("polytopes")).expect("create run dir");
     let summary_path = run_dir.join("summary.json");
     let improvements_path = run_dir.join("improvements.jsonl");
@@ -141,13 +142,28 @@ pub fn run_multi(pool_path: &std::path::Path) {
                 prep_timeout,
                 &mut stats[idx],
             ) {
+                Some(geom) if geom.pfv_seeds.is_empty() => {
+                    // The exact seed scan found no isotropic flux pair in
+                    // budget: the quadratic form is anisotropic for every
+                    // sampled M. Random search cannot succeed here.
+                    eprintln!(
+                        "[WARN] polytope {} is PFV-barren (no isotropic flux seeds); marking dead",
+                        record.name
+                    );
+                    stats[idx].dead = true;
+                    stats[idx].dead_reason = Some("PFV-barren in seed scan budget".into());
+                    std::fs::write(&summary_path, serde_json::to_string_pretty(&stats).unwrap())
+                        .expect("write summary");
+                    continue;
+                }
                 Some(geom) => {
                     eprintln!(
-                        "[INFO] prepared {} in {:.1?} (h21={}, {} GV curves)",
+                        "[INFO] prepared {} in {:.1?} (h21={}, {} GV curves, {} PFV seeds)",
                         record.name,
                         t0.elapsed(),
                         geom.h21_primal,
-                        geom.gv.len()
+                        geom.gv.len(),
+                        geom.pfv_seeds.len()
                     );
                     slot.insert(geom);
                 }

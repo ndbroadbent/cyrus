@@ -95,6 +95,184 @@ pub fn sample_isotropic_genome(
     None
 }
 
+/// Integer-arithmetic exact isotropy form.
+///
+/// Clearing denominators turns `K^T N^{-1} K == 0` into
+/// `K^T adj(N_int) K == 0` over i128 - three orders of magnitude faster
+/// than rational arithmetic, fast enough to exhaustively scan small flux
+/// boxes.
+///
+/// Returns the integer-scaled N matrix's adjugate, or `None` when N is
+/// singular (zero determinant).
+#[must_use]
+pub fn integer_adjugate_for_m(kappa: &Intersection, m: &[i64]) -> Option<Vec<Vec<i128>>> {
+    let dim = m.len();
+    // N as exact rationals, then scale by the lcm of denominators.
+    let mut n_rat = vec![vec![Rational::from(0); dim]; dim];
+    for (a, row) in n_rat.iter_mut().enumerate() {
+        for (b, entry) in row.iter_mut().enumerate() {
+            let mut sum = Rational::from(0);
+            for (c, &mc) in m.iter().enumerate() {
+                if mc != 0 {
+                    sum += kappa.get(a, b, c).into_inner() * Rational::from(mc);
+                }
+            }
+            *entry = sum;
+        }
+    }
+    use malachite::num::arithmetic::traits::Lcm;
+    use malachite::num::basic::traits::One;
+    let mut denom_lcm = malachite::Natural::ONE;
+    for row in &n_rat {
+        for entry in row {
+            denom_lcm = denom_lcm.lcm(entry.denominator_ref());
+        }
+    }
+    let scale = Rational::from(&denom_lcm);
+    let mut n_int = vec![vec![0i128; dim]; dim];
+    for (a, row) in n_rat.iter().enumerate() {
+        for (b, entry) in row.iter().enumerate() {
+            let scaled = entry * &scale;
+            debug_assert!(scaled.denominator_ref() == &malachite::Natural::ONE);
+            let int: malachite::Integer = malachite::Integer::try_from(scaled).ok()?;
+            n_int[a][b] = i128::try_from(&int).ok()?;
+        }
+    }
+    // Adjugate via cofactors (dims here are h21 <= ~12; O(n^5) is fine).
+    let det = int_determinant(&n_int)?;
+    if det == 0 {
+        return None;
+    }
+    let mut adj = vec![vec![0i128; dim]; dim];
+    for r in 0..dim {
+        for c in 0..dim {
+            let minor: Vec<Vec<i128>> = n_int
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| *i != r)
+                .map(|(_, row)| {
+                    row.iter()
+                        .enumerate()
+                        .filter(|(j, _)| *j != c)
+                        .map(|(_, &v)| v)
+                        .collect()
+                })
+                .collect();
+            let cof = int_determinant(&minor)?;
+            let sign = if (r + c) % 2 == 0 { 1 } else { -1 };
+            adj[c][r] = sign * cof; // transpose of cofactor matrix
+        }
+    }
+    Some(adj)
+}
+
+/// Integer determinant by cofactor expansion (small dims only).
+fn int_determinant(m: &[Vec<i128>]) -> Option<i128> {
+    let n = m.len();
+    if n == 1 {
+        return Some(m[0][0]);
+    }
+    let mut det: i128 = 0;
+    for c in 0..n {
+        let minor: Vec<Vec<i128>> = m[1..]
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .enumerate()
+                    .filter(|(j, _)| *j != c)
+                    .map(|(_, &v)| v)
+                    .collect()
+            })
+            .collect();
+        let cof = int_determinant(&minor)?;
+        let sign: i128 = if c % 2 == 0 { 1 } else { -1 };
+        det = det.checked_add(sign.checked_mul(m[0][c])?.checked_mul(cof)?)?;
+    }
+    Some(det)
+}
+
+/// Exact isotropy in integer arithmetic: `K^T adj K == 0`.
+#[must_use]
+pub fn is_isotropic_int(adj: &[Vec<i128>], k: &[i64]) -> bool {
+    let mut total: i128 = 0;
+    for (a, &ka) in k.iter().enumerate() {
+        if ka == 0 {
+            continue;
+        }
+        for (b, &kb) in k.iter().enumerate() {
+            if kb == 0 {
+                continue;
+            }
+            total += adj[a][b] * i128::from(ka) * i128::from(kb);
+        }
+    }
+    total == 0
+}
+
+/// Exhaustive small-box seed search: for `max_m_tries` random M, enumerate
+/// EVERY K in the `k_box` cube and keep exact isotropic pairs.
+///
+/// Motivated by a measured failure mode: on some geometries the quadratic
+/// form is anisotropic over Q for most M (zero solutions in the entire
+/// +-15 box, verified exhaustively), so random K sampling cannot work; and
+/// when solutions exist, small ones are found by this scan. An empty
+/// result after a full budget marks the geometry PFV-barren - itself a
+/// physical result.
+#[must_use]
+pub fn find_isotropic_seeds(
+    kappa: &Intersection,
+    dim: usize,
+    rng: &mut ChaCha8Rng,
+    m_range: i64,
+    k_box: i64,
+    max_m_tries: usize,
+    max_seeds: usize,
+    keep: impl Fn(&Genome) -> bool,
+) -> Vec<Genome> {
+    let mut seeds = Vec::new();
+    for _ in 0..max_m_tries {
+        if seeds.len() >= max_seeds {
+            break;
+        }
+        let m: Vec<i64> = (0..dim)
+            .map(|_| rng.gen_range(-m_range..=m_range))
+            .collect();
+        if m.iter().all(|&x| x == 0) {
+            continue;
+        }
+        let Some(adj) = integer_adjugate_for_m(kappa, &m) else {
+            continue;
+        };
+        let side = (2 * k_box + 1) as usize;
+        let total = side.pow(dim as u32);
+        for flat in 0..total {
+            let mut rem = flat;
+            let mut k = vec![0i64; dim];
+            for slot in &mut k {
+                *slot = (rem % side) as i64 - k_box;
+                rem /= side;
+            }
+            if k.iter().all(|&x| x == 0) {
+                continue;
+            }
+            if is_isotropic_int(&adj, &k) {
+                let genome = Genome { k, m: m.clone() };
+                // Only seeds that also clear the cheap downstream gates
+                // (tadpole window, cone-interior flat direction) are worth
+                // keeping - measured: on some geometries EVERY raw
+                // isotropic seed dies at those gates.
+                if keep(&genome) {
+                    seeds.push(genome);
+                    if seeds.len() >= max_seeds {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    seeds
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -154,6 +332,7 @@ mod tests {
                 .expect("h21"),
             dual_basis: vec![0, 1],
             dual_glsm: vec![],
+            pfv_seeds: vec![],
             q_d3: 100.0,
         };
         let genome = sample_isotropic_genome(&geom, &mut rng, 10, 64, 256).expect("finds a sample");
