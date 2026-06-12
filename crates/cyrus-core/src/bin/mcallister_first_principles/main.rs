@@ -45,6 +45,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 mod chamber_hook;
+mod cone_walk;
 mod missing_gv;
 use missing_gv::{
     compute_minimal_degree_gv_by_ambient_class, defer_bounded_impact_missing_gvs,
@@ -3028,24 +3029,15 @@ fn stage_volume(
                         );
                         std::process::exit(2);
                     }
-                    let Some(result) = solve_divisor_basis_path_following(
-                        &intersection.kappa_full,
-                        production_primal_basis.as_divisor_basis(),
+                    let result = cone_walk::solve_zeroth_order_with_rescue(
+                        geom,
+                        intersection,
+                        &production_primal_basis,
                         &kklt_basis,
                         &tau_target,
                         &phase1.t,
-                        CheckedRange::new(0, kklt_steps),
-                    ) else {
-                        eprintln!("[ERROR] zeroth-order divisor-basis KKLT path-following failed");
-                        std::process::exit(2);
-                    };
-                    if !result.converged {
-                        eprintln!(
-                            "[ERROR] zeroth-order mixed-basis KKLT path-following did not converge: rel_err={}",
-                            result.relative_error.get()
-                        );
-                        std::process::exit(2);
-                    }
+                        kklt_steps,
+                    );
                     let small_curve_selection_t = transform_production_primal_kahler_to_computed(
                         intersection,
                         &production_primal_basis,
