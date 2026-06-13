@@ -21,7 +21,7 @@
 //! axion potential height is identified with the candidate's |V0| scale.
 
 use cyrus_core::cosmology::{CosmologyParams, Potential, solve_cosmology};
-use cyrus_core::pipeline::{EvaluationRequest, evaluate_vacuum};
+use cyrus_core::pipeline::{EvaluationRequest, EvaluationResult, evaluate_vacuum};
 use serde::{Deserialize, Serialize};
 
 use crate::genome::Genome;
@@ -166,6 +166,63 @@ fn gaussian_score(value: f64, target: f64, sigma: f64) -> f64 {
     (-0.5 * pull * pull).exp()
 }
 
+/// Strictly MONOTONIC failure ladder: each pipeline gate a candidate
+/// clears moves it into a higher, non-overlapping band, and within each
+/// band a continuous gradient rewards getting closer to the next gate. The
+/// pipeline order is tadpole -> N invertible -> orthogonality (K.p = 0) ->
+/// mirror cone interior (q.p > 0) -> racetrack -> valid, so the bands must
+/// ascend in that exact order.
+///
+/// The previous ladder was NON-monotonic: a candidate that achieved exact
+/// orthogonality but landed on a cone wall scored -1500, BELOW a merely
+/// near-orthogonal one at -800, so the GA fled the exact-isotropic region
+/// where every real vacuum lives. Now clearing orthogonality always
+/// dominates failing it.
+fn invalid_fitness(reason: &str, result: &EvaluationResult, cfg: &FitnessConfig) -> f64 {
+    // Band floors, ascending with pipeline progress. Width 400 each, so a
+    // fully-graded lower band never reaches the next band's floor.
+    const TADPOLE: f64 = -3000.0;
+    const W0_DEAD_END: f64 = -2800.0; // PFV but W0 identically 0: reward-hack
+    const N_SINGULAR: f64 = -2600.0;
+    const ORTHOGONALITY: f64 = -2400.0; // + up to 380 as |K.p| -> 0
+    const CONE_WALL: f64 = -1900.0; // passed orthogonality; + up to 380
+    const NO_RACETRACK: f64 = -1400.0; // genuine PFV; + up to 380
+    const RACETRACK_UNCTRL: f64 = -800.0; // racetrack found, drift too big
+    const OTHER: f64 = -2000.0;
+
+    if reason.starts_with("Tadpole") {
+        let overshoot = (result.q_flux - cfg.q_max).max(-result.q_flux).max(0.0);
+        TADPOLE - overshoot
+    } else if reason.contains("cancelled exactly") {
+        W0_DEAD_END
+    } else if reason.starts_with("N matrix") {
+        N_SINGULAR
+    } else if reason.starts_with("Orthogonality") {
+        // |K.p| -> 0 climbs the band toward the cone gate.
+        let violation = result.k_dot_p.map_or(f64::INFINITY, f64::abs);
+        380.0f64.mul_add((-violation / 2.0).exp(), ORTHOGONALITY)
+    } else if reason.starts_with("Flat direction") {
+        // EXACT orthogonality achieved; p on/outside a cone wall. The
+        // closer the worst curve's q.p is to zero from below, the closer
+        // p is to the cone interior - climb toward it.
+        let margin = result.cone_margin.unwrap_or(f64::NEG_INFINITY);
+        // margin in (-inf, eps); map to [0, 1) increasing as margin -> 0.
+        let closeness = (margin.min(0.0) / 1.0).exp(); // exp of a non-positive number
+        380.0f64.mul_add(closeness, CONE_WALL)
+    } else if reason.starts_with("No stable racetrack") {
+        // A genuine perturbatively flat vacuum (all three PFV conditions
+        // hold) that lacks an instanton hierarchy for a racetrack. The
+        // closest-to-valid failure: top of the invalid ladder, just below
+        // a found-but-uncontrolled racetrack.
+        NO_RACETRACK + 380.0
+    } else if reason.starts_with("Racetrack refinement") {
+        // Two-term racetrack solved, full-series refinement out of control.
+        RACETRACK_UNCTRL
+    } else {
+        OTHER
+    }
+}
+
 /// Evaluate a genome: tiered penalties for invalid candidates, weighted
 /// component score for valid ones.
 #[must_use]
@@ -211,36 +268,11 @@ pub fn evaluate_fitness(geom: &GaGeometry, cfg: &FitnessConfig, genome: &Genome)
     };
 
     if !result.success {
-        let reason = result.reason.unwrap_or_else(|| "unknown".to_string());
-        // Graded tiers (validated prototype design): later stages score
-        // higher so the GA can climb toward validity.
-        report.fitness = if reason.starts_with("Tadpole") {
-            // Overshoot above the bound or below zero, graded either way.
-            let overshoot = (result.q_flux - cfg.q_max).max(-result.q_flux).max(0.0);
-            -2000.0 - overshoot
-        } else if reason.starts_with("N matrix") {
-            -1800.0
-        } else if reason.starts_with("Flat direction") {
-            -1500.0
-        } else if reason.starts_with("Orthogonality") {
-            // Graded: |K.p| -> 0 climbs from -1200 toward the racetrack
-            // tier, giving the GA a slope toward the Diophantine condition.
-            let violation = result.k_dot_p.map_or(f64::INFINITY, f64::abs);
-            400.0f64.mul_add((-violation / 2.0).exp(), -1200.0)
-        } else if reason.starts_with("Racetrack refinement") {
-            // A two-term solution exists but the full series moves it out
-            // of control: closer to valid than no-racetrack, still failed.
-            -700.0
-        } else if reason.starts_with("No stable racetrack") {
-            -800.0
-        } else if reason.contains("cancelled exactly") {
-            // Symmetric fluxes with W0 identically zero are dead ends, not
-            // progress; rank them below a missing racetrack so they cannot
-            // colonize the frontier (observed reward-hacking attractor).
-            -1000.0
-        } else {
-            -600.0
-        };
+        let reason = result
+            .reason
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
+        report.fitness = invalid_fitness(&reason, &result, cfg);
         report.tier = reason;
         return report;
     }

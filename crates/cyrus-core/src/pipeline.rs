@@ -58,6 +58,11 @@ pub struct EvaluationResult {
     /// K . p (must vanish for a perturbatively flat vacuum); exposed even
     /// on failure so search algorithms can grade orthogonality violations.
     pub k_dot_p: Option<f64>,
+    /// Minimum q . p over the enumerated mirror GV curves: the signed
+    /// distance of the flat direction from the nearest Kahler cone wall.
+    /// Negative or near-zero means p is on/outside a wall. Exposed for
+    /// graded scoring of cone-wall failures.
+    pub cone_margin: Option<f64>,
 }
 
 /// Evaluate a (K, M) pair.
@@ -84,6 +89,7 @@ pub fn evaluate_vacuum(
         vacuum: None,
         q_flux: compute_tadpole(k, m),
         k_dot_p: None,
+        cone_margin: None,
     };
 
     // 1. Filter: Tadpole Bound. The constraint is two-sided
@@ -139,18 +145,22 @@ pub fn evaluate_vacuum(
     // The threshold sits far below genuine leading exponents (~1/h11 of
     // the mirror) and far above float noise.
     const CONE_WALL_EPS: f64 = 1e-8;
-    for gv in req.gv {
-        let q_dot_p: f64 = gv
-            .curve
-            .iter()
-            .zip(p.iter())
-            .map(|(qi, pi)| qi.to_f64().get() * pi.get())
-            .sum();
-        if q_dot_p < CONE_WALL_EPS {
-            res.reason =
-                Some("Flat direction on or outside the mirror Kahler cone wall (q.p <= 0)".into());
-            return Ok(res);
-        }
+    let cone_margin = req
+        .gv
+        .iter()
+        .map(|gv| {
+            gv.curve
+                .iter()
+                .zip(p.iter())
+                .map(|(qi, pi)| qi.to_f64().get() * pi.get())
+                .sum::<f64>()
+        })
+        .fold(f64::INFINITY, f64::min);
+    res.cone_margin = Some(cone_margin);
+    if cone_margin < CONE_WALL_EPS {
+        res.reason =
+            Some("Flat direction on or outside the mirror Kahler cone wall (q.p <= 0)".into());
+        return Ok(res);
     }
 
     // 6. Calculation: Racetrack Solution

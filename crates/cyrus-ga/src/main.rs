@@ -304,12 +304,15 @@ pub(crate) fn inject_isotropic(state: &mut GaState, geom: &GaGeometry) {
     use rand::Rng as _;
     use rand::SeedableRng as _;
     let mut sampler_rng = rand_chacha::ChaCha8Rng::seed_from_u64(state.rng.r#gen());
-    // Draw from the geometry's precomputed exact-isotropic seeds, with
-    // isotropy-preserving variants: sign flips of K or M and integer
-    // scalings of K all keep K.N(M)^{-1}.K = 0 exactly. (Random K
-    // sampling provably fails on geometries where the quadratic form is
-    // anisotropic for most M - the seed scan already solved the hard
-    // Diophantine part at preparation time.)
+    // Draw from the geometry's precomputed exact-isotropic seeds. The seeds
+    // were filtered to be cone-INTERIOR PFVs (q.p > 0 for every mirror GV
+    // curve), and only POSITIVE integer scaling of K preserves both the
+    // isotropy (K.N(M)^{-1}.K stays 0) AND the cone-interiority (q.p stays
+    // positive). Sign-flipping K or M sends p -> -p, flipping every q.p
+    // negative - it threw the carefully-found PFVs straight back outside
+    // the cone. Diversity comes from the distinct seeds, not from sign
+    // variants. (Random K sampling provably fails where the form is
+    // anisotropic for most M; the seed scan solved that at prep time.)
     let genomes: Vec<Genome> = if geom.pfv_seeds.is_empty() {
         (0..INJECT_PER_GEN)
             .filter_map(|_| sample_isotropic_genome(geom, &mut sampler_rng, flux_range, 16, 64))
@@ -318,12 +321,12 @@ pub(crate) fn inject_isotropic(state: &mut GaState, geom: &GaGeometry) {
         (0..INJECT_PER_GEN)
             .map(|_| {
                 let seed = &geom.pfv_seeds[sampler_rng.gen_range(0..geom.pfv_seeds.len())];
-                let k_sign: i64 = if sampler_rng.r#gen::<bool>() { 1 } else { -1 };
-                let m_sign: i64 = if sampler_rng.r#gen::<bool>() { 1 } else { -1 };
-                let scale: i64 = sampler_rng.gen_range(1..=3);
+                // n = 1 mostly (the raw PFV), with occasional 2x (tadpole
+                // grows quadratically, so larger scalings rarely fit).
+                let scale: i64 = if sampler_rng.gen_ratio(1, 4) { 2 } else { 1 };
                 Genome {
-                    k: seed.k.iter().map(|&x| x * k_sign * scale).collect(),
-                    m: seed.m.iter().map(|&x| x * m_sign).collect(),
+                    k: seed.k.iter().map(|&x| x * scale).collect(),
+                    m: seed.m.clone(),
                 }
             })
             .collect()
