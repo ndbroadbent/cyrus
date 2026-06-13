@@ -68,7 +68,12 @@ fn main() {
             std::process::exit(2);
         };
         let chamber: usize = parse_arg_value("--chamber").unwrap_or(record.chamber);
-        match GaGeometry::prepare_from_points_in_chamber(&record.points, gv_min_points, chamber) {
+        match GaGeometry::prepare_from_points_in_chamber(
+            &record.points,
+            gv_min_points,
+            chamber,
+            false,
+        ) {
             Ok(_) => std::process::exit(0),
             Err(reason) => {
                 eprintln!("[PROBE] {name}: {reason}");

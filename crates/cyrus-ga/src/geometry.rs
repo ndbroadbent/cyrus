@@ -95,7 +95,7 @@ impl GaGeometry {
         primal_points: &[Vec<i64>],
         gv_min_points: u32,
     ) -> Result<Self, String> {
-        Self::prepare_from_points_in_chamber(primal_points, gv_min_points, 0)
+        Self::prepare_from_points_in_chamber(primal_points, gv_min_points, 0, true)
     }
 
     /// Prepare the geometry with the mirror (dual) side in the `chamber`-th
@@ -109,10 +109,16 @@ impl GaGeometry {
     /// # Errors
     /// Returns an error string when any preparation stage fails, including
     /// when no k-th distinct valid chamber exists.
+    ///
+    /// `compute_seeds` controls the exact PFV seed scan. The killable
+    /// prep-probe subprocess passes `false` (it only needs to confirm the
+    /// geometry itself prepares without hanging; the parent re-prepares
+    /// with seeds against the warm GV cache), avoiding a redundant scan.
     pub fn prepare_from_points_in_chamber(
         primal_points: &[Vec<i64>],
         gv_min_points: u32,
         chamber: usize,
+        compute_seeds: bool,
     ) -> Result<Self, String> {
         // Primal polytope and its true h11 (Batyrev-corrected), which is the
         // mirror's h21 for the BBHL term.
@@ -276,16 +282,20 @@ impl GaGeometry {
                 a > 1e-8
             })
         };
-        let pfv_seeds = crate::pfv::find_isotropic_seeds(
-            &kappa_basis,
-            dual_basis.len(),
-            &mut seed_rng,
-            15,
-            4,
-            1500,
-            64,
-            keep,
-        );
+        let pfv_seeds = if compute_seeds {
+            crate::pfv::find_isotropic_seeds(
+                &kappa_basis,
+                dual_basis.len(),
+                &mut seed_rng,
+                15,
+                4,
+                1500,
+                64,
+                keep,
+            )
+        } else {
+            Vec::new()
+        };
 
         Ok(Self {
             kappa_basis,

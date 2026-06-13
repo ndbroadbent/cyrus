@@ -84,8 +84,7 @@ pub fn run_multi(pool_path: &std::path::Path) {
     });
     cyrus_ga::multi::validate_pool_conventions(&pool);
     // Mirror-chamber diversity: each (polytope, dual chamber) is its own
-    // bandit arm. The published scans search across the LCS cones of the
-    // dual polytope; one chamber samples only a slice of the PFV space.
+    // bandit arm (published scans search across all LCS cones of the dual).
     let chambers: usize = parse_arg_value("--chambers-per-polytope").unwrap_or(1);
     let pool: Vec<cyrus_ga::multi::PolytopeRecord> = pool
         .into_iter()
@@ -234,8 +233,7 @@ pub fn run_multi(pool_path: &std::path::Path) {
         if state.best_fitness > stats[idx].best_fitness {
             stats[idx].best_fitness = state.best_fitness;
             // Polytope-level improvement: emit the new hall leader for
-            // ingestion (the global improvements.jsonl only records global
-            // bests, which would hide most leaderboard candidates).
+            // ingestion (improvements.jsonl only records global bests).
             if let Some(best) = state.hall_of_fame.first() {
                 append_jsonl(
                     &candidates_path,
@@ -311,12 +309,11 @@ pub fn run_multi(pool_path: &std::path::Path) {
     );
 }
 
-/// Emit a runner-compatible data directory for one GA candidate:
-/// `--emit-verification-dir <dir> --polytope-file <jsonl> --polytope-name
-/// <name> --k a,b,... --m a,b,...`. Constructs the automated orientifold
+/// Emit a runner-compatible data directory for one GA candidate
+/// (`--polytope-name`, `--k`, `--m`): constructs the automated orientifold
 /// (involution, c_i, KKLT divisor set, tadpole) and writes the declared
-/// inputs the McAllister first-principles runner needs for a full
-/// instanton-corrected KKLT verification of the candidate.
+/// inputs the McAllister first-principles runner needs for full
+/// instanton-corrected KKLT verification.
 #[allow(clippy::too_many_lines)] // linear orchestration
 pub fn emit_verification_dir(out_dir: &std::path::Path) {
     let pool_path: String = parse_arg_value("--polytope-file").unwrap_or_else(|| {
@@ -464,9 +461,13 @@ pub fn emit_verification_dir(out_dir: &std::path::Path) {
     // The GA generated K/M in the COMPUTED dual divisor basis; declare that
     // explicitly so the runner cannot misinterpret the coordinates.
     let chamber: usize = parse_arg_value("--chamber").unwrap_or(0);
-    let geom =
-        GaGeometry::prepare_from_points_in_chamber(&record.points, DEFAULT_GV_MIN_POINTS, chamber)
-            .expect("geometry for dual basis");
+    let geom = GaGeometry::prepare_from_points_in_chamber(
+        &record.points,
+        DEFAULT_GV_MIN_POINTS,
+        chamber,
+        true,
+    )
+    .expect("geometry for dual basis");
     // The candidate's fluxes live in THIS dual chamber's conventions; the
     // runner must use the same chamber.
     let dual_simplices_csv: String = geom

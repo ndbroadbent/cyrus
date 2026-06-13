@@ -14,6 +14,7 @@
 pub mod fitness;
 pub mod genome;
 pub mod geometry;
+pub mod isotropic_enum;
 pub mod multi;
 pub mod pfv;
 pub mod population;

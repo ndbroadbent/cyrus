@@ -19,6 +19,7 @@ use cyrus_core::integer_math::invert_matrix;
 
 use crate::genome::Genome;
 use crate::geometry::GaGeometry;
+use crate::isotropic_enum::enumerate_isotropic_in_box;
 
 /// Exact `N(M)^{-1}` for a flux vector M, or `None` when N is singular.
 #[must_use]
@@ -243,29 +244,21 @@ pub fn find_isotropic_seeds(
         let Some(adj) = integer_adjugate_for_m(kappa, &m) else {
             continue;
         };
-        let side = (2 * k_box + 1) as usize;
-        let total = side.pow(dim as u32);
-        for flat in 0..total {
-            let mut rem = flat;
-            let mut k = vec![0i64; dim];
-            for slot in &mut k {
-                *slot = (rem % side) as i64 - k_box;
-                rem /= side;
-            }
-            if k.iter().all(|&x| x == 0) {
-                continue;
-            }
-            if is_isotropic_int(&adj, &k) {
-                let genome = Genome { k, m: m.clone() };
-                // Only seeds that also clear the cheap downstream gates
-                // (tadpole window, cone-interior flat direction) are worth
-                // keeping - measured: on some geometries EVERY raw
-                // isotropic seed dies at those gates.
-                if keep(&genome) {
-                    seeds.push(genome);
-                    if seeds.len() >= max_seeds {
-                        break;
-                    }
+        // Enumerate the exact-isotropic K's in the box via the quadratic
+        // solve (identical set to a brute-force sweep, ~k_box-fold cheaper).
+        // The per-M result cap bounds memory on degenerate forms; it is far
+        // above the few seeds the GA needs.
+        const PER_M_CAP: usize = 4096;
+        for k in enumerate_isotropic_in_box(&adj, dim, k_box, PER_M_CAP) {
+            let genome = Genome { k, m: m.clone() };
+            // Only seeds that also clear the cheap downstream gates
+            // (tadpole window, cone-interior flat direction) are worth
+            // keeping - measured: on some geometries EVERY raw isotropic
+            // seed dies at those gates.
+            if keep(&genome) {
+                seeds.push(genome);
+                if seeds.len() >= max_seeds {
+                    break;
                 }
             }
         }
@@ -276,6 +269,110 @@ pub fn find_isotropic_seeds(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Brute-force reference: every nonzero K in the box that is isotropic.
+    fn brute_force_set(
+        adj: &[Vec<i128>],
+        dim: usize,
+        k_box: i64,
+    ) -> std::collections::BTreeSet<Vec<i64>> {
+        let side = (2 * k_box + 1) as usize;
+        let total = side.pow(dim as u32);
+        let mut set = std::collections::BTreeSet::new();
+        for flat in 0..total {
+            let mut rem = flat;
+            let mut k = vec![0i64; dim];
+            for slot in &mut k {
+                *slot = (rem % side) as i64 - k_box;
+                rem /= side;
+            }
+            if k.iter().any(|&x| x != 0) && is_isotropic_int(adj, &k) {
+                set.insert(k);
+            }
+        }
+        set
+    }
+
+    fn enumerate_set(
+        adj: &[Vec<i128>],
+        dim: usize,
+        k_box: i64,
+    ) -> std::collections::BTreeSet<Vec<i64>> {
+        enumerate_isotropic_in_box(adj, dim, k_box, usize::MAX)
+            .into_iter()
+            .collect()
+    }
+
+    #[test]
+    fn enumeration_matches_brute_force_on_random_forms() {
+        use rand::{Rng, SeedableRng};
+        let mut rng = ChaCha8Rng::seed_from_u64(20260614);
+        for _ in 0..400 {
+            let dim = rng.gen_range(2..=4);
+            // Random SYMMETRIC integer form (the adjugate of a symmetric N).
+            let mut adj = vec![vec![0i128; dim]; dim];
+            for i in 0..dim {
+                for j in i..dim {
+                    let v = i128::from(rng.gen_range(-6i64..=6));
+                    adj[i][j] = v;
+                    adj[j][i] = v;
+                }
+            }
+            let k_box = rng.gen_range(2..=4);
+            assert_eq!(
+                enumerate_set(&adj, dim, k_box),
+                brute_force_set(&adj, dim, k_box),
+                "mismatch for adj={adj:?} k_box={k_box}"
+            );
+        }
+    }
+
+    #[test]
+    fn enumeration_matches_brute_force_on_real_geometry() {
+        // N = [[m2, m1], [m1, 0]] toy from diag_kappa; check a few M.
+        let kappa = diag_kappa();
+        for m in [[1, 0], [3, 2], [-2, 5], [4, -7]] {
+            let Some(adj) = integer_adjugate_for_m(&kappa, &m) else {
+                continue;
+            };
+            assert_eq!(
+                enumerate_set(&adj, 2, 6),
+                brute_force_set(&adj, 2, 6),
+                "mismatch for M={m:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn enumeration_overflow_fallback_matches_brute_force() {
+        // Scale a small form by a huge factor: the isotropic SET is
+        // unchanged (Q scales by the factor, stays 0), but the discriminant
+        // B^2 overflows i128 while Q(K) itself still fits - exercising the
+        // exact per-value fallback path. F ~ 1e18.
+        let factor: i128 = 1_000_000_000_000_000_000;
+        // Q = 2 k0 k1: isotropic iff k0 == 0 or k1 == 0.
+        let adj = vec![vec![0, factor], vec![factor, 0]];
+        let brute = brute_force_set(&adj, 2, 3);
+        let enumer = enumerate_set(&adj, 2, 3);
+        assert_eq!(enumer, brute);
+        // Sanity: the expected set is the axes (excluding origin).
+        for k in &brute {
+            assert!(k[0] == 0 || k[1] == 0, "unexpected non-axis root {k:?}");
+        }
+    }
+
+    #[test]
+    fn enumeration_degenerate_zero_form_is_capped() {
+        // adj = 0: every K is isotropic. The cap bounds the output.
+        let adj = vec![vec![0i128; 3]; 3];
+        let out = enumerate_isotropic_in_box(&adj, 3, 4, 50);
+        assert_eq!(out.len(), 50);
+        for k in &out {
+            assert!(is_isotropic_int(&adj, k));
+            assert!(k.iter().any(|&v| v != 0));
+        }
+    }
+
     use cyrus_core::types::rational::Rational as TypedRational;
     use cyrus_core::types::tags::Finite;
 

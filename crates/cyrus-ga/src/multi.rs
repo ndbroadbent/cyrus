@@ -173,7 +173,12 @@ pub fn prepare_or_mark_dead(
     };
     let outcome = outcome.and_then(|()| {
         // Probe succeeded: re-prepare in-process against warm disk caches.
-        GaGeometry::prepare_from_points_in_chamber(&record.points, gv_min_points, record.chamber)
+        GaGeometry::prepare_from_points_in_chamber(
+            &record.points,
+            gv_min_points,
+            record.chamber,
+            true,
+        )
     });
     match outcome {
         Ok(geom) => Some(geom),
