@@ -304,11 +304,24 @@ pub fn evaluate_fitness(geom: &GaGeometry, cfg: &FitnessConfig, genome: &Genome)
     // Weak coupling: full marks toward g_s -> 0, zero by g_s = 1.
     let gs_score = 100.0 * (1.0 - g_s).clamp(0.0, 1.0);
 
-    report.fitness = cfg.weight_slope.mul_add(
-        slope_score,
-        cfg.weight_height
-            .mul_add(height_score, cfg.weight_gs * gs_score),
-    );
+    // Height GATES the score. DESI is a target SCALE first (log|V0| at the
+    // observed dark-energy density) and a slope second; weak coupling is a
+    // control tiebreaker. The old purely-additive form let the g_s term
+    // (~20 pts for any weakly-coupled vacuum) dominate height, so a vacuum
+    // 95 orders off-scale but weakly coupled topped the leaderboard
+    // (observed: ks_4_1055, V0 ~ 1e-26, fitness 21.9 = 19.7 g_s + 2.2
+    // height + 0 slope). Multiplicative gating: slope and g_s only reward
+    // candidates that are already near the right scale.
+    //   off-scale  (height ~ 0)            -> fitness ~ 0
+    //   on-scale, no slope, weak coupling   -> ~ 100 * (1 + 0.2)
+    //   on-scale, DESI slope, weak coupling -> ~ 100 * (1 + 1 + 0.2)
+    let slope_norm = slope_score / 100.0; // in [0, 1]
+    let gs_norm = gs_score / 100.0; // in [0, 1]
+    report.fitness = height_score
+        * cfg.weight_slope.mul_add(
+            slope_norm,
+            cfg.weight_gs.mul_add(gs_norm, cfg.weight_height),
+        );
     report
 }
 
