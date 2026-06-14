@@ -71,6 +71,21 @@ impl PolytopeStats {
     }
 }
 
+/// Deterministic uniform shuffle of the bandit's visit order.
+///
+/// A sorted (h21, h11) pool traps the first-visit sweep in the
+/// systematically-barren high-h11 tail for hours (the cone-interior
+/// condition q.p > 0 over every GV curve is hard to satisfy at large
+/// h11). A uniform shuffle is the least-biased order - we do not know
+/// which region holds candidates - and interleaves fertile geometries
+/// with barren culls so dashboard progress is steady.
+pub fn shuffle_visit_order(pool: &mut [PolytopeRecord]) {
+    use rand::SeedableRng as _;
+    use rand::seq::SliceRandom as _;
+    let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(987_654_321);
+    pool.shuffle(&mut rng);
+}
+
 /// Read a JSONL polytope pool file.
 ///
 /// # Errors

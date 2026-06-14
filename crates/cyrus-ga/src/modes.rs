@@ -86,7 +86,7 @@ pub fn run_multi(pool_path: &std::path::Path) {
     // Mirror-chamber diversity: each (polytope, dual chamber) is its own
     // bandit arm (published scans search across all LCS cones of the dual).
     let chambers: usize = parse_arg_value("--chambers-per-polytope").unwrap_or(1);
-    let pool: Vec<cyrus_ga::multi::PolytopeRecord> = pool
+    let mut pool: Vec<cyrus_ga::multi::PolytopeRecord> = pool
         .into_iter()
         .flat_map(|record| {
             (0..chambers.max(1)).map(move |c| {
@@ -99,6 +99,7 @@ pub fn run_multi(pool_path: &std::path::Path) {
             })
         })
         .collect();
+    cyrus_ga::multi::shuffle_visit_order(&mut pool);
     std::fs::create_dir_all(run_dir.join("polytopes")).expect("create run dir");
     let summary_path = run_dir.join("summary.json");
     let improvements_path = run_dir.join("improvements.jsonl");
@@ -152,10 +153,9 @@ pub fn run_multi(pool_path: &std::path::Path) {
             std::process::exit(2);
         };
         let record = &pool[idx];
-        // Bound the geometry cache: an unbounded map of prepared geometries
-        // (GV tables run to thousands of curves each) grew without limit on
-        // the 73k-polytope pool and the process died around round 1000.
-        // Re-preparation is cheap (seconds, disk-cached GV), so just clear.
+        // Bound the geometry cache: an unbounded map (thousands of GV
+        // curves each) grew without limit and OOM'd the process. Re-prep
+        // is cheap (disk-cached GV), so just clear.
         if geometries.len() >= 48 {
             geometries.clear();
         }
