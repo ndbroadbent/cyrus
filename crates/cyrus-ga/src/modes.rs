@@ -224,8 +224,8 @@ pub fn run_multi(pool_path: &std::path::Path) {
                 .collect();
             round_valid += reports.iter().filter(|r| r.tier == "valid").count();
             state.absorb_reports(reports);
-            inject_isotropic(&mut state, geom);
             state.next_generation();
+            inject_isotropic(&mut state, geom);
         }
         stats[idx].rounds += 1;
         stats[idx].evaluations = state.evaluations;
