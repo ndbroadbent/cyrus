@@ -246,9 +246,12 @@ pub fn find_isotropic_seeds(
         };
         // Enumerate the exact-isotropic K's in the box via the quadratic
         // solve (identical set to a brute-force sweep, ~k_box-fold cheaper).
-        // The per-M result cap bounds memory on degenerate forms; it is far
-        // above the few seeds the GA needs.
-        const PER_M_CAP: usize = 4096;
+        // The cap must be high enough to enumerate EVERY isotropic K of a
+        // non-degenerate form (<= 2*(2k+1)^(dim-1), ~1.06M for dim=7,
+        // k_box=4); a lower cap truncates a lexicographic prefix and makes
+        // fertile geometries look barren - a recall bug AND a bias. It only
+        // bounds the degenerate identically-zero form (the full box).
+        const PER_M_CAP: usize = 4_000_000;
         for k in enumerate_isotropic_in_box(&adj, dim, k_box, PER_M_CAP) {
             let genome = Genome { k, m: m.clone() };
             // Only seeds that also clear the cheap downstream gates
