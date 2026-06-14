@@ -59,6 +59,83 @@ impl DivisorClass {
     }
 }
 
+/// Combinatorial rigidity classification of every non-origin prime toric
+/// divisor, with the irreducible-component count for non-favorable splits.
+///
+/// This depends only on the polytope's face combinatorics - NOT on the
+/// intersection numbers, the triangulation/chamber, or the flux - so it is a
+/// cheap, purely per-polytope quantity. A McAllister-class orientifold
+/// requires a nonperturbative term on every divisor-basis element, hence
+/// every basis divisor must be rigid; a single non-rigid basis divisor rules
+/// out the whole polytope for every involution and every chamber. See
+/// [`non_rigid_basis_divisors`] for the resulting pre-filter.
+///
+/// Returns `(classes, components)` where `classes[i] = (point_index, class)`
+/// for each non-origin point and `components[idx]` is the irreducible-piece
+/// count (>1 for non-favorable splits).
+///
+/// # Errors
+/// Propagates failures from the polytope face-pairing combinatorics.
+pub fn classify_divisor_rigidity(
+    polytope: &Polytope,
+    points: &[Point],
+) -> Result<(Vec<(usize, DivisorClass)>, Vec<usize>)> {
+    let (hull, dual_vertices, dual_points) = face_pairing_context(polytope, points)?;
+    let mut classes: Vec<(usize, DivisorClass)> = Vec::new();
+    let mut components = vec![1usize; points.len()];
+    for (idx, point) in points.iter().enumerate() {
+        if point.coords().iter().all(|&c| c == 0) {
+            continue;
+        }
+        let sat = saturated_facets(point, &dual_vertices);
+        let dual_interior = dual_face_interior_lattice_points(
+            points,
+            &hull.vertex_indices,
+            &dual_points,
+            &dual_vertices,
+            &sat,
+        )?;
+        let class = match sat.len() {
+            2 => {
+                components[idx] = 1 + dual_interior;
+                DivisorClass::RigidTwoFaceInterior
+            }
+            3 if dual_interior == 0 => DivisorClass::RigidOneFaceInterior,
+            _ if sat.len() >= 4 && dual_interior == 0 => DivisorClass::RigidVertex,
+            _ => DivisorClass::NonRigid { dual_interior },
+        };
+        classes.push((idx, class));
+    }
+    Ok((classes, components))
+}
+
+/// The `basis` divisors that are NOT rigid.
+///
+/// Empty means the polytope could host a McAllister-class orientifold (the
+/// full O7-disjointness check still runs later); non-empty means it cannot,
+/// for any involution or chamber - so the geometry can be pruned before any
+/// flux search. Cheap: only the combinatorial [`classify_divisor_rigidity`].
+///
+/// # Errors
+/// Propagates failures from [`classify_divisor_rigidity`].
+pub fn non_rigid_basis_divisors(
+    polytope: &Polytope,
+    points: &[Point],
+    basis: &[usize],
+) -> Result<Vec<usize>> {
+    let (classes, _) = classify_divisor_rigidity(polytope, points)?;
+    Ok(basis
+        .iter()
+        .copied()
+        .filter(|&idx| {
+            classes
+                .iter()
+                .find(|(i, _)| *i == idx)
+                .is_none_or(|(_, c)| !c.is_rigid())
+        })
+        .collect())
+}
+
 /// One candidate orientifold model on a fixed geometry.
 #[derive(Debug, Clone)]
 pub struct OrientifoldModel {
@@ -111,37 +188,11 @@ pub fn enumerate_involutions(
     h11: usize,
     h21: usize,
 ) -> Result<Vec<OrientifoldModel>> {
-    let (hull, dual_vertices, dual_points) = face_pairing_context(polytope, points)?;
-
-    // Classify every non-origin point once. `components[idx]` counts the
-    // irreducible pieces the divisor splits into on X (non-favorable
-    // 2-face-interior points split into 1 + l*(dual face) rigid components;
-    // see the split-divisor chi analysis in divisor.rs).
-    let mut classes: Vec<(usize, DivisorClass)> = Vec::new();
-    let mut components = vec![1usize; points.len()];
-    for (idx, point) in points.iter().enumerate() {
-        if point.coords().iter().all(|&c| c == 0) {
-            continue;
-        }
-        let sat = saturated_facets(point, &dual_vertices);
-        let dual_interior = dual_face_interior_lattice_points(
-            points,
-            &hull.vertex_indices,
-            &dual_points,
-            &dual_vertices,
-            &sat,
-        )?;
-        let class = match sat.len() {
-            2 => {
-                components[idx] = 1 + dual_interior;
-                DivisorClass::RigidTwoFaceInterior
-            }
-            3 if dual_interior == 0 => DivisorClass::RigidOneFaceInterior,
-            _ if sat.len() >= 4 && dual_interior == 0 => DivisorClass::RigidVertex,
-            _ => DivisorClass::NonRigid { dual_interior },
-        };
-        classes.push((idx, class));
-    }
+    // Classify every non-origin point once (combinatorial; no intersection
+    // numbers). `components[idx]` counts the irreducible pieces the divisor
+    // splits into on X (non-favorable 2-face-interior points split into
+    // 1 + l*(dual face) rigid components; see divisor.rs).
+    let (classes, components) = classify_divisor_rigidity(polytope, points)?;
 
     let q_d3 = (h11 + h21) as f64 / 2.0 + 1.0;
     let dim = points.first().map_or(0, Point::dim);
