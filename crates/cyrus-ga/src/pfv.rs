@@ -376,6 +376,59 @@ mod tests {
         }
     }
 
+    #[test]
+    fn enumeration_matches_brute_force_high_dim() {
+        // Production runs the seed scan at h21 = 4..7; the recursion descends
+        // that many levels and the optimizer rewrites the per-leaf coefficient
+        // computation. Exercise the deep, expensive end (dim 5..7) with a WIDE
+        // coefficient range approximating real adjugate magnitudes, keeping
+        // k_box small so the brute-force reference stays cheap.
+        use rand::{Rng, SeedableRng};
+        let mut rng = ChaCha8Rng::seed_from_u64(0x00D1_5C00);
+        for _ in 0..60 {
+            let dim = rng.gen_range(5..=7);
+            let mut adj = vec![vec![0i128; dim]; dim];
+            for i in 0..dim {
+                for j in i..dim {
+                    let v = i128::from(rng.gen_range(-200i64..=200));
+                    adj[i][j] = v;
+                    adj[j][i] = v;
+                }
+            }
+            // 7^5 = 16807, 5^7 = 78125: brute force stays cheap.
+            let k_box = if dim >= 7 { 2 } else { 3 };
+            assert_eq!(
+                enumerate_set(&adj, dim, k_box),
+                brute_force_set(&adj, dim, k_box),
+                "mismatch dim={dim} k_box={k_box} adj={adj:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn enumeration_overflow_fallback_is_load_bearing() {
+        // Construct a form whose only isotropic K's in the box are reachable
+        // ONLY through the per-value fallback: at k0 = +-1 the discriminant
+        // b^2 - 4ac overflows i128, so the quadratic solve returns None and
+        // enumerate_rec must recover the true root via is_isotropic_int. A
+        // wrapping/overflowing quad path would compute a bogus discriminant
+        // and MISS these roots - so this test fails unless the fallback is both
+        // taken and correct (verified by mutation).
+        //
+        // adj = [[4F-4, -F], [-F, 1]] gives Q(k0,k1) = (4F-4)k0^2 - 2F k0 k1
+        // + k1^2, which vanishes exactly at (1, 2) and (-1, -2). At k0 = 1 the
+        // leaf quadratic is k1^2 - 2F k1 + (4F-4); its discriminant 4F^2 - ...
+        // exceeds i128::MAX for F = 1e19, forcing the fallback.
+        let f: i128 = 10_000_000_000_000_000_000; // 1e19
+        let adj = vec![vec![4 * f - 4, -f], vec![-f, 1]];
+        let k_box = 2;
+        let got = enumerate_set(&adj, 2, k_box);
+        assert_eq!(got, brute_force_set(&adj, 2, k_box));
+        let expected: std::collections::BTreeSet<Vec<i64>> =
+            [vec![1, 2], vec![-1, -2]].into_iter().collect();
+        assert_eq!(got, expected, "fallback failed to recover the true roots");
+    }
+
     use cyrus_core::types::rational::Rational as TypedRational;
     use cyrus_core::types::tags::Finite;
 
