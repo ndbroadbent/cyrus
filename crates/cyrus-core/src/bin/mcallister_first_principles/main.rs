@@ -798,7 +798,7 @@ struct PipelineArgs {
 
 use cyrus_core::kklt_vacuum::{
     OwnedDivisorBasis, PrimalGeom, PrimalIntersection, basis_change_matrix_between_owned,
-    computed_primal_basis, height_projected_branch_initialization,
+    computed_primal_basis, height_projected_branch_initialization, solve_gv_corrected_kklt,
     transform_kahler_between_owned_divisor_bases, transform_production_primal_kahler_to_computed,
 };
 
@@ -2589,137 +2589,6 @@ fn compare_corrected_chamber_target_volume_checkpoint(
 }
 
 #[allow(clippy::too_many_arguments)] // stage plumbing forwarded one-to-one
-fn solve_gv_corrected_kklt(
-    intersection: &PrimalIntersection,
-    production_primal_basis: &OwnedDivisorBasis,
-    kklt_basis: &[usize],
-    c_i: &[I64<Pos>],
-    chi_divisor: &[I64<Finite>],
-    c_tau: cyrus_core::types::physics::CTau,
-    small_curve_gvs: &[(Vec<i64>, malachite::Integer)],
-    gamma: &[I64<Finite>],
-    gv_iteration_source_t: &[F64<Finite>],
-    kklt_steps: usize,
-) -> Vec<F64<Finite>> {
-    // Solve the full worldsheet-instanton-corrected KKLT system with the
-    // correction inside every Newton linearization. The earlier scheme —
-    // freezing the correction at the previous iterate and re-solving the
-    // classical system to a fixed point — is not a contraction for every
-    // geometry (5-81-3213 cycles with steps ~0.1 regardless of update
-    // mixing), while the corrected-system Newton converges directly.
-    let zero_correction = vec![F64::<Finite>::ZERO; kklt_basis.len()];
-    let Some(base_tau_target) = cyrus_core::kklt::compute_gv_corrected_target_tau(
-        c_i,
-        chi_divisor,
-        c_tau,
-        &zero_correction,
-    ) else {
-        eprintln!("[ERROR] base KKLT target construction failed");
-        std::process::exit(2);
-    };
-    let production_is_computed = matches!(
-        production_primal_basis,
-        OwnedDivisorBasis::Indices(indices) if *indices == intersection.basis
-    );
-    let computed_t_for_corrections = |t_production: &[F64<Finite>]| -> Vec<F64<Finite>> {
-        if production_is_computed {
-            t_production.to_vec()
-        } else {
-            transform_production_primal_kahler_to_computed_or_exit(
-                intersection,
-                production_primal_basis,
-                t_production,
-                "GV-corrected solve iterate",
-            )
-        }
-    };
-    // Columns of d(t_computed)/d(t_production) for the correction
-    // Jacobian chain rule; identity (and skipped) in the default case.
-    let correction_transform_columns: Option<Vec<Vec<F64<Finite>>>> = if production_is_computed {
-        None
-    } else {
-        let production_dim = gv_iteration_source_t.len();
-        Some(
-            (0..production_dim)
-                .map(|column| {
-                    let mut unit = vec![F64::<Finite>::ZERO; production_dim];
-                    unit[column] = cyrus_core::f64_finite!(1.0);
-                    computed_t_for_corrections(&unit)
-                })
-                .collect(),
-        )
-    };
-    let gv_correction_closure = |t_production: &[F64<Finite>]| {
-        let t_computed = computed_t_for_corrections(t_production);
-        cyrus_core::kklt::compute_gv_target_correction_for_ambient_curves(
-            small_curve_gvs,
-            &intersection.basis,
-            kklt_basis,
-            &t_computed,
-            Some(gamma),
-        )
-    };
-    let gv_correction_jacobian_closure = |t_production: &[F64<Finite>]| {
-        let t_computed = computed_t_for_corrections(t_production);
-        let jac_computed =
-            cyrus_core::kklt::compute_gv_target_correction_jacobian_for_ambient_curves(
-                small_curve_gvs,
-                &intersection.basis,
-                kklt_basis,
-                &t_computed,
-                Some(gamma),
-            )?;
-        match correction_transform_columns.as_ref() {
-            None => Some(jac_computed),
-            Some(columns) => Some(
-                jac_computed
-                    .iter()
-                    .map(|row| {
-                        columns
-                            .iter()
-                            .map(|column| {
-                                row.iter()
-                                    .zip(column.iter())
-                                    .fold(F64::<Finite>::ZERO, |acc, (a, b)| acc + *a * *b)
-                            })
-                            .collect()
-                    })
-                    .collect(),
-            ),
-        }
-    };
-    let Some(gv_corrected) = cyrus_core::kklt::solve_gv_corrected_divisor_basis_path_following(
-        &intersection.kappa_full,
-        production_primal_basis.as_divisor_basis(),
-        kklt_basis,
-        &base_tau_target,
-        gv_iteration_source_t,
-        CheckedRange::new(0, kklt_steps),
-        gv_correction_closure,
-        gv_correction_jacobian_closure,
-    ) else {
-        eprintln!("[ERROR] GV-corrected KKLT solve failed");
-        std::process::exit(2);
-    };
-    if !gv_corrected.converged {
-        eprintln!(
-            "[ERROR] GV-corrected KKLT solve did not converge: rel_err={}",
-            gv_corrected.relative_error.get()
-        );
-        std::process::exit(2);
-    }
-    eprintln!(
-        "[INFO] GV-corrected KKLT solve converged: rel_err={}",
-        gv_corrected.relative_error.get()
-    );
-    transform_production_primal_kahler_to_computed_or_exit(
-        intersection,
-        production_primal_basis,
-        &gv_corrected.t,
-        "GV-corrected Kähler point",
-    )
-}
-
 #[allow(clippy::fn_params_excessive_bools)] // CLI flags are forwarded one-to-one into this stage
 fn stage_volume(
     data_dir: Option<&str>,
@@ -3487,7 +3356,11 @@ fn stage_volume(
                 &gamma,
                 &gv_iteration_source_t,
                 kklt_steps,
-            );
+            )
+            .unwrap_or_else(|e| {
+                eprintln!("[ERROR] {e}");
+                std::process::exit(2);
+            });
             verify_deferred_missing_gv_bounds(
                 &deferred_missing_classes,
                 intersection,
