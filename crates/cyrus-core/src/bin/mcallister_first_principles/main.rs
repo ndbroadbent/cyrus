@@ -772,11 +772,11 @@ struct PipelineArgs {
 }
 
 use cyrus_core::kklt_vacuum::{
-    OwnedDivisorBasis, PrimalGeom, PrimalIntersection, basis_change_matrix_between_owned,
-    compute_b_field_gamma_for_o7_divisors, computed_primal_basis,
-    height_projected_branch_initialization, production_gv_basis_data, solve_gv_corrected_kklt,
-    transform_kahler_between_owned_divisor_bases, transform_production_primal_kahler_to_computed,
-    vector_gv_basis_data,
+    OwnedDivisorBasis, PrimalGeom, PrimalIntersection, StabilizationInputs, VacuumConfig,
+    basis_change_matrix_between_owned, compute_b_field_gamma_for_o7_divisors,
+    computed_primal_basis, height_projected_branch_initialization, production_gv_basis_data,
+    solve_gv_corrected_kklt, transform_kahler_between_owned_divisor_bases,
+    transform_production_primal_kahler_to_computed, vector_gv_basis_data, verify_kklt_vacuum,
 };
 
 struct FlatDirectionData {
@@ -3568,14 +3568,6 @@ fn stage_vacuum(
         std::process::exit(2);
     });
     let v0_log10_abs = vac.v0.get().abs().log10();
-    compare_against_dat(
-        compare_dir,
-        data_dir,
-        g_s,
-        racetrack.w0,
-        v_string,
-        checkpoint_tau_slop,
-    );
     let summary = PipelineSummary {
         g_s: g_s.get(),
         w0: racetrack.w0.get(),
@@ -3583,6 +3575,42 @@ fn stage_vacuum(
         v0_log10_abs,
         ek0: ek0.get(),
     };
+    report_vacuum_summary(
+        summary,
+        g_s,
+        racetrack.w0,
+        v_string,
+        checkpoint_tau_slop,
+        compare_dir,
+        data_dir,
+        validate_mcallister_assertions,
+        manifest_dir,
+    )
+}
+
+/// Emit the `[RESULT]` lines, run the checkpoint comparison, and (unless
+/// suppressed) the final McAllister assertions, returning the summary. Shared
+/// by the staged path (`stage_vacuum`) and the orchestrator path
+/// (`run_standard_vacuum`).
+fn report_vacuum_summary(
+    summary: PipelineSummary,
+    g_s: F64<Pos>,
+    w0: F64<Pos>,
+    v_string: f64,
+    checkpoint_tau_slop: Option<f64>,
+    compare_dir: Option<String>,
+    data_dir: Option<String>,
+    validate_mcallister_assertions: bool,
+    manifest_dir: &Path,
+) -> PipelineSummary {
+    compare_against_dat(
+        compare_dir,
+        data_dir,
+        g_s,
+        w0,
+        v_string,
+        checkpoint_tau_slop,
+    );
     eprintln!("[RESULT] g_s = {}", summary.g_s);
     eprintln!("[RESULT] W0 = {}", summary.w0);
     eprintln!("[RESULT] V_string = {}", summary.v_string);
@@ -3633,6 +3661,97 @@ fn stage_vacuum(
     summary
 }
 
+/// Map the binary's branch-selection flag to the library orchestrator's
+/// policy. The coverage-based policies have no orchestrator equivalent (they
+/// drive the binary-only branch-report tooling) and are gated out before this
+/// is reached.
+fn library_branch_selection(
+    selection: BranchSelection,
+) -> cyrus_core::kklt_vacuum::BranchSelection {
+    use cyrus_core::kklt_vacuum::BranchSelection as Lib;
+    match selection {
+        BranchSelection::MaxVolume => Lib::MaxVolume,
+        BranchSelection::MinVolume => Lib::MinVolume,
+        BranchSelection::FirstPositive => Lib::FirstPositive,
+        BranchSelection::MinCondition => Lib::MinCondition,
+        BranchSelection::MinToricGvMissing | BranchSelection::MinRequiredGvDegree => {
+            eprintln!(
+                "[ERROR] GV-coverage branch selection has no library orchestrator path; this should have been gated"
+            );
+            std::process::exit(2);
+        }
+    }
+}
+
+/// Standard first-principles Volume+Vacuum via the library orchestrator
+/// `verify_kklt_vacuum`. This is the validated KKLT stabilization path - the
+/// same one the GA verifier calls - exercised whenever no binary-only feature
+/// (downstream-Kähler replay, branch reports, GV-coverage selection, or a
+/// production-basis override) is requested.
+fn run_standard_vacuum(
+    data_dir: Option<&str>,
+    manifest_dir: &Path,
+    geom: &PrimalGeom,
+    intersection: &PrimalIntersection,
+    h21: usize,
+    ek0: F64<Pos>,
+    racetrack: &RacetrackData,
+    small_curve_cutoff: F64<Pos>,
+    args: &PipelineArgs,
+    t0: &Instant,
+) -> PipelineSummary {
+    let (c_i, kklt_basis) = load_kklt_inputs(data_dir, manifest_dir);
+    let production_primal_basis = computed_primal_basis(intersection);
+    let inputs = StabilizationInputs {
+        geom,
+        intersection,
+        production_primal_basis: &production_primal_basis,
+        c_i: &c_i,
+        kklt_basis: &kklt_basis,
+        g_s: racetrack.rt_res.g_s,
+        w0: racetrack.w0,
+        ek0,
+        h21,
+    };
+    let config = VacuumConfig {
+        kklt_steps: args.kklt_steps,
+        branch_candidates: args.branch_candidates,
+        branch_seed: args.branch_seed,
+        branch_height_init: args.branch_height_init,
+        branch_selection: library_branch_selection(args.branch_selection),
+        small_curve_cutoff,
+        small_curve_pruning: args.small_curve_pruning,
+        primal_gv_min_points: args.primal_gv_min_points,
+        primal_gv_max_deg: args.primal_gv_max_deg,
+        max_missing_gv_impact: args.max_missing_gv_impact,
+        missing_gv_abs_bound: args.missing_gv_abs_bound,
+    };
+    let verdict = verify_kklt_vacuum(&inputs, &config).unwrap_or_else(|e| {
+        eprintln!("[ERROR] {e}");
+        std::process::exit(2);
+    });
+    eprintln!("[TIME] volume+vacuum: {:.2?}", t0.elapsed());
+    let v_string = verdict.v_string.get();
+    let summary = PipelineSummary {
+        g_s: verdict.g_s.get(),
+        w0: verdict.w0.get(),
+        v_string,
+        v0_log10_abs: verdict.v0.get().abs().log10(),
+        ek0: verdict.ek0.get(),
+    };
+    report_vacuum_summary(
+        summary,
+        verdict.g_s,
+        verdict.w0,
+        v_string,
+        None,
+        args.compare_dir.clone(),
+        args.data_dir.clone(),
+        args.validate_mcallister_assertions,
+        manifest_dir,
+    )
+}
+
 fn run_pipeline(args: PipelineArgs) {
     let t0 = Instant::now();
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -3670,47 +3789,76 @@ fn run_pipeline(args: PipelineArgs) {
     if !stage_enabled(Stage::Volume, args.stop_after) {
         return;
     }
-    let (v_string, v_string_pos, checkpoint_tau_slop) = stage_volume(
-        data_dir,
-        &manifest_dir,
-        &geom,
-        &intersection,
-        &racetrack,
-        args.allow_downstream_kahler,
-        args.kklt_steps,
-        args.branch_candidates,
-        args.branch_seed,
-        args.branch_selection,
-        args.branch_height_init,
-        args.branch_report_path.as_deref(),
-        args.branch_report_missing_limit,
-        args.branch_report_decomposition_depth,
-        args.branch_report_only,
-        args.branch_report_skip_gv_coverage,
-        args.primal_gv_min_points,
-        args.primal_gv_max_deg,
-        args.max_missing_gv_impact,
-        args.missing_gv_abs_bound,
-        args.production_primal_basis_override.as_ref(),
-        small_curve_cutoff,
-        args.small_curve_pruning,
-        flat.dual_divisor_basis.dimension(),
-        &t0,
-    );
-    if !stage_enabled(Stage::Vacuum, args.stop_after) {
-        return;
-    }
-    let summary = stage_vacuum(
-        flat.ek0_opt,
-        &racetrack,
-        v_string_pos,
-        v_string,
-        checkpoint_tau_slop,
-        args.compare_dir,
-        args.data_dir,
-        args.validate_mcallister_assertions,
-        &manifest_dir,
-    );
+    // The standard first-principles Volume+Vacuum delegates to the library
+    // orchestrator `verify_kklt_vacuum`. The staged inline path is reserved
+    // for the binary-only research/replay features the orchestrator does not
+    // model (downstream-Kähler replay, branch reports, GV-coverage selection,
+    // production-basis override), and for `--stop-after volume`.
+    let use_orchestrator = stage_enabled(Stage::Vacuum, args.stop_after)
+        && !args.allow_downstream_kahler
+        && args.branch_report_path.is_none()
+        && !args.branch_selection.requires_gv_coverage()
+        && args.production_primal_basis_override.is_none();
+    let summary = if use_orchestrator {
+        let Some(ek0) = flat.ek0_opt else {
+            eprintln!("[ERROR] ek0 is invalid; cannot compute V0");
+            std::process::exit(2);
+        };
+        run_standard_vacuum(
+            data_dir,
+            &manifest_dir,
+            &geom,
+            &intersection,
+            flat.dual_divisor_basis.dimension(),
+            ek0,
+            &racetrack,
+            small_curve_cutoff,
+            &args,
+            &t0,
+        )
+    } else {
+        let (v_string, v_string_pos, checkpoint_tau_slop) = stage_volume(
+            data_dir,
+            &manifest_dir,
+            &geom,
+            &intersection,
+            &racetrack,
+            args.allow_downstream_kahler,
+            args.kklt_steps,
+            args.branch_candidates,
+            args.branch_seed,
+            args.branch_selection,
+            args.branch_height_init,
+            args.branch_report_path.as_deref(),
+            args.branch_report_missing_limit,
+            args.branch_report_decomposition_depth,
+            args.branch_report_only,
+            args.branch_report_skip_gv_coverage,
+            args.primal_gv_min_points,
+            args.primal_gv_max_deg,
+            args.max_missing_gv_impact,
+            args.missing_gv_abs_bound,
+            args.production_primal_basis_override.as_ref(),
+            small_curve_cutoff,
+            args.small_curve_pruning,
+            flat.dual_divisor_basis.dimension(),
+            &t0,
+        );
+        if !stage_enabled(Stage::Vacuum, args.stop_after) {
+            return;
+        }
+        stage_vacuum(
+            flat.ek0_opt,
+            &racetrack,
+            v_string_pos,
+            v_string,
+            checkpoint_tau_slop,
+            args.compare_dir,
+            args.data_dir,
+            args.validate_mcallister_assertions,
+            &manifest_dir,
+        )
+    };
     if let Some(path) = args.out_path {
         let out_path = PathBuf::from(path);
         let data = serde_json::to_string_pretty(&summary).expect("serialize summary");
