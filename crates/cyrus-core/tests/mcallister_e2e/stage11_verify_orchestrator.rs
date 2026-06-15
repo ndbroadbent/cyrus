@@ -171,6 +171,97 @@ fn build_intersection(geom: &PrimalGeom) -> PrimalIntersection {
     }
 }
 
+/// De-risking the GA deep-verify integration: how much of the orientifold
+/// model that `verify_kklt_vacuum` needs (the involution, `c_i`, `kklt_basis`)
+/// can be DERIVED from the geometry rather than read from McAllister's data
+/// files?
+///
+/// Established here for 4-214-647:
+/// 1. `enumerate_involutions` finds the correct involution `sigma=[1,0,0,0]`
+///    with 51 O7 divisors (matching the runner's own gamma derivation).
+/// 2. The `c_i` rule - `6` on O7-parity divisors, else the irreducible-
+///    component count - reproduces `target_volumes.dat` EXACTLY on
+///    McAllister's `kklt_basis`.
+/// 3. The remaining gap is basis SELECTION: the rigid prime toric divisors
+///    number 216, and McAllister's `kklt_basis` is those minus exactly
+///    `{46, 130}` (both rigid; 2 is correctly excluded as non-rigid). So
+///    `kklt_basis` is a 214-element H^{1,1} basis chosen from the rigid prime
+///    divisors; the deterministic drop rule (and whether V0 is invariant to
+///    it) is the open piece tracked for the GA integration.
+#[test]
+fn derived_orientifold_model_vs_mcallister_data() {
+    if !require_first_principles() || !require_runner_heavy() {
+        return;
+    }
+    let Some(data_dir) = require_data_dir() else {
+        return;
+    };
+    let geom = build_geom(&data_dir);
+    let intersection = build_intersection(&geom);
+
+    let h11_extra =
+        cyrus_core::divisor::batyrev_h11_extra_classes(&geom.polytope, &geom.triangulation_points)
+            .expect("batyrev h11 extra");
+    let h11 = intersection.basis.len() + h11_extra;
+
+    let models = cyrus_core::orientifold::enumerate_involutions(
+        &geom.polytope,
+        &geom.triangulation_points,
+        &intersection.kappa_full,
+        &intersection.basis,
+        h11,
+        MCALLISTER_4_214_H21,
+    )
+    .expect("enumerate involutions");
+
+    // (1) The correct involution is found.
+    let model = models
+        .iter()
+        .find(|m| m.sigma == vec![1, 0, 0, 0])
+        .expect("sigma=[1,0,0,0] model present");
+    assert_eq!(model.o7_points.len(), 51, "expected 51 O7 divisors");
+
+    let data_kklt_basis: Vec<usize> = read_usize_csv(&data_dir.join("kklt_basis.dat"));
+    let data_c_i: Vec<i64> = read_ints_csv(&data_dir.join("target_volumes.dat"));
+
+    let c_i_rule = |idx: usize| -> i64 {
+        if model.gamma[idx] == 1 {
+            6
+        } else {
+            i64::try_from(model.components[idx]).unwrap()
+        }
+    };
+
+    // (2) The c_i rule reproduces target_volumes.dat on McAllister's basis.
+    let c_i_on_data: Vec<i64> = data_kklt_basis.iter().map(|&idx| c_i_rule(idx)).collect();
+    assert_eq!(
+        c_i_on_data, data_c_i,
+        "derived c_i rule must reproduce target_volumes.dat on McAllister's kklt_basis"
+    );
+
+    // (3) Basis-selection gap: rigid prime divisors minus McAllister's basis
+    // is exactly {46, 130}, and every McAllister divisor is rigid.
+    let mut rigid: Vec<usize> = model
+        .divisor_classes
+        .iter()
+        .filter(|(_, class)| class.is_rigid())
+        .map(|(idx, _)| *idx)
+        .collect();
+    rigid.sort_unstable();
+    let dropped: Vec<usize> = rigid
+        .iter()
+        .filter(|i| !data_kklt_basis.contains(i))
+        .copied()
+        .collect();
+    let extra: Vec<usize> = data_kklt_basis
+        .iter()
+        .filter(|i| !rigid.contains(i))
+        .copied()
+        .collect();
+    assert_eq!(dropped, vec![46, 130], "rigid-minus-McAllister drop set");
+    assert!(extra.is_empty(), "every McAllister kklt divisor is rigid");
+}
+
 #[test]
 fn verify_kklt_vacuum_reaches_corrected_volume_and_v0() {
     if !require_first_principles() || !require_runner_heavy() {
