@@ -66,16 +66,14 @@ use cyrus_core::{
     CurvePruningStrategy, GvDivisorBasisData, Point, Polytope, ToricCurveCandidate, Triangulation,
     apply_finite_f64_basis_transform, apply_integer_basis_transform,
     apply_integer_basis_transform_transpose, basis_change_matrix, build_racetrack_terms,
-    compute_curve_basis_matrix, compute_glsm_and_linrels, compute_grading_vector,
-    compute_intersection_cytools, compute_linear_relations_no_origin, compute_mori_cone_cap_rays,
-    compute_regular_triangulation, compute_toric_two_face_curve_gv_invariants,
-    compute_w0_from_terms, divisor_basis_change_matrix, effective_prime_divisors_from_curve_basis,
-    generate_scaled_divisor_basis_branch_initializations, gv_divisor_basis_data, heights_to_kahler,
+    compute_glsm_and_linrels, compute_grading_vector, compute_intersection_cytools,
+    compute_linear_relations_no_origin, compute_mori_cone_cap_rays, compute_regular_triangulation,
+    compute_toric_two_face_curve_gv_invariants, compute_w0_from_terms,
+    generate_scaled_divisor_basis_branch_initializations, gv_divisor_basis_data,
     intersection_in_basis, intersection_in_divisor_basis, is_unimodular, kahler_to_heights,
     map_basis_gv_invariants_to_ambient, prune_decomposable_curve_candidates,
-    scale_divisor_basis_kklt_branch_initialization_to_target, solve_divisor_basis_path_following,
-    solve_divisor_basis_path_following_branch_candidates, solve_racetrack,
-    subcutoff_toric_curve_candidates,
+    solve_divisor_basis_path_following, solve_divisor_basis_path_following_branch_candidates,
+    solve_racetrack, subcutoff_toric_curve_candidates,
 };
 
 /// Translate a library cone-walk rescue failure into the runner's loud
@@ -590,19 +588,6 @@ fn owned_divisor_basis_from_override(
     }
 }
 
-fn basis_change_matrix_between_owned(
-    glsm: &[Vec<malachite::Integer>],
-    from_basis: &OwnedDivisorBasis,
-    to_basis: &OwnedDivisorBasis,
-) -> std::result::Result<Vec<Vec<malachite::Integer>>, String> {
-    divisor_basis_change_matrix(
-        glsm,
-        from_basis.as_divisor_basis(),
-        to_basis.as_divisor_basis(),
-    )
-    .map_err(|e| e.to_string())
-}
-
 fn production_gv_basis_data(
     ambient_mori_rays: &[Vec<i64>],
     linrels: &[Vec<malachite::Integer>],
@@ -811,7 +796,11 @@ struct PipelineArgs {
     production_dual_basis_override: Option<BasisOverride>,
 }
 
-use cyrus_core::kklt_vacuum::{OwnedDivisorBasis, PrimalGeom, PrimalIntersection};
+use cyrus_core::kklt_vacuum::{
+    OwnedDivisorBasis, PrimalGeom, PrimalIntersection, basis_change_matrix_between_owned,
+    computed_primal_basis, height_projected_branch_initialization,
+    transform_kahler_between_owned_divisor_bases, transform_production_primal_kahler_to_computed,
+};
 
 struct FlatDirectionData {
     dual_polytope: Polytope,
@@ -1054,70 +1043,20 @@ fn transform_kahler_to_computed_basis_with_logging(
     })
 }
 
-fn transform_kahler_between_owned_divisor_bases(
-    glsm: &[Vec<malachite::Integer>],
-    target_basis: &OwnedDivisorBasis,
-    source_basis: &OwnedDivisorBasis,
-    values: &[F64<Finite>],
-    label: &str,
-    log_transform: bool,
-) -> Result<Vec<F64<Finite>>, String> {
-    if target_basis == source_basis {
-        return Ok(values.to_vec());
-    }
-    let transform = basis_change_matrix_between_owned(glsm, target_basis, source_basis)
-        .map_err(|e| format!("failed to compute {label} basis transform: {e}"))?;
-    if !is_unimodular(&transform) {
-        return Err(format!("{label} basis transform is not unimodular"));
-    }
-    if log_transform {
-        eprintln!(
-            "[INFO] transforming {label} from {} source coordinates to {} target coordinates",
-            source_basis.description(),
-            target_basis.description()
-        );
-    }
-    apply_finite_f64_basis_transform(&transform, values, label).map_err(|e| e.to_string())
-}
-
-fn computed_primal_basis(intersection: &PrimalIntersection) -> OwnedDivisorBasis {
-    OwnedDivisorBasis::Indices(intersection.basis.clone())
-}
-
-fn transform_production_primal_kahler_to_computed(
+/// Transform a production-basis Kähler point into Cyrus's computed primal
+/// basis, exiting loudly on a transform failure (the binary's fail-fast CLI
+/// contract; the library form returns `Result`).
+fn transform_production_primal_kahler_to_computed_or_exit(
     intersection: &PrimalIntersection,
     production_basis: &OwnedDivisorBasis,
     values: &[F64<Finite>],
     label: &str,
 ) -> Vec<F64<Finite>> {
-    transform_kahler_between_owned_divisor_bases(
-        &intersection.glsm,
-        &computed_primal_basis(intersection),
-        production_basis,
-        values,
-        label,
-        true,
-    )
-    .unwrap_or_else(|e| {
-        eprintln!("[ERROR] {e}");
-        std::process::exit(2);
-    })
-}
-
-fn transform_computed_primal_kahler_to_production(
-    intersection: &PrimalIntersection,
-    production_basis: &OwnedDivisorBasis,
-    values: &[F64<Finite>],
-    label: &str,
-) -> Result<Vec<F64<Finite>>, String> {
-    transform_kahler_between_owned_divisor_bases(
-        &intersection.glsm,
-        production_basis,
-        &computed_primal_basis(intersection),
-        values,
-        label,
-        true,
-    )
+    transform_production_primal_kahler_to_computed(intersection, production_basis, values, label)
+        .unwrap_or_else(|e| {
+            eprintln!("[ERROR] {e}");
+            std::process::exit(2);
+        })
 }
 
 /// Derive the half-integral B-field parity vector `gamma` from the orientifold
@@ -2285,43 +2224,6 @@ fn write_branch_report_jsonl(
     std::fs::write(path, lines).map_err(|e| e.to_string())
 }
 
-fn height_projected_branch_initialization(
-    geom: &PrimalGeom,
-    intersection: &PrimalIntersection,
-    production_basis: &OwnedDivisorBasis,
-    kklt_basis: &[usize],
-    tau_phase1: &[F64<Pos>],
-) -> Result<Vec<F64<Finite>>, String> {
-    let basis_non_origin = intersection
-        .basis
-        .iter()
-        .map(|&idx| {
-            idx.checked_sub(1)
-                .ok_or_else(|| "height projection basis unexpectedly contains origin".to_string())
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    let curve_basis = compute_curve_basis_matrix(&intersection.linrels, &intersection.basis)
-        .map_err(|e| format!("failed to compute primal curve basis: {e}"))?;
-    let prime_divisors = effective_prime_divisors_from_curve_basis(&curve_basis, &basis_non_origin)
-        .ok_or_else(|| "failed to extract effective-cone prime divisor rows".to_string())?;
-    let raw = heights_to_kahler(&geom.heights, &basis_non_origin, &prime_divisors)
-        .ok_or_else(|| "failed to project triangulation heights to Kähler basis".to_string())?;
-    let production_raw = transform_computed_primal_kahler_to_production(
-        intersection,
-        production_basis,
-        &raw,
-        "height-projected Kähler",
-    )?;
-    scale_divisor_basis_kklt_branch_initialization_to_target(
-        &intersection.kappa_full,
-        production_basis.as_divisor_basis(),
-        kklt_basis,
-        tau_phase1,
-        &production_raw,
-    )
-    .ok_or_else(|| "failed to scale height-projected Kähler point to phase-1 target".to_string())
-}
-
 fn triangulation_from_kahler_point(
     geom: &PrimalGeom,
     basis: &[usize],
@@ -2723,7 +2625,7 @@ fn solve_gv_corrected_kklt(
         if production_is_computed {
             t_production.to_vec()
         } else {
-            transform_production_primal_kahler_to_computed(
+            transform_production_primal_kahler_to_computed_or_exit(
                 intersection,
                 production_primal_basis,
                 t_production,
@@ -2810,7 +2712,7 @@ fn solve_gv_corrected_kklt(
         "[INFO] GV-corrected KKLT solve converged: rel_err={}",
         gv_corrected.relative_error.get()
     );
-    transform_production_primal_kahler_to_computed(
+    transform_production_primal_kahler_to_computed_or_exit(
         intersection,
         production_primal_basis,
         &gv_corrected.t,
@@ -3022,12 +2924,13 @@ fn stage_volume(
                         kklt_steps,
                     )
                     .unwrap_or_else(|e| exit_on_cone_walk_rescue_error(&e));
-                    let small_curve_selection_t = transform_production_primal_kahler_to_computed(
-                        intersection,
-                        &production_primal_basis,
-                        &phase1.t,
-                        "phase-1 Kähler point",
-                    );
+                    let small_curve_selection_t =
+                        transform_production_primal_kahler_to_computed_or_exit(
+                            intersection,
+                            &production_primal_basis,
+                            &phase1.t,
+                            "phase-1 Kähler point",
+                        );
                     (result, small_curve_selection_t, phase1.t)
                 } else {
                     let tau_phase1: Vec<F64<Pos>> = c_i.iter().map(|ci| ci.to_f64()).collect();
@@ -3249,12 +3152,13 @@ fn stage_volume(
                 }
             };
                     let best_branch = positive_branches[selected_rank_by_volume].clone();
-                    let small_curve_selection_t = transform_production_primal_kahler_to_computed(
-                        intersection,
-                        &production_primal_basis,
-                        &best_branch.result.t,
-                        "selected branch Kähler point",
-                    );
+                    let small_curve_selection_t =
+                        transform_production_primal_kahler_to_computed_or_exit(
+                            intersection,
+                            &production_primal_basis,
+                            &best_branch.result.t,
+                            "selected branch Kähler point",
+                        );
                     if let Some(path) = branch_report_path {
                         let report_path = PathBuf::from(path);
                         let ctx = BranchReportContext {

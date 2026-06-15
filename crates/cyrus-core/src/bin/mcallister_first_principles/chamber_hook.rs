@@ -19,11 +19,12 @@ use cyrus_core::types::range::CheckedRange;
 use cyrus_core::types::tags::{Finite, Pos};
 use cyrus_core::{Triangulation, compute_curve_basis_matrix};
 
-use cyrus_core::kklt_vacuum::{OwnedDivisorBasis, PrimalGeom, PrimalIntersection};
-
-use crate::{
-    chamber_intersection_full, parse_arg_value, transform_computed_primal_kahler_to_production,
+use cyrus_core::kklt_vacuum::{
+    OwnedDivisorBasis, PrimalGeom, PrimalIntersection,
+    transform_computed_primal_kahler_to_production,
 };
+
+use crate::{chamber_intersection_full, parse_arg_value};
 
 /// Everything the failure-site hook needs from the volume stage.
 pub struct ChamberSearchContext<'a> {
