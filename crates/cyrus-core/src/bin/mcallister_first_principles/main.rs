@@ -45,9 +45,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 mod chamber_hook;
-mod missing_gv;
 use cyrus_core::kklt_vacuum::cone_walk::{self, ConeWalkRescueError};
-use missing_gv::{
+use cyrus_core::kklt_vacuum::missing_gv::{
     compute_minimal_degree_gv_by_ambient_class, defer_bounded_impact_missing_gvs,
     verify_deferred_missing_gv_bounds,
 };
@@ -63,14 +62,14 @@ use cyrus_core::types::tags::{Finite, Pos};
 use cyrus_core::vacuum::compute_vacuum;
 use cyrus_core::volume::bbhl_correction;
 use cyrus_core::{
-    CurvePruningStrategy, GvDivisorBasisData, Point, Polytope, ToricCurveCandidate, Triangulation,
+    CurvePruningStrategy, Point, Polytope, ToricCurveCandidate, Triangulation,
     apply_finite_f64_basis_transform, apply_integer_basis_transform,
     apply_integer_basis_transform_transpose, basis_change_matrix, build_racetrack_terms,
     compute_glsm_and_linrels, compute_grading_vector, compute_intersection_cytools,
     compute_linear_relations_no_origin, compute_mori_cone_cap_rays, compute_regular_triangulation,
     compute_toric_two_face_curve_gv_invariants, compute_w0_from_terms,
-    generate_scaled_divisor_basis_branch_initializations, gv_divisor_basis_data,
-    intersection_in_basis, intersection_in_divisor_basis, is_unimodular, kahler_to_heights,
+    generate_scaled_divisor_basis_branch_initializations, intersection_in_basis,
+    intersection_in_divisor_basis, is_unimodular, kahler_to_heights,
     map_basis_gv_invariants_to_ambient, prune_decomposable_curve_candidates,
     solve_divisor_basis_path_following, solve_divisor_basis_path_following_branch_candidates,
     solve_racetrack, subcutoff_toric_curve_candidates,
@@ -588,30 +587,6 @@ fn owned_divisor_basis_from_override(
     }
 }
 
-fn production_gv_basis_data(
-    ambient_mori_rays: &[Vec<i64>],
-    linrels: &[Vec<malachite::Integer>],
-    basis: &OwnedDivisorBasis,
-    context: &str,
-) -> Result<GvDivisorBasisData, String> {
-    gv_divisor_basis_data(ambient_mori_rays, linrels, basis.as_divisor_basis())
-        .map_err(|e| format!("failed to build {context} GV divisor-basis data: {e}"))
-}
-
-fn vector_gv_basis_data(
-    ambient_mori_rays: &[Vec<i64>],
-    linrels: &[Vec<malachite::Integer>],
-    basis: &[usize],
-    context: &str,
-) -> Result<GvDivisorBasisData, String> {
-    production_gv_basis_data(
-        ambient_mori_rays,
-        linrels,
-        &OwnedDivisorBasis::Indices(basis.to_vec()),
-        context,
-    )
-}
-
 #[derive(Debug, Deserialize)]
 struct RacetrackAssertion {
     g_s: f64,
@@ -799,8 +774,9 @@ struct PipelineArgs {
 use cyrus_core::kklt_vacuum::{
     OwnedDivisorBasis, PrimalGeom, PrimalIntersection, basis_change_matrix_between_owned,
     compute_b_field_gamma_for_o7_divisors, computed_primal_basis,
-    height_projected_branch_initialization, solve_gv_corrected_kklt,
+    height_projected_branch_initialization, production_gv_basis_data, solve_gv_corrected_kklt,
     transform_kahler_between_owned_divisor_bases, transform_production_primal_kahler_to_computed,
+    vector_gv_basis_data,
 };
 
 struct FlatDirectionData {
@@ -3256,7 +3232,11 @@ fn stage_volume(
                 &correction_source_t,
                 max_missing_gv_impact,
                 missing_gv_abs_bound,
-            );
+            )
+            .unwrap_or_else(|e| {
+                eprintln!("[ERROR] {e}");
+                std::process::exit(2);
+            });
             let Some(gv_volume_correction) =
                 cyrus_core::kklt::compute_gv_volume_correction_for_ambient_curves(
                     &small_curve_gvs,

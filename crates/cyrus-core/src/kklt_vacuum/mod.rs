@@ -14,9 +14,11 @@ use crate::types::tags::Finite;
 use crate::{DivisorBasis, Intersection, Point, Polytope, Triangulation};
 
 pub mod cone_walk;
+pub mod missing_gv;
 
 mod basis_transform;
 mod gamma;
+mod gv_basis;
 mod gv_corrected;
 
 pub use basis_transform::{
@@ -25,6 +27,7 @@ pub use basis_transform::{
     transform_kahler_between_owned_divisor_bases, transform_production_primal_kahler_to_computed,
 };
 pub use gamma::compute_b_field_gamma_for_o7_divisors;
+pub use gv_basis::{production_gv_basis_data, vector_gv_basis_data};
 pub use gv_corrected::solve_gv_corrected_kklt;
 
 /// Primal toric geometry: the reflexive polytope, its FRST heights, the

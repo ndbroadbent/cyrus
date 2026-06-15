@@ -1,17 +1,22 @@
 //! Coverage for selected primal small curves whose GV invariants the toric
-//! formulas miss: exact no-decomposition certificates (minimal grading
-//! degree, extremal wall rays) computed via the one-dimensional HKTY series,
-//! plus the explicitly opted-in bounded-impact deferral.
+//! formulas miss.
+//!
+//! Exact no-decomposition certificates (minimal grading degree, extremal wall
+//! rays) computed via the one-dimensional HKTY series, plus the explicitly
+//! opted-in bounded-impact deferral.
 
 use std::collections::{HashMap, HashSet};
 
-use cyrus_core::types::f64::F64;
-use cyrus_core::types::tags::Finite;
+use crate::compute_grading_vector;
+use crate::types::f64::F64;
+use crate::types::tags::Finite;
 
-use cyrus_core::kklt_vacuum::{PrimalGeom, PrimalIntersection};
+use super::gv_basis::vector_gv_basis_data;
+use super::{PrimalGeom, PrimalIntersection};
 
-use crate::{compute_grading_vector, vector_gv_basis_data};
-
+/// Exact GV for a missing class that is a multiple of an extremal wall Mori
+/// generator, via the one-dimensional HKTY series.
+///
 /// Compute GV invariants for missing classes whose grading degree is below
 /// twice the minimal positive generator degree. Such classes admit no
 /// decomposition into positive-degree effective classes at all (any
@@ -51,8 +56,8 @@ fn try_extremal_wall_ray_gv(
         })
         .collect();
     let target_basis = &generators_basis[generator_index];
-    let lp_options = cyrus_core::SupportingMoriFaceLpSearchOptions::default();
-    let certificate = cyrus_core::gv::diagnose_extremal_mori_ray_separator_by_lp_search(
+    let lp_options = crate::SupportingMoriFaceLpSearchOptions::default();
+    let certificate = crate::gv::diagnose_extremal_mori_ray_separator_by_lp_search(
         target_basis,
         &generators_basis,
         &lp_options,
@@ -65,7 +70,7 @@ fn try_extremal_wall_ray_gv(
         );
         return Ok(None);
     }
-    let series = cyrus_core::compute_ambient_one_dimensional_ray_gv_series(
+    let series = crate::compute_ambient_one_dimensional_ray_gv_series(
         &wall_generators[generator_index],
         &intersection.basis,
         grading,
@@ -121,11 +126,13 @@ fn parallel_ambient_ray_multiple(class: &[i64], rays: &[Vec<i64>]) -> Option<(us
     None
 }
 
-/// Split off missing-GV classes whose maximal possible contribution
-/// (assuming `|GV| <= missing_gv_abs_bound`) stays below the explicitly
-/// requested `--max-missing-gv-impact` threshold; they are excluded from the
-/// targets and V_string with a loud warning, and re-verified at the solved
-/// Kahler point by `verify_deferred_missing_gv_bounds`.
+/// Split off missing-GV classes whose bounded impact is below the requested
+/// `--max-missing-gv-impact` threshold.
+///
+/// A class whose maximal possible contribution (assuming
+/// `|GV| <= missing_gv_abs_bound`) stays under the threshold is excluded from
+/// the targets and V_string with a loud warning, and re-verified at the
+/// solved Kahler point by `verify_deferred_missing_gv_bounds`.
 pub fn defer_bounded_impact_missing_gvs(
     missing_gv_classes: &mut Vec<Vec<i64>>,
     intersection: &PrimalIntersection,
@@ -167,7 +174,7 @@ pub fn verify_deferred_missing_gv_bounds(
     solved_t: &[F64<Finite>],
     max_missing_gv_impact: f64,
     missing_gv_abs_bound: u32,
-) {
+) -> Result<(), String> {
     for class in deferred_missing_classes {
         let realized =
             missing_gv_unit_impact_bound(class, &intersection.basis, kklt_basis, solved_t)
@@ -175,13 +182,13 @@ pub fn verify_deferred_missing_gv_bounds(
         match realized {
             Some(bound) if bound <= max_missing_gv_impact => {}
             other => {
-                eprintln!(
-                    "[ERROR] deferred missing-GV curve exceeds the impact bound at the solved Kahler point (realized={other:?}, limit={max_missing_gv_impact:.3e}); class={class:?}"
-                );
-                std::process::exit(2);
+                return Err(format!(
+                    "deferred missing-GV curve exceeds the impact bound at the solved Kahler point (realized={other:?}, limit={max_missing_gv_impact:.3e}); class={class:?}"
+                ));
             }
         }
     }
+    Ok(())
 }
 
 /// Conservative per-unit-GV bound on a missing curve's contribution to any
@@ -203,7 +210,7 @@ fn missing_gv_unit_impact_bound(
     if volume.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
         return None;
     }
-    let dilog = cyrus_core::kklt::gv_dilog_from_curve_volume_checked(volume, 0).ok()?;
+    let dilog = crate::kklt::gv_dilog_from_curve_volume_checked(volume, 0).ok()?;
     let max_kklt_coeff = kklt_basis
         .iter()
         .map(|&idx| class.get(idx).copied().unwrap_or(0).unsigned_abs())
@@ -214,6 +221,13 @@ fn missing_gv_unit_impact_bound(
     Some(tau_bound.max(volume_bound))
 }
 
+/// Compute exact GV invariants for missing ambient classes that provably do
+/// not decompose.
+///
+/// These are the classes below twice the minimal generator grading degree, or
+/// positive multiples of an extremal wall Mori generator. For each such class
+/// the one-dimensional HKTY series is the exact computation; classes that may
+/// decompose are left for other methods.
 pub fn compute_minimal_degree_gv_by_ambient_class(
     geom: &PrimalGeom,
     intersection: &PrimalIntersection,
@@ -252,7 +266,7 @@ pub fn compute_minimal_degree_gv_by_ambient_class(
     // generating description of the toric Mori cone, so exact extremality
     // certificates are meaningful against it.
     let wall_generators: Vec<Vec<i64>> =
-        cyrus_core::compute_mori_generators(&geom.triangulation, &geom.triangulation_points)
+        crate::compute_mori_generators(&geom.triangulation, &geom.triangulation_points)
             .map_err(|e| format!("failed to compute wall Mori generators: {e}"))?
             .generators()
             .iter()
@@ -314,7 +328,7 @@ pub fn compute_minimal_degree_gv_by_ambient_class(
             // always fail the degree gate; reaching here would be a bug.
             continue;
         }
-        let series = cyrus_core::compute_ambient_one_dimensional_ray_gv_series(
+        let series = crate::compute_ambient_one_dimensional_ray_gv_series(
             class,
             &intersection.basis,
             &grading,
