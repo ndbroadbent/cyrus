@@ -11,6 +11,7 @@
 //! Runs persist their full state (population, hall of fame, RNG) to a run
 //! directory every generation, so they can be stopped and resumed exactly.
 
+pub mod deep_verify;
 pub mod fitness;
 pub mod genome;
 pub mod geometry;

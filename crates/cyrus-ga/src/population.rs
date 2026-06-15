@@ -306,6 +306,8 @@ mod tests {
             q_flux: 0.0,
             cpl_w0: None,
             cpl_wa: None,
+            deep_tier: None,
+            deep_log10_v0: None,
         }
     }
 

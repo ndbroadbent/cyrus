@@ -469,25 +469,29 @@ mod tests {
 
     #[test]
     fn sampler_finds_exact_isotropic_pairs() {
+        use cyrus_core::types::i32::I32;
+        use cyrus_core::types::tags::{GTEOne, NonNeg};
+        use cyrus_core::{Point, Polytope};
         use rand::SeedableRng;
         let kappa = diag_kappa();
         let mut rng = ChaCha8Rng::seed_from_u64(123);
-        // Build a minimal geometry around the toy kappa.
-        // (Only kappa_basis and h21_primal are used by the sampler.)
+        // Minimal geometry; only kappa_basis/h21_primal are used here.
+        let toy_verts = [[1, 0], [0, 1], [-1, -1]].map(|v| Point::new(v.to_vec()));
         let geom = GaGeometry {
             kappa_basis: kappa,
             mori: cyrus_core::MoriCone::new(vec![]),
             gv: vec![],
             h21_primal: 2,
-            mirror_h11: cyrus_core::types::i32::I32::<cyrus_core::types::tags::GTEOne>::new(2)
-                .expect("h11"),
-            mirror_h21: cyrus_core::types::i32::I32::<cyrus_core::types::tags::NonNeg>::new(2)
-                .expect("h21"),
+            mirror_h11: I32::<GTEOne>::new(2).expect("h11"),
+            mirror_h21: I32::<NonNeg>::new(2).expect("h21"),
             dual_basis: vec![0, 1],
             dual_glsm: vec![],
             dual_simplices: vec![],
             pfv_seeds: vec![],
             q_d3: 100.0,
+            primal: Polytope::from_vertices(toy_verts.to_vec()).expect("toy polytope"),
+            primal_tri_points: vec![],
+            deep_verify_cell: crate::deep_verify::DeepVerifyCell::default(),
         };
         let genome = sample_isotropic_genome(&geom, &mut rng, 10, 64, 256).expect("finds a sample");
         let n_inv = n_inverse_for_m(&geom.kappa_basis, &genome.m).expect("invertible");

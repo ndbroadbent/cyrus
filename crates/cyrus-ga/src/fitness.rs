@@ -22,6 +22,8 @@
 
 use cyrus_core::cosmology::{CosmologyParams, Potential, solve_cosmology};
 use cyrus_core::pipeline::{EvaluationRequest, EvaluationResult, evaluate_vacuum};
+use cyrus_core::types::f64::F64;
+use cyrus_core::types::tags::Pos;
 use serde::{Deserialize, Serialize};
 
 use crate::genome::Genome;
@@ -55,7 +57,26 @@ pub struct FitnessConfig {
     pub weight_slope: f64,
     /// Weight of the weak-coupling component.
     pub weight_gs: f64,
+    /// Run the in-process deep KKLT verification (the full primal-side
+    /// arXiv:2107.09064 SS6 stabilization, `GaGeometry::deep_verify`) on a
+    /// VALID candidate once its base scan fitness exceeds this threshold.
+    /// `None` disables it. Deep verification is ~tens of minutes, so it is
+    /// gated: genuine vacua worth verifying are extremely rare (order one or
+    /// two a day), and that rarity - not a throttle - is what keeps the cost
+    /// bounded. A passing deep-verify lifts the candidate into a strictly
+    /// higher fitness band (see [`evaluate_fitness`]).
+    #[serde(default)]
+    pub deep_verify_threshold: Option<f64>,
 }
+
+/// Fitness band floor for a candidate whose primal KKLT vacuum was solved
+/// (deep-verify produced a real `V0`) but whose worldsheet-instanton expansion
+/// left curves uncovered/deferred. Strictly above any non-deep-verified valid.
+const STABILIZED_FLOOR: f64 = 1000.0;
+/// Fitness band floor for a fully GV-controlled deep-verified vacuum (no
+/// deferred curves): the instanton expansion is under control. Strictly above
+/// the stabilized band.
+const CONTROLLED_FLOOR: f64 = 2000.0;
 
 impl Default for FitnessConfig {
     fn default() -> Self {
@@ -71,6 +92,7 @@ impl Default for FitnessConfig {
             weight_height: 1.0,
             weight_slope: 1.0,
             weight_gs: 0.2,
+            deep_verify_threshold: None,
         }
     }
 }
@@ -94,6 +116,15 @@ pub struct FitnessReport {
     pub cpl_w0: Option<f64>,
     /// CPL evolution parameter of the integrated w(z).
     pub cpl_wa: Option<f64>,
+    /// Deep-verify outcome when it was triggered: `"controlled"`,
+    /// `"kklt-stabilized"`, or a `"deep-verify failed: ..."` reason. `None`
+    /// when the candidate never crossed the deep-verify threshold.
+    #[serde(default)]
+    pub deep_tier: Option<String>,
+    /// Real `log10|V0|` from the primal KKLT solve, when deep-verify succeeded
+    /// (replaces the mirror proxy for the verified candidate).
+    #[serde(default)]
+    pub deep_log10_v0: Option<f64>,
 }
 
 struct AxionPotential {
@@ -223,6 +254,71 @@ fn invalid_fitness(reason: &str, result: &EvaluationResult, cfg: &FitnessConfig)
     }
 }
 
+/// Weighted DESI-targeted component score for an energy scale `abs_v0` and
+/// string coupling `g_s`: a height term (closeness of `log10|V0|` to the
+/// observed dark-energy scale) gating a DESI-slope term and a weak-coupling
+/// term. Returns the combined score (in roughly `[0, 100*(weights)]`) and the
+/// CPL `(w0, wa)` fit when the quintessence integration ran. Shared by the
+/// valid (proxy `V0`) and the deep-verified (real `V0`) scoring so both bands
+/// reward the same physics.
+fn weighted_component_score(
+    abs_v0: f64,
+    g_s: f64,
+    cfg: &FitnessConfig,
+) -> (f64, Option<(f64, f64)>) {
+    let height_score = 100.0 * (-(abs_v0.log10() - cfg.target_log10_v0).abs() / 25.0).exp();
+    let cpl = quintessence_cpl(abs_v0, cfg);
+    let slope_norm = cpl.map_or(0.0, |(w0_fit, wa_fit)| {
+        gaussian_score(w0_fit, cfg.desi_w0, cfg.desi_w0_sigma)
+            * gaussian_score(wa_fit, cfg.desi_wa, cfg.desi_wa_sigma)
+    });
+    let gs_norm = (1.0 - g_s).clamp(0.0, 1.0);
+    let combined = height_score
+        * cfg.weight_slope.mul_add(
+            slope_norm,
+            cfg.weight_gs.mul_add(gs_norm, cfg.weight_height),
+        );
+    (combined, cpl)
+}
+
+/// Apply the deep-verify band to a VALID candidate that cleared the threshold:
+/// run the full primal KKLT stabilization and, on success, lift the candidate
+/// into the stabilized or controlled band scored on the REAL `V0`. A failure
+/// leaves it in the valid band (it still passed the scan) with the reason
+/// recorded - the ladder never demotes a valid candidate for being tested.
+fn apply_deep_verify(
+    geom: &GaGeometry,
+    cfg: &FitnessConfig,
+    ek0: F64<Pos>,
+    g_s: F64<Pos>,
+    w0: F64<Pos>,
+    report: &mut FitnessReport,
+) {
+    match geom.deep_verify(ek0, g_s, w0) {
+        Ok(verdict) => {
+            let real_abs_v0 = verdict.v0.get().abs();
+            report.deep_log10_v0 = Some(real_abs_v0.log10());
+            let (combined, cpl) = weighted_component_score(real_abs_v0, g_s.get(), cfg);
+            if let Some((w0_fit, wa_fit)) = cpl {
+                report.cpl_w0 = Some(w0_fit);
+                report.cpl_wa = Some(wa_fit);
+            }
+            let controlled = verdict.gv_controlled && verdict.deferred_missing_gv_count == 0;
+            let (floor, tier) = if controlled {
+                (CONTROLLED_FLOOR, "controlled")
+            } else {
+                (STABILIZED_FLOOR, "kklt-stabilized")
+            };
+            report.deep_tier = Some(tier.to_string());
+            report.tier = tier.to_string();
+            report.fitness = floor + combined;
+        }
+        Err(e) => {
+            report.deep_tier = Some(format!("deep-verify failed: {e}"));
+        }
+    }
+}
+
 /// Evaluate a genome: tiered penalties for invalid candidates, weighted
 /// component score for valid ones.
 #[must_use]
@@ -252,6 +348,8 @@ pub fn evaluate_fitness(geom: &GaGeometry, cfg: &FitnessConfig, genome: &Genome)
                 q_flux: 0.0,
                 cpl_w0: None,
                 cpl_wa: None,
+                deep_tier: None,
+                deep_log10_v0: None,
             };
         }
     };
@@ -265,6 +363,8 @@ pub fn evaluate_fitness(geom: &GaGeometry, cfg: &FitnessConfig, genome: &Genome)
         q_flux: result.q_flux,
         cpl_w0: None,
         cpl_wa: None,
+        deep_tier: None,
+        deep_log10_v0: None,
     };
 
     if !result.success {
@@ -281,47 +381,33 @@ pub fn evaluate_fitness(geom: &GaGeometry, cfg: &FitnessConfig, genome: &Genome)
     let vacuum = result.vacuum.expect("success implies vacuum");
     let g_s = racetrack.g_s.get();
     let abs_v0 = vacuum.v0.get().abs();
-    let log10_abs_v0 = abs_v0.log10();
     report.g_s = Some(g_s);
     report.w0 = Some(vacuum.w0.get());
-    report.log10_abs_v0 = Some(log10_abs_v0);
+    report.log10_abs_v0 = Some(abs_v0.log10());
 
-    // Height: each decade away from the target costs e^(-1/25).
-    let height_score = 100.0 * (-(log10_abs_v0 - cfg.target_log10_v0).abs() / 25.0).exp();
-
-    // Slope: only meaningful near the right height; the integration itself
-    // enforces that (a wildly off-scale potential freezes at w = -1 or
-    // never dominates).
-    let cpl = quintessence_cpl(abs_v0, cfg);
-    let slope_score = cpl.map_or(0.0, |(w0_fit, wa_fit)| {
+    // Valid band: DESI-targeted weighted component score on the PROXY V0.
+    // Height GATES the score (DESI is a target SCALE first, log|V0| at the
+    // observed dark-energy density, and a slope second; weak coupling is a
+    // control tiebreaker). Multiplicative gating means slope and g_s only
+    // reward candidates already near the right scale - the old additive form
+    // let a weakly-coupled vacuum 95 orders off-scale top the leaderboard.
+    let (combined, cpl) = weighted_component_score(abs_v0, g_s, cfg);
+    if let Some((w0_fit, wa_fit)) = cpl {
         report.cpl_w0 = Some(w0_fit);
         report.cpl_wa = Some(wa_fit);
-        100.0
-            * gaussian_score(w0_fit, cfg.desi_w0, cfg.desi_w0_sigma)
-            * gaussian_score(wa_fit, cfg.desi_wa, cfg.desi_wa_sigma)
-    });
+    }
+    report.fitness = combined;
 
-    // Weak coupling: full marks toward g_s -> 0, zero by g_s = 1.
-    let gs_score = 100.0 * (1.0 - g_s).clamp(0.0, 1.0);
-
-    // Height GATES the score. DESI is a target SCALE first (log|V0| at the
-    // observed dark-energy density) and a slope second; weak coupling is a
-    // control tiebreaker. The old purely-additive form let the g_s term
-    // (~20 pts for any weakly-coupled vacuum) dominate height, so a vacuum
-    // 95 orders off-scale but weakly coupled topped the leaderboard
-    // (observed: ks_4_1055, V0 ~ 1e-26, fitness 21.9 = 19.7 g_s + 2.2
-    // height + 0 slope). Multiplicative gating: slope and g_s only reward
-    // candidates that are already near the right scale.
-    //   off-scale  (height ~ 0)            -> fitness ~ 0
-    //   on-scale, no slope, weak coupling   -> ~ 100 * (1 + 0.2)
-    //   on-scale, DESI slope, weak coupling -> ~ 100 * (1 + 1 + 0.2)
-    let slope_norm = slope_score / 100.0; // in [0, 1]
-    let gs_norm = gs_score / 100.0; // in [0, 1]
-    report.fitness = height_score
-        * cfg.weight_slope.mul_add(
-            slope_norm,
-            cfg.weight_gs.mul_add(gs_norm, cfg.weight_height),
-        );
+    // Deep-verify band: the toil this automates. A valid candidate that
+    // clears the threshold is rare enough (order one or two genuine vacua a
+    // day) to run the full primal KKLT stabilization in-process; a pass lifts
+    // it into a strictly higher band scored on the real V0. The threshold IS
+    // the gate - no throttling, by design.
+    if let Some(threshold) = cfg.deep_verify_threshold
+        && report.fitness > threshold
+    {
+        apply_deep_verify(geom, cfg, vacuum.ek0, vacuum.g_s, vacuum.w0, &mut report);
+    }
     report
 }
 

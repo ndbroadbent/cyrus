@@ -134,6 +134,12 @@ fn main() {
     if let Some(v) = parse_arg_value("--decay-constant") {
         fitness_cfg.decay_constant = v;
     }
+    // Deep-verify (full primal KKLT stabilization, ~tens of minutes) runs only
+    // on a valid candidate whose base scan fitness exceeds this threshold; off
+    // unless given.
+    if let Some(v) = parse_arg_value("--deep-verify-threshold") {
+        fitness_cfg.deep_verify_threshold = Some(v);
+    }
 
     std::fs::create_dir_all(&run_dir).unwrap_or_else(|e| {
         eprintln!("[ERROR] cannot create run dir {}: {e}", run_dir.display());

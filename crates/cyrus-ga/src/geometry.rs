@@ -13,7 +13,7 @@ use cyrus_core::racetrack::GvInvariant;
 use cyrus_core::types::f64::F64;
 use cyrus_core::types::i32::I32;
 use cyrus_core::types::i64::I64;
-use cyrus_core::types::tags::{Finite, GTEOne, NonNeg};
+use cyrus_core::types::tags::{Finite, GTEOne, NonNeg, Pos};
 use cyrus_core::{
     DivisorBasis, Intersection, MoriCone, Point, Polytope, compute_frst_heights,
     compute_glsm_and_linrels, compute_grading_vector, compute_intersection_cytools,
@@ -53,6 +53,15 @@ pub struct GaGeometry {
     /// chi_f/4 = (h11 + h21)/2 + 1 (single-coordinate involutions with
     /// h11_- = h21_+ = 0, validated against all five published examples).
     pub q_d3: f64,
+    /// Canonicalized primal polytope (the CY X whose KKLT vacuum the
+    /// deep-verify checks). Retained so the primal-side stabilization context
+    /// can be built lazily on the first deep verification.
+    pub primal: Polytope,
+    /// Primal triangulation points (non-facet-interior lattice points of X).
+    pub primal_tri_points: Vec<Point>,
+    /// Lazily-built primal deep-verify context (full KKLT vacuum on X). Built
+    /// on the first `deep_verify` and shared thereafter.
+    pub deep_verify_cell: crate::deep_verify::DeepVerifyCell,
 }
 
 fn read_points_csv(path: &std::path::Path) -> Result<Vec<Vec<i64>>, String> {
@@ -331,7 +340,34 @@ impl GaGeometry {
             dual_simplices: dual_tri.simplices().to_vec(),
             pfv_seeds,
             q_d3: (primal_h11 + dual_basis_len) as f64 / 2.0 + 1.0,
+            primal,
+            primal_tri_points,
+            deep_verify_cell: crate::deep_verify::DeepVerifyCell::default(),
         })
+    }
+
+    /// Deep-verify a flux candidate's KKLT vacuum on the primal CY X.
+    ///
+    /// Runs the full arXiv:2107.09064 SS6 stabilization (admissible-basis
+    /// scan, corrected F-flat solve, BBHL/GV-corrected volume down to `V0`)
+    /// for the racetrack scalars the mirror scan produced (`ek0`, `g_s`, `w0`
+    /// come straight from the candidate's `EvaluationResult`). The expensive
+    /// primal-side context is built on the first call and reused. This is the
+    /// integration of the published `verify_kklt_vacuum` into the GA: run
+    /// only on genomes that pass the scan and clear a fitness threshold.
+    ///
+    /// # Errors
+    /// Returns an error if the primal context cannot be built or no admissible
+    /// KKLT basis verifies cleanly (fail-loud; no proxy fallback).
+    pub fn deep_verify(
+        &self,
+        ek0: F64<Pos>,
+        g_s: F64<Pos>,
+        w0: F64<Pos>,
+    ) -> Result<cyrus_core::kklt_vacuum::VacuumVerdict, String> {
+        self.deep_verify_cell
+            .get_or_build(&self.primal, &self.primal_tri_points, self.h21_primal)?
+            .verify(ek0, g_s, w0)
     }
 
     /// Transform a flux pair written in another index basis (e.g. the

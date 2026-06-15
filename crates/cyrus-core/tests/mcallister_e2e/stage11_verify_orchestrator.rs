@@ -535,6 +535,184 @@ fn most_interior_admissible_basis_4214() {
     eprintln!("[NORM] McAllister rank ascending (drop low-norm)={mc_norm_rank_asc:?}");
 }
 
+fn require_general_gv() -> bool {
+    if std::env::var_os("CYRUS_GENERAL_GV").is_none() {
+        eprintln!("Skipping general-GV validation (set CYRUS_GENERAL_GV=1)");
+        return false;
+    }
+    true
+}
+
+/// Build the orientifold involution model ONCE for a geometry: the involution
+/// defining the O7 set is the one with the most O7-planes among the
+/// pairwise-disjoint involutions (strongest racetrack hierarchy). Viability
+/// against the GLSM basis is irrelevant - the KKLT basis is all-rigid by
+/// construction; we only read gamma/components for c_i.
+fn build_o7_model(
+    geom: &PrimalGeom,
+    intersection: &PrimalIntersection,
+) -> cyrus_core::orientifold::OrientifoldModel {
+    let h11_extra =
+        cyrus_core::divisor::batyrev_h11_extra_classes(&geom.polytope, &geom.triangulation_points)
+            .expect("batyrev h11 extra");
+    let h11 = intersection.basis.len() + h11_extra;
+    let models = cyrus_core::orientifold::enumerate_involutions(
+        &geom.polytope,
+        &geom.triangulation_points,
+        &intersection.kappa_full,
+        &intersection.basis,
+        h11,
+        MCALLISTER_4_214_H21,
+    )
+    .expect("enumerate involutions");
+    models
+        .into_iter()
+        .filter(|m| m.o7_pairwise_disjoint && !m.o7_points.is_empty())
+        .max_by_key(|m| m.o7_points.len())
+        .expect("a disjoint-O7 involution exists")
+}
+
+/// Derive the c_i (dual Coxeter / instanton coefficients) for a derived KKLT
+/// basis from a prebuilt involution model: 6 on O7-parity divisors (so(8)
+/// gaugino condensation), else the irreducible-component count. This is the
+/// rule `derived_orientifold_model_vs_mcallister_data` proves reproduces
+/// `target_volumes.dat` on McAllister's own basis.
+fn c_i_for_basis(
+    model: &cyrus_core::orientifold::OrientifoldModel,
+    kklt_basis: &[usize],
+) -> Vec<I64<Pos>> {
+    kklt_basis
+        .iter()
+        .map(|&idx| {
+            let c = if model.gamma[idx] == 1 {
+                6
+            } else {
+                i64::try_from(model.components[idx]).expect("component count fits i64")
+            };
+            I64::<Pos>::new(c).expect("c_i positive")
+        })
+        .collect()
+}
+
+/// END-TO-END BASIS-AGNOSTIC VALIDATION (the GA's deep-verify path).
+///
+/// `verify_kklt_vacuum_reaches_corrected_volume_and_v0` feeds McAllister's
+/// hand-shipped `kklt_basis.dat` ({46,130} dropped). The GA has no such file: it
+/// must DERIVE an admissible basis from the geometry (paper SS2 effective-cone
+/// criterion). There are thousands of admissible bases, and they are NOT
+/// physically interchangeable for the worldsheet-instanton expansion: each
+/// places the phase-1 selection point in a different chamber, and only some
+/// chambers select small curves the cheap toric GV formulas can cover. A
+/// non-McAllister chamber can select a curve at GV grading degree ~700, where
+/// the general HKTY-series fallback is intractable (verified empirically: the
+/// least-interior basis needs degree 716).
+///
+/// The tractable, McAllister-faithful route is therefore NOT "any basis +
+/// general GV" but a SCAN: walk the admissible bases (paper criterion) in
+/// most-interior-first order and take the first whose chamber is fully covered
+/// by the cheap toric + minimal-degree GV layers (`primal_gv_min_points=None`).
+/// That chamber is McAllister's (or an equivalent low-degree one), and it
+/// reproduces V0 ~ -202 with no expensive general-GV computation. This is the
+/// exact procedure `GaGeometry::deep_verify` runs. It is slow (each rejected
+/// basis costs one branch solve; McAllister's lands around interior-rank 436),
+/// so it is gated behind `CYRUS_GENERAL_GV=1` and intended to run detached.
+#[test]
+fn derived_basis_auto_scan_reproduces_v0() {
+    if !require_first_principles() || !require_runner_heavy() || !require_general_gv() {
+        return;
+    }
+    let Some(data_dir) = require_data_dir() else {
+        return;
+    };
+
+    let geom = build_geom(&data_dir);
+    let intersection = build_intersection(&geom);
+    let production_primal_basis = computed_primal_basis(&intersection);
+
+    // Derive ALL admissible KKLT bases from first principles (NO kklt_basis.dat),
+    // most-interior first, each with its own involution-derived c_i.
+    let bases = cyrus_core::orientifold::admissible_kklt_bases(
+        &geom.polytope,
+        &geom.triangulation_points,
+        0,
+    )
+    .expect("admissible KKLT bases exist");
+    eprintln!(
+        "[SCAN] {} admissible KKLT bases to scan (interior order)",
+        bases.len()
+    );
+    let o7_model = build_o7_model(&geom, &intersection);
+    eprintln!(
+        "[SCAN] involution sigma={:?} o7_count={}",
+        o7_model.sigma,
+        o7_model.o7_points.len()
+    );
+    let candidates: Vec<(Vec<usize>, Vec<I64<Pos>>)> = bases
+        .into_iter()
+        .map(|basis| {
+            let c_i = c_i_for_basis(&o7_model, &basis);
+            (basis, c_i)
+        })
+        .collect();
+
+    // g_s / |W0| are racetrack (upstream) outputs; e^{K0} is the flat-direction
+    // factor. These are orchestrator inputs, validated by stage4/stage5.
+    let g_s = F64::<Pos>::new(read_scalar_f64(&data_dir.join("g_s.dat"))).expect("g_s positive");
+    let w0 = F64::<Pos>::new(read_scalar_f64(&data_dir.join("W_0.dat"))).expect("W0 positive");
+    let ek0 = F64::<Pos>::new(MCALLISTER_4_214_EK0).expect("ek0 positive");
+    // The GA has no small_curves_cutoff.dat; use the runner's default (1.0).
+    let small_curve_cutoff = F64::<Pos>::new(1.0).expect("cutoff positive");
+
+    let base_inputs = StabilizationInputs {
+        geom: &geom,
+        intersection: &intersection,
+        production_primal_basis: &production_primal_basis,
+        c_i: &candidates[0].1,
+        kklt_basis: &candidates[0].0,
+        g_s,
+        w0,
+        ek0,
+        h21: MCALLISTER_4_214_H21,
+    };
+    let config = VacuumConfig {
+        kklt_steps: 64,
+        branch_candidates: 1,
+        branch_seed: 42,
+        branch_height_init: true,
+        branch_selection: BranchSelection::FirstPositive,
+        small_curve_cutoff,
+        small_curve_pruning: CurvePruningStrategy::PairDecomposable,
+        // Cheap coverage ONLY: the scan finds a chamber the toric + minimal
+        // layers fully cover, so general GV is never needed.
+        primal_gv_min_points: None,
+        primal_gv_max_deg: None,
+        max_missing_gv_impact: 0.0,
+        missing_gv_abs_bound: 10,
+    };
+
+    let verdict =
+        cyrus_core::kklt_vacuum::verify_kklt_vacuum_auto_basis(&base_inputs, &candidates, &config)
+            .unwrap_or_else(|e| panic!("derived-basis auto-scan verify failed: {e}"));
+
+    eprintln!(
+        "[SCAN] V_string={} small_curve_gv_count={} gv_controlled={} deferred={}",
+        verdict.v_string.get(),
+        verdict.small_curve_gv_count,
+        verdict.gv_controlled,
+        verdict.deferred_missing_gv_count,
+    );
+    let v0_log10_abs = verdict.v0.get().abs().log10();
+    eprintln!("[SCAN] log10(|V0|)={v0_log10_abs}");
+    assert!(
+        verdict.gv_controlled && verdict.deferred_missing_gv_count == 0,
+        "scanned basis must be fully GV-controlled (no deferred curves)"
+    );
+    assert!(
+        (-203.0..-201.0).contains(&v0_log10_abs),
+        "derived-basis auto-scan log10(|V0|) should be near -202, got {v0_log10_abs}"
+    );
+}
+
 #[test]
 fn verify_kklt_vacuum_reaches_corrected_volume_and_v0() {
     if !require_first_principles() || !require_runner_heavy() {

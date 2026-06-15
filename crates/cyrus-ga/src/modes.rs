@@ -32,20 +32,20 @@ pub fn parse_params_and_fitness() -> (GaParams, FitnessConfig) {
         params.asteroid_threshold = v;
     }
     let mut fitness_cfg = FitnessConfig::default();
-    if let Some(v) = parse_arg_value("--q-max") {
-        fitness_cfg.q_max = v;
+    macro_rules! set {
+        ($field:ident, $flag:literal) => {
+            if let Some(v) = parse_arg_value($flag) {
+                fitness_cfg.$field = v;
+            }
+        };
     }
-    if let Some(v) = parse_arg_value("--target-log10-v0") {
-        fitness_cfg.target_log10_v0 = v;
-    }
-    if let Some(v) = parse_arg_value("--desi-w0") {
-        fitness_cfg.desi_w0 = v;
-    }
-    if let Some(v) = parse_arg_value("--desi-wa") {
-        fitness_cfg.desi_wa = v;
-    }
-    if let Some(v) = parse_arg_value("--decay-constant") {
-        fitness_cfg.decay_constant = v;
+    set!(q_max, "--q-max");
+    set!(target_log10_v0, "--target-log10-v0");
+    set!(desi_w0, "--desi-w0");
+    set!(desi_wa, "--desi-wa");
+    set!(decay_constant, "--decay-constant");
+    if let Some(v) = parse_arg_value("--deep-verify-threshold") {
+        fitness_cfg.deep_verify_threshold = Some(v);
     }
     (params, fitness_cfg)
 }
