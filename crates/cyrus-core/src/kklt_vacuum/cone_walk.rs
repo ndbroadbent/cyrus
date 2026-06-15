@@ -1,5 +1,7 @@
 //! The tau-line cone walk of arXiv:2107.09064 SS"Algorithm for F-flat
-//! solutions": instead of solving the KKLT targets inside one chamber and
+//! solutions".
+//!
+//! Instead of solving the KKLT targets inside one chamber and
 //! giving up at its boundary, walk the STRAIGHT line in tau-space from the
 //! initial point toward the target. Convexity of the dual effective cone
 //! keeps the line inside; the corresponding t-path is continuous and C^1
@@ -15,23 +17,24 @@
 //! overshoot into the neighboring chamber benign - the next segment
 //! re-solves under the transformed kappa).
 
-use cyrus_core::Intersection;
-use cyrus_core::gv::curve_volume_in_divisor_basis;
-use cyrus_core::kklt::{
+use crate::Intersection;
+use crate::gv::curve_volume_in_divisor_basis;
+use crate::kklt::{
     CertifiedFlopContinuationStep, KkltResult, flop_reassign_gv_invariants,
     flop_transform_intersection_numbers, solve_divisor_basis_path_following,
 };
-use cyrus_core::types::f64::F64;
-use cyrus_core::types::physics::DivisorVolume;
-use cyrus_core::types::range::CheckedRange;
-use cyrus_core::types::tags::Finite;
+use crate::types::f64::F64;
+use crate::types::physics::DivisorVolume;
+use crate::types::range::CheckedRange;
+use crate::types::tags::Finite;
 use malachite::Integer;
 
-use cyrus_core::kklt_vacuum::{OwnedDivisorBasis, PrimalGeom, PrimalIntersection};
+use super::{OwnedDivisorBasis, PrimalGeom, PrimalIntersection};
 
 /// Outcome of a cone walk: the converged result in the final chamber plus
 /// the discovered flop sequence and the transformed data.
 pub struct ConeWalkOutcome {
+    /// The converged KKLT result in the final (post-flop) chamber.
     pub result: KkltResult,
     /// Transformed data of the destination chamber - the handoff for the
     /// (not yet implemented) full cross-chamber continuation.
@@ -40,7 +43,31 @@ pub struct ConeWalkOutcome {
     /// See `kappa_final`.
     #[allow(dead_code)]
     pub gv_final: Vec<(Vec<i64>, Integer)>,
+    /// The certified flop sequence crossed from the start chamber.
     pub flops: Vec<CertifiedFlopContinuationStep>,
+}
+
+/// Why the zeroth-order rescue could not hand back an in-chamber solution.
+///
+/// These are the failure modes the binary used to translate into distinct
+/// process exit codes; as a library routine the rescue returns them so the
+/// caller (CLI or GA verifier) decides how to react.
+#[derive(Clone, Debug)]
+pub enum ConeWalkRescueError {
+    /// The chamber's toric two-face GV table could not be built.
+    GvTableFailed(String),
+    /// No path to the KKLT targets was found within the flop/segment budget.
+    NoPath,
+    /// The solution lives `flops.len()` chamber walls away. Cross-chamber
+    /// continuation of the downstream stages (chi transforms across flops)
+    /// is not yet implemented, so the discovered sequence is reported rather
+    /// than silently used.
+    FlopsAway {
+        /// The certified flop sequence from the start chamber to the solution.
+        flops: Vec<CertifiedFlopContinuationStep>,
+        /// Relative error of the converged solve in the destination chamber.
+        relative_error: f64,
+    },
 }
 
 /// Walk the straight tau-line from the initial point's volumes to
@@ -212,7 +239,7 @@ fn divisor_volumes_at(
     kklt_basis: &[usize],
     t: &[F64<Finite>],
 ) -> Option<Vec<DivisorVolume>> {
-    let volumes = cyrus_core::kklt::compute_kklt_divisor_volumes_in_divisor_basis(
+    let volumes = crate::kklt::compute_kklt_divisor_volumes_in_divisor_basis(
         kappa,
         production_basis.as_divisor_basis(),
         kklt_basis,
@@ -226,12 +253,11 @@ fn divisor_volumes_at(
 ///
 /// A ZERO-flop success means the segmented path navigated a region the
 /// direct solve could not, within the starting chamber: the result is
-/// sound and the pipeline continues with it. An N-flop success means the
-/// solution lives N chamber walls away; continuing the downstream stages
+/// sound and the pipeline continues with it (`Ok`). An N-flop success means
+/// the solution lives N chamber walls away; continuing the downstream stages
 /// there requires transforming the divisor topology (chi across flops),
-/// which is not yet implemented - so the discovered sequence is reported
-/// as a loud, actionable diagnostic instead of a silent failure. Never
-/// returns on the N-flop or failed paths.
+/// which is not yet implemented - so the discovered sequence is returned as
+/// [`ConeWalkRescueError::FlopsAway`] for the caller to report.
 #[allow(clippy::too_many_arguments)] // failure-site rescue context
 pub fn rescue_zeroth_order(
     geom: &PrimalGeom,
@@ -241,12 +267,12 @@ pub fn rescue_zeroth_order(
     tau_target: &[DivisorVolume],
     t_init: &[F64<Finite>],
     kklt_steps: usize,
-) -> KkltResult {
+) -> Result<KkltResult, ConeWalkRescueError> {
     eprintln!(
         "[INFO] zeroth-order solve diverged; attempting tau-line cone walk (arXiv:2107.09064 SS5.2)"
     );
     let gv_table: Vec<(Vec<i64>, Integer)> =
-        match cyrus_core::gv::compute_toric_two_face_curve_gv_invariants(
+        match crate::gv::compute_toric_two_face_curve_gv_invariants(
             &geom.triangulation,
             &geom.triangulation_points,
             &geom.polytope,
@@ -255,10 +281,7 @@ pub fn rescue_zeroth_order(
                 .into_iter()
                 .map(|inv| (inv.class, inv.gv))
                 .collect(),
-            Err(e) => {
-                eprintln!("[ERROR] cone walk: two-face GV table failed: {e}");
-                std::process::exit(2);
-            }
+            Err(e) => return Err(ConeWalkRescueError::GvTableFailed(e.to_string())),
         };
     let Some(outcome) = solve_with_cone_walk(
         &intersection.kappa_full,
@@ -272,34 +295,24 @@ pub fn rescue_zeroth_order(
         200,
         24,
     ) else {
-        eprintln!("[ERROR] cone walk failed: no path to the KKLT targets found");
-        std::process::exit(2);
+        return Err(ConeWalkRescueError::NoPath);
     };
     if outcome.flops.is_empty() {
         eprintln!(
             "[INFO] cone walk converged WITHOUT chamber crossings (rel_err={}); continuing",
             outcome.result.relative_error.get()
         );
-        return outcome.result;
+        return Ok(outcome.result);
     }
-    eprintln!(
-        "[ERROR] cone walk found the solution {} flops away (rel_err={}); cross-chamber continuation of the downstream stages (chi transforms) is not yet implemented. Discovered flop sequence:",
-        outcome.flops.len(),
-        outcome.result.relative_error.get()
-    );
-    for (n, step) in outcome.flops.iter().enumerate() {
-        eprintln!(
-            "  flop {}: curve={:?} n_C={}",
-            n + 1,
-            step.curve_class,
-            step.gv_invariant
-        );
-    }
-    std::process::exit(3);
+    Err(ConeWalkRescueError::FlopsAway {
+        flops: outcome.flops,
+        relative_error: outcome.result.relative_error.get(),
+    })
 }
 
-/// Direct zeroth-order solve, falling back to the cone walk on
-/// divergence. Exits the process (never returns) when neither succeeds.
+/// Direct zeroth-order solve, falling back to the cone walk on divergence.
+/// Returns [`ConeWalkRescueError`] when neither the direct solve nor the
+/// rescue yields an in-chamber solution.
 #[allow(clippy::too_many_arguments)] // mirrors the solver call
 pub fn solve_zeroth_order_with_rescue(
     geom: &PrimalGeom,
@@ -309,8 +322,8 @@ pub fn solve_zeroth_order_with_rescue(
     tau_target: &[DivisorVolume],
     t_init: &[F64<Finite>],
     kklt_steps: usize,
-) -> KkltResult {
-    solve_divisor_basis_path_following(
+) -> Result<KkltResult, ConeWalkRescueError> {
+    match solve_divisor_basis_path_following(
         &intersection.kappa_full,
         production_basis.as_divisor_basis(),
         kklt_basis,
@@ -319,8 +332,9 @@ pub fn solve_zeroth_order_with_rescue(
         CheckedRange::new(0, kklt_steps),
     )
     .filter(|r| r.converged)
-    .unwrap_or_else(|| {
-        rescue_zeroth_order(
+    {
+        Some(result) => Ok(result),
+        None => rescue_zeroth_order(
             geom,
             intersection,
             production_basis,
@@ -328,6 +342,6 @@ pub fn solve_zeroth_order_with_rescue(
             tau_target,
             t_init,
             kklt_steps,
-        )
-    })
+        ),
+    }
 }

@@ -13,6 +13,8 @@ use crate::types::f64::F64;
 use crate::types::tags::Finite;
 use crate::{DivisorBasis, Intersection, Point, Polytope, Triangulation};
 
+pub mod cone_walk;
+
 /// Primal toric geometry: the reflexive polytope, its FRST heights, the
 /// triangulation point set, and the triangulation itself.
 pub struct PrimalGeom {

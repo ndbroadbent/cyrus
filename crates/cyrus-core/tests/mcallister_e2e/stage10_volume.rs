@@ -585,7 +585,7 @@ fn stage11_first_principles_runner_reaches_corrected_volume_and_v0() {
         stderr
     );
     assert!(
-        stderr.contains("primal small toric curve GVs selected=344"),
+        stderr.contains("primal small-curve GVs selected=344"),
         "runner did not compute the expected 344 small toric GV values:\n{stderr}"
     );
     assert!(

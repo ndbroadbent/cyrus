@@ -45,8 +45,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 mod chamber_hook;
-mod cone_walk;
 mod missing_gv;
+use cyrus_core::kklt_vacuum::cone_walk::{self, ConeWalkRescueError};
 use missing_gv::{
     compute_minimal_degree_gv_by_ambient_class, defer_bounded_impact_missing_gvs,
     verify_deferred_missing_gv_bounds,
@@ -77,6 +77,40 @@ use cyrus_core::{
     solve_divisor_basis_path_following_branch_candidates, solve_racetrack,
     subcutoff_toric_curve_candidates,
 };
+
+/// Translate a library cone-walk rescue failure into the runner's loud
+/// diagnostic + process exit, preserving the historical exit codes (2 for an
+/// unsolvable chamber, 3 for a solution that lives across un-continued flops).
+fn exit_on_cone_walk_rescue_error(error: &ConeWalkRescueError) -> ! {
+    match error {
+        ConeWalkRescueError::GvTableFailed(msg) => {
+            eprintln!("[ERROR] cone walk: two-face GV table failed: {msg}");
+            std::process::exit(2);
+        }
+        ConeWalkRescueError::NoPath => {
+            eprintln!("[ERROR] cone walk failed: no path to the KKLT targets found");
+            std::process::exit(2);
+        }
+        ConeWalkRescueError::FlopsAway {
+            flops,
+            relative_error,
+        } => {
+            eprintln!(
+                "[ERROR] cone walk found the solution {} flops away (rel_err={relative_error}); cross-chamber continuation of the downstream stages (chi transforms) is not yet implemented. Discovered flop sequence:",
+                flops.len()
+            );
+            for (n, step) in flops.iter().enumerate() {
+                eprintln!(
+                    "  flop {}: curve={:?} n_C={}",
+                    n + 1,
+                    step.curve_class,
+                    step.gv_invariant
+                );
+            }
+            std::process::exit(3);
+        }
+    }
+}
 
 const DEFAULT_MCALLISTER_GV_MIN_POINTS: u32 = 20_000;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -2986,7 +3020,8 @@ fn stage_volume(
                         &tau_target,
                         &phase1.t,
                         kklt_steps,
-                    );
+                    )
+                    .unwrap_or_else(|e| exit_on_cone_walk_rescue_error(&e));
                     let small_curve_selection_t = transform_production_primal_kahler_to_computed(
                         intersection,
                         &production_primal_basis,
