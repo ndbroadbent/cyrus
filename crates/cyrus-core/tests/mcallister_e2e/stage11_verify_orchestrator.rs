@@ -186,8 +186,22 @@ fn build_intersection(geom: &PrimalGeom) -> PrimalIntersection {
 ///    number 216, and McAllister's `kklt_basis` is those minus exactly
 ///    `{46, 130}` (both rigid; 2 is correctly excluded as non-rigid). So
 ///    `kklt_basis` is a 214-element H^{1,1} basis chosen from the rigid prime
-///    divisors; the deterministic drop rule (and whether V0 is invariant to
-///    it) is the open piece tracked for the GA integration.
+///    divisors. The paper (SS2) specifies only "a basis of h^{1,1} rigid prime
+///    divisors"; the specific drop set is a CYTools convention.
+///
+/// Finding (the V0-invariance experiment): although V0 is basis-independent in
+/// PRINCIPLE, reproducing it through `verify_kklt_vacuum` is computationally
+/// SENSITIVE to the rigid-basis choice. Dropping low-index structural divisors
+/// (e.g. `{3, 4}`, which McAllister keeps) leaves the KKLT solver with no
+/// positive-volume branch; dropping high-index divisors (e.g. `{217, 218}`)
+/// lets the solve converge but to a DIFFERENT chamber whose ~685 small curves
+/// the cheap GV methods cannot cover. A different `kklt_basis` shifts the
+/// per-divisor targets, so the solve lands on a different Kähler point with a
+/// different instanton-curve set. McAllister's CYTools-selected basis is the
+/// one that is both well-conditioned AND lands in the 344-curve chamber the
+/// cheap GV coverage handles - so the GA's deep-verify must derive the basis
+/// the SAME way (rigid-constrained, CYTools-style low-norm selection), not an
+/// arbitrary rigid basis.
 #[test]
 fn derived_orientifold_model_vs_mcallister_data() {
     if !require_first_principles() || !require_runner_heavy() {
