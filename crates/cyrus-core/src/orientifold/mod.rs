@@ -35,6 +35,12 @@ use crate::error::Result;
 use crate::intersection::Intersection;
 use crate::polytope::Polytope;
 
+mod basis_select;
+pub use basis_select::{
+    admissible_kklt_bases, complement_is_admissible, complement_remaining_volumes,
+    select_kklt_basis,
+};
+
 /// Combinatorial rigidity classification of one prime toric divisor.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DivisorClass {

@@ -35,7 +35,10 @@ pub use gamma::compute_b_field_gamma_for_o7_divisors;
 pub use general_gv::compute_primal_general_gv_by_ambient_class;
 pub use gv_basis::{production_gv_basis_data, vector_gv_basis_data};
 pub use gv_corrected::solve_gv_corrected_kklt;
-pub use verify::{StabilizationInputs, VacuumConfig, VacuumVerdict, verify_kklt_vacuum};
+pub use verify::{
+    StabilizationInputs, VacuumConfig, VacuumVerdict, verify_kklt_vacuum,
+    verify_kklt_vacuum_auto_basis,
+};
 
 /// Primal toric geometry: the reflexive polytope, its FRST heights, the
 /// triangulation point set, and the triangulation itself.

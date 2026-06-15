@@ -264,6 +264,80 @@ fn characterize_kklt_basis_selection() {
         4,
         "remaining four = non-rigid + dropped-rigid"
     );
+
+    // The paper's effective-cone criterion must accept McAllister's own basis.
+    assert!(
+        cyrus_core::orientifold::complement_is_admissible(&geom.triangulation_points, &remaining),
+        "McAllister's basis complement must satisfy tau_* in E^0"
+    );
+
+    // select_kklt_basis derives an admissible basis from scratch.
+    let derived =
+        cyrus_core::orientifold::select_kklt_basis(&geom.polytope, &geom.triangulation_points)
+            .expect("an admissible KKLT basis exists");
+    eprintln!(
+        "[CHAR]   select_kklt_basis len={} == McAllister kklt_basis.dat: {}",
+        derived.len(),
+        derived
+            .iter()
+            .copied()
+            .collect::<std::collections::HashSet<_>>()
+            == kklt
+    );
+    assert_eq!(
+        derived.len(),
+        intersection.basis.len(),
+        "derived basis has h11 divisors"
+    );
+    assert!(
+        derived.iter().all(|i| rigid.contains(i)),
+        "derived basis is all-rigid"
+    );
+}
+
+/// The effective-cone criterion (paper SS2) must separate the admissible basis
+/// from the inadmissible ones the V0-invariance experiment tried - cheaply,
+/// with no KKLT solve. 4-214 only.
+#[test]
+fn kklt_basis_criterion_separates_good_and_bad() {
+    if !require_first_principles() || !require_runner_heavy() {
+        return;
+    }
+    let Some(data_dir) = require_data_dir() else {
+        return;
+    };
+    if data_dir.file_name().unwrap().to_string_lossy() != "4-214-647" {
+        return;
+    }
+    let geom = build_geom(&data_dir);
+    let pts = &geom.triangulation_points;
+    let admissible = |c: &[usize]| cyrus_core::orientifold::complement_is_admissible(pts, c);
+
+    for c in [vec![1, 2, 46, 130], vec![1, 2, 3, 4], vec![1, 2, 217, 218]] {
+        let (det, nums) = cyrus_core::orientifold::complement_remaining_volumes(pts, &c);
+        let tau: Vec<f64> = nums.iter().map(|&n| n as f64 / det as f64).collect();
+        eprintln!(
+            "[CRIT] complement {c:?}: det={det} admissible={} tau_C={tau:?}",
+            admissible(&c)
+        );
+    }
+    // McAllister's {46,130}: all remaining volumes positive (det=2, NOT
+    // unimodular - independence is what matters, not unimodularity).
+    assert!(
+        admissible(&[1, 2, 46, 130]),
+        "McAllister complement is admissible"
+    );
+    // {3,4} drops a structural divisor -> divisor 3 has negative volume.
+    assert!(
+        !admissible(&[1, 2, 3, 4]),
+        "dropping structural {{3,4}} is inadmissible (negative remaining volume)"
+    );
+    // {217,218}: divisor 218 has negative volume - so the criterion DOES reject
+    // the basis whose solve landed in the GV-uncoverable 685-curve chamber.
+    assert!(
+        !admissible(&[1, 2, 217, 218]),
+        "dropping {{217,218}} is inadmissible (negative remaining volume)"
+    );
 }
 
 /// De-risking the GA deep-verify integration: how much of the orientifold
@@ -370,6 +444,95 @@ fn derived_orientifold_model_vs_mcallister_data() {
         .collect();
     assert_eq!(dropped, vec![46, 130], "rigid-minus-McAllister drop set");
     assert!(extra.is_empty(), "every McAllister kklt divisor is rigid");
+}
+
+/// Which admissible drop-pair maximizes the minimum remaining divisor volume
+/// (the "most interior" tau_*), and is it McAllister's {46,130}? Cheap - just
+/// 4x4 determinants over all rigid drop-pairs, no KKLT solve. 4-214 only.
+#[test]
+fn most_interior_admissible_basis_4214() {
+    if !require_first_principles() || !require_runner_heavy() {
+        return;
+    }
+    let Some(data_dir) = require_data_dir() else {
+        return;
+    };
+    if data_dir.file_name().unwrap().to_string_lossy() != "4-214-647" {
+        return;
+    }
+    let geom = build_geom(&data_dir);
+    let pts = &geom.triangulation_points;
+    let (classes, _) =
+        cyrus_core::orientifold::classify_divisor_rigidity(&geom.polytope, pts).expect("rigidity");
+    let mut rigid: Vec<usize> = classes
+        .iter()
+        .filter(|(_, c)| c.is_rigid())
+        .map(|(i, _)| *i)
+        .collect();
+    rigid.sort_unstable();
+
+    let min_remaining_vol = |a: usize, b: usize| -> Option<f64> {
+        let (det, nums) = cyrus_core::orientifold::complement_remaining_volumes(pts, &[1, 2, a, b]);
+        if det == 0 || !nums.iter().all(|&n| n != 0 && (n > 0) == (det > 0)) {
+            return None;
+        }
+        Some(
+            nums.iter()
+                .map(|&n| n as f64 / det as f64)
+                .fold(f64::INFINITY, f64::min),
+        )
+    };
+
+    let mut scored: Vec<((usize, usize), f64)> = Vec::new();
+    for (i, &a) in rigid.iter().enumerate() {
+        for &b in &rigid[i + 1..] {
+            if let Some(m) = min_remaining_vol(a, b) {
+                scored.push(((a, b), m));
+            }
+        }
+    }
+    scored.sort_by(|x, y| y.1.total_cmp(&x.1));
+    eprintln!(
+        "[INTERIOR] admissible pairs={} of {} total",
+        scored.len(),
+        rigid.len() * (rigid.len() - 1) / 2
+    );
+    eprintln!("[INTERIOR] top 8 by min-remaining-volume:");
+    for ((a, b), m) in scored.iter().take(8) {
+        eprintln!("[INTERIOR]   drop {{{a},{b}}}: min_remaining_vol={m:.3}");
+    }
+    let mcallister = min_remaining_vol(46, 130).expect("McAllister admissible");
+    let mcallister_rank = scored.iter().position(|((a, b), _)| *a == 46 && *b == 130);
+    eprintln!(
+        "[INTERIOR] McAllister {{46,130}}: min_remaining_vol={mcallister:.3} rank={mcallister_rank:?}"
+    );
+
+    // CYTools-style tiebreak: keep low-L1-norm divisors in the basis, drop the
+    // high-norm ones. Rank admissible pairs by the dropped divisors' total L1
+    // norm (descending) and see where McAllister's {46,130} lands.
+    let l1 = |idx: usize| -> i64 { pts[idx].coords().iter().map(|c| c.abs()).sum() };
+    let mut by_norm: Vec<((usize, usize), i64)> = scored
+        .iter()
+        .map(|&((a, b), _)| ((a, b), l1(a) + l1(b)))
+        .collect();
+    by_norm.sort_by(|x, y| y.1.cmp(&x.1));
+    eprintln!("[NORM] top 8 admissible by dropped-divisor L1 norm (descending):");
+    for ((a, b), n) in by_norm.iter().take(8) {
+        eprintln!(
+            "[NORM]   drop {{{a},{b}}}: dropped_norm={n} (norms {},{})",
+            l1(*a),
+            l1(*b)
+        );
+    }
+    let mc_norm_rank = by_norm.iter().position(|((a, b), _)| *a == 46 && *b == 130);
+    eprintln!(
+        "[NORM] McAllister {{46,130}}: dropped_norm={} rank_by_norm={mc_norm_rank:?}",
+        l1(46) + l1(130)
+    );
+    // Also ascending (drop lowest-norm) for comparison.
+    by_norm.sort_by(|x, y| x.1.cmp(&y.1));
+    let mc_norm_rank_asc = by_norm.iter().position(|((a, b), _)| *a == 46 && *b == 130);
+    eprintln!("[NORM] McAllister rank ascending (drop low-norm)={mc_norm_rank_asc:?}");
 }
 
 #[test]

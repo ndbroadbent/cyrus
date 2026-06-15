@@ -28,9 +28,50 @@ use super::missing_gv::{
 };
 use super::{PrimalGeom, PrimalIntersection};
 
+/// Geometry-only inputs to the small-curve GV cascade that do NOT depend on
+/// the KKLT basis or the Kähler point: the ambient Mori-cap rays and the toric
+/// two-face GV table. Computing these once (they are the dominant cost) lets a
+/// basis search probe many candidate bases cheaply.
+pub struct SmallCurveGeometry {
+    /// Ambient Mori-cone cap rays of the primal triangulation.
+    pub ambient_rays: Vec<Vec<i64>>,
+    /// Toric two-face curve GV invariants, keyed by ambient curve class.
+    pub toric_gv_by_class: HashMap<Vec<i64>, Integer>,
+}
+
+/// Compute the basis-independent geometry inputs for the small-curve cascade.
+///
+/// # Errors
+/// Fails if the Mori-cap rays or the toric two-face GV table cannot be built.
+pub fn compute_small_curve_geometry(geom: &PrimalGeom) -> Result<SmallCurveGeometry, String> {
+    let ambient_rays = compute_mori_cone_cap_rays(
+        &geom.triangulation,
+        &geom.triangulation_points,
+        &geom.polytope,
+        false,
+        false,
+        None,
+    )
+    .map_err(|e| format!("failed to compute primal ambient Mori-cap rays: {e}"))?;
+    let toric_gvs = compute_toric_two_face_curve_gv_invariants(
+        &geom.triangulation,
+        &geom.triangulation_points,
+        &geom.polytope,
+    )
+    .map_err(|e| format!("failed to compute primal toric curve GV values: {e}"))?;
+    let toric_gv_by_class = toric_gvs
+        .into_iter()
+        .map(|item| (item.class, item.gv))
+        .collect();
+    Ok(SmallCurveGeometry {
+        ambient_rays,
+        toric_gv_by_class,
+    })
+}
+
 /// The GV invariants selected for the small toric curves, plus the curves
 /// whose negligible contribution was deferred (and must be re-verified at the
-/// solved Kähler point by the caller).
+/// solved Kähler point by the caller), plus any that remain uncovered.
 pub struct SmallCurveGvSelection {
     /// Selected `(ambient curve class, GV invariant)` pairs feeding the volume
     /// correction.
@@ -38,6 +79,11 @@ pub struct SmallCurveGvSelection {
     /// Curves deferred under the bounded-impact policy; excluded from the
     /// correction but re-verified at the solved point.
     pub deferred_missing: Vec<Vec<i64>>,
+    /// Selected small curves with no GV invariant after every cascade layer
+    /// and not eligible for deferral. Non-empty means the basis lands in a
+    /// chamber the cheap methods cannot cover; the strict
+    /// [`select_small_curve_gvs`] turns this into an error.
+    pub uncovered_missing: Vec<Vec<i64>>,
 }
 
 /// Parameters controlling the small-curve GV selection cascade.
@@ -101,27 +147,20 @@ fn merge_gv_values(
 /// Run the full small-curve GV selection cascade at `small_curve_selection_t`
 /// (a Kähler point in Cyrus's computed primal basis).
 ///
-/// Returns the selected GV invariants and the deferred classes. Fails when any
-/// selected small curve remains uncovered after the toric, minimal-degree, and
-/// (optional) general-degree layers and is not eligible for deferral.
-pub fn select_small_curve_gvs(
+/// Returns the selected GV invariants, the deferred classes, and any uncovered
+/// classes (without erroring - see [`select_small_curve_gvs`] for the strict
+/// variant). Reuses the precomputed [`SmallCurveGeometry`] so a basis search
+/// pays the dominant Mori-cap / toric-GV cost only once.
+pub fn collect_small_curve_gvs(
+    scgeom: &SmallCurveGeometry,
     geom: &PrimalGeom,
     intersection: &PrimalIntersection,
     kklt_basis: &[usize],
     small_curve_selection_t: &[F64<Finite>],
     config: &SmallCurveGvConfig,
 ) -> Result<SmallCurveGvSelection, String> {
-    let ambient_rays = compute_mori_cone_cap_rays(
-        &geom.triangulation,
-        &geom.triangulation_points,
-        &geom.polytope,
-        false,
-        false,
-        None,
-    )
-    .map_err(|e| format!("failed to compute primal ambient Mori-cap rays: {e}"))?;
     let small_curve_candidates = subcutoff_toric_curve_candidates(
-        &ambient_rays,
+        &scgeom.ambient_rays,
         &intersection.basis,
         small_curve_selection_t,
         config.small_curve_cutoff,
@@ -135,26 +174,8 @@ pub fn select_small_curve_gvs(
                     config.small_curve_pruning.as_str()
                 )
             })?;
-    eprintln!(
-        "[INFO] primal small toric curves: ambient_rays={} subcutoff={} pruned={} pruning={} cutoff={}",
-        ambient_rays.len(),
-        small_curve_candidates.len(),
-        small_curves.len(),
-        config.small_curve_pruning.as_str(),
-        config.small_curve_cutoff.get()
-    );
 
-    let toric_gvs = compute_toric_two_face_curve_gv_invariants(
-        &geom.triangulation,
-        &geom.triangulation_points,
-        &geom.polytope,
-    )
-    .map_err(|e| format!("failed to compute primal toric curve GV values: {e}"))?;
-    let mut gv_by_class: HashMap<Vec<i64>, Integer> = toric_gvs
-        .into_iter()
-        .map(|item| (item.class, item.gv))
-        .collect();
-
+    let mut gv_by_class: HashMap<Vec<i64>, Integer> = scgeom.toric_gv_by_class.clone();
     let (mut small_curve_gvs, mut missing_gv_classes) =
         partition_covered(&small_curves, &gv_by_class);
 
@@ -164,7 +185,7 @@ pub fn select_small_curve_gvs(
             geom,
             intersection,
             &missing_gv_classes,
-            &ambient_rays,
+            &scgeom.ambient_rays,
         )
         .map_err(|e| format!("minimal-degree GV pre-pass failed: {e}"))?;
         if !minimal_degree_gvs.is_empty() {
@@ -187,7 +208,7 @@ pub fn select_small_curve_gvs(
             geom,
             intersection,
             &missing_gv_classes,
-            Some(&ambient_rays),
+            Some(&scgeom.ambient_rays),
             config.primal_gv_min_points,
             config.primal_gv_max_deg,
         )
@@ -205,22 +226,44 @@ pub fn select_small_curve_gvs(
         config.missing_gv_abs_bound,
     );
 
-    if !missing_gv_classes.is_empty() {
-        return Err(format!(
-            "{} selected primal small curve(s) have no GV invariant and exceed the deferral bound; first uncovered class={:?}",
-            missing_gv_classes.len(),
-            missing_gv_classes.first()
-        ));
-    }
-
-    eprintln!(
-        "[INFO] primal small-curve GVs selected={} deferred={}",
-        small_curve_gvs.len(),
-        deferred_missing.len()
-    );
-
     Ok(SmallCurveGvSelection {
         small_curve_gvs,
         deferred_missing,
+        uncovered_missing: missing_gv_classes,
     })
+}
+
+/// Run the full small-curve GV selection cascade at `small_curve_selection_t`
+/// (a Kähler point in Cyrus's computed primal basis), failing loudly when any
+/// selected small curve remains uncovered after the toric, minimal-degree, and
+/// (optional) general-degree layers and is not eligible for deferral.
+pub fn select_small_curve_gvs(
+    scgeom: &SmallCurveGeometry,
+    geom: &PrimalGeom,
+    intersection: &PrimalIntersection,
+    kklt_basis: &[usize],
+    small_curve_selection_t: &[F64<Finite>],
+    config: &SmallCurveGvConfig,
+) -> Result<SmallCurveGvSelection, String> {
+    let selection = collect_small_curve_gvs(
+        scgeom,
+        geom,
+        intersection,
+        kklt_basis,
+        small_curve_selection_t,
+        config,
+    )?;
+    if !selection.uncovered_missing.is_empty() {
+        return Err(format!(
+            "{} selected primal small curve(s) have no GV invariant and exceed the deferral bound; first uncovered class={:?}",
+            selection.uncovered_missing.len(),
+            selection.uncovered_missing.first()
+        ));
+    }
+    eprintln!(
+        "[INFO] primal small-curve GVs selected={} deferred={}",
+        selection.small_curve_gvs.len(),
+        selection.deferred_missing.len()
+    );
+    Ok(selection)
 }

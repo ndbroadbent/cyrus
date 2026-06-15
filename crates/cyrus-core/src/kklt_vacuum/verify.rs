@@ -26,7 +26,9 @@ use crate::{CurvePruningStrategy, Intersection};
 use super::branch_solve::{BranchSelection, BranchSolveConfig, solve_kklt_branches};
 use super::gamma::compute_b_field_gamma_for_o7_divisors;
 use super::gv_corrected::solve_gv_corrected_kklt;
-use super::gv_coverage::{SmallCurveGvConfig, select_small_curve_gvs};
+use super::gv_coverage::{
+    SmallCurveGeometry, SmallCurveGvConfig, compute_small_curve_geometry, select_small_curve_gvs,
+};
 use super::missing_gv::verify_deferred_missing_gv_bounds;
 use super::{OwnedDivisorBasis, PrimalGeom, PrimalIntersection};
 
@@ -80,6 +82,19 @@ pub struct VacuumConfig {
     pub missing_gv_abs_bound: u32,
 }
 
+impl VacuumConfig {
+    const fn small_curve_gv_config(&self) -> SmallCurveGvConfig {
+        SmallCurveGvConfig {
+            small_curve_cutoff: self.small_curve_cutoff,
+            small_curve_pruning: self.small_curve_pruning,
+            primal_gv_min_points: self.primal_gv_min_points,
+            primal_gv_max_deg: self.primal_gv_max_deg,
+            max_missing_gv_impact: self.max_missing_gv_impact,
+            missing_gv_abs_bound: self.missing_gv_abs_bound,
+        }
+    }
+}
+
 /// The verdict of a KKLT vacuum verification: the stabilized moduli, the
 /// string-frame volume breakdown, and the vacuum energy `V0`.
 pub struct VacuumVerdict {
@@ -118,6 +133,20 @@ pub struct VacuumVerdict {
 /// the deferred-bound re-verification, the volume correction, or a `V0` that
 /// underflows `f64`. No physics step silently falls back.
 pub fn verify_kklt_vacuum(
+    inputs: &StabilizationInputs<'_>,
+    config: &VacuumConfig,
+) -> Result<VacuumVerdict, String> {
+    let scgeom = compute_small_curve_geometry(inputs.geom)?;
+    verify_one_basis(&scgeom, inputs, config)
+}
+
+/// Verify a KKLT vacuum for ONE candidate basis, reusing the precomputed
+/// basis-independent [`SmallCurveGeometry`]. Errors (before the expensive
+/// corrected solve) when the basis lands in a chamber whose small curves the
+/// cheap GV methods cannot cover - so a basis search can try the next candidate
+/// without paying for the corrected solve.
+fn verify_one_basis(
+    scgeom: &SmallCurveGeometry,
     inputs: &StabilizationInputs<'_>,
     config: &VacuumConfig,
 ) -> Result<VacuumVerdict, String> {
@@ -167,18 +196,12 @@ pub fn verify_kklt_vacuum(
     );
 
     let gv_selection = select_small_curve_gvs(
+        scgeom,
         geom,
         intersection,
         kklt_basis,
         &branch.small_curve_selection_t,
-        &SmallCurveGvConfig {
-            small_curve_cutoff: config.small_curve_cutoff,
-            small_curve_pruning: config.small_curve_pruning,
-            primal_gv_min_points: config.primal_gv_min_points,
-            primal_gv_max_deg: config.primal_gv_max_deg,
-            max_missing_gv_impact: config.max_missing_gv_impact,
-            missing_gv_abs_bound: config.missing_gv_abs_bound,
-        },
+        &config.small_curve_gv_config(),
     )?;
 
     let correction_source_t = solve_gv_corrected_kklt(
@@ -242,6 +265,64 @@ pub fn verify_kklt_vacuum(
         gv_controlled: gv_selection.deferred_missing.is_empty(),
         deferred_missing_gv_count: gv_selection.deferred_missing.len(),
     })
+}
+
+/// Verify a KKLT vacuum, choosing the KKLT basis automatically from a list of
+/// admissible `(kklt_basis, c_i)` candidates.
+///
+/// All admissible bases describe the same physical vacuum, but they place the
+/// phase-1 selection point in different chambers, and only some land where the
+/// cheap GV methods cover every selected small curve. This tries the candidates
+/// in order, paying the dominant Mori-cap / toric-GV cost ONCE (shared
+/// [`SmallCurveGeometry`]) and only the light per-basis solve+coverage for each,
+/// and returns the first candidate that verifies cleanly. The `c_i`/`kklt_basis`
+/// fields of `base` are ignored (each candidate supplies its own); the other
+/// fields (geometry, racetrack scalars, `h21`) are shared.
+///
+/// # Errors
+/// Returns an error if the shared geometry cannot be built, or if no candidate
+/// verifies (the last candidate's error is included).
+pub fn verify_kklt_vacuum_auto_basis(
+    base: &StabilizationInputs<'_>,
+    candidates: &[(Vec<usize>, Vec<I64<Pos>>)],
+    config: &VacuumConfig,
+) -> Result<VacuumVerdict, String> {
+    if candidates.is_empty() {
+        return Err("no candidate KKLT bases supplied".to_string());
+    }
+    let scgeom = compute_small_curve_geometry(base.geom)?;
+    let mut last_err = String::new();
+    for (i, (kklt_basis, c_i)) in candidates.iter().enumerate() {
+        let inputs = StabilizationInputs {
+            geom: base.geom,
+            intersection: base.intersection,
+            production_primal_basis: base.production_primal_basis,
+            c_i,
+            kklt_basis,
+            g_s: base.g_s,
+            w0: base.w0,
+            ek0: base.ek0,
+            h21: base.h21,
+        };
+        match verify_one_basis(&scgeom, &inputs, config) {
+            Ok(verdict) => {
+                eprintln!(
+                    "[INFO] auto-basis: candidate {}/{} verified cleanly",
+                    i + 1,
+                    candidates.len()
+                );
+                return Ok(verdict);
+            }
+            Err(e) => {
+                eprintln!("[INFO] auto-basis: candidate {} rejected: {e}", i + 1);
+                last_err = e;
+            }
+        }
+    }
+    Err(format!(
+        "no admissible KKLT basis among {} candidates verified cleanly; last error: {last_err}",
+        candidates.len()
+    ))
 }
 
 /// Classical Calabi-Yau volume `(1/6) κ_ijk t^i t^j t^k` in the divisor basis.
