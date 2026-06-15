@@ -703,6 +703,32 @@ fn derived_basis_auto_scan_reproduces_v0() {
     );
     let v0_log10_abs = verdict.v0.get().abs().log10();
     eprintln!("[SCAN] log10(|V0|)={v0_log10_abs}");
+
+    // WHICH chamber did the scan pick? Not necessarily McAllister's {46,130}:
+    // any admissible basis lands on the same stabilized minimum (V0 is
+    // basis-invariant); the scan just takes the first toric-coverable one. We
+    // load kklt_basis.dat ONLY for this diagnostic comparison (not used in the
+    // computation path).
+    let mcallister: std::collections::HashSet<usize> =
+        read_usize_csv(&data_dir.join("kklt_basis.dat"))
+            .into_iter()
+            .collect();
+    let selected: std::collections::HashSet<usize> =
+        verdict.selected_kklt_basis.iter().copied().collect();
+    let dropped: Vec<usize> = (0..geom.triangulation_points.len())
+        .filter(|i| {
+            geom.triangulation_points[*i]
+                .coords()
+                .iter()
+                .any(|&c| c != 0)
+                && !selected.contains(i)
+        })
+        .collect();
+    eprintln!(
+        "[SCAN] selected basis dropped divisors={dropped:?}; same as McAllister {{46,130}}: {}",
+        selected == mcallister
+    );
+
     assert!(
         verdict.gv_controlled && verdict.deferred_missing_gv_count == 0,
         "scanned basis must be fully GV-controlled (no deferred curves)"

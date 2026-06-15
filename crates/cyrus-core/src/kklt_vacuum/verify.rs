@@ -123,6 +123,12 @@ pub struct VacuumVerdict {
     pub gv_controlled: bool,
     /// Number of small curves deferred under the bounded-impact policy.
     pub deferred_missing_gv_count: usize,
+    /// The KKLT divisor basis that produced this verdict. For a single-basis
+    /// verification this is the input basis; for the auto-basis scan it is the
+    /// winning admissible basis (the first whose chamber the cheap GV layers
+    /// fully covered). The stabilized vacuum - hence `V0` - is the same for
+    /// every admissible basis; this records WHICH chamber the homotopy took.
+    pub selected_kklt_basis: Vec<usize>,
 }
 
 /// Verify a KKLT vacuum end-to-end: stabilize the Kähler moduli with the
@@ -264,6 +270,7 @@ fn verify_one_basis(
         small_curve_gv_count: gv_selection.small_curve_gvs.len(),
         gv_controlled: gv_selection.deferred_missing.is_empty(),
         deferred_missing_gv_count: gv_selection.deferred_missing.len(),
+        selected_kklt_basis: kklt_basis.to_vec(),
     })
 }
 
