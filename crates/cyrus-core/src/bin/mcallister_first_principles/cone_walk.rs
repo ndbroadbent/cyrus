@@ -27,7 +27,7 @@ use cyrus_core::types::range::CheckedRange;
 use cyrus_core::types::tags::Finite;
 use malachite::Integer;
 
-use crate::OwnedDivisorBasis;
+use cyrus_core::kklt_vacuum::{OwnedDivisorBasis, PrimalGeom, PrimalIntersection};
 
 /// Outcome of a cone walk: the converged result in the final chamber plus
 /// the discovered flop sequence and the transformed data.
@@ -234,8 +234,8 @@ fn divisor_volumes_at(
 /// returns on the N-flop or failed paths.
 #[allow(clippy::too_many_arguments)] // failure-site rescue context
 pub fn rescue_zeroth_order(
-    geom: &crate::PrimalGeom,
-    intersection: &crate::PrimalIntersection,
+    geom: &PrimalGeom,
+    intersection: &PrimalIntersection,
     production_basis: &OwnedDivisorBasis,
     kklt_basis: &[usize],
     tau_target: &[DivisorVolume],
@@ -302,8 +302,8 @@ pub fn rescue_zeroth_order(
 /// divergence. Exits the process (never returns) when neither succeeds.
 #[allow(clippy::too_many_arguments)] // mirrors the solver call
 pub fn solve_zeroth_order_with_rescue(
-    geom: &crate::PrimalGeom,
-    intersection: &crate::PrimalIntersection,
+    geom: &PrimalGeom,
+    intersection: &PrimalIntersection,
     production_basis: &OwnedDivisorBasis,
     kklt_basis: &[usize],
     tau_target: &[DivisorVolume],

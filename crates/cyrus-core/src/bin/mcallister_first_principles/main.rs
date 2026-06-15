@@ -63,8 +63,8 @@ use cyrus_core::types::tags::{Finite, Pos};
 use cyrus_core::vacuum::compute_vacuum;
 use cyrus_core::volume::bbhl_correction;
 use cyrus_core::{
-    CurvePruningStrategy, DivisorBasis, GvDivisorBasisData, Point, Polytope, ToricCurveCandidate,
-    Triangulation, apply_finite_f64_basis_transform, apply_integer_basis_transform,
+    CurvePruningStrategy, GvDivisorBasisData, Point, Polytope, ToricCurveCandidate, Triangulation,
+    apply_finite_f64_basis_transform, apply_integer_basis_transform,
     apply_integer_basis_transform_transpose, basis_change_matrix, build_racetrack_terms,
     compute_curve_basis_matrix, compute_glsm_and_linrels, compute_grading_vector,
     compute_intersection_cytools, compute_linear_relations_no_origin, compute_mori_cone_cap_rays,
@@ -508,44 +508,6 @@ enum BasisOverrideRef<'a> {
     Matrix(&'a [Vec<i64>]),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum OwnedDivisorBasis {
-    Indices(Vec<usize>),
-    Matrix {
-        standard_basis: Vec<usize>,
-        basis_matrix: Vec<Vec<malachite::Integer>>,
-    },
-}
-
-impl OwnedDivisorBasis {
-    fn as_divisor_basis(&self) -> DivisorBasis<'_> {
-        match self {
-            Self::Indices(indices) => DivisorBasis::Indices(indices),
-            Self::Matrix {
-                standard_basis,
-                basis_matrix,
-            } => DivisorBasis::Matrix {
-                standard_basis,
-                basis_matrix,
-            },
-        }
-    }
-
-    const fn dimension(&self) -> usize {
-        match self {
-            Self::Indices(indices) => indices.len(),
-            Self::Matrix { basis_matrix, .. } => basis_matrix.len(),
-        }
-    }
-
-    const fn description(&self) -> &'static str {
-        match self {
-            Self::Indices(_) => "index divisor basis",
-            Self::Matrix { .. } => "matrix divisor basis",
-        }
-    }
-}
-
 impl BasisOverride {
     fn representation(&self, context: &str) -> std::result::Result<BasisOverrideRef<'_>, String> {
         match (&self.indices, &self.matrix) {
@@ -815,20 +777,7 @@ struct PipelineArgs {
     production_dual_basis_override: Option<BasisOverride>,
 }
 
-struct PrimalGeom {
-    polytope: Polytope,
-    heights: Vec<F64<Finite>>,
-    triangulation_points: Vec<Point>,
-    triangulation: Triangulation,
-}
-
-struct PrimalIntersection {
-    glsm: Vec<Vec<malachite::Integer>>,
-    linrels: Vec<Vec<malachite::Integer>>,
-    basis: Vec<usize>,
-    kappa_full: cyrus_core::Intersection,
-    kappa_basis: cyrus_core::Intersection,
-}
+use cyrus_core::kklt_vacuum::{OwnedDivisorBasis, PrimalGeom, PrimalIntersection};
 
 struct FlatDirectionData {
     dual_polytope: Polytope,

@@ -152,6 +152,7 @@ pub use intersection::{
 };
 pub use intersection::{compute_ambient_intersections_cytools, compute_intersection_cytools};
 pub mod kklt;
+pub mod kklt_vacuum;
 
 pub use kklt::{
     CertifiedFlopContinuationStep, FlopContinuationState, GvDilogFailure, KkltBranchSearchResult,

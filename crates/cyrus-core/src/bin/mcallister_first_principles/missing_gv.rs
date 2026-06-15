@@ -8,7 +8,9 @@ use std::collections::{HashMap, HashSet};
 use cyrus_core::types::f64::F64;
 use cyrus_core::types::tags::Finite;
 
-use crate::{PrimalGeom, PrimalIntersection, compute_grading_vector, vector_gv_basis_data};
+use cyrus_core::kklt_vacuum::{PrimalGeom, PrimalIntersection};
+
+use crate::{compute_grading_vector, vector_gv_basis_data};
 
 /// Compute GV invariants for missing classes whose grading degree is below
 /// twice the minimal positive generator degree. Such classes admit no
