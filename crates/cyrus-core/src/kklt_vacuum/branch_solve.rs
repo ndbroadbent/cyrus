@@ -110,10 +110,10 @@ pub fn solve_kklt_branches(
     tau_target: &[DivisorVolume],
     config: &BranchSolveConfig,
 ) -> Result<KkltBranchSolveOutput, String> {
-    let tau_phase1: Vec<F64<Pos>> = c_i.iter().map(|ci| ci.to_f64()).collect();
     let steps = CheckedRange::new(0, config.kklt_steps);
 
     if config.branch_candidates == 0 {
+        let tau_phase1: Vec<F64<Pos>> = c_i.iter().map(|ci| ci.to_f64()).collect();
         return solve_single_height_branch(
             geom,
             intersection,
@@ -124,6 +124,74 @@ pub fn solve_kklt_branches(
             config.kklt_steps,
         );
     }
+
+    // Phase-1 branch search produces the small-curve selection point. The
+    // corrected zeroth-order solve below is a redundant diagnostic gate (its
+    // result feeds only an info log; the real corrected solve is the GV
+    // iteration downstream) - so it is NOT part of the cheap coverage probe.
+    let phase1 = solve_kklt_phase1_branch_search(
+        geom,
+        intersection,
+        production_primal_basis,
+        kklt_basis,
+        c_i,
+        config,
+        false,
+    )?;
+
+    let zeroth_order = solve_divisor_basis_path_following(
+        &intersection.kappa_full,
+        production_primal_basis.as_divisor_basis(),
+        kklt_basis,
+        tau_target,
+        &phase1.gv_iteration_source_t,
+        steps,
+    )
+    .ok_or_else(|| "corrected divisor-basis KKLT solve failed after branch search".to_string())?;
+    if !zeroth_order.converged {
+        return Err(format!(
+            "corrected mixed-basis KKLT solve after branch search did not converge: rel_err={}",
+            zeroth_order.relative_error.get()
+        ));
+    }
+
+    Ok(KkltBranchSolveOutput {
+        zeroth_order,
+        small_curve_selection_t: phase1.small_curve_selection_t,
+        gv_iteration_source_t: phase1.gv_iteration_source_t,
+    })
+}
+
+/// The phase-1 branch search result: the selected positive-volume Kähler point,
+/// in both the computed basis (small-curve selection) and the production basis
+/// (to seed the corrected GV iteration). This is everything the small-curve
+/// COVERAGE check needs - it does NOT require the corrected zeroth-order solve.
+pub struct Phase1BranchSelection {
+    /// Phase-1 Kähler point in Cyrus's computed primal basis.
+    pub small_curve_selection_t: Vec<F64<Finite>>,
+    /// Phase-1 Kähler point in the production basis.
+    pub gv_iteration_source_t: Vec<F64<Finite>>,
+}
+
+/// Phase-1 branch search (`branch_candidates > 0`): build the scaled (and
+/// optional height-projected) initializations, path-follow them to the phase-1
+/// targets `tau_phase1 = c_i`, and select one positive-volume branch by policy.
+///
+/// Returns the selected Kähler point WITHOUT running the corrected zeroth-order
+/// solve, so this is the cheap path a coverage probe uses to classify a
+/// candidate basis at low `kklt_steps`. `quiet` suppresses the per-call branch
+/// diagnostics (used when scanning hundreds of candidate bases).
+pub fn solve_kklt_phase1_branch_search(
+    geom: &PrimalGeom,
+    intersection: &PrimalIntersection,
+    production_primal_basis: &OwnedDivisorBasis,
+    kklt_basis: &[usize],
+    c_i: &[I64<Pos>],
+    config: &BranchSolveConfig,
+    quiet: bool,
+) -> Result<Phase1BranchSelection, String> {
+    let tau_phase1: Vec<F64<Pos>> = c_i.iter().map(|ci| ci.to_f64()).collect();
+    let steps = CheckedRange::new(0, config.kklt_steps);
 
     let mut t_initializations = generate_scaled_divisor_basis_branch_initializations(
         &intersection.kappa_full,
@@ -153,14 +221,16 @@ pub fn solve_kklt_branches(
         &t_initializations,
         steps,
     );
-    eprintln!(
-        "[INFO] KKLT branch search: attempted={} solved={} non_converged={} non_positive_volume={} positive_volume={}",
-        branch_search.attempted,
-        branch_search.solved,
-        branch_search.non_converged,
-        branch_search.non_positive_volume,
-        branch_search.positive_volume.len()
-    );
+    if !quiet {
+        eprintln!(
+            "[INFO] KKLT branch search: attempted={} solved={} non_converged={} non_positive_volume={} positive_volume={}",
+            branch_search.attempted,
+            branch_search.solved,
+            branch_search.non_converged,
+            branch_search.non_positive_volume,
+            branch_search.positive_volume.len()
+        );
+    }
     let mut positive_branches = branch_search.positive_volume;
     positive_branches.sort_by(|a, b| {
         a.classical_volume
@@ -173,14 +243,16 @@ pub fn solve_kklt_branches(
 
     let selected_rank = select_branch_rank(&positive_branches, config.branch_selection)?;
     let best_branch = positive_branches[selected_rank].clone();
-    eprintln!(
-        "[INFO] KKLT branch search selected policy={} rank_by_volume={} init={} phase1_volume={} rel_err={}",
-        config.branch_selection.as_str(),
-        selected_rank,
-        best_branch.init_index,
-        best_branch.classical_volume.get(),
-        best_branch.result.relative_error.get()
-    );
+    if !quiet {
+        eprintln!(
+            "[INFO] KKLT branch search selected policy={} rank_by_volume={} init={} phase1_volume={} rel_err={}",
+            config.branch_selection.as_str(),
+            selected_rank,
+            best_branch.init_index,
+            best_branch.classical_volume.get(),
+            best_branch.result.relative_error.get()
+        );
+    }
 
     let small_curve_selection_t = transform_production_primal_kahler_to_computed(
         intersection,
@@ -189,24 +261,7 @@ pub fn solve_kklt_branches(
         "selected branch Kähler point",
     )?;
 
-    let zeroth_order = solve_divisor_basis_path_following(
-        &intersection.kappa_full,
-        production_primal_basis.as_divisor_basis(),
-        kklt_basis,
-        tau_target,
-        &best_branch.result.t,
-        steps,
-    )
-    .ok_or_else(|| "corrected divisor-basis KKLT solve failed after branch search".to_string())?;
-    if !zeroth_order.converged {
-        return Err(format!(
-            "corrected mixed-basis KKLT solve after branch search did not converge: rel_err={}",
-            zeroth_order.relative_error.get()
-        ));
-    }
-
-    Ok(KkltBranchSolveOutput {
-        zeroth_order,
+    Ok(Phase1BranchSelection {
         small_curve_selection_t,
         gv_iteration_source_t: best_branch.result.t,
     })

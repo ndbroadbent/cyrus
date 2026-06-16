@@ -23,11 +23,14 @@ use crate::vacuum::compute_vacuum;
 use crate::volume::bbhl_correction;
 use crate::{CurvePruningStrategy, Intersection};
 
-use super::branch_solve::{BranchSelection, BranchSolveConfig, solve_kklt_branches};
+use super::branch_solve::{
+    BranchSelection, BranchSolveConfig, solve_kklt_branches, solve_kklt_phase1_branch_search,
+};
 use super::gamma::compute_b_field_gamma_for_o7_divisors;
 use super::gv_corrected::solve_gv_corrected_kklt;
 use super::gv_coverage::{
-    SmallCurveGeometry, SmallCurveGvConfig, compute_small_curve_geometry, select_small_curve_gvs,
+    SmallCurveGeometry, SmallCurveGvConfig, collect_small_curve_gvs, compute_small_curve_geometry,
+    select_small_curve_gvs,
 };
 use super::missing_gv::verify_deferred_missing_gv_bounds;
 use super::{OwnedDivisorBasis, PrimalGeom, PrimalIntersection};
@@ -83,7 +86,10 @@ pub struct VacuumConfig {
 }
 
 impl VacuumConfig {
-    const fn small_curve_gv_config(&self) -> SmallCurveGvConfig {
+    /// Project the small-curve-coverage knobs out of this config into a
+    /// [`SmallCurveGvConfig`] for the GV cascade.
+    #[must_use]
+    pub const fn small_curve_gv_config(&self) -> SmallCurveGvConfig {
         SmallCurveGvConfig {
             small_curve_cutoff: self.small_curve_cutoff,
             small_curve_pruning: self.small_curve_pruning,
@@ -274,17 +280,113 @@ fn verify_one_basis(
     })
 }
 
+/// Default coverage-probe step count for the two-stage scan. The COVERAGE
+/// verdict (which small curves are selected, and whether all are cheaply
+/// covered) is stable from ~16 path-following steps up - identical to the full
+/// 64-step solve on 4-214 (test `coverage_stable_at_low_kklt_steps`), with NO
+/// false "covered" verdicts observed. The only low-step failure mode is the
+/// phase-1 branch search not yet reaching a positive-volume branch for harder
+/// chambers, which falls through to the exact Stage-2 check (safe, not fast);
+/// 40 steps converges most such chambers while staying well under the full 64.
+const COVERAGE_PROBE_STEPS: usize = 40;
+
+/// Outcome of the cheap per-basis coverage probe.
+enum ProbeOutcome {
+    /// The probe's chamber is fully covered by the cheap GV layers.
+    Covered,
+    /// The probe positively found an uncovered small curve - reject the basis.
+    Uncovered,
+    /// The probe could not decide (phase-1 or coverage errored) - keep the
+    /// basis for Stage 2's exact check rather than risk a false reject.
+    Indeterminate,
+}
+
+/// Cheaply classify whether a candidate basis lands in a GV-coverable chamber,
+/// WITHOUT the full solve: run only the phase-1 branch search at a low step
+/// count (no corrected zeroth-order solve, no chi/gamma/target construction) and
+/// the cheap coverage check. Conservative by construction - only a positive
+/// uncovered finding rejects; any error keeps the candidate for Stage 2. A
+/// false accept is harmless (Stage 2 re-runs the exact coverage check and fails
+/// loudly); the coverage verdict is stable at this step count (see
+/// `COVERAGE_PROBE_STEPS`), so the covered chamber is not falsely rejected.
+fn probe_basis_coverage(
+    scgeom: &SmallCurveGeometry,
+    inputs: &StabilizationInputs<'_>,
+    config: &VacuumConfig,
+    probe_steps: usize,
+) -> ProbeOutcome {
+    let probe_branch = BranchSolveConfig {
+        kklt_steps: probe_steps,
+        branch_candidates: config.branch_candidates,
+        branch_seed: config.branch_seed,
+        branch_height_init: config.branch_height_init,
+        branch_selection: config.branch_selection,
+    };
+    let Ok(phase1) = solve_kklt_phase1_branch_search(
+        inputs.geom,
+        inputs.intersection,
+        inputs.production_primal_basis,
+        inputs.kklt_basis,
+        inputs.c_i,
+        &probe_branch,
+        true,
+    ) else {
+        return ProbeOutcome::Indeterminate;
+    };
+    match collect_small_curve_gvs(
+        scgeom,
+        inputs.geom,
+        inputs.intersection,
+        inputs.kklt_basis,
+        &phase1.small_curve_selection_t,
+        &config.small_curve_gv_config(),
+    ) {
+        Ok(sel) if sel.uncovered_missing.is_empty() => ProbeOutcome::Covered,
+        Ok(_) => ProbeOutcome::Uncovered,
+        Err(_) => ProbeOutcome::Indeterminate,
+    }
+}
+
+/// Borrow candidate `i` as a [`StabilizationInputs`] sharing `base`'s geometry
+/// and racetrack scalars.
+fn candidate_inputs<'a>(
+    base: &StabilizationInputs<'a>,
+    candidate: &'a (Vec<usize>, Vec<I64<Pos>>),
+) -> StabilizationInputs<'a> {
+    StabilizationInputs {
+        geom: base.geom,
+        intersection: base.intersection,
+        production_primal_basis: base.production_primal_basis,
+        c_i: &candidate.1,
+        kklt_basis: &candidate.0,
+        g_s: base.g_s,
+        w0: base.w0,
+        ek0: base.ek0,
+        h21: base.h21,
+    }
+}
+
 /// Verify a KKLT vacuum, choosing the KKLT basis automatically from a list of
 /// admissible `(kklt_basis, c_i)` candidates.
 ///
-/// All admissible bases describe the same physical vacuum, but they place the
-/// phase-1 selection point in different chambers, and only some land where the
-/// cheap GV methods cover every selected small curve. This tries the candidates
-/// in order, paying the dominant Mori-cap / toric-GV cost ONCE (shared
-/// [`SmallCurveGeometry`]) and only the light per-basis solve+coverage for each,
-/// and returns the first candidate that verifies cleanly. The `c_i`/`kklt_basis`
-/// fields of `base` are ignored (each candidate supplies its own); the other
-/// fields (geometry, racetrack scalars, `h21`) are shared.
+/// All admissible bases describe the same physical vacuum (V0 is basis-
+/// invariant), but they place the phase-1 selection point in different chambers,
+/// and only some land where the cheap GV methods cover every selected small
+/// curve. Finding that chamber is a scan, but a full solve per candidate is
+/// wasteful: instead this runs a TWO-STAGE scan, paying the dominant Mori-cap /
+/// toric-GV cost ONCE (shared [`SmallCurveGeometry`]):
+///
+/// Each candidate is **interleaved**: the cheap probe runs first; only if it
+/// does not reject does the full [`verify_one_basis`] run, and the first clean
+/// full verify returns immediately. So the expensive solve is paid only for the
+/// covered chamber (plus any rare probe false-accepts before it) - NOT for the
+/// hundreds of un-coverable chambers, which cost only a probe each.
+///
+/// A Stage-1 false accept is caught by the full check, so the result is
+/// identical to scanning every candidate fully (the coverage verdict is stable
+/// at the probe step count, so the covered chamber is never falsely rejected).
+/// The `c_i`/`kklt_basis` fields of `base` are ignored (each candidate supplies
+/// its own).
 ///
 /// # Errors
 /// Returns an error if the shared geometry cannot be built, or if no candidate
@@ -298,36 +400,40 @@ pub fn verify_kklt_vacuum_auto_basis(
         return Err("no candidate KKLT bases supplied".to_string());
     }
     let scgeom = compute_small_curve_geometry(base.geom)?;
-    let mut last_err = String::new();
-    for (i, (kklt_basis, c_i)) in candidates.iter().enumerate() {
-        let inputs = StabilizationInputs {
-            geom: base.geom,
-            intersection: base.intersection,
-            production_primal_basis: base.production_primal_basis,
-            c_i,
-            kklt_basis,
-            g_s: base.g_s,
-            w0: base.w0,
-            ek0: base.ek0,
-            h21: base.h21,
-        };
+    let mut last_err = "all candidates rejected by the coverage probe".to_string();
+    let (mut probe_rejected, mut full_verified) = (0usize, 0usize);
+    for (i, candidate) in candidates.iter().enumerate() {
+        let inputs = candidate_inputs(base, candidate);
+        // Stage 1: cheap probe - skip un-coverable chambers without a solve.
+        if matches!(
+            probe_basis_coverage(&scgeom, &inputs, config, COVERAGE_PROBE_STEPS),
+            ProbeOutcome::Uncovered
+        ) {
+            probe_rejected += 1;
+            continue;
+        }
+        // Stage 2: exact verify on probe survivors; first clean wins.
+        full_verified += 1;
         match verify_one_basis(&scgeom, &inputs, config) {
             Ok(verdict) => {
                 eprintln!(
-                    "[INFO] auto-basis: candidate {}/{} verified cleanly",
+                    "[INFO] auto-basis: candidate {}/{} verified cleanly ({probe_rejected} probe-rejected, {full_verified} full-verified)",
                     i + 1,
                     candidates.len()
                 );
                 return Ok(verdict);
             }
             Err(e) => {
-                eprintln!("[INFO] auto-basis: candidate {} rejected: {e}", i + 1);
+                eprintln!(
+                    "[INFO] auto-basis: candidate {} rejected at full verify: {e}",
+                    i + 1
+                );
                 last_err = e;
             }
         }
     }
     Err(format!(
-        "no admissible KKLT basis among {} candidates verified cleanly; last error: {last_err}",
+        "no admissible KKLT basis among {} candidates verified cleanly ({probe_rejected} probe-rejected, {full_verified} full-verified); last error: {last_err}",
         candidates.len()
     ))
 }

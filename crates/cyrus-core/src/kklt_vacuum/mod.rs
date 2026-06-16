@@ -18,6 +18,7 @@ pub mod missing_gv;
 
 mod basis_transform;
 mod branch_solve;
+mod diagnostics;
 mod gamma;
 mod general_gv;
 mod gv_basis;
@@ -31,10 +32,12 @@ pub use basis_transform::{
     transform_kahler_between_owned_divisor_bases, transform_production_primal_kahler_to_computed,
 };
 pub use branch_solve::BranchSelection;
+pub use diagnostics::{ChamberCoverageReport, primal_gv_grading, probe_chamber_coverage};
 pub use gamma::compute_b_field_gamma_for_o7_divisors;
 pub use general_gv::compute_primal_general_gv_by_ambient_class;
 pub use gv_basis::{production_gv_basis_data, vector_gv_basis_data};
 pub use gv_corrected::solve_gv_corrected_kklt;
+pub use gv_coverage::{SmallCurveGeometry, compute_small_curve_geometry};
 pub use verify::{
     StabilizationInputs, VacuumConfig, VacuumVerdict, verify_kklt_vacuum,
     verify_kklt_vacuum_auto_basis,

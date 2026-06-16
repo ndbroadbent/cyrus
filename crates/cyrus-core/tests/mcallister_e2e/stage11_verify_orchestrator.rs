@@ -20,7 +20,8 @@ use std::path::{Path, PathBuf};
 
 use cyrus_core::kklt_vacuum::{
     BranchSelection, PrimalGeom, PrimalIntersection, StabilizationInputs, VacuumConfig,
-    computed_primal_basis, verify_kklt_vacuum,
+    compute_small_curve_geometry, computed_primal_basis, primal_gv_grading, probe_chamber_coverage,
+    verify_kklt_vacuum,
 };
 use cyrus_core::types::f64::F64;
 use cyrus_core::types::i64::I64;
@@ -592,6 +593,180 @@ fn c_i_for_basis(
             I64::<Pos>::new(c).expect("c_i positive")
         })
         .collect()
+}
+
+/// DE-RISK for the two-stage scan speedup: is the GV COVERAGE classification
+/// (which small curves are selected, and whether they are all cheaply covered)
+/// STABLE as `kklt_steps` is reduced? The proposed fast scan rejects bad bases
+/// with a cheap low-step phase-1 "coverage probe"; that is only sound if a low
+/// step count gives the same covered/uncovered verdict as the full 64-step
+/// solve. This runs McAllister's (known-covered) basis at several step counts
+/// and reports, for each, whether `verify_kklt_vacuum` still finds it fully
+/// covered (`Ok` with `gv_controlled`) or errors on an uncovered curve. If
+/// coverage holds down to small step counts, the cheap probe is valid. 4-214.
+#[test]
+fn coverage_stable_at_low_kklt_steps() {
+    if !require_first_principles() || !require_runner_heavy() || !require_general_gv() {
+        return;
+    }
+    let Some(data_dir) = require_data_dir() else {
+        return;
+    };
+    if data_dir.file_name().unwrap().to_string_lossy() != "4-214-647" {
+        return;
+    }
+    let geom = build_geom(&data_dir);
+    let intersection = build_intersection(&geom);
+    let production_primal_basis = computed_primal_basis(&intersection);
+    let c_i: Vec<I64<Pos>> = read_ints_csv(&data_dir.join("target_volumes.dat"))
+        .into_iter()
+        .map(|v| I64::<Pos>::new(v).expect("c_i positive"))
+        .collect();
+    let kklt_basis: Vec<usize> = read_usize_csv(&data_dir.join("kklt_basis.dat"));
+    let g_s = F64::<Pos>::new(read_scalar_f64(&data_dir.join("g_s.dat"))).expect("g_s");
+    let w0 = F64::<Pos>::new(read_scalar_f64(&data_dir.join("W_0.dat"))).expect("W0");
+    let ek0 = F64::<Pos>::new(MCALLISTER_4_214_EK0).expect("ek0");
+
+    for steps in [4usize, 8, 16, 32, 64] {
+        let inputs = StabilizationInputs {
+            geom: &geom,
+            intersection: &intersection,
+            production_primal_basis: &production_primal_basis,
+            c_i: &c_i,
+            kklt_basis: &kklt_basis,
+            g_s,
+            w0,
+            ek0,
+            h21: MCALLISTER_4_214_H21,
+        };
+        let config = VacuumConfig {
+            kklt_steps: steps,
+            branch_candidates: 1,
+            branch_seed: 42,
+            branch_height_init: true,
+            branch_selection: BranchSelection::FirstPositive,
+            small_curve_cutoff: F64::<Pos>::new(1.0).unwrap(),
+            small_curve_pruning: CurvePruningStrategy::PairDecomposable,
+            primal_gv_min_points: None,
+            primal_gv_max_deg: None,
+            max_missing_gv_impact: 0.0,
+            missing_gv_abs_bound: 10,
+        };
+        match verify_kklt_vacuum(&inputs, &config) {
+            Ok(v) => eprintln!(
+                "[STEPS] kklt_steps={steps}: COVERED gv_count={} gv_controlled={} log10|V0|={:.3}",
+                v.small_curve_gv_count,
+                v.gv_controlled,
+                v.v0.get().abs().log10()
+            ),
+            Err(e) => eprintln!("[STEPS] kklt_steps={steps}: NOT covered / error: {e}"),
+        }
+    }
+}
+
+/// MEASUREMENT: per admissible chamber (interior order), how many small curves
+/// are left uncovered and at what GV grading degree - to test the "accept an
+/// early chamber and just compute its few low-degree uncovered curves" tradeoff
+/// vs scanning to McAllister's rank-437 chamber. Walks the first
+/// `CYRUS_SCAN_LIMIT` (default 250) candidates; flags the earliest chamber whose
+/// uncovered curves are ALL below each degree threshold (max degree is the gate).
+#[test]
+fn measure_uncovered_curve_degrees_across_chambers() {
+    if !require_first_principles() || !require_runner_heavy() || !require_general_gv() {
+        return;
+    }
+    let Some(data_dir) = require_data_dir() else {
+        return;
+    };
+    if data_dir.file_name().unwrap().to_string_lossy() != "4-214-647" {
+        return;
+    }
+    let env_usize = |k: &str, d: usize| {
+        std::env::var(k)
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(d)
+    };
+    let limit = env_usize("CYRUS_SCAN_LIMIT", 250);
+    let probe_steps = env_usize("CYRUS_PROBE_STEPS", 64);
+
+    let geom = build_geom(&data_dir);
+    let intersection = build_intersection(&geom);
+    let production_primal_basis = computed_primal_basis(&intersection);
+    let scgeom = compute_small_curve_geometry(&geom).expect("small-curve geometry");
+    let grading = primal_gv_grading(&scgeom, &intersection).expect("gv grading");
+    let bases = cyrus_core::orientifold::admissible_kklt_bases(
+        &geom.polytope,
+        &geom.triangulation_points,
+        0,
+    )
+    .expect("admissible bases");
+    let o7_model = build_o7_model(&geom, &intersection);
+    let g_s = F64::<Pos>::new(read_scalar_f64(&data_dir.join("g_s.dat"))).expect("g_s");
+    let w0 = F64::<Pos>::new(read_scalar_f64(&data_dir.join("W_0.dat"))).expect("W0");
+    let ek0 = F64::<Pos>::new(MCALLISTER_4_214_EK0).expect("ek0");
+    let config = VacuumConfig {
+        kklt_steps: probe_steps,
+        branch_candidates: 1,
+        branch_seed: 42,
+        branch_height_init: true,
+        branch_selection: BranchSelection::FirstPositive,
+        small_curve_cutoff: F64::<Pos>::new(1.0).unwrap(),
+        small_curve_pruning: CurvePruningStrategy::PairDecomposable,
+        primal_gv_min_points: None,
+        primal_gv_max_deg: None,
+        max_missing_gv_impact: 0.0,
+        missing_gv_abs_bound: 10,
+    };
+    eprintln!(
+        "[DEG] {} bases; first {limit} at {probe_steps} steps",
+        bases.len()
+    );
+    let thresholds = [20i128, 30, 50, 80, 120];
+    let mut earliest_under: Vec<Option<(usize, usize, i128)>> = vec![None; thresholds.len()];
+    let (mut covered_ranks, mut indeterminate) = (Vec::<usize>::new(), 0usize);
+    for (rank, basis) in bases.iter().take(limit).enumerate() {
+        let c_i = c_i_for_basis(&o7_model, basis);
+        let inputs = StabilizationInputs {
+            geom: &geom,
+            intersection: &intersection,
+            production_primal_basis: &production_primal_basis,
+            c_i: &c_i,
+            kklt_basis: basis,
+            g_s,
+            w0,
+            ek0,
+            h21: MCALLISTER_4_214_H21,
+        };
+        let report = probe_chamber_coverage(&scgeom, &inputs, &config, &grading, probe_steps);
+        if report.indeterminate {
+            indeterminate += 1;
+            continue;
+        }
+        let degs = &report.uncovered_degrees;
+        if degs.is_empty() {
+            covered_ranks.push(rank);
+            eprintln!("[DEG] rank {rank}: COVERED (0 uncovered) <<<");
+            continue;
+        }
+        let (min, max, med) = (degs[0], degs[degs.len() - 1], degs[degs.len() / 2]);
+        eprintln!(
+            "[DEG] rank {rank}: uncovered={} deg[min={min} med={med} max={max}]",
+            degs.len()
+        );
+        for (t, thr) in thresholds.iter().enumerate() {
+            if max <= *thr && earliest_under[t].is_none() {
+                earliest_under[t] = Some((rank, degs.len(), max));
+            }
+        }
+    }
+    eprintln!("[DEG] SUMMARY: covered ranks={covered_ranks:?} indeterminate={indeterminate}");
+    for (t, thr) in thresholds.iter().enumerate() {
+        eprintln!(
+            "[DEG]   earliest all-uncovered-degree<= {thr}: {:?}",
+            earliest_under[t]
+        );
+    }
 }
 
 /// END-TO-END BASIS-AGNOSTIC VALIDATION (the GA's deep-verify path).

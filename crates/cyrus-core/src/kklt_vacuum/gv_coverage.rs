@@ -28,10 +28,11 @@ use super::missing_gv::{
 };
 use super::{PrimalGeom, PrimalIntersection};
 
-/// Geometry-only inputs to the small-curve GV cascade that do NOT depend on
-/// the KKLT basis or the Kähler point: the ambient Mori-cap rays and the toric
-/// two-face GV table. Computing these once (they are the dominant cost) lets a
-/// basis search probe many candidate bases cheaply.
+/// Geometry-only inputs to the small-curve GV cascade.
+///
+/// These do NOT depend on the KKLT basis or the Kähler point: the ambient
+/// Mori-cap rays and the toric two-face GV table. Computing them once (they are
+/// the dominant cost) lets a basis search probe many candidate bases cheaply.
 pub struct SmallCurveGeometry {
     /// Ambient Mori-cone cap rays of the primal triangulation.
     pub ambient_rays: Vec<Vec<i64>>,
