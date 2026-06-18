@@ -59,14 +59,16 @@ pub struct FitnessConfig {
     pub weight_gs: f64,
     /// Run the in-process deep KKLT verification (the full primal-side
     /// arXiv:2107.09064 SS6 stabilization, `GaGeometry::deep_verify`) on a
-    /// VALID candidate once its base scan fitness exceeds this threshold.
-    /// `None` disables it. Deep verification is ~tens of minutes, so it is
-    /// gated: genuine vacua worth verifying are extremely rare (order one or
-    /// two a day), and that rarity - not a throttle - is what keeps the cost
-    /// bounded. A passing deep-verify lifts the candidate into a strictly
-    /// higher fitness band (see [`evaluate_fitness`]).
+    /// VALID candidate whose proxy CPL fit `(w0, wa)` lands within this many
+    /// DESI sigma on BOTH parameters (see [`within_desi_sigma`]). `None`
+    /// disables it. The gate is PHYSICAL, not a fitness number: the primal
+    /// solve is expensive, so it runs only on candidates whose dark-energy
+    /// equation of state is actually DESI-relevant (the per-polytope coverage
+    /// cache then bounds the cost to one admissible-basis scan per polytope). A
+    /// passing deep-verify lifts the candidate into a strictly higher fitness
+    /// band (see [`evaluate_fitness`]).
     #[serde(default)]
-    pub deep_verify_threshold: Option<f64>,
+    pub deep_verify_desi_sigma: Option<f64>,
 }
 
 /// Fitness band floor for a candidate whose primal KKLT vacuum was solved
@@ -92,7 +94,7 @@ impl Default for FitnessConfig {
             weight_height: 1.0,
             weight_slope: 1.0,
             weight_gs: 0.2,
-            deep_verify_threshold: None,
+            deep_verify_desi_sigma: None,
         }
     }
 }
@@ -319,6 +321,24 @@ fn apply_deep_verify(
     }
 }
 
+/// Whether a candidate's CPL fit `(w0, wa)` lands within `n_sigma` of the DESI
+/// w0-wa constraints on BOTH parameters - the physical gate for deep
+/// verification (only a DESI-relevant dark-energy equation of state is worth the
+/// primal KKLT solve). A `None` fit (the quintessence integration did not run)
+/// never qualifies.
+fn within_desi_sigma(
+    cpl_w0: Option<f64>,
+    cpl_wa: Option<f64>,
+    n_sigma: f64,
+    cfg: &FitnessConfig,
+) -> bool {
+    let (Some(w0), Some(wa)) = (cpl_w0, cpl_wa) else {
+        return false;
+    };
+    (w0 - cfg.desi_w0).abs() <= n_sigma * cfg.desi_w0_sigma
+        && (wa - cfg.desi_wa).abs() <= n_sigma * cfg.desi_wa_sigma
+}
+
 /// Evaluate a genome: tiered penalties for invalid candidates, weighted
 /// component score for valid ones.
 #[must_use]
@@ -398,13 +418,13 @@ pub fn evaluate_fitness(geom: &GaGeometry, cfg: &FitnessConfig, genome: &Genome)
     }
     report.fitness = combined;
 
-    // Deep-verify band: the toil this automates. A valid candidate that
-    // clears the threshold is rare enough (order one or two genuine vacua a
-    // day) to run the full primal KKLT stabilization in-process; a pass lifts
-    // it into a strictly higher band scored on the real V0. The threshold IS
-    // the gate - no throttling, by design.
-    if let Some(threshold) = cfg.deep_verify_threshold
-        && report.fitness > threshold
+    // Deep-verify band: the toil this automates. The gate is PHYSICAL - a valid
+    // candidate is worth the expensive primal KKLT solve only if its proxy
+    // dark-energy equation of state (w0, wa) already sits within the configured
+    // DESI sigma; a pass lifts it into a strictly higher band scored on the real
+    // V0. The per-polytope coverage cache keeps the cost bounded.
+    if let Some(n_sigma) = cfg.deep_verify_desi_sigma
+        && within_desi_sigma(report.cpl_w0, report.cpl_wa, n_sigma, cfg)
     {
         apply_deep_verify(geom, cfg, vacuum.ek0, vacuum.g_s, vacuum.w0, &mut report);
     }

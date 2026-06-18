@@ -44,9 +44,10 @@ fn validate_leaderboard_candidates() {
         serde_json::from_str(&raw).unwrap_or_else(|e| panic!("parse {file}: {e}"));
 
     // Force the primal deep-verify to run on every successful candidate,
-    // regardless of its valid-band fitness.
+    // regardless of its DESI distance: the harness validates whatever
+    // candidates it is pointed at (a huge sigma admits everything).
     let cfg = FitnessConfig {
-        deep_verify_threshold: Some(f64::NEG_INFINITY),
+        deep_verify_desi_sigma: Some(1e9),
         ..FitnessConfig::default()
     };
 

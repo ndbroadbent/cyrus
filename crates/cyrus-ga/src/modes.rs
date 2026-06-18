@@ -44,8 +44,8 @@ pub fn parse_params_and_fitness() -> (GaParams, FitnessConfig) {
     set!(desi_w0, "--desi-w0");
     set!(desi_wa, "--desi-wa");
     set!(decay_constant, "--decay-constant");
-    if let Some(v) = parse_arg_value("--deep-verify-threshold") {
-        fitness_cfg.deep_verify_threshold = Some(v);
+    if let Some(v) = parse_arg_value("--deep-verify-desi-sigma") {
+        fitness_cfg.deep_verify_desi_sigma = Some(v);
     }
     (params, fitness_cfg)
 }

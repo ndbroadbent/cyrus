@@ -134,11 +134,11 @@ fn main() {
     if let Some(v) = parse_arg_value("--decay-constant") {
         fitness_cfg.decay_constant = v;
     }
-    // Deep-verify (full primal KKLT stabilization, ~tens of minutes) runs only
-    // on a valid candidate whose base scan fitness exceeds this threshold; off
-    // unless given.
-    if let Some(v) = parse_arg_value("--deep-verify-threshold") {
-        fitness_cfg.deep_verify_threshold = Some(v);
+    // Deep-verify (full primal KKLT stabilization) runs only on a valid
+    // candidate whose proxy (w0, wa) is within this many DESI sigma; off unless
+    // given.
+    if let Some(v) = parse_arg_value("--deep-verify-desi-sigma") {
+        fitness_cfg.deep_verify_desi_sigma = Some(v);
     }
 
     std::fs::create_dir_all(&run_dir).unwrap_or_else(|e| {
