@@ -31,7 +31,8 @@ use std::sync::OnceLock;
 
 use cyrus_core::kklt_vacuum::{
     BranchSelection, OwnedDivisorBasis, PrimalGeom, PrimalIntersection, StabilizationInputs,
-    VacuumConfig, VacuumVerdict, computed_primal_basis, verify_kklt_vacuum_auto_basis,
+    VacuumConfig, VacuumVerdict, computed_primal_basis, verify_kklt_vacuum,
+    verify_kklt_vacuum_auto_basis,
 };
 use cyrus_core::orientifold::OrientifoldModel;
 use cyrus_core::types::f64::F64;
@@ -59,6 +60,17 @@ pub struct DeepVerifyContext {
     candidates: Vec<(Vec<usize>, Vec<I64<Pos>>)>,
     /// Primal `h^{2,1}` (= flux length / mirror `h^{1,1}`), for the BBHL term.
     primal_h21: usize,
+    /// Genome-independent coverage determination, computed once: `Ok(basis)` is
+    /// the covered KKLT chamber, `Err` is the reason no chamber is coverable.
+    ///
+    /// The small-curve coverage that selects (or rejects) a chamber is driven by
+    /// the phase-1 target `c_i` - a property of the geometry/orientifold, NOT
+    /// the flux genome (which only scales `g_s`/`W0`/`e^{K0}` afterwards). So the
+    /// expensive admissible-basis scan is the same for every genome on this
+    /// polytope and is paid exactly once: without this, the GA (which
+    /// re-evaluates the whole population every generation) would re-scan
+    /// thousands of bases for every surviving elite and crawl.
+    coverage: OnceLock<Result<Vec<usize>, String>>,
 }
 
 impl DeepVerifyContext {
@@ -112,6 +124,7 @@ impl DeepVerifyContext {
             production_primal_basis,
             candidates,
             primal_h21,
+            coverage: OnceLock::new(),
         })
     }
 
@@ -131,20 +144,47 @@ impl DeepVerifyContext {
         g_s: F64<Pos>,
         w0: F64<Pos>,
     ) -> Result<VacuumVerdict, String> {
-        let base_inputs = StabilizationInputs {
+        let config = Self::vacuum_config()?;
+
+        // Determine the covered chamber ONCE (genome-independent - see the
+        // `coverage` field): the first genome on this polytope pays the full
+        // admissible-basis scan; every later genome reuses the verdict, so the
+        // GA's per-generation re-evaluation never re-scans thousands of bases.
+        let coverage = self.coverage.get_or_init(|| {
+            let scan_inputs = self.base_inputs(ek0, g_s, w0);
+            verify_kklt_vacuum_auto_basis(&scan_inputs, &self.candidates, &config)
+                .map(|verdict| verdict.selected_kklt_basis)
+        });
+        let covered_basis = match coverage {
+            Ok(basis) => basis,
+            Err(reason) => return Err(reason.clone()),
+        };
+
+        // Verify in the cached covered chamber for THIS genome's scalars: the
+        // chamber is genome-independent, only the resulting V0 is not.
+        let candidate = self
+            .candidates
+            .iter()
+            .find(|(basis, _)| basis == covered_basis)
+            .ok_or("cached covered KKLT basis is not among the admissible candidates")?;
+        let inputs = StabilizationInputs {
             geom: &self.primal_geom,
             intersection: &self.primal_intersection,
             production_primal_basis: &self.production_primal_basis,
-            // Ignored by the auto-basis entry point (each candidate supplies
-            // its own); present only to satisfy the struct.
-            c_i: &self.candidates[0].1,
-            kklt_basis: &self.candidates[0].0,
+            c_i: &candidate.1,
+            kklt_basis: &candidate.0,
             g_s,
             w0,
             ek0,
             h21: self.primal_h21,
         };
-        let config = VacuumConfig {
+        verify_kklt_vacuum(&inputs, &config)
+    }
+
+    /// Genome-independent stabilization config, shared by the one-time scan and
+    /// the per-genome single-chamber verify.
+    fn vacuum_config() -> Result<VacuumConfig, String> {
+        Ok(VacuumConfig {
             kklt_steps: KKLT_STEPS,
             branch_candidates: 1,
             branch_seed: 42,
@@ -159,8 +199,24 @@ impl DeepVerifyContext {
             primal_gv_max_deg: None,
             max_missing_gv_impact: 0.0,
             missing_gv_abs_bound: 10,
-        };
-        verify_kklt_vacuum_auto_basis(&base_inputs, &self.candidates, &config)
+        })
+    }
+
+    /// Inputs for the one-time auto-basis scan. The `c_i`/`kklt_basis` fields are
+    /// ignored by the auto-basis entry point (each candidate supplies its own);
+    /// they are present only to satisfy the struct.
+    fn base_inputs(&self, ek0: F64<Pos>, g_s: F64<Pos>, w0: F64<Pos>) -> StabilizationInputs<'_> {
+        StabilizationInputs {
+            geom: &self.primal_geom,
+            intersection: &self.primal_intersection,
+            production_primal_basis: &self.production_primal_basis,
+            c_i: &self.candidates[0].1,
+            kklt_basis: &self.candidates[0].0,
+            g_s,
+            w0,
+            ek0,
+            h21: self.primal_h21,
+        }
     }
 }
 
