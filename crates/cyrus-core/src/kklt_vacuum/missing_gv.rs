@@ -228,12 +228,41 @@ fn missing_gv_unit_impact_bound(
 /// positive multiples of an extremal wall Mori generator. For each such class
 /// the one-dimensional HKTY series is the exact computation; classes that may
 /// decompose are left for other methods.
-pub fn compute_minimal_degree_gv_by_ambient_class(
+/// Basis-fixed precompute for the minimal-degree GV pre-pass.
+///
+/// These are the parts of the minimal-degree computation that depend only on
+/// the geometry and the production divisor basis — NOT the Kähler point or the
+/// set of missing classes. Hoisting them out lets an admissible-basis scan pay
+/// the 561k-ray projection, grading, and Mori-generator costs once instead of
+/// on every candidate probe.
+pub struct MinimalDegreeGvContext {
+    /// GV grading vector in the production divisor basis.
+    grading: Vec<i64>,
+    /// Curve-basis (charge) matrix for the one-dimensional HKTY series.
+    q_matrix: Vec<Vec<i64>>,
+    /// Minimal positive grading degree among the Mori cap generators.
+    min_generator_degree: i128,
+    /// Mori cap generators at exactly `min_generator_degree`, in basis coords.
+    minimal_degree_generators: HashSet<Vec<i64>>,
+    /// Wall-based (ridge-adjacent) Mori generators in ambient coordinates.
+    wall_generators: Vec<Vec<i64>>,
+}
+
+/// Build the basis-fixed [`MinimalDegreeGvContext`] once for a geometry and its
+/// production divisor basis.
+///
+/// This carries the dominant per-probe cost (the 561k-ray projection to the
+/// divisor basis, the grading vector, and the wall Mori generators), so an
+/// admissible-basis scan pays it a single time.
+///
+/// # Errors
+/// Fails if the GV basis data, the grading vector, or the wall Mori generators
+/// cannot be built, or if there are no positive-degree Mori generators.
+pub fn build_minimal_degree_gv_context(
     geom: &PrimalGeom,
     intersection: &PrimalIntersection,
-    required_ambient_classes: &[Vec<i64>],
     ambient_rays: &[Vec<i64>],
-) -> Result<HashMap<Vec<i64>, malachite::Integer>, String> {
+) -> Result<MinimalDegreeGvContext, String> {
     let gv_basis_data = vector_gv_basis_data(
         ambient_rays,
         &intersection.linrels,
@@ -256,9 +285,10 @@ pub fn compute_minimal_degree_gv_by_ambient_class(
         .filter(|&deg| deg > 0)
         .min()
         .ok_or_else(|| "no positive-degree Mori generators".to_string())?;
-    let minimal_degree_generators: HashSet<&Vec<i64>> = rays
+    let minimal_degree_generators: HashSet<Vec<i64>> = rays
         .iter()
         .filter(|ray| degree_of(ray) == min_generator_degree)
+        .cloned()
         .collect();
 
     // Wall-based Mori generators (ridge-adjacent simplex relations only).
@@ -272,6 +302,38 @@ pub fn compute_minimal_degree_gv_by_ambient_class(
             .iter()
             .map(|generator| generator.iter().map(|value| value.get()).collect())
             .collect();
+    Ok(MinimalDegreeGvContext {
+        grading,
+        q_matrix: gv_basis_data.q_matrix,
+        min_generator_degree,
+        minimal_degree_generators,
+        wall_generators,
+    })
+}
+
+/// Compute minimal-degree GV invariants for `required_ambient_classes` using a
+/// precomputed [`MinimalDegreeGvContext`].
+///
+/// This is the per-Kähler-point work: the missing-class loop only, with all
+/// basis-fixed data supplied by `ctx`.
+///
+/// # Errors
+/// Fails if a one-dimensional HKTY series for a non-decomposable missing class
+/// cannot be computed.
+pub fn compute_minimal_degree_gv_with_context(
+    ctx: &MinimalDegreeGvContext,
+    intersection: &PrimalIntersection,
+    required_ambient_classes: &[Vec<i64>],
+) -> Result<HashMap<Vec<i64>, malachite::Integer>, String> {
+    let grading = &ctx.grading;
+    let min_generator_degree = ctx.min_generator_degree;
+    let degree_of = |basis_class: &[i64]| -> i128 {
+        basis_class
+            .iter()
+            .zip(grading.iter())
+            .map(|(&c, &g)| i128::from(c) * i128::from(g))
+            .sum()
+    };
     let mut out = HashMap::new();
     for class in required_ambient_classes {
         let basis_class: Vec<i64> = intersection
@@ -290,23 +352,23 @@ pub fn compute_minimal_degree_gv_by_ambient_class(
         } else if class_degree < 2 * min_generator_degree {
             false
         } else if class_degree == 2 * min_generator_degree {
-            minimal_degree_generators.iter().any(|generator| {
+            ctx.minimal_degree_generators.iter().any(|generator| {
                 let remainder: Vec<i64> = basis_class
                     .iter()
                     .zip(generator.iter())
                     .map(|(&c, &g)| c - g)
                     .collect();
-                minimal_degree_generators.contains(&remainder)
+                ctx.minimal_degree_generators.contains(&remainder)
             })
         } else {
             true
         };
         if decomposable {
             if let Some(value) = try_extremal_wall_ray_gv(
-                &wall_generators,
+                &ctx.wall_generators,
                 intersection,
-                &gv_basis_data.q_matrix,
-                &grading,
+                &ctx.q_matrix,
+                grading,
                 class,
             )? {
                 eprintln!(
@@ -331,8 +393,8 @@ pub fn compute_minimal_degree_gv_by_ambient_class(
         let series = crate::compute_ambient_one_dimensional_ray_gv_series(
             class,
             &intersection.basis,
-            &grading,
-            &gv_basis_data.q_matrix,
+            grading,
+            &ctx.q_matrix,
             &intersection.kappa_basis,
             1,
         )
@@ -346,6 +408,26 @@ pub fn compute_minimal_degree_gv_by_ambient_class(
         out.insert(class.clone(), value.clone());
     }
     Ok(out)
+}
+
+/// Compute minimal-degree GV invariants, building the basis-fixed context
+/// inline.
+///
+/// Equivalent to [`build_minimal_degree_gv_context`] followed by
+/// [`compute_minimal_degree_gv_with_context`]; prefer the split form when
+/// covering many Kähler points over a fixed production basis (the context build
+/// dominates the cost).
+///
+/// # Errors
+/// Fails if the context build or the per-class computation fails.
+pub fn compute_minimal_degree_gv_by_ambient_class(
+    geom: &PrimalGeom,
+    intersection: &PrimalIntersection,
+    required_ambient_classes: &[Vec<i64>],
+    ambient_rays: &[Vec<i64>],
+) -> Result<HashMap<Vec<i64>, malachite::Integer>, String> {
+    let ctx = build_minimal_degree_gv_context(geom, intersection, ambient_rays)?;
+    compute_minimal_degree_gv_with_context(&ctx, intersection, required_ambient_classes)
 }
 
 fn gcd_u64(a: u64, b: u64) -> u64 {

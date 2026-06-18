@@ -148,7 +148,7 @@ pub fn verify_kklt_vacuum(
     inputs: &StabilizationInputs<'_>,
     config: &VacuumConfig,
 ) -> Result<VacuumVerdict, String> {
-    let scgeom = compute_small_curve_geometry(inputs.geom)?;
+    let scgeom = compute_small_curve_geometry(inputs.geom, inputs.intersection)?;
     verify_one_basis(&scgeom, inputs, config)
 }
 
@@ -399,7 +399,7 @@ pub fn verify_kklt_vacuum_auto_basis(
     if candidates.is_empty() {
         return Err("no candidate KKLT bases supplied".to_string());
     }
-    let scgeom = compute_small_curve_geometry(base.geom)?;
+    let scgeom = compute_small_curve_geometry(base.geom, base.intersection)?;
     let mut last_err = "all candidates rejected by the coverage probe".to_string();
     let (mut probe_rejected, mut full_verified) = (0usize, 0usize);
     for (i, candidate) in candidates.iter().enumerate() {

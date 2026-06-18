@@ -24,27 +24,43 @@ use crate::types::tags::{Finite, Pos};
 
 use super::general_gv::compute_primal_general_gv_by_ambient_class;
 use super::missing_gv::{
-    compute_minimal_degree_gv_by_ambient_class, defer_bounded_impact_missing_gvs,
+    MinimalDegreeGvContext, build_minimal_degree_gv_context,
+    compute_minimal_degree_gv_with_context, defer_bounded_impact_missing_gvs,
 };
 use super::{PrimalGeom, PrimalIntersection};
 
-/// Geometry-only inputs to the small-curve GV cascade.
+/// Geometry + production-basis inputs to the small-curve GV cascade.
 ///
 /// These do NOT depend on the KKLT basis or the Kähler point: the ambient
-/// Mori-cap rays and the toric two-face GV table. Computing them once (they are
-/// the dominant cost) lets a basis search probe many candidate bases cheaply.
+/// Mori-cap rays, the toric two-face GV table, and the minimal-degree GV
+/// precompute (fixed by the geometry and the production divisor basis, both
+/// constant across an admissible-KKLT-basis scan). Computing them once (they
+/// are the dominant cost) lets a basis search probe many candidate bases
+/// cheaply.
 pub struct SmallCurveGeometry {
     /// Ambient Mori-cone cap rays of the primal triangulation.
     pub ambient_rays: Vec<Vec<i64>>,
     /// Toric two-face curve GV invariants, keyed by ambient curve class.
     pub toric_gv_by_class: HashMap<Vec<i64>, Integer>,
+    /// Basis-fixed precompute for the minimal-degree GV pre-pass (grading,
+    /// charge matrix, Mori generators), so a scan over many candidate KKLT
+    /// bases pays the 561k-ray projection once instead of per candidate.
+    pub minimal_degree_ctx: MinimalDegreeGvContext,
 }
 
-/// Compute the basis-independent geometry inputs for the small-curve cascade.
+/// Compute the shared geometry + production-basis inputs for the small-curve
+/// cascade (see [`SmallCurveGeometry`]).
+///
+/// `intersection` supplies the production divisor basis for the minimal-degree
+/// GV precompute.
 ///
 /// # Errors
-/// Fails if the Mori-cap rays or the toric two-face GV table cannot be built.
-pub fn compute_small_curve_geometry(geom: &PrimalGeom) -> Result<SmallCurveGeometry, String> {
+/// Fails if the Mori-cap rays, the toric two-face GV table, or the
+/// minimal-degree precompute cannot be built.
+pub fn compute_small_curve_geometry(
+    geom: &PrimalGeom,
+    intersection: &PrimalIntersection,
+) -> Result<SmallCurveGeometry, String> {
     let ambient_rays = compute_mori_cone_cap_rays(
         &geom.triangulation,
         &geom.triangulation_points,
@@ -64,9 +80,11 @@ pub fn compute_small_curve_geometry(geom: &PrimalGeom) -> Result<SmallCurveGeome
         .into_iter()
         .map(|item| (item.class, item.gv))
         .collect();
+    let minimal_degree_ctx = build_minimal_degree_gv_context(geom, intersection, &ambient_rays)?;
     Ok(SmallCurveGeometry {
         ambient_rays,
         toric_gv_by_class,
+        minimal_degree_ctx,
     })
 }
 
@@ -182,11 +200,10 @@ pub fn collect_small_curve_gvs(
 
     // Minimal-degree HKTY pre-pass for classes the toric formulas missed.
     if !missing_gv_classes.is_empty() {
-        let minimal_degree_gvs = compute_minimal_degree_gv_by_ambient_class(
-            geom,
+        let minimal_degree_gvs = compute_minimal_degree_gv_with_context(
+            &scgeom.minimal_degree_ctx,
             intersection,
             &missing_gv_classes,
-            &scgeom.ambient_rays,
         )
         .map_err(|e| format!("minimal-degree GV pre-pass failed: {e}"))?;
         if !minimal_degree_gvs.is_empty() {

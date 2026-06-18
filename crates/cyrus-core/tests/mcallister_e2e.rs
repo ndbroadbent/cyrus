@@ -87,3 +87,6 @@ mod stage10_volume;
 
 #[path = "mcallister_e2e/stage11_verify_orchestrator.rs"]
 mod stage11_verify_orchestrator;
+
+#[path = "mcallister_e2e/stage11_bench.rs"]
+mod stage11_bench;

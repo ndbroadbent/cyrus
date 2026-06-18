@@ -32,7 +32,10 @@ pub use basis_transform::{
     transform_kahler_between_owned_divisor_bases, transform_production_primal_kahler_to_computed,
 };
 pub use branch_solve::BranchSelection;
-pub use diagnostics::{ChamberCoverageReport, primal_gv_grading, probe_chamber_coverage};
+pub use diagnostics::{
+    ChamberCoverageReport, ProbeTimings, primal_gv_grading, probe_chamber_coverage,
+    probe_chamber_coverage_timed,
+};
 pub use gamma::compute_b_field_gamma_for_o7_divisors;
 pub use general_gv::compute_primal_general_gv_by_ambient_class;
 pub use gv_basis::{production_gv_basis_data, vector_gv_basis_data};

@@ -34,11 +34,11 @@ use cyrus_core::{
 /// Published `e^{K0}` for 4-214-647 (arXiv:2107.09064 SS6.4). The checkpoint
 /// ships no `e^{K0}` scalar file; `e^{K0}` is an orchestrator input from the
 /// flat-direction stage (stage4) and only enters `V0`, not the volume.
-const MCALLISTER_4_214_EK0: f64 = 0.234_393;
+pub const MCALLISTER_4_214_EK0: f64 = 0.234_393;
 /// `h^{2,1}` for 4-214-647 (so `χ = 2(h11 - h21) = 2(214 - 4) = 420`).
-const MCALLISTER_4_214_H21: usize = 4;
+pub const MCALLISTER_4_214_H21: usize = 4;
 
-fn require_first_principles() -> bool {
+pub fn require_first_principles() -> bool {
     if !crate::first_principles_enabled() {
         eprintln!("Skipping first-principles test (set CYRUS_FIRST_PRINCIPLES=1)");
         return false;
@@ -46,7 +46,7 @@ fn require_first_principles() -> bool {
     true
 }
 
-fn require_runner_heavy() -> bool {
+pub fn require_runner_heavy() -> bool {
     if std::env::var_os("CYRUS_MCALLISTER_RUNNER_HEAVY").is_none() {
         eprintln!("Skipping heavy orchestrator test (set CYRUS_MCALLISTER_RUNNER_HEAVY=1)");
         return false;
@@ -54,7 +54,7 @@ fn require_runner_heavy() -> bool {
     true
 }
 
-fn require_data_dir() -> Option<PathBuf> {
+pub fn require_data_dir() -> Option<PathBuf> {
     let Some(dir) = crate::mcallister_data_dir() else {
         assert!(
             !crate::first_principles_enabled(),
@@ -92,7 +92,7 @@ fn read_usize_csv(path: &Path) -> Vec<usize> {
         .collect()
 }
 
-fn read_scalar_f64(path: &Path) -> f64 {
+pub fn read_scalar_f64(path: &Path) -> f64 {
     std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()))
         .trim()
@@ -116,7 +116,7 @@ fn read_points(path: &Path) -> Vec<Vec<i64>> {
 
 /// Build the primal geometry from `points.dat` + `heights.dat` (production
 /// triangulation code).
-fn build_geom(data_dir: &Path) -> PrimalGeom {
+pub fn build_geom(data_dir: &Path) -> PrimalGeom {
     let points_raw = read_points(&data_dir.join("points.dat"));
     let heights_raw = read_floats_csv(&data_dir.join("heights.dat"));
     let heights: Vec<F64<Finite>> = heights_raw
@@ -140,7 +140,7 @@ fn build_geom(data_dir: &Path) -> PrimalGeom {
 
 /// Build the primal intersection data (GLSM/linrels/basis + intersection
 /// tensors) from the geometry (production intersection code).
-fn build_intersection(geom: &PrimalGeom) -> PrimalIntersection {
+pub fn build_intersection(geom: &PrimalGeom) -> PrimalIntersection {
     let (glsm, linrels, basis) =
         compute_glsm_and_linrels(&geom.triangulation_points).expect("failed GLSM/linrels");
     let points_i64: Vec<Vec<i64>> = geom
@@ -536,7 +536,7 @@ fn most_interior_admissible_basis_4214() {
     eprintln!("[NORM] McAllister rank ascending (drop low-norm)={mc_norm_rank_asc:?}");
 }
 
-fn require_general_gv() -> bool {
+pub fn require_general_gv() -> bool {
     if std::env::var_os("CYRUS_GENERAL_GV").is_none() {
         eprintln!("Skipping general-GV validation (set CYRUS_GENERAL_GV=1)");
         return false;
@@ -549,7 +549,7 @@ fn require_general_gv() -> bool {
 /// pairwise-disjoint involutions (strongest racetrack hierarchy). Viability
 /// against the GLSM basis is irrelevant - the KKLT basis is all-rigid by
 /// construction; we only read gamma/components for c_i.
-fn build_o7_model(
+pub fn build_o7_model(
     geom: &PrimalGeom,
     intersection: &PrimalIntersection,
 ) -> cyrus_core::orientifold::OrientifoldModel {
@@ -578,7 +578,7 @@ fn build_o7_model(
 /// gaugino condensation), else the irreducible-component count. This is the
 /// rule `derived_orientifold_model_vs_mcallister_data` proves reproduces
 /// `target_volumes.dat` on McAllister's own basis.
-fn c_i_for_basis(
+pub fn c_i_for_basis(
     model: &cyrus_core::orientifold::OrientifoldModel,
     kklt_basis: &[usize],
 ) -> Vec<I64<Pos>> {
@@ -693,7 +693,7 @@ fn measure_uncovered_curve_degrees_across_chambers() {
     let geom = build_geom(&data_dir);
     let intersection = build_intersection(&geom);
     let production_primal_basis = computed_primal_basis(&intersection);
-    let scgeom = compute_small_curve_geometry(&geom).expect("small-curve geometry");
+    let scgeom = compute_small_curve_geometry(&geom, &intersection).expect("small-curve geometry");
     let grading = primal_gv_grading(&scgeom, &intersection).expect("gv grading");
     let bases = cyrus_core::orientifold::admissible_kklt_bases(
         &geom.polytope,
