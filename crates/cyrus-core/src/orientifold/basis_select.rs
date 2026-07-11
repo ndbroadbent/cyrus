@@ -224,6 +224,75 @@ pub fn admissible_kklt_bases(
     Ok(scored.iter().map(|(_, d)| drop_to_basis(d)).collect())
 }
 
+/// Existence check for an admissible all-rigid KKLT basis, early-exiting on
+/// the first admissible complement.
+///
+/// Returns `None` when at least one admissible basis exists — the polytope
+/// can host a McAllister-class orientifold as far as basis selection goes —
+/// otherwise `Some(reason)` describing the obstruction. This is the
+/// basis-INDEPENDENT form of the prep-time rigidity gate: checking one fixed
+/// basis (e.g. the GLSM auto-basis) is over-strict, because a non-rigid
+/// divisor in that particular basis can simply be moved to the complement
+/// whenever the rigid divisors still admit a basis (arXiv:2107.09064 SS2
+/// selects the basis among RIGID divisors explicitly; in the June 2026
+/// landscape run the fixed-basis check wrongly pruned ~26k of 74k polytopes,
+/// most failing on a single auto-basis divisor).
+///
+/// Unlike [`admissible_kklt_bases`] this does not enumerate and rank every
+/// basis; it stops at the first admissible one, so the common viable case is
+/// cheap enough for the prep gate.
+///
+/// # Errors
+/// Propagates failures from [`classify_divisor_rigidity`].
+pub fn kklt_basis_obstruction(polytope: &Polytope, points: &[Point]) -> Result<Option<String>> {
+    let dim = points.first().map_or(0, Point::dim);
+    let (classes, _components) = classify_divisor_rigidity(polytope, points)?;
+    let mut rigid: Vec<usize> = classes
+        .iter()
+        .filter(|(_, c)| c.is_rigid())
+        .map(|(idx, _)| *idx)
+        .collect();
+    rigid.sort_unstable();
+    let non_rigid: Vec<usize> = classes
+        .iter()
+        .filter(|(_, c)| !c.is_rigid())
+        .map(|(idx, _)| *idx)
+        .collect();
+    if non_rigid.len() > dim {
+        return Ok(Some(format!(
+            "{} non-rigid prime toric divisors exceed codimension {dim}; no all-rigid KKLT basis exists",
+            non_rigid.len()
+        )));
+    }
+    let drop_count = dim - non_rigid.len();
+    let admissible = |dropped: &[usize]| {
+        let mut complement = non_rigid.clone();
+        complement.extend_from_slice(dropped);
+        complement_is_admissible(points, &complement)
+    };
+    if drop_count == 0 {
+        if admissible(&[]) {
+            return Ok(None);
+        }
+    } else {
+        let mut combo: Vec<usize> = (0..drop_count).collect();
+        loop {
+            let dropped: Vec<usize> = combo.iter().map(|&i| rigid[i]).collect();
+            if admissible(&dropped) {
+                return Ok(None);
+            }
+            if !next_combination(&mut combo, rigid.len()) {
+                break;
+            }
+        }
+    }
+    Ok(Some(format!(
+        "no admissible all-rigid KKLT basis: tau_* leaves the dual effective cone for every complement ({} rigid, {} non-rigid prime divisors)",
+        rigid.len(),
+        non_rigid.len()
+    )))
+}
+
 /// Select a single KKLT divisor basis from first principles: the most interior
 /// admissible basis (see [`admissible_kklt_bases`]).
 ///

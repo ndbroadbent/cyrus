@@ -157,24 +157,21 @@ impl GaGeometry {
 
         // Cheap per-polytope orientifold pre-filter. A McAllister-class
         // vacuum needs a nonperturbative term on every Kahler modulus, so
-        // every divisor-basis element must be rigid. Rigidity is pure
-        // polytope-face combinatorics (no intersection numbers, no chamber,
-        // no flux), so a single non-rigid basis divisor rules out the whole
-        // polytope for every involution and chamber - prune it now, before
-        // the expensive GV and seed-scan stages, rather than discovering at
-        // verification time that no candidate it yields can be completed.
-        // (The full O7-disjointness check still runs later, at verification.)
-        let non_rigid = cyrus_core::orientifold::non_rigid_basis_divisors(
-            &primal,
-            &primal_tri_points,
-            &primal_basis,
-        )
-        .map_err(|e| format!("rigidity classification: {e}"))?;
-        if !non_rigid.is_empty() {
-            return Err(format!(
-                "no viable orientifold: {} non-rigid basis divisor(s) {non_rigid:?}",
-                non_rigid.len()
-            ));
+        // SOME h11-sized basis of rigid prime toric divisors must be
+        // admissible (tau_* in the dual effective cone, arXiv:2107.09064
+        // SS2) - the same criterion deep-verify's admissible-basis scan
+        // uses. The check must be basis-independent: demanding that the
+        // GLSM auto-basis specifically be all-rigid pruned ~26k of the 74k
+        // pool in the June 2026 run, mostly on one swappable divisor.
+        // Rigidity is pure polytope-face combinatorics (no intersection
+        // numbers, no chamber, no flux), so this prunes before the
+        // expensive GV and seed-scan stages. (The full O7-disjointness
+        // check still runs later, at verification.)
+        if let Some(obstruction) =
+            cyrus_core::orientifold::kklt_basis_obstruction(&primal, &primal_tri_points)
+                .map_err(|e| format!("rigidity classification: {e}"))?
+        {
+            return Err(format!("no viable orientifold: {obstruction}"));
         }
 
         // Dual (mirror) side: default-chamber FRST and intersection numbers.

@@ -38,7 +38,7 @@ use crate::polytope::Polytope;
 mod basis_select;
 pub use basis_select::{
     admissible_kklt_bases, complement_is_admissible, complement_remaining_volumes,
-    select_kklt_basis,
+    kklt_basis_obstruction, select_kklt_basis,
 };
 
 /// Combinatorial rigidity classification of one prime toric divisor.
