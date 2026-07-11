@@ -8,9 +8,10 @@ use rayon::prelude::*;
 
 use cyrus_ga::fitness::{FitnessConfig, evaluate_fitness};
 use cyrus_ga::geometry::{DEFAULT_GV_MIN_POINTS, GaGeometry};
-use cyrus_ga::multi::{PolytopeStats, load_pool, prepare_or_mark_dead, select_next};
+use cyrus_ga::multi::{load_pool, prepare_or_mark_dead, select_next};
 use cyrus_ga::population::{GaParams, GaState};
 
+use crate::resume::{SUMMARY_EVERY, write_summary_atomic};
 use crate::{inject_isotropic, parse_arg_value};
 
 /// Shared GA hyperparameter / fitness-config parsing for both modes.
@@ -59,6 +60,10 @@ pub fn run_multi(pool_path: &std::path::Path) {
         .map_or_else(|| PathBuf::from("runs/landscape"), PathBuf::from);
     let rounds: u64 = parse_arg_value("--rounds").unwrap_or(u64::MAX);
     let gens_per_round: u64 = parse_arg_value("--gens-per-round").unwrap_or(10);
+    // Rounds without a per-arm best improvement before the arm goes cold
+    // and leaves the UCB pool (see select_next). At 256x8 that is ~1M
+    // improvement-free evaluations before the scheduler moves on.
+    let stale_after: u64 = parse_arg_value("--stale-after-rounds").unwrap_or(500);
     let seed: u64 = parse_arg_value("--seed").unwrap_or(20260611);
     let gv_min_points: u32 = parse_arg_value("--gv-min-points").unwrap_or(DEFAULT_GV_MIN_POINTS);
     let (params, fitness_cfg) = parse_params_and_fitness();
@@ -109,34 +114,11 @@ pub fn run_multi(pool_path: &std::path::Path) {
     let rounds_path = run_dir.join("rounds.jsonl");
     let candidates_path = run_dir.join("candidates.jsonl");
 
-    // Stats merge by NAME so a grown pool (new chambers, new slices)
-    // resumes cleanly: existing arms keep their history, new arms start
-    // fresh.
-    let mut stats: Vec<PolytopeStats> = if summary_path.exists() {
-        let text = std::fs::read_to_string(&summary_path).expect("read summary");
-        let loaded: Vec<PolytopeStats> = serde_json::from_str(&text).expect("parse summary");
-        let mut by_name: std::collections::HashMap<String, PolytopeStats> =
-            loaded.into_iter().map(|s| (s.name.clone(), s)).collect();
-        let merged: Vec<PolytopeStats> = pool
-            .iter()
-            .map(|p| {
-                by_name
-                    .remove(&p.name)
-                    .unwrap_or_else(|| PolytopeStats::new(p.name.clone()))
-            })
-            .collect();
-        eprintln!(
-            "[INFO] resumed landscape run: {} arms ({} with history), {} rounds so far",
-            merged.len(),
-            merged.iter().filter(|s| s.rounds > 0 || s.dead).count(),
-            merged.iter().map(|s| s.rounds).sum::<u64>()
-        );
-        merged
-    } else {
-        pool.iter()
-            .map(|p| PolytopeStats::new(p.name.clone()))
-            .collect()
-    };
+    let mut stats = crate::resume::load_stats(&summary_path, &pool);
+    crate::resume::revive_transient_prep_deaths(&mut stats);
+
+    let mut last_summary_write = std::time::Instant::now();
+    write_summary_atomic(&summary_path, &stats);
 
     let mut geometries: std::collections::HashMap<usize, GaGeometry> =
         std::collections::HashMap::new();
@@ -148,7 +130,7 @@ pub fn run_multi(pool_path: &std::path::Path) {
     let target_rounds = total_rounds.saturating_add(rounds);
 
     while total_rounds < target_rounds {
-        let Some(idx) = select_next(&stats, total_rounds) else {
+        let Some(idx) = select_next(&stats, total_rounds, stale_after) else {
             eprintln!("[ERROR] all polytopes are dead; nothing to schedule");
             std::process::exit(2);
         };
@@ -181,8 +163,10 @@ pub fn run_multi(pool_path: &std::path::Path) {
                     );
                     stats[idx].dead = true;
                     stats[idx].dead_reason = Some("PFV-barren in seed scan budget".into());
-                    std::fs::write(&summary_path, serde_json::to_string_pretty(&stats).unwrap())
-                        .expect("write summary");
+                    if last_summary_write.elapsed() >= SUMMARY_EVERY {
+                        write_summary_atomic(&summary_path, &stats);
+                        last_summary_write = std::time::Instant::now();
+                    }
                     continue;
                 }
                 Some(geom) => {
@@ -197,8 +181,10 @@ pub fn run_multi(pool_path: &std::path::Path) {
                     slot.insert(geom);
                 }
                 None => {
-                    std::fs::write(&summary_path, serde_json::to_string_pretty(&stats).unwrap())
-                        .expect("write summary");
+                    if last_summary_write.elapsed() >= SUMMARY_EVERY {
+                        write_summary_atomic(&summary_path, &stats);
+                        last_summary_write = std::time::Instant::now();
+                    }
                     continue;
                 }
             }
@@ -230,8 +216,11 @@ pub fn run_multi(pool_path: &std::path::Path) {
         stats[idx].rounds += 1;
         stats[idx].evaluations = state.evaluations;
         stats[idx].valid_seen += round_valid as u64;
-        if state.best_fitness > stats[idx].best_fitness {
+        stats[idx].last_pulled_round = total_rounds;
+        let improved_arm = state.best_fitness > stats[idx].best_fitness;
+        if improved_arm {
             stats[idx].best_fitness = state.best_fitness;
+            stats[idx].rounds_since_best = 0;
             // Polytope-level improvement: emit the new hall leader for
             // ingestion (improvements.jsonl only records global bests).
             if let Some(best) = state.hall_of_fame.first() {
@@ -246,6 +235,8 @@ pub fn run_multi(pool_path: &std::path::Path) {
                     }),
                 );
             }
+        } else {
+            stats[idx].rounds_since_best += 1;
         }
         if state.best_fitness > global_best {
             global_best = state.best_fitness;
@@ -274,8 +265,10 @@ pub fn run_multi(pool_path: &std::path::Path) {
         )
         .expect("write state");
         std::fs::rename(&tmp, &state_path).expect("replace state");
-        std::fs::write(&summary_path, serde_json::to_string_pretty(&stats).unwrap())
-            .expect("write summary");
+        if last_summary_write.elapsed() >= SUMMARY_EVERY {
+            write_summary_atomic(&summary_path, &stats);
+            last_summary_write = std::time::Instant::now();
+        }
 
         append_jsonl(
             &rounds_path,
@@ -290,18 +283,23 @@ pub fn run_multi(pool_path: &std::path::Path) {
                 "ts": unix_now(),
             }),
         );
-        eprintln!(
-            "[ROUND {:>5}] {} gens+={} evals={} valid+={} best_here={:.2} global_best={:.2} live={}/{}",
-            total_rounds,
-            record.name,
-            gens_per_round,
-            state.evaluations,
-            round_valid,
-            state.best_fitness,
-            global_best,
-            stats.iter().filter(|s| !s.dead).count(),
-            stats.len()
-        );
+        // One [ROUND] line per round was ~330 MB/day of pure repetition at
+        // full speed (rounds.jsonl carries the per-round data for ingestion);
+        // log improvements always, otherwise sample.
+        if improved_arm || total_rounds % 25 == 0 {
+            eprintln!(
+                "[ROUND {:>5}] {} gens+={} evals={} valid+={} best_here={:.2} global_best={:.2} live={}/{}",
+                total_rounds,
+                record.name,
+                gens_per_round,
+                state.evaluations,
+                round_valid,
+                state.best_fitness,
+                global_best,
+                stats.iter().filter(|s| !s.dead).count(),
+                stats.len()
+            );
+        }
     }
     eprintln!(
         "[INFO] reached round target; resume any time with the same --run-dir ({})",

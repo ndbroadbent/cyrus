@@ -53,6 +53,16 @@ pub struct PolytopeStats {
     pub dead: bool,
     /// Failure description when dead.
     pub dead_reason: Option<String>,
+    /// Rounds pulled since `best_fitness` last improved. The scheduler's
+    /// staleness signal: on a deterministic fitness landscape an arm that
+    /// has stopped improving is exhausted, and its all-time best says
+    /// nothing about the marginal value of another pull.
+    #[serde(default)]
+    pub rounds_since_best: u64,
+    /// Global round counter at this arm's most recent pull (LRU order for
+    /// the everything-is-stale fallback).
+    #[serde(default)]
+    pub last_pulled_round: u64,
 }
 
 impl PolytopeStats {
@@ -67,6 +77,8 @@ impl PolytopeStats {
             valid_seen: 0,
             dead: false,
             dead_reason: None,
+            rounds_since_best: 0,
+            last_pulled_round: 0,
         }
     }
 }
@@ -108,13 +120,20 @@ pub fn load_pool(path: &std::path::Path) -> Result<Vec<PolytopeRecord>, String> 
     Ok(records)
 }
 
-/// UCB-style polytope selection.
+/// UCB-style polytope selection with an exhaustion cutoff.
 ///
 /// Balances the best fitness seen on a polytope against an exploration
 /// bonus for under-visited ones. Fitness tiers span roughly [-2000, +300],
 /// so the exploration constant is on that scale.
+///
+/// Arms whose best has not improved in `stale_after` pulls go cold and
+/// leave the UCB pool. Without this, a deterministic landscape locks the
+/// bandit onto its all-time champion forever: in the June 2026 run one
+/// polytope took >99.9% of 34M rounds (273M generations) after its flux
+/// box was exhausted, because "best fitness ever seen" never decays and
+/// ln(T) exploration re-visits rivals only logarithmically.
 #[must_use]
-pub fn select_next(stats: &[PolytopeStats], total_rounds: u64) -> Option<usize> {
+pub fn select_next(stats: &[PolytopeStats], total_rounds: u64, stale_after: u64) -> Option<usize> {
     // First visits go in pool order (pools sort by ascending h21, where the
     // isotropic-flux lattice is densest), but every third round is reserved
     // for UCB exploitation so a fertile polytope found early gets deepened
@@ -125,21 +144,34 @@ pub fn select_next(stats: &[PolytopeStats], total_rounds: u64) -> Option<usize> 
     {
         return Some(idx);
     }
-    // UCB over VISITED polytopes only: unvisited ones are the first-visit
-    // branch's job (treating them as infinity here made exploit rounds
-    // burn budget preparing far-pool geometries instead of deepening known
-    // fertile ones). Falls back to the first unvisited when nothing has
-    // been visited yet.
+    // UCB over VISITED, still-improving polytopes only: unvisited ones are
+    // the first-visit branch's job (treating them as infinity here made
+    // exploit rounds burn budget preparing far-pool geometries instead of
+    // deepening known fertile ones).
     let exploration = 400.0;
-    stats
+    let hot = stats
         .iter()
         .enumerate()
-        .filter(|(_, s)| !s.dead && s.rounds > 0)
+        .filter(|(_, s)| !s.dead && s.rounds > 0 && s.rounds_since_best <= stale_after)
         .map(|(idx, s)| {
             let bonus = exploration * ((total_rounds.max(2) as f64).ln() / s.rounds as f64).sqrt();
             (idx, s.best_fitness + bonus)
         })
         .max_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(idx, _)| idx);
+    if hot.is_some() {
+        return hot;
+    }
+    // Every visited arm is cold: trickle rounds by least-recently-pulled so
+    // leftover budget spreads evenly instead of re-grinding the champion.
+    // An arm that improves on its trickle pull resets rounds_since_best
+    // and returns to the UCB pool. Falls back to the first unvisited arm
+    // when nothing has been visited yet.
+    stats
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| !s.dead && s.rounds > 0)
+        .min_by_key(|(_, s)| s.last_pulled_round)
         .map(|(idx, _)| idx)
         .or_else(|| stats.iter().position(|s| !s.dead && s.rounds == 0))
 }
@@ -159,7 +191,19 @@ pub fn prepare_or_mark_dead(
     // core per timeout, so the probe runs in a KILLABLE subprocess; on
     // success the in-process re-preparation is warm (GV and lattice-point
     // caches persist to disk).
+    //
+    // Probe stderr goes to a temp file, not a pipe (an undrained pipe
+    // deadlocks the poll loop once the probe fills the buffer with debug
+    // output) and not /dev/null (discarding it left 26k dead arms with an
+    // unexplained "exit status: 1" in the June 2026 run): the last line is
+    // the [PROBE] reason, which belongs in dead_reason.
     let exe = std::env::current_exe().expect("current executable path");
+    let stderr_path = std::env::temp_dir().join(format!(
+        "cyrus-prep-probe-{}-{}.stderr",
+        record.name.replace(['#', '/'], "_"),
+        std::process::id()
+    ));
+    let stderr_file = std::fs::File::create(&stderr_path).expect("create probe stderr file");
     let mut child = std::process::Command::new(exe)
         .arg("--prep-probe")
         .arg(&record.name)
@@ -170,22 +214,46 @@ pub fn prepare_or_mark_dead(
         .arg("--gv-min-points")
         .arg(gv_min_points.to_string())
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stderr(stderr_file)
         .spawn()
         .expect("spawn prep probe");
+    let probe_tail = |path: &std::path::Path| -> String {
+        let text = std::fs::read_to_string(path).unwrap_or_default();
+        let line = text
+            .lines()
+            .rev()
+            .find(|l| !l.trim().is_empty())
+            .unwrap_or("");
+        let mut line = line.trim().to_string();
+        line.truncate(300);
+        line
+    };
     let deadline = std::time::Instant::now() + timeout;
     let outcome = loop {
         match child.try_wait().expect("poll prep probe") {
             Some(status) if status.success() => break Ok(()),
-            Some(status) => break Err(format!("geometry preparation failed ({status})")),
+            Some(status) => {
+                let tail = probe_tail(&stderr_path);
+                break Err(if tail.is_empty() {
+                    format!("geometry preparation failed ({status})")
+                } else {
+                    format!("geometry preparation failed ({status}): {tail}")
+                });
+            }
             None if std::time::Instant::now() >= deadline => {
                 let _ = child.kill();
                 let _ = child.wait();
-                break Err(format!("geometry preparation exceeded {timeout:?}"));
+                let tail = probe_tail(&stderr_path);
+                break Err(if tail.is_empty() {
+                    format!("geometry preparation exceeded {timeout:?}")
+                } else {
+                    format!("geometry preparation exceeded {timeout:?} (last: {tail})")
+                });
             }
             None => std::thread::sleep(std::time::Duration::from_millis(100)),
         }
     };
+    let _ = std::fs::remove_file(&stderr_path);
     let outcome = outcome.and_then(|()| {
         // Probe succeeded: re-prepare in-process against warm disk caches.
         GaGeometry::prepare_from_points_in_chamber(
@@ -282,27 +350,50 @@ mod tests {
             PolytopeStats::new("b".into()),
         ];
         // Both unvisited: any unvisited polytope is acceptable.
-        let first = select_next(&stats, 0).expect("selects something");
+        let first = select_next(&stats, 0, 500).expect("selects something");
         assert_eq!(stats[first].rounds, 0);
         stats[0].rounds = 1;
         stats[0].best_fitness = 100.0;
         // b unvisited -> selected next.
-        assert_eq!(select_next(&stats, 1), Some(1));
+        assert_eq!(select_next(&stats, 1, 500), Some(1));
         stats[1].rounds = 1;
         stats[1].best_fitness = -100.0;
         // Both visited once: a's fitness dominates the small bonus gap.
-        assert_eq!(select_next(&stats, 2), Some(0));
+        assert_eq!(select_next(&stats, 2, 500), Some(0));
         // Heavy exploitation of a shrinks its bonus while b's grows with
         // total rounds: exploration eventually wins.
         stats[0].rounds = 10_000;
-        assert_eq!(select_next(&stats, 10_001), Some(1));
+        assert_eq!(select_next(&stats, 10_001, 500), Some(1));
     }
 
     #[test]
     fn dead_polytopes_are_never_selected() {
         let mut stats = vec![PolytopeStats::new("a".into())];
         stats[0].dead = true;
-        assert_eq!(select_next(&stats, 5), None);
+        assert_eq!(select_next(&stats, 5, 500), None);
+    }
+
+    #[test]
+    fn stale_champion_yields_to_lru_trickle() {
+        let mut stats = vec![
+            PolytopeStats::new("champ".into()),
+            PolytopeStats::new("other".into()),
+        ];
+        stats[0].rounds = 1000;
+        stats[0].best_fitness = 145.0;
+        stats[0].rounds_since_best = 501;
+        stats[0].last_pulled_round = 999;
+        stats[1].rounds = 10;
+        stats[1].best_fitness = 20.0;
+        stats[1].rounds_since_best = 501;
+        stats[1].last_pulled_round = 500;
+        // Every arm is stale: least-recently-pulled wins, not the champion.
+        assert_eq!(select_next(&stats, 1000, 500), Some(1));
+        // A trickle-pull improvement returns the arm to the UCB pool, where
+        // it beats the still-stale champion despite the lower best fitness.
+        stats[1].rounds_since_best = 0;
+        stats[1].last_pulled_round = 1000;
+        assert_eq!(select_next(&stats, 1001, 500), Some(1));
     }
 
     #[test]

@@ -25,6 +25,7 @@ use cyrus_ga::geometry::{DEFAULT_GV_MIN_POINTS, GaGeometry};
 use cyrus_ga::pfv::sample_isotropic_genome;
 
 mod modes;
+mod resume;
 use cyrus_ga::population::{GaParams, GaState};
 use modes::{emit_verification_dir, run_multi};
 

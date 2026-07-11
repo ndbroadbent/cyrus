@@ -82,13 +82,27 @@ millions of evaluations per hour on all cores (rayon).
 (fetcher: `string_theory/landscape_smoke/fetch_ga_polytopes.py`). A UCB
 bandit allocates inner-GA rounds: first visits sweep the pool in ascending
 h21 (densest isotropic flux lattice first) with every third round reserved
-for exploiting the best polytope found so far. Per-polytope GA state
-persists under `<run-dir>/polytopes/<name>/`; `summary.json` holds the
-bandit state and `improvements.jsonl` the global best trajectory. Geometry
-preparation runs under a deadline (`--prep-timeout-secs`) and failures
-mark the polytope dead, loudly. Each geometry's tadpole bound is computed
-automatically ((h11+h21)/2 + 1, the McAllister involution class) and caps
-the fitness gate - a global `--q-max` can only tighten it.
+for exploiting the best polytope found so far. An arm whose own best has
+not improved in `--stale-after-rounds` pulls (default 500) goes cold and
+leaves the UCB pool; once every visited arm is cold, leftover rounds
+trickle by least-recently-pulled. Without the cutoff a deterministic
+fitness landscape locks the bandit onto its all-time champion forever
+(June 2026: one exhausted polytope took >99.9% of 34M rounds). Per-polytope
+GA state persists under `<run-dir>/polytopes/<name>/`; `summary.json`
+holds the bandit state (written atomically, at most every 30s) and
+`improvements.jsonl` the global best trajectory. Geometry preparation runs
+under a deadline (`--prep-timeout-secs`) and failures mark the polytope
+dead with the probe's last stderr line as the reason; transient failures
+(timeout, bare subprocess exit) are revived and retried on the next start,
+while deterministic physics rejections (PFV-barren, no viable orientifold)
+stay dead. The orientifold pre-filter is basis-independent: it requires
+that SOME admissible all-rigid KKLT basis exists
+(`cyrus_core::orientifold::kklt_basis_obstruction`, the same criterion as
+deep-verify's basis scan) - demanding rigidity of the fixed GLSM auto-basis
+wrongly pruned ~26k of 74k pool polytopes in the June 2026 run. Each
+geometry's tadpole bound is computed automatically ((h11+h21)/2 + 1, the
+McAllister involution class) and caps the fitness gate - a global
+`--q-max` can only tighten it.
 
 ## Constructive PFV sampling
 
